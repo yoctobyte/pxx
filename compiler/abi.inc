@@ -276,41 +276,6 @@ begin
   end;
 end;
 
-{ Is a C record parameter of this type passed BY VALUE in registers?
-
-  THE ONE PREDICATE, because two sites must agree or the call desynchronises,
-  and they are in different files: cparser's AllocParam (what the parameter IS,
-  and so how the callee's body reads its fields) and the Params[].IsRef the
-  signature carries (what the CALLER marshals). RegisterProc sets the second
-  from `CProgramMode and (ptypes[i] = tyRecord)` and cannot do better -- it is
-  handed type kinds and no record ids, so it cannot classify. cparser fixes it
-  up right after, through this.
-
-  The ticket's own words for why this is not two decisions: the caller and the
-  callee must agree about what the slot CONTAINS. A disagreement here is not a
-  wrong value in one argument, it is every argument after it.
-  bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
-function ABICRecordParamByValue(recId: Integer): Boolean;
-var c0, c1: Integer;
-begin
-  ABICRecordParamByValue := False;
-  { i386 cdecl has no register arguments and no eightbyte classification: EVERY
-    aggregate is passed as its own bytes in the stack argument area, rounded up
-    to a whole number of 4-byte slots. So the only question is whether the size
-    is known -- a REC_NONE id would size the argument from RecSize's fallback
-    and desynchronise the block, which is the one thing worse than a pointer. }
-  if TargetArch = TARGET_I386 then
-  begin
-    ABICRecordParamByValue := RecSize(recId) > 0;
-    Exit;
-  end;
-  if TargetArch <> TARGET_X86_64 then Exit;
-  { >= 0, not > 0: a MEMORY aggregate is passed BY VALUE as well -- as its own
-    bytes in the stack argument area, not as a pointer to them. Only a REFUSAL
-    (-1), a shape the classifier does not model, keeps the by-reference slot. }
-  ABICRecordParamByValue := ABISysVRecordEightbytes(recId, c0, c1) >= 0;
-end;
-
 { PLACEMENT: where does ONE cdecl argument go, given how much of each register
   bank is already spoken for? Classification (what class is it) and placement
   (does it fit) are one call because SysV couples them: an aggregate goes in
@@ -570,6 +535,29 @@ begin
   Inc(nsaa, ((size + 7) div 8) * 8);
 end;
 
+{ THE AAPCS64 placement walk over a FULL per-argument description -- how many
+  registers of which bank each argument wants and how many bytes it occupies.
+
+  ABIA64SlotWalk below is this walk with every argument fixed at one register
+  and eight bytes, which is what an argument list of scalars and pointers IS.
+  It is kept as its own entry point because the VARIADIC path builds a class
+  vector out of argument node types and has no aggregates to describe; giving
+  it the wide signature would make every caller carry two vectors of ones.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure ABIA64VecWalkN(const argRegs, argSize: array of Integer;
+                         const argFp: array of Boolean; argIdx: Integer;
+                         var isFp: Boolean; var regIdx, stackOff: Integer);
+var i, ngrn, nsrn, nsaa: Integer;
+begin
+  ngrn := 0; nsrn := 0; nsaa := 0;
+  isFp := False; regIdx := -1; stackOff := -1;
+  for i := 0 to argIdx do
+  begin
+    isFp := argFp[i];
+    ABIA64ArgPlace(argRegs[i], argSize[i], isFp, ngrn, nsrn, nsaa, regIdx, stackOff);
+  end;
+end;
+
 procedure ABIA64SlotWalk(const argFp: array of Boolean; argIdx: Integer;
                          var isFp: Boolean; var regIdx, stackOff: Integer);
 { THE AAPCS64 placement walk, over a per-ARGUMENT class vector rather than over
@@ -716,6 +704,78 @@ begin
   ABIA64RecordClass := 0;
 end;
 
+{ MOVED BELOW ABIA64RecordClass, and the FPC seed canary is the reason. It
+  used to sit ~420 lines above, which pxx accepts because pxx prescans headers;
+  FPC is single-pass and rejects a call to a function it has not seen. The same
+  ordering trap ABIA64ArgDesc hit one commit earlier, in the same file, on the
+  same callee -- and neither make compiler/pascal26 nor testmgr --tier quick
+  can see it. Keep this below ABIA64RecordClass. }
+{ Is a C record parameter of this type passed BY VALUE in registers?
+
+  THE ONE PREDICATE, because two sites must agree or the call desynchronises,
+  and they are in different files: cparser's AllocParam (what the parameter IS,
+  and so how the callee's body reads its fields) and the Params[].IsRef the
+  signature carries (what the CALLER marshals). RegisterProc sets the second
+  from `CProgramMode and (ptypes[i] = tyRecord)` and cannot do better -- it is
+  handed type kinds and no record ids, so it cannot classify. cparser fixes it
+  up right after, through this.
+
+  The ticket's own words for why this is not two decisions: the caller and the
+  callee must agree about what the slot CONTAINS. A disagreement here is not a
+  wrong value in one argument, it is every argument after it.
+  bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+function ABICRecordParamByValue(recId: Integer): Boolean;
+var c0, c1, a64N: Integer;
+    a64Fp: Boolean;
+    a64Tk: TTypeKind;
+begin
+  ABICRecordParamByValue := False;
+  { i386 cdecl has no register arguments and no eightbyte classification: EVERY
+    aggregate is passed as its own bytes in the stack argument area, rounded up
+    to a whole number of 4-byte slots. So the only question is whether the size
+    is known -- a REC_NONE id would size the argument from RecSize's fallback
+    and desynchronise the block, which is the one thing worse than a pointer. }
+  if TargetArch = TARGET_I386 then
+  begin
+    ABICRecordParamByValue := RecSize(recId) > 0;
+    Exit;
+  end;
+  { AAPCS64: `> 0`, AND THE SIGN OF THE SysV TEST BELOW IS `>= 0` FOR A REASON
+    THAT DOES NOT CARRY OVER. Both classifiers use 0 for "does not go in
+    registers", and the two ABIs mean OPPOSITE things by it.
+
+    SysV's 0 is MEMORY: the aggregate's OWN BYTES are in the stack argument
+    area, so the slot IS the object and by-value is right. AAPCS64's 0 is
+    INDIRECT: the argument is a POINTER to a copy the caller makes, so the slot
+    is a pointer and the callee reads the object through it -- which is exactly
+    the by-REFERENCE parameter pxx already had. Marking it by-value would make
+    the callee copy 24 bytes into a slot the ABI never said it owned, and would
+    change what every existing indirect-class parameter IS.
+
+    MEASURED, and it is why this reads `> 0` today: with `>= 0`, `va_list`
+    -- `struct __pxx_va_elem[1]`, 24 bytes, indirect class -- stopped being a
+    pointer parameter, and every crtl routine that forwards one (vprintf,
+    vsnprintf, __crtl_vformat) took a by-value slot. A plain
+    `printf("hello %d %.2f")` SEGFAULTED on aarch64 while x86-64 stayed green,
+    which is the shape of a change that is correct about one ABI and applied to
+    another.
+
+    The caller's obligation to pass a pointer to a COPY rather than to the
+    original is a separate thing and is already met: the marshalling memcpys
+    the aggregate into a temp before taking its address.
+    bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    ABICRecordParamByValue := ABIA64RecordClass(recId, a64N, a64Fp, a64Tk) > 0;
+    Exit;
+  end;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  { >= 0, not > 0: a MEMORY aggregate is passed BY VALUE as well -- as its own
+    bytes in the stack argument area, not as a pointer to them. Only a REFUSAL
+    (-1), a shape the classifier does not model, keeps the by-reference slot. }
+  ABICRecordParamByValue := ABISysVRecordEightbytes(recId, c0, c1) >= 0;
+end;
+
 { MOVED BELOW ABIA64RecordClass ON PURPOSE, and the FPC seed canary is why. It
   sat above ABIA64SlotWalk in the first draft, which pxx accepts -- pxx
   prescans headers -- and FPC does not, because FPC is single-pass: `calls
@@ -733,21 +793,33 @@ end;
   bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
 procedure ABIA64ArgDesc(tk: TTypeKind; isRef, isArray: Boolean; recId: Integer;
                         var nRegs, size: Integer;
-                        var isFp, isIndirect, ok: Boolean);
+                        var isFp, isIndirect, isAgg, ok: Boolean);
 var n, cnt: Integer; fpTk: TTypeKind; hfa: Boolean;
 begin
-  nRegs := 1; size := 8; isFp := False; isIndirect := False; ok := True;
+  nRegs := 1; size := 8; isFp := False; isIndirect := False; isAgg := False;
+  ok := True;
   if isRef or isArray then Exit;
   if tk = tyRecord then
   begin
     n := ABIA64RecordClass(recId, cnt, hfa, fpTk);
     if n < 0 then begin ok := False; Exit; end;
     if n = 0 then begin isIndirect := True; Exit; end;   { pointer: 1 GP, 8 bytes }
-    nRegs := cnt; isFp := hfa; size := RecSize(recId);
+    nRegs := cnt; isFp := hfa; size := RecSize(recId); isAgg := True;
     Exit;
   end;
   isFp := TypeIsFloat(tk) and not ABIParamSlotIsPointer(tk, isRef, isArray);
 end;
+
+{ `isAgg` IS ITS OWN FLAG AND CANNOT BE INFERRED FROM nRegs AND size, which is
+  what the first draft of the marshaller tried. `struct { int a, b; }` is ONE
+  GP register and EIGHT bytes -- exactly a scalar's description -- so a guard
+  reading `(nRegs > 1) or (size <> 8)` sends it down the scalar path and passes
+  the ADDRESS where AAPCS64 wants the packed value. Measured against
+  `clang --target=aarch64-linux-gnu -O1 -S`: four of the five shapes were
+  already right and that one was not, and it is the SMALLEST aggregate there
+  is. The default and the correct answer collide, so the fact has to be
+  carried rather than derived.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
 
 { The 16-byte-aligned AAPCS64 stack-argument bytes implied by a class VECTOR,
   the vector-sourced twin of ABIA64CdeclStackBytes below. A variadic call cannot
@@ -769,6 +841,31 @@ begin
   else ABIA64VecStackBytes := ((hiOff + 8 + 15) div 16) * 16;
 end;
 
+{ The same total as ABIA64VecStackBytes, over a FULL description. The last
+  stack argument's own SIZE is what makes this different rather than a copy:
+  the block ends where that argument ends, and an aggregate on the stack
+  occupies its own bytes, not eight. Sizing it at eight would put the callee's
+  frame on top of the tail of the last argument.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+function ABIA64VecStackBytesN(const argRegs, argSize: array of Integer;
+                              const argFp: array of Boolean; nArgs: Integer): Integer;
+var i, regIdx, stackOff, hiEnd, e: Integer;
+    isFp: Boolean;
+begin
+  hiEnd := -1;
+  for i := 0 to nArgs - 1 do
+  begin
+    ABIA64VecWalkN(argRegs, argSize, argFp, i, isFp, regIdx, stackOff);
+    if stackOff >= 0 then
+    begin
+      e := stackOff + ((argSize[i] + 7) div 8) * 8;
+      if e > hiEnd then hiEnd := e;
+    end;
+  end;
+  if hiEnd < 0 then ABIA64VecStackBytesN := 0
+  else ABIA64VecStackBytesN := ((hiEnd + 15) div 16) * 16;
+end;
+
 function ABIA64ParamIsFp(procIdx, pi: Integer): Boolean;
 var r: Boolean;
 begin
@@ -784,18 +881,74 @@ begin
   ABIA64ParamIsFp := r;
 end;
 
-procedure ABIA64CdeclArgSlot(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
-                             var regIdx, stackOff: Integer);
+{ Describe ONE ARGUMENT of a call to `procIdx` -- the parameter-list source for
+  ABIA64ArgDesc, with the two out-of-range cases the walk has always had. Below
+  the parameter range is an injected Self (a pointer) and above it is a variadic
+  tail (already promoted, and never an aggregate), so both are one GP slot and
+  neither carries a record id. }
+procedure ABIA64ArgDescOf(procIdx, pi: Integer; var nRegs, size: Integer;
+                          var isFp, isIndirect, isAgg: Boolean);
+var ok: Boolean;
+begin
+  nRegs := 1; size := 8; isFp := False; isIndirect := False; isAgg := False;
+  if (pi < 0) or (pi >= Procs[procIdx].ParamCount) then Exit;
+  ABIA64ArgDesc(Procs[procIdx].Params[pi].TypeKind,
+                Procs[procIdx].Params[pi].IsRef,
+                Procs[procIdx].Params[pi].IsArray,
+                ProcParamRecId[procIdx * MAX_PROC_PARAMS + pi],
+                nRegs, size, isFp, isIndirect, isAgg, ok);
+  { A REFUSAL STAYS A REFUSAL. ABIA64RecordClass answers -1 for a shape it does
+    not model rather than guessing, and ABICRecordParamByValue refuses the same
+    shapes, so such a parameter is still IsRef and still one pointer-sized GP
+    slot. Turning "cannot classify" into a placement here would desynchronise
+    the call the classifier declined to describe. }
+  if not ok then
+  begin
+    nRegs := 1; size := 8; isFp := False; isIndirect := False; isAgg := False;
+  end;
+end;
+
+{ THE FULL AAPCS64 answer for one argument: where it goes, AND what occupies
+  that place. `nRegs` is how many consecutive registers of `isFp`'s bank it
+  takes, `size` how many bytes it occupies on the stack, `isIndirect` whether
+  the slot holds a POINTER to a caller-made copy rather than the bytes.
+
+  The three readers -- the callee spill, the direct call and the indirect call
+  -- all ask this one question, which is the point: fixing the direct arm and
+  not the indirect one produces a gate that passes because the subject contains
+  no call through a function pointer, and that is the trap x86-64 and i386 both
+  walked into on the parent ticket.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure ABIA64CdeclArgSlotN(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
+                              var regIdx, stackOff, nRegs, size: Integer;
+                              var isIndirect, isAgg: Boolean);
 var i: Integer;
     argFp: array[0..MAX_PROC_PARAMS + 7] of Boolean;
+    argRegs, argSize: array[0..MAX_PROC_PARAMS + 7] of Integer;
+    dFp, dInd, dAgg: Boolean;
+    dRegs, dSize: Integer;
 begin
   for i := 0 to argIdx do
   begin
     if i > MAX_PROC_PARAMS + 7 then
       Error('target aarch64: argument index past the AAPCS64 class vector');
-    argFp[i] := ABIA64ParamIsFp(procIdx, i - selfCount);
+    ABIA64ArgDescOf(procIdx, i - selfCount, dRegs, dSize, dFp, dInd, dAgg);
+    argFp[i] := dFp; argRegs[i] := dRegs; argSize[i] := dSize;
+    if i = argIdx then
+    begin
+      nRegs := dRegs; size := dSize; isIndirect := dInd; isAgg := dAgg;
+    end;
   end;
-  ABIA64SlotWalk(argFp, argIdx, isFp, regIdx, stackOff);
+  ABIA64VecWalkN(argRegs, argSize, argFp, argIdx, isFp, regIdx, stackOff);
+end;
+
+procedure ABIA64CdeclArgSlot(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
+                             var regIdx, stackOff: Integer);
+var nRegs, size: Integer;
+    isIndirect, isAgg: Boolean;
+begin
+  ABIA64CdeclArgSlotN(procIdx, argIdx, selfCount, isFp, regIdx, stackOff,
+                      nRegs, size, isIndirect, isAgg);
 end;
 
 { The 16-byte-aligned size of the AAPCS64 stack argument area for `procIdx`'s
@@ -804,17 +957,25 @@ end;
   16 and not
   8 because sp must stay 16-byte aligned at a public interface. }
 function ABIA64CdeclStackBytes(procIdx, nparams, selfCount: Integer): Integer;
-var i, regIdx, stackOff, hiOff: Integer;
-    isFp: Boolean;
+var i, regIdx, stackOff, hiEnd, e, nRegs, size: Integer;
+    isFp, isIndirect, isAgg: Boolean;
 begin
-  hiOff := -1;
+  { The END of the last stack argument, not its offset plus a fixed eight: an
+    aggregate on the stack occupies its own bytes, and sizing the block at eight
+    would let the callee's frame land on the tail of the last argument. }
+  hiEnd := -1;
   for i := 0 to nparams - 1 do
   begin
-    ABIA64CdeclArgSlot(procIdx, i, selfCount, isFp, regIdx, stackOff);
-    if stackOff > hiOff then hiOff := stackOff;
+    ABIA64CdeclArgSlotN(procIdx, i, selfCount, isFp, regIdx, stackOff,
+                        nRegs, size, isIndirect, isAgg);
+    if stackOff >= 0 then
+    begin
+      e := stackOff + ((size + 7) div 8) * 8;
+      if e > hiEnd then hiEnd := e;
+    end;
   end;
-  if hiOff < 0 then ABIA64CdeclStackBytes := 0
-  else ABIA64CdeclStackBytes := ((hiOff + 8 + 15) div 16) * 16;
+  if hiEnd < 0 then ABIA64CdeclStackBytes := 0
+  else ABIA64CdeclStackBytes := ((hiEnd + 15) div 16) * 16;
 end;
 
 { How many BYTES of a variadic function's own incoming stack area its NAMED

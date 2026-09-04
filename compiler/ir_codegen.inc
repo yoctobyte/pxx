@@ -1685,6 +1685,8 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
     a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
+    a64Ind, a64Agg: Boolean;             { ...a pointer to a caller copy / its own bytes }
+    a64NRegs, a64Size, a64K, a64ES: Integer;
     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
     wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
     sIdx, nSlotsForParam, dstOff: Integer;  { x86-64 cdecl: slots OF one param }
@@ -1919,7 +1921,8 @@ begin
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
         sz := ParamSlotWordSize(idx);
-        ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, intIdx, stackOff);
+        ABIA64CdeclArgSlotN(procIdx, i, 0, a64Fp, intIdx, stackOff,
+                            a64NRegs, a64Size, a64Ind, a64Agg);
         EmitLoadImmA64(9, Syms[idx].Offset);
         EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
         if stackOff >= 0 then
@@ -1929,14 +1932,54 @@ begin
             there is no bank distinction to make here -- only the store width. }
           EmitLoadImmA64(10, 16 + stackOff);
           EmitI32($8B0A03AA);                     { add x10, x29, x10 }
-          EmitI32($F9400149);                     { ldr x9, [x10] }
-          if (Syms[idx].TypeKind = tySingle) and (not Syms[idx].IsRef) and
-             (not Syms[idx].IsArray) then
-            EmitI32($B9000109)                    { str w9, [x8] (raw single) }
-          else if sz = 1 then EmitI32($39000109)  { strb w9, [x8] }
-          else if sz = 2 then EmitI32($79000109)  { strh w9, [x8] }
-          else if sz = 4 then EmitI32($B9000109)  { str  w9, [x8] }
-          else EmitI32($F9000109);                { str  x9, [x8] }
+          if a64Agg then
+          begin
+            { An AGGREGATE that did not fit its bank arrives whole, in its own
+              bytes, and the slot is the same size -- so this is a copy, not a
+              load. The 4-byte tail is copied as a word rather than rounding the
+              count up, because the source is the caller's outgoing block and a
+              doubleword read past a 12-byte HFA of singles reads a byte the
+              program never passed. }
+            for a64K := 0 to (a64Size div 8) - 1 do
+            begin
+              EmitI32($F9400149 or (a64K shl 10));            { ldr x9, [x10,#k*8] }
+              EmitI32($F9000109 or (a64K shl 10));            { str x9, [x8, #k*8] }
+            end;
+            if (a64Size - (a64Size div 8) * 8) > 0 then
+            begin
+              EmitI32($B9400149 or (((a64Size div 8) * 2) shl 10)); { ldr w9,[x10,#n] }
+              EmitI32($B9000109 or (((a64Size div 8) * 2) shl 10)); { str w9,[x8, #n] }
+            end;
+          end
+          else
+          begin
+            EmitI32($F9400149);                   { ldr x9, [x10] }
+            if (Syms[idx].TypeKind = tySingle) and (not Syms[idx].IsRef) and
+               (not Syms[idx].IsArray) then
+              EmitI32($B9000109)                    { str w9, [x8] (raw single) }
+            else if sz = 1 then EmitI32($39000109)  { strb w9, [x8] }
+            else if sz = 2 then EmitI32($79000109)  { strh w9, [x8] }
+            else if sz = 4 then EmitI32($B9000109)  { str  w9, [x8] }
+            else EmitI32($F9000109);                { str  x9, [x8] }
+          end;
+        end
+        else if a64Agg then
+        begin
+          { THE CALLEE'S HALF OF THE SAME DECISION, and it has to be the same
+            decision: the caller loaded these registers out of the aggregate's
+            bytes and the callee writes them back into its own slot, in the same
+            order, at the same stride. A stride derived differently on the two
+            sides is a call that type-checks and desynchronises.
+            bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+          if a64Fp and (a64NRegs > 0) then a64ES := a64Size div a64NRegs
+          else a64ES := 8;
+          for a64K := 0 to a64NRegs - 1 do
+            if not a64Fp then
+              EmitI32($F9000100 + intIdx + a64K + (a64K shl 10))  { str x[n+k],[x8,#k*8] }
+            else if a64ES = 4 then
+              EmitI32($BD000100 + intIdx + a64K + (a64K shl 10))  { str s[n+k],[x8,#k*4] }
+            else
+              EmitI32($FD000100 + intIdx + a64K + (a64K shl 10)); { str d[n+k],[x8,#k*8] }
         end
         else if a64Fp then
         begin

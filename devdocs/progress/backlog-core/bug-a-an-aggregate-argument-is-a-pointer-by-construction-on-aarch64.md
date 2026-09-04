@@ -4,7 +4,7 @@ prio: 45
 type: bug
 found: 2026-09-01
 found-by: frankC
-summary: "aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee. THE ORACLE CLAUSE THIS TICKET WAS FILED WITH IS FALSE AND IS CORRECTED BELOW (2026-09-03): there is no cross gcc and no mixed LINK, but `clang --target=aarch64-linux-gnu -S` is a placement oracle that needs nothing installed and reads the CALL SITE, and llvm-objdump-21 reads pxx's own aarch64 ELF for the other column. MEASURED against it, five by-value shapes in one program: pxx emits `x0 = &temp, x1 = tail` for ALL FIVE, while AAPCS64 wants `{int,int}` packed in x0, `{long,long}` in x0+x1, a 24-byte struct indirect, `{double,double}` in d0+d1 and `{float,float,float}` in s0..s2 -- and after an HFA the tail integer goes to w0, because the banks allocate independently. FOUR OF FIVE ROWS WRONG AND THE FIFTH RIGHT BY ACCIDENT: a 24-byte struct really is indirect, so the always-a-pointer construction collides with the psABI on exactly the shape a single hand-written probe would choose. Work is now the classifier, not the oracle. Remaining gap: this is a PLACEMENT oracle and never runs, and the outcome oracle on aarch64 (a dynamic call into the target's glibc) cannot reach this ticket because no libc entry point takes a large aggregate by value."
+summary: "FIXED 2026-09-04 (step 2 of 2). aarch64 was the last target where a by-value aggregate argument occupied one pointer-sized slot by CONSTRUCTION rather than by classification. ABICRecordParamByValue now answers for aarch64, the AAPCS64 walk carries a full per-argument description (registers, bank, size, indirect, isAgg) instead of one Boolean, and all THREE readers take their answer from it -- the callee spill, the direct call and the indirect call. Verified against the clang PLACEMENT oracle: five of five shapes now match, including the tail register, which moves on four of the five and is the column that reports the bank state. TWO THINGS THE MEASUREMENT CAUGHT AND READING WOULD NOT HAVE: isAgg cannot be derived from nRegs and size, because struct{int,int} is one GP register and eight bytes -- a scalar's exact description -- so an inferred guard passed its ADDRESS; and SysV's `>= 0` is WRONG here, because both classifiers use 0 for 'not in registers' while SysV means MEMORY (the slot IS the object, by-value) and AAPCS64 means INDIRECT (the slot is a POINTER, which is the by-reference parameter pxx already had) -- copying the sign made va_list stop being a pointer and segfaulted a plain printf on aarch64 while x86-64 stayed green. STILL OPEN AND OWNED ELSEWHERE: a mixed LINK, a pxx-compiled CALLEE receiving from clang-compiled code, needs an aarch64 linker this box does not have -- that is an apt install and therefore the owner's, and it is recorded in the 2026-09-03 note in this ticket. test/caarch64_aggregate_byval.c is a REGRESSION guard and not the proof: measured, it passes on the pre-fix compiler byte for byte, because caller and callee were both pxx and both wrong the same way."
 ---
 
 # An aggregate argument is a pointer by construction on aarch64
@@ -259,3 +259,75 @@ model and step 2 must:
    `w0`.** A fix that places the HFA in `d0,d1` and still advances the GP index
    puts that tail in `w2` — wrong in a way NO SINGLE-ARGUMENT PROBE CAN SEE.
    Every probe for step 2 needs a trailing scalar.
+
+# 2026-09-04 (frankB) — STEP 2 LANDED. The three readers, the by-value switch, and what the outcome test cannot see
+
+In one sentence: `ABICRecordParamByValue` now answers for
+aarch64, the placement walk carries a full per-argument DESCRIPTION rather than
+one Boolean, and all three readers — the callee spill, the direct call and the
+indirect call — take their answer from it.
+
+## The five rows, re-measured against clang after the fix
+
+Same probe, same oracle (`clang --target=aarch64-linux-gnu -O1 -S` for the call
+site, `llvm-objdump-21` plus pxx's own `.map` for the other column):
+
+| shape | size | clang (AAPCS64) | pxx BEFORE | pxx NOW |
+| --- | --- | --- | --- | --- |
+| `{int,int}` | 8 | `x0` packed, tail `w1` | `x0 = &tmp`, tail `x1` | `ldr x0,[x9]`, tail `x1` |
+| `{long,long}` | 16 | `x0, x1`, tail `w2` | `x0 = &tmp`, tail `x1` | `ldr x0,[x9]`, `ldr x1,[x9,#8]`, tail `x2` |
+| `{long,long,long}` | 24 | POINTER `x0`, tail `w1` | `x0 = &tmp`, tail `x1` | `mov x0, x9`, tail `x1` |
+| `{double,double}` | 16 | `d0, d1`, tail `w0` | `x0 = &tmp`, tail `x1` | `ldr d0,[x9]`, `ldr d1,[x9,#8]`, tail `x0` |
+| `{float,float,float}` | 12 | `s0, s1, s2`, tail `w0` | `x0 = &tmp`, tail `x1` | `ldr s0/s1/s2`, tail `x0` |
+
+Five of five. The tail register moves on four of the five rows, which is the
+column that reports the bank state and the one no single-argument probe has.
+
+## Two things that were nearly wrong, both caught by measuring
+
+**1. `isAgg` cannot be derived from `nRegs` and `size`.** The first marshaller
+asked `(nRegs > 1) or (size <> 8)`. `struct {int a, b;}` is ONE GP register and
+EIGHT bytes — character for character a scalar's description — so it went down
+the scalar path and passed the ADDRESS. Four of five rows were right and the
+one that was wrong is the SMALLEST aggregate there is. The fact is now carried,
+not inferred, exactly as `ABISysVArgPlace` already carries it on x86-64.
+
+**2. `>= 0` IS RIGHT FOR SysV AND WRONG FOR AAPCS64, and the sign is the whole
+bug.** Both classifiers use 0 for "not in registers" and the two ABIs mean
+opposite things by it. SysV's 0 is MEMORY — the aggregate's own bytes are in
+the stack argument area, so the slot IS the object and by-value is right.
+AAPCS64's 0 is INDIRECT — a POINTER to a caller-made copy, so the slot is a
+pointer and the callee reads through it, which is the by-REFERENCE parameter
+pxx already had. Copying the SysV test verbatim made `va_list` (`struct
+__pxx_va_elem[1]`, 24 bytes, indirect class) stop being a pointer parameter,
+and every crtl routine forwarding one took a by-value slot: a plain
+`printf("hello %d %.2f")` SEGFAULTED on aarch64 while x86-64 stayed green. The
+predicate reads `> 0` on this target and says why.
+
+## What the new test proves, and what it CANNOT
+
+`test/caarch64_aggregate_byval.c` covers every class, bank exhaustion in both
+directions, and the same functions through a function POINTER, each call with a
+trailing integer. It is wired on five targets — only one is aarch64; the other
+four are the control that a change to the shared C-ABI predicate did not
+disturb them. It matches gcc exactly on all five.
+
+**AND IT PASSES ON THE PRE-FIX COMPILER, BYTE FOR BYTE.** That is measured, not
+suspected, and it is this defect's class rather than a flaw in the rows: caller
+and callee were both built by pxx and both used the one-pointer-slot
+convention, so they agreed and every value arrived intact. An outcome test over
+a pxx-only program is PHYSICALLY UNABLE to observe a wrong calling convention.
+A green row there says "pxx still agrees with itself".
+
+So the file is a REGRESSION guard. The proof is the placement table above.
+
+## Still open, and it is the same gap this ticket has always had
+
+The remaining half is a mixed LINK — a pxx-compiled CALLEE receiving from
+clang-compiled code — which needs an aarch64 linker this box does not have (see
+the 2026-09-03 note; the compiler and the runner are both present and only the
+linker is missing). The indirect-call arm shares one description and one walk
+with the direct arm, which is why it is not separately proven: there is no
+shape here that reaches it with an aggregate — a Pascal program calling through
+a cdecl fnptr into a foreign callee that takes a struct by value — and inventing
+one that only pxx can execute would prove pxx agrees with itself again.

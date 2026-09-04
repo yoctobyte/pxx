@@ -9337,15 +9337,42 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_riscv32
 	tools/expect_same.sh riscv32/cvarargfp_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvarargfp_riscv32)" "$$(cat test/cvararg_fp_bank_cross.expected)"
 	# AAPCS64 by-value aggregate CLASSIFICATION, asserted before any codegen
-	# reads it — the same discipline as PXXDBG=a.sysvcls for SysV. Every row
-	# disagrees with what the compiler currently DOES (pxx passes every
-	# aggregate as one pointer slot on aarch64); the point is that the
-	# classifier is proven against clang first, so the classifier and the
-	# marshalling are never debugged together. The compile is its own line so
-	# its exit status is make's to check — the capture below reads a FILE, not
-	# a pipe, because a pipe would swallow it.
+	# reads it — the same discipline as PXXDBG=a.sysvcls for SysV. It landed as
+	# step 1 with NO consumer, and this block used to say "every row disagrees
+	# with what the compiler currently DOES (pxx passes every aggregate as one
+	# pointer slot on aarch64)". That is no longer true: step 2 landed and the
+	# marshalling now READS this classifier. The rows are unchanged, which is
+	# the point of having proved them against clang before anything depended on
+	# them — the classifier and the marshalling were never debugged together.
+	# The compile is its own line so its exit status is make's to check — the
+	# capture below reads a FILE, not a pipe, because a pipe would swallow it.
 	PXXDBG=a.a64cls ./$(COMPILER) --target=aarch64 test/caarch64_aggregate_class.c $(TESTTMP)/caarch64aggcls > $(TESTTMP)/caarch64aggcls.log 2>&1
 	tools/expect_same.sh aarch64/caarch64aggcls "$$(grep '^PXXDBG a.a64cls' $(TESTTMP)/caarch64aggcls.log)" "$$(cat test/caarch64_aggregate_class.expected)"
+	# ...and what the marshalling DOES with it: every AAPCS64 class, each call
+	# carrying a trailing integer because the GP and FP banks advance
+	# independently and the tail is the only thing that reports the bank state
+	# after the aggregate. Bank exhaustion in both directions (`five`, `nine`),
+	# and the same functions called through a POINTER, because fixing the direct
+	# arm and not the indirect one gives a gate that passes for want of a call
+	# through a function pointer.
+	#
+	# THIS IS A REGRESSION GUARD AND NOT THE PROOF, and the file says so at
+	# length. MEASURED: it passes on the PRE-FIX compiler byte for byte, because
+	# caller and callee were both built by pxx and both used the wrong
+	# convention, so they agreed. The proof was clang's call site read against
+	# pxx's disassembly, recorded in the ticket. Wired on FIVE targets and only
+	# one of them is aarch64: the other four are the control that a change to
+	# the shared C-ABI predicate did not disturb them.
+	./$(COMPILER) test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv26
+	tools/expect_same.sh caggbv26 "$$($(TESTTMP)/caggbv26)" "$$(cat test/caarch64_aggregate_byval.expected)"
+	./$(COMPILER) --target=aarch64 test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv_a64
+	tools/expect_same.sh aarch64/caggbv "$$(tools/run_target.sh aarch64 $(TESTTMP)/caggbv_a64)" "$$(cat test/caarch64_aggregate_byval.expected)"
+	./$(COMPILER) --target=i386 test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv_i386
+	tools/expect_same.sh i386/caggbv "$$(tools/run_target.sh i386 $(TESTTMP)/caggbv_i386)" "$$(cat test/caarch64_aggregate_byval.expected)"
+	./$(COMPILER) --target=arm32 test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv_a32
+	tools/expect_same.sh arm32/caggbv "$$(tools/run_target.sh arm32 $(TESTTMP)/caggbv_a32)" "$$(cat test/caarch64_aggregate_byval.expected)"
+	./$(COMPILER) --target=riscv32 test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv_rv32
+	tools/expect_same.sh riscv32/caggbv "$$(tools/run_target.sh riscv32 $(TESTTMP)/caggbv_rv32)" "$$(cat test/caarch64_aggregate_byval.expected)"
 	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
 	# NO `varargs` must still refuse an extra argument. fpc refuses the same
 	# line ("Wrong number of parameters specified for call to fflush").

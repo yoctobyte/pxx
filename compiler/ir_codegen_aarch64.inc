@@ -1874,6 +1874,95 @@ begin
   end;
 end;
 
+{ The same vector, WIDE: how many registers of which bank each argument wants,
+  how many bytes it occupies, and whether its slot holds a pointer to a copy.
+  A variadic tail argument is a promoted scalar and has no parameter to
+  classify, so it stays one register of eight bytes and only its BANK comes
+  from the argument's own type -- which is the whole reason A64CdeclArgIsFp
+  exists. bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure A64BuildArgVecN(procIdx, selfCount, argChain, nArgs: Integer;
+                          var argFp, argInd, argAgg: array of Boolean;
+                          var argRegs, argSize: array of Integer);
+var i, an, pi, dRegs, dSize: Integer;
+    dFp, dInd, dAgg: Boolean;
+begin
+  an := argChain;
+  for i := 0 to nArgs - 1 do
+  begin
+    if i > MAX_PROC_PARAMS + 7 then
+      Error('target aarch64: argument index past the AAPCS64 class vector');
+    pi := i - selfCount;
+    if (pi >= 0) and (pi >= Procs[procIdx].ParamCount) and
+       ProcVariadic[procIdx] and (an <> -1) then
+    begin
+      argFp[i] := TypeIsFloat(IntToTypeKind(IRTk[IRA[an]]));
+      argRegs[i] := 1; argSize[i] := 8; argInd[i] := False; argAgg[i] := False;
+    end
+    else
+    begin
+      ABIA64ArgDescOf(procIdx, pi, dRegs, dSize, dFp, dInd, dAgg);
+      argFp[i] := dFp; argRegs[i] := dRegs; argSize[i] := dSize;
+      argInd[i] := dInd; argAgg[i] := dAgg;
+    end;
+    if PxxDbgEnabled('a.a64argvec') then
+      WriteLn('A64ARGVEC ', Procs[procIdx].Name, ' i=', i, ' pi=', pi,
+              ' tk=', Ord(Procs[procIdx].Params[pi].TypeKind),
+              ' isref=', Ord(Procs[procIdx].Params[pi].IsRef),
+              ' recid=', ProcParamRecId[procIdx * MAX_PROC_PARAMS + pi],
+              ' regs=', argRegs[i], ' size=', argSize[i],
+              ' fp=', Ord(argFp[i]), ' agg=', Ord(argAgg[i]),
+              ' ind=', Ord(argInd[i]));
+    if an <> -1 then an := IRB[an];
+  end;
+end;
+
+{ Load an AGGREGATE argument's own bytes into the registers AAPCS64 gave it,
+  from x9 which holds its ADDRESS -- the argument temp carries a pointer, the
+  same shape the SysV caller uses on x86-64 for the same reason: the aggregate
+  is evaluated once, into memory, and the marshaller reads it from there.
+
+  The element stride is DERIVED rather than passed. An HFA's size is exactly
+  count * member size -- ABIA64RecordClass asserts that equality precisely so
+  padding cannot masquerade as homogeneity -- so `size div nRegs` is 4 for a
+  homogeneous single aggregate and 8 for a double one, and it is the load width
+  as well as the stride. A GP aggregate is <= 16 bytes in one or two X
+  registers, stride 8 by definition. The unsigned-offset immediate is scaled by
+  the access size on this ISA, so the immediate is `k` in all three forms.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure A64EmitAggLoadRegs(nRegs, lo, size: Integer; isFp: Boolean);
+var k, es: Integer;
+begin
+  if isFp and (nRegs > 0) then es := size div nRegs else es := 8;
+  for k := 0 to nRegs - 1 do
+    if not isFp then
+      EmitI32($F9400120 + lo + k + (k shl 10))        { ldr x[lo+k], [x9, #k*8] }
+    else if es = 4 then
+      EmitI32($BD400120 + lo + k + (k shl 10))        { ldr s[lo+k], [x9, #k*4] }
+    else
+      EmitI32($FD400120 + lo + k + (k shl 10));       { ldr d[lo+k], [x9, #k*8] }
+end;
+
+{ ...and the stack half of the same thing: `size` bytes from [x9] to [sp,#off].
+  The tail is copied as a WORD rather than by rounding the count up, because the
+  source is the caller's own object and a doubleword read past a 12-byte HFA of
+  singles is a read the program never asked for. Everything pxx can classify is
+  a multiple of four bytes, so one 4-byte tail is the whole remainder case. }
+procedure A64EmitAggToStack(size, off: Integer);
+var k, n: Integer;
+begin
+  n := size div 8;
+  for k := 0 to n - 1 do
+  begin
+    EmitI32($F940012A + (k shl 10));                     { ldr x10, [x9, #k*8] }
+    EmitI32($F90003EA or (((off div 8) + k) shl 10));    { str x10, [sp, #off+k*8] }
+  end;
+  if (size - n * 8) > 0 then
+  begin
+    EmitI32($B940012A + ((n * 2) shl 10));               { ldr w10, [x9, #n*8] }
+    EmitI32($B90003EA or (((off div 4) + n * 2) shl 10));{ str w10, [sp, #off+n*8] }
+  end;
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1887,7 +1976,11 @@ var
   cdeclDropA64: Integer;   { bytes the C-ABI call arm must drop after the call }
   cdeclBlkA64: Integer;    { AAPCS64 outgoing stack-argument block bytes }
   a64Fp: Boolean;          { AAPCS64: this argument takes the FP bank }
+  a64Ind: Boolean;         { AAPCS64: this argument's slot holds a POINTER to a caller copy }
+  a64N, a64Sz: Integer;    { AAPCS64: registers it occupies, and its own size in bytes }
   argFpA64: array[0..MAX_PROC_PARAMS + 7] of Boolean;  { AAPCS64 per-ARGUMENT class vector }
+  argIndA64, argAggA64: array[0..MAX_PROC_PARAMS + 7] of Boolean;
+  argRegsA64, argSizeA64: array[0..MAX_PROC_PARAMS + 7] of Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
   nArgTotal: Integer;   { -O3 W1 last-argument collapse (aarch64): args counted BEFORE the push loop }
@@ -3575,8 +3668,17 @@ begin
             the call. Argument i's temp sits at sp + blk + (nArgs-1-i)*16
             once the block is reserved (arg0 was pushed deepest).
             bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-          A64BuildArgFpVec(procIdx, 0, IRB[node], nArgs, argFpA64);
-          cdeclBlkA64 := ABIA64VecStackBytes(argFpA64, nArgs);
+          { THE WIDE VECTOR, because an aggregate argument is not one slot. A
+            by-value composite takes 1-2 X registers, 1-4 V registers as an HFA,
+            or a POINTER to a caller copy over 16 bytes, and the argument temp
+            holds its ADDRESS either way -- so the register half loads the
+            bytes out of it and the stack half copies them. `argInd` marks the
+            over-16 case, where the pointer IS the argument and today's
+            one-word path is already right.
+            bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+          A64BuildArgVecN(procIdx, 0, IRB[node], nArgs,
+                          argFpA64, argIndA64, argAggA64, argRegsA64, argSizeA64);
+          cdeclBlkA64 := ABIA64VecStackBytesN(argRegsA64, argSizeA64, argFpA64, nArgs);
           if cdeclBlkA64 + nArgs * 16 > 32760 then
             Error('target aarch64: cdecl call with ' + AIntToStr(nArgs) +
                   ' arguments needs a temp block past the 32760-byte reach of '
@@ -3587,21 +3689,29 @@ begin
             argument register that the register half has already loaded. }
           for i := 0 to nArgs - 1 do
           begin
-            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then
             begin
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
               EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
-              EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
+              if argAggA64[i] then
+                A64EmitAggToStack(argSizeA64[i], hi)
+              else
+                EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
             end;
           end;
           { Register half, high index first so x0 is written last. }
           for i := nArgs - 1 downto 0 do
           begin
-            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then Continue;
             sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
             EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            if argAggA64[i] then
+            begin
+              A64EmitAggLoadRegs(argRegsA64[i], lo, argSizeA64[i], a64Fp);
+              Continue;
+            end;
             if a64Fp then
             begin
               EmitI32($9E670120 + lo);           { fmov d[lo], x9 }
@@ -3779,8 +3889,15 @@ begin
             reserved argument i sits at sp + blk + (nArgs-1-i)*16 and the callee
             at sp + blk + nArgs*16. Everything drops in one add after the call.
             bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-          A64BuildArgFpVec(procIdx, Integer(IRC[node]), IRB[node], nArgs, argFpA64);
-          cdeclBlkA64 := ABIA64VecStackBytes(argFpA64, nArgs);
+          { THE SAME WIDE VECTOR THE DIRECT ARM USES, and it is here for the
+            reason the parent ticket names on x86-64 and i386: fixing the direct
+            arm and not this one produces a gate that PASSES because the subject
+            contains no call through a function pointer. Two arms, one
+            description, one walk.
+            bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+          A64BuildArgVecN(procIdx, Integer(IRC[node]), IRB[node], nArgs,
+                          argFpA64, argIndA64, argAggA64, argRegsA64, argSizeA64);
+          cdeclBlkA64 := ABIA64VecStackBytesN(argRegsA64, argSizeA64, argFpA64, nArgs);
           if cdeclBlkA64 + (nArgs + 1) * 16 > 32760 then
             Error('target aarch64: cdecl indirect call with ' + AIntToStr(nArgs) +
                   ' arguments needs a temp block past the 32760-byte reach of ' +
@@ -3791,21 +3908,29 @@ begin
             argument register the register half has already loaded. }
           for i := 0 to nArgs - 1 do
           begin
-            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then
             begin
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
               EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
-              EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
+              if argAggA64[i] then
+                A64EmitAggToStack(argSizeA64[i], hi)
+              else
+                EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
             end;
           end;
           { Register half, high index first so x0 is written last. }
           for i := nArgs - 1 downto 0 do
           begin
-            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then Continue;
             sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
             EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            if argAggA64[i] then
+            begin
+              A64EmitAggLoadRegs(argRegsA64[i], lo, argSizeA64[i], a64Fp);
+              Continue;
+            end;
             if a64Fp then
             begin
               { by-REF float = pointer -> int bank; see the direct path above. }
