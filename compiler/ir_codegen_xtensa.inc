@@ -1751,6 +1751,10 @@ var
                         (0 = the block was already freed before it) }
   argCls: Integer;    { Arg32Class of the argument being pushed on the virtual /
                         indirect ladders -- see those arms }
+  vaTail: Boolean;    { this argument is past the callee's declared parameters,
+                        so there is no Params[i] to classify it by -- the direct
+                        ladder's two 64-bit arms both keyed on one and silently
+                        pushed a single word. See them. }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
@@ -3507,7 +3511,58 @@ begin
         end;
         while argNode <> -1 do
         begin
-          if (procIdx >= 0) and
+          { THE VARIADIC TAIL HAS NO Params[i], AND BOTH 64-BIT ARMS BELOW ASKED
+            FOR ONE. `i < Procs[procIdx].ParamCount` is false for every argument
+            past the declared parameters, so a `long long` or a `double` in a
+            printf tail fell through to the one-word arm: the HIGH word was
+            never pushed and every later variadic argument shifted down a slot.
+            Measured against gcc on xtensa, with riscv32 as the working control:
+
+              printf("%llx", 0x1122334455667788)  ->  55667788
+              printf("%.3f %.3f", 1.5, 2.25)      ->  0.000 0.000
+              printf("%d %.3f %d", 7, 1.5, 8)     ->  7 0.000 1   (8 read as 1)
+
+            riscv32 fixed the identical hole with a dedicated tail branch, and
+            its comment says the same sentence. Arg32Class already answers this
+            question -- its own header says "a paramIdx at or past ParamCount is
+            a VARIADIC TAIL argument: there is no declared parameter to consult,
+            so it classifies by the argument's own type" -- so the tail asks it
+            rather than growing a third private ladder.
+
+            SCOPED TO THE TAIL on purpose. The named arms keep their existing
+            conditions untouched: Arg32Class deliberately answers A32_PAIR64 for
+            an Int64 open-array-by-ref that these arms exclude with `not
+            IsArray`, so routing named parameters through it would change a
+            working case in the same commit as a fix, and neither could then be
+            attributed.
+            bug-cfront-no-entry-stub-for-xtensa }
+          vaTail := (procIdx < 0) or (i >= Procs[procIdx].ParamCount);
+          if vaTail then
+            argCls := Arg32Class(procIdx, i, IntToTypeKind(IRTk[IRA[argNode]]))
+          else
+            argCls := A32_WORD;
+          if vaTail and (argCls = A32_DOUBLE) then
+          begin
+            { The even-word pad is required on both sides: __pxx_va_arg_cross32
+              steps a 64-bit read by 8 from an 8-aligned base, which is what
+              riscv32's tail does too (its word dump shows the pad slot). }
+            XtensaPadTo64Xtensa(procIdx, nArgs);
+            EmitFloatOperandXtensa(IRA[argNode], tyDouble);   { a2=lo, a3=hi }
+            XtensaPushA2;                                     { lo }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                                     { hi }
+            Inc(nArgs, 2);
+          end
+          else if vaTail and (argCls = A32_PAIR64) then
+          begin
+            XtensaPadTo64Xtensa(procIdx, nArgs);
+            EmitNode64Xtensa(IRA[argNode]);                   { a2=lo, a3=hi }
+            XtensaPushA2;                                     { lo }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                                     { hi }
+            Inc(nArgs, 2);
+          end
+          else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              IsFloatXtensa(Procs[procIdx].Params[i].TypeKind) and
              (not Procs[procIdx].Params[i].IsRef) and

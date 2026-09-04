@@ -1062,6 +1062,33 @@ end;
   names a record. bytes is what the slot HOLDS -- 4 for the indirect case,
   because there the slot holds a pointer and not the aggregate.
   bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+{ THE SAME QUESTION FOR XTENSA, AND IT HAS TO BE ASKED IN ONE PLACE BECAUSE
+  BOTH SIDES ASK IT. XtensaPadTo64Xtensa starts a 64-bit argument at an EVEN
+  word index -- measured from the IDF's own xtensa-esp32s3-elf-gcc, which puts
+  `long long v` in a4:a5 and SKIPS a3 -- and that rule applies to a variadic
+  argument exactly as to a named one. The READER (__pxx_va_arg_cross32) is told
+  the alignment by the frontend and defaults to 4, the packed walk i386 and
+  riscv32-scalar... take.
+
+  With the two disagreeing, the caller pushed a pad word the walk did not skip:
+  `printf("%llx", v)` printed the pad and the low word as one value, and it was
+  visible only at ODD preceding-word counts, so `printf("%d %llx", 7, v)` was
+  RIGHT and `printf("%llx", v)` was WRONG in the same program. Measured 2026-09-04
+  across five positions; three wrong, two right, which is the signature of a
+  parity disagreement rather than a broken read.
+
+  Records are deliberately NOT given an answer here: the xtensa tail still
+  passes an aggregate as a POINTER, four bytes and four-aligned, exactly as
+  before, and inventing a by-value rule for them in a scalar fix is how a
+  refactor gets blamed for a bug it did not cause.
+  bug-cfront-no-entry-stub-for-xtensa }
+function ABIXtensaVaArgSlotAlign(recId, slotBytes: Integer): Integer;
+begin
+  ABIXtensaVaArgSlotAlign := 4;
+  if recId > REC_NONE then Exit;
+  if slotBytes > 4 then ABIXtensaVaArgSlotAlign := 8;
+end;
+
 procedure ABIRV32VaArgDesc(recId, slotBytes: Integer;
                            var bytes, align: Integer; var byValue: Boolean);
 begin

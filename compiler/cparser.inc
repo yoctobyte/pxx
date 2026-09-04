@@ -1890,6 +1890,12 @@ begin
           a4 := AllocNode(AN_INT_LIT);
           if TargetArch = TARGET_RISCV32 then ASTIVal[a4] := vaRvAlign
           else if TargetArch = TARGET_ARM32 then ASTIVal[a4] := vaA32Align
+          else if TargetArch = TARGET_XTENSA then
+            { ...and xtensa asks its own, for the reason that function gives:
+              its caller has ALWAYS started a 64-bit argument at an even word
+              (XtensaPadTo64Xtensa, measured from IDF gcc) and this walk was
+              being told 4. bug-cfront-no-entry-stub-for-xtensa }
+            ASTIVal[a4] := ABIXtensaVaArgSlotAlign(vaRecId, TypeSlotSize(vt))
           else ASTIVal[a4] := 4;
           ASTTk[a4] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
