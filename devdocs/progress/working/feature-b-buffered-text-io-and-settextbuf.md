@@ -3,7 +3,7 @@ track: B
 prio: 55
 type: feature
 blocked-by: []
-summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. The read buffer already exists (4096 bytes, inline in the Text record); the only structural blocker is that it is an inline array where FPC has a pointer, so SetTextBuf cannot point it at the caller's memory. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty. DO NOT LAND THE WRITE SIDE ALONE: this is one half of an interlock with feature-c-crtl-stdio-buffering-and-setvbuf, and the two share a flush registry. Ordering between Pascal WriteLn and C printf is correct TODAY only because both sides are unbuffered; buffering either side by itself reorders output inside a single program that mixes them, which is the case pxx exists to support. crtl's setvbuf is also a stub that ignores its arguments and returns SUCCESS -- worse in C than a missing SetTextBuf is in Pascal, because C callers check the return, so it turns a missing feature into a wrong answer. The READ side (BufPtr/BufSize + SetTextBuf) is self-contained and may land on its own."
+summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. READ SIDE DONE at 8dacaaa15: the inline 4096-byte array became BufPtr/BufSize over an inline DefBuf and SetTextBuf exists, byte-identical to FPC 3.2.2's own run. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty. DO NOT LAND THE WRITE SIDE ALONE: this is one half of an interlock with feature-c-crtl-stdio-buffering-and-setvbuf, and the two share a flush registry. Ordering between Pascal WriteLn and C printf is correct TODAY only because both sides are unbuffered; buffering either side by itself reorders output inside a single program that mixes them, which is the case pxx exists to support. crtl's setvbuf is also a stub that ignores its arguments and returns SUCCESS -- worse in C than a missing SetTextBuf is in Pascal, because C callers check the return, so it turns a missing feature into a wrong answer. WHAT IS LEFT IS THE WRITE SIDE, and it is bigger than this ticket assumed: MEASURED 2026-09-04, plain `writeln` does NOT go through textfile.pas on any target -- every backend lowers IR_WRITE/IR_WRITELN to its own emitted write, so buffering Output here buys nothing for the common case. See the 2026-09-04 finding in the body before planning it."
 status: working
 owner: franks-ab
 ---
@@ -135,3 +135,53 @@ registry shared with `feature-c-crtl-stdio-buffering-and-setvbuf`.
 **Do not land the write side alone.** `Flush`'s comment at `textfile.pas` and
 the interface comment above it both still say writes are unbuffered; they are
 true today and must be rewritten in the same commit that stops being true.
+
+## 2026-09-04 — WHOEVER TAKES THE WRITE SIDE, READ THIS FIRST
+
+### `writeln` does not go through this unit. Measured, with a positive control.
+
+The ticket's write-side plan says *"Writes go straight to the fd (`PalWrite` per
+`Write`)"* and reads as though buffering `Output` in `textfile.pas` would buffer
+`writeln`. **It would not.** Every backend lowers `IR_WRITE`/`IR_WRITELN` to its
+own emitted write — `ir_codegen.inc` (x86-64), `386`, `arm32`, `aarch64`,
+`riscv32`, `xtensa`, `wasm32` all carry the node — and the Text record is never
+consulted.
+
+Not inferred from the syscall trace, which cannot separate the two: `writeln`
+gives `write(1,"hello",5)` then `write(1,"\n",1)`, and `TextWriteLn` would give
+exactly the same pair. **The discriminator is a marker inside `TextWrite`.** With
+`PalWrite(2, '[TW]', 4)` added to its first line and nothing else changed:
+
+```
+writeln('plain');            ->  plain            { no marker }
+TextWrite(Output, 'viaText') ->  [TW]viaText      { marker }
+```
+
+So the write half is not "add a buffer to `Text`". It is either
+
+- **re-route `IR_WRITE` through a runtime helper** on every backend and buffer
+  there (Track A's files, not Track B's — `compiler/ir_codegen*.inc`), or
+- accept that `SetTextBuf`-style buffering applies **only** to explicit
+  `write(f, …)` on a file variable, and say so, which leaves the C99 policy
+  argument and the flush registry answering a case almost no program hits.
+
+`riscv32` already routes through `builtinheap.pas`'s `PXXWrite*` helpers rather
+than inline codegen, so a runtime hook is not unprecedented — but those helpers
+call `PXXSysWrite` directly and are equally invisible to this unit.
+
+### It also changes the interlock, and makes it WORSE rather than better
+
+The ruling's registry assumes both writers can be made to consult it. crtl's can.
+**Pascal's cannot, today, because the writer is emitted code with no call site to
+hook.** So the moment `lib/crtl` buffers, a mixed program's `writeln` output
+jumps ahead of its buffered `printf` output and there is nowhere in `lib/rtl` to
+put the flush. That is a Track A dependency the C half acquires, and it is not
+in either ticket.
+
+### Two comments that must be rewritten in the same commit
+
+`lib/rtl/textfile.pas:164-165` (interface, above `Flush`) and the body of `Flush`
+both state that writes are unbuffered and there is nothing to drain. **Both are
+true today.** Whoever adds write buffering rewrites both in that commit, or the
+tree gets a comment that disagrees with its code — the case CLAUDE.md says you
+cannot resolve by looking, because you cannot tell which half is wrong.
