@@ -1,9 +1,9 @@
 ---
-summary: "`file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead)."
+summary: "`file of T` and untyped `file` are refused outright -- only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead). BOTH BLOCKERS ARE CLOSED and this ticket is now READY. THE STRING HALF OF ITS FORMAT PROBLEM WENT AWAY WITH THEM -- re-measured at HEAD 2026-09-04 against FPC 3.2.2 and every row of the table below is now IDENTICAL, where on 2026-09-02 five of six diverged: string[100] 101 (was 108), TRec 302 (was 320), field b at offset 101 (was 112), TGrid 3333 (was 3564), strides 101/1111 (were 108/1188). So `we pad and FPC does not` IS RESOLVED, the padding came from the 8-byte length word, and a record or array of fixed strings now blits AND is FPC-readable -- no marshalling, and no format fork to settle for that case. SETS ARE UNCHANGED AND ARE NOW THE ONLY MARSHALLING CONSTRAINT: re-measured the same day, a set is 32 bytes against FPC 4, and in `record s: TSmall; n: Integer` our n sits at offset 32 against FPC 4, so such a record still cannot blit. The owner-instructed Track D doc note and the `BlockWrite(f, s, SizeOf(s))` trap both stand, and both are now about sets ALONE rather than about strings and sets."
 type: feature
 prio: 70
 track: P
-blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, feature-p-implement-the-real-tyshortstring-byte-prefix-layout]
+blocked-by: []   # both closed 2026-09-04 (compat-... in done/, p100 in done/); edge kept in the body's history
 ---
 
 # `file of T` and untyped `file` are not supported
@@ -12,16 +12,31 @@ blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agr
 > 2026-09-02 (`5f275966bf50` @ `bf92c45a7`), and this CORRECTS an earlier
 > framing in this ticket's own history that said records could not blit.**
 >
+> **RE-MEASURED AT HEAD 2026-09-04 AND THE DIVERGENCE IS GONE.** The 09-02
+> column below was correct when taken; the byte-prefix flip (`fd186a975`) and
+> the `shortstring` arm that completed it (`6a890a405`) landed after it, and
+> nothing updates a table. Both blockers are now in `done/`.
+>
 > ```
->                         pxx        FPC (-Mobjfpc)
-> string[100]             108        101
+>                         pxx 09-02   pxx HEAD   FPC (-Mobjfpc)
+> string[100]             108         101        101
 > TRec = a:s[100]; b:s[200]
->   SizeOf                320        302
->   field b offset        112        101
+>   SizeOf                320         302        302
+>   field b offset        112         101        101
 > TGrid = [0..2] of [0..10] of string[100]
->   SizeOf               3564       3333
->   inner / outer stride  108/1188   101/1111
+>   SizeOf               3564        3333       3333
+>   inner / outer stride  108/1188    101/1111   101/1111
 > ```
+>
+> **Six rows, six exact matches.** The padding this ticket is built around was
+> the 8-byte length word needing alignment; a one-byte prefix is byte-aligned,
+> so it is not that we stopped padding but that there is nothing left to pad.
+>
+> **What that changes for the feature:** a record or array of fixed strings now
+> blits AND the result is FPC-readable. Those were two separate goals here and
+> they have collapsed into one, so for this case there is no format choice left
+> to state -- our layout IS FPC's. Sets are the only case where the choice
+> survives.
 >
 > **Both compilers are fully contiguous.** FPC's record is exactly 101+201 with
 > no padding; our grid is exactly 3*11*108 with clean strides. Nested arrays of
@@ -34,15 +49,23 @@ blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agr
 > choice first; the blit/marshal question is downstream of it and not
 > independent.**
 >
-> Two divergences that appear in RECORDS and not in arrays: **we pad and FPC
-> does not** (offset 112 vs 101 — our 8-byte length word needs alignment, FPC's
-> 1-byte prefix is byte-aligned), and **`string[1000]` cannot arise in FPC at
-> all**, so records holding one are ours-only by construction and blitting them
-> is unambiguous. Implementing
-> [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] removes the
-> padding as well as the width gap.
+> ~~Two divergences that appear in RECORDS and not in arrays: **we pad and FPC
+> does not**~~ — **RESOLVED 2026-09-04, see the re-measurement above.** This
+> paragraph predicted that implementing
+> [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] would remove
+> the padding as well as the width gap. It did, exactly, and that ticket is
+> closed. The surviving half is the other one: **`string[1000]` cannot arise in
+> FPC at all** (it exceeds the one-byte prefix, so it stays the wide kind here),
+> so records holding one are ours-only by construction and blitting them is
+> unambiguous — that remains true and is now a statement about `string[N]` for
+> N > 255 specifically, not about fixed strings in general.
 >
-> **SETS: A CONSTRAINT AND A DOC OBLIGATION, settled by the owner 2026-09-02.**
+> **SETS: A CONSTRAINT AND A DOC OBLIGATION, settled by the owner 2026-09-02 —
+> RE-MEASURED AT HEAD 2026-09-04 AND UNCHANGED, so this section stands as
+> written while the string section above did not.** `set of 0..31` and
+> `set of TE8` are both 32 bytes against FPC's 4, and in
+> `record s: TSmall; n: Integer` our `n` sits at offset 32 against FPC's 4 —
+> the field shift this section predicts, confirmed rather than assumed.
 > Sets stay 32 bytes in memory. Measured: our mask is a byte-exact ZERO-EXTENSION
 > of FPC's, so **a bare set writes with no conversion** — put down 4 bytes when
 > the declared high bound is <= 31, else 32, read back and zero-extend, and the
