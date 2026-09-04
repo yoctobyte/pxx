@@ -10676,6 +10676,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_generator_instance_freed_on_escaping_raise.pas $(TESTTMP)/test_gifer26
 	tools/expect_same.sh test_gifer26 "$$($(TESTTMP)/test_gifer26 2>/dev/null)" "$$(printf 'caught_sl=2000\ncaught_sf=2000\nexitsum=6000\nbreaksum=6000\nnest=100')"
 	tools/assert_no_leak.sh generator_instance_freed_on_escaping_raise 50 $(TESTTMP)/test_gifer26
+	@# A `for X in C` over a class with GetEnumerator wraps the loop in a
+	@# try/finally for the enumerator's Free -- and never asked for the
+	@# exception runtime, whose stubs come from a token pre-scan looking for a
+	@# SOURCE `try`. So a program whose only try/finally is a SYNTHESISED one
+	@# got ExcRaiseAddr = 0. This program does not compile on pin v403; that is
+	@# the positive control, and it is why the file contains no `try` of its
+	@# own -- adding one would enable the runtime by the old path and make the
+	@# test unable to fail. Both values matter: the loop ran (sum) and the
+	@# enumerator was freed exactly once (freed).
+	@# bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in
+	./$(COMPILER) test/test_forin_enumerator_free_without_try.pas $(TESTTMP)/test_fefwt26
+	tools/expect_same.sh test_fefwt26 "$$($(TESTTMP)/test_fefwt26)" "sum=60 freed=1"
 	./$(COMPILER) test/test_forin_set_member.pas $(TESTTMP)/test_forin_set_member26
 	tools/expect_same.sh test_forin_set_member26 "$$($(TESTTMP)/test_forin_set_member26)" "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas $(TESTTMP)/test_textfile26

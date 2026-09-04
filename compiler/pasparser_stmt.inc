@@ -349,6 +349,19 @@ begin
     GenForInGenTeardown := GenMakeSeq(whileNode, GenMakeSeq(callFree, -1));
     Exit;
   end;
+  { A DESUGAR THAT SYNTHESISES A try/finally MUST ASK FOR THE EXCEPTION RUNTIME.
+    Nothing downstream infers it: the enabling scan looks for a SOURCE `try`
+    (pasparser_prog.inc's hasExceptions), so a program that never writes one got
+    ExcRaiseAddr = 0 and the AN_TRY_FINALLY lowering's IR_RAISE compiled to
+    `call 0`. IREmitCodeCall's guard turned that into a compiler error rather
+    than the infinite entry-point loop it would otherwise be, which is the only
+    reason this was a build failure and not a hang.
+
+    The stackful arm never showed it because EnableCoroutineRuntime already
+    calls EnableExceptionRuntime (CoSwitch saves BSS_EXC_TOP), so `uses
+    coroutine` supplied it by accident. `uses slgen` alone does not, and
+    test_stackless_gen.pas is exactly that program. }
+  EnableExceptionRuntime;
   tryNode := AllocNode(AN_TRY_FINALLY);
   ASTLeft[tryNode] := whileNode;
   ASTRight[tryNode] := callFree;

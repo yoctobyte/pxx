@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-i386`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/test_stackless_gen.pas`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -38,3 +39,44 @@ pascal26:144: error: compiler error: call to a runtime stub that was never emitt
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+
+## Resolved 2026-09-04 by frankb-78 — mine, and the red list pointed the wrong way
+
+**Cause: `7e271ff7d`** (the for-in generator teardown fix). Fixed in the commit
+that lands beside this note; all four targets now match the expected output.
+
+**It was never a cross-target defect.** `test_stackless_gen.pas` does not
+COMPILE on x86-64 at `7e271ff7d` either:
+
+```
+compiler error: call to a runtime stub that was never emitted
+(code offset 0 is the ELF entry point)
+```
+
+The three rows that reported are the ones that diff a cross run against an
+x86-64 oracle; the host's own row was not in what the report listed. So
+**"x86-64 is not among them" was a true fact that reads as evidence for a
+width- or target-dependent cause, and the cause was universal.** That is the
+mirror of the i386-invisibility rule: a red list without the host can mean the
+host is fine, or that the host's row was never printed.
+
+**Mechanism.** `EmitExceptionRuntime` writes CODE and the stubs must precede
+the body, so the decision is a token PRE-SCAN in `ParseProgram` looking for a
+source `try`/`raise`. The new desugar synthesises a try/finally, so a program
+with no `try` of its own got `ExcRaiseAddr = 0`. `IREmitCodeCall`'s guard turned
+that into a compiler error rather than the infinite entry-point loop it
+describes — that guard is the only reason this was loud.
+
+Calling `EnableExceptionRuntime` from the desugar builds cleanly and
+**segfaults**: the stub bytes land inside the body already being emitted. Both
+states were measured before the right one was found.
+
+**The prescan already had this arm for `class operator Finalize`**, with a
+comment describing this failure almost word for word. A third synthesised-try
+site was added without grepping for the second — the literal stated form of
+`normalise-dont-special-case`. And the SECOND sibling was already broken: the
+class-enumerator `for X in C` wraps its enumerator's `Free` and never asked for
+the runtime either; such a program does not compile on pin v403. Guarded now by
+`test/test_forin_enumerator_free_without_try.pas`.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

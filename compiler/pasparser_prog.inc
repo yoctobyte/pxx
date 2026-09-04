@@ -1131,6 +1131,34 @@ begin
        (i > 0) and (Tokens[i - 1].Kind = tkIdent) and
        CaseEqual(GetTokenStr(i - 1), 'operator') then
       hasExceptions := True;
+    { THE SIBLING OF THE ARM ABOVE, and it had two instances, one of them years
+      old. `for X in ...` desugars to a try/finally whenever the source owns
+      something to release: the class-enumerator form wraps its enumerator's
+      `Free` (ParseForInEnumeratorAST / ParseForInOpEnumeratorAST) and, since
+      bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in,
+      the generator form wraps SlFree / CoFree. Same failure as the Finalize
+      case: the stubs are emitted HERE from a token pre-scan, long before the
+      statement is parsed, and EmitExceptionRuntime writes CODE -- calling
+      EnableExceptionRuntime from the desugar instead lands stub bytes inside
+      the body already being emitted, which builds cleanly and segfaults. So the
+      trigger has to be the token evidence, exactly as it is above.
+
+      Deliberately the whole `for .. in` shape rather than only the two forms
+      that wrap. A pre-scan cannot tell which source a for-in has -- that needs
+      the symbol table -- and the two wrapping forms are not distinguishable
+      from `for c in s` by tokens. The cost is the exception stubs in a program
+      that has a for-in and no `try`; narrowing it needs a post-parse emission
+      point, not a better guess here. }
+    if Tokens[i].Kind = tkFor then
+    begin
+      j := i + 1;
+      while (j < TokCount) and (Tokens[j].Kind <> tkDo) and
+            (Tokens[j].Kind <> tkSemicolon) and (Tokens[j].Kind <> tkEOF) do
+      begin
+        if Tokens[j].Kind = tkIn then begin hasExceptions := True; Break; end;
+        Inc(j);
+      end;
+    end;
     { A program naming the promotable-int type pulls its runtime (and, through
       it, bignum). Nothing else references those entry points, so a Pascal or C
       program that never names the type keeps them unreachable and DCE drops
