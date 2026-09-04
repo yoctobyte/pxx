@@ -8279,6 +8279,29 @@ begin
         end;
       tkInteger, tkMinus, tkPlus, tkStar, tkSlash, tkMod, tkShl, tkShr, tkAmp,
       tkXor, tkPipe, tkLParen, tkRParen, tkNot, tkIdent,
+      { `->` and `.`, which are the SAME token here (clexer.inc:790 lexes `->`
+        to tkDot). Without this, `offsetof(T, m)` -- which stddef.h defines as
+        `((size_t)&(((T*)0)->m))` -- bailed on the arrow, and the CONSEQUENCE
+        was not a zero: the whole element list left this flat path, and the
+        fallback below sized the array as ONE element. So
+
+            static int ofs[] = { 5, offsetof(struct S,b), 9 };
+
+        became a 1-element array, `sizeof(ofs)` 4 against gcc's 12, and the
+        standard `sizeof(a)/sizeof(a[0])` table-length idiom evaluated to 1 --
+        every loop over such a table ran exactly one iteration, silently.
+        Measured in a pxx-built busybox: `uname -a` printed `Linux` eight
+        times, because coreutils/uname.c:113 walks struct utsname through
+        `static const unsigned short utsname_offset[] = { offsetof(...), ... }`.
+        `uname -s` was CORRECT THROUGHOUT -- sysname is at offset 0, so the
+        right answer and the broken one coincide on exactly the field a probe
+        reaches for first.
+
+        Nothing new has to fold, exactly as with the cast arm above:
+        CEvalConstPrimary already routes tkAmp to CEvalConstOffsetofAddress.
+        This scan only has to stop routing those elements away from it.
+        bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently }
+      tkDot,
       { The type keywords a CAST can be spelled with. Without them `{ (int)0xFF }`
         left this flat path and every element materialised as 0 — for EVERY type,
         `(char)1` included, so a static table built from casts became all zeros
@@ -13509,11 +13532,31 @@ begin
     end
     else if CurTok.Kind = tkDot then
     begin
-      Next;
-      if CurTok.Kind = tkIdent then
+      { A member PATH, not a single member. `offsetof(T, n.a)` expands to
+        `&(((T*)0)->n.a)`, and `->` and `.` are the same tkDot (clexer.inc:790),
+        so the links are indistinguishable here and the walk is uniform.
+
+        This used to take ONE link and Exit. Two things went wrong and only one
+        of them was a wrong number: the offset returned was the OUTER field's
+        (`n`, not `n.a`), and the trailing `.a` was left UNCONSUMED, which
+        desynchronised the parser -- a file-scope `static unsigned long x =
+        offsetof(struct outer, n.b);` was reported as `stray token at top
+        level (not a declaration): 'b'`, a diagnostic naming a token the
+        programmer wrote correctly and pointing nowhere near the cause.
+
+        The accumulate-and-descend form below is also why the flat case was
+        never the whole bug: `offsetof(T, m)` and `offsetof(T, a.b.c)` are one
+        construct with one loop, not a case and a special case.
+
+        RecFieldRecId returns REC_NONE for a field that is not itself a record,
+        which ends the walk naturally at the last link. }
+      while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
       begin
+        Next;
+        if CurTok.Kind <> tkIdent then Break;
         fieldName := CurTok.SVal;
-        if recId <> REC_NONE then Result := RecFieldOffset(recId, fieldName);
+        Result := Result + RecFieldOffset(recId, fieldName);
+        recId := RecFieldRecId(recId, fieldName);
         Next;
       end;
       while (parenDepth > 0) and (CurTok.Kind = tkRParen) do
