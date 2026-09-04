@@ -11083,6 +11083,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_shr_const_fold_typing26 "$$($(TESTTMP)/test_shr_const_fold_typing26)" "$$(printf 'FFFFFFF0\nFFFFFE00\nFFFFFFF0\n-17\n-513\n-17')"
 	./$(COMPILER) test/test_inline_result_narrows.pas $(TESTTMP)/test_inline_result_narrows26
 	tools/expect_same.sh test_inline_result_narrows26 "$$($(TESTTMP)/test_inline_result_narrows26)" "$$(printf '3\n3\n3\n3\n-2147483648\n-294967296\n-5\n8589934598\n200')"
+	./$(COMPILER) test/test_inline_float_result_narrows.pas $(TESTTMP)/test_inline_float_narrows26
+	tools/expect_same.sh test_inline_float_narrows26.O0 "$$($(TESTTMP)/test_inline_float_narrows26)" "$$(printf '0.33333334326744080\n16777216.0\n0.33333334326744080\n16777216.0\n0.25000000000000000\n16777217.0\n3.00000000000000000\n3.00000000000000000')"
+	./$(COMPILER) -O3 test/test_inline_float_result_narrows.pas $(TESTTMP)/test_inline_float_narrows26_O3
+	tools/expect_same.sh test_inline_float_narrows26.O3 "$$($(TESTTMP)/test_inline_float_narrows26_O3)" "$$(printf '0.33333334326744080\n16777216.0\n0.33333334326744080\n16777216.0\n0.25000000000000000\n16777217.0\n3.00000000000000000\n3.00000000000000000')"
 	./$(COMPILER) test/test_stderr_fd.pas $(TESTTMP)/test_stderr_fd26
 	tools/expect_same.sh test_stderr_fd26.1 "$$($(TESTTMP)/test_stderr_fd26 2>/dev/null)" "$$(printf 'out1\nout2')"
 	tools/expect_same.sh test_stderr_fd26.2 "$$($(TESTTMP)/test_stderr_fd26 2>&1 1>/dev/null)" "$$(printf 'e1 n=42 i=  7 b=TRUE')"

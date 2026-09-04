@@ -31,7 +31,13 @@ function InlineScalarTk(tk: TTypeKind): Boolean;
 begin
   InlineScalarTk :=
     (tk = tyInteger) or (tk = tyBoolean) or (tk = tyChar) or
-    ((tk >= tyInt8) and (tk <= tyNativeUInt)) or (tk = tyPointer);
+    ((tk >= tyInt8) and (tk <= tyNativeUInt)) or (tk = tyPointer) or
+    { Float leaves land behind -O3 first, per the Track O charter, so -O2 stays
+      byte-identical until this has promise and Track T's proof. tyExtended is
+      deliberately NOT here: it is 10-byte x87 with its own load/store path,
+      not an SSE2 register scalar like the other two.
+      feature-opt-inline-float-and-record-returning-leaves }
+    ((OptLevel >= 3) and ((tk = tySingle) or (tk = tyDouble)));
 end;
 
 { Param index of symIdx within procIdx's params, or -1. }
@@ -45,8 +51,9 @@ begin
 end;
 
 { Is E built only from inline-safe nodes (literals, params, scalar globals/consts,
-  arithmetic/logical operators)? Rejects calls, indexing, fields, managed/float,
-  and any ident that is not allowed. `allowLocals` additionally permits a scalar
+  arithmetic/logical operators)? Rejects calls, indexing, fields and managed
+  types, and any ident that is not allowed. Float (tySingle/tyDouble) is
+  accepted from -O3 only -- see InlineScalarTk and the AN_FLOAT_LIT arm. `allowLocals` additionally permits a scalar
   callee local (slice 2b). `retSym` (>=0) is the Result symbol whose READ is
   forbidden (Result may only be an assignment target, never read — avoids the
   uninitialised-Result hazard). }
@@ -59,6 +66,14 @@ begin
   case ASTKind[node] of
     AN_INT_LIT:
       InlineExprSimple := True;
+    AN_FLOAT_LIT:
+      { A float leaf without float literals is the rare one: minimax kernels and
+        Horner loops are made of coefficients, so rejecting this node rejected
+        most of what admitting tySingle/tyDouble was for -- `Mix := a * 0.5`
+        declined while `Sq := x * x` inlined. Gated with the type predicate so
+        -O2 stays byte-identical.
+        feature-opt-inline-float-and-record-returning-leaves }
+      InlineExprSimple := OptLevel >= 3;
     AN_IDENT:
       begin
         idx := ASTIVal[node];
@@ -509,6 +524,26 @@ begin
     if TypeIsOrdinal(Syms[retSym].TypeKind) and
        TypeIsOrdinal(IntToTypeKind(ASTTk[rhs])) and
        (TypeSlotSize(Syms[retSym].TypeKind) < TypeSlotSize(IntToTypeKind(ASTTk[rhs]))) then
+    begin
+      TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
+      Exit;
+    end;
+    { The FLOAT ARM of that same hazard, opened by admitting tySingle/tyDouble.
+      The guard above tests TypeIsOrdinal on BOTH sides, so it cannot see a
+      conversion INTO a float result -- and this shape drops the store that
+      performs it. Measured at -O3 before this guard existed:
+        function D2S(a: Double): Single; begin D2S := a; end
+      returned the full Double (0.33333333333333331 for 1/3, where Single is
+      0.33333334326744080), and I2S(16777217) returned 16777217 where Single
+      rounds to 16777216. Both were right at -O0/-O2 and right out-of-line.
+      Any RHS kind that is not ALREADY the result kind goes to shape 3, which
+      allocates a properly typed Result temp and stores through it. Widening
+      (Single -> Double) is safe either way and takes the same route rather
+      than growing a second predicate to distinguish it
+      (devdocs/dev/normalise-dont-special-case.md).
+      feature-opt-inline-float-and-record-returning-leaves }
+    if ((Syms[retSym].TypeKind = tySingle) or (Syms[retSym].TypeKind = tyDouble)) and
+       (IntToTypeKind(ASTTk[rhs]) <> Syms[retSym].TypeKind) then
     begin
       TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
       Exit;
