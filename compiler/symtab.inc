@@ -5625,6 +5625,14 @@ begin
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  { A recycled slot could have been an `except .. as e` binder. AddConst is the
+    ONE allocator that does not reset the parallel arrays -- SymGenSlot is not
+    reset here either -- and nothing depends on this line today, because only
+    skLocal slots are consulted and all four Alloc* that make one do reset it.
+    It is here because the file's own rule two functions up is that every
+    allocator resets every parallel array, and a flag whose meaning is "do NOT
+    release this" is the wrong one to leave resting on an invariant elsewhere. }
+  SymIsExcBinder[SymCount] := False;
   DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
