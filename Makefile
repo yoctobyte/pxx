@@ -14250,9 +14250,16 @@ test-core: $(COMPILER)
 	# BLOCKS rather than that a handler fires -- crtl's signal/sigaction are
 	# link-only stubs (see bug-b-crtl-signal-and-sigaction-report-success-and-
 	# install-nothing), so the obvious alarm(1) version died on the default
+	# disposition. ROW 12 is the refusal path of ether_aton_r: it stores each
+	# octet AFTER checking its separator, so a caller inspecting the struct
+	# after -1 sees the components that parsed. Hoisting that store passes
+	# every ACCEPTING row and changes row 12 -- measured, by making the
+	# change and watching row 3 not move. Row 4 does NOT cover the
+	# /etc/ethers file scan: the file needs root to create, so both libcs
+	# answer -1 and the row would pass a lookup that never opened it.
 	# disposition. All rows diffed against gcc -D_GNU_SOURCE.
 	./$(COMPILER) test/c_crtl_busybox_394_gaps.c $(TESTTMP)/c_bb394gaps26
-	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1\n11 -1 1')"
+	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1\n11 -1 1\n12 -1:001122330000 -1:001122000000 0:001122334455 -1:001122334400')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26

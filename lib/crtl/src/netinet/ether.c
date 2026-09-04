@@ -81,6 +81,15 @@ struct ether_addr *ether_aton_r(const char *asc, struct ether_addr *addr)
       if (*asc != ':') return (struct ether_addr *)0;
       asc++;
     }
+    /* THE STORE IS AFTER THE SEPARATOR CHECK AND THAT IS OBSERVABLE, not
+       tidiness. On a refusal the caller keeps whatever octets were written
+       BEFORE the failing component, and glibc writes exactly the same ones:
+       measured 2026-09-04 (frankD's oracle, re-run here), `00:11:22:33:44 x'
+       gives -1 with 00:11:22:33:00:00 under both, because the fifth component
+       fails its `:' test before being stored. Hoisting this assignment above
+       the check would still pass every ACCEPTING row and would leave
+       00:11:22:33:44:00 in a struct the caller may inspect after -1.
+       test/c_crtl_busybox_394_gaps.c row 12 asserts it. */
     addr->ether_addr_octet[i] = (unsigned char)d0;
   }
   /* Nothing is asserted about what follows the sixth component -- see the

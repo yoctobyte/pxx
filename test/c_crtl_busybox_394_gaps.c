@@ -85,7 +85,18 @@ int main(void)
 
   /* 4: ether_hostton/ether_ntohost for a name and an address that cannot be in
      any /etc/ethers. -1 whether or not the file exists, which is what makes
-     this row machine-independent rather than a bet on the file's absence. */
+     this row machine-independent rather than a bet on the file's absence.
+
+     WHAT THIS ROW DOES NOT COVER, said plainly because a passing row otherwise
+     implies it: the FILE SCAN. /etc/ethers does not exist on the machines this
+     runs on and creating it needs root, so both libcs answer -1 for every
+     input and the row would pass against a lookup that never opened the file
+     at all. The PARSER half is fully covered -- eleven line shapes, plus row
+     12 -- and the scan is fifteen lines of fopen/fgets/compare on top of it.
+     Closing this needs a root-created /etc/ethers or a container; until then
+     the scan is unverified, not verified-by-omission. (frankD ran an
+     independent glibc oracle over the parser and could not cover this half
+     either, for the same reason.) */
   {
     struct ether_addr a;
     char h[512];
@@ -204,6 +215,29 @@ int main(void)
     rc = acct("/tmp/pxx-no-such-acct-file");
     e = errno;
     printf("11 %d %d\n", rc, e == EPERM || e == ENOENT || e == ENOSYS);
+  }
+
+  /* 12: the REFUSAL path writes partial octets, and the boundary is where the
+     component fails. Not a curiosity: ether_aton_r stores each octet AFTER
+     checking its separator, so a caller inspecting the struct after -1 sees
+     the components that parsed and zeros after. glibc does the same, measured
+     -- and an implementation that stored first would pass every accepting row
+     in row 3 and differ here. This row is what stops that being "tidied". */
+  {
+    struct ether_addr a;
+    char h[512];
+    const char *lines[4] = { "00:11:22:33:44 short", "00:11:22:33 shorter",
+                             "00:11:22:33:44:55 ok", "00:11:22:33:44:zz bad" };
+    int i, r;
+    printf("12");
+    for (i = 0; i < 4; i++) {
+      memset(&a, 0, sizeof a);
+      r = ether_line(lines[i], &a, h);
+      printf(" %d:%02x%02x%02x%02x%02x%02x", r,
+             a.ether_addr_octet[0], a.ether_addr_octet[1], a.ether_addr_octet[2],
+             a.ether_addr_octet[3], a.ether_addr_octet[4], a.ether_addr_octet[5]);
+    }
+    printf("\n");
   }
 
   return 0;

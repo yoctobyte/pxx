@@ -240,6 +240,32 @@ therefore asserts that `pause()` BLOCKS (fork, confirm the child is alive, kill
 it). **Strengthen it when that lands** rather than leaving it weak because
 nobody remembers why.
 
+### Independently differentialled, and one half is NOT covered
+
+frankD ran their own glibc oracle over `ether_line` after throwing away a draft
+of the same three functions (a topic collision neither of us could see; this
+landed first). **11/11 rows byte-identical**, including the two a reasonable
+implementation gets wrong: the leading-blank refusal, and the partial-octet
+write on the refusal path. Their draft would have differed on the second —
+it stored each octet before checking the separator, which leaves different
+bytes in a struct the caller may inspect after -1.
+
+That is now **row 12**, and it is there because a comment would not have held:
+`ether_aton_r`'s store sits after its separator check, which reads as tidiness
+and is observable. Positive control run rather than asserted — hoisting the
+store changes row 12 and leaves **every accepting row in row 3 unchanged**, so
+before row 12 existed the "tidy-up" would have shipped silently. Restore
+verified byte-identical with `cmp`.
+
+**The FILE half is not covered and the ticket should not imply it is.**
+`/etc/ethers` does not exist on either machine and creating it needs root, so
+both libcs answer -1 for every input and row 4 would pass against a lookup that
+never opened the file. The parser is fully covered; the scan is fifteen lines
+of fopen/fgets/compare on top of it, and it is **unverified, not
+verified-by-omission**. Closing that needs a root-created `/etc/ethers` or a
+container. frankD hit the same wall independently, so this is a property of the
+environment rather than of either measurement.
+
 ### Not closed, and deliberately
 
 The acceptance here is the nine busybox TUs COMPILING, per target. That needs a
