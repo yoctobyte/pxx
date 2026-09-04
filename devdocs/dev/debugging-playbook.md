@@ -6595,3 +6595,50 @@ retyped, and fix it in the habit rather than in the file.
 **Positive control, when the answer matters:** assert a known member on both
 sides (`grep -cx <known> in.txt` = 1, and 0 after subtraction). A set difference
 whose inputs were never proven to contain the element cannot fail.
+
+## A list built from FIRST-REFUSAL-PER-UNIT is a lower bound on every axis at once
+
+**The shape.** A compiler, linker or validator stops each unit at its FIRST
+error. Collect one error per unit across a corpus and you have a list whose
+length equals **the number of units**, not the number of causes. Every unit is
+hiding an unknown number of further faults behind the one it reported.
+
+**It does not look like an estimate.** It looks like a checklist, it has
+distinct named entries, and each entry is individually correct. Nothing about
+it says "lower bound" — the entries are facts and only the SET is wrong.
+
+**Measured twice in one week on one corpus, on two different axes:**
+
+*Functions* (franks-ab, 2026-09-04, `41a2d59a8`). Nine busybox refusals named
+nine missing crtl functions. Implementing exactly those nine would have cleared
+nine refusals and produced **nine more, one per file**:
+
+```
+mlock              hdparm.c:1507  ->  munlock at :1559, 52 lines later
+scandir            tree.c:43      ->  alphasort, passed AS its comparator, same line
+sched_getscheduler chrt.c:154     ->  sched_getparam :175, sched_setscheduler :199
+```
+
+Thirteen, not nine — and the ticket's count was not an error, it was a property
+of how the list was built.
+
+*Headers* (frankC, same corpus, same week). A TU reports one missing include
+and stops, so a missing-header count from one run is a lower bound too; the
+last two of that set only became visible once the first five landed.
+
+**The tell that distinguishes it from a regression.** Fix the list, re-run, and
+new entries appear **in the same files**. That is the lower bound resolving,
+not a fix that failed — and reading it as failure is how a completed piece of
+work gets reported as half-done twice.
+
+**What to do instead.** Do not size the job from the refusal list. Either
+(a) grep the corpus for the whole family once the first member is known
+(`sched_*` is three calls in one file, not one), or (b) budget for N rounds and
+say so in the ticket, so the second round is the plan rather than a surprise.
+And when you report the count, say which kind it is: **"nine refusals" is a
+measurement; "nine missing functions" is an inference from it, and they are
+different numbers.**
+
+**Generalises past compilers**: any pipeline that aborts a unit on first fault
+— a schema validator, a linker, a test runner with `-x`, a preflight check —
+produces the same shape.
