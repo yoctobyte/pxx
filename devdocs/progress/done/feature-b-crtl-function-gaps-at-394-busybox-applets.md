@@ -4,10 +4,10 @@ title: "crtl is missing nine POSIX/GNU functions plus the loff_t typedef that bu
 track: B
 prio: 55
 type: feature
-status: working
+status: done
 created: 2026-09-02
 found-by: frankD
-summary: "**THE CRTL SURFACE IS LANDED AND DIFFED AGAINST GLIBC (2026-09-04, franks-ab). THIRTEEN FUNCTIONS, NOT NINE.** loff_t landed earlier in 0e439aaf5. The nine the checklist named -- acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- plus FOUR SIBLINGS the same TUs call within fifty lines: munlock (hdparm.c:1559, fifty-two lines after the mlock at :1507), alphasort (tree.c:43 passes it AS scandir's comparator), sched_getparam and sched_setscheduler (chrt.c:175 and :199, either side of the getscheduler at :154). **The count of nine was a count of FILES, not of functions** -- a refusal stops a TU at its FIRST undeclared identifier, so shipping the nine would have moved each refusal a few lines down its own file and produced nine more refusals. All thirteen are in `test/c_crtl_busybox_394_gaps.c`, eleven rows byte-identical to `gcc -D_GNU_SOURCE`, relations wherever root/RLIMIT_MEMLOCK//etc/ethers would change a literal. `make lib-test` green against stable v403; crtl-reachability and the regenerated crtl_names.inc both pass. **STILL OPEN: the corpus confirmation, which is not mine to run.** This ticket's acceptance is those nine busybox TUs compiling, and that needs a 394-applet run per target -- x86-64 AND i386, since the host-header fallback is native-only and i386 refuses more. Two findings came out of the work: ether_line REJECTS a leading blank in glibc (measured across eleven line shapes, crtl now matches byte for byte), and crtl's signal/sigaction are link-only stubs that return 0 and install nothing (bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing), which is why the pause() row tests blocking rather than a handler."
+summary: "**THE CRTL SURFACE IS LANDED AND DIFFED AGAINST GLIBC (2026-09-04, franks-ab). THIRTEEN FUNCTIONS, NOT NINE.** loff_t landed earlier in 0e439aaf5. The nine the checklist named -- acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- plus FOUR SIBLINGS the same TUs call within fifty lines: munlock (hdparm.c:1559, fifty-two lines after the mlock at :1507), alphasort (tree.c:43 passes it AS scandir's comparator), sched_getparam and sched_setscheduler (chrt.c:175 and :199, either side of the getscheduler at :154). **The count of nine was a count of FILES, not of functions** -- a refusal stops a TU at its FIRST undeclared identifier, so shipping the nine would have moved each refusal a few lines down its own file and produced nine more refusals. All thirteen are in `test/c_crtl_busybox_394_gaps.c`, eleven rows byte-identical to `gcc -D_GNU_SOURCE`, relations wherever root/RLIMIT_MEMLOCK//etc/ethers would change a literal. `make lib-test` green against stable v403; crtl-reachability and the regenerated crtl_names.inc both pass. **DONE 2026-09-04, CORPUS-CONFIRMED ON BOTH TARGETS BY TWO INSTRUMENTS THAT FAIL DIFFERENTLY.** frankC ran 394 applets `--separate` at binary `89a8cbcae23f3dcc` / HEAD `41a2d59a8`: ZERO refusals name any of the nine or `loff_t`, x86-64 or i386; x86-64 went 14 -> 3 refusals (all three `__BEGIN_DECLS`) and i386 has 16 (12 headers, 4 inline-asm, NO function gaps), so the two targets no longer share a failure population. That list is FIRST-REFUSAL-PER-UNIT and therefore a lower bound -- a gap inside any of the sixteen still-refusing i386 TUs could not appear in it -- so franks-ab added a header-clean TU touching all fourteen entries that CANNOT refuse on a header, under the PIN `c31d03b202da` rather than frankC's binary: x86-64 compiles, links and runs; the i386 object DEFINES all fourteen at real addresses rather than importing them; and the positive control (one absent name) refuses with exit 1 and writes no object. Two findings came out of the work: ether_line REJECTS a leading blank in glibc (measured across eleven line shapes, crtl now matches byte for byte), and crtl's signal/sigaction are link-only stubs that return 0 and install nothing (bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing), which is why the pause() row tests blocking rather than a handler."
 owner: franks-ab
 ---
 
@@ -324,3 +324,58 @@ from the x86-64 pass: every object in the directory is ELF32). The i386 link
 cannot succeed anyway while 16 TUs refuse, but this would still be there after
 they are fixed.
 
+
+## CONFIRMED INDEPENDENTLY, AND THE SECOND READING WAS NOT REDUNDANT — franks-ab, 2026-09-04
+
+frankC's acceptance above is a **first-refusal-per-unit** list, which this
+ticket's own body spends a section explaining is a **lower bound on every
+axis**. That property does not stop applying because the news is good. Sixteen
+i386 TUs still refuse on headers, and **a function gap inside any of those
+sixteen is structurally invisible to a refusal list** — the TU stopped at its
+header and never reached the call. "Zero refusals mention the nine" is
+therefore a true statement about the TUs that got far enough to mention them.
+
+So the second reading was chosen to **fail differently**: one header-clean TU,
+`scratchpad/thirteen.c`, that touches all fourteen entries (the thirteen plus
+`alphasort`) and **cannot refuse on a header**, so it can only refuse on a
+function. Pinned v403 `c31d03b202da`, both targets, at HEAD `733b32712`:
+
+| target | result |
+| --- | --- |
+| x86-64 | compiles, LINKS and RUNS — `THIRTEEN-LINKED 1` |
+| i386 | `--emit-obj` writes an `ELF 32-bit LSB relocatable, Intel 80386` |
+
+**And the i386 object DEFINES all fourteen rather than importing them** —
+`nm` gives a `W` at a real address for every one (`acct` `0006ef9e`, `pause`
+`0006f0fa`, `nice` `0006f1e2`, `sched_getscheduler` `00070ab8`,
+`sched_getparam` `00070e55`, `sched_setscheduler` `00070c13`, `mlock`
+`000717e0`, `munlock` `000719b0`, `alphasort` `00072861`, `scandir`
+`00072f7e`, `sigisemptyset` `0007ee9b`, `ether_line` `00088d2c`,
+`ether_hostton` `00089f16`, `ether_ntohost` `0008a06d`). That distinction is
+the point of looking: `--emit-obj` tolerates undefined symbols, so "the i386
+object was written" would have been satisfied by declarations alone. Weak is
+expected — the crtl runtime is exported `W` by design (`243137302`).
+
+**Positive control**, because a guard that cannot fail prints PASS: the same
+compiler, same target, same flags, on a TU calling one name crtl does not have
+answers `error: call to undeclared function: pxx_no_such_crtl_entry_zzz`,
+exits **1**, and writes **no object**. The probe is able to refuse.
+
+**Note the compiler differs from frankC's on purpose.** Theirs was built at
+`41a2d59a8`; mine is the pin, `c31d03b202da`, which predates every line of this
+work — so the two readings share no binary, no target selection path and no
+instrument. The pin resolving these functions is itself the fact that matters:
+they are lib/crtl SOURCE the compiler reads at compile time, not a table baked
+into it, which is why an older compiler can consume them at all.
+
+**RESOLVED.** Every entry in the table at the top of this ticket is landed,
+diffed against glibc, and now confirmed to compile on both targets by two
+instruments that fail differently.
+
+**What is NOT closed by this, and belongs elsewhere:** x86-64's three
+`__BEGIN_DECLS` refusals and i386's twelve headers plus four inline-asm are the
+two header tickets' residue. frankC's `bb_bswap_64` anomaly on the i386 link is
+frankD's, by frankC's own routing. And row 4's `/etc/ethers` FILE SCAN remains
+unverified in both directions — the file needs root to create, so both libcs
+answer -1 and the row would pass a lookup that never opened it. That is
+recorded in the test and the Makefile as an uncovered path, not as coverage.
