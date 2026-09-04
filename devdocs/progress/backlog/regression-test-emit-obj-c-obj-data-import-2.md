@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: A
+track: T
 ---
 
 > **Track A from the job NAME `test-emit-obj`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/c_obj_data_import.c`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -45,3 +45,45 @@ test-emit-obj: data-import object FAILED to link
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+
+## Triaged 2026-09-04 by frankb-78 (Track A) — does not reproduce, and the log tail says harness
+
+**Not reproducible at HEAD.** Ran the job's own two emit steps and both gcc
+links by hand at `7e271ff7d`:
+
+```
+--emit-obj            test/c_obj_data_import.c  -> ok, 108709B
+--emit-obj --target=i386 same source            -> ok, 178091B
+gcc main.c cods_imp_x64.o && ./a.out            -> 99   (rc 0)
+gcc -m32 main.c cods_imp_386.o && ./a.out       -> 99   (rc 0)
+```
+
+**The failing sha does not contain the generator work landing that day.**
+`git merge-base --is-ancestor a090fa76d 01b56f5f8f0f` is FALSE — the tested tree
+predates it. Nothing in the range touches `compiler/**` for C or emit-obj.
+
+**The log tail is self-contradictory in a way only the harness can explain.**
+It prints `ok: /tmp/testmgr-scratch-2487013/cods_imp_x64.o [code=108709B ...]`
+— the compiler wrote the object and reported the exact byte count this repro
+reproduces — and then, in a later step of the SAME recipe:
+
+```
+/usr/bin/ld: cannot find /tmp/testmgr-scratch-2487013/cods_imp_x64.o: No such file or directory
+```
+
+A file the job created went missing between two steps of one recipe. That is not
+a code generation defect; the object was produced and measured. **Re-laned to
+T** on that evidence.
+
+**RESIDUAL QUESTION, AND IT HAS AN OWNER.** "Not a compiler bug" is half a
+finding. The open half is *why did `$(TESTTMP)` lose a file mid-job on seven* —
+a scratch dir cleaned by a concurrent job, a tmpfs eviction, or a
+`testmgr` teardown racing its own recipe. Track T owns the scratch lifecycle and
+is the only lane that can see the run. **This is a signal about the harness, not
+noise: whatever removed that object could remove any other, and every job that
+loses one reports as a red in the subject it was testing.** Worth checking
+whether the other reds in the same run share the shape.
+
+Not claimed: that the harness is broken. Claimed: it does not reproduce, the
+compiler wrote the object, and the cause is above the compiler.
