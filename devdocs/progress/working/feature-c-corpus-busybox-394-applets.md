@@ -116,3 +116,57 @@ compiler build input, `lib/crtl` is not") was still the wrong move, because the
 value of a pause is that it is total and every agent's carve-out is individually
 defensible. A carve-out is the owner's to grant, and asking for one is not the
 same as taking one.
+
+## A pxx-built busybox LINKS and RUNS — 374 applets, 506 objects, 853 cases GREEN
+
+Measured 2026-09-04 (frankC), binary `08f25ff41d20c98f`, HEAD `223705957`.
+The fourteen refusals are all crtl and all Track B, so they are not mine to
+land — but the LINK and the differential are not blocked on them. Dropping the
+20 applets those fourteen TUs serve leaves 374 applets / 506 TUs:
+
+```
+ORACLE  gcc separate build, 506 objects (853 cases)
+ORACLE  busybox agrees with the gcc build
+PASS    x86_64  byte-identical to the gcc oracle over 853 cases
+busybox-diff: GREEN
+```
+
+That is the first time this rung's claim has been proved against a **pxx-built
+binary** rather than against the gcc oracle alone. The TU→applet mapping is not
+1:1 and the arithmetic matters: `chpst.c` carries five applets, `hush.c` three,
+`nandwrite.c` two.
+
+## AND THAT GREEN IS THE MOST IMPORTANT NEGATIVE RESULT ON THIS TICKET
+
+**On the very binary that produced it, `uname -a` printed `Linux` eight
+times.**
+
+```
+uname --help   byte-identical to gcc   -> counted as one of the 853 PASSes
+uname -a       Linux Linux Linux Linux Linux Linux Linux Linux
+uname -s       Linux                   -> CORRECT, and correct for the wrong reason
+```
+
+Cause was `bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently`
+(fixed, `62463923f`): busybox walks `struct utsname` through a static
+`offsetof` table, the table was truncated to one element, and every field read
+offset 0 — which IS `sysname`. So the broken value and the true value coincide
+on exactly the field a probe reaches for first.
+
+**The corpus was green because of what it runs, not despite the bug.** 516 of
+its 621 cases were `applet --help`, twice per applet, and `--help` prints a
+string literal. franks-ab raised this as a structural concern from a 258-applet
+boot; this run is the measurement behind it, and it is the stronger
+demonstration because it is **wider, greener, and equally blind**. Going 141 →
+258 → 374 applets moves along an axis this entire defect class is invisible
+from.
+
+**So the ranking is settled and it is not a matter of taste: "more applets" and
+"applets with real arguments" are not comparable in value.** 506 objects and
+853 green cases did not see a miscompiled core utility; one invocation with a
+real argument found it. frankD has since landed a real-argument case group
+(`d0104ec8e`) which reds on exactly this — the right response, and the reason
+the count of green cases is not the number to optimise.
+
+Rung 3's write-up should cite THIS measurement rather than the 258-applet one.
+
