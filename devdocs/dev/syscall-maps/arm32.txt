@@ -8,10 +8,19 @@
 # A '?noreturn' row is an ASSIGNED number whose probe did not come back:
 #   it blocked, or the call does not return by design (exit, sigreturn).
 #   Not the same as an absent row, which means nothing is at that number.
-# range: 0..460   date: 2026-09-04T14:09:32Z
-# compiler: 0476702436f1358a  commit: 6d177b486531
+# A '?unnamed' row is an ASSIGNED number that RETURNED and that qemu
+#   printed no name for -- its handler emitted only the return value. It
+#   is a real syscall and this tool cannot say which; look it up in the
+#   kernel table. arm32 90 (old_mmap) is the one instance at 0..460: its
+#   handler prints the struct argument, and the probe's argument is not a
+#   readable address, so the line comes out as bare ' = -1 errno=14'.
+#   ABSENT, ?noreturn and ?unnamed are three different statements and
+#   only the first one means nothing is at that number.
+# range: 0..460   date: 2026-09-04T14:32:28Z
+# compiler: 0476702436f1358a  commit: 5fa3e0705f90
 0 restart_syscall
-1 exit ?noreturn
+1 exit
+2 fork
 3 read
 4 write
 5 open
@@ -34,7 +43,7 @@
 25 stime
 26 ptrace
 27 alarm
-29 rt_sigreturn ?noreturn
+29 pause
 30 utime
 33 access
 34 nice
@@ -83,6 +92,7 @@
 87 swapon
 88 reboot
 89 readdir
+90 ?unnamed
 91 munmap
 92 truncate
 93 ftruncate
@@ -100,12 +110,13 @@
 107 lstat
 108 fstat
 111 vhangup
+113 syscall
 114 wait4
 115 swapoff
 116 sysinfo
 117 ipc
 118 fsync
-119 sigreturn ?noreturn
+119 sigreturn
 120 clone
 121 setdomainname
 122 uname
@@ -153,7 +164,7 @@
 170 setresgid
 171 getresgid
 172 prctl
-173 rt_sigreturn ?noreturn
+173 rt_sigreturn
 174 rt_sigaction
 175 rt_sigprocmask
 176 rt_sigpending
@@ -168,6 +179,7 @@
 185 capset
 186 sigaltstack
 187 sendfile
+190 vfork
 191 ugetrlimit
 192 mmap2
 193 truncate64
@@ -223,7 +235,7 @@
 245 io_getevents
 246 io_submit
 247 io_cancel
-248 mmap2
+248 exit_group
 249 lookup_dcookie
 250 epoll_create
 251 epoll_ctl
@@ -255,8 +267,8 @@
 279 mq_getsetattr
 280 waitid
 281 socket
-282 bind ?noreturn
-283 connect ?noreturn
+282 bind
+283 connect
 284 listen
 285 accept
 286 getsockname

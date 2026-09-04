@@ -6802,3 +6802,47 @@ stable_linux_amd64/default/../../lib/crtl/include/   <- the live repo tree
 Same family as "A FILTERED grep answers about your filter list" above; this is
 the syscall spelling of it, with the extra turn that the control made the
 wrong answer *more* credible.
+
+## THE VALUE YOU PASSED IN IS NOT THE STRING THE INSTRUMENT PRINTS — and the rendering changes with the ARGUMENT's type, inside one line
+
+Measured 2026-09-04, `tools/qemu_syscall_map.sh`. To learn which syscall number
+qemu maps to which name, the probe calls one syscall per process with every
+argument set to `2147483647` — a value inert as a pointer, an fd and a pid. The
+first cut then found its own row by grepping the `-strace` output for that
+literal:
+
+```sh
+qemu-arm -strace ./scn "$n" 2>&1 | grep 2147483647     # WRONG
+```
+
+It missed `acct` (51) and `statfs` (99) — and missed them SILENTLY, as absent
+rows in a generated map, which is the shape nobody re-checks. qemu renders a
+`long` argument in decimal and a **pointer** argument in hex, so the same integer
+appears as `2147483647` on one line and `0x7fffffff` on the next:
+
+```
+51 acct(0x7fffffff) = -1 errno=1
+99 statfs(0x7fffffff,0x7fffffff) = -1 errno=14
+20 getpid() = 1234
+```
+
+The grep did not error and did not warn. It answered a question about **the
+decimal spelling of an argument**, which is not the question, and the difference
+only shows up for syscalls whose prototype qemu happens to know well enough to
+format properly — i.e. **the rows where the instrument was working best.**
+
+Three things generalise:
+
+- **A value you chose does not travel through a tool unchanged.** Between you and
+  the output sits a formatter with its own rules, and those rules are usually
+  *per-argument*, not per-line. Never key a filter on the input's spelling.
+- **Anchor on structure, not on your own constant.** The fix was to stop looking
+  for the value at all: diff the whole trace against a baseline run with a
+  known-unassigned number and take the first line past the common prefix. That
+  anchor cannot be broken by a formatting choice because it never reads an
+  argument.
+- **The failure mode is an ABSENT ROW, and absence is the reading that looks like
+  data.** `51` simply was not in the map. Compare against an independent list, or
+  add a control whose row must be present (see the section on completeness
+  guards) — a generated table has no natural place for "I could not see this".
+
