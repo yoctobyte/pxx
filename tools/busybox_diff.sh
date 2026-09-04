@@ -111,7 +111,46 @@
 
 set -u
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+# ---- RUN FROM A SNAPSHOT OF THIS SCRIPT -------------------------------------
+# /bin/sh reads a script INCREMENTALLY, not into memory, so anything that
+# rewrites this file mid-run corrupts the run in progress. It does not error in
+# a way you can recognise: it returns an rc no test in this harness can produce
+# (rc=2 on three shards, 2026-09-02 -- a shell parse error wearing the shape of
+# a verdict).
+#
+# The hazard is NOT limited to someone editing the harness on purpose. A run
+# here takes minutes; in that window `tools/sync.sh` does a `pull --rebase`, so
+# an agent committing entirely unrelated work rewrites this file under a peer's
+# running shell. Measured 2026-09-04: frankc-af ran sync.sh TWICE during a
+# 394-applet run and got away with it only because the edit had not been pushed
+# yet -- its own words, "pure luck, not judgement". Telling every agent to
+# remember this is a rule with nothing mechanical behind it, and a rule that
+# must be remembered at the moment you are confident does not fire.
+#
+# So: copy ourselves out of the repo and exec the copy. From that point the
+# file being read is not on any branch and no pull can reach it. The snapshot
+# is unlinked immediately in the child -- the exec'd shell holds the fd, so the
+# bytes survive the name -- which means it also cannot leak on any exit path,
+# including a kill.
+#
+# ROOT is passed through because it is derived from $0, which the snapshot
+# changes. That is the one thing this trick breaks and it is why the variable
+# exists.
+if [ -z "${BBDIFF_FROM_SNAPSHOT:-}" ]; then
+  BBDIFF_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+  _self="$(mktemp "${TMPDIR:-/tmp}/bbdiff-self-XXXXXX.sh")" || {
+    printf 'busybox-diff: could not snapshot this script; refusing to run from the repo copy\n' >&2
+    exit 1
+  }
+  cat -- "$0" > "$_self" || { printf 'busybox-diff: snapshot copy failed\n' >&2; exit 1; }
+  BBDIFF_FROM_SNAPSHOT="$_self"
+  export BBDIFF_FROM_SNAPSHOT BBDIFF_ROOT
+  exec bash "$_self" "$@"
+fi
+# We are the snapshot. Drop the name; the open fd keeps the bytes.
+unlink "$BBDIFF_FROM_SNAPSHOT" 2>/dev/null || :
+
+ROOT="${BBDIFF_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
 BB="${PXX_BUSYBOX_DIR:-$ROOT/library_candidates/busybox}"
 CATUNITY="$ROOT/tools/busybox_cat_unity.c"
 COMPILER="$ROOT/compiler/pascal26"
