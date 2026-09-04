@@ -9400,6 +9400,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/casm_m_operand_pressure.c $(TESTTMP)/casmmpress26
 	@gcc -O0 -o $(TESTTMP)/casmmpress_gcc test/casm_m_operand_pressure.c
 	tools/expect_same.sh casmmpress26 "$$($(TESTTMP)/casmmpress26)" "$$($(TESTTMP)/casmmpress_gcc)"
+	# The SAME AT&T reader, rendered as i386 text lines for asmtext_386.inc
+	# instead of encoded into AsmBytes -- so an AN_ASM node keeps exactly one
+	# span convention per target. The two blocks are the i386 arms of busybox
+	# networking/tls_sp_c32.c and tls_pstm_mul_comba.c verbatim, the files this
+	# feature exists for: pxx answers __GNUC__ and __i386__ here, so those
+	# sources SELECT these arms and refusing them refused code we told the
+	# preprocessor to reach. MULADD is the register-pressure half -- three
+	# "=rm" outputs and two "m" inputs with %eax/%edx clobbered, which is
+	# exactly the three a five-entry pool has left, and only fits because an
+	# "m" is a frame slot. Oracle is `gcc -m32' on the same source; without
+	# multilib the row says so out loud rather than passing quietly.
+	./$(COMPILER) --target=i386 test/casm_gnu_operands_i386.c $(TESTTMP)/casmgnu386
+	@if gcc -m32 -O0 -o $(TESTTMP)/casmgnu386_gcc test/casm_gnu_operands_i386.c 2>/dev/null; then \
+	  tools/expect_same.sh casmgnu386 "$$(tools/run_target.sh i386 $(TESTTMP)/casmgnu386)" "$$($(TESTTMP)/casmgnu386_gcc)" || exit 1; \
+	  echo "=== casmgnu386: i386 identical to gcc -m32 ==="; \
+	else \
+	  echo "=== casmgnu386: no gcc -m32, the i386 asm ORACLE did not run (it still compiled and ran) ==="; \
+	  tools/run_target.sh i386 $(TESTTMP)/casmgnu386 >/dev/null || { echo 'casmgnu386: i386 run FAILED'; exit 1; }; \
+	fi
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.

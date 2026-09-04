@@ -71,6 +71,173 @@ begin
   if n >= AttBindCount then AttBindCount := n + 1;
 end;
 
+{ ---- the i386 sink: the same parse, rendered as TEXT ----------------------
+
+  x86-64 encodes an inline-asm block into AsmBytes at PARSE time and an AN_ASM
+  node's Left/Right name that byte span. Every other target captures TEXT LINES
+  that its own engine assembles at CODEGEN, and there the same two fields name a
+  line span. The convention is per-target and there is exactly one of it per
+  target, which is the property worth keeping.
+
+  So an i386 GNU template is read by the SAME AT&T parser -- one syntax reader,
+  not two -- and only the last step changes: instead of handing the parsed
+  AsmOp* slots to AsmDispatch, this renders them as the Intel line
+  AsmParseBodyText386 would have captured, and asmtext_386.inc assembles it.
+  Giving i386's IR_ASM a second, byte-span form was the alternative; it is less
+  code and it puts two mechanisms behind one concept on one target, which is the
+  smell normalise-dont-special-case.md is about.
+
+  WHAT THIS DELIBERATELY DOES NOT DO is encode i386 bytes here. It would work --
+  the forms these templates use are byte-identical in both modes, measured with
+  gas -- and it would mean this file quietly assembling for a target whose
+  assembler is somewhere else. The one engine per target stays the one engine.
+
+  Mnemonics are whitelisted rather than passed through. asmtext_386.inc reports
+  an unknown mnemonic at CODEGEN, which is a long way from the template that
+  wrote it; the list below fails at parse time with the offending word. It is
+  the same "a narrower feature with an honest refusal" rule the constraint
+  classes follow. }
+
+var
+  AttSinkText: Boolean;   { render Intel lines for asmtext_386 instead of bytes }
+
+function AttRegName386(num, size: Integer): AnsiString;
+begin
+  Result := '';
+  if size = 4 then
+  begin
+    if num = 0 then Result := 'eax' else if num = 1 then Result := 'ecx'
+    else if num = 2 then Result := 'edx' else if num = 3 then Result := 'ebx'
+    else if num = 4 then Result := 'esp' else if num = 5 then Result := 'ebp'
+    else if num = 6 then Result := 'esi' else if num = 7 then Result := 'edi';
+  end
+  else if size = 2 then
+  begin
+    if num = 0 then Result := 'ax' else if num = 1 then Result := 'cx'
+    else if num = 2 then Result := 'dx' else if num = 3 then Result := 'bx'
+    else if num = 4 then Result := 'sp' else if num = 5 then Result := 'bp'
+    else if num = 6 then Result := 'si' else if num = 7 then Result := 'di';
+  end
+  else if size = 1 then
+  begin
+    { Only the four low-byte names exist without a REX prefix; 4..7 at this
+      width are ah/ch/dh/bh, which name a DIFFERENT part of the register and
+      are not what an operand pinned to esi could ever have meant. }
+    if num = 0 then Result := 'al' else if num = 1 then Result := 'cl'
+    else if num = 2 then Result := 'dl' else if num = 3 then Result := 'bl'
+    else
+      Error('C: inline asm on i386 has no low-byte name for register '
+            + AIntToStr(num) + ' — only al, cl, dl and bl exist');
+  end
+  else
+    Error('C: inline asm on i386 has no ' + AIntToStr(size * 8)
+          + '-bit register — a 64-bit operand needs a 64-bit target');
+  if Result = '' then
+    Error('C: inline asm on i386 has no register number ' + AIntToStr(num));
+end;
+
+function AttSizeKw386(size: Integer): AnsiString;
+begin
+  if size = 1 then Result := 'byte'
+  else if size = 2 then Result := 'word'
+  else if size = 4 then Result := 'dword'
+  else
+  begin
+    Error('C: inline asm on i386 cannot address ' + AIntToStr(size)
+          + ' bytes of memory in one instruction');
+    Result := '';
+  end;
+end;
+
+{ A signed displacement, written so AsmTextOperand's split-on-first-+/- reads
+  it back as the same number. }
+function AttDisp386(d: Int64): AnsiString;
+begin
+  if d < 0 then Result := '-' + AsmEncIntToStr(-d)
+  else Result := '+' + AsmEncIntToStr(d);
+end;
+
+function AttRender386(slot: Integer): AnsiString;
+begin
+  Result := '';
+  if AsmOpKind[slot] = AOP_REG then
+    Result := AttRegName386(AsmOpReg[slot], AsmOpSize[slot])
+  else if AsmOpKind[slot] = AOP_IMM then
+    Result := AsmEncIntToStr(AsmOpVal[slot])
+  else if AsmOpKind[slot] = AOP_MEM then
+    { A frame slot. The size keyword is always written: the i386 engine refuses
+      a memory ALU or `mul` operand whose width nothing else fixes, and a
+      keyword next to a register that already fixes it is harmless. }
+    Result := AttSizeKw386(AsmOpSize[slot]) + ' [ebp'
+              + AttDisp386(AsmOpVal[slot]) + ']'
+  else if AsmOpKind[slot] = AOP_MEMR then
+  begin
+    if AsmOpIndex[slot] >= 0 then
+      Error('C: inline asm on i386 cannot write [base+index*scale]'
+            + ' — the i386 text engine has no SIB form');
+    Result := AttSizeKw386(AsmOpSize[slot]) + ' ['
+              + AttRegName386(AsmOpReg[slot], 4)
+              + AttDisp386(AsmOpVal[slot]) + ']';
+  end
+  else
+    Error('C: inline asm on i386 has an operand form the text sink'
+          + ' cannot write');
+end;
+
+{ The mnemonics asmtext_386.inc actually assembles. Kept here rather than
+  exported from there because this is a statement about what THIS path may
+  emit, and a wider list would only move the failure to codegen. }
+function AttKnows386(const mn: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mn,'mov') or CaseEqual(mn,'lea')
+    or CaseEqual(mn,'add') or CaseEqual(mn,'adc') or CaseEqual(mn,'sub')
+    or CaseEqual(mn,'sbb') or CaseEqual(mn,'and') or CaseEqual(mn,'or')
+    or CaseEqual(mn,'xor') or CaseEqual(mn,'cmp') or CaseEqual(mn,'test')
+    or CaseEqual(mn,'mul') or CaseEqual(mn,'imul') or CaseEqual(mn,'div')
+    or CaseEqual(mn,'idiv') or CaseEqual(mn,'neg') or CaseEqual(mn,'not')
+    or CaseEqual(mn,'inc') or CaseEqual(mn,'dec')
+    or CaseEqual(mn,'shl') or CaseEqual(mn,'sal') or CaseEqual(mn,'shr')
+    or CaseEqual(mn,'sar') or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
+    or CaseEqual(mn,'movzx') or CaseEqual(mn,'movsx')
+    or CaseEqual(mn,'nop') or CaseEqual(mn,'cdq') or CaseEqual(mn,'leave')
+    or CaseEqual(mn,'ret');
+end;
+
+{ The one seam. Either the x86-64 byte encoder or the i386 text sink; the parse
+  above this point is identical for both. }
+function AttEmitInstr(const mn: AnsiString; nops: Integer): Boolean;
+var line: AnsiString;
+begin
+  if not AttSinkText then
+  begin
+    Result := AsmDispatch(mn, nops);
+    Exit;
+  end;
+  if not AttKnows386(mn) then begin Result := False; Exit; end;
+  if nops > 2 then
+    Error('C: inline asm on i386 cannot write the three-operand form of ' + mn);
+  line := mn;
+  if nops >= 1 then line := line + ' ' + AttRender386(0);
+  if nops >= 2 then line := line + ',' + AttRender386(1);
+  AsmAddInlineLine(line, 0, 0);
+  Result := True;
+end;
+
+{ The span an AN_ASM node carries is whatever its TARGET's convention says --
+  AsmBytes on x86-64, InlineAsmLine everywhere else. Reading the wrong counter
+  here would not error; it would name a real span of the wrong thing. }
+procedure AttBeginBlock(var startOff: Integer);
+begin
+  if AttSinkText then startOff := InlineAsmLineCount
+  else startOff := AsmBytesCount;
+end;
+
+procedure AttEndBlock(startOff: Integer; var len: Integer);
+begin
+  if AttSinkText then len := InlineAsmLineCount - startOff
+  else len := AsmBytesCount - startOff;
+end;
+
 { ---- character-level scanning ---- }
 
 function AttAtEnd: Boolean;
@@ -332,8 +499,13 @@ begin
   AttParseBaseOrOperand(slot);
   num := AsmOpReg[slot];
   size := AsmOpSize[slot];
-  if size <> 8 then
-    Error('C: inline asm template needs a 64-bit base register inside ( )');
+  { An address register is as wide as an address. That is 8 on x86-64 and 4 on
+    i386, and it is not a matter of taste: `(%eax)` in 64-bit mode is a
+    different, address-size-prefixed encoding, and `(%rax)` does not exist in
+    32-bit mode at all. }
+  if size <> TARGET_PTR_SIZE then
+    Error('C: inline asm template needs a ' + AIntToStr(TARGET_PTR_SIZE * 8)
+          + '-bit base register inside ( )');
   idxNum := -1; scale := 1;
   AttSkipSpace;
   if AttPeek = ',' then
@@ -599,7 +771,7 @@ begin
               + AIntToStr(AsmOpSize[i] * 8) + '-bit register');
     end;
 
-  if not AsmDispatch(base, nops) then
+  if not AttEmitInstr(base, nops) then
     Error('C: inline asm template has an unsupported instruction: ' + mn);
 end;
 
@@ -618,14 +790,16 @@ begin
   AttPos := 1;
   AttExtended := isExt;
   AttMaxOpnd := -1;
-  startOff := AsmBytesCount;
+  { Same span rule as AttBeginBlock/AttEndBlock, and for the same reason: the
+    counter this walks is whichever one the target's sink is filling. }
+  AttBeginBlock(startOff);
   AttSkipSeparators;
   while not AttAtEnd do
   begin
     AttEncodeOne;
     AttSkipSeparators;
   end;
-  len := AsmBytesCount - startOff;
+  AttEndBlock(startOff, len);
 end;
 
 { ---- the moves that bind operands to their pinned registers ----------------
@@ -659,22 +833,12 @@ begin
     AsmOpKind[0] := AOP_MEM;  AsmOpVal[0] := frameOff; AsmOpSize[0] := size;
     AsmOpKind[1] := AOP_REG;  AsmOpReg[1] := regNum; AsmOpSize[1] := size;
   end;
-  if not AsmDispatch('mov', 2) then
+  if not AttEmitInstr('mov', 2) then
     Error('C: inline asm could not encode an operand move');
 end;
 
 { Open a block: the caller emits its own prologue moves, then the template,
   then its epilogue moves, and closes with AttEndBlock to get the span. }
-procedure AttBeginBlock(var startOff: Integer);
-begin
-  startOff := AsmBytesCount;
-end;
-
-procedure AttEndBlock(startOff: Integer; var len: Integer);
-begin
-  len := AsmBytesCount - startOff;
-end;
-
 { Encode a template that is already inside an open block (bindings set). }
 procedure AttEncodeTemplateInner(const tpl: AnsiString; isExt: Boolean);
 var ignoreStart, ignoreLen: Integer;

@@ -7518,6 +7518,18 @@ const
   CAsmPool: array[0..CASM_POOL_COUNT-1] of Integer =
     (8, 9, 10, 11, 6, 7, 1, 0, 2);   { r8 r9 r10 r11 rsi rdi rcx rax rdx }
 
+  { i386 has no r8..r15, and ebx is CALLEE-saved while pxx's prologue saves
+    nothing -- so the caller-saved file is five registers, not nine. Same
+    ordering rule: eax and edx come last because `mul` writes both implicitly
+    and the fixed-register letters "a" and "d" want them, so leaving them until
+    the pool is under pressure avoids most collisions with no cleverness.
+    Five is not a comfortable number: busybox tls_pstm_mul_comba.c wants three
+    outputs with %eax and %edx clobbered, which is exactly the three that are
+    left, and it only fits because an "m" operand costs no register any more. }
+  CASM_POOL386_COUNT = 5;
+  CAsmPool386: array[0..CASM_POOL386_COUNT-1] of Integer =
+    (1, 6, 7, 0, 2);                 { ecx esi edi eax edx }
+
 { The register a fixed-letter constraint names, or -1. These are the EASY
   constraints, not the hard ones: the letter says which register, so there is
   nothing to choose. tls_sp_c32.c wants "a" for mul's implicit operand. }
@@ -7575,6 +7587,34 @@ begin
       Error('C: inline asm earlyclobber constraint "' + CAsmOps[i].Raw
             + '" is not supported');
   end;
+end;
+
+function CAsmPoolCount: Integer;
+begin
+  if TargetArch = TARGET_I386 then Result := CASM_POOL386_COUNT
+  else Result := CASM_POOL_COUNT;
+end;
+
+function CAsmPoolReg(k: Integer): Integer;
+begin
+  if TargetArch = TARGET_I386 then Result := CAsmPool386[k]
+  else Result := CAsmPool[k];
+end;
+
+{ Is this register one the CALLER expects to survive the block? pxx's prologue
+  saves none of them, so pinning an operand to one silently breaks whoever
+  called us -- a wrong VALUE with no diagnostic, which is the class this
+  project treats as the most expensive. The pool avoids them by construction;
+  a FIXED-register constraint can name one anyway, and busybox's
+  procps/powertop.c does exactly that (`cpuid` writes "=b", and ebx is not ours
+  to re-choose). Refused by name until there is a save/restore pair to put
+  around the block. }
+function CAsmRegIsCalleeSaved(reg: Integer): Boolean;
+begin
+  if TargetArch = TARGET_I386 then
+    Result := (reg = 3) or (reg = 5) or (reg = 4)          { ebx ebp esp }
+  else
+    Result := (reg = 3) or (reg = 5) or (reg = 4) or (reg >= 12);
 end;
 
 { Bind every operand to a pinned register, encode the block, and synthesise the
@@ -7655,6 +7695,10 @@ begin
         Error('C: inline asm wants register constraint "' + CAsmOps[i].Raw
               + '" but that register is already taken by another operand or a'
               + ' clobber');
+      if CAsmRegIsCalleeSaved(fixed) then
+        Error('C: inline asm constraint "' + CAsmOps[i].Raw
+              + '" names a callee-saved register, and this frontend has no'
+              + ' save/restore pair to put around the block');
       opReg[i] := fixed;
       used[fixed] := True;
     end;
@@ -7670,11 +7714,12 @@ begin
   begin
     if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
     if not CAsmClassWantsReg(CAsmOps[i].Cons) then Continue;
-    while (poolNext < CASM_POOL_COUNT) and used[CAsmPool[poolNext]] do Inc(poolNext);
-    if poolNext >= CASM_POOL_COUNT then
+    while (poolNext < CAsmPoolCount) and used[CAsmPoolReg(poolNext)] do Inc(poolNext);
+    if poolNext >= CAsmPoolCount then
       Error('C: inline asm needs more registers than this frontend can pin'
-            + ' — it uses a fixed caller-saved pool, not a register allocator');
-    opReg[i] := CAsmPool[poolNext];
+            + ' — it uses a fixed caller-saved pool of ' + AIntToStr(CAsmPoolCount)
+            + ', not a register allocator');
+    opReg[i] := CAsmPoolReg(poolNext);
     used[opReg[i]] := True;
   end;
   for i := 0 to CAsmOpCount - 1 do
@@ -7721,6 +7766,7 @@ begin
   end;
 
   { ---- tell the template reader what each %N is ---- }
+  AttSinkText := TargetArch = TARGET_I386;
   AttResetBindings;
   for i := 0 to CAsmOpCount - 1 do
     if CAsmClassWantsReg(CAsmOps[i].Cons) then
@@ -7982,14 +8028,18 @@ begin
         becomes an AN_ASM span of AsmBytes, indistinguishable at codegen from a
         Pascal `asm` block. With operands, CAsmBuildBlock additionally pins each
         one to a register and wraps the span in ordinary assignments. }
-      if TargetArch <> TARGET_X86_64 then
+      { x86-64 encodes bytes here; i386 renders the same parse as text lines for
+        asmtext_386.inc (AttSinkText). Every other target has no reader for
+        this syntax at all and says so. }
+      if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
         Error('C: inline asm with a non-empty template is only supported on'
-              + ' x86-64, not ' + TargetArchName(TargetArch));
+              + ' x86-64 and i386, not ' + TargetArchName(TargetArch));
       if CAsmOpCount > 0 then
       begin
         Result := CAsmBuildBlock(asmSections > 0);
         Exit;
       end;
+      AttSinkText := TargetArch = TARGET_I386;
       AttResetBindings;
       AttEncodeTemplate(CAsmTemplate, asmSections > 0, asmStart, asmLen);
       node := AllocNode(AN_ASM);

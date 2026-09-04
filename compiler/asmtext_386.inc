@@ -126,21 +126,30 @@ begin
     Exit;
   end;
 
-  { unary F6/F7 group on a register: not/neg/mul/idiv, plus one-operand imul
-    (the two-operand imul reg,reg is handled below). ext digit per mnemonic. }
+  { unary F6/F7 group: not/neg/mul/idiv, plus one-operand imul (the two-operand
+    imul reg,reg is handled below). ext digit per mnemonic. Register or MEMORY
+    -- `mull -8(%ebp)` is what busybox's PSTM_X86 MULADD writes, an `"m"`
+    operand multiplied straight out of its frame slot, and it is the only form
+    that keeps the multiplier off the five-register pool. A memory operand
+    carries no width of its own, so the size keyword is required rather than
+    guessed: F7 on a byte slot is a silent 4-byte read. }
   if (Length(op1) = 0) and (CaseEqual(mnem, 'not') or CaseEqual(mnem, 'neg') or
      CaseEqual(mnem, 'mul') or CaseEqual(mnem, 'idiv') or CaseEqual(mnem, 'imul')) then
   begin
-    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
-      Error('EmitAsm386: unary op expects a register');
+    k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
+    if (k0 <> 0) and (k0 <> 2) then
+      Error('EmitAsm386: unary op expects a register or a memory operand');
     if CaseEqual(mnem, 'not') then i := 2
     else if CaseEqual(mnem, 'neg') then i := 3
     else if CaseEqual(mnem, 'mul') then i := 4
     else if CaseEqual(mnem, 'imul') then i := 5
     else i := 7;   { idiv }
+    if (k0 = 2) and (s0 = 0) then
+      Error('EmitAsm386: unary op on memory needs an explicit size (byte/word/dword)');
     if s0 = 2 then EncB($66);
     if s0 = 1 then EncB($F6) else EncB($F7);
-    EncModRMReg(i, r0);
+    if k0 = 2 then EncModRMMem(i, mb0, md0, False)
+    else EncModRMReg(i, r0);
     Exit;
   end;
 
