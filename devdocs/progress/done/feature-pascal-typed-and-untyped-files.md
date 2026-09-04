@@ -89,7 +89,7 @@ owner: frankB
 - **Type:** feature (Pascal frontend + RTL file layer). Track P; the RTL half
   (`Seek`/`FileSize`/`BlockRead`/`BlockWrite` over a typed handle) is Track B
   ground once the frontend accepts the type.
-- **Status:** working
+- **Status:** done
   tree for `file of` / "typed file" before filing.
 - **Found:** 2026-08-16, Pascal oracle sweep vs `fpc -O- -Mobjfpc` (file I/O
   topic).
@@ -348,3 +348,6 @@ here.
 - **`Default(TIntFile)`** — the alias spelling — is not refused. The `Default`
   guard is keyed on the type NAME, so `Default(FileRec)` and `Default(TextFile)`
   are caught and an alias to either is not. Pre-existing shape, one type wider.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
