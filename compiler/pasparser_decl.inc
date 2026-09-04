@@ -4929,6 +4929,36 @@ begin
           re-emitted, or it was an exact re-statement of a specialization that
           another deferral had already queued. }
         if ParseSpecialization(tname) then Continue;
+      { `T = type Base` -- the DISTINCT-TYPE declaration, the standard Pascal
+        strong-typedef idiom. FPC's `type` keyword here says "layout-identical to
+        Base, a DIFFERENT type for overload resolution, var-parameter matching
+        and RTTI". pxx reported `unknown type: type` and stopped the file: the
+        keyword was not consumed anywhere, so `type TMyB = type byte;` -- common
+        in FPC RTL headers and Delphi-lineage code -- could not be compiled at
+        all. compat-pascal-distinct-type-declaration
+
+        Consumed HERE, ahead of the whole binding chain, so every RHS shape
+        (`type byte`, `type PByte`, `type array[0..3] of Char`) takes the arm it
+        would have taken without the keyword and no arm below learns a new case.
+
+        `type helper for T` is the OTHER meaning of tkType in this position and
+        keeps its own arm further down, so it is excluded by name.
+
+        WHAT THIS DOES NOT DO: the type is an ALIAS, not yet distinct.
+        pxx has no type-IDENTITY channel for aliases -- no LastTypeAlias, no
+        Syms[].AliasIdx, no ProcParam alias carrier beside ProcParamRecId and
+        ProcParamSetEnumId -- so a value declared through the name arrives at
+        overload matching as its base kind. Measured: FPC prints `base` then
+        `distinct` for the two-overload probe; pxx warns `duplicate definition
+        of 'P' with the same parameter types` and binds both to one body, which
+        is what it ALREADY does for a plain `= byte` alias. So this spelling
+        reaches an existing loud behaviour rather than adding a silent one.
+        bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+      if (CurTok.Kind = tkType) and
+         not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+              CaseEqual(GetTokenStrFromRaw(Tokens[TokPos].SOffset,
+                                           Tokens[TokPos].SLen), 'helper')) then
+        Next;
       if CurTok.Kind = tkLParen then
       begin
         etid := RegisterEnumType(tnOff, tnLen);

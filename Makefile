@@ -5950,6 +5950,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_th_constarr26 "$$($(TESTTMP)/test_th_constarr26)" "$$(printf 'helper-name : 32768\nTYPE-name   : 2147483648\nfrom body   : 8388608\n128 32768 8388608 2147483648 ')"
 	./$(COMPILER) test/test_type_helper_typename_receiver.pas $(TESTTMP)/test_th_typename26
 	tools/expect_same.sh test_th_typename26 "$$($(TESTTMP)/test_th_typename26)" "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
+	# `T = type Base` -- the strong-typedef spelling, which was `unknown type: type`
+	# and stopped the file. The keyword is consumed ahead of the whole type-binding
+	# chain, so the seven declarations cover one RHS arm each. The three helper
+	# tests above and below are the CONTROL for the other meaning of that keyword
+	# in the same position; FPC 3.2.2 has no `type helper` so it cannot be a row
+	# here. Rows match fpc 3.2.2 exactly; the pin refuses the file at line 27.
+	# compat-pascal-distinct-type-declaration
+	./$(COMPILER) test/test_distinct_type_decl.pas $(TESTTMP)/test_distinct_type26
+	tools/expect_same.sh test_distinct_type26 "$$($(TESTTMP)/test_distinct_type26)" "$$(printf '5 120\n100 9 abcd hi 7 42\n1 4 8')"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas $(TESTTMP)/test_macros_rot_b33026
