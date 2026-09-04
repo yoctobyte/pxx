@@ -219,11 +219,32 @@ fi
 # Under a second: a text scan, before the case so no mode can forget it. It runs
 # --selftest first because a check that cannot fail prints PASS -- the selftest
 # asserts it REJECTS both shapes it was built from and ACCEPTS a fixed-size one.
+# A SKIP ON A TRACKED FILE IS A GREEN GATE WITH NO GATE IN IT. Seven arms below
+# guarded a checker with `[ -f ]` or `[ -x ]` and printed SKIP when it was not
+# there, setting no RC -- so a tree missing every checker in tools/ passed. All
+# seven files are tracked at mode 100755: absence is a BROKEN TREE, not a
+# configuration, and the two must not produce the same verdict.
+#
+# The `-x` three were worse than the `-f` four, because the mode bit is the part
+# that goes missing without the file doing so: a `cp`, a tarball restore, an
+# archive export, a filesystem that does not carry the bit. The checker sits
+# right there, readable, and the gate reports SKIP. Those now test `-f` and
+# invoke through the interpreter, so the bit is not load-bearing at all.
+#
+# The genuinely conditional SKIPs are left alone and are a different animal:
+# `fpc not installed` (a host tool nobody commits), `no pinned binary`, `no
+# origin ref`, `compiler/ unchanged`. Those say NOT APPLICABLE. These said
+# NOT PRESENT and were read as the same thing.
+# Reported by frankuser on the census arm; the other six are the same shape.
 if [ -f tools/rel8_literal_span_check.py ]; then
   step "rel8 literal-jump spans" "$LOGDIR/rel8-literal-span.log" \
        python3 tools/rel8_literal_span_check.py --selftest .        || RC=1
 else
-  echo "  SKIP  rel8 literal-jump spans (checker absent)"
+  echo "  FAIL  rel8 literal-jump spans — tools/rel8_literal_span_check.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # THE SEED CANARY. Same placement argument as the block above: before the case,
@@ -254,7 +275,9 @@ if [ -f tools/forwardlint.py ] && [ -f compiler/compiler.pas ]; then
   step "fpc seed compiles (forward decls)" "$LOGDIR/forwardlint.log" \
        python3 tools/forwardlint.py                                   || RC=1
 else
-  echo "  SKIP  fpc seed compiles (no forwardlint.py or compiler.pas)"
+  echo "  FAIL  fpc seed compiles — tools/forwardlint.py or compiler/compiler.pas is MISSING"
+  echo "        Both are TRACKED, so this is a broken tree rather than a configuration."
+  RC=1
 fi
 
 # THE ABI-ORACLE CHECK. Wired for the reason the forwardlint block above gives:
@@ -275,7 +298,11 @@ if [ -f tools/abi_oracle_lint.py ]; then
   step "backends ask the ABI oracle" "$LOGDIR/abi-oracle-lint.log" \
        python3 tools/abi_oracle_lint.py                              || RC=1
 else
-  echo "  SKIP  backends ask the ABI oracle (no abi_oracle_lint.py)"
+  echo "  FAIL  backends ask the ABI oracle — tools/abi_oracle_lint.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # IR OP NAME COVERAGE. IROpName's one load-bearing caller is the "unsupported
@@ -292,7 +319,11 @@ if [ -f tools/iropname_lint.py ]; then
   step "IROpName names every IR op" "$LOGDIR/iropname-lint.log" \
        python3 tools/iropname_lint.py                                 || RC=1
 else
-  echo "  SKIP  IROpName names every IR op (no iropname_lint.py)"
+  echo "  FAIL  IROpName names every IR op — tools/iropname_lint.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # AST SLOT-WRITE CENSUS. ASTLeft/ASTRight are children for most kinds and a
@@ -308,11 +339,15 @@ fi
 # write into a slot the table calls a child must be flagged); ~5s, builds
 # nothing. A RED here on your own change usually means `--update` after reading
 # the diff, which is what its message says.
-if [ -x tools/ast_slot_overloads.py ]; then
+if [ -f tools/ast_slot_overloads.py ]; then
   step "AST slot-write census matches its snapshot" "$LOGDIR/ast-slot-census.log" \
-       tools/ast_slot_overloads.py --self-check                        || RC=1
+       python3 tools/ast_slot_overloads.py --self-check                        || RC=1
 else
-  echo "  SKIP  AST slot-write census (no ast_slot_overloads.py)"
+  echo "  FAIL  AST slot-write census — tools/ast_slot_overloads.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # EVERY MAKEFILE ASSERTION CAN FAIL, AND CAN SAY WHY. ~3900 recipe lines
@@ -324,11 +359,15 @@ fi
 # an assertion whose exit status is discarded by a following `;`, the worse
 # sibling: that one cannot fail at all.
 # bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
-if [ -x tools/silent_assertion_check.py ]; then
+if [ -f tools/silent_assertion_check.py ]; then
   step "every Makefile assertion can fail and can say why" "$LOGDIR/silent-assertion.log" \
-       tools/silent_assertion_check.py                                 || RC=1
+       python3 tools/silent_assertion_check.py                                 || RC=1
 else
-  echo "  SKIP  Makefile assertion check (no silent_assertion_check.py)"
+  echo "  FAIL  Makefile assertion check — tools/silent_assertion_check.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
@@ -339,11 +378,15 @@ fi
 # because a hook that allows everything looks exactly like a hook nobody
 # tripped. Sub-second; it runs no suite, it only feeds the hook payloads.
 # bug-t-the-full-suite-hook-keys-on-the-tier-name-so-it-refuses-every-auto-filed-repro
-if [ -x tools/test_no_full_suite_hook.sh ]; then
+if [ -f tools/test_no_full_suite_hook.sh ]; then
   step "the full-suite hook still refuses a sweep" "$LOGDIR/no-full-suite-hook.log" \
-       tools/test_no_full_suite_hook.sh                               || RC=1
+       sh tools/test_no_full_suite_hook.sh                               || RC=1
 else
-  echo "  SKIP  the full-suite hook still refuses a sweep (no test script)"
+  echo "  FAIL  the full-suite hook still refuses a sweep — tools/test_no_full_suite_hook.sh is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
 fi
 
 # THE UNWIRED-TEST CANARY. Same placement argument as the two blocks above --

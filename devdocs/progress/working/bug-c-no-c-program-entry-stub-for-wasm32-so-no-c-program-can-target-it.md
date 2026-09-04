@@ -4,10 +4,11 @@ track: C
 prio: 40
 type: bug
 blocked-by: []
-owner: unassigned
+owner: frankA
 created: 2026-09-04
 found-by: franks-ab (measured while checking whether its crtl signal bridge reached wasm32); filed by frankA
 summary: "`--target=wasm32` on ANY C program fails at cparser.inc:11666 with `C program entry stub not implemented for this target yet`, on a trivial `int main(void){return 0;}`. So the whole C x wasm32 cell of the goal's languages-x-platforms product is empty, and every wasm32 measurement anyone has made is a Pascal-only measurement -- including this lane's corpus census, whose source list is Pascal-only for exactly this reason. The same shape was solved once for xtensa (done/bug-cfront-no-entry-stub-for-xtensa), so this is a known pattern with a worked precedent, not new ground."
+status: working
 ---
 
 # No C entry stub for wasm32
