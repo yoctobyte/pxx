@@ -4159,3 +4159,31 @@ argument would have rotted.
 
 `2aedcd004` has a GREEN **native** and no full; `a9213e770` and `96358226d` have
 **nothing at all** yet. Not asking for a pin. **v403 stands.**
+
+### Sampling depth — updated within the hour, and it moved in the fix's favour
+
+The line above ("`2aedcd004` has a GREEN **native** and no full") was true when
+written and is now stale. `4ffd15684` landed a **full** tier at `2aedcd004`:
+
+```
+tier: full   verdict: RED   skips: 1   skip_holes: 1   flaky: 1
+```
+
+**RED, and it says nothing against the ABI change.** There is **no NEW-RED
+section at all**; the sole red bullet is `tools-devtest#00`, a Track T tooling
+self-check, **STILL-RED**, and the one flaky row is the same subsystem
+(`tools/twatch_flaky_report_devtest.py`). **Zero** variadic / `aarch64_aggregate`
+rows appear red — grep count 0. So the full tier ran with the ABI change in it
+and the change contributed nothing to the verdict.
+
+**This is why a bare verdict must not be routed.** "Full tier RED at your commit"
+and "full tier RED on a tools self-check, no new reds, none of your rows" are the
+same word and opposite news for the session that owns the commit.
+
+**Still no pin** — that is the owner's, and a red-graded pin is his call to make
+or not, not a conclusion anyone here draws from a clean row set.
+
+Method note, since this pass nearly produced a fourth: `ls reports/*full*`
+returned **nothing**, because the tier is not in the filename (they are
+`<ts>-<sha7>-<host>.md`). An empty glob and a clean run print the same blank.
+The report was found via the commit that added it instead.
