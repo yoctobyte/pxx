@@ -334,4 +334,4 @@ a cdecl fnptr into a foreign callee that takes a struct by value — and inventi
 one that only pxx can execute would prove pxx agrees with itself again.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f95f85532.
