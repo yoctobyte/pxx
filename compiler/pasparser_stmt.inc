@@ -1016,6 +1016,24 @@ end;
   plain variable (ParseForInVarAST) or an implicit-Self field
   (ParseForInFieldAST). Flags + elemTk are computed by the caller from whichever
   metadata table applies (Syms[...] vs UFld...). }
+{ True when `node` is a CALL whose result is a FIXED array — the one question
+  the for-in container dispatch and ParseForInNodeAST's arm both have to ask,
+  asked in one place so they cannot drift into disagreeing about which
+  containers are iterable (that disagreement is exactly what produced two
+  different error messages for one gap).
+  bug-p-for-in-over-a-static-array-returning-call-is-refused }
+function NodeIsFixedArrayCallResult(node: Integer): Boolean;
+var ai: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if not ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) then Exit;
+  if (Integer(ASTIVal[node]) < 0) or (Integer(ASTIVal[node]) >= ProcCount) then Exit;
+  ai := ProcRetArrAi[Integer(ASTIVal[node])];
+  Result := (ai >= 0) and (not ArrTypeIsDyn[ai]);
+end;
+
 function BuildForInArrayLoop(varIdx, ckind, csym, cselfSym, cfOff, cfLen, ctemplate: Integer;
   contTk: TTypeKind; isString, isStaticArr, isArr: Boolean;
   staticLen, elemTk, bodyNode: Integer; idxScale, staticLo: Integer): Integer;
@@ -1063,11 +1081,35 @@ begin
   { idxScale > 1: an N-D container iterated by ROW — the flat index of row
     __i's first element is __i * rowElemCount (the container stays flattened,
     the assign's dest size copies the whole row). }
+  { …and a POINTER-DEREF container carries its own low bound in the SUBSCRIPT,
+    because the low bound is answered by TWO mechanisms in this compiler and a
+    deref uses the other one.
+
+    Measured (`PXXDBG=a.ast`): `x := a1[1]` over `array[1..4]` builds
+    AN_INDEX(AN_IDENT, 1) and IR lowering subtracts the bound from
+    Syms[].ConstVal; `x := p1^[1]` builds AN_INDEX(AN_DEREF, 1 - 1) — the
+    PARSER folded the bound into the subscript, and ir.inc's `lo` ladder has an
+    AN_IDENT arm and an AN_FIELD arm and NO deref arm because it never needed
+    one. This builder synthesises its AN_INDEX without the parser, so a deref
+    container got neither subtraction: `p^` over array[1..4] holding
+    11 22 33 44 iterated as `22 33 44 4310536`, and over array[5..7] as
+    `0 0 4` — shifted garbage, silently.
+
+    Emitting it here matches what the parser already does for this exact shape,
+    so there is one answer per shape rather than a third. The real repair is to
+    make the bound node-keyed the way FrozenStrElemCapOf (ir.inc, eight lines
+    above that ladder) already made the frozen-string CAPACITY node-keyed
+    across the identical three shapes — that is Track A ground and it is filed
+    as bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other.
+    bug-p-for-in-over-a-deref-ignores-a-non-zero-low-bound }
   if idxScale > 1 then
     idxNode := GenMakeBinop(tkStar,
                  GenMakeBinop(tkMinus, GenMakeIdent(idxSym, tyInteger),
                               GenMakeIntLit(staticLo), tyInteger),
                  GenMakeIntLit(idxScale), tyInteger)
+  else if (staticLo <> 0) and (ckind = 2) and (DerefPtrArraySym(ctemplate) >= 0) then
+    idxNode := GenMakeBinop(tkMinus, GenMakeIdent(idxSym, tyInteger),
+                            GenMakeIntLit(staticLo), tyInteger)
   else
     idxNode := GenMakeIdent(idxSym, tyInteger);
   ASTRight[elemAccess] := idxNode;
@@ -1241,6 +1283,8 @@ var
   setEnumId, setElemTk: Integer;
   fnElemCount, fnLowBound, fnFlatCount: Integer;   { `p^` extent, from DerefPtrArrayInfo }
   fnElemTk, fnElemRec, fnElemCap: Integer;         { ...and its element, from DerefPtrArrayElem }
+  fnStaticLo: Integer;                             { the container's own low bound }
+  fnArrAi: Integer;                                { a FIXED-array call result's ArrType row }
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
@@ -1305,8 +1349,50 @@ begin
     Exit;
   end;
 
+  { A FIXED-array VALUE that is not a bare variable: `for x in MkArr do`,
+    `for x in o.GetArr do`. The exact sibling of the dyn-array arm above, and it
+    was the arm that made the difference between the two spellings' error
+    messages -- the bare one died at the container-expression dispatch with
+    "not a generator, enum type, or iterable variable" and the qualified one got
+    this far and said "unsupported iterable expression". One gap, two messages.
+
+    MATERIALISED, and here that is the CORRECT choice, where for `p^` it was
+    not. A call result is a temporary nobody else holds a reference to, so
+    copying it into a hidden local aliases nothing and evaluates the container
+    exactly ONCE -- which is what FPC does and what a function with side effects
+    requires. `p^` is the opposite case: the pointee is live storage the body
+    can write through, so that arm indexes in place instead. Same question, two
+    answers, and the shape decides which.
+
+    The extent comes from ProcRetArrAi, the ArrType row the result's own
+    declaration recorded -- not from the pointer-symbol columns DerefPtrArrayInfo
+    reads, which is why this is a separate arm rather than a widening of that
+    one.
+    bug-p-for-in-over-a-static-array-returning-call-is-refused }
+  fnArrAi := -1;
+  if NodeIsFixedArrayCallResult(contNode) then fnArrAi := ProcRetArrAi[Integer(ASTIVal[contNode])];
+  if fnArrAi >= 0 then
+  begin
+    LastTypeRecId := ArrTypeElemRec[fnArrAi];
+    fnSym := AllocArray('', IntToTypeKind(ArrTypeElemTk[fnArrAi]),
+                        ArrTypeLo[fnArrAi], ArrTypeHi[fnArrAi]);
+    Syms[fnSym].ElemRecName := ArrTypeElemRec[fnArrAi];
+    SymSyncTypeRef(fnSym);
+    fnAssign := GenMakeAssign(GenMakeIdent(fnSym, IntToTypeKind(ArrTypeElemTk[fnArrAi])),
+                              contNode);
+    fnLoop := ParseForInVarAST(varIdx, fnSym);
+    Result := AllocNode(AN_SEQ);
+    ASTLeft[Result] := fnAssign;
+    fnSeq := AllocNode(AN_SEQ);
+    ASTLeft[fnSeq] := fnLoop;
+    ASTRight[fnSeq] := -1;
+    ASTRight[Result] := fnSeq;
+    Exit;
+  end;
+
   isArr := IsNodeArray(contNode);
   staticLen := -1;
+  fnStaticLo := 0;
   setEnumId := -1; setElemTk := 0;
   if ASTKind[contNode] = AN_IDENT then
   begin
@@ -1333,7 +1419,6 @@ begin
     end;
   end
   else if DerefPtrArrayInfo(contNode, fnElemCount, fnLowBound, fnFlatCount) and
-          (fnLowBound = 0) and
           DerefPtrArrayElem(contNode, fnElemTk, fnElemRec, fnElemCap) then
   begin
     { `for x in p^` where `p: ^array[lo..hi] of T`. Every branch above keys on a
@@ -1358,26 +1443,16 @@ begin
       predicate and wrong about the arm: nothing in this function consulted
       IsNodeArray for a non-IDENT, non-FIELD node at all, because there was no
       branch to reach.
-      RESTRICTED TO A ZERO LOW BOUND, and the restriction is measured rather
-      than cautious. BuildForInArrayLoop's comment says "AN_INDEX subtracts the
-      low bound itself, so __i in [lo..hi] is the correct domain" -- true of the
-      AN_IDENT container it was written for, and NOT of a deref: the subtraction
-      keys on tags the lvalue walk stamps on a parser-built `p^[i]`, and the
-      bare AN_INDEX this builder synthesises carries none of them. Measured with
-      the bound admitted: `p^` over `array[1..4] of Integer` holding 11 22 33 44
-      printed `22 33 44 4310536`, and over `array[5..7]` printed `0 0 4` --
-      shifted garbage, silently, which is the one outcome worth refusing over.
-      `p1^[1]` written out by hand is correct on this binary AND on pinned, so
-      the defect is the synthesised node, not the index path.
+      THE LOW BOUND is carried into the subscript by BuildForInArrayLoop —
+      see the note there. It is not free: a deref and an identifier answer the
+      low-bound question through two different mechanisms, and this builder
+      uses neither by default.
 
-      A non-zero bound therefore keeps its existing loud refusal, which is not a
-      regression -- it was refused before this change too. Filed with the table
-      as bug-p-for-in-over-a-deref-ignores-a-non-zero-low-bound rather than
-      shipped half-working.
       bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused }
     contTk := IntToTypeKind(fnElemTk);
     elemTk := fnElemTk;
     staticLen := fnFlatCount;
+    fnStaticLo := fnLowBound;
     isArr := True;
   end
   else
@@ -1429,7 +1504,7 @@ begin
   bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 2, -1, -1, 0, 0, contNode, contTk,
-    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode, 1, 0);
+    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode, 1, fnStaticLo);
 end;
 
 { for x in <EnumType> do BODY iterates ALL enum ordinals low..high, as
@@ -2735,8 +2810,8 @@ begin
       where: there was no arm here to reach at all.
       bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused }
     if (NodeDynDepth(forcNode) > 0) or
-       (DerefPtrArrayInfo(forcNode, forcElemCount, forcLowBound, forcFlatCount)
-        and (forcLowBound = 0)) then
+       DerefPtrArrayInfo(forcNode, forcElemCount, forcLowBound, forcFlatCount) or
+       NodeIsFixedArrayCallResult(forcNode) then
     begin
       Result := ParseForInNodeAST(varIdx, forcNode);
       Exit;

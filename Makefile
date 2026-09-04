@@ -12701,16 +12701,19 @@ test-core: $(COMPILER)
 	@# pointer before iterating, so a materialised private copy fails it.
 	./$(COMPILER) test/test_forin_deref_ptr_array.pas $(TESTTMP)/test_fdpa26
 	tools/expect_same.sh test_fdpa26 "$$($(TESTTMP)/test_fdpa26)" "$$(cat test/test_forin_deref_ptr_array.expected)"
-	@# ...and the half deliberately NOT handled: a non-zero low bound must keep
-	@# REFUSING, because the loop builder's synthesised AN_INDEX does not
-	@# subtract it and `array[1..4]` would iterate shifted garbage in silence.
-	@printf 'program p;\ntype TA = array[1..4] of Integer; PA = ^TA;\nvar a: TA; q: PA; x: Integer;\nbegin\n  a[1]:=11; q := @a;\n  for x in q^ do Write(x);\nend.\n' > $(TESTTMP)/forinlo.pas
-	@out=$$(./$(COMPILER) $(TESTTMP)/forinlo.pas $(TESTTMP)/forinlo26 2>&1); \
-	 rc=$$?; \
-	 test "$$rc" = "1" \
-	   && printf '%s\n' "$$out" | grep -q 'for-in: not a generator, enum type, or iterable variable' \
-	   && test ! -e $(TESTTMP)/forinlo26 \
-	  || { echo "for-in non-zero low bound: FAIL - rc=$$rc (want rc=1, a refusal, no binary -- a silent shifted read is the failure this guards)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...including a NON-ZERO and a NEGATIVE low bound, which the test above
+	@# asserts against the direct spelling. This row is the positive control for
+	@# the subtraction: it must NOT be silently shifted, and the previous
+	@# behaviour (`22 33 44 4310536` for array[1..4]) is what it guards.
+	@printf 'program p;\ntype TA = array[1..4] of Integer; PA = ^TA;\nvar a: TA; q: PA; x, n: Integer;\nbegin\n  a[1]:=11; a[2]:=22; a[3]:=33; a[4]:=44; q := @a; n := 0;\n  for x in q^ do n := n * 100 + x;\n  WriteLn(n);\nend.\n' > $(TESTTMP)/forinlo.pas
+	./$(COMPILER) $(TESTTMP)/forinlo.pas $(TESTTMP)/forinlo26
+	tools/expect_same.sh forinlo26 "$$($(TESTTMP)/forinlo26)" "11223344"
+	@# `for x in <call returning a FIXED array>`, bare and method-qualified.
+	@# `calls=1` is the load-bearing row: materialising is what makes this arm
+	@# correct, and a re-evaluating loop prints 4. `lowbound=` covers a result
+	@# whose array type does not start at 0. .expected IS fpc 3.2.2's output.
+	./$(COMPILER) test/test_forin_static_array_call.pas $(TESTTMP)/test_fsac26
+	tools/expect_same.sh test_fsac26 "$$($(TESTTMP)/test_fsac26)" "$$(cat test/test_forin_static_array_call.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

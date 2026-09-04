@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:15 unfinished:27 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:133 backlog-nilpy:97 backlog-tools:18 backlog-pascal:40 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3271 rejected:75`
+`working:15 unfinished:27 blocked:7 backlog:13 backlog-umbrella:7 backlog-core:134 backlog-nilpy:97 backlog-tools:18 backlog-pascal:38 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3273 rejected:75`
 
 ## Held now (working/ — do not touch these files)
 
@@ -82,6 +82,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
+- `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-lib-test-cmath-integral-family
 - `[p 70] [T]` regression-lib-test-cmath-lround
 - `[p 70] [T]` regression-lib-test-cmath-nan-payload
@@ -96,6 +97,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
 _358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
