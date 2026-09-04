@@ -40,3 +40,6 @@ pascal26:144: error: no overload of SetMethodProp matches these arguments
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-04 — the seven watcher saw `test-aarch64#src:test/test_rtti.pas` GREEN at b8e3b3010249 (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
