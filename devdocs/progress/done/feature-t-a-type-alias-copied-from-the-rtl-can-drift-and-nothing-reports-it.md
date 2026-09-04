@@ -129,4 +129,4 @@ resolution does not change that. What it changes is that a copy someone
 bothers to mark can no longer drift silently.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit eaf3144e5.
