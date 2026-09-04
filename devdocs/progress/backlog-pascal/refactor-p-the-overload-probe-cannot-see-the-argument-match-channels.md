@@ -109,3 +109,30 @@ An unanchored `:=` grep counts producers and consumers as one population, which
 is precisely the conflation — *"calling the shared predicate is not the same as
 reaching the shared answer"* — that the body already warns about for
 `MatchArgNilOk`.
+
+### The gate's first row cannot currently answer, and it SKIPs rather than failing
+
+Measured 2026-09-05 while establishing this ticket's baseline before touching
+anything:
+
+```
+tools/run_pascal_conformance.sh
+  test-pascal-conformance: SKIP — no suite at library_candidates/fpc-testsuite/tests/test
+                                  (run tools/install_lib_candidates.sh fpc-testsuite)
+tools/run_fgl_corpus.sh
+  test-fgl: 7 pass, 0 fail, 0 skip (of 7) — PASS
+```
+
+The Gate section says *"conformance 346/0 ... Those five are what caught each
+class; do not believe a narrower run."* **On this checkout the conformance row
+is not a narrower run, it is no run**, and it exits 0 saying so. The fgl
+baseline is live and is 7/7.
+
+That matters more than usual here because the body's measurement table credits
+conformance with **seven of the eight** regressions the naive gate caused — all
+`CreateFmt` from one `sysutils.pas:874`. So the row carrying most of this
+ticket's evidence is the row that currently cannot speak, and a SKIP reads as a
+pass to anyone grepping for a failure. **Install the suite first**
+(`tools/install_lib_candidates.sh fpc-testsuite`) **and confirm it prints 346
+before trusting a green here** — a baseline of "SKIP" would let the whole
+widening land unmeasured.
