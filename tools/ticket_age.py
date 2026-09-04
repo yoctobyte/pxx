@@ -26,6 +26,17 @@ THREE INSTRUMENT LIMITS -- read before quoting a number:
    something else and never errors. Tickets with the old schema are flagged `*`,
    because being on the old schema is itself weak evidence of age.
 
+ * A BLOCKED TICKET STILL RANKS HERE, and is marked `B`. This tool answers
+   "how long has this been open", which is a different question from "can I
+   work on it" -- `ready`/`next` drop a ticket with an unmet blocker, this one
+   deliberately does not, because a ticket that has been gated for two months
+   is exactly what an age audit is looking for. The mark exists so the reader
+   can tell the two apart WITHOUT opening the file. Measured 2026-09-04: the
+   oldest open ticket in the tree was gated on an unanswered Track U fork, and
+   three sessions in a row each spent a full read to discover that.
+   `B` means "blocked-by names something not in done/ or decided/" -- the same
+   test `ready` applies, and rejected/ does NOT satisfy a blocker.
+
  * AGE IS NOT EVIDENCE OF STALENESS, in either direction. An old ticket is
    usually old because it is unglamorous or hard, and both are live. This ranks
    READING ORDER. What settles staleness is running the repro or checking the
@@ -37,6 +48,11 @@ import subprocess, os, sys, re, collections, argparse
 ROOT   = 'devdocs/progress'
 OPEN   = ['urgent', 'working', 'unfinished', 'blocked', 'backlog']
 PARKED = ['rainy-day', 'experimental', 'done-followup']
+# Folders whose tickets SATISFY a blocker. Mirrors progress.py's
+# `resolved_slugs`: done/ OR decided/, and rejected/ deliberately does NOT --
+# a blocker that turned out to be a bad report never answered the question its
+# dependent was waiting on.
+RESOLVED = ['done', 'decided']
 
 def first_seen():
     out = subprocess.run(
@@ -54,16 +70,49 @@ def first_seen():
 def strip(v):
     return re.split(r'\s+#', v.strip(), maxsplit=1)[0].strip().strip('"').strip()
 
+def blockers_of(body):
+    """Slugs named by `blocked-by:`, inline-list or block-list form.
+
+    A DELIBERATELY NARROWER PARSE THAN progress.py's, and it must stay that
+    way: this reads the first 4000 bytes, so a ticket with a very long summary
+    ABOVE its blocked-by would truncate. That direction is safe -- it drops the
+    `B` mark and the row reads exactly as it did before this flag existed --
+    whereas guessing from prose would invent edges. Under-report, never over.
+    """
+    out = []
+    in_list = False
+    for line in body.splitlines():
+        m = re.match(r'^blocked-by:\s*\[(.*?)\]', line)
+        if m:
+            out += [x.strip() for x in m.group(1).split(',')]
+            in_list = False
+            continue
+        if re.match(r'^blocked-by:\s*$', line):
+            in_list = True
+            continue
+        m = re.match(r'^blocked-by:\s*(\S.*)$', line)
+        if m:
+            out += [x.strip() for x in m.group(1).split(',')]
+            in_list = False
+            continue
+        if in_list:
+            m = re.match(r'^\s*-\s*(\S.*)$', line)
+            if m:
+                out.append(m.group(1).strip())
+                continue
+            in_list = False
+    return [x.strip('"\'' ) for x in out if x.strip('"\'' )]
+
 def head(path):
-    """(track, prio, old_schema) -- reads BOTH the YAML field and the old
-    `**Track:** X` body form. Returns old_schema=True when only the latter."""
+    """(track, prio, old_schema, blockers) -- reads BOTH the YAML field and the
+    old `**Track:** X` body form. Returns old_schema=True when only the latter."""
     track = prio = ''
     old = False
     try:
         with open(path, encoding='utf-8', errors='replace') as fh:
             body = fh.read(4000)
     except OSError:
-        return '', '', False
+        return '', '', False, []
     for line in body.splitlines():
         if line.startswith('track:') and not track:
             track = strip(line[6:])
@@ -73,7 +122,7 @@ def head(path):
         m = re.search(r'^\s*[-*]?\s*\*\*Track:\*\*\s*([A-Za-z])', body, re.M)
         if m:
             track, old = m.group(1).upper(), True
-    return track.upper(), prio, old
+    return track.upper(), prio, old, blockers_of(body)
 
 def folders(include_parked):
     want = list(OPEN) + (PARKED if include_parked else [])
@@ -93,17 +142,29 @@ a = ap.parse_args()
 
 first = first_seen()
 fl = folders(a.parked)
+
+# Slugs that satisfy a blocker. Scanned from the RESOLVED folders directly
+# rather than from the open set, so a blocker that has closed stops marking its
+# dependent the moment it lands, with no second index to keep in step.
+resolved = set()
+for d in RESOLVED:
+    dp = os.path.join(ROOT, d)
+    if os.path.isdir(dp):
+        resolved |= {f[:-3] for f in os.listdir(dp) if f.endswith('.md')}
+
 rows, dropped = [], 0
 for d in fl:
     for f in sorted(os.listdir(os.path.join(ROOT, d))):
         if not f.endswith('.md') or f in ('README.md', 'BOARD.md', 'BOARD-brief.md'):
             continue
-        tr, pr, old = head(os.path.join(ROOT, d, f))
+        tr, pr, old, bl = head(os.path.join(ROOT, d, f))
         if a.track:
             if tr != a.track.upper():
                 dropped += 1
                 continue
-        rows.append((first.get(f, '9999-99-99'), first.get(f, '?'), d, f[:-3], tr, pr, old))
+        unmet = [b for b in bl if b not in resolved]
+        rows.append((first.get(f, '9999-99-99'), first.get(f, '?'), d, f[:-3], tr, pr, old,
+                     unmet))
 rows.sort()
 
 pop = f"{len(rows)} open" + (f" on track {a.track.upper()}" if a.track else "") + \
@@ -120,12 +181,17 @@ if a.hist:
 
 unk = sum(1 for r in rows if r[1] == '?')
 olds = sum(1 for r in rows if r[6])
+blk = sum(1 for r in rows if r[7])
 print(pop)
 print(f"{unk} with no visible add commit (renamed -- age UNMEASURABLE, not new); "
       f"{olds} on the pre-YAML `**Track:**` schema, marked *")
+print(f"{blk} with an unmet `blocked-by`, marked B -- still ranked here (age is "
+      f"the question), but `ready`/`next` will not offer them")
 if a.track:
     print(f"{dropped} ticket(s) filtered out by --track (includes any whose lane is unset)")
 print()
-print(f"{'filed':10s}  {'folder':18s}  {'tk':3s} {'pri':>4s}  slug")
-for _, d, folder, slug, tr, pr, old in rows[:a.n]:
-    print(f"{d:10s}  {folder:18s}  {(tr or '-')[:2]:2s}{'*' if old else ' '} {pr:>4s}  {slug}")
+print(f"{'filed':10s}  {'folder':18s}  {'tk':3s} {'pri':>4s} {'':1s} slug")
+for _, d, folder, slug, tr, pr, old, unmet in rows[:a.n]:
+    print(f"{d:10s}  {folder:18s}  {(tr or '-')[:2]:2s}{'*' if old else ' '} {pr:>4s} "
+          f"{'B' if unmet else ' '} {slug}"
+          + (f"   (waits on {', '.join(unmet)})" if unmet else ''))

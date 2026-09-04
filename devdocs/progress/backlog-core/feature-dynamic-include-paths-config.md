@@ -2,7 +2,7 @@
 track: A
 prio: 25
 type: feature
-blocked-by: []
+blocked-by: [decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]
 summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31 and RE-MEASURED 2026-09-01: none of the three remaining bullets has a consumer, and two are near-zero value as specified -- the soname fallback table is UNREACHABLE on a normal Linux host (all nine stems resolve from ld.so.cache, which is asked first), and an xtensa build needs no generated config. The only open question is intent, filed as [[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]. Do not take this for its title - the big half is landed."
 status: backlog
 owner: frankS
@@ -408,3 +408,25 @@ of intent, filed as
 [[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]
 (recommendation: close this ticket, keep the scanner as its own item with a
 stated justification). Nothing is blocked on the answer.
+
+### 2026-09-04 (frankH) — wired the fork as a real edge
+
+The 2026-09-01 outcome above is unchanged and still correct. What was missing is
+that it was recorded only in PROSE ("filed as [[...]]"), and `check`'s
+prose-edge aperture does not fire on it because "filed as" is not a blocking
+phrase — so the sentence was true and the ranker could not see it.
+
+**"Nothing is blocked on the answer" was about OTHER work, and it reads as being
+about this ticket.** No other ticket waits on the scanner decision; that is what
+was measured and it still holds. But this ticket's own remaining acceptance rows
+cannot be met or honestly dropped until the fork is answered, and it is now the
+OLDEST open ticket in the tree — so `tools/ticket_age.py` offers it first to
+every session that starts on the age-ordered brief, each of which spends a read
+to reach this same paragraph. Three sessions have now done that.
+
+`blocked-by:` now names the decide ticket. That is a claim about THIS ticket
+only, it costs the decide ticket nothing (`effective_prio` takes a max, and both
+sit at 25), and it removes this from `ready`/`next` until the fork is answered.
+Its prio and its recommendation are untouched — the fork is the owner's, and
+wiring the edge is not answering it.
+

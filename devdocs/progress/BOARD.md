@@ -206,7 +206,7 @@ _none_
 | feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 20 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-dynamic-include-paths-config | A | 25 | feature | Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31 and RE-MEASURED 2026-09-01: none of the three remaining bullets has a consumer, and two are near-zero value as specified -- the soname fallback table is UNREACHABLE on a normal Linux host (all nine stems resolve from ld.so.cache, which is asked first), and an xtensa build needs no generated config. The only open question is intent, filed as [[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]. Do not take this for its title - the big half is landed. | — |
+| feature-dynamic-include-paths-config | A | 25 | feature | Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31 and RE-MEASURED 2026-09-01: none of the three remaining bullets has a consumer, and two are near-zero value as specified -- the soname fallback table is UNREACHABLE on a normal Linux host (all nine stems resolve from ld.so.cache, which is asked first), and an xtensa build needs no generated config. The only open question is intent, filed as [[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]. Do not take this for its title - the big half is landed. | decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one |
 | feature-inline-nonleaf-and-branch-locals | O | 40 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-n-a-quoted-from-import-reaches-another-language | A | 15 | feature | `import 'sysutils.pas' as su` works; `from 'sysutils.pas' import Trim` does not. The quoted cross-language import was built for the PLAIN arm only, because the from-arms thread impName/impRoot through member binding, alias recording and PyStdAliasRecord. Nothing needs it today — the refusal diagnostic points at the plain spelling, which works — so this is filed to be visible rather than to be urgent. | — |
 | feature-nilpy-arc-cross-parity | A | 25 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
@@ -1266,6 +1266,7 @@ _none_
 - [p 25] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
 - [p 25] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm (unblocks 1)
 - [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile (unblocks 1)
+- [p 25] [U] decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one (unblocks 1)
 - [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)
 - [p 25] [A] feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host (unblocks 1)
 - [p 25] [A+B] feature-target-wasm (unblocks 1) [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
@@ -1286,13 +1287,11 @@ _none_
 - [p 25] [T] bug-t-the-c-conformance-corpus-is-absent-from-this-checkout-so-make-test-c-covers-less-than-its-name
 - [p 25] [A] chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
-- [p 25] [U] decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
 - [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
 - [p 25] [A] feature-a-an-extern-only-variable-still-reserves-its-storage
 - [p 25] [A] feature-a-o-the-refcount-lock-is-still-global-but-nobody-has-measured-that-it-costs
 - [p 25] [A] feature-a-the-pascal-reduced-build-must-be-able-to-seed-the-full-compiler
-- [p 25] [A] feature-dynamic-include-paths-config
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [N] feature-n-route-pypal-through-wasi-imports-so-nilpy-can-do-file-io-on-wasm32
 - [p 25] [A] feature-nilpy-arc-cross-parity
@@ -1386,6 +1385,7 @@ _none_
 - **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
+- **1** — decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
