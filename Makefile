@@ -14460,6 +14460,31 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_uapi: gcc absent, UAPI constants NOT verified ==="; \
 	fi
+	# <linux/fb.h> and <mtd/ubi-user.h>: ioctl numbers AND struct layouts, at
+	# BOTH widths, because two of these structs are deliberately
+	# width-dependent (fb_fix_screeninfo carries `unsigned long smem_start')
+	# and comparing against a written-down number would have to pick one. The
+	# i386 row is therefore not a duplicate of the native one -- it is the
+	# only row that can catch a field widened to uint64_t "to be safe".
+	# For the ubi half the ioctl NUMBER is the layout assertion: _IOW folds
+	# _IOC_TYPECHECK(size) in, so dropping __attribute__((packed)) from
+	# ubi_rsvol_req moves UBI_IOCRSVOL from 1074556674 to 1074818818 as well
+	# as the sizeof (measured, as this test's positive control).
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_uapi_layout.c $(TESTTMP)/c_uapilay26 >/dev/null || { echo "c_uapilay compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_uapilay_gcc test/c_crtl_uapi_layout.c || { echo "c_uapilay gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_uapilay26 "$$($(TESTTMP)/c_uapilay26)" "$$($(TESTTMP)/c_uapilay_gcc)" || exit 1; \
+	  echo "=== c_uapilay: fb + ubi ioctls and layouts identical to gcc ==="; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_uapilay_gcc32 test/c_crtl_uapi_layout.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_uapi_layout.c $(TESTTMP)/c_uapilay32 >/dev/null || { echo "c_uapilay i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_uapilay26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_uapilay32)" "$$($(TESTTMP)/c_uapilay_gcc32)" || exit 1; \
+	    echo "=== c_uapilay: i386 identical to gcc -m32 (the width-dependent half) ==="; \
+	  else \
+	    echo "=== c_uapilay: no gcc -m32, 32-bit layouts NOT verified ==="; \
+	  fi; \
+	else \
+	  echo "=== c_uapilay: gcc absent, layouts NOT verified ==="; \
+	fi
 	# getrandom(2), which busybox's seedrng needs and which is a SYSCALL rather
 	# than a PAL entry because the FLAGS are the point: GRND_NONBLOCK and
 	# GRND_INSECURE select between "fail rather than wait for entropy" and
