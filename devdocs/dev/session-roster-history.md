@@ -24922,3 +24922,35 @@ touches `lexer.inc`, shared with Track A. They open when frankA's cluster lands.
 were told to talk directly, and peer-to-peer beat routing in every case measured.
 
 **No pin.** `make pin` is the owner's alone; nobody asked for one.
+
+### Boundary 1 answered — NO collision, and frankA had already synced
+
+frankA, 19:45, answering with the mechanism rather than an assurance: the
+predicate is a **procedural-value recognition** test ("is this symbol a method
+pointer, should a bare mention be a CALL"), live at `pasparser_stmt.inc:7297`,
+`:7483`, `:7491`, plus frankH's `AllocVar` site. frankA's cluster asks a
+different question — **what node a `^` / `.field` / `[i]` postfix may attach
+to** — in arms that run after the primary is built and never consult
+`SymProcSig`. Two questions, not two spellings of one. **Flag dropped.**
+
+frankA had already told frankH the `Result :=` fix is orthogonal, before I
+asked. The peer-to-peer path beat the routing path again; my question's value
+was confirming there was nothing to route, which is the outcome the seat should
+expect most of the time.
+
+**One live shared surface remains, and it is sequencing, not merge:**
+`ApplyCallResultPtrSuffix` is genuinely shared between frankA and frankH.
+frankA has **ceded it to frankH** and will message frankH before touching it if
+measurements force it back. Banked here so a coordinator restart does not lose
+the cession — it is the kind of agreement that exists only in two transcripts.
+
+Two items frankA raised that are NOT coordinator business, recorded only so the
+next reader does not re-route them: the postfix-loop count in
+`refactor-p-three-hand-rolled-postfix-loops` is stale (**five** in Pascal, not
+three, plus two in `pyparser.inc`), and
+`bug-p-a-field-selection-on-a-record-cast-is-not-parsed` has a **false premise**
+— eight record-cast shapes compile and match fpc 3.2.2, and the author reduced
+from the *second* error of a two-error batch; its real content is that `TMethod`
+is not a builtin. Both are frankA's under fix-it-then-note-it, and frankA has
+already told frankH the second one moves to their TMethod work. The
+`pyparser.inc` copies are Track N; **nobody is on N tonight**, so no collision.
