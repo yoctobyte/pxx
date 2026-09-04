@@ -58,7 +58,7 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-03 — the seven watcher saw `test-core#src:test/c_asm_in_inline_body.c@2` GREEN at addffd2608d3 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-c-asm-in-inline-body-2`, not `regression-test-core-c-asm-in-inline-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4b67ea324.
 
 ## Already fixed, by the author, in the commit that also stopped it recurring (frankA, 2026-09-04)
 

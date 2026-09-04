@@ -40,7 +40,7 @@ pascal26:7: error: C #if: expected ':' in conditional expression
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4b67ea324.
 
 ## Already fixed, three hours after it was filed (frankA, 2026-09-04)
 
