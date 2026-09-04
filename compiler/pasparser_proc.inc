@@ -2672,6 +2672,40 @@ begin
   begin
     { mov [rbp+selfOff], rbx }
     EmitB($48); EmitB($89); EmitB($9D); EmitI32(Syms[CurGenSelfSym].Offset);
+    { INHERIT THE RESUMER'S EXCEPTION CHAIN. CoAlloc seeds this context's saved
+      exc_top with 0 (`fresh chain on this stack`) and CoSwitch restores it on
+      the way in, so a `raise` in a stackful generator body walked an EMPTY
+      chain, found no handler and killed the process — while the IDENTICAL
+      source as `generator; stackless;` gives caught=3, and so does a plain
+      procedure raising inside the same try. Three-way control in the ticket.
+
+      The consumer's chain head is recoverable from the instance and needs no
+      new intrinsic: CoNext calls CoSwitch with pfrom = &callerctx, so
+      [self + CO_OFF_CALLERCTX] is the consumer's rsp at the switch, and
+      CoSwitch pushes exc_top LAST (lowest address) before storing rsp — so
+      [[self + CO_OFF_CALLERCTX]] is exactly the chain the consumer was running
+      with. Linking to it at body entry makes the generator's chain an extension
+      of its resumer's, which is what a `call` would have given it.
+
+      THE ASSUMPTION THIS RESTS ON, stated rather than left implicit: the link
+      is made ONCE, at first entry, so it is only valid while the resumer's
+      frame outlives the coroutine. That holds because CoAlloc and CoNext are
+      reached from exactly one place — the for-in desugar — so creation and
+      every resume are the same frame, and the resume happens at the loop HEAD,
+      outside any try the loop BODY pushes and pops. A first-class stackful
+      generator resumed from a different dynamic context would need the link
+      refreshed per resume; there is no such thing today and the day there is,
+      this is the site.
+      bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler
+      No nil guard on callerctx: CoSwitch does `mov [pfrom], rsp` BEFORE the
+      switch and CoNext passes pfrom = &callerctx, so it is written on the way
+      in and cannot be 0 at body entry. A guard here would have to jump over
+      EmitStatusSlotX64, whose length is not fixed (the threadsafe build takes a
+      `gs:` prefix) — a hand-counted branch distance over a variable-length
+      emitter is a worse hazard than the one it would be guarding. }
+    EmitB($48); EmitB($8B); EmitB($43); EmitB(CO_OFF_CALLERCTX);  { mov rax, [rbx+callerctx] }
+    EmitB($48); EmitB($8B); EmitB($00);                           { mov rax, [rax]  (consumer's saved exc_top) }
+    EmitStatusSlotX64(0, BSS_EXC_TOP, True);                      { mov [EXC_TOP], rax }
     for i := 0 to nparams - 1 do
     begin
       gpi := Procs[procIdx].Params[i].SymIdx;

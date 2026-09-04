@@ -54,7 +54,23 @@ begin
   top := top - 8;              { body entry rsp == 8 (mod 16) }
   top := top - 64;             { 8 saved qwords }
 
-  PW(top + 0)^  := 0;                { exc_top -> fresh chain on this stack }
+  { exc_top: 0 here, and the generator body's PROLOGUE overwrites it on entry
+    with the resumer's chain head, read out of [[inst + 8]] -- so a `raise` in a
+    generator body reaches the handler around the driving for-in instead of
+    walking an empty chain and killing the process.
+
+    THAT LINK IS MADE ONCE, AT FIRST ENTRY, AND IT IS ONLY SAFE BECAUSE CoAlloc
+    AND CoNext HAVE EXACTLY ONE CALLER: the compiler's for-in desugar, which
+    creates and resumes in the same frame, and resumes at the loop HEAD so no
+    try the loop BODY pushes is on the chain. Nothing enforces that uniqueness.
+    If you are here to drive a coroutine from somewhere else -- a first-class
+    generator value, a scheduler, anything resumed from a different dynamic
+    context -- the link must be refreshed at every resume instead, and the site
+    is the generator prologue in pasparser_proc.inc. The failure mode if you do
+    not is a longjmp into a frame that has already returned, which will not
+    point back here.
+    bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler }
+  PW(top + 0)^  := 0;
   PW(top + 8)^  := 0;                { r15 }
   PW(top + 16)^ := 0;                { r14 }
   PW(top + 24)^ := 0;                { r13 }

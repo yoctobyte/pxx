@@ -10646,6 +10646,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_generator_raise_past_managed_temp.pas $(TESTTMP)/test_grpmt26
 	tools/expect_same.sh test_grpmt26 "$$($(TESTTMP)/test_grpmt26)" "caught=2000"
 	tools/assert_no_leak.sh generator_raise_past_managed_temp 3000 $(TESTTMP)/test_grpmt26
+	@# A raise inside a STACKFUL (`generator;`) body used to die with `Unhandled
+	@# exception` where the same raise from a plain procedure and from a
+	@# `generator; stackless;` body was caught by the same try. CoAlloc seeded
+	@# the coroutine's exc_top with 0 and CoSwitch restored it, so the raise
+	@# walked an EMPTY chain. Rows 1-2 of the program are the controls that say
+	@# the harness works (green before the fix); row 3 is the guard; rows 4-5
+	@# say it did not swing too far -- a generator must still catch its own
+	@# raise and still let one past its own non-matching handler.
+	@# N is 5, not 2000, because an escaping raise still leaks the coroutine's
+	@# 64 KB stack (4.59 KB/raise measured as RSS slope) --
+	@# bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in
+	@# bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler
+	./$(COMPILER) test/test_generator_stackful_raise_reaches_the_handler.pas $(TESTTMP)/test_gsfrh26
+	tools/expect_same.sh test_gsfrh26 "$$($(TESTTMP)/test_gsfrh26)" "$$(printf 'plain=5\nstackless=5\nstackful=5\nown vals=2 inner=1\npast vals=1 inner=0 outer=1')"
 	./$(COMPILER) test/test_forin_set_member.pas $(TESTTMP)/test_forin_set_member26
 	tools/expect_same.sh test_forin_set_member26 "$$($(TESTTMP)/test_forin_set_member26)" "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas $(TESTTMP)/test_textfile26

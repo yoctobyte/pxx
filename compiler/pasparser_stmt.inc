@@ -544,6 +544,13 @@ begin
   end;
 
   { Stackful: CoAlloc / while CoNext / CoCurrent / CoFree (heap coroutine stack). }
+  { THIS IS THE ONLY CALLER OF CoAlloc/CoNext, and a stackful generator's
+    exception handling depends on it. The generator body prologue links its
+    exception chain to the resumer's ONCE, at first entry, which is correct only
+    while creation and every resume share a frame -- true here because both
+    happen in this desugar and the resume is at the loop head. A second driver
+    would have to refresh the link per resume. See CoAlloc in lib/rtl/coroutine.pas.
+    bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler }
   paCoAlloc   := FindProc('CoAlloc');
   paCoNext    := FindProc('CoNext');
   paCoCurrent := FindProc('CoCurrent');

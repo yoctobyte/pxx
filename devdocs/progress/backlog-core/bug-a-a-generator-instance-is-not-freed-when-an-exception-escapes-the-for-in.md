@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-summary: "MEASURED: a stackless generator's instance leaks ~0.99 blocks per raise when an exception escapes the driving `for..in` — SlFree lives in the loop teardown and the unwind skips it. Flat (live=2) when the loop exhausts normally, and a plain non-generator raise+catch is flat at live=2 too, so it is neither the exception object nor the generator in general: it is the loop's teardown on the unwind path only."
+summary: "MEASURED on BOTH forms. Stackless: a generator instance leaks ~0.99 blocks per raise when an exception escapes the driving `for..in` -- SlFree lives in the loop teardown and the unwind skips it. Stackful: the same skipped teardown loses CoFree, so each escaping raise leaks the coroutine's 64 KB stack (RSS slope 4.59 kB/raise) plus the instance. Flat when the loop exhausts normally, and a plain non-generator raise+catch is flat at live=2, so it is neither the exception object nor generators in general -- it is the loop teardown on the unwind path only."
 status: open
 ---
 
@@ -50,11 +50,30 @@ The first row above, as an `assert_no_leak` row with a tight bound. Note that
 its own numbers and says so — its bound is 3000 rather than 50 *because* of
 this ticket, and tightening that bound is part of closing this one.
 
-## What is NOT known
+## The stackful form has it too, and it is far bigger — measured 2026-09-04
 
-Whether the same hole exists for a **stackful** generator. It could not be
-measured: an exception raised inside a `generator;` (non-stackless) body does
-not reach the driving `for..in`'s handler at all — it goes unhandled and kills
-the process. That is filed separately as
-`bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler`.
-UNCHECKED, not "does not happen".
+This said "UNCHECKED, not does-not-happen" because a stackful raise killed the
+process before anything could be measured. That blocker is now fixed
+(`bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler`),
+and the leak underneath it is worse than the stackless one:
+
+| N escaping raises | max RSS |
+| --- | --- |
+| 2000 | 9324 kB |
+| 8000 | 36844 kB |
+
+**4.59 kB per raise**, and that is the TOUCHED PAGES — the reservation is
+`CO_STACK = 65536` bytes per generator, so the address space lost is 64 KB per
+escaping raise, not 4.6. Same cause: `CoFree` (which frees the heap stack AND
+the instance) is in the loop teardown the unwind skips.
+
+So the fix wanted here covers both forms and the stackful one is the reason to
+do it: a program that raises out of a stackful generator in a loop grows by
+64 KB a time. `test/test_generator_stackful_raise_reaches_the_handler.pas` runs
+N=5 for exactly this reason and says so.
+
+## Still not known
+
+Whether the same skipped teardown loses anything else — the for-in desugar's
+`SlFree` / `CoFree` are what this ticket names, and nobody has walked the rest
+of that teardown asking the same question.
