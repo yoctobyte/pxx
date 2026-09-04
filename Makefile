@@ -13592,6 +13592,23 @@ test-core: $(COMPILER)
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 	./$(COMPILER) test/c_labels_as_values.c $(TESTTMP)/c_labelval26
 	tools/expect_same.sh c_labelval26 "$$($(TESTTMP)/c_labelval26)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
+	# IR_UNSUPPORTED must name the line the construct is ON. Asserts the LINE,
+	# not merely that the compile refuses: it refused correctly all along, at a
+	# position read off the LEXER (wherever it stopped, i.e. inside a builtin
+	# unit), so a test asserting only "this fails" would have passed throughout.
+	# Reported `lib/crtl/src/sys/socket.c near cmsghdr` for busybox's
+	# flash_eraseall and `unit builtinheap` for this reduction -- both files
+	# compile cleanly alone, and two sessions searched them for two days.
+	# bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall
+	@if ./$(COMPILER) --emit-obj test/c_ir_unsupported_reports_the_real_line.c $(TESTTMP)/c_irunsup.o 2>&1 \
+	     | grep -q '^pascal26:23: error: IR_UNSUPPORTED'; then \
+	  echo "c_ir_unsupported_reports_the_real_line: names line 23, the loff_t line"; \
+	else \
+	  echo "c_ir_unsupported_reports_the_real_line: FAILED -- the diagnostic no longer names line 23."; \
+	  echo "  Either it regressed to the lexer position (a builtin unit), or it stopped refusing."; \
+	  ./$(COMPILER) --emit-obj test/c_ir_unsupported_reports_the_real_line.c $(TESTTMP)/c_irunsup.o 2>&1 | tail -3; \
+	  exit 1; \
+	fi
 	./$(COMPILER) test/c_const_and_chain_dead_arm.c $(TESTTMP)/c_andchain26
 	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
 	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26

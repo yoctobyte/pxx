@@ -859,7 +859,21 @@ begin
           IRA[i] holds the offending AST kind (ASTKind, see the IRAppend calls
           at ~965 / ~5107). }
         if StrictIR then
-          Error('IR_UNSUPPORTED: frontend could not lower AST node (kind ' +
+          { ErrorAt, not Error: this check runs AFTER the parse, so ErrorPrint's
+            `in:` path and `near:` window are read off the LEXER's position --
+            which by then is standing in whichever builtin unit it stopped in.
+            Measured 2026-09-04 on busybox's flash_eraseall: it reported
+            `in: lib/crtl/src/sys/socket.c near cmsghdr`, and the five-line
+            reduction reported `near: unit builtinheap`. BOTH FILES COMPILE
+            CLEANLY ALONE. The real site was a `loff_t` that crtl does not
+            declare, so `&offset` became the address of an integer literal.
+            Two sessions spent two days in the files the message named.
+            This is exactly the failure ErrorNoPos was introduced for
+            (lexer.inc) -- the same wrong-file-that-reads-as-correct -- and
+            IRLine/IRFile already hold the lowering position, so the node knows
+            where it came from and only the reporting was throwing it away. }
+          ErrorAt(IRLine[i],
+                'IR_UNSUPPORTED: frontend could not lower AST node (kind ' +
                 IRVerifyIntStr(IRA[i]) + ') — a frontend gap, would miscompile');
 
       IR_VAR_STORE:
