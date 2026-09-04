@@ -142,3 +142,40 @@ disagreement, and the mode-dependence of the second.
 
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 824e95953.
+
+## The census above was reported too narrow — corrected 2026-09-04
+
+frankD's objection, and it is right about what was *written* here: the
+define-setting census bounds finding (1) only. Findings (2) and (3) change the
+comment scanner and mode handling in a pass that runs over EVERY Pascal source,
+so their population is sources carrying a brace comment — **2117 of 2265** in
+`compiler/ lib/ examples/ test/`, not the 2 include files named above.
+
+That measurement was run before landing and then not written down here, which is
+the actual failure: a verification claim scopes to what was checked, and this
+record understated it. The instrument compares where a brace comment ENDS under
+the old rule (nest on `{$` only) against the new one (nest on any `{`), and
+reports the disputed span:
+
+- **761 comments end at a different position.**
+- **Four** have any directive in the disputed span:
+  `test_pascal_nested_comment_directive.pas:18` and
+  `test_pascal_delphi_mode_comment_include.pas:19` are the two fixtures added
+  here — the live controls, so the count is not a dead probe;
+  `test_pascal_macro_comment_nesting.pas:29` is Delphi-mode and passes (the
+  scanner assumes `NestedComments`, so it over-reports there — conservative in
+  the safe direction); `lib/rtl/palparallel.pas:4` is `{$threadsafe on}` quoted
+  in prose, which this pass does not act on in either reading.
+
+**The stronger instrument is frankD's, not this one.** He swept all 2265 sources
+HEAD-vs-pin with the same list and flags: **HEAD 558 fail, pin 632**. Six sources
+the pin compiles and HEAD refuses; five are deliberate must-not-compile tests
+(two of them the `{$FATAL}` pair added this session, which assert `! $(COMPILER)`
+and `! test -e`). **Zero regressions attributable to this change.** The sixth was
+`test_hint_directive_on_a_generic_type` and belonged to `771b157a6`, not here:
+`library` is an FPC hint directive (`type T<X> = class end library;`) that had
+been reserved as a keyword.
+
+So the full tier was still not needed for this change — but that conclusion is
+now carried by an empirical sweep over the right population rather than by a
+static census over the wrong one.
