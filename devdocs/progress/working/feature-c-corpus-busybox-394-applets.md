@@ -1,6 +1,6 @@
 ---
 slug: feature-c-corpus-busybox-394-applets
-title: "Rung 6: busybox at 394 applets — 507 of 521 TUs, and the fourteen that refuse"
+title: "Rung 6: busybox at 394 applets — 521 of 521 TUs on x86-64, linked, byte-identical over 938 cases"
 track: C
 prio: 60
 type: feature
@@ -8,7 +8,7 @@ status: working
 created: 2026-09-02
 found-by: frankD
 blocked-by: [feature-b-crtl-function-gaps-at-394-busybox-applets, bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS]
-summary: "**507 OF 521 TRANSLATION UNITS BECOME x86-64 OBJECTS AT 394 APPLETS**, up from 265 of 265 at 141, and RE-MEASURED 2026-09-04 at binary 75c874f301fb77c2 / HEAD a8b606a3e: same 507, same fourteen, so the set is stable across two days of commits. The gcc oracle links all 521 and agrees with the reference busybox over 893 differential cases, so the oracle is sound at this width. **ALL FOURTEEN REFUSALS ARE crtl SURFACE AND NONE IS A COMPILER DEFECT** -- corrected from `thirteen of fourteen`: the flash_eraseall IR_UNSUPPORTED was root-caused to the missing `loff_t` typedef, and so was nandwrite`s `argument 3` error, so nine missing functions + three __BEGIN_DECLS TUs + two loff_t TUs = fourteen. The binary does not link yet and cannot until all fourteen clear, because busybox`s applet table references every applet_main by name; the link RED is that same fourteen counted once more, not an independent failure. **507 IS THE FLATTERED NUMBER**: 37 distinct headers resolve from the HOST system on x86-64 and would be `not found` on i386, so this row closes PER-TARGET and `fixed on x86-64` is not `fixed`."
+summary: "**CLOSED ON x86-64 2026-09-04: 521 OF 521 TRANSLATION UNITS BECOME OBJECTS, THEY LINK, AND THE LINKED BINARY IS BYTE-IDENTICAL TO THE gcc ORACLE OVER 938 DIFFERENTIAL CASES.** That is the first fully green 394-applet run; the previous state on this ticket was 507 of 521 with fourteen refusals, all of them crtl surface, and it is now false. Measured at binary sha256 `b425f312ffff` on HEAD `e71eaf4e8`, private tree `library_candidates/busybox-frankC`, `tools/busybox_diff.sh --separate`. The oracle is gcc plus upstream busybox`s own separately-linked binary, and the two agree, so the comparison is not a unity build agreeing with itself. **521 IS STILL THE FLATTERED NUMBER AND THAT HAS NOT CHANGED**: the host-header fallback is native-only, so on x86-64 an unknown `<h>` resolves from /usr/include with a warning while on any cross target it is a hard `include file not found`. A refusal is a property of a (TU, target) PAIR. The honest instrument is `feature-c-corpus-busybox-i386-the-second-architecture`, and this row does not close that one."
 owner: frankC
 ---
 
@@ -223,3 +223,30 @@ exercise argument parsing and little else; the first fixture with a digit in it
 found one and the first substitution found the other. That is an argument about
 coverage shape rather than coverage size — the 894th `--help` case would not
 have found either.
+
+## 2026-09-04 — the fourteen cleared, and the run went green
+
+Binary `b425f312fffff6bc1ce243c7074f945f75e0ae9ff91608cb830a273b64741b36`,
+HEAD `e71eaf4e8`, `tools/busybox_diff.sh --separate --applets "$(cat
+tools/busybox-applets-394.txt)"`:
+
+```
+ORACLE  gcc separate build, 521 objects
+ORACLE  busybox agrees with the gcc build
+PASS    x86_64   521 objects linked separately
+PASS    x86_64   byte-identical to the gcc oracle over 938 cases
+```
+
+**The link is the part that had never run.** The fourteen refusals were not
+fourteen independent failures to be counted down — busybox's applet table
+references every `*_main` by name, so the link could not be attempted at all
+until the last one cleared. The 938 cases are therefore the first evidence on
+this ticket about a **pxx-built binary** rather than about the oracle: every
+earlier number here (893 cases at 507 TUs) was gcc agreeing with upstream, which
+is a statement about the harness being sound and not about the compiler.
+
+**What this row does NOT say.** It does not say the compiler is correct at 394
+applets in general: 938 cases is what the harness's transcript set covers, and
+byte-identical output on those cases is a much narrower claim than the applet
+set working. And it says nothing at all about any target but this one — see the
+next section, which was written before this run and is unchanged by it.

@@ -14883,6 +14883,57 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_uapilay: gcc absent, layouts NOT verified ==="; \
 	fi
+	# <linux/wireless.h>: the WE ioctl numbers, 257 macros and 19 aggregate
+	# layouts, diffed against gcc at BOTH widths. busybox's ifplugd.c reads
+	# the associated AP's MAC out of `iwreq.u.ap_addr.sa_data' after
+	# SIOCGIWAP, and a union member of the wrong size leaves that offset
+	# valid and wrong -- no ioctl error, just six bytes of a neighbour.
+	#
+	# THE COMPILE STEP IS CHECKED FOR WARNINGS, NOT ONLY FOR ITS EXIT CODE,
+	# AND THAT IS THE POINT OF THIS ROW. pxx does not refuse an undeclared
+	# identifier used as a value: it warns and yields 0. So a constant
+	# missing from the crtl header COMPILES, and `>/dev/null' on the compile
+	# line -- which every other row here uses -- throws the only warning
+	# away. Measured 2026-09-04: this file's first run had 24 macros missing
+	# from lib/crtl/include/linux/wireless.h and printed 0 for twelve of
+	# them; the exit code was 0 and the gcc diff was the sole instrument
+	# that noticed. The grep below makes it fail where the fault is.
+	#
+	# iw_point AND iw_event MUST DIFFER BETWEEN THE TWO WIDTHS -- 16/8 and
+	# 24/20, because `struct iw_point' carries a pointer. The must-differ
+	# check is this row's positive control: a header hard-coded for x86-64
+	# would still diff clean against gcc on x86-64, and the i386 leg is what
+	# separates a correct header from a native-only one.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_uapi_wireless.c $(TESTTMP)/c_uapiwl26 > $(TESTTMP)/c_uapiwl26.cc 2>&1 || { echo "c_uapiwl compile FAIL"; cat $(TESTTMP)/c_uapiwl26.cc; exit 1; }; \
+	  if grep -q 'undeclared identifier' $(TESTTMP)/c_uapiwl26.cc; then \
+	    echo "c_uapiwl FAIL: a name in the test is not in the crtl header, so it compiled as 0:"; \
+	    grep 'undeclared identifier' $(TESTTMP)/c_uapiwl26.cc; exit 1; \
+	  fi; \
+	  gcc -w -o $(TESTTMP)/c_uapiwl_gcc test/c_crtl_uapi_wireless.c || { echo "c_uapiwl gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_uapiwl26 "$$($(TESTTMP)/c_uapiwl26)" "$$($(TESTTMP)/c_uapiwl_gcc)" || exit 1; \
+	  echo "=== c_uapiwl: 231 wireless ioctl/macro/layout rows identical to gcc ==="; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_uapiwl_gcc32 test/c_crtl_uapi_wireless.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_uapi_wireless.c $(TESTTMP)/c_uapiwl32 > $(TESTTMP)/c_uapiwl32.cc 2>&1 || { echo "c_uapiwl i386 compile FAIL"; cat $(TESTTMP)/c_uapiwl32.cc; exit 1; }; \
+	    if grep -q 'undeclared identifier' $(TESTTMP)/c_uapiwl32.cc; then \
+	      echo "c_uapiwl i386 FAIL: undeclared identifier compiled as 0:"; \
+	      grep 'undeclared identifier' $(TESTTMP)/c_uapiwl32.cc; exit 1; \
+	    fi; \
+	    tools/expect_same.sh c_uapiwl26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_uapiwl32)" "$$($(TESTTMP)/c_uapiwl_gcc32)" || exit 1; \
+	    $(TESTTMP)/c_uapiwl_gcc   > $(TESTTMP)/c_uapiwl_gcc.out; \
+	    $(TESTTMP)/c_uapiwl_gcc32 > $(TESTTMP)/c_uapiwl_gcc32.out; \
+	    if cmp -s $(TESTTMP)/c_uapiwl_gcc.out $(TESTTMP)/c_uapiwl_gcc32.out; then \
+	      echo "c_uapiwl FAIL: the 32- and 64-bit runs agree on every row, so"; \
+	      echo "  iw_point/iw_event are not width-dependent and this row's"; \
+	      echo "  positive control did not fire."; exit 1; \
+	    fi; \
+	    echo "=== c_uapiwl: i386 identical to gcc -m32, and differs from the 64-bit run (iw_point 8 vs 16, iw_event 20 vs 24) ==="; \
+	  else \
+	    echo "=== c_uapiwl: no gcc -m32, the width-dependent half NOT verified ==="; \
+	  fi; \
+	else \
+	  echo "=== c_uapiwl: gcc absent, wireless layouts NOT verified ==="; \
+	fi
 	# glob(3), diffed against glibc over a tree the TEST builds, not the
 	# Makefile: a `mkdir -p' that half-succeeded would make both runs agree on
 	# a wrong answer, and agreement is what this row reads as success. A fresh
