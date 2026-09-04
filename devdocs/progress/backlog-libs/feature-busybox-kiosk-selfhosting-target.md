@@ -8,7 +8,7 @@ blocked-by: []
 status: new
 created: 2026-08-30
 owner: ""
-summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1, 2, 2b AND 3 ARE DONE. As of 2026-09-04 the userland is 258 APPLETS built busybox's own way -- 400 translation units, 400 objects, one real link, 621 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`) -- and it BOOTS AS PID 1 under qemu-system-x86_64 with that same case list re-run inside the guest and compared byte for byte (`tools/mkkiosk.sh --busybox= --cases=`, feature-b-a-bootable-image-...). With --selfhost it reaches a SELF-HOST FIXEDPOINT INSIDE THAT VM (stage1 == stage2, seeded by pinned v403 against HEAD sources), and the kiosk app answers, so the owner's sentence -- busybox userland, shell, self-hosting compiler, kiosk app -- is met end to end on x86-64 with every one of those built by pxx. aarch64 is proven at 26 applets by unity build and still waits on an --emit-obj object writer. WHAT IS OPEN is no longer kernel-or-rootfs (settled by measurement 2026-08-30): it is aarch64, and running applets with REAL ARGUMENTS -- 516 of the 621 cases are `applet --help`, and the first boot with arguments turned up a silent miscompile (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently)."
+summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1, 2, 2b AND 3 ARE DONE. As of 2026-09-04 the userland is 258 APPLETS built busybox's own way -- 400 translation units, 400 objects, one real link, 621 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`) -- and it BOOTS AS PID 1 under qemu-system-x86_64 with that same case list re-run inside the guest and compared byte for byte (`tools/mkkiosk.sh --busybox= --cases=`, feature-b-a-bootable-image-...). With --selfhost it reaches a SELF-HOST FIXEDPOINT INSIDE THAT VM (stage1 == stage2, seeded by pinned v403 against HEAD sources), and the kiosk app answers, so the owner's sentence -- busybox userland, shell, self-hosting compiler, kiosk app -- is met end to end on x86-64 with every one of those built by pxx. aarch64 is proven at 26 applets by unity build and still waits on an --emit-obj object writer. WHAT IS OPEN is no longer kernel-or-rootfs (settled by measurement 2026-08-30): it is aarch64, and running applets with REAL ARGUMENTS. That last is a measurement, not a ratio: frankc-af's 374-applet corpus -- 506 objects, 853 cases BYTE-IDENTICAL to the gcc oracle, GREEN -- was green on the same binary whose `uname -a` printed `Linux` eight times, because the corpus invokes applets with `--help` and `--help` prints a string literal. A wider, greener corpus, equally blind. The miscompile behind it (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently) is FIXED in 62463923f; the blindness that hid it is not."
 ---
 
 # The target, in the owner's words
@@ -79,15 +79,27 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of
    libbb's ~145 TUs, and the ones it misses are where `pwd`/`grp`/`statfs`/
    `getrlimit` are actually called — stubs-by-omission today.
-3. **qemu-system + a kernel.** **NOW THE LIVE RUNG** — the host dependency
-   below is resolved and rungs 1, 2 and 2b are done. Filed as
-   [[feature-b-a-bootable-image-with-the-busybox-userland-on-it]].
-4. **The compiler self-hosting *inside* the image.** Related and not identical:
+3. **qemu-system + a kernel.** **DONE 2026-09-04**,
+   [[feature-b-a-bootable-image-with-the-busybox-userland-on-it]]. The
+   258-applet pxx busybox is PID 1 (the guest hashes `/proc/1/exe`) and the
+   621-case list runs inside the guest byte-identical to the host gcc oracle.
+   Kernel: Alpine v3.21 `vmlinuz-virt`, 6.12.81-0-virt, fetched.
+   `tools/mkkiosk.sh --busybox= --cases=`.
+4. **The compiler self-hosting *inside* the image.** **x86-64 half DONE the same
+   day** — `--busybox --selfhost` reaches `stage1 == stage2` in a VM where PID 1,
+   the shell and every tool are pxx-built. **The cross-CPU half is what is left**,
+   and it is the strictly stronger claim: blocked on
+   [[feature-a-object-output-for-arm32-and-aarch64]] (no aarch64 `--emit-obj`, so
+   no aarch64 busybox) and on
+   `bug-a-the-compiler-cannot-cross-build-itself-for-aarch64`. Related and not
+   identical:
    `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one`.
-   A self-host under a real kernel on a cross CPU is a strictly stronger claim
-   than either current gate.
-5. **The kiosk application** — not yet filed; file it when rung 3 resolves, since
-   its shape depends on what the image can do.
+5. **The kiosk application** — **MET on x86-64, and deliberately NOT filed.**
+   `examples/kiosk.pas` is pxx-built, ships in the image, and answers `about`,
+   `sum N` and `primes N` in the booted VM. The rung was left unfiled until the
+   image existed because its shape depended on what the image could do; the
+   image can do it, so there is no work here to coordinate, rank or remember.
+   A ticket would be bookkeeping for something already true.
 
 ## Host dependency: RESOLVED 2026-08-30
 
@@ -103,9 +115,13 @@ images run emulated. **"Random kernel on random CPU" is now a real choice rather
 than an aspiration** — and `qemu-system-xtensa` in particular is new ground for
 Track S, which had qemu-user only.
 
-**Still open, and NOT resolved by the install:** which kernel + rootfs. Building
-a kernel is a large job; fetching one is a download. That is rung 3's first
-decision and it should be made with a measurement, not a preference.
+**Kernel + rootfs: SETTLED**, by measurement on 2026-08-30 and unchanged by
+rung 3 — fetch Alpine's netboot `vmlinuz-virt` (12 MB, one second) rather than
+build one (hours, and it teaches nothing about pxx). No rootfs at all on x86-64:
+an initramfs of our own binaries plus, since the pxx busybox is dynamic, `ld.so`
+and `libc`. This paragraph read as open for three days after it was closed, and
+rung 3 was filed against it — the actual gap was one line of `tools/mkkiosk.sh`
+booting DEBIAN's busybox as PID 1.
 
 `decide-install-qemu-system-and-a-freebsd-image-on-plexus` [p55] asked for this
 emulator **and** a FreeBSD image. **The emulator half is now done**; the

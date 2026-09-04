@@ -83,8 +83,12 @@ NESTED path return the outer member's offset. The second is the one `uname`
 needed, since `name.sysname` is nested; none of the rows in the table above
 nests, so they could not have shown it.
 
-**The verification of the fix is frankc-af's, measured on their tree. I have not
-re-run these rows against a fixed compiler** — Track B does not rebuild the
+**Verified independently by frank-coordinator-2c** at HEAD `d0104ec8e`, binary
+`72131451adc7`: `sizeof(ofs)` 12, three elements, `ofs[0]` 5, and a NESTED
+`offsetof(struct Out, n.b)` byte-identical to gcc. Two sessions, two trees.
+
+**Neither verification is mine. I have not re-run these rows against a fixed
+compiler** — Track B does not rebuild the
 compiler, and the binary in my tree has provenance I cannot establish.
 
 ### `uname -s` is the guard that cannot fail, with a real victim
