@@ -2902,10 +2902,32 @@ end;
 
 { One token into NSpecIns. Flat, not nested inside EmitQualAliasDecl: nested
   routines appear nowhere else in this file. }
+{ ===== The prerequisite buffer: ONE reservation rule, ONE push =====
+
+  NSpecIns carries "declarations that must exist before this specialization".
+  Four sites fill it and three emitters feed them, and until now each carried its
+  own capacity arithmetic and its own idea of how to write a slot -- EmitSpecDecl
+  open-coded the same six-line push ten times and EmitHoistedDecls copied raw
+  tokens past every guard. Three encodings of one limit is how the fourth writer
+  ends up with none.
+  refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins }
+
+procedure PrereqReserve(n: Integer);
+begin
+  if NSpecInsCnt + n > PREREQ_CAP then
+    Error('nested specialization token buffer overflow');
+end;
+
+procedure PrereqPushRaw(const t: TRawToken);
+begin
+  PrereqReserve(1);
+  NSpecIns[NSpecInsCnt] := t;
+  Inc(NSpecInsCnt);
+end;
+
 procedure QualPush(k: TTokenKind; const txt: AnsiString; ln: Integer);
 begin
-  if NSpecInsCnt >= MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
-    Error('nested specialization token buffer overflow');
+  PrereqReserve(1);
   NSpecIns[NSpecInsCnt].Kind := k;
   NSpecIns[NSpecInsCnt].IVal := 0;
   NSpecIns[NSpecInsCnt].Line := ln;
@@ -2941,16 +2963,15 @@ begin
         HoistEmitted[HoistEmittedCount] := HoistFull[k];
         Inc(HoistEmittedCount);
       end;
-      if NSpecInsCnt + n + 4 > MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+      { Its own message, because this is the one overflow a USER can hit with
+        ordinary source and the remedy names a constant. Still one rule: the
+        bound is PrereqReserve's. }
+      if NSpecInsCnt + n + 4 > PREREQ_CAP then
         Error('hoisted nested type is too large for the prerequisite buffer ' +
               '(raise MAX_NESTED_SPECS): ' + HoistFull[k]);
       QualPush(tkIdent, HoistFull[k], ln);
       QualPush(tkEq, '', ln);
-      for q := 0 to n - 1 do
-      begin
-        NSpecIns[NSpecInsCnt] := SpecializeTokens[q];
-        Inc(NSpecInsCnt);
-      end;
+      for q := 0 to n - 1 do PrereqPushRaw(SpecializeTokens[q]);
       QualPush(tkSemicolon, '', ln);
     end;
 end;
@@ -3014,42 +3035,21 @@ var k: Integer; ln: Integer;
 begin
   ln := 0;
   if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
-  if NSpecInsCnt + 8 + 2 * nArgs > MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
-    Error('nested specialization token buffer overflow');
-  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln;
-  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(aliasNm);
-  NSpecIns[NSpecInsCnt].SLen := Length(aliasNm); Inc(NSpecInsCnt);
-  NSpecIns[NSpecInsCnt].Kind := tkEq; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
-  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
-  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln;
-  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend('specialize');
-  NSpecIns[NSpecInsCnt].SLen := 10; Inc(NSpecInsCnt);
-  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln;
-  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(tmplNm);
-  NSpecIns[NSpecInsCnt].SLen := Length(tmplNm); Inc(NSpecInsCnt);
-  NSpecIns[NSpecInsCnt].Kind := tkLt; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
-  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+  { Reserve the whole declaration up front, so a partial one can never be
+    spliced: 8 fixed tokens plus a comma and an argument per parameter. }
+  PrereqReserve(8 + 2 * nArgs);
+  QualPush(tkIdent, aliasNm, ln);
+  QualPush(tkEq, '', ln);
+  QualPush(tkIdent, 'specialize', ln);
+  QualPush(tkIdent, tmplNm, ln);
+  QualPush(tkLt, '', ln);
   for k := 0 to nArgs - 1 do
   begin
-    if k > 0 then
-    begin
-      NSpecIns[NSpecInsCnt].Kind := tkComma; NSpecIns[NSpecInsCnt].IVal := 0;
-      NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
-      NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
-    end;
-    NSpecIns[NSpecInsCnt] := NSpecArg[base + k]; Inc(NSpecInsCnt);
+    if k > 0 then QualPush(tkComma, '', ln);
+    PrereqPushRaw(NSpecArg[base + k]);
   end;
-  NSpecIns[NSpecInsCnt].Kind := tkGt; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
-  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
-  NSpecIns[NSpecInsCnt].Kind := tkSemicolon; NSpecIns[NSpecInsCnt].IVal := 0;
-  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
-  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+  QualPush(tkGt, '', ln);
+  QualPush(tkSemicolon, '', ln);
 end;
 
 { Result = True means the declaration was DEFERRED: its nested generic

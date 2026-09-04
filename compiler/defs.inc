@@ -2295,6 +2295,15 @@ const
                              exhausts 24 at line 1313 and compiles past it at 96. Not a runaway;
                              raising it moved the frontier ~1200 lines further into the unit.
                              Cost is 96 AnsiStrings x2 + 96*MAX_TEMPLATE_PARAMS TRawTokens. }
+  { The prerequisite buffer's capacity, named ONCE. It was spelled out at three
+    guards in pasparser_generic.inc, each with its own reservation arithmetic
+    (1 token, n+4, 8+2*nArgs) -- three encodings of one limit, and a fourth
+    writer with no guard at all. The formula still mentions MAX_TEMPLATE_PARAMS
+    while the buffer now also carries hoisted record BODIES, which have nothing
+    to do with template parameters; that is a sizing question, not a spelling
+    one, and naming it is what makes it askable.
+    refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins }
+  PREREQ_CAP = MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS);
   MAX_OP_OVERLOADS = 64;
 
 type
@@ -2436,7 +2445,7 @@ var
   NSpecArg    : array[0..MAX_NESTED_SPECS*MAX_TEMPLATE_PARAMS-1] of TRawToken;
   NSpecNArg   : array[0..MAX_NESTED_SPECS-1] of Integer;
   NSpecCount  : Integer;
-  NSpecIns    : array[0..MAX_NESTED_SPECS*(8+2*MAX_TEMPLATE_PARAMS)-1] of TRawToken;
+  NSpecIns    : array[0..PREREQ_CAP-1] of TRawToken;   { guarded via PrereqReserve }
   NSpecInsCnt : Integer;
   { Deferral round counter per specialization NAME. A specialization whose body
     names an unregistered nested one re-emits itself behind its prerequisites

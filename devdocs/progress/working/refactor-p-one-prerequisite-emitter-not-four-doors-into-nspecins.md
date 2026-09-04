@@ -3,10 +3,10 @@ slug: refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 track: P
 prio: 55
 type: refactor
-status: backlog
+status: working
 blocked-by: []
 summary: "`NSpecIns` — the buffer that carries 'declarations that must exist before this specialization' — is now filled by FOUR independent sites through three different emitters (EmitSpecDecl, EmitQualAliasDecl, EmitHoistedDecls) with four hand-written `NSpecInsCnt := 0` / `InsertTokens` pairs, each carrying its own capacity check, its own leading-`type` decision and its own ordering rule. One concept, four doors. Per root-cause-over-microfix.md two mechanisms is a smell and three is a design flaw — this is at four, and it got there one honest increment at a time in a single session."
-owner: unassigned
+owner: frankA
 ---
 
 # One prerequisite emitter, not four doors into `NSpecIns`
