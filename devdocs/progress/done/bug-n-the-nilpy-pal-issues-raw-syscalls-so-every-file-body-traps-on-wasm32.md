@@ -75,7 +75,7 @@ because that backend turns an unlowerable body into a recorded refusal instead
 of a silent miscompile.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bce31c210.
 
 ## FIXED 2026-09-04 (frankb-78) — and the fork went two ways, deliberately
 
