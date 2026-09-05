@@ -7507,3 +7507,64 @@ pid whose `/proc/<pid>/exe` is the interpreter and whose `argv[1]` is the script
 cannot be produced by a shell that merely mentions it. And when you must match
 text, **assert the negative control**: run the matcher against a case that must
 NOT match, in the same run, or you have a grep that cannot come out clean.
+
+---
+
+## READ THE GATE VERDICT FROM *YOUR OWN* RUN'S LOGDIR, NAMED BY ITS FIRST LINE
+
+**This hazard is one day old and it was created by the fix for the previous
+one.** `tools/gate.sh` gained `summary.log` on 2026-09-05 (`08096b259`,
+*"the gate writes its verdict to a FILE, because 'grep the log' had no file
+behind it"*) so that nobody would read a verdict off a backgrounded wrapper.
+Then the fleet went to eight. **Several sessions now gate at once, and there
+are several `summary.log` files.**
+
+Reading the wrong one does not error. It returns **a real gate's real verdict**
+— correct, complete, well-formed, and about a tree that is not yours. That is
+the worst failure shape this file catalogues: an instrument that lies by being
+correct about something else.
+
+### The two wrong ways, both of which look careful
+
+```sh
+# WRONG -- newest by mtime. Picks whichever gate wrote most recently.
+L=$(ls -td /tmp/pxx-gate-* | head -1); cat "$L/summary.log"
+
+# WRONG -- pgrep for the process. Matches every session's gate.
+P=$(pgrep -f "gate.sh quick" | tail -1); while kill -0 "$P"; do sleep 5; done
+```
+
+Measured 2026-09-05 with three gates running: the `pgrep` form waited on
+another session's pid, returned when *that* run finished, and printed a
+two-line summary from a gate still in progress. Both halves — the wait and the
+read — were about a different run, and neither produced an error.
+
+### The right way: your own run tells you where it lives
+
+`gate.sh`'s FIRST LINE names its logdir, and the logdir is named for the gate's
+own pid. So capture your run's stdout and derive both from it:
+
+```sh
+nohup tools/gate.sh quick > "$SCRATCH/gate.log" 2>&1 &
+MY=$(head -1 "$SCRATCH/gate.log" | grep -o 'logs=/tmp/pxx-gate-[0-9]*' | cut -d= -f2)
+MYPID=${MY##*-}                     # the logdir IS the pid
+while kill -0 "$MYPID" 2>/dev/null; do sleep 5; done
+grep -E 'gate: (GREEN|RED)' "$MY/summary.log"     # the verdict, from YOUR run
+```
+
+**Never glob, never sort by mtime, never `pgrep` for the tool's name.** Identify
+the run by the identifier the run itself printed.
+
+### And the older half still applies
+
+A backgrounded gate's **task-completion notification reports the WRAPPER, not
+the gate.** Measured the same day: the notification fired `exit code 0` while
+**3 of 15 checks had run**, and again over an 11-of-15 log. `summary.log` fixed
+"there is no file to grep"; it did not make the notification mean what it looks
+like. Wait on the pid you derived above, then read the file.
+
+**The general rule, which is why this belongs here rather than in a README:**
+when N agents run one tool concurrently, every *shared, conventionally-named*
+output path becomes a way to read a correct answer to someone else's question.
+The discriminator is never "is this file well-formed" — it is **"did MY run say
+this path is mine"**.
