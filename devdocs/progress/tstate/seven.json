@@ -13741,6 +13741,7 @@
   },
   {
    "bad": "b8e3b301024907a1200d3d149ca427df6eca755e",
+   "bad_untestable": true,
    "cascade": [
     "demos#00",
     "lib-test#src:examples/json/jsondemo.pas",
@@ -13788,6 +13789,7 @@
    "good": "9d5a4e27029eb30dd509ad8ab8326b269a8b9af7",
    "job": "cascade@b8e3b3010249",
    "name": "",
+   "no_testable_change": false,
    "opened": "2026-09-04T18:47:37Z",
    "range": [
     "3914444ffc068d8d3ff4cd4dc416e2967a35a054",
