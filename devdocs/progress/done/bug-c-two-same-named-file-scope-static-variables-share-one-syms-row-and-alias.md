@@ -186,4 +186,4 @@ build fails at `__BEGIN_DECLS` **both with and without this change** — checked
 by stashing the change and rebuilding, so it is pre-existing and not mine.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ec1a1d7b6.
