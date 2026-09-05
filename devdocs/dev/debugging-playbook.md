@@ -5017,6 +5017,58 @@ looks covered.** Its mirror, a false *attribution*, removes a finding from its
 author's record — and the only tell there is the credited party being **unable to
 source the quote**, which fires only if somebody asks.
 
+## A PRECEDENT CAN BE CORRECT TODAY AND LOAD-BEARING FOR THE WRONG REASON — and only the REASON tells you whether it survives the next fix
+
+Measured twice on 2026-09-05, by two sessions, in the two directions the same
+mechanism can point. The mechanism is **an existing note answering the question
+you were about to ask**, and it is not the ordinary staleness problem: in both
+cases **the note was accurate**, so nothing about it looked wrong.
+
+**frankB's half — a gap described one class too low is harder to find than an
+unknown one.** `ParseTypeKind`'s comment said the forward spelling *"falls back
+to the old default"*, which reads as a stride approximation. The actual cost is
+`AliasElemRec`: **refused, or silently zero — not approximated.** The comment was
+correct about the MECHANISM and one severity class wrong about the COST, and that
+is worse than silence, because a reader with the right question stops at it.
+
+**frankS's half — the same shape one layer up, where the verdict is RIGHT.**
+Two `pxx.skip` entries carried `wontfix: dialect-pass` for what read as the same
+family, two lines from where the new entries would go. **Inheriting the bucket
+would have been defensible and would have been wrong-by-luck.**
+
+- A **rename** — `<T>` declared, `<S>` implemented — cannot mislead: both
+  spellings denote the same single position. That is the family argument, and it
+  is what the existing entries record.
+- A **swap** could mislead, and would have made the disposition
+  `gap: accepts-invalid` instead. **It is unreachable** — no two-parameter
+  generic routine parses at all, so nobody had ever tested the claim that pxx
+  "accepts the swap": the construct does not exist.
+
+So the bucket is right, and **it is right because of a parse limitation nobody
+had connected to it, not because the family argument covers the swap.**
+
+> **A verdict and its reason go stale separately, and the verdict is the half
+> everyone copies.** The reason is the only part that says whether the verdict
+> survives the fix that is already filed.
+
+### The guard, and it costs one question
+
+**Ask what CHANGE would make this precedent wrong, then check whether that change
+is already on the queue.** Here it was — the one-type-parameter data-model limit
+is filed — so the entries carry a **tripwire**: when the parse gap lifts, the
+swap becomes reachable and the disposition re-opens. **The next reader inherits
+the caveat, not just the verdict.**
+
+The positive-control question does not fire on this: a precedent whose verdict is
+correct passes every check aimed at the verdict. **The failing check has to be
+aimed at the reason** — *would this still be true for the same reason after the
+ticket next to it lands?*
+
+And note which way the cheap error runs. **Nothing re-checks an inherited
+disposition**, exactly as nothing re-checks a row that looks covered — the
+skip-list entry is a queue row that has been answered, and answered rows are not
+re-read.
+
 ## TWO APERTURES COMPOSE — a ticket sampled from the visible half, then probed from its slug, has been narrowed TWICE before anyone measures anything
 
 Two separate narrowings were measured here on 2026-09-05/06, by different

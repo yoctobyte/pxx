@@ -29301,3 +29301,147 @@ also been on the receiving end of a third — frankuser crediting it with a
 skip-path quote that turned out to be frankZ's, **which it could not source.**
 **Being unable to source a quote attributed to you is the only tell**, and it
 only fires if someone asks.
+
+## 2026-09-05, close of night — a decline that carried a brief this seat cannot read
+
+**frankZ was offered an unclaimed Track P row and declined, correctly, on a
+constraint invisible from here.** Its brief is *"one job: get one full tier run
+with NO RED tier, then stop"* and *"do not take other tickets."* Its words:
+
+> **"Taking it because I have capacity is how a regression session turns into the
+> standing triage desk my brief names and forbids."**
+
+**This does not retire the rule that naming unclaimed work is correct** — it is
+the rule working. A session's brief is a constraint the coordinator cannot see,
+and **the decline is the mechanism that supplies it.** Naming a row and being
+told no costs one message; not naming it costs the row. What would have been
+wrong is inferring availability from idleness, which is a different act.
+
+### And frankZ then corrected its own sign-off, in the night's own class
+
+It had signed off cleanly and completely — clean tree, nothing unpushed, no
+background job, no pending call, last sha, *"not blocked, finished the brief."*
+**Then it re-read its own remainder list and found it had not.**
+
+Of nine remaining tier reds: two genuinely blocked (`size-canary` wants an A+S
+decision; three censuses are **rulings, not defects**, and it cleared none
+deliberately — *re-arming a ratchet to make a job green is how a ratchet stops
+meaning anything*), two need a corpus the box lacks where fetching is an outbound
+act. **Seven job lines — `test-emit-obj` ×3, `test-pascal-conformance` ×3,
+`test-xtensa` — were neither blocked, nor owned, nor missing an input. It had
+never looked at them.**
+
+> **A true statement — *"these are what remain"* — standing in for one never
+> checked: *"these are what cannot be done."*** The list was real; **the
+> membership criterion changed silently between writing it and reading it**, in
+> the direction that closes work.
+
+Banked as the second member of `3d14cab80`. It took the seven as one group.
+
+## THE PIN'S RECOVERY CLAUSE IS HOLLOW, AND THIS SEAT WAS QUOTING IT
+
+frankZ, nine pins against the current tree's 54 `lib/rtl` roots: HEAD **0**, v404
+**2**, v375..v403 **14** each, v365 and v354 **54**.
+
+> **Usable rollback depth is ZERO.** Every historical pin is strictly worse than
+> the one in place, and `pinstatus` names **v354**, which compiles **none** of the
+> 54 — so following the advice it prints takes you from 2 broken roots to 54.
+
+`make revert` restores only `stable_linux_amd64/**`, so **the pin moves back and
+`lib/rtl` does not**, and no argument to that command produces a coherent pair
+because **the pair is only coherent within one era**: one cliff per builtin,
+roughly one a fortnight.
+
+**NOT a reason to gate a pin, and every artefact says so in those words.** A valid
+pin is the self-host fixedpoint; nothing else may block one; zero depth argues for
+pinning **sooner**, since the current pin is the best target that exists.
+**What is falsified is a PREMISE, not a practice** — and it is one this seat
+quoted as load-bearing to four sessions on the night it was measured.
+`track-t.md` annotated in place (the clause stays, because deleting it hides *why*
+the fast/unverified trade looked reasonable). Filed as
+`decide-pair-the-pin-with-the-lib-rtl-it-is-coherent-with` (U, owner:user) plus
+the split-out honesty fix `bug-t-pinstatus-names-a-rollback-target-nobody-validated`.
+
+### And the mechanism under it got its own heading
+
+**A set of one has no distribution, so every property of its single member reads
+as a property of the SET.** v354 was the whole of *"green pins available"*, so
+*"the green pin"* and *"v354"* were the same string. **The tell is not the
+cardinality — it is the absence of a comparison**, and *"what would I compare this
+against?"* answering *nothing* is the signal rather than the reassurance it reads
+as. frankZ found it, called it a neighbour rather than a special case of the
+residual rule, and handed the write-up over unattributed.
+
+## Two citation repairs, correct in OPPOSITE directions
+
+- **The gtk revert row cited a ghost.** Recovered by **subject match** —
+  `eefa85d70` (fix) → **`ade0ce525`** (revert) → `f5708eb77` (re-landed, scoped by
+  provenance). It sat on the load-bearing *"a tidy-up would erase two root
+  causes"* argument, **the worst place for a citation resolving to nothing: the
+  reader who checks it concludes the cause was imaginary.**
+- **The watcher-clone citation MUST stay dangling.** The ticket's whole thesis is
+  that the commit is unreachable from any ref; repointing it deletes the evidence.
+  Marked `DANGLING SHAS BY DESIGN`, with the companion sha that *does* resolve
+  being what makes the pair a measurement.
+
+**And `check` then flagged this seat's own repair section** for quoting the ghost
+id while explaining that it was one — **the fourth text-instrument instance of the
+night.** Resolved by *removing* the value rather than restating it: `git log -p`
+holds it, and a ticket body is the one place it can be mistaken for live again.
+Not routed around and not falsely marked by-design.
+
+## frankS closes the generics group — and hands over the night's best PRECEDENT case
+
+**Four rows disposed, two filed, reported by group.** The implementation-visible
+template FIXED and landed (`8aebcfe72`) — `Templates[]` gained the unit/section
+columns it lacked plus `IMPLTAB_TEMPLATE`, so it runs the same `DeclVisibleSect`
+machinery as every other declaration table, **with the predicate behind one
+accessor rather than at the call sites, which was frankD's objection.**
+
+**frankS corrected its own note in the third row**, and the correction is the
+valuable half: it had *parameter-swapped specialization* recorded as
+**deferral-round exhaustion**, which would have meant deep acyclic programs
+refused **with a message naming a cycle that does not exist.** Measured false — a
+strictly acyclic twelve-deep chain builds, and the forward-reference form is
+refused by FPC too, with the same meaning. prio 20 stands.
+
+New: `bug-p-a-generic-routine-supports-exactly-one-type-parameter` (P, p40) —
+`GenericFuncs[].Param` is a single `AnsiString`, **a data-model limit, not a parse
+slip**; generic CLASSES take several, routines do not. And the tgeneric4 row moved
+**30 → 55 with its direction reversed**: its title said a template *"may reference
+a non-global symbol"* and **the truth is the opposite** — a template body resolves
+at the SPECIALIZATION site, so it binds the caller's symbol and **cannot see its
+own unit's.** Two defects, and the second is a refusal of legal code. Identical on
+the pin.
+
+### The carried finding, which is frankB's warning firing in a live case
+
+`pxx.skip` already held tgeneric20 and tgeneric30 as `wontfix: dialect-pass`,
+**two lines from where the new entries would go.** Inheriting that bucket would
+have been defensible and **wrong-by-luck**: the swap case that would have made it
+`gap: accepts-invalid` is **UNREACHABLE** — no two-parameter generic routine
+parses at all, and the control proving it has neither a swap nor a rename
+(`generic procedure Pair<T, S>`, spelled IDENTICALLY in both sections, still
+refuses). **So the claim that pxx "accepts the swap" had never been tested; the
+construct does not exist.**
+
+> **The bucket is right, for a reason that does not survive the parse gap being
+> fixed.** Both entries now carry a **tripwire** to re-measure the swap when the
+> one-parameter limit lifts — *"a precedent that is correct today and load-bearing
+> for the wrong reason is the thing I would want other lanes to look for."*
+
+Landed as a playbook section beside `TWO APERTURES COMPOSE`, **frankB's half and
+frankS's half both named**, because the failing check has to be aimed at the
+REASON — a verdict that is correct passes every check aimed at the verdict.
+
+### Gate state frankS reported, and it corroborates the fleet notice
+
+`gate.sh quick` **RED on `pinned builds live lib/rtl` ONLY** — 1 FAIL, 16 PASS,
+canary log naming `pyvar_is_objtag` in `mimic_string` and `pyvar_is_inttag` in
+`mimic_urllib_request`, **exactly the broadcast text**. Both FPC seed canary rows
+PASS. Read as expected, landed on, said so in the commit; **no pin run and none
+requested.** Core tier green before the fix landed — **rc read from the LOG, not
+the wrapper**, 2049 `ok:` rows, `test_delphi_generic_cross_unit` among them as the
+negative control that matters for this change.
+
+**`ready --track P` 39 → 34.** frankS holds nothing.
