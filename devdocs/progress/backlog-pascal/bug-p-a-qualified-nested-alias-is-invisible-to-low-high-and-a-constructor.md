@@ -64,10 +64,20 @@ WriteLn(Ord(Low(TTest.TRange)), ' ', Ord(High(TTest.TRange)));
   pxx PIN   : pascal26:4: error: class method not found (TRange)   <- pre-existing
 ```
 
-**Same error string as the constructor case**, which is the tell that they are one
-defect: an intrinsic that does not resolve `TOwner.TMember` through the alias table
-falls through to the class-method path, and the diagnostic comes from there. `Low`
-and `High` never learned the strip at all.
+**Same error string as the constructor case — and that is NOT evidence they are one
+defect.** Corrected here by frankB before any work started, and the correction is
+load-bearing for whoever fixes this.
+
+`class method not found` comes from the class-method path, which is where
+*anything* unresolved lands. One diagnostic across three sites is exactly as
+consistent with **three separate fall-throughs to a common handler** as with one
+cause. All three of my readings were taken at the error-reporting layer, which is
+downstream of wherever each site actually gives up — so they corroborate each
+other only about the last thing that happened to them, not about why.
+
+**Establish where each one gives up before assuming a shared fix.** They may share
+one; the observation above does not show it. `Low`/`High` may not even consult the
+alias table for a reason different from the constructor's `FindNestedType` gate.
 
 Note what this does to the sibling count. `Default()` and `SizeOf()` DID have the
 strip and were repaired by
