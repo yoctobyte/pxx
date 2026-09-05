@@ -11679,6 +11679,25 @@ test-core: $(COMPILER)
 	# asm-text emitters build vectors of exactly that shape.
 	# Whole output compared, not the tail: the pre-fix compiler still printed
 	# the final OK line. Byte-identical to fpc 3.2.2 -Mdelphi -O1.
+	# feature-writeln-as-library PHASE 3: write/writeln as ORDINARY LIBRARY
+	# routines over `array of const` (lib/rtl/libwriteln.pas), coexisting with
+	# the builtin -- compiler.pas self-hosts on the builtin, so it is not
+	# replaced and nothing is shadowed.
+	# Rows are PAIRS: each type printed once through the builtin and once
+	# through the library, so a divergence names the TYPE in the diff instead
+	# of saying "output differs". The .expected pins the bytes so the two
+	# cannot drift together; the fpc 3.2.2 -Mdelphi oracle said those bytes are
+	# the right ones.
+	# The `double` row is the discriminating one: a library renderer reaching
+	# for the obvious sysutils.FloatToStr prints `3.5` where the builtin prints
+	# ` 3.5000000000000000E+000`, and EVERY other row still passes with that
+	# mistake in place.
+	# The `single` pair is asserted as DIFFERENT on purpose -- a Single boxes as
+	# vtExtended (no vtSingle exists, here or in fpc), so the width is gone
+	# before any vector reader sees it. Measured identical in fpc, so there is
+	# nothing to fix; the row is here to go RED if a vtSingle ever appears.
+	./$(COMPILER) test/test_libwriteln_parity.pas $(TESTTMP)/test_libwln26
+	tools/expect_same.sh test_libwln26 "$$($(TESTTMP)/test_libwln26)" "$$(cat test/test_libwriteln_parity.expected)"
 	./$(COMPILER) test/test_shortstring_in_array_of_const.pas $(TESTTMP)/test_ssvarrec26
 	tools/expect_same.sh test_ssvarrec26 "$$($(TESTTMP)/test_ssvarrec26)" "$$(printf 'plain=short\nstale=ab\ns5=five5\nempty=[]\nlit=literal\nkonst=konstant\nmixed=mid|7|tail\nbuiltin=short\nSHORTSTRING VARREC OK')"
 	# ...and it must not leak: the fix parks each ShortString element in an

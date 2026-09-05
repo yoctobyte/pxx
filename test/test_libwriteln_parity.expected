@@ -1,0 +1,27 @@
+int      builtin=-42
+int      library=-42
+int64    builtin=9223372036854775807
+int64    library=9223372036854775807
+qword    builtin=9000000000
+qword    library=9000000000
+bool     builtin=TRUE
+bool     library=TRUE
+boolF    builtin=FALSE
+boolF    library=FALSE
+char     builtin=Z
+char     library=Z
+short    builtin=short
+short    library=short
+ansi     builtin=ansi
+ansi     library=ansi
+double   builtin= 3.5000000000000000E+000
+double   library= 3.5000000000000000E+000
+single   builtin= 5.000000000E-01
+single   library= 5.0000000000000000E-001
+literal  builtin=lit
+literal  library=lit
+mixed    builtin=-42|TRUE|ansi
+mixed    library=-42|TRUE|ansi
+partial  builtin=yes
+partial  library=yes
+LIBWRITELN PARITY OK
