@@ -5163,13 +5163,34 @@ begin
   xtensa_movi(reg_xtensa_a5, 8);                    { arg3 = sigsetsize }
   xtensa_movi(reg_xtensa_a2, 226);                  { rt_sigaction }
   xtensa_syscall;
-  { getpid. MEASURED ONLY TO A SET: 120, 126 and 127 all answer the process's own
-    id and are indistinguishable in a single-threaded process by construction
-    (getpid / gettid / most likely set_tid_address). All three feed kill the right
-    number, so this is operationally settled; what is NOT settled is which name
-    belongs on this line. Do not "correct" it to a confident name without a
-    threaded measurement. 150 is getppid -- it matched a pid oracle exactly and
-    the oracle was the parent process. }
+  { getpid -- SETTLED 2026-09-05, and the line was already right.
+
+    The set was 120/126/127: all three answer the process's own id and are
+    indistinguishable in a single-threaded process by construction. The note
+    here asked for a THREADED measurement to collapse it, which turns out to be
+    unbuildable on this target -- `{$threadsafe on}` is x86-64/i386/aarch64/
+    arm32 only, so xtensa cannot create a second thread to ask from.
+
+    Settled with a different instrument instead, one that fails differently
+    from both a threaded probe and a header read: `qemu-xtensa -strace` names
+    each call from the emulator's OWN xtensa syscall table, and it is the thing
+    actually executing them. CALIBRATED FIRST against the one row this comment
+    already considered settled -- 150 came back `getppid`, returning the parent
+    pid -- so the instrument reproduced a known-good answer before being trusted
+    on an unknown one.
+
+      120 = getpid            <- this line, correct as written
+      126 = set_tid_address
+      127 = gettid
+      150 = getppid           (calibration)
+      224 = sigaltstack       <- NOT gettid. See below.
+
+    224 IS THE TRAP WORTH LEAVING WRITTEN DOWN. test_signal_siginfo.pas and
+    test_signal_num.pas define SYS_gettid = 224 for CPUARM and CPUI386, and
+    copying either arm to xtensa would call sigaltstack instead -- a wrong
+    syscall that returns plausibly rather than failing. The xtensa arm for those
+    two tests still does not exist; gettid is 127 here, and SYS_tkill has not
+    been located (see bug-a-xtensa-tkill-syscall-number-is-unlocated). }
   xtensa_movi(reg_xtensa_a2, 120);
   xtensa_syscall;                                   { a2 = pid }
   xtensa_mov(reg_xtensa_a6, reg_xtensa_a2);         { arg0 = pid }
