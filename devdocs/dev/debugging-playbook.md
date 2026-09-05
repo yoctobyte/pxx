@@ -7613,6 +7613,75 @@ Two corollaries worth carrying:
   reader away from the correct fix.
 
 
+## THE SYMPTOM IS OBSERVED AT THE CONSUMER, SO THE FIRST HYPOTHESIS IS ALWAYS ABOUT THE CONSUMER — and the consumer is the one component the symptom has already proved is running
+
+Named 2026-09-05 (frankB), after hitting it **twice in one session**. The positive
+counterpart to the layer rule above: that one says corroboration is only as wide
+as the layer it was taken at. This one names **the cheapest reading at a different
+layer, and why nothing in a normal investigation prompts you to take it.**
+
+**The shape.** A value comes out wrong where it is *used*. You reach for the code
+that used it — and that code is the one component you already know executed,
+because it produced the symptom. **The writer never ran in front of you.** So the
+theory forms around the reader, and every instrument you then choose is chosen
+from inside that theory.
+
+> **A chain of instruments chosen from inside a theory stays inside that theory by
+> construction.**
+
+### The habit, and it is cheaper than the rule
+
+> **Ask what ELSE reads the field you believe was lost, and check whether that
+> consumer is happy.**
+
+**A field with a second reader is the cheapest exculpation there is, and it has no
+natural trigger.** One line, and it either clears the field outright or promotes
+your hypothesis from plausible to measured.
+
+### The case that named it — a TRUE measurement supporting a FALSE cause
+
+`Low`/`High` over a `set of Char` answered **`99 107`** where FPC answers
+**`c k`**. That is *precisely* what a lost element kind produces, and there was a
+plausible place to lose it **one line from the char path**, which the ticket had
+already named as a prerequisite.
+
+**`SymSetElemTk` held `tyChar` the whole time.** The real defect was a layer away
+and in the WRITER: `ParseSetElemSpec` parses the element through
+`ParseTypeKind`, `ParseSubrangeTail` sets `LastTypeIsSub`/`SubLo`/`SubHi` **for
+the element**, nothing clears them, and `AllocVar` copies all three onto the
+**set** symbol. So the set variable was flagged a subrange with bounds 99..107,
+and `TryOrdinalVarBound` tests `SymIsSub` in its **first** arm and the set in a
+later one. **The subrange arm answered the right ordinal, typed with the wrong
+type.**
+
+**The exculpation was `for c in s`** — a second reader of the same
+`SymSetElemTk`, green throughout, one line to check. Nothing in the investigation
+asked for it.
+
+**Same session, same polarity, different subsystem:** the enum spelling was a
+**missing channel**, not a lost value — `TryOrdinalVarBound` (the VARIABLE
+spelling) reported a `TTypeKind` and nothing else, so the identity had nowhere to
+travel, while `TryFoldHighLowType` (the TYPE-NAME spelling of the same intrinsic)
+stamps `ASTEnumId` and was **right all along**. One intrinsic, one question, two
+spellings, **only one of which could carry the reply.**
+
+**Both defects in a writer; both symptoms read at a reader; both readers innocent
+and instrumented clean.**
+
+### Probe the CONSTRUCT, not the reported rows
+
+Two tickets named two faces of one construct. frankB probed the construct
+instead: **nine spellings, five wrong** — and `set of D` was **a face nobody had
+filed**. A fix scoped to either ticket's own example would have left it standing.
+Cf. *normalise, don't special-case*: the second path is the one that stays broken.
+
+**Rate, stated as a hypothesis and not a finding:** two instances in one session,
+and frankB's reading is that this is **a property of the aperture** rather than a
+coincidence — the same way a duplicate-ticket rate was. **n is 2.** It is offered
+as a hypothesis with a mechanism, which is worth more than the count, and the
+mechanism is the paragraph at the top: the consumer is the component the symptom
+certifies is running.
+
 ## A CORRECTED COUNT CAN STILL BE A COUNT OF THE WRONG POPULATION — fixing the instrument does not fix the question
 
 Measured 2026-09-02 (frankC), across the phase-2 shortstring conversion.

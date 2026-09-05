@@ -78,6 +78,25 @@ surface as a self-host or cross divergence. Free, brutal, deterministic coverage
   (no giant static reserve) but needs the managed-dynarray path working there.
 - **Perf** — geometric growth amortizes, but a too-small initial reserve causes
   early realloc churn on big TUs; pick sane initial sizes.
+- **A ZERO-INIT SENTINEL IS A CONTRACT WITH "NO ROW IS EVER REUSED", and this
+  conversion is the thing that can break it** (added 2026-09-05, measured from
+  frankB's Group 8 work). `AliasEnumId` (`compiler/defs.inc:6039`,
+  `array[0..MAX_TYPEALIAS-1]`, MAX_TYPEALIAS = 4096) stores the enum index
+  **PLUS ONE**, because 0 is a valid enum index and an unwritten row must mean
+  NONE. **Six procedures do `Inc(AliasCount)`** — `compiler/symtab.inc` 265,
+  416, 441, 467, 557, 591 — and **exactly one writes `AliasEnumId`** (412/414,
+  the block immediately before the Inc at 416). Readers are
+  `pasparser_decl.inc:1188` and `pasparser_lval.inc:7762`/`7839`.
+  **It is safe TODAY for a stated reason, not by luck:** `AliasCount` never
+  decreases and no row is recycled, so an unwritten row genuinely reads 0 and the
+  omission is inert. **If a grow-and-reuse scheme ever recycles an alias row, five
+  allocators become stale reads that FAIL OPEN** — a leftover enum id read as the
+  current one, silently, in a table whose column comment says the omission is
+  inert. Geometric growth alone is fine; a free-list or a compaction pass is not.
+  frankB deliberately did NOT add five copies of the write, because five copies is
+  the missing-copy shape that column already documents. **If this conversion
+  introduces reuse, that decision has to be revisited, and this bullet is the
+  only place the dependency is written down from THIS side.**
 - **Frozen vs managed self-build** — the compiler self-builds frozen; make sure
   the dynarray path is exercised in that mode too, not only managed user progs.
 
