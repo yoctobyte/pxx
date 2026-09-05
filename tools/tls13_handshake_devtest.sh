@@ -39,13 +39,40 @@ if ! "$PXX_STABLE" -Fu"$ROOT/lib/rtl/platform/posix" \
 fi
 
 # root CA + leaf (SAN=localhost) signed by the CA, all ed25519
-openssl req -x509 -newkey ed25519 -keyout "$CAKEY" -out "$CAPEM" -days 1 -nodes \
-  -subj "/CN=PXX Test Root CA" >/dev/null 2>&1 || { say "SKIP: CA gen failed"; exit 0; }
-openssl req -newkey ed25519 -keyout "$LKEY" -out "$LCSR" -nodes \
-  -subj "/CN=localhost" >/dev/null 2>&1 || { say "SKIP: leaf csr failed"; exit 0; }
+#
+# THESE ARE NOT THE SAME ANIMAL AS THE TWO PRECONDITIONS ABOVE, and they used to
+# print the same word and the same exit code. Line 31-32 are "the thing is not
+# here"; these three are "the thing IS here and it FAILED" -- most often an
+# openssl built without ed25519, but equally a full disk or a bad umask. Both
+# printed `SKIP` and `exit 0`, so a box where cert generation is broken reported
+# exactly what a box where the whole TLS 1.3 handshake passed reported.
+#
+# Exit 2 = "cannot answer", this repo's convention (tools/gcc_diff_probe.sh,
+# tools/c_corpus_probe.sh, tools/wasm32_gap_census.sh, tools/gui_suite.sh).
+# And the error is no longer thrown away: `2>&1 >/dev/null` was making "no
+# ed25519 in this openssl" and "disk full" one observation, which is the same
+# defect tools/esp_run_bare.sh had -- a diagnostic discarded by the runner makes
+# a failure and a silent success identical.
+gen_or_bail() {   # $1 = what was being made; rest = the openssl command
+  local what="$1"; shift
+  local err
+  if ! err="$("$@" 2>&1 >/dev/null)"; then
+    say "INCONCLUSIVE: $what failed -- openssl is present but could not do it"
+    say "  openssl said: ${err:-(nothing on stderr)}"
+    say "  This is NOT a pass. Nothing about TLS 1.3 was tested."
+    exit 2
+  fi
+}
+gen_or_bail "CA generation" \
+  openssl req -x509 -newkey ed25519 -keyout "$CAKEY" -out "$CAPEM" -days 1 -nodes \
+    -subj "/CN=PXX Test Root CA"
+gen_or_bail "leaf CSR" \
+  openssl req -newkey ed25519 -keyout "$LKEY" -out "$LCSR" -nodes \
+    -subj "/CN=localhost"
 printf 'subjectAltName=DNS:localhost\n' > "$EXT"
-openssl x509 -req -in "$LCSR" -CA "$CAPEM" -CAkey "$CAKEY" -CAcreateserial -days 1 \
-  -extfile "$EXT" -out "$LPEM" >/dev/null 2>&1 || { say "SKIP: leaf sign failed"; exit 0; }
+gen_or_bail "leaf signing" \
+  openssl x509 -req -in "$LCSR" -CA "$CAPEM" -CAkey "$CAKEY" -CAcreateserial -days 1 \
+    -extfile "$EXT" -out "$LPEM"
 
 # the trust anchor (CA) handed to the client as a DER file path, plus the UTC time
 CADER=/tmp/pxx_tls13_ca.der
