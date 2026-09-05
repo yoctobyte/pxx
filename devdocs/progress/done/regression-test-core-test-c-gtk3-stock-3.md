@@ -38,7 +38,7 @@ pascal26:7: error: C include file not found: "gtk/gtk.h" (searched: /usr/include
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a058097b7.
 
 ## Closed 2026-09-05 (frankB) — reproduce-clean at HEAD, full job, not just the failing step
 
