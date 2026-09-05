@@ -5,8 +5,8 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankA
 created: 2026-08-25
 summary: "THREE copies, not two, and the uncounted one had two SILENT defects (both fixed 2026-09-05; the lift is still open). `ParseRecordFields` (pasparser_decl.inc, now ~3840) and the class-body field arm inside `ParseTypeSection` (now ~6150) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken."
 ---

@@ -4,8 +4,8 @@ prio: 55
 type: refactor
 blocked-by: []
 summary: "The `^ / .field / [i]` suffix chain is parsed by FIVE hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, two in pasparser_stmt.inc for cast targets) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask — ONE suffix parser instead of five — with no defect backlog attached, so rank it as a pure refactor. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be."
-status: backlog
-owner: unassigned
+status: working
+owner: frankA
 ---
 
 # P three hand-rolled copies of the postfix `^ / .field / [i]` loop
