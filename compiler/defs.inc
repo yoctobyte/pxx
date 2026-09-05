@@ -2544,6 +2544,24 @@ var
     boundary and inheriting the destination was always right. See
     TemplateSrcKeyOfTok. bug-p-a-generic-function-cannot-be-declared-in-a-unit }
   GenericFuncSrcKey  : array[0..MAX_GENERIC_FUNCS-1] of Integer;
+  { This routine was declared WITHOUT the `generic` keyword -- the mode-Delphi
+    spelling `function Add<T>(...)`. It gates exactly one thing: whether a bare
+    `Add<LongInt>(` at a USE site counts as a specialization or as two
+    comparisons. Kept per-routine rather than read off the global DelphiMode for
+    the same reason TemplateIsDelphi is per-template -- which surface a use may
+    be written in is decided by how the TEMPLATE was spelled, and a unit
+    compiled in one mode can be used from a program compiled in the other.
+
+    A PARALLEL ARRAY, not a TGenericFunc field, for the reason SymTR is not a
+    TSymbol field: TGenericFunc is a BUILT-IN record whose layout is hard-coded
+    in symtab.inc's REC_TGENERICFUNC table and baked into the compiler BINARY,
+    so a new field cannot be compiled by the compiler that precedes it --
+    measured 2026-09-05, `"IsDelphi": no such member` out of round 0 of the
+    fixedpoint with the table, the size check and the declaration all updated
+    together and all agreeing with each other. GenericFuncSrcKey beside it is
+    the same shape for the same record.
+    feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+  GenericFuncIsDelphi : array[0..MAX_GENERIC_FUNCS-1] of Boolean;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;
   { Class specializations seen in the current type section whose template

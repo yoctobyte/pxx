@@ -19,18 +19,27 @@
     ProviderTag      7        an ordinary routine declared AFTER the generic
                               ones: a truncated template body only becomes
                               damage when something follows it
+    DTwice           12       the mode-DELPHI surface of the same thing, from a
+                              unit. Its declaration is spelled exactly like a
+                              use, and unit tokens sit behind the program's
+                              sweep, so this row is the only one that can catch
+                              the sweep rewriting a header
+                              (feature-p-generic-routines-in-a-class-body-and-
+                              in-delphi-spelling)
 
   Oracle: FPC 3.2.2 prints `42 21 8 7` for the four rows it will compile (it
-  refuses the `as` spelling, which is ours). }
+  refuses the `as` spelling, which is ours). The DTwice row is diffed against
+  fpc separately, in its own mode-delphi program, for the same reason: fpc
+  cannot hold `generic function` and `function F<T>` in one compilation. }
 program test_generic_func_in_unit;
 {$mode objfpc}
 
-uses ugfcons, ugfprov;
+uses ugfcons, ugfprov, ugfdelphi;
 
 specialize Twice<ShortInt> as TwiceShort;
 
 begin
   writeln(ConsumerUse, ' ', ConsumerUseTry, ' ',
           specialize Twice<Integer>(4), ' ',
-          TwiceShort(5), ' ', ProviderTag);
+          TwiceShort(5), ' ', ProviderTag, ' ', DTwice<Integer>(6));
 end.

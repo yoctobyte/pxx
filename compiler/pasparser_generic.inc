@@ -4063,9 +4063,9 @@ end;
   compat-pascal-inline-generic-specialization }
 procedure SpecializeInlineGenericFuncUses(gfi: Integer);
 const MAX_INLINE_SPECS = 64;
-var i, k, nSpec: Integer;
+var i, k, nSpec, base: Integer;
     fname, cname, specName: AnsiString;
-    seen: Boolean;
+    seen, hasKw, isDecl: Boolean;
     specArgs: array[0..MAX_INLINE_SPECS-1] of AnsiString;
     specNames: array[0..MAX_INLINE_SPECS-1] of AnsiString;
     specKinds: array[0..MAX_INLINE_SPECS-1] of TTokenKind;
@@ -4073,15 +4073,38 @@ begin
   fname := GenericFuncs[gfi].Name;
   nSpec := 0;
   i := TokPos;
-  while i + 5 < TokCount do
+  while i + 4 < TokCount do
   begin
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'specialize') and
-       (Tokens[i + 1].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 1), fname) and
-       (Tokens[i + 2].Kind = tkLt) and
-       IsConcreteTypeArgKind(Tokens[i + 3].Kind) and
-       (Tokens[i + 4].Kind = tkGt) and (Tokens[i + 5].Kind = tkLParen) then
+    { Two surfaces for the same use. `specialize F<C>(` is the objfpc spelling
+      and is accepted for any generic routine. `F<C>(` -- no keyword -- is the
+      mode-Delphi one, and it is accepted ONLY for a routine that was itself
+      declared in the Delphi spelling, because at a USE position the bare form
+      is genuinely ambiguous with `a < b > (c)`. Restricting it to a name that
+      was declared as a Delphi generic routine is the same gate
+      DelphiRewriteGenericUses uses on the type side (TemplateIsDelphi), and it
+      is what keeps an objfpc program's comparisons from being eaten.
+      feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+    hasKw := (i + 5 < TokCount) and
+             (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'specialize');
+    if hasKw then base := i + 1 else base := i;
+    { A DECLARATION is not a use, and in the Delphi surface the two are spelled
+      identically: `function UAdd<T>(` in a unit matches the use pattern token
+      for token. The `specialize` surface never collided because the keyword is
+      absent from a declaration. `function`/`procedure` immediately before the
+      name is the whole discriminator -- nothing else can put it there -- and
+      without it a unit's own header was rewritten to `UAdd_T` and then compiled
+      as a real routine, which surfaced as `unknown type: T` inside the unit.
+      Measured 2026-09-05 on the cross-unit probe, not reasoned about. }
+    isDecl := (base > 0) and
+              ((Tokens[base - 1].Kind = tkFunction) or (Tokens[base - 1].Kind = tkProcedure));
+    if (hasKw or GenericFuncIsDelphi[gfi]) and (not isDecl) and
+       (base + 4 < TokCount) and
+       (Tokens[base].Kind = tkIdent) and CaseEqual(GetTokenStr(base), fname) and
+       (Tokens[base + 1].Kind = tkLt) and
+       IsConcreteTypeArgKind(Tokens[base + 2].Kind) and
+       (Tokens[base + 3].Kind = tkGt) and (Tokens[base + 4].Kind = tkLParen) then
     begin
-      cname := GetTokenStr(i + 3);
+      cname := GetTokenStr(base + 2);
       specName := fname + '_' + cname;
       seen := False;
       for k := 0 to nSpec - 1 do
@@ -4092,15 +4115,17 @@ begin
           Error('too many inline specializations of ' + fname);
         specArgs[nSpec] := cname;
         specNames[nSpec] := specName;
-        specKinds[nSpec] := Tokens[i + 3].Kind;
+        specKinds[nSpec] := Tokens[base + 2].Kind;
         Inc(nSpec);
       end;
-      { collapse `specialize F < C >` to the one identifier F_C }
+      { collapse `specialize F < C >` (or the keyword-less `F < C >`) to the one
+        identifier F_C. The token COUNT differs between the two surfaces, which
+        is the only place the distinction survives past the match above. }
       Tokens[i].Kind := tkIdent;
       Tokens[i].IVal := 0;
       Tokens[i].SOffset := TokCharsAppend(specName);
       Tokens[i].SLen := Length(specName);
-      RemoveTokens(i + 1, 4);
+      if hasKw then RemoveTokens(i + 1, 4) else RemoveTokens(i + 1, 3);
     end;
     Inc(i);
   end;
@@ -4169,11 +4194,99 @@ begin
   end;
 end;
 
+function TokGenericParamGt(at: Integer): Integer;
+{ Tokens[at] is the `<` opening a generic ROUTINE's type-parameter list; the
+  index of the `>` that closes it, or -1.
+
+  A CONSTRAINT (`<T: class>`) is inside the group and is skipped with it: pxx
+  does not check constraints, and refusing to PARSE one would turn an unchecked
+  rule into a syntax error, which is the worse of the two answers. }
+var j: Integer;
+begin
+  TokGenericParamGt := -1;
+  j := at + 1;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkGt then begin TokGenericParamGt := j; Exit; end;
+    if (Tokens[j].Kind = tkSemicolon) or (Tokens[j].Kind = tkLParen) or
+       (Tokens[j].Kind = tkBegin) or (Tokens[j].Kind = tkEOF) then Exit;
+    Inc(j);
+  end;
+end;
+
+function IsGenericRoutineHeaderAhead: Boolean;
+{ CurTok is `function` or `procedure` at a declaration position: does a
+  mode-Delphi generic-routine header (`function Add<T>(...)`) start here?
+
+  The discriminator is not the `<` alone -- it is what CLOSES the group. A
+  generic ROUTINE's type-parameter list is followed by its parameter list, its
+  return type or its semicolon; a generic CLASS's is followed by `.` and a
+  method name:
+
+    function Add<T>(a, b: T): T;              a routine     `>` then `(`
+    function TGenericClass<T1,T2>.Do(a: T1);  a class METHOD `>` then `.`
+
+  The `<` alone was the first spelling of this test and it was wrong: it matched
+  `function TGenericClass<T1>.DoSomething` and handed a mode-Delphi generic
+  class's method implementation to the routine parser, which read the CLASS name
+  as the routine's and ACCEPTED it. tgeneric31 is a `%FAIL` row precisely
+  because that header names one type parameter where the class declared two, so
+  pxx went from refusing it to accepting it.
+
+  WHAT THE CONTROL ACTUALLY SAID, because the obvious worry is not what
+  happened. Built with the loose predicate on purpose (2026-09-05), an ORDINARY
+  mode-Delphi generic class -- `TBox<T>`, `function TBox<T>.Echo`, specialized
+  and called -- still compiled and still printed fpc's answer. The loose test
+  only misfires on a header whose class is never specialized, which is exactly
+  tgeneric31's shape and is why no corpus row caught it: the specialized case is
+  desugared before this dispatcher sees it and is immune by coincidence, so the
+  only witness is a program that declares a generic class and does nothing with
+  it. Do not read the tightening as repairing a broken corpus; read it as the
+  test saying NO to something, which the `<` alone never did.
+  a-guard-that-flags-everything.
+
+  Says NO to `function TTest.Add<T>` for a second, independent reason -- the
+  token after the name is `.` -- and that form is a separate question.
+
+  (The USE position is the ambiguous one, and it is gated on a declared name
+  instead; see SpecializeInlineGenericFuncUses.)
+
+  One predicate rather than a three-token test spelled at each of the three
+  top-level declaration dispatchers, because those three arms have already
+  drifted apart once: `generic` was handled at program level only, and the same
+  declaration was rejected in a unit for a fortnight.
+  bug-p-a-generic-function-cannot-be-declared-in-a-unit
+  feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+var gt: Integer;
+begin
+  IsGenericRoutineHeaderAhead := False;
+  if ((CurTok.Kind <> tkFunction) and (CurTok.Kind <> tkProcedure)) or
+     (TokPos + 1 >= TokCount) or
+     (Tokens[TokPos].Kind <> tkIdent) or
+     (Tokens[TokPos + 1].Kind <> tkLt) then Exit;
+  gt := TokGenericParamGt(TokPos + 1);
+  if (gt < 0) or (gt + 1 >= TokCount) then Exit;
+  IsGenericRoutineHeaderAhead :=
+    (Tokens[gt + 1].Kind = tkLParen) or (Tokens[gt + 1].Kind = tkColon) or
+    (Tokens[gt + 1].Kind = tkSemicolon);
+end;
+
 procedure ParseGenericFunctionDef;
-var isFunc: Boolean; funcName, paramName: AnsiString;
+{ Both surfaces, one parser. The objfpc spelling opens with `generic`; the
+  mode-Delphi spelling (`function Add<T>(...)`) has no keyword at all and is
+  told apart from an ordinary routine by the `<` after the name --
+  IsGenericRoutineHeaderAhead is the one place that test is written.
+
+  Entering with the keyword already absent is why the consume below is
+  conditional rather than unconditional: adding a second entry point for the
+  Delphi form would have duplicated the whole token-buffering body, which is
+  exactly the second path that stays broken.
+  feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+var isFunc, isDelphi: Boolean; funcName, paramName: AnsiString;
     gfi, j, cur, finalCur, depth: Integer;
 begin
-  Next; { consume 'generic' }
+  isDelphi := not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic'));
+  if not isDelphi then Next; { consume 'generic' }
   if (CurTok.Kind <> tkFunction) and (CurTok.Kind <> tkProcedure) then
     Error('expected function or procedure after generic');
   isFunc := CurTok.Kind = tkFunction;
@@ -4193,6 +4306,7 @@ begin
   GenericFuncs[gfi].Name     := funcName;
   GenericFuncs[gfi].Param    := paramName;
   GenericFuncs[gfi].IsFunc   := isFunc;
+  GenericFuncIsDelphi[gfi]   := isDelphi;   { parallel array -- see its declaration }
   GenericFuncs[gfi].TokStart := TemplateTokenCount;
   GenericFuncs[gfi].TokCount := 0;
   { Where this body CAME from -- captured now for the same reason

@@ -153,7 +153,6 @@ tgeneric78.pp	gap: generic class implementing specialized interface + method res
 tgeneric99.pp	gap: unit-/class-qualified `specialize` syntax (ugeneric99.specialize TTest<...>)
 tgenfunc12.pp	gap: generic methods with class/interface constraints and generic global functions
 tgenfunc19.pp	gap: generic global function + class helper method resolution via specialize
-tgenfunc2.pp	gap: generic (parameterized) standalone functions in mode delphi
 tgenfunc3.pp	gap: generic class functions (generic class function Add<T>) not supported
 tgenfunc4.pp	gap: delphi-mode generic class function with inline type args
 tgenfunc5.pp	gap: generic instance methods (objfpc generic function ... <T>)

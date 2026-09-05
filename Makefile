@@ -5843,6 +5843,14 @@ test-core: $(COMPILER)
 	# the defect was that they disagreed.
 	./$(COMPILER) test/test_generic_header_tight_equals.pas $(TESTTMP)/test_ghte26
 	tools/expect_same.sh test_ghte26 "$$($(TESTTMP)/test_ghte26)" "$$(printf 'tight 1\nspaced 2')"
+	# A generic ROUTINE has two surfaces -- objfpc `generic function F<T>` called
+	# as `specialize F<C>(..)`, and the Delphi `function F<T>` called as `F<C>(..)`
+	# -- and pxx accepted only the first. Both are in the row for the reason above:
+	# either alone passes against a compiler that broke the other. The last line is
+	# the control for the ambiguous direction: a bare `a < b` that is NOT a
+	# specialization must still be a comparison.
+	./$(COMPILER) test/test_generic_routine_both_spellings.pas $(TESTTMP)/test_grbs26
+	tools/expect_same.sh test_grbs26 "$$($(TESTTMP)/test_grbs26)" "$$(printf 'objfpc 5\nobjfpc HelloWorld\ndelphi 5\ndelphi HelloWorld\ncmp TRUE\nclassmeth 7')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
 	tools/expect_same.sh test_method_overload_types_b24826 "$$($(TESTTMP)/test_method_overload_types_b24826)" "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
@@ -9074,7 +9082,7 @@ test-core: $(COMPILER)
 	# three times and only the program copy had a `generic` arm.
 	# FPC 3.2.2 prints `42 21 8 7` for the four rows it will compile.
 	./$(COMPILER) -Futest/generic_func_unit_units test/test_generic_func_in_unit.pas $(TESTTMP)/test_generic_func_in_unit26
-	tools/expect_same.sh test_generic_func_in_unit26 "$$($(TESTTMP)/test_generic_func_in_unit26)" "42 21 8 10 7"
+	tools/expect_same.sh test_generic_func_in_unit26 "$$($(TESTTMP)/test_generic_func_in_unit26)" "42 21 8 10 7 12"
 	# A reference to a DIFFERENT specialization of the SAME template, from inside
 	# that template's own body -- `FOther: TOuter<ShortInt>` inside `TOuter<T>`.
 	# A different TEMPLATE in that position always worked (its own desugar sweep

@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (15)
+## working (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ _none_
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | FLOAT HALF LANDED at -O3 (InlineScalarTk widened to tySingle/tyDouble + an AN_FLOAT_LIT arm); -O0/-O1/-O2 byte-identical on compiler.pas. Measured 2.7x on a float-leaf microbench and 1.18x on a 10M-iteration math-unit workload. The RECORD HALF IS NOT DONE and is where this ticket's headline 3.8x actually lives: the dd kernels it was measured on (DdMul/DdAdd/Dd2Sum/Dd2Prod/DdFast2Sum) all return TDd, a RECORD of two Doubles, so the float change does not touch them. Admitting floats also opened the float arm of the dropped-narrowing bug fixed in 191af3440 (D2S returned the full Double, I2S(16777217) returned 16777217) -- guarded here by routing any conversion into a float result to shape 3. | — |
+| feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling | P | 45 | feature | `generic procedure`/`function` at unit level works (71deb21d4). Two adjacent spellings do not parse at all: `generic function Add<T>(...)` declared INSIDE a class body, and the Delphi form `function Add<T>(...)` with no `generic` keyword, both as a free routine and as a method. Eight FPC-testsuite rows, four each, one diagnostic each — measured 2026-09-05, and they are the largest remaining lever in the generics conformance cluster. | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -368,7 +369,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (34)
+## backlog-pascal (33)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -391,7 +392,6 @@ _none_
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
-| feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling | P | 45 | feature | `generic procedure`/`function` at unit level works (71deb21d4). Two adjacent spellings do not parse at all: `generic function Add<T>(...)` declared INSIDE a class body, and the Delphi form `function Add<T>(...)` with no `generic` keyword, both as a free routine and as a method. Eight FPC-testsuite rows, four each, one diagnostic each — measured 2026-09-05, and they are the largest remaining lever in the generics conformance cluster. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus | P | 45 | feature | {$PACKENUM 1} and {$H-} are accepted and not implemented, and both are in the first nine lines of FPC 3.2.2's fpcdefs.inc — so every unit of the FPC compiler corpus is compiled with 4-byte enums and a longstring default where the source asked for 1-byte enums and shortstrings. Silent until 2026-09-04; the unknown-directive warning is what surfaced them. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 15 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
@@ -1101,7 +1101,6 @@ _none_
 - [p 45] [N] feature-nilpy-methods-on-int-and-float
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 45] [N] feature-nilpy-threadsafe-containers
-- [p 45] [P] feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling
 - [p 45] [P] feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus
 - [p 45] [A] refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel
 - [p 45] [A] refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths [parked — re-claim, do not duplicate]

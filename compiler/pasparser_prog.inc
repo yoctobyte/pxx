@@ -1750,7 +1750,14 @@ begin
       tkClass,
       tkProcedure,
       tkFunction:
-      if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+      if IsGenericRoutineHeaderAhead then
+        { `function Add<T>(...)` -- the mode-Delphi spelling of the `generic`
+          arm further down. Same parser, same pre-scan clearing, and it is here
+          rather than in the tkIdent arm only because the Delphi surface has no
+          keyword to dispatch on.
+          feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+        begin PreScanPass := False; ParseGenericFunctionDef; PreScanPass := True; end
+      else if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
          (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
       begin
         { `class operator TPt.+ (const a, b: TPt): TPt;` — an advanced-record operator

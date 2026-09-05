@@ -5747,7 +5747,16 @@ begin
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
-      tkFunction: ParseSubroutine;
+      tkFunction:
+        if IsGenericRoutineHeaderAhead then
+          { `function Add<T>(...);` in the INTERFACE -- the mode-Delphi spelling
+            of the `generic` arm below, and a header with no body for the same
+            reason. Consumed as a unit; the template is registered from the
+            implementation side.
+            feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+          SkipDeclHeaderToSemicolon
+        else
+          ParseSubroutine;
       tkIdent:
         { `resourcestring` sections (FPC rtlconsts et al) register as plain
           string constants — pxx has no resource tables; the format-arg
@@ -5849,6 +5858,12 @@ begin
         tkClass,
         tkProcedure,
         tkFunction:
+        if IsGenericRoutineHeaderAhead then
+          { The mode-Delphi generic-routine DEFINITION, in a unit's
+            implementation -- same arm as `generic` below, reached without a
+            keyword. feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+          begin PreScanPass := False; ParseGenericFunctionDef; PreScanPass := True; end
+        else
         begin
           if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
           DeclItemStart[DeclItemCount] := TokPos - 1;
