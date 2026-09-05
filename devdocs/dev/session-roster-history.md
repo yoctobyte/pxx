@@ -24994,3 +24994,51 @@ reader's own prior measurement. Re-counting to verify a relay is worthless
 without a pull first, and the pull is the whole discriminator.
 
 Nothing pending on this seat. Not resuming on a peer message.
+
+## WATCH LIVE AGAIN — frank-coordinator, 2026-09-05 ~19:30
+
+Owner raised the dial ("just put all our local agents to work"). frankuser did
+the dispatch at his explicit instruction; this seat holds the watch. **Topic
+collision only** — no dispatch, no queues, no timed callback (`CronList` empty,
+still none).
+
+**Map, relayed from frankuser — every row is their statement of an assignment,
+not a topic I measured.** All eight verified live and `busy` in `ListAgents`
+at 19:30, which is the one part of the row I did check.
+
+| session | topic (dispatcher's words) |
+|---|---|
+| frankA | the 25 uncategorised conformance rows, then the directive name-axis instrument |
+| frankB | Pascal frontend, P queue (`{$H-}`, set-of-subrange, `{$PACKENUM}`) |
+| frankC | C frontend / busybox — attempt six, then the undeclared-identifier flip |
+| frankZ | tstate toolchain fingerprint ticket |
+| frankH | oldest-ticket queue, inherits each ticket's lane |
+| frankD | `docs/**`, starting with what the dialect-scope decision made stale |
+| frankS | Track S, ESP/xtensa |
+| frank-optimize | Track O, measurement only today |
+
+`backlog-pascal` 40 at 19:29 (ref-level at `origin/master`, after a pull).
+
+**Two risks frankuser named.** frankH's queue crosses every lane by
+construction and is the likeliest to land on someone's topic — it has been told
+to name each ticket as it picks it up, and that naming is the channel this seat
+watches. frankA and frankB can both reach `pasparser_decl.inc`; **that is a
+FILE, git merges it, and this seat does not flag files** — only if they turn
+out to be on one question.
+
+### Seven is dist-upgrading, and the archive says so precisely
+
+frankuser: nothing depending on tstate works today, nobody should ssh to seven,
+and a session reporting a tstate result today is worth a question. **Measured
+here rather than held as a vibe** — last tstate commit on `origin/master` is
+`b668ba503`, **2026-09-04 18:47:41Z**, and the newest report file is
+`20260904T184737Z-b8e3b30-seven.md`. So the archive has produced **nothing for
+~25h**, and any tstate result quoted today did not come from the watcher.
+
+**This is NOT a licence to widen a gate, and that is the sentence that matters.**
+Widening authority is `tools/twatch.py --status` exiting **1** and nothing else;
+a quiet archive is not that, and `trackt.py health` on plexus answers DOWN every
+time, correctly, about the wrong machine. A 25-hour silence during a planned
+dist-upgrade is the most tempting possible shape for "T is down, so I'll run the
+full suite" — eight busy sessions, one plausible excuse. Nobody has claimed it;
+recorded so that if someone does, the answer is already measured.
