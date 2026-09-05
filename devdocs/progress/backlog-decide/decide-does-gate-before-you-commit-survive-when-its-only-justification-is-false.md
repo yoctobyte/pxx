@@ -47,6 +47,15 @@ FAILED.** frankS and frankA each predicted a SKIP on a clean tree and each
 reported the prediction failing rather than quietly dropping the caveat — which
 is the only reason this surfaced at all.
 
+**AND ONE TESTED ON PURPOSE, which is a cleaner citation than any of the three
+predictions.** frankA, 2026-09-05 at tip `7fda453d4`: a gate run on a **CLEAN
+tree** — everything committed and pushed, `git status --porcelain` empty at the
+moment of the run — with `FPC seed canary (concurrent)` **ARMED and PASSED**.
+The three earlier instances were all sessions *predicting* a SKIP and being
+surprised by a PASS; this one is the same claim tested deliberately, under known
+and stated conditions. **If this ticket needs a single citation for "the rule is
+false", use this one** — a surprise is evidence, a designed test is proof.
+
 **Two sources, failing differently.** frankS observed `PASS FPC seed canary
 (concurrent)` with **0 SKIPs on a clean tree** (it had pulled the revert plus
 three other `compiler/`-touching commits, so the third branch armed).
