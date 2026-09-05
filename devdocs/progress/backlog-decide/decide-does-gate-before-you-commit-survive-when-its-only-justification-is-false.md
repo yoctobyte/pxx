@@ -6,7 +6,7 @@ status: backlog
 blocked-by: []
 found: 2026-09-05
 found-by: frankS (measured), frank-coordinator (source-confirmed and filed)
-summary: "CLAUDE.md's `GATE BEFORE YOU COMMIT, NOT AFTER` rests entirely on the claim that quick's FPC seed canary only fires on an uncommitted tree. `tools/gate.sh` arms it against the MERGE-BASE, so a committed-but-unpushed tree — and a tree whose `compiler/` has moved since the last green seed — still gets full FPC coverage. The false sentence is being corrected separately; this ticket is only the question of whether the INSTRUCTION should survive its justification. NOT a near-miss: it is a false CONSTRAINT, not a false safety."
+summary: "CLAUDE.md's `GATE BEFORE YOU COMMIT, NOT AFTER` rests entirely on the claim that quick's FPC seed canary only fires on an uncommitted tree. `tools/gate.sh` arms it against the MERGE-BASE, so a committed-but-unpushed tree — and a tree whose `compiler/` has moved since the last green seed — still gets full FPC coverage. The false sentence is being corrected separately; this ticket is only the question of whether the INSTRUCTION should survive its justification. Rank on the MEASURED friction (over-gating, observed), but the hazard is two-directional: the same false belief read the other way is a live under-gating mechanism, unobserved and — because nothing durable records working-tree state at gate time — unobservable after the fact."
 ---
 
 # Does "gate before you commit" survive when its only justification is false?
@@ -52,16 +52,18 @@ is the only reason this surfaced at all.
 three other `compiler/`-touching commits, so the third branch armed).
 frank-coordinator then read the source. Neither settles it alone.
 
-## THIS IS A FALSE CONSTRAINT, NOT A FALSE SAFETY
+## THE MEASURED HARM IS OVER-GATING; THE UNMEASURED ARM POINTS THE OTHER WAY
 
-**Nothing has been under-gated.** The stale rule makes sessions gate *more*
-carefully than needed, which is why it survived unnoticed — it breaks nothing
-and nobody complains. Measured cost to date: fleet-wide sequencing friction,
-and one session publishing a pessimistic caveat about a real green and then
-retracting it.
+**Everything observed is over-gating.** The stale rule makes sessions gate
+*more* carefully than needed, which is why it survived unnoticed — it breaks
+nothing and nobody complains. Measured cost to date: fleet-wide sequencing
+friction, and one session publishing a pessimistic caveat about a real green
+and then retracting it.
 
-**Do not rank this as a near-miss.** No defect reached anyone through it, and
-no lane has been measured to under-gate because of it.
+**Rank on that friction.** No defect has been shown to reach anyone through it.
+But see the next section before recording the hazard as one-sided: *no lane has
+been measured to under-gate* and *no lane could be*, and those are different
+sentences.
 
 **But the harm is not strictly one-directional, and frankA named the arm this
 ticket first missed.** Two sessions (frankS, frankA) independently predicted
@@ -73,10 +75,22 @@ did — or skip a gate it has concluded is worthless.* That is a live mechanism
 for under-gating, and it is why "correct the sentence" is not optional even if
 the instruction survives.
 
-**No instance of that arm has been observed.** Both sessions checked their
-compiler commits had `compiler/**` genuinely uncommitted, so the canary was live
-for the reason each stated even though the reason was not the whole rule. Rank
-the ticket on the friction, but do not record the hazard as one-sided.
+**No instance of that arm has been observed — and it is UNOBSERVABLE BY
+CONSTRUCTION, which is the part that should decide how this is read.** An
+earlier revision of this ticket said both sessions *checked* their compiler
+commits had `compiler/**` genuinely uncommitted. **That check never happened and
+could not have** (frankA, correcting its own sentence, which this seat had
+quoted as measured because it arrived beside things that were): nothing durable
+captures working-tree state at gate time, and because the canary arms off the
+merge-base, **a gate run before a commit and a gate run after it emit the
+identical `PASS` line.** The very property that makes CLAUDE.md's sentence false
+is what destroys the evidence that would settle whether anyone acted on it.
+
+So the honest form is *neither session has any reason to believe it under-gated,
+and neither can demonstrate it* — not *both checked*. That is still a fine
+reason to rank on the friction. It is not a reason to record a check that cannot
+exist, and an absence of instances is here **weak evidence**, not strong: this
+detector has zero reach into its own question.
 
 ## Options
 
