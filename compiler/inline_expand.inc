@@ -226,7 +226,8 @@ end;
   Exists because an -O3 inline miscompile is otherwise invisible: the only
   evidence is a wrong value in an unrelated routine, and bisecting by flipping
   `OptLevel < 3` gates tells you which SLICE but never which ROUTINE.
-  `shape` is 1 (Result := E), 2 (if/else ternary) or 3 (straight-line body). }
+  `shape` is 1 (Result := E), 2 (if/else ternary), 3 (straight-line body) or
+  4 (straight-line RECORD body, per-field definite assignment). }
 procedure DbgInlineRetained(procIdx, shape: Integer);
 begin
   if not PxxDbgEnabled('a.inline') then Exit;
@@ -234,6 +235,25 @@ begin
         ' params=', Procs[procIdx].ParamCount);
   if InlineRetentionSawCall then Write(' hasCall');
   if InlineRetentionSawGlobal then Write(' readsGlobal');
+  WriteLn;
+end;
+
+{ REACH instrument, measurement only (PXXDBG=a.inlinedecline): which statement
+  kind stopped a body that had already passed the locals and Result checks.
+  Exists to answer "would supporting shape X reach any real code" with a count
+  instead of an opinion -- the Track O charter forbids inferring value from an
+  opportunity census, and this is the same trap one level down, so read it as an
+  UPPER BOUND on new candidates and nothing more. A body counted here cleared
+  the local/Result gates but may still fail a LATER check once its statement kind
+  is accepted, so the true reach is <= this number, never > it. }
+procedure DbgInlineDeclinedStmt(procIdx, stmtKind: Integer);
+begin
+  if not PxxDbgEnabled('a.inlinedecline') then Exit;
+  Write('PXXDBG a.inlinedecline ', Procs[procIdx].Name, ' stmtkind=', stmtKind);
+  if stmtKind = AN_WHILE then Write(' (while)')
+  else if stmtKind = AN_FOR then Write(' (for)')
+  else if stmtKind = AN_REPEAT then Write(' (repeat)')
+  else if stmtKind = AN_CASE then Write(' (case)');
   WriteLn;
 end;
 
@@ -523,7 +543,10 @@ begin
       if not InlineIfValidate(stmtN, procIdx, retSym) then Exit;
     end
     else
+    begin
+      DbgInlineDeclinedStmt(procIdx, ASTKind[stmtN]);
       Exit;
+    end;
     seqN := ASTRight[seqN];
   end;
   if not InlineResultDef then Exit;          { Result assigned on ALL paths }

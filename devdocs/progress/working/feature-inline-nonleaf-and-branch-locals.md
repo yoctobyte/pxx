@@ -259,3 +259,56 @@ Also corrected `test_inline_nonleaf.pas`'s header, which still claimed inner
 calls stay real calls — untrue since d4c19919 re-landed depth-1.
 
 **REMAINING: while/for loop bodies (bound 1.37x, measured above).**
+
+## 2026-09-05 — REACH measured before implementing the while/for slice
+
+The depth slice was chosen on the bigger BOUND (3.12x vs 1.37x) and delivered
+the smaller result: 12 of 13 real programs byte-identical. That is the
+measurement establishing the principle, so the remaining slice gets its reach
+counted FIRST, before any code.
+
+Added `PXXDBG=a.inlinedecline` (inert unless enabled; `compiler.pas` byte-
+identical at -O0/-O2/-O3 with and without it): which statement kind stopped a
+body that had ALREADY cleared the locals and Result gates.
+
+Across 13 example programs + `compiler.pas` — **distinct function names**, because
+the RTL is recompiled into every program and inflates a raw count (`StrLCopy`
+appears 24 times, `StrLComp` and `StrIComp` 12 each):
+
+| blocking statement | distinct functions |
+| --- | --- |
+| `while` | 102 |
+| **bare call statement (`AN_CALL`)** | **67** |
+| `for` | 32 |
+| `case` | 19 |
+| `repeat` / `asm` | 1 each |
+
+**135 distinct functions are blocked solely by a loop statement**, against the
+depth slice's one affected program in thirteen. Reach favours while/for by two
+orders of magnitude even though its ceiling is less than half.
+
+**135 IS AN UPPER BOUND AND PROBABLY A LOOSE ONE.** These bodies cleared the
+locals/Result gates and hit a loop; accepting loops does not make them inline.
+The binding constraint will be definite assignment: `for i := 1 to n do Result
+:= ...` does NOT definitely assign Result, because the loop may run zero times,
+and the same applies to every `while`. How much of the 135 survives that cannot
+be known without implementing the analysis, so this number sizes the OPPORTUNITY
+and must not be quoted as delivery — the distinction this ticket already got
+wrong once.
+
+**A measurement fault worth recording, caught by frank-coordinator's caution that
+zero and unmeasurable must not both print 0:** the first census printed
+`life 2`. `life` does not compile here at all (rc=1, no binary — the GTK3 headers
+resolve to GTK2; identical on all three compilers, so not a regression), and the
+2 was partial output emitted before the error. The re-run guards on rc AND on the
+binary existing, and prints `UNMEASURABLE`. `sudoku`'s 0 is genuine — it compiles
+and has no declines at all. The depth census in the section above was NOT
+affected: it guarded compiles with `|| continue`, `life` is absent from its
+thirteen, and `built=13` is consistent with that.
+
+### A shape no ticket names
+
+**67 distinct functions decline on a bare procedure-call statement in the body**
+— the second-largest blocker, larger than `for`, and not in this ticket's
+remaining scope nor anywhere else. Filed as
+[[feature-opt-inline-bodies-with-a-statement-level-call]].
