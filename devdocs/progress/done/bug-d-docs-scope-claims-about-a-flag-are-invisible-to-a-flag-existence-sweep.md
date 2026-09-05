@@ -132,8 +132,18 @@ enumerated**, which is the deliverable; leaving it open would keep a ticket in
 the ranker for a standing hazard rather than a piece of work.
 
 **The residual has an owner and a trigger, which is what it needed.** Re-run
-this table when a new backend target lands or a new target-scoped flag is
-documented — those are the only two events that can falsify a row, and both are
-visible in the commit that causes them. The six rows above are the regression
-baseline: each is one command per target and the whole table is under a minute.
+this table when **a new backend target lands, a new target-scoped flag is
+documented, or a new pin lands**. The six rows above are the regression baseline:
+each is one command per target and the whole table is under a minute.
+
+**The third trigger was added the same day and is deliberately redundant.** Pin
+v404 landed hours after this sweep, and frank-coordinator asked whether it fired
+the trigger. By the letter it did not — a pin is neither a new backend nor a new
+flag, and these rows are claims about *the compiler's* target scope rather than
+about the pin. But the numbers were measured *with* v403, so the letter of the
+trigger and the provenance of the numbers pointed in different directions, and
+that is a judgement call standing between someone and a one-minute command. Re-ran
+everything under v404: **byte-identical**, pin sha printed before and after.
+Adding the pin as a trigger deletes the judgement call, which is worth more than
+the runtime it costs.
 
