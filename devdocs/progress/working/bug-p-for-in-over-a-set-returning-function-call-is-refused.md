@@ -59,3 +59,51 @@ Note the temp-assignment workaround already materialises the result into a
 symbol, so whatever the fix does, it must not evaluate `F` once per loop
 iteration — the membership scan runs the container expression's node, and a
 call with side effects would fire 256 times.
+
+## THE CARRIER CENSUS — frankB, 2026-09-06, and it is why this is not a one-line arm
+
+A set's ELEMENT IDENTITY is carried once per CARRIER, and the carriers are
+independent parallel columns in four files:
+
+| carrier | column |
+| --- | --- |
+| variable | `SymSetEnumId` / `SymSetElemTk` (`defs.inc:3286`) |
+| record field | `UFldSetEnumId` / `UFldSetElemTk` (`defs.inc:5894`) |
+| property | `UPropSetEnumId` (`defs.inc:5951`) |
+| parameter | `ProcParamSetEnumId` (`defs.inc:3524`) |
+| type alias | `AliasSetElemTk` (`defs.inc:6037`) |
+| **function RESULT** | **none — `ProcRetEnumId` exists, `ProcRetSetEnumId` does not** |
+
+`defs.inc:3525` already names this family in prose, in its own words — *"the
+five-carrier set (symbol / record field / type alias / array element /
+param-return)"* — for a DIFFERENT fact (managed-string element width). So the
+enumeration exists, as a comment, and the sixth carrier is missing anyway.
+**That is a worked example of a written-down list failing to surface an
+omission, sitting in the file today.** A list nothing is forced to walk is a
+comment, which is the same rule as: a precondition you do not branch on is a
+comment.
+
+### The order of work, and why the column is NOT being added first
+
+The refusal today comes from the container DISPATCH
+(`pasparser_stmt.inc:~2930`), one layer earlier than any element-identity
+question — it would refuse a set-returning call even if the identity were
+present, because a call result is a third source of a set and only two have an
+arm (`ParseForInSetAST` takes a symbol, `ParseForInNodeAST` takes a node whose
+kind is `AN_IDENT` or `AN_FIELD`).
+
+So: **add the dispatch arm, re-measure, and add a carrier only if the compiler
+then says it does not know the element type.** Adding two columns on a
+hypothesis is how a plausible explanation gets built into the tree, and a
+plausible explanation for a red is this repo's expensive failure mode.
+
+### The constraint the fix must satisfy, which is not about parsing
+
+`BuildForInSetLoop` scans the set's DOMAIN and reads the container node per
+candidate. `CloneAST(contNode)` on a CALL node would therefore emit the call
+inside the loop — up to 256 evaluations for a `set of Char`, side effects and
+all. The container must be materialised into a hidden local ONCE, which is the
+move the dyn-array and fixed-array call-result arms in `ParseForInNodeAST`
+already make and document. fpc evaluates it once; `test_for_in_over_a_set_valued_call`
+row E asserts `calls=2` and is the row a fix that merely stops the refusal
+still fails.

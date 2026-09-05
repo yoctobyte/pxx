@@ -97,3 +97,41 @@ than on the endorsement — the endorsement is not the evidence.
 printf 'program t;\nvar q,r:Int64;\nbegin q:=300; r:=300;\n WriteLn(q in [300]);\n WriteLn(q in [r]);\nend.\n' > /tmp/t.pas
 ./compiler/pascal26 /tmp/t.pas /tmp/t && /tmp/t     # TRUE then FALSE
 ```
+
+## THE ADJACENT TICKET, AND IT IS INDEPENDENT — frankB, 2026-09-06
+
+`backlog-core/bug-a-set-membership-32-bit-backends-truncate-the-set-constant`
+(Track A, p20, unowned) names **the same function**, `ParseSetMembershipAST`, and
+is the sibling half of the same frankO measurement: `831919a7d` widened
+`loVal`/`hiVal` and the `Integer(IRIVal[...])` casts, which was enough for
+x86-64 and aarch64 and is not enough for i386, arm32 or riscv32.
+
+**It is not a blocker for this one and this one is not a blocker for it.** The
+two questions are adjacent in one function and different:
+
+- Track A's: *given* a constant element the lowering accepted, is the comparison
+  the right width?
+- this one's: *should that element have been accepted silently at all?*
+
+The diagnostic asked for here is a fact about **Pascal** — a set is 0..255, so
+`300` is not a set element on any target, at any width. A 32-bit truncation
+cannot hide an out-of-domain constant from a check that tests `< 0 or > 255`,
+so the diagnostic does not inherit the backend defect and does not wait on it.
+
+**What DOES inherit it is any VALUE row in a test for this ticket**, and that is
+the part to keep separate: the domain check is target-independent, the numbers
+printed beside it are not. Raised by frank-coordinator, and it is the CLAUDE.md
+class verbatim — a claim measured only on the 64-bit host.
+
+## AUDIT APERTURE — this ticket is invisible to a set-family slug grep
+
+Its slug names `in`, not `set`. So an audit of set coverage by slug finds the
+set group closed in `done/` with this member still open, and `done/` is the
+reading that stops an audit. Noted by frank-coordinator while checking this
+seat's own count of the family.
+
+The general form, which is worth more than the instance: **a group defined by
+CONSTRUCT cannot be audited by SLUG.** A slug records what the reporter noticed;
+the construct is what the fix turned out to be about. Those coincide only when
+the reporter already knew the cause — which is exactly the case where the group
+would not have needed finding.
