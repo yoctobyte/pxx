@@ -1,8 +1,12 @@
 ---
+slug: feature-writeln-as-library
+title: "write/writeln as a library function (via `array of const` + variadic sugar)"
 prio: 40
 track: A
 type: feature
 status: backlog
+owner: ""
+blocked-by: [refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]
 summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. PHASE 3 COMPLETE 2026-09-05 (65b62b148): lib/rtl/libwriteln.pas renders every type byte-identically to the builtin, asserted as PAIRS so a divergence names the type; all formatting is in Pascal and only 'emit bytes to a descriptor' stays in the compiler. Phase 3 was only worth doing once phase 1 landed -- this ticket's own 2026-07-20 note calling it 'a strictly worse writeln nobody would call' was true then and stale from 2026-09-01. THREE known holes, all in the BOXING and so unreachable from a vector reader: a QWord >= 2^63 renders signed (filed), the sized booleans render 1/0 (filed, and appended as a fourth consumer to decide-how-a-type-carries-an-identity-its-kind-cannot-hold), and a Single renders as a Double -- that last is NOT a defect, fpc has no vtSingle either, and its parity row is asserted as DIFFERENT so it goes red if one ever appears. PHASE 2 BRACKET SPELLING COMPLETE 2026-09-05: `Log(['x=', x:8:2])` parses and renders byte-identically to the builtin for float w:p, integer, Int64, QWord, Boolean, string, Char, variable width and narrow width. AND IT NEEDED NO vtFormatted TAG, which is a deliberate departure from this ticket's design -- `TextStrArg` already formats exactly these types for the write statement's variable-width path, through the same builtin formatters `Str(...)` lowers to, so a formatted element renders to an ordinary string node and boxes as a managed string. Every existing TVarRec consumer therefore reads it unchanged (sysutils.Format's FmtArg*, libwriteln, and vendored FPC code doing `case VType of`, which would have met an unknown tag 19 and fallen through its else). A new tag would have been a second copy of a formatter we already have. NOTE THE JUSTIFICATION IN THE DESIGN BELOW IS WRONG: it says `:w:p` here is 'where FPC parses width/precision too', conflating the write STATEMENT with an array-of-const literal -- measured, fpc 3.2.2 refuses `Log(['x=', x:8:2])` with `Syntax error, "]" expected but ":" found`. This is an EXTENSION, and what it earns is the gap between the builtin `writeln(x:8:2)` and a library one. PHASE 2 ELIDED SPELLING STILL NOT DONE and still blocked for the reason recorded below: it needs the shared argument loops loosened, and frankA's `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` is `status: working` with 25 `isNilPy` references left in `pasparser_expr.inc`, five of them in those very loops (1227, 1272, 1302, 1382, 1385) -- checked with frankA 2026-09-05 rather than assumed from the four commits whose subjects name that slug. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
 ---
 
@@ -489,3 +493,18 @@ They were found in one program and that is their only relationship. Bundling
 them would send whoever takes the first one looking for a fork that does not
 apply to it.
 
+
+
+## 2026-09-05 (frankH) — the block was in the prose only, and the count is unchanged
+
+Phases 1, 2-bracket and 3 are landed; the ONLY item left is the phase-2 ELIDED
+spelling, and that has been blocked on frankA's
+[[refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]]
+since 2026-09-05 — recorded in the summary and **not in the frontmatter**, so
+`ready --track A` offered the whole ticket as available work while its own
+summary said the remaining half could not be started. Edge added.
+
+Re-measured rather than re-asserted, twice today at different tips:
+`grep -c isNilPy compiler/pasparser_expr.inc` is **25**, and the five in the
+shared argument loops are still at 1227, 1272, 1302, 1382, 1385. The carve is
+`status: working`, `owner: frankA`. Nothing has moved.
