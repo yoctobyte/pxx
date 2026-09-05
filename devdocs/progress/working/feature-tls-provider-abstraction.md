@@ -1,7 +1,13 @@
 ---
+slug: feature-tls-provider-abstraction
+title: "TLS provider abstraction — pluggable backends (OpenSSL + handrolled)"
 prio: 53  # auto
 blocked-by: []
 track: B
+type: feature
+status: working
+owner: frankH
+summary: "HTTPS WORKS, SYNC AND ASYNC, THROUGH TWO BACKENDS, AND THE TICKET HAD NO SUMMARY UNTIL 2026-09-05 -- a p53 ticket in working/ with no status, owner or summary in its frontmatter, so the one part everyone reads did not exist. Six slices landed 2026-06-25: lib/rtl/tls.pas ships the backend-neutral vtable and registry (fails CLEANLY with tlsError when no backend is registered, never crashes), http.pas routes https:// through it across ALL FOUR transports (blocking one-shot, async one-shot, keep-alive, async pool -- reuse keyed on host:port:SCHEME so an https connection is never handed to a plain request), then the OpenSSL backend, async handshake, certificate verification with a trust store, and server role via SSL_accept with OpenSSL<->OpenSSL interop. The NATIVE TLS 1.3 backend landed 2026-08-01: ed25519 + rsa_pss + ecdsa_p256, chain verify, kTLS-TX with a Pascal fallback; it is CLIENT ROLE ONLY and answers `native TLS 1.3: server role is not implemented` (tls13_native.pas:295) -- the OpenSSL backend has the server side, the native one does not. 2026-09-01, TWO findings worth more than the code: (a) the `blocked-by: [feature-tls13-from-scratch]` edge was FALSE, not stale -- that ticket is deliberately parked in rainy-day/ and `ready` keeps a ticket whose blockers are RESOLVED, so parked-not-resolved suppressed this p53 ticket from the Track B queue entirely while the native backend it was supposedly waiting for had already landed; (b) this ticket claimed async https `occupies a thread for the length of a handshake` and the truth was worse -- ASYNC HTTPS DID NOT WORK AT ALL. RecvN tested `if got <= 0`, swallowing PAL_NET_EAGAIN as EOF, so a would-block was reported as `no ServerHello (connection closed)` about a connection that was open and healthy; SendBytes had the twin defect and was quieter, ignoring its result so EAGAIN sent nothing and a short write truncated a record. Fixed, with the coroutine stack canary now checked at EVERY yield rather than only at completion (a silent SIGSEGV became `fatal: coroutine stack overflow`). NO STATE MACHINE was built and that is measured, not preferred: the scheduler is STACKFUL, scheduler.WaitIO ends in a real __pxxcoswitch. STILL OPEN, three things: a large STREAMED body over the reactor is untested (the devtest does one GET), the native backend refuses the server role, and the stack canary still cannot catch an overflow that faults before it can yield -- a guard page per stack would, at an mmap each. THE `make lib-test cannot run to completion for ANYONE` NOTE BELOW IS STALE as of 2026-09-05: crtl_reachability passes (148 headers, 66 modules) and the suite runs."
 ---
 
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
@@ -12,7 +18,12 @@ track: B
 - **Opened:** 2026-06-24
 - **Relation:** the `https://` enabler for [[feature-own-net-http-lib]]. Umbrella
   over two backends: [[feature-tls13-from-scratch]] (native) and the OpenSSL
-  backend (needs [[feature-real-dynlib-loader]]).
+  backend. That second one read *"needs [[feature-real-dynlib-loader]]"* until
+  2026-09-05; **that ticket is `done` and its summary names the exact thing this
+  one needed** — *"OpenSSL 3 loaded and answering"* — so the dependency is
+  satisfied, not merely closed. Checked rather than taken from the slug: the two
+  items it leaves open are an arm32/aarch64 RUN and Synapse's own SSL path,
+  neither of which this ticket goes through.
 
 ## Slice 1 landed — the seam + plumbing proof (2026-06-25)
 
@@ -579,3 +590,45 @@ stashed; it is Track C's and is routed to frankC.
 Application-data `Read`/`Write` now inherit the EAGAIN handling through the
 shared helpers, but they are only exercised by the devtest's single GET. A
 large streamed body over the reactor is untested. Server role is still refused.
+
+
+## 2026-09-05 (frankH) — staleness check: the routed blocker is gone, and the frontmatter was the defect
+
+Three things, none of them new code.
+
+**1. The routed Track C blocker is GONE — and `make lib-test` still does not
+finish, for a different and temporary reason.** The section above says the suite
+*"cannot currently run to completion for **anyone**"*, blocked on
+`crtl_reachability` failing over `<string.h>` declaring `strsignal()`, and routes
+it to Track C. Re-measured today: `crtl-reachability: OK -- 148 headers, 66
+modules, every declared function reachable from its own header`, and the run goes
+straight past it, through `crtl-map: OK -- 608 crtl functions`, and stops two
+steps later at `lib-units: FAIL mimic_string / mimic_urllib_request` on
+`undefined variable (pyvar_is_objtag)`. **That is the fleet-wide pin lag, not
+this ticket's problem**: frankZ exported `pyvar_is_inttag`/`pyvar_is_objtag` from
+`compiler/builtin/pylib.pas`, `lib/rtl` calls them, and `$(PXX_STABLE)` is the
+pin, which has not caught up. The remedy is a pin and it is with the owner.
+
+**A routed blocker is the shape most likely to go stale unnoticed** — the person
+who fixes it is not standing where the claim is written, which is the same
+asymmetry the 2026-09-01 `blocked-by` note describes one section up. Nobody told
+this ticket, and nobody would have. Note also that "still red" would have been
+the wrong reading twice over: the red moved from a real Track C defect to a
+temporary pin gap, and only running it says which.
+
+**2. The frontmatter was four lines and none of them said what this is.** No
+`status`, no `owner`, no `type`, and **no `summary` at all**, on a p53 ticket
+sitting in `working/`. `owner: frankH` and `Status: working` existed only in the
+prose header. Anyone reading the board saw a title and a number. Fixed, with a
+summary that leads with what actually works, because a reader deciding whether
+to take this needs to know that https works today through two backends before
+they need anything else.
+
+**3. The three open items, re-stated so they are findable.** A large streamed
+body over the reactor is still untested — the devtest does a single GET, so the
+EAGAIN handling the application-data path inherited from the shared helpers is
+exercised once and shallowly. The native backend is client-role only
+(`tls13_native.pas:295`); the OpenSSL backend has the server side. And the
+coroutine stack canary narrows the overflow window rather than closing it: it
+still cannot catch a fault that happens before the first yield, which is exactly
+the 64 KB TLS case.
