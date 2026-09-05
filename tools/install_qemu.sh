@@ -18,7 +18,23 @@
 # draft guessed wrong about install_externals.sh and silently protected nothing.
 set -eu
 
-sudo apt-get install -y qemu-user qemu-user-static binfmt-support
+# The binfmt package was renamed between releases: 24.04 (noble) ships
+# `qemu-user-static`, 26.04 (resolute) dropped that name and provides the same
+# thing as `qemu-user-binfmt`. Asking for the wrong one is a hard apt error
+# ("has no installation candidate"), which took this script out on seven's
+# 24.04->26.04 upgrade, so resolve the name instead of hardcoding it — borg is
+# still on 24.04 and both spellings have to keep working.
+# Test the CANDIDATE, not mere existence: on resolute `qemu-user-static` still
+# exists as a pure virtual package, so `apt-cache show` (and dpkg-query, and
+# apt-cache showpkg) all succeed on it while `apt-get install` still fails with
+# "has no installation candidate". Only "Candidate:" tells the two apart —
+# a real package names a version, a virtual or absent one gives (none)/empty.
+BINFMT_PKG=qemu-user-static
+case "$(apt-cache policy "$BINFMT_PKG" 2>/dev/null | awk '/Candidate:/{print $2}')" in
+  ''|'(none)') BINFMT_PKG=qemu-user-binfmt ;;
+esac
+
+sudo apt-get install -y qemu-user "$BINFMT_PKG" binfmt-support
 
 echo
 for q in qemu-i386 qemu-aarch64 qemu-arm qemu-riscv32 qemu-riscv64 qemu-xtensa; do
