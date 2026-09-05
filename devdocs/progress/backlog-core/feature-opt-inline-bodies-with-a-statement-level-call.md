@@ -126,3 +126,20 @@ code that does not run hot.
 **A third slice picked by a third static metric should not be attempted without
 first measuring call-site frequency.** That is the ticket this one should spawn,
 not another admission widening.
+
+### If this is reverted, VALUE is the reason, not risk
+
+Keep the two separable, because they are, and a future reader will otherwise
+assume a reverted optimisation was unsafe. This slice is **proven safe**:
+-O0/-O1/-O2/-O3 agree, FPC 3.2.2 agrees byte-for-byte, -O0/-O2 byte-identical on
+`compiler.pas`, optfuzz 219 programs with 0 diffs and 0 o0-compile-skips against
+that exact binary, `gate.sh quick` GREEN, and the by-ref control declines as
+designed.
+
+**It is a revert candidate purely because it delivers nothing measurable** — 0 of
+16 real programs changed, and `compiler.pas`'s +3 retained bodies have never been
+timed because no load-independent instrument exists on this host (no valgrind, no
+qemu TCG plugins, and `perf` is DENIED rather than absent:
+`kernel.perf_event_paranoid = 4` blocks even user-space counters). If that
+instrument appears and shows nothing, revert it; the safety evidence above is not
+what would be in question.

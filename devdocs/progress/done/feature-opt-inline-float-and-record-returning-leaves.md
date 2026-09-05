@@ -368,3 +368,30 @@ measured promise.
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1f94f6a03.
+
+
+## 2026-09-05 — CORRECTION: the objdump note above is wrong about the mechanism
+
+This ticket says `objdump -d` "does not disassemble a pxx-emitted ELF -- 3 lines
+of output total". **The observation is right and the cause is wrong, and the
+wrong cause tells the next reader to abandon a working instrument.**
+
+Measured today: pxx emits a minimal ELF with **no section headers unless `-g` is
+passed**. Same program, same compiler:
+
+    objdump -d <built without -g>   ->     3 lines
+    objdump -d <built with -g>      -> 13789 lines, 286 call instructions
+
+So objdump is fine. **Pass `-g` when you intend to disassemble.**
+
+**The second half, which is why a name-based grep still fails even with `-g`:**
+there is no symbol table, so `objdump -d bin | grep 'call.*<Leaf>'` matches
+nothing on a `-g` build either -- not because the call is absent, but because
+the name is. Attribution needs address bucketing: collect the `call 0x...`
+targets as function entries and bucket each address to the greatest entry below
+it.
+
+**Both failures return 0 and so does a file that does not exist**, which is what
+made this look like one fact instead of two. The guard is a LINE COUNT before
+any grep: under ~1000 lines means nothing was disassembled, and that must print
+NOSECT rather than 0.
