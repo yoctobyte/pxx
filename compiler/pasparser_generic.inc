@@ -2513,8 +2513,35 @@ begin
     end;
     if not Eat(tkSemicolon) then doneParams := True;
   until doneParams;
-  Expect(tkGt, '>');
-  Expect(tkEq, '=');
+  { `generic TList<_T>=class(...)` -- no space before the `=`. The lexer's
+    maximal munch makes that ONE tkGe token, and the grammar here wants `>`
+    then `=`, so the header was refused with "expected '>' before '>='". A
+    space cannot change what a program means, and fpc 3.2.2 accepts both
+    spellings; the FPC test suite writes the tight one throughout (8 rows of
+    the generics cluster: tgeneric1/3/5/6/8/10/11/92).
+
+    Unambiguous HERE and only here. By this point the header has already been
+    recognised as a template declaration and the parser is committed to it, so
+    the sequence `>` `=` is the only thing the grammar admits -- a `>=`
+    COMPARISON cannot occur at this position. That matters because the tkGe
+    spelling is load-bearing elsewhere: the header collector's own comment
+    (see ParseGenericTemplateNamed's caller, `a < b >= c` lexes `>=` as tkGe)
+    uses exactly this distinction to tell a template header from a comparison,
+    so tkGe must NOT be split globally or that discriminator is destroyed.
+    That is why this is a consumer-side fix and not a lexer change.
+
+    The two token-scanning detectors that ALSO test for tkGt-then-tkEq are
+    left alone deliberately: they are not on this path (the diagnostic proves
+    detection had already succeeded and the parser had reached this Expect).
+    Widening them without a row that needs it would be a guard whose necessity
+    was never shown. feature-pascal-corpus-fpc-testsuite }
+  if CurTok.Kind = tkGe then
+    Next
+  else
+  begin
+    Expect(tkGt, '>');
+    Expect(tkEq, '=');
+  end;
 
   { Generic templates: class / record / packed record (depth-counted to the
     matching `end`), or array / procedure / function types (run to the

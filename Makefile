@@ -5835,6 +5835,14 @@ test-core: $(COMPILER)
 	  || { echo 'test_method_array_arg_scalar_param_fails: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_array_arg_ok.pas $(TESTTMP)/test_marrok26
 	tools/expect_same.sh test_marrok26 "$$($(TESTTMP)/test_marrok26)" "$$(printf 'chararr [abc] 1\nopenarr 2 3 11\nscalar 44')"
+	# A generic header written TIGHT -- `generic TList<_T>=class` with no space --
+	# lexes `>=` as ONE token where the header grammar wants `>` then `=`. The
+	# spaced spelling compiled and the tight one did not, which is a whitespace
+	# sensitivity fpc 3.2.2 does not have. BOTH spellings are in the row on
+	# purpose: either alone passes against a compiler that broke the other, and
+	# the defect was that they disagreed.
+	./$(COMPILER) test/test_generic_header_tight_equals.pas $(TESTTMP)/test_ghte26
+	tools/expect_same.sh test_ghte26 "$$($(TESTTMP)/test_ghte26)" "$$(printf 'tight 1\nspaced 2')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
 	tools/expect_same.sh test_method_overload_types_b24826 "$$($(TESTTMP)/test_method_overload_types_b24826)" "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"

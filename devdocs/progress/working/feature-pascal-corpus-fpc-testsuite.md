@@ -263,3 +263,82 @@ Counts reconcile: the file held 150 `gap:` rows, 20 of the 21 burned were `gap:`
 146 skips, 142 of which the retry run confirms still fail. That is the real
 burn-down surface and it is feature work, not diagnostics. `tgenconstraint37` is
 frankB's and is untouched.
+
+---
+
+## 2026-09-05 (frankA) — the generics cluster, attempted as a cluster: 42 rows, and the first mechanism is ONE token
+
+Took the cluster whole rather than row by row. **The interesting number is
+mechanisms, not rows**, and the first one is a single lexing detail standing in
+front of 8 rows.
+
+### Mechanism 1 — a missing SPACE decided whether the program compiled
+
+The suite writes generic headers tight:
+
+```pascal
+generic TList<_T>=class(TObject)
+```
+
+Maximal munch makes `>=` ONE `tkGe` token; the header grammar wants `>` then
+`=`. Proven by varying exactly one axis — the identical program with a space
+before the `=` compiles and runs, without it is refused `expected '>' before
+'>='`. fpc 3.2.2 accepts both. A space cannot change what a program means.
+
+**Fixed at the CONSUMER, deliberately not in the lexer.** The header collector's
+own comment uses "`>=` lexes as tkGe" as the discriminator that tells a template
+header from a comparison `a < b >= c`; splitting tkGe globally would destroy
+that. At `ParseGenericTemplateNamed`'s `Expect(tkGt) / Expect(tkEq)` the parser
+is already committed to a header, so a `>=` there can only be the tight
+spelling. The two token-SCANNING detectors that share the blind spot
+(`Tokens[j]=tkGt and Tokens[j+1]=tkEq`) were left alone: the diagnostic proves
+detection had already succeeded, so widening them would be a guard whose
+necessity was never shown.
+
+### What the 8 rows did, which is the argument for attempting a cluster
+
+| | |
+| --- | --- |
+| built AND matched fpc 3.2.2 | tgeneric1, tgeneric3, tgeneric5 |
+| built, compile-only agreement (0 write-sites by design) | tgeneric92 |
+| advanced PAST the header into a DIFFERENT diagnostic | tgeneric6, tgeneric8, tgeneric10, tgeneric11 |
+
+**The header refusal was masking four more defects**, and they cluster again:
+`cannot assign AnsiString to Integer` on both tgeneric6 and tgeneric8 (two rows,
+one shape — smells like a type parameter not being substituted), plus
+`"TCompareFunc": no such member` (tgeneric10) and `no overload of assign`
+(tgeneric11). So 8 rows were at least three mechanisms deep, and only the
+outermost is now gone.
+
+**The four skip reasons were all over-attributed.** They said "objfpc generic
+syntax not parsed" and, for tgeneric5, "+ `typeinfo(_T)` intrinsic and typinfo
+unit". The real blocker was the one token; tgeneric5 needs no typeinfo work at
+all. A reason written at triage names the first plausible cause and is never
+re-read — which is the same finding as the burn-down above, from the other side.
+
+### The count moved to 371/3, and the third failure is an ACCIDENTAL PASS REMOVED
+
+```
+test-pascal-conformance: 371 pass, 3 fail, 142 skip, 34 auto-gated (of 550)
+  FAILURES: tgeneric4.pp tgenfunc17.pp tgenfunc18.pp   (all accepted-invalid)
+```
+
+368 + 4 unskipped = 372, minus tgeneric4 moving pass -> fail = 371; skip 146 ->
+142; fail 2 -> 3. Reconciles exactly.
+
+**tgeneric4 is not damage this change did.** It is `{ %fail }`, and pin v403
+refuses it with `expected '>' before '>='` **in ugeneric4.pp** — it was green
+because the parser could not read the unit. What it actually tests is a
+diagnostic pxx has never had (`Global Generic template references static
+symtable`). Filed as
+[[bug-p-a-generic-template-in-a-unit-may-reference-a-non-global-symbol]], the
+THIRD instance of this shape after tgenfunc17/18.
+
+**Expect more of these.** A `%FAIL` row is a pass-by-refusal, so every parser
+capability added here can turn one red, and each is a missing diagnostic that
+was always missing. That is a property of the suite, not a regression signal —
+but it means the pass count alone cannot be read as progress, and the fail list
+has to be read by NAME every time.
+
+Gate: quick GREEN, fgl 7/7, self-host converged. Every row moved from gap to
+pass was diffed against fpc 3.2.2 output, not scored on its exit code.

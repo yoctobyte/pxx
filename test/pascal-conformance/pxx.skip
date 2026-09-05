@@ -103,18 +103,14 @@ tforin15.pp	gap: `operator enumerator` (custom enumerator operator) not supporte
 tforin16.pp	gap: for-in over a string constant
 tforin26.pp	gap: user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
 tforin27.pp	gap: user function named `Write` (builtin name shadowing) + for-in over dynamic array
-tgeneric1.pp	gap: objfpc `generic TList<_T> = class` / `specialize` syntax not parsed
 tgeneric10.pp	gap: objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization
 tgeneric11.pp	gap: objfpc generic/specialize syntax; `specialize TList<_T>` as a param type
 tgeneric14.pp	wontfix: dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
 tgeneric20.pp	wontfix: dialect-pass — generic method impl without <T> marker — PXX's generics surface deliberately accepts the stripped form (3d71edcf); not a bug
 tgeneric21.pp	gap: accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
-tgeneric3.pp	gap: objfpc generic/specialize syntax with the generic declared in another unit
-tgeneric5.pp	gap: objfpc generic syntax + `typeinfo(_T)` intrinsic and typinfo unit
 tgeneric6.pp	gap: objfpc generic syntax + nested record/pointer types inside a generic class
 tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects runtime error 201)
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
-tgeneric92.pp	gap: objfpc generic syntax + `with` over a generic type parameter record
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
 tobject2.pp	gap: old-style `object` types with virtual methods, constructor/destructor
