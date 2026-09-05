@@ -1,13 +1,13 @@
 ---
 track: T
-prio: 50
+prio: 65
 type: bug
 status: backlog
 found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source."
+summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source. RAISED 50->65 on 2026-09-05: two MEASURED wrong readings during one night of live tier triage, both with attributable cost — one key standing for six unrelated targets (sqlite-threads x4, uforth, emit-obj) so the tier's red DENOMINATOR was unknown until settled by hand, and one job's history SPLIT ACROSS TWO KEYS when its recipe changed, which made test-uforth look like it had never run and pointed at a ~6.5 week bisect window instead of the true 234 commits. The key is derived from the recipe's TEXT rather than from the job's subject, so it is both too coarse and too brittle."
 ---
 
 # The job map cannot be asked whether a given source was exercised
@@ -102,3 +102,47 @@ as one thing.**
 membership.** An empty result means "no job is NAMED that", which is a
 statement about naming, not about coverage — and it looks exactly like the
 answer you were hoping to rule out.
+
+## 2026-09-05 (frankZ) — two live instances in one night's triage, with costs
+
+Filed as a gap in what the map can ANSWER. Both of these are the map giving a
+confident WRONG answer during live tier triage, which is the stronger case.
+
+**Instance 1 — one key, six unrelated targets.** `COMPILER_SRCHASH` is a make
+variable at the head of many recipes, so `extract_src` picked
+`tools/compiler_srchash.sh` as the source identity for six different targets:
+sqlite-threads x4, test-uforth, test-emit-obj. The report's `near:` text for all
+six was the `self-host fixedpoint: verified` line PRECEDING the failure rather
+than the failure. Reading the tier as "six jobs share a cause" was the obvious
+inference and it was wrong — six distinct targets, six distinct causes. **Cost:
+the tier's denominator was unknown until it was settled by hand.**
+
+**Instance 2 — the SAME 13 jobs under two identities, and this one nearly bought
+a six-week bisect.** `seven.json` carries both:
+
+```
+test-uforth#src:compiler/.pascal26.fixedpoint@1..13   status=absent  last_pass=cc411ceee30b
+test-uforth#src:tools/compiler_srchash.sh@1..13       status=fail    last_pass=b8e3b3010249
+```
+
+The recipe changed, `extract_src`'s answer changed with it, and the job's history
+**split across two keys** — the old ones stranded as `absent`, the new ones
+carrying the record. Nothing errors. Both key families look like real jobs.
+
+The cost was concrete: reading the stranded family made `test-uforth` look like
+it had never run, which combined with a (separately wrong) inference to suggest
+the regression could be anywhere back to 2026-07-21 — **a ~6.5 week window**. The
+correct window is `b8e3b3010249..5b5fdb0b32d3`, **234 commits**, established
+instead by reading the report itself (`tier: full`, `skips: 1`, zero `uforth`
+mentions → it ran and passed).
+
+**WHAT WOULD HAVE PREVENTED BOTH: a job key that is stable under recipe edits,
+and a map that can be asked "was source X exercised in run Y" rather than
+"what is the status of key K".** Instance 1 is the key being too COARSE (six
+targets collapse onto one name); instance 2 is the key being too BRITTLE (one
+job's history splits when its recipe is touched). Same root: **the key is derived
+from the recipe's text rather than from the job's subject**, so it inherits every
+property of the text including its instability.
+
+Raising prio: filed on a plausible gap, now carries two measured failures with
+attributable cost in one triage session.

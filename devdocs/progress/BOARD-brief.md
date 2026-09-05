@@ -93,9 +93,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
+- `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
 _363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

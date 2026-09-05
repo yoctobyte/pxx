@@ -8530,3 +8530,59 @@ The third is worth one extra line because of *where* it happened: the tool's own
 source comment warns about `| tail` **in those words**, and it was read that
 night, in that function's neighbourhood, by the person who had already done it.
 **Reading is not adopting**, and the interval between the two was minutes.
+
+## A REGRESSION IS EXACTLY THE CASE WHERE TODAY'S SEMANTICS DO NOT DESCRIBE YESTERDAY'S TREE — and it is also exactly the case where you are reasoning about yesterday
+
+Same genus as the "correct status about a different process" family: an
+instrument answering **truthfully about a subject you did not mean to ask
+about.** Here the subject is **WHICH TREE**.
+
+**Measured 2026-09-05**, triaging seven's full tier. `test-uforth` was red on 13
+job keys. I argued it could not have regressed recently:
+
+> `bytearray.extend` has had exactly **one** overload since 2026-07-20
+> (`extend(src: TPyBytes)`), and `uforth.py:806` has had `out.extend((13, 10))`
+> since **March**. So `test-uforth` cannot have compiled that file in the window
+> where it is recorded as passing.
+
+I called it a proof by construction and used it to widen the search from one day
+to six and a half weeks. **Every clause is true. The conclusion is false.**
+
+One overload does not prevent a tuple binding **when resolution is loose**, and
+resolution *was* loose until `5dbd56a3c` tightened it. I used the
+**post-regression** strictness as a premise about the **pre-regression** tree.
+The report settled it in one read — `tier: full`, `skips: 1` (rdrand only),
+`grep -c uforth` → **0**, so the job ran and passed. True window: 234 commits.
+
+**WHY THIS ONE IS NASTIER THAN A SAMPLING ERROR.** The three other corrections
+that night were claims about a SET made without checking what the sampling could
+produce, and every one was catchable by reading a column already present in my
+own output. This one is **locally valid at every step**. There is no column to
+read. And it is self-reinforcing in the worst direction: **the better you
+understand the current behaviour, the stronger the false inference about the old
+tree feels** — your confidence is real, and it is confidence about the wrong
+tree.
+
+**THE TELL, AND IT IS CHECKABLE: two pieces of evidence in your own message
+pointing opposite ways.** I cited an RTL comment as evidence the binding *used
+to* work, and the current overload set as evidence it *could not have* — in the
+same paragraph, both mine. When that happens, the one describing the PAST wins,
+because the other is a fact about the present being smuggled in as a fact about
+history.
+
+**THE GUARD:** before reasoning about a tree older than the change you are
+hunting, ask **"which of my premises is a statement about the CURRENT compiler?"**
+Every such premise is suspect by construction — the regression is, definitionally,
+a place where the current compiler differs. Prefer evidence that is *dated*: a
+report's own frontmatter, a commit that landed before the window, a comment
+written at the time. Prefer a BUILD over any of them.
+
+**AND THE COROLLARY THAT DECIDES THE FIX.** A contemporaneous comment is
+evidence the old behaviour was **designed for**. It is *not* evidence the old
+behaviour was **sound**, and those come apart exactly here: `TPyList` and
+`TPyBytes` are both root classes, so the binding the comment relied on was one
+unrelated class passing through another's parameter. Restoring it would have
+traded the type system for one method. **Ask whether the old behaviour was
+correct, not merely whether it was intended** — one `grep` for the class
+declarations separated them, and only "unrelated classes bound anyway" sounding
+wrong prompted it.

@@ -656,8 +656,12 @@ type
     { see TPyList.at — bytearrays have no Python .get either }
     function at(i: Integer): Integer;
     procedure put(i: Integer; v: Integer);
-    { bytearray.extend / .append — uforth builds output buffers byte by byte }
-    procedure extend(src: TPyBytes);
+    { bytearray.extend / .append — uforth builds output buffers byte by byte.
+      TWO OVERLOADS, because bytearray.extend takes any iterable of ints and
+      TPyList (list/tuple/set) is NOT a TPyBytes -- both are root classes here,
+      so there is no inheritance to carry one into the other's parameter. }
+    procedure extend(src: TPyBytes); overload;
+    procedure extend(src: TPyList); overload;
     { bytearray.append. This comment used to say "NO .append here on purpose",
       because a second class declaring the name made every `.append(...)` on a
       dynamically typed receiver ambiguous — and then the method was added
@@ -10206,25 +10210,46 @@ begin
   b.FLen := need;
 end;
 
-procedure TPyBytes.extend(src: TPyBytes);
-var k, base: Integer; sp, dp: PByte; sl: TPyList;
+{ THE LIST/TUPLE ARM IS ITS OWN OVERLOAD NOW, and that is the fix rather than
+  a convenience.
+
+  It used to be a branch inside the TPyBytes overload, reached because a TPyList
+  ARGUMENT bound to a TPyBytes PARAMETER -- the old comment said so plainly:
+  "overload resolution is not identity-precise". It is not inheritance; TPyList
+  and TPyBytes are both root classes. So the call was passing one unrelated
+  class through another's parameter and the body recovered by re-testing
+  `TObject(src) is TPyList`. That worked only while the overload gate derived a
+  weak kind-based answer.
+
+  `5dbd56a3c` ("the method overload probe reaches the free path's own answer
+  instead of re-deriving a weaker one from kinds") closed that, and
+  `out.extend((13, 10))` in uforth.py:806 stopped compiling -- 13 job keys in
+  seven's full tier. Bisected to that commit and confirmed by building either
+  side: bc2fe10f1 compiles the four-line repro, 5dbd56a3c does not.
+
+  THE TIGHTENING IS CORRECT AND IS NOT WHAT IS BEING FIXED HERE. A gate that
+  lets any class bind to any other class's parameter is a hole, and restoring it
+  to keep one RTL method working would be trading a type system for a method.
+  The RTL was the thing relying on the laxity, so the RTL is what changes. The
+  old comment is honest evidence that the looseness was DESIGNED FOR; it is not
+  evidence that it was sound, and those two come apart exactly here. }
+procedure TPyBytes.extend(src: TPyList);
+var k, base: Integer; dp: PByte;
 begin
   if src = nil then Exit;
-  { A LIST/TUPLE of ints binds to this class param too (overload resolution is
-    not identity-precise): `out.extend((13, 10))` — read its VALUES instead of
-    misreading TPyList fields as byte storage. }
-  if TObject(src) is TPyList then
+  base := FLen;
+  PyBytesEnsure(Self, FLen + src.count);
+  for k := 0 to src.count - 1 do
   begin
-    sl := TPyList(TObject(src));
-    base := FLen;
-    PyBytesEnsure(Self, FLen + sl.count);
-    for k := 0 to sl.count - 1 do
-    begin
-      dp := PByte(NativeInt(FData) + base + k);
-      dp^ := Byte(pyvar_to_int(sl.at(k)) and $FF);
-    end;
-    Exit;
+    dp := PByte(NativeInt(FData) + base + k);
+    dp^ := Byte(pyvar_to_int(src.at(k)) and $FF);
   end;
+end;
+
+procedure TPyBytes.extend(src: TPyBytes);
+var k, base: Integer; sp, dp: PByte;
+begin
+  if src = nil then Exit;
   base := FLen;
   PyBytesEnsure(Self, FLen + src.FLen);
   for k := 0 to src.FLen - 1 do
