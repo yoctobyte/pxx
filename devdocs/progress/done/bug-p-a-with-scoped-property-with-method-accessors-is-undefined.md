@@ -67,4 +67,4 @@ omission: an arm that resolves a property without going through
 `pasparser_call.inc`'s accessor helpers.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e18cefa31.
