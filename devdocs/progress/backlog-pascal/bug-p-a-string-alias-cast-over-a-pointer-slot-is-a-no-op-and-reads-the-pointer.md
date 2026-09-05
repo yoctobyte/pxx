@@ -79,15 +79,56 @@ is the obvious change and it is **not sufficient**:
 
 And the store is **already correct**: `t(p) := s; p = Pointer(s)` is `TRUE`, and
 `Length(s)` is `3`. So the value in the slot is right and every READ path is
-wrong. The fix therefore spans `ir.inc`'s lvalue/length lowering as well as the
-parser — plausibly because the lowering re-derives the type from the SYMBOL
-(`p: Pointer`) rather than from the node, which is the same durable-column-vs-
-node seam `bug-p-a-parameters-pointer-element-type-is-lost-between-registration-
-and-overload-matching` turned on.
+wrong. The fix therefore spans the IR lowering as well as the parser.
+
+**CORRECTED 2026-09-05, same day, asked for by frank-optimize before it took
+this ticket.** This paragraph first said the lowering "re-derives the type from
+the SYMBOL rather than from the node", and called it the same durable-column
+seam as the pointee-element bug. **That was a hypothesis written from the retag
+not helping, and the code does not support it as stated.** The refusal is
+`ir_codegen.inc:10778`, the final `else` of the `specialId = 101` chain whose
+arms are `if IRKind[val1Node] = IR_LEA` then
+`else if IRNodeIsFrozenStrAddr(val1Node)` — it dispatches on NODE predicates,
+not on a symbol. The measured fact underneath is only this: retagging the AST
+node's `ASTTk` did not change the refusal, so whatever those predicates read, it
+is not that tag.
+
+**Five siblings, so a fix keyed on the x86-64 arm alone will pass a native
+gate and leave four targets refusing:** `ir_codegen386.inc:3284`,
+`ir_codegen_aarch64.inc:3246`, `ir_codegen_arm32.inc:2613`,
+`ir_codegen_riscv32.inc:2906`, `ir_codegen_xtensa.inc:3013`, each with the same
+message under a target prefix.
+
+The comment directly above that chain cites
+`bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol`,
+and the `IRNodeIsFrozenStrAddr` arm is its fix. The case here is the next shape
+past it — a `Pointer`-typed slot rather than a frozen-string address — so that
+arm is the model and plausibly the place.
 
 Reverted rather than shipped: a half-fix that turns a wrong number into an
 out-of-bounds read is not an improvement, and CLAUDE.md's rule is to bank the
 diagnosis and park it rather than microfix.
+
+**The diff itself was restored with `git checkout --` and not stashed, which was
+a mistake** — CLAUDE.md says park held work as a patch or a stash, and "reverted
+because it was worse" is still held work if the next taker wants it as a
+positive control. Reconstructed here so it is not lost: the arm's exit, today
+`LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);`, became
+
+```pascal
+strAliasOpTk := IntToTypeKind(ASTTk[CurASTNode]);
+if TypeIsFrozenString(strAliasOpTk) or
+   (strAliasOpTk = tyAnsiString) or (strAliasOpTk = tyString) then
+  LastExprTk := strAliasOpTk
+else
+begin
+  ASTTk[CurASTNode] := AliasTk[aliasIdx];
+  LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
+end;
+```
+
+mirroring the `tyRecord` arm directly below, which already retypes rather than
+returning the operand unchanged.
 
 ## What a fix has to satisfy
 
