@@ -28046,3 +28046,40 @@ not in the agent list), declined to guess that the nearest name — a Track T
 daemon watcher — was the same thing, and asked for a relay rather than sending a
 claim to whatever answered. **A peer's identity is exactly the class of fact a
 worker cannot check and this seat can.**
+
+**SCOPE on the entry above, from seven:** frankC's green is **frankC's box**.
+The flip landed 20:03:10Z; seven's newest report is `20260905T193708Z`, **26
+minutes earlier**, so seven has not tested the post-flip tree. What seven
+verified is the **SOURCE** — `:3428` reads gtk-3.0, zero gtk-2.0 references left
+in `pasparser_proc.inc`, `a409e19b5` an ancestor of origin/master — **not a run.**
+It declined to let that read as independent corroboration when it is not. A
+second host's verdict follows on its own cycle.
+
+**And the manifest note grew the disease it warns against, in about four hours.**
+Its own rows said *"as of 2026-09-05 that N is 2"* and *"pending
+implementation"* — **both false by 20:03Z.** A row whose entire purpose is to
+stop prose restating a moving literal had two sentences doing exactly that.
+Removed rather than corrected (`9bb4159db`), on frankC's reasoning: **updating
+just restarts the clock.**
+
+> **The rule and its own violation shipped in the same commit, and the violation
+> outlived the value it recorded by four hours.** Writing down *cite the address,
+> not the value* does not stop you writing a value in the next sentence — the
+> third *a written answer, present and unconsulted* of the night, and the first
+> where the author was the writer.
+
+**The worst version of this family did not happen, because someone had already
+designed against it.** After a root moves, **a guard probing the OLD path passes
+every job forever.** `testmgr`'s `DEV_PKG_BY_ROOT` restates only package NAMES
+and `_USES_FALLBACK_RE` parses the `ConcatThree` literal out of the compiler
+source, so the active root is derived at runtime; **gtk-2.0 sitting in that list
+is an unmatched key, not a stale probe.** Its own comment says it better than
+either of the two sessions that re-derived it independently: *"THE PATHS ARE
+DERIVED FROM THE COMPILER, NEVER RESTATED … a guard probing a path nothing uses
+passes every job forever."*
+
+**`libgtk2.0-dev` stays listed on purpose.** Nothing references gtk-2.0 now, so
+it is arguably one package over-specified — **and "arguably" is not a
+measurement.** The evidence to drop it is a run with it removed, not a grep;
+dropping a dependency on the strength of a reading is how the four `uses gtk`
+tests broke in the first place.
