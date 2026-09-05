@@ -6731,6 +6731,19 @@ test-core: $(COMPILER)
 	@# no-op and exist only to catch a widening.
 	@$(TESTTMP)/test_lhoid26 | diff -u test/test_low_high_carry_the_ordinals_identity.expected - \
 	  || { echo 'test_low_high_carry_the_ordinals_identity: FAIL - a bound lost the ordinal it is a value of'; exit 1; }
+	./$(COMPILER) test/test_own_name_is_the_result_to_every_intrinsic.pas $(TESTTMP)/test_onri26
+	@# .expected is fpc 3.2.2's own output. A function's own name IS its result
+	@# variable, and thirteen intrinsic destination sites each spelled their own
+	@# FindSym-then-ParseLValueAST and none of them knew it -- while the rule had
+	@# already been extracted as OwnNameResultSym for the ONE site that hit it
+	@# (Inc(FuncName[0]) in FPC's cutils.pas). Row D is load-bearing: GetMem was
+	@# green BEFORE the fix, because it takes its destination through ParseExpr
+	@# and never had a copy of the rule to be wrong. Row G is FPC's own
+	@# tstunits/erroru.pp shape, the helper behind five conformance rows. Rows H
+	@# and I are the two guards: a local shadowing the function still wins, and a
+	@# following `(` is a recursive call and not an lvalue.
+	@$(TESTTMP)/test_onri26 | diff -u test/test_own_name_is_the_result_to_every_intrinsic.expected - \
+	  || { echo 'test_own_name_is_the_result_to_every_intrinsic: FAIL - an intrinsic destination cannot see the own name'; exit 1; }
 	./$(COMPILER) test/test_forward_pointer_to_array_type.pas $(TESTTMP)/test_fpta26
 	@# .expected is fpc 3.2.2's own output. `PArr = ^TArr` above `TArr = array[..]
 	@# of T` -- the shape FPC's own cclasses.pas uses, and the last PARSER wall on

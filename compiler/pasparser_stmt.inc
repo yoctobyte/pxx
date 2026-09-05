@@ -5955,13 +5955,11 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(idx);
         Expect(tkComma, ',');
 
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected destination');
-        si := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        stepsNode := ParseLValueAST(si, identTokIdx);
+        stepsNode := ParseIntrinsicDestLValue(si);
         Expect(tkRParen, ')');
 
         { A DESTINATION THAT IS NOT A PLAIN IDENTIFIER IS NORMALISED HERE, not
@@ -6023,8 +6021,7 @@ begin
           not followed by `(` is not the intrinsic. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('Include/Exclude: expected set variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(idx);
         Expect(tkComma, ',');
         ParseExpr; Expect(tkRParen, ')');
         if CaseEqual(name, 'Include') then
@@ -6147,22 +6144,18 @@ begin
         else if CurTok.Kind <> tkIdent then Error('expected variable')
         else
         begin
-          argIdx := FindSym(CurTok.SVal);
-          { …or the bare OWN NAME of the enclosing function, which FindSym
-            cannot see (it is a proc, not a symbol). `Inc(FuncName[0])` is how
-            FPC's cutils.pas:1429 grows a shortstring, and it reported
-            `undefined variable`. Same rule as the expression-read arm, shared
-            through OwnNameResultSym. Only when nothing else claimed the name,
-            so a local that shadows the function still wins. }
-          if (argIdx < 0) and (Tokens[TokPos].Kind <> tkLParen) then
-            argIdx := OwnNameResultSym(CurTok.SVal);
-          identTokIdx := TokPos - 1; Next;
-          { Parse the FULL target lvalue (consuming any .field / [i] / ^
-            selectors) BEFORE the optional step and ')'. Inc/Dec accept any
-            assignable lvalue, exactly like a `var` parameter — a bare-symbol
-            parse choked on `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1
-            (implicit-Self field): ParseLValueAST resolves it. }
-          valNode := ParseLValueAST(argIdx, identTokIdx);
+          { The own-name arm this site was the FIRST to need -- `Inc(FuncName[0])`
+            is how FPC's cutils.pas:1429 grows a shortstring, and it reported
+            `undefined variable` -- and for a while the ONLY one to have. It now
+            lives in ParseIntrinsicDestLValue with the other twelve destination
+            sites, which were all missing the same fact and all agreed.
+
+            That helper also parses the FULL target lvalue (any .field / [i] / ^
+            selectors) before the optional step and ')': Inc/Dec accept any
+            assignable lvalue, exactly like a `var` parameter, and a bare-symbol
+            parse choked on `Inc(rec.f)` / `Inc(Self.field)`. argIdx may come
+            back -1 (implicit-Self field); ParseLValueAST resolves it. }
+          valNode := ParseIntrinsicDestLValue(argIdx);
         end;
 
         if Eat(tkComma) then
@@ -6242,8 +6235,7 @@ begin
           bug-p-sysopen-intrinsic-shadows-a-user-function-name }
         Next; Expect(tkLParen, '(');
         ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
-        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(argIdx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(argIdx);
         if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
         Expect(tkComma, ',');
 
@@ -6303,8 +6295,7 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
         if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
-        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(argIdx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(argIdx);
         if (argIdx < 0) or
            (not (TypeIsFrozenString(Syms[argIdx].TypeKind) or
                  (Syms[argIdx].TypeKind = tyAnsiString))) then Error('ArgStr: not a string var');
@@ -6617,20 +6608,29 @@ begin
         if slCastDrop then begin Next; Expect(tkLParen, '('); end;
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
         { Bare function name as the SetLength target = the result var (FPC: `F`
-          synonym for `Result`), so `SetLength(F, n)` works like `SetLength(Result,
-          n)` for a string/dynarray-returning F. FindSym does not know the own name
-          (it is not a plain symbol) — map it to RetSymIdx, mirroring the bare-own-
-          name read in ParseFactor. Excluded in {$mode delphi} (Result-only there).
-          Was bug-bare-name-setlength-dynarray-result. }
-        if (CurProc >= 0) and Procs[CurProc].IsFunc and not DelphiMode and
-           ((CurTok.SVal = Procs[CurProc].Name) or
-            CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name))) then
-          idx := Procs[CurProc].RetSymIdx
-        else
-          { FindVarSym, not FindSym: a bare `class var` target used to resolve to -1
-            here and fall through to the STRING arm of the classification below,
-            writing a string header over a dynamic-array handle. }
-          idx := FindVarSym(CurTok.SVal);
+          synonym for `Result`), so `SetLength(F, n)` works like
+          `SetLength(Result, n)` for a string/dynarray-returning F. FindSym does
+          not know the own name (it is not a plain symbol).
+          Was bug-bare-name-setlength-dynarray-result.
+
+          The RULE is OwnNameResultSym's and this site no longer restates it --
+          it was the fourteenth spelling of the same four conditions, written
+          before that routine was extracted. It does NOT go through
+          ParseIntrinsicDestLValue with the other thirteen, and the reason is
+          the line below: SetLength must resolve with FindVarSym rather than
+          FindSym, or a bare `class var` target comes back -1 and falls through
+          to the STRING arm of the classification below, writing a string header
+          over a dynamic-array handle. A shared helper that took the wrong base
+          lookup for one caller would be worse than one that this caller skips.
+
+          The `(` exclusion is new here and is the one behaviour change: a
+          following paren is a recursive CALL, which is not an lvalue, and every
+          other own-name site already excluded it. OwnNameResultSym's header
+          says that test belongs to the caller because only the caller sees the
+          token. }
+        idx := -1;
+        if Tokens[TokPos].Kind <> tkLParen then idx := OwnNameResultSym(CurTok.SVal);
+        if idx < 0 then idx := FindVarSym(CurTok.SVal);
         identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         if slCastDrop then Expect(tkRParen, ')');   { the string cast's own ')' }
@@ -6781,8 +6781,7 @@ begin
           by `(` (assignment, etc.) is not the intrinsic. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('New: expected pointer variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(idx);
         Expect(tkRParen, ')');
         { Same normalisation as SetLength above: a qualified class var (`TC.P`)
           resolves the CLASS name here, so idx is -1 and the element size below
@@ -6853,8 +6852,7 @@ begin
           pointer variable. Guarded like New above. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);   { assign target }
+        valNode := ParseIntrinsicDestLValue(idx);   { assign target }
         Expect(tkComma, ',');
         ParseExpr;                                      { new size -> CurASTNode }
         Expect(tkRParen, ')');
@@ -6910,8 +6908,7 @@ begin
         end;
         Expect(tkComma, ',');
         if CurTok.Kind <> tkIdent then Error('Str: expected destination string variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(idx);
         Expect(tkRParen, ')');
 
         { THE DISPATCH IS write's, NOT A COPY OF IT. Str used to carry its own
@@ -6973,8 +6970,7 @@ begin
           pointer variable. Guarded like New above. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);   { assign target }
+        valNode := ParseIntrinsicDestLValue(idx);   { assign target }
         Expect(tkComma, ',');
         ParseExpr;                                      { new size -> CurASTNode }
         Expect(tkRParen, ')');
@@ -7030,8 +7026,7 @@ begin
         end;
         Expect(tkComma, ',');
         if CurTok.Kind <> tkIdent then Error('Str: expected destination string variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);
+        valNode := ParseIntrinsicDestLValue(idx);
         Expect(tkRParen, ')');
 
         { Float value -> StrFloat(x, width, decimals); integer -> StrInt(x, width).
@@ -7103,8 +7098,7 @@ begin
         ParseExpr; exprNode := CurASTNode;                 { source string }
         Expect(tkComma, ',');
         if CurTok.Kind <> tkIdent then Error('Val: expected destination variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-        valNode := ParseLValueAST(idx, identTokIdx);        { dest value }
+        valNode := ParseIntrinsicDestLValue(idx);        { dest value }
         { `code` is OPTIONAL in FPC — `Val(s, i)` is ordinary code, and it was
           refused here with "Expected: ,". Measured against FPC 3.2.2: the
           two-argument form behaves exactly like the three-argument one with
@@ -7115,8 +7109,7 @@ begin
         begin
           Next;
           if CurTok.Kind <> tkIdent then Error('Val: expected code variable');
-          si := FindSym(CurTok.SVal); argIdx := TokPos - 1; Next;
-          stepsNode := ParseLValueAST(si, argIdx);          { code }
+          stepsNode := ParseIntrinsicDestLValue(si);          { code }
         end
         else
         begin

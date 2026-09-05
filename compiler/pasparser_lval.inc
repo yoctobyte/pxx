@@ -366,6 +366,51 @@ begin
   ASTRight[indexNode] := fdSubNode;
 end;
 
+function ParseIntrinsicDestLValue(var symOut: Integer): Integer;
+{ THE DESTINATION ARGUMENT OF AN INTRINSIC THAT WRITES THROUGH IT -- Str, Val,
+  New, ReallocMem, Include/Exclude, LoadFile, SysWrite, ArgStr. CurTok is the
+  identifier; on return it is consumed, `symOut` holds its Syms[] index (-1 if
+  none) and the result is the parsed lvalue node.
+
+  Twelve sites each spelled the same two lines:
+
+      idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+      valNode := ParseLValueAST(idx, identTokIdx);
+
+  What none of them said is that A FUNCTION'S OWN NAME IS ITS RESULT VARIABLE.
+  FindSym cannot see it -- the name is a PROC, not a symbol -- so inside
+  `function G`, `Str(7, G)`, `Val(s, G)`, `New(G)` and `Include(G, x)` all
+  answered `undefined variable (G)`, while `Fill(G)` -- the same name to a USER
+  procedure's var parameter, in the same program -- worked, because that path
+  goes through the expression parser, which has the rule.
+
+  AND THE RULE WAS ALREADY WRITTEN DOWN. OwnNameResultSym above is it, extracted
+  when somebody hit `Inc(FuncName[0])` in FPC's cutils.pas -- and exactly ONE of
+  the thirteen callers ever learned about it. Twelve copies of a two-line
+  resolution that agree with each other perfectly and are all missing the same
+  fact: the instrument for a missing caller is the callee's own contract, never
+  a diff of its callers.
+
+  MEASURED against fpc 3.2.2, which accepts the own name in all six shapes
+  probed -- Str, Val, New, GetMem, Include, ReallocMem. Five of the six were
+  refused here, and the one that worked, GetMem, worked because it takes its
+  destination through ParseExpr and so never had a copy to be wrong.
+  bug-p-a-functions-own-name-is-not-an-lvalue-to-str-and-val }
+var destTokIdx: Integer;
+begin
+  symOut := FindSym(CurTok.SVal);
+  { Only when nothing else claimed the name, so a local shadowing the function
+    still wins; and not before a `(`, which is a recursive CALL and not an
+    lvalue -- OwnNameResultSym's own header says that exclusion belongs to the
+    caller, because only the caller sees the token. Identical to the Inc/Dec
+    site, deliberately: two spellings of this guard is how it went missing. }
+  if (symOut < 0) and (Tokens[TokPos].Kind <> tkLParen) then
+    symOut := OwnNameResultSym(CurTok.SVal);
+  destTokIdx := TokPos - 1;
+  Next;
+  Result := ParseLValueAST(symOut, destTokIdx);
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }

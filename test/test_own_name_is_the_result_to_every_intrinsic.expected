@@ -1,0 +1,10 @@
+A Str            : 7
+B Val            : 7
+C New            : 3
+D GetMem was ok  : 4
+E Include        : TRUE
+F ReallocMem     : 6
+G nested Str     : 4096 bytes
+H CONTROL local  : user-var
+I CONTROL call   : 10
+J user var param : user-var
