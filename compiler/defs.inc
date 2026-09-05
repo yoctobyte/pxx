@@ -4913,6 +4913,12 @@ var
     there, so the value space is closed and not merely conventional. Default 4,
     which is fpc's with no directive. feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus }
   PackEnumVal : Integer;
+  { {$H-} / {$LONGSTRINGS OFF}: a bare `string` is a 256-byte ShortString rather
+    than the managed default, from here on. Line 3 of fpc's own fpcdefs.inc, so
+    it is the FPC compiler corpus's string model. Same per-token discipline as
+    PackEnumVal beside it -- see TokHMinus.
+    feature-p-h-minus-makes-a-bare-string-a-shortstring }
+  HMinusVal : Boolean;
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
   AssertionsVal : Boolean;   { current {$C±} / {$ASSERTIONS} lexer state. DEFAULT ON, which is NOT FPC's default: FPC compiles Assert out unless -Sa, and flipping ours to match would turn every existing pxx assertion into dead code silently. -Sa is accepted and is a no-op for that reason (feature-p-assertions-directive-and-position). }
@@ -5235,6 +5241,7 @@ var
   TokRChecks : array of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
   TokIChecks : array of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
   TokScopedEnums : array of Boolean;  { {$SCOPEDENUMS} state at each token }
+  TokHMinus : array of Boolean;   { {$H} state at each token, for the reason TokPackEnum has one: directives run in the LEX pass, so a global read at parse time gives the LAST {$H} in the file to every declaration in it }
   TokPackEnum : array of Integer;  { {$PACKENUM} state at each token. Per-token for the reason TokScopedEnums is: directives run in the LEX pass, so by the time the parser reaches a type section the global holds the LAST value in the file, not the one in force at the declaration. A file with a single {$PACKENUM} cannot tell the two apart -- both readings give the same number -- which is why the parser must read the snapshot and not PackEnumVal. }
   { The token's SOURCE SPELLING -- offset and length into TokChars, exactly like
     SOffset/SLen but populated for EVERY token, and carrying no other meaning.

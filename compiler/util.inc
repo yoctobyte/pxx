@@ -104,7 +104,18 @@ function BareStringKind: TTypeKind;
   -overloading table can now all ask the same question.
   bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets }
 begin
-  if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind := tyAnsiString
+  { {$H-} / {$LONGSTRINGS OFF} wins over both: it asks for the CLASSIC inline
+    256-byte ShortString, which is what fpc's own compiler sources declare (line
+    3 of fpcdefs.inc) and what every bare `string` in that corpus means.
+
+    Read POSITIONALLY, off the token being parsed, not from HMinusVal -- the
+    directive runs in the LEX pass, so the global holds the LAST {$H} in the
+    file by the time any declaration parses, and a file with a single directive
+    cannot tell the two readings apart. Same discipline and same reason as
+    TokPackEnum. feature-p-h-minus-makes-a-bare-string-a-shortstring }
+  if (TokPos > 0) and (TokPos - 1 < Length(TokHMinus)) and TokHMinus[TokPos - 1] then
+    BareStringKind := tyShortString
+  else if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind := tyAnsiString
   else BareStringKind := tyString;
 end;
 

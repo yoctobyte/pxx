@@ -651,6 +651,7 @@ begin
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   PackEnumVal := 4;   { fpc's default with no {$PACKENUM}: measured 4/4/4 }
+  HMinusVal := False;   { {$H+}: pxx's bare `string` is already the managed one }
   ScopedEnumsVal := False;
   QChecksVal := False;
   { ON by default -- see AssertionsVal in defs.inc for why this deliberately is
@@ -1687,11 +1688,12 @@ const
 var lower: AnsiString;
 begin
   lower := PasDirectiveLower(command);
-  if lower = 'h' then
-  begin
-    if sign = '-' then Result := 1 else Result := 0;
-    Exit;
-  end;
+  { 'h' USED TO RETURN 1 FOR THE MINUS SIGN and no longer does: {$H-} is
+    implemented (HMinusVal), so both signs are class 0. Removed rather than
+    left harmless, for the reason the 'a' note below gives -- a rule that can no
+    longer fire still tells the next reader the directive is ignored, which is
+    the part that stopped being true. }
+  if lower = 'h' then begin Result := 0; Exit; end;
   { 'a' USED TO SIT BESIDE 'h' HERE and no longer does: {$A+}/{$A-}/{$A n} are
     implemented as the short spelling of {$PACKRECORDS} (PasAlignSwitchVal), so
     they never reach this classifier. Leaving the row would have been harmless
@@ -1705,11 +1707,8 @@ begin
   { {$C+}/{$C-} is dispatched above the chain, like {$Q} and {$I}, so it reaches
     the terminal arm and must not be read as an unknown name. }
   if lower = 'c' then begin Result := 0; Exit; end;
-  if lower = 'longstrings' then
-  begin
-    if CaseEqual(name, 'off') then Result := 1 else Result := 0;
-    Exit;
-  end;
+  { …and its long spelling with it: {$LONGSTRINGS OFF} is {$H-}. }
+  if lower = 'longstrings' then begin Result := 0; Exit; end;
   if lower = 'booleval' then
   begin
     if CaseEqual(name, 'on') then Result := 1 else Result := 0;
@@ -2310,6 +2309,29 @@ begin
       else if CaseEqual(name, '4') then PackEnumVal := 4
       else ErrorAt(SrcLine, 'invalid ' + command + ' value: ' + name +
                    ' (1, 2, 4, NORMAL or DEFAULT)');
+    end
+    else if CaseEqual(command, 'h') and ((dsign = '+') or (dsign = '-')) then
+    begin
+      { {$H-} makes a bare `string` a ShortString; {$H+} the managed one. Line 3
+        of fpc 3.2.2's fpcdefs.inc, so it is the corpus-wide string model for
+        every unit of that compiler.
+
+        THE POLARITY IS THE OBVIOUS ONE HERE and the measurement still matters,
+        because the mode decides whether the directive does anything at all:
+        in fpc's PLAIN mode a bare `string` is ALREADY a ShortString, so {$H-}
+        is the default there and changes nothing observable. Only under
+        {$mode objfpc} do the two arms differ -- 260 bytes against 16 for
+        `record s: string; n: Integer` -- and objfpc is what fpcdefs.inc sets
+        one line earlier. A probe run in the wrong mode measures a real
+        compiler answering about a configuration where the question does not
+        exist. }
+      HMinusVal := dsign = '-';
+    end
+    else if CaseEqual(command, 'longstrings') then
+    begin
+      if CaseEqual(name, 'on') then HMinusVal := False
+      else if CaseEqual(name, 'off') then HMinusVal := True
+      else ErrorAt(SrcLine, 'longstrings requires on or off');
     end
     else if CaseEqual(command, 'z1') then PackEnumVal := 1
     else if CaseEqual(command, 'z2') then PackEnumVal := 2
@@ -3186,6 +3208,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokPackEnum[TokCount]    := PackEnumVal;
+    TokHMinus[TokCount]      := HMinusVal;
     TokQChecks[TokCount] := QChecksVal;
     TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;

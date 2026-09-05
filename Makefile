@@ -6481,6 +6481,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_open_array_field_args.pas $(TESTTMP)/test_open_array_field26
 	tools/expect_same.sh test_open_array_field26 "$$($(TESTTMP)/test_open_array_field26)" "$$(printf '15 3\nhb=3 hd=15\ndirect: 42\nhb=3 hd=15\nindirect: 74\nhb=3 hd=15\nwith: 106')"
 	# {$SCOPEDENUMS}: scoped members + TEnum.member access (bug-pascal-scopedenums-ignored)
+	./$(COMPILER) test/test_h_minus_shortstring.pas $(TESTTMP)/test_hminus26
+	@# .expected is fpc 3.2.2's own output. BOTH arms are in it: pxx's default
+	@# bare `string` is already the managed one, so the {$$H+} rows pass even if
+	@# the directive is discarded, and only the {$$H-} rows are the claim. The
+	@# file switches back to {$$H+} half way down, because the directive runs in
+	@# the LEX pass and a single-directive file cannot catch a global read.
+	@$(TESTTMP)/test_hminus26 | diff -u test/test_h_minus_shortstring.expected - \
+	  || { echo 'test_h_minus_shortstring: FAIL - {$$H-} did not select a ShortString'; exit 1; }
 	./$(COMPILER) test/test_packenum.pas $(TESTTMP)/test_packenum26
 	@# The .expected here is fpc 3.2.2's own output, byte for byte -- the enum
 	@# NAMES in it are the part that a layout-only test cannot check, and every

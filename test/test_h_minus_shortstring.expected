@@ -1,0 +1,10 @@
+var    H- 256
+alias  H- 256
+rec    H- 260
+var    H+ 8
+rec    H+ 16
+cat       abcde 5
+mix       abcxyz
+copy      bc 2
+recval    inrec 7 inrec2 8
+local H- 256 in-proc 7

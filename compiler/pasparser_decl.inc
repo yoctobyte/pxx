@@ -650,7 +650,18 @@ begin
           default string model). `string[N]`/`shortstring` stay frozen
           tyFixedString; `-uPXX_MANAGED_STRING` keeps everything frozen tyString.
           Answered by BareStringKind so the resourcestring path cannot drift. }
+      begin
         Result := BareStringKind;
+        { {$H-} makes that answer tyShortString, and a ShortString's CAPACITY
+          has no carrier in the kind: `string[N]` sets LastTypeStrCap from N and
+          the `shortstring` NAME sets 255 a few arms down. A bare `string` under
+          {$H-} is the third spelling of the same type and must set it too --
+          without this the kind was already right and the variable was allocated
+          with capacity 0, so SizeOf answered 8 for a declaration that had
+          correctly become a ShortString. The kind and the capacity are one
+          fact and neither is sufficient. }
+        if Result = tyShortString then LastTypeStrCap := 255;
+      end;
     tkReal_T:     if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then Result := tySingle else Result := tyDouble;
     tkSingle_T:   Result := tySingle;
     tkDouble_T:   Result := tyDouble;

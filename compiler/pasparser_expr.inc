@@ -3995,7 +3995,18 @@ begin
             (FindArrayType(name) >= 0) or (FindTypeAlias(name) >= 0) or
             (FindEnumType(name) >= 0) or (FindVarSym(name) >= 0)) then
           szBTk := tyUnknown;
-        if szBTk <> tyUnknown then
+        if szBTk = tyShortString then
+          { A ShortString's size IS its capacity plus the length prefix, and
+            TypeSlotSize takes a kind with no capacity to answer from. The
+            `shortstring` NAME never reaches here -- BuiltinTypeNameNeedsDecl
+            routes it through ParseTypeKind, which sets LastTypeStrCap -- so the
+            only spelling that arrives with this kind and no capacity is a bare
+            `string` under {$H-}, which is the third name for the same type.
+            255 is that spelling's capacity, exactly as the `shortstring` arm
+            in pasparser_decl.inc sets it.
+            feature-p-h-minus-makes-a-bare-string-a-shortstring }
+          prevTok := SizeOfSlot(tyShortString, 255)
+        else if szBTk <> tyUnknown then
           prevTok := TypeSlotSize(szBTk)
         else if CurTok.Kind = tkIdent then
         begin

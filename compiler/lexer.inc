@@ -252,7 +252,7 @@ begin
   SetLength(Tokens, n);          SetLength(TokPackRecords, n);  SetLength(TokQChecks, n);
   SetLength(TokAssertions, n);
   SetLength(TokRChecks, n);      SetLength(TokIChecks, n);      SetLength(TokScopedEnums, n);
-  SetLength(TokNChecks, n);      SetLength(TokPackEnum, n);
+  SetLength(TokNChecks, n);      SetLength(TokPackEnum, n);  SetLength(TokHMinus, n);
   SetLength(TokSrcOff, n);       SetLength(TokSrcLen, n);
   SetLength(CAttrFlags, n);      SetLength(CAttrAlignValues, n);
   TokCapacity := n;
@@ -300,6 +300,7 @@ begin
       TokNChecks[i + delta]     := TokNChecks[i];
       TokScopedEnums[i + delta] := TokScopedEnums[i];
       TokPackEnum[i + delta]    := TokPackEnum[i];
+      TokHMinus[i + delta]      := TokHMinus[i];
       TokSrcOff[i + delta]      := TokSrcOff[i];
       TokSrcLen[i + delta]      := TokSrcLen[i];
       CAttrFlags[i + delta]     := CAttrFlags[i];
@@ -345,6 +346,7 @@ begin
         TokNChecks[i]     := TokNChecks[src];
         TokScopedEnums[i] := TokScopedEnums[src];
         TokPackEnum[i]    := TokPackEnum[src];
+        TokHMinus[i]      := TokHMinus[src];
         TokSrcOff[i]      := 0;
         TokSrcLen[i]      := 0;
         CAttrFlags[i]     := 0;
@@ -362,6 +364,7 @@ begin
       TokNChecks[i]     := TokNChecks[i - delta];
       TokScopedEnums[i] := TokScopedEnums[i - delta];
       TokPackEnum[i]    := TokPackEnum[i - delta];
+      TokHMinus[i]      := TokHMinus[i - delta];
       TokSrcOff[i]      := TokSrcOff[i - delta];
       TokSrcLen[i]      := TokSrcLen[i - delta];
       CAttrFlags[i]     := CAttrFlags[i - delta];
@@ -753,6 +756,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokPackEnum[TokCount]    := PackEnumVal;
+    TokHMinus[TokCount]      := HMinusVal;
     TokQChecks[TokCount] := QChecksVal;
     TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
