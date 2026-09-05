@@ -1,11 +1,11 @@
 ---
 track: A+S
-prio: 25
+prio: 55
 type: bug
 status: open
 found: 2026-08-30
 found-by: frankD
-summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number."
+summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate. NO LONGER UNWATCHED and no longer only ESP: since 2026-09-05 tools/size_canary.py holds this number and it is FAILING — esp32c3-bare.code 50528 -> 57900 (+7372, +14.6%), over its 55580 budget — which is one of the reds holding seven's full tier. AND EVERY SUBJECT GREW against the 2026-08-30 baseline, x86_64-empty by +4025 code and +832 data, so an EMPTY PROGRAM ON THE HOST carries ~4KB more than it did six days ago: this is the always-linked surface growing, not an ESP profile problem. Raised 25 -> 55: it was ranked as a docs-adjacent measurement when nothing observed it, and it is now a gate failure with a live tier behind it."
 ---
 
 # The ESP32 bare image doubled in code and grew half again in bss
@@ -144,3 +144,43 @@ the number is now. That ordering matters: enrolment
 (`bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it`) has to come
 first, or the guard is written into a target nothing executes. Not adding one
 here for that reason.
+
+
+## 2026-09-05 (frankZ) — the canary caught the next 7 KB, and it is not ESP-specific
+
+Reproduced locally at `af6dc03d3`, `tools/size_canary.py` against its
+2026-08-30 baseline `4039216a7f25`:
+
+```
+  subject              code    d(code)         data    d(data)          bss     d(bss)
+  esp32c3-bare        57900      +7372        576       +232     103728        +36
+  esp32s3-bare        46436      +2984        576       +232     103728        +36
+  esp32s2-bare        46436      +2984        576       +232     103728        +36
+  esp32-bare          46436      +2984        576       +232     103728        +36
+  x86_64-empty        65304      +4025       2792       +832      43524      +1072
+  esp32c3-bare.code: 50528 -> 57900 (+7372, +14.6%), over the allowed 55580
+```
+
+**THE ROW THAT FAILS IS NOT THE ROW THAT MATTERS.** Only `esp32c3` crosses its
+budget, so the canary names it and a reader reasonably concludes "an esp32c3
+problem". **All five subjects grew**, three ESP variants by an identical +2984,
+and `x86_64-empty` — *an empty program on the host* — by **+4025 code and +832
+data**. Nothing about an empty x86-64 program is ESP-specific, so whatever this
+is lives in the always-linked surface every target pays for. esp32c3 is simply
+the smallest budget and therefore the first tripwire.
+
+The identical +2984 across esp32/esp32s2/esp32s3 and a *different* +7372 for
+esp32c3 (a RISC-V part where the others are Xtensa) says at least two things
+moved, not one — worth separating before anyone bisects, because a single-cause
+assumption would be contradicted by that split immediately.
+
+**NOT RE-BASELINED, deliberately.** The tool offers `--update` and says a moved
+size "is not automatically a defect — but it is always a decision". Re-baselining
+without knowing what grew is widening a guard's window to accommodate its own
+subject, which is the failure this repo has named repeatedly. The decision needs
+whoever owns the growth, and the six-day window (2026-08-30 -> 2026-09-05) is
+where to look.
+
+**Found while clearing seven's full-tier reds** (17 of 29 cleared that night by
+other fixes); this one is a decision rather than a defect I can settle, so it is
+banked here rather than microfixed.
