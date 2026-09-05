@@ -298,4 +298,4 @@ generator prologue reads offset 48, the caller writes offset 48, and the IR
 agrees on both targets.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8089fe128.
