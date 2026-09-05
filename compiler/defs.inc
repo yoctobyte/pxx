@@ -139,6 +139,7 @@ const
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
   MAX_INLINE_LOCALS = 8;   { max callee locals in a slice-2b (-O3) inline body }
+  MAX_INLINE_REC_FIELDS = 4; { max fields in an inlinable RECORD result. 4 covers the double-double kernels (2) with headroom; a wider record is more copying than the removed call saves, and the cap keeps the per-field definite vector a fixed array. }
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
@@ -2830,6 +2831,18 @@ var
   InlineResultSym  : Integer;
   InlineWrittenLocal : array[0..MAX_INLINE_LOCALS-1] of Boolean; { read-before-write guard during shape-3 validation — DEFINITE (all-paths) assignment under slice 2c branches }
   InlineResultDef    : Boolean; { slice 2c: Result definitely (all paths) assigned so far — gates Result-READ inside the body (Clamp-style `if Result < lo then ...`) }
+  { RECORD-RESULT retention (feature-opt-inline-float-and-record-returning-leaves,
+    record half). A record Result is assigned FIELD BY FIELD, so one Boolean
+    cannot express "definitely assigned" — `Result.Lo := b - (Result.Hi - a)`
+    reads a field the previous statement wrote. These track it per field, and
+    every field must be definite at the body end or the whole record temp would
+    carry stack garbage in the fields nobody wrote. Straight-line bodies ONLY:
+    records decline inside an AN_IF rather than teach InlineIfValidate's
+    save/merge to carry a per-field vector, which is a bigger change than the dd
+    kernels need. }
+  RetResRecId      : Integer;   { rec id of a record Result, REC_NONE when the result is scalar }
+  RetResFieldCnt   : Integer;   { field count of that record }
+  RetResFieldDef   : array[0..MAX_INLINE_REC_FIELDS-1] of Boolean;
   InlineRetentionSawCall : Boolean; { non-leaf slice: an AN_CALL was accepted somewhere in the body being validated for retention }
   InlineRetentionSawGlobal : Boolean; { ...and a GLOBAL variable was read somewhere in it. Diagnostic only (PXXDBG=a.inline): unlike an argument, a body's global read is cloned IN PLACE and cannot move across the body's inner call — measured, see InlineExprSimple. skConst does not set it. }
   InlineBodyHasCall  : array of Boolean; { retained body contains a call — the splice must temp-capture EVERY arg (a direct-substituted pure arg would otherwise be re-read after the inner call's side effects) }

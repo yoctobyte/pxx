@@ -17,7 +17,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
-- `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: frank-optimize
+- `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: unrecorded
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust

@@ -6384,7 +6384,7 @@ end;
   that temp — so evaluation order and side effects are preserved without
   re-evaluating a multiply-used param. }
 function IRInlineExpand(callNode, cpi: Integer): Integer;
-var item, n, clonedRoot, tsym, identNode, aval, resSym: Integer;
+var item, n, clonedRoot, tsym, identNode, aval, resSym, savedRetRecId: Integer;
     rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
     boundAST: array[0..MAX_PROC_PARAMS-1] of Integer;
     ptk: TTypeKind; anyImpure: Boolean;
@@ -6480,13 +6480,33 @@ begin
     { Slice 2b: alloc a caller Result temp + a fresh caller local per callee
       local, clone the statement chain (placeholders → these syms), lower it
       (emits the statements), then yield a load of the Result temp. }
+    { A RECORD result temp needs its LAYOUT, not just its kind. AllocVar takes a
+      bare TTypeKind and stamps the rec id from LastTypeRecId, which is the same
+      protocol IRBuildHiddenDest uses for the scratch a real aggregate call
+      returns into -- so set it the same way rather than writing SymTR after the
+      fact. Without it every `temp.Field` in the spliced body resolves its
+      offset against REC_NONE and reads offset 0.
+      feature-opt-inline-float-and-record-returning-leaves }
+    savedRetRecId := LastTypeRecId;
+    if Procs[cpi].RetType = tyRecord then LastTypeRecId := ProcRetRecId[cpi];
     resSym := AllocVar('', Procs[cpi].RetType);
+    LastTypeRecId := savedRetRecId;
     InlineResultSym := resSym;
     for n := 0 to InlineLocalCnt[cpi] - 1 do
       InlineLocalSym[n] := AllocVar('', IntToTypeKind(InlineLocalTk[cpi*MAX_INLINE_LOCALS + n]));
     clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
     IRLowerAST(clonedRoot);
-    IRInlineExpand := IRAppend(IR_LOAD_SYM, resSym, -1, -1, 0, Ord(Procs[cpi].RetType));
+    { A record result is an ADDRESS to the caller, never a loaded value: an
+      aggregate call yields IR_LEA of its hidden destination (IRBuildHiddenDest),
+      and the caller's assign/copy path consumes that. Returning IR_LOAD_SYM of a
+      record symbol instead handed the caller sixteen bytes of record where it
+      expected a pointer, and the program SEGFAULTED at -O3 while -O0/-O2 were
+      correct. Match the real call's shape.
+      feature-opt-inline-float-and-record-returning-leaves }
+    if Procs[cpi].RetType = tyRecord then
+      IRInlineExpand := IRAppend(IR_LEA, resSym, -1, -1, 0, Ord(tyPointer))
+    else
+      IRInlineExpand := IRAppend(IR_LOAD_SYM, resSym, -1, -1, 0, Ord(Procs[cpi].RetType));
   end
   else
   begin

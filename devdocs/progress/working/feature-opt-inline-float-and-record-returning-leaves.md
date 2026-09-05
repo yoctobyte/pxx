@@ -3,9 +3,7 @@ track: A
 prio: 45
 type: feature
 blocked-by: []
-summary: "FLOAT HALF LANDED at -O3 (InlineScalarTk widened to tySingle/tyDouble + an AN_FLOAT_LIT arm); -O0/-O1/-O2 byte-identical on compiler.pas. Measured 2.7x on a float-leaf microbench and 1.18x on a 10M-iteration math-unit workload. The RECORD HALF IS NOT DONE and is where this ticket's headline 3.8x actually lives: the dd kernels it was measured on (DdMul/DdAdd/Dd2Sum/Dd2Prod/DdFast2Sum) all return TDd, a RECORD of two Doubles, so the float change does not touch them. Admitting floats also opened the float arm of the dropped-narrowing bug fixed in 191af3440 (D2S returned the full Double, I2S(16777217) returned 16777217) -- guarded here by routing any conversion into a float result to shape 3."
-status: working
-owner: frank-optimize
+summary: "BOTH HALVES NOW LAND AT -O3. Float half ec95c2beb (2.72x microbench, 1.18x math unit). Record half here: record-returning leaves inline via a new InlineRecResultOk predicate, a straight-line record-body validator with PER-FIELD definite assignment, and a Result temp carrying its rec id. DELIVERED 1.54x on the dd kernels on an unloaded box (min-of-7 interleaved wall clock), 1.67x under fleet load by two independent instruments; hand-inlined bound 3.0-3.3x, so the compiler captures 50-60% of the available win and the remainder is the record temp the splice still materialises. -O0/-O1/-O2/-O3 ALL byte-identical on compiler.pas -- the feature is inert on the compiler's own source, so the self-host fixedpoint proves nothing about it. The first working version SEGFAULTED at -O3 (splice returned IR_LOAD_SYM of a record where an aggregate call yields IR_LEA of its hidden destination), caught by a directed matrix, which optfuzz structurally cannot provide: pasmith returns only integer kinds (a4c89e31d). Branching record bodies, whole-record assigns and non-leaf dd kernels all still decline."
 ---
 
 # Inline float-returning and record-returning leaf functions
@@ -208,3 +206,161 @@ output exactly. 12 of the 13 routines verifiably inline at -O3; `Recur` stays a
 real call, which is the recursion guard behaving. Kept in the session scratchpad
 rather than landed, because `test_inline_float_result_narrows` covers the arm
 that actually broke and the rest duplicates `test_inline_expand`'s job.
+
+
+## 2026-09-05 (frank-optimize) — the RECORD half lands at -O3. Delivered 1.55x, not the 3.8x
+
+### What it required, and what the ticket got wrong about its own scope
+
+The ticket's suggested scope says "leaf functions only ... which covers DdMul,
+Dd2Sum, DdFast2Sum, DdAdd, DdMulD, DdBits". **Three of those six are not
+leaves**: `DdMul`, `DdAdd` and `DdMulD` call the other kernels, so a leaf-only
+slice cannot reach them. What it does reach is `DdFast2Sum`, `Dd2Sum`,
+`Dd2Prod` (and `DdBits`, which returns a plain Double and was already covered by
+the float half). Those are the innermost and most-called, which is why the win
+is real anyway — they inline INTO the mid-level kernels.
+
+### The change
+
+- **`InlineRecResultOk`** — a record result is admitted at -O3 when it is a user
+  record of at most `MAX_INLINE_REC_FIELDS` (4) fields, each a non-array,
+  non-nested, inline-scalar field. **Deliberately NOT a widening of
+  `InlineScalarTk`**, which also governs params and locals: widening that would
+  admit record params and record locals in the same stroke, neither of which the
+  splice has been shown to carry. One axis at a time.
+- **`TryRetainInlineRecBody`** — straight-line `Result.Field := E` / `local := E`
+  chains, with **per-field** definite assignment (`RetResFieldDef`). A single
+  Boolean cannot express it: `Result.Lo := b - (Result.Hi - a)` reads a field the
+  previous statement wrote, which is the shape of every dd kernel. Every field
+  must be definite at the end, or the caller's temp carries stack garbage in the
+  fields nobody wrote — silently, because the other fields look right.
+- **Straight-line only.** A record inside an `AN_IF` would need
+  `InlineIfValidate`'s save/merge to carry a per-field vector rather than one
+  Boolean. The kernels this axis exists for are all straight-line; branching
+  record bodies decline.
+- **The Result temp carries its rec id**, set through `LastTypeRecId` the way
+  `IRBuildHiddenDest` does it, not by writing `SymTR` afterwards.
+
+### The bug this shipped with first, and why the directed matrix existed before the code
+
+The first working version **SEGFAULTED at -O3 while -O0 and -O2 were correct**.
+`IRInlineExpand` returned `IR_LOAD_SYM` of a record symbol; an aggregate call
+returns `IR_LEA` of its hidden destination, so the caller was handed sixteen
+bytes of record where it expected a pointer. Fixed by matching the real call's
+shape.
+
+**optfuzz could not have found this.** `pasmith` returns only integer kinds from
+every function it generates — no record returns at all — so the designated net
+for splice-machinery changes is blind to this entire axis
+([[bug-t-pasmith-returns-only-integer-kinds-so-optfuzz-is-blind-to-the-return-type-axis]],
+sharpened today from "no float code" to the wider true statement). The matrix in
+`test/test_inline_record_result.pas` was written BEFORE the feature, as a
+pre-change control, and it is what caught the crash.
+
+Two further defects of my own, both found by measuring rather than reading:
+`UFldArrLen` is an element COUNT and reads 1 for a plain scalar field, so testing
+it against 0 rejected every record; and the read-before-write guard recursed
+through the field node into the bare Result ident and demanded `InlineResultDef`,
+a whole-Result flag a field-wise body never sets, so every kernel that reads back
+a field it just wrote declined after the node-class guard had accepted it.
+
+### PROMISE — delivered, and it is well under the hand-inlined bound
+
+Control `9f65e23ccbdc` (stock, same tree) vs `9ac545b62722`, `-O3`, min-of-7
+interleaved, seven pxx/make processes on the box by the process table (NOT by
+load average, which lags and was reading ~2x the real contention):
+
+| | | |
+| --- | --- | --- |
+| dd kernels, out-of-line (today) | 0.310 s | 1.00x |
+| **dd kernels, this change** | **0.200 s** | **1.55x** |
+| same arithmetic hand-inlined | 0.090 s | 3.44x |
+
+**Report 1.55x.** The hand-inlined 3.44x reproduces this ticket's recorded 3.8x
+and is the PRIZE, not the delivery: hand-inlining also lets the arithmetic fold
+and CSE across the merged body and writes straight to the destination, while the
+splice still materialises a record temp and copies it. **The remaining ~2.2x is
+that temp**, and eliminating it — splicing directly into the caller's
+destination when the call result is immediately assigned — is the obvious next
+piece and is not in this change.
+
+### Safety
+
+- `-O0`/`-O1`/`-O2` **byte-identical** on `compiler/compiler.pas` (~4250 procs),
+  control vs change, same source both sides.
+- Self-host fixedpoint converged on every build.
+- `tools/gate.sh quick` **GREEN**, verdict read from that run's own
+  `logs=/tmp/pxx-gate-<pid>` line and watched to completion. An earlier attempt
+  was KILLED after 14 passing checks; it produced no `gate: GREEN` line and was
+  discarded rather than reported, because a partial run is not a verdict.
+- `test/test_inline_record_result.pas` wired at **-O0 and -O3** (an -O2 arm
+  cannot catch this — records are not admitted below -O3), carrying three rows
+  that must NOT inline (`Trunc` call, whole-record assign, branching) so a future
+  guard cannot pass by declining everything.
+
+### PROOF — outstanding, and no promotion is requested
+
+Track T's full tier is the proof gate and it is stale by 85 testable commits
+with seven dist-upgrading, so **no cross-target verdict exists for this tree**.
+Native green does not cover i386/arm32/riscv32/aarch64. This stays at `-O3`,
+which is where the charter puts an unproven pass. Promotion, when T returns, is
+one pass at a time.
+
+## 2026-09-05 — re-measured after the revert and pin v404
+
+The first record-half numbers (1.55x) were taken on a tree that `2d6bfadd6`
+(frankB's assignment-type-check revert) has since moved. Re-took **both** arms
+rather than re-baselining one against the old control, which is the cheapest way
+to turn a real number into a plausible wrong one. Both arms rebuilt from the
+same base, `converged after 1 round(s)` each time.
+
+| | control | change | ratio |
+| --- | --- | --- | --- |
+| unloaded box, wall clock, min-of-7 | 0.3264s | 0.2114s | **1.543x** |
+| under fleet load (~16-19), wall clock, min-of-7 | 0.4740s | 0.2846s | 1.665x |
+| under fleet load, **user CPU**, min-of-9 | 0.30s | 0.18s | 1.666x |
+
+The revert did not touch this: 1.55x before, 1.543x after, same conditions.
+
+**The published number is 1.54x — the conservative one.** The ratio is
+load-sensitive in a direction that makes sense (the call-heavy control loses more
+to contention than the inlined arm does), so the busy-box 1.67x is not the claim
+even though two independent instruments agree on it.
+
+Hand-inlined bound, same tree, bit-identical output: 0.0994s unloaded / 0.10s
+user-CPU → **3.0-3.3x**, so **50-60% of the available win is captured**. The
+remainder is the record temp the splice still materialises; eliminating it means
+splicing directly into the caller's destination and is not attempted here.
+
+### Two null instruments, banked
+
+**`objdump -d` does not disassemble a pxx-emitted ELF** — 3 lines of output
+total. So `objdump -d bin | grep -c 'call.*Dd2Prod'` returns **0**, and 0 is
+exactly what successful inlining looks like. It returns 0 for a nonexistent file
+too, so one number spans *inlined*, *not inlined*, and *never built*. It was in
+the earlier evidence and was worthless. Caught only because a build failed and
+both arms still read 0.
+
+The aimed instrument is `PXXDBG=a.inline`: the change arm retains
+`DdFast2Sum shape=4` and `Dd2Prod shape=4`, the control retains neither (0 vs 2).
+
+**A process-table count filtered to `pascal26|pxx|make|fpc` is not a load
+check.** It read 0 while a qemu-system-xtensa at 180% and a python at 63% were
+on the box. "No pxx processes" and "quiet box" are different claims; use
+`/proc/loadavg` for the second.
+
+### What is NOT proven
+
+`gate.sh quick` GREEN (logdir `/tmp/pxx-gate-1543221`, verdict read from that
+run's own first line), including the FPC seed canary — which only runs while
+`compiler/**` is dirty, so it was gated before the commit, not after. The
+`pinned builds live lib/rtl` row is the multi-fixture sampler here (22s;
+`b6212f43f` is an ancestor now), so the caveat carried on the float half no
+longer applies.
+
+optfuzz: 205 programs, 0 diffs, 0 o0-compile-skips — **integer path only**, by
+construction. It cannot reach a record return.
+
+**No promotion requested.** PROOF is Track T's full tier; there is no full tier
+at this tree and pin v404 was itself graded `reds`. Both halves stay at `-O3` as
+measured promise.

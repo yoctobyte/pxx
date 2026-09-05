@@ -40,6 +40,60 @@ begin
     ((OptLevel >= 3) and ((tk = tySingle) or (tk = tyDouble)));
 end;
 
+{ Is this a RECORD result the inliner may expand? (record half of
+  feature-opt-inline-float-and-record-returning-leaves.)
+
+  Separate from InlineScalarTk deliberately: that predicate also governs
+  PARAMS and LOCALS, and widening it to tyRecord would admit record params and
+  record locals in the same stroke -- neither of which the splice has been
+  shown to handle, and both of which change what gets copied at every call
+  site. One axis at a time.
+
+  Requires a USER record (rec id at or above REC_UCLASS_BASE; the builtin recs
+  are the compiler's own descriptors and are not the subject here), a field
+  count within the cap, and every field a scalar the expansion can already
+  carry. A field that is itself a record, an array or a managed type declines
+  the whole routine: the temp copy would need ARC or a nested layout walk. }
+function InlineRecResultOk(recId: Integer): Boolean;
+var ci, i, base, cnt: Integer;
+begin
+  InlineRecResultOk := False;
+  if OptLevel < 3 then Exit;                 { records land behind -O3 first }
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if (ci < 0) or (ci >= MAX_UCLASS) then Exit;
+  cnt := UClsFCount[ci];
+  if (cnt <= 0) or (cnt > MAX_INLINE_REC_FIELDS) then Exit;
+  base := UClsFBase[ci];
+  for i := base to base + cnt - 1 do
+  begin
+    { UFldArrLen is an ELEMENT COUNT and reads 1 for a plain scalar field, so
+      testing it against 0 rejected every record. Dimensionality is the question
+      being asked: ndims = 0 is not an array, DynDepth > 0 is a dynamic one. }
+    if UFldArrNDims[i] <> 0 then Exit;
+    if UFldArrLen[i] < 0 then Exit;          { -1 also marks dynamic }
+    if UFldDynDepth[i] <> 0 then Exit;
+    if UFldRec_[i] <> REC_NONE then Exit;    { nested record/class field }
+    if not InlineScalarTk(IntToTypeKind(UFldTk[i])) then Exit;
+  end;
+  InlineRecResultOk := True;
+end;
+
+{ 0-based field index of the AN_FIELD node's name within recId, or -1. }
+function InlineRecFieldIndex(recId, fieldNode: Integer): Integer;
+var ci, gi: Integer; nm: AnsiString;
+begin
+  InlineRecFieldIndex := -1;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  nm := GetASTIdentName(fieldNode);
+  gi := FindUField(ci, nm);
+  if gi < 0 then Exit;
+  gi := gi - UClsFBase[ci];
+  if (gi < 0) or (gi >= MAX_INLINE_REC_FIELDS) then Exit;
+  InlineRecFieldIndex := gi;
+end;
+
 { Param index of symIdx within procIdx's params, or -1. }
 function InlineParamIndexOf(procIdx, symIdx: Integer): Integer;
 var i: Integer;
@@ -66,6 +120,27 @@ begin
   case ASTKind[node] of
     AN_INT_LIT:
       InlineExprSimple := True;
+    AN_FIELD:
+      { A RECORD Result's own field, read back -- `Result.Lo := b - (Result.Hi - a)`
+        is the shape of every double-double kernel, so declining it would decline
+        the routines this axis exists for. Allowed only once THAT FIELD is
+        definitely assigned, which is the per-field form of the existing
+        uninitialised-Result guard: reading Result.Lo before writing it would
+        splice in the caller temp's stack garbage.
+        Reachable only for a record result -- RetResRecId is REC_NONE for every
+        scalar body, so this arm returns False there exactly as the absent arm
+        did before.
+        feature-opt-inline-float-and-record-returning-leaves }
+      begin
+        if RetResRecId = REC_NONE then Exit;
+        idx := ASTLeft[node];
+        if (idx < 0) or (ASTKind[idx] <> AN_IDENT) then Exit;
+        if ASTIVal[idx] <> retSym then Exit;
+        cpi2 := InlineRecFieldIndex(RetResRecId, node);
+        if cpi2 < 0 then Exit;
+        if not RetResFieldDef[cpi2] then Exit;
+        InlineExprSimple := True;
+      end;
     AN_FLOAT_LIT:
       { A float leaf without float literals is the rare one: minimax kernels and
         Horner loops are made of coefficients, so rejecting this node rejected
@@ -278,6 +353,26 @@ var lidx: Integer;
 begin
   InlineStmtRhsLocalsWritten := False;
   if node < 0 then begin InlineStmtRhsLocalsWritten := True; Exit; end;
+  { A record Result's field read, answered PER FIELD and without recursing into
+    the base ident. Recursing would reach the bare Result and demand
+    InlineResultDef, which a field-wise body never sets -- so every kernel that
+    reads back a field it just wrote (`Result.Lo := b - (Result.Hi - a)`, i.e.
+    all of them) declined here even after the node-class guard accepted it.
+    This mirrors the AN_FIELD arm in InlineExprSimple deliberately: the two
+    guards answer different questions (node class vs read-before-write) and the
+    scalar path already states its Result rule in both.
+    feature-opt-inline-float-and-record-returning-leaves }
+  if (ASTKind[node] = AN_FIELD) and (RetResRecId <> REC_NONE) and (RetResSym >= 0) then
+  begin
+    lidx := ASTLeft[node];
+    if (lidx >= 0) and (ASTKind[lidx] = AN_IDENT) and (ASTIVal[lidx] = RetResSym) then
+    begin
+      lidx := InlineRecFieldIndex(RetResRecId, node);
+      if (lidx < 0) or (not RetResFieldDef[lidx]) then Exit;
+      InlineStmtRhsLocalsWritten := True;
+      Exit;
+    end;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     if (RetResSym >= 0) and (ASTIVal[node] = RetResSym) then
@@ -448,6 +543,91 @@ begin
     InlineLocalTk[procIdx*MAX_INLINE_LOCALS + j] := Ord(Syms[RetLocalSym[j]].TypeKind);
 end;
 
+{ RECORD-result retention: a STRAIGHT-LINE chain whose statements are
+  `Result.Field := E` or `local := E`, E over params / scalar globals-consts /
+  written locals / already-written Result fields.
+
+  Straight-line only, deliberately. A record inside an AN_IF would need
+  InlineIfValidate's save/merge to carry a per-FIELD vector rather than one
+  Boolean, and the kernels this axis exists for (DdFast2Sum, Dd2Sum, Dd2Prod)
+  are all straight-line. Branching record bodies decline and stay real calls.
+
+  EVERY field must be definite at the end. A field nobody wrote would leave the
+  caller's record temp holding stack garbage in that field -- the same hazard as
+  an unassigned scalar Result, one slot at a time, and it fails SILENTLY because
+  the other fields look right.
+  feature-opt-inline-float-and-record-returning-leaves }
+procedure TryRetainInlineRecBody(procIdx, bodyNode, retSym: Integer);
+var i, j, seqN, stmtN, lhs, rhs, fi, startNext, cloned: Integer;
+begin
+  if OptLevel < 3 then Exit;
+  { Scalar callee locals (excluding Result) -> the placeholder map. }
+  RetLocalCnt := 0;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+  begin
+    if Syms[i].Kind <> skLocal then Continue;
+    if i = retSym then Continue;
+    if Syms[i].IsArray then Exit;
+    if not InlineScalarTk(Syms[i].TypeKind) then Exit;
+    if RetLocalCnt >= MAX_INLINE_LOCALS then Exit;
+    RetLocalSym[RetLocalCnt] := i;
+    Inc(RetLocalCnt);
+  end;
+  RetResSym := retSym;
+  for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := False;
+  for j := 0 to MAX_INLINE_REC_FIELDS - 1 do RetResFieldDef[j] := False;
+  InlineResultDef := False;
+  seqN := bodyNode;
+  while seqN <> -1 do
+  begin
+    if ASTKind[seqN] <> AN_SEQ then Exit;
+    stmtN := ASTLeft[seqN];
+    if stmtN < 0 then Exit;
+    if ASTKind[stmtN] <> AN_ASSIGN then Exit;   { straight-line assigns only }
+    lhs := ASTLeft[stmtN];
+    rhs := ASTRight[stmtN];
+    if (lhs < 0) or (rhs < 0) then Exit;
+    if not InlineExprSimple(rhs, procIdx, True, retSym, False) then Exit;
+    if not InlineStmtRhsLocalsWritten(rhs) then Exit;
+    if ASTKind[lhs] = AN_FIELD then
+    begin
+      { Result.Field := E }
+      i := ASTLeft[lhs];
+      if (i < 0) or (ASTKind[i] <> AN_IDENT) or (ASTIVal[i] <> retSym) then Exit;
+      fi := InlineRecFieldIndex(RetResRecId, lhs);
+      if fi < 0 then Exit;
+      RetResFieldDef[fi] := True;
+    end
+    else if ASTKind[lhs] = AN_IDENT then
+    begin
+      { local := E. A bare `Result := E` declines: assigning the whole record
+        is a different shape (a record COPY, not a field write) and nothing in
+        the target set needs it. }
+      j := RetLocalIndexOf(ASTIVal[lhs]);
+      if j < 0 then Exit;
+      InlineWrittenLocal[j] := True;
+    end
+    else Exit;
+    seqN := ASTRight[seqN];
+  end;
+  { every field written, or the temp carries garbage in the rest }
+  for j := 0 to RetResFieldCnt - 1 do
+    if not RetResFieldDef[j] then Exit;
+  startNext := InlineASTNext;
+  if InlineASTNext + 256 >= INLINE_AST_RESERVE then Exit;
+  cloned := CloneToInlineRegion(bodyNode, procIdx);
+  if cloned < 0 then begin InlineASTNext := startNext; Exit; end;
+  if InlineASTNext - startNext > 256 then begin InlineASTNext := startNext; Exit; end;
+  DbgInlineRetained(procIdx, 4);
+  InlineBodyRoot[procIdx]   := cloned;
+  InlineBodyIsStmt[procIdx] := True;
+  InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
+  InlineParamCnt[procIdx]   := Procs[procIdx].ParamCount;
+  InlineLocalCnt[procIdx]   := RetLocalCnt;
+  for j := 0 to RetLocalCnt - 1 do
+    InlineLocalTk[procIdx*MAX_INLINE_LOCALS + j] := Ord(Syms[RetLocalSym[j]].TypeKind);
+end;
+
 { If bodyNode is an inline-eligible function body, retain it. Handles: pure-
   expression `Result := E`, `if c then Result:=A else Result:=B` (AN_TERNARY),
   and (slice 2b, -O3) a straight-line multi-statement body. Called at the
@@ -464,10 +644,22 @@ begin
   if ProcExternal[procIdx] or ProcCdecl[procIdx] or ProcVariadic[procIdx] then Exit;
   if ProcIsGenerator[procIdx] or ProcIsStackless[procIdx] then Exit;
   if Procs[procIdx].ParamCount > 6 then Exit;
-  { Result must be a scalar. }
+  { Result must be a scalar, or (record half, -O3) a small all-scalar record.
+    RetResRecId is the flag the rest of the retention reads, and it is reset on
+    EVERY entry: it is a global, and a stale record id left over from the
+    previous routine would let a scalar body's AN_FIELD read validate against
+    another record's layout. }
+  RetResRecId := REC_NONE;
+  RetResFieldCnt := 0;
   retSym := Procs[procIdx].RetSymIdx;
   if retSym < 0 then Exit;
-  if not InlineScalarTk(Syms[retSym].TypeKind) then Exit;
+  if (Syms[retSym].TypeKind = tyRecord) and (not Syms[retSym].IsArray) and
+     InlineRecResultOk(SymTR[retSym].RecId) then
+  begin
+    RetResRecId := SymTR[retSym].RecId;
+    RetResFieldCnt := UClsFCount[RetResRecId - REC_UCLASS_BASE];
+  end
+  else if not InlineScalarTk(Syms[retSym].TypeKind) then Exit;
   { Every param scalar, by value. }
   for i := 0 to Procs[procIdx].ParamCount - 1 do
   begin
@@ -495,6 +687,13 @@ begin
     emit local/Result placeholders. }
   if bodyNode < 0 then Exit;
   if ASTKind[bodyNode] <> AN_SEQ then Exit;
+  if RetResRecId <> REC_NONE then
+  begin
+    { A record result has its own straight-line validator; the shape 1/2a/3
+      dispatch below is written entirely around a scalar Result ident. }
+    TryRetainInlineRecBody(procIdx, bodyNode, retSym);
+    Exit;
+  end;
   RetLocalCnt := 0;
   RetResSym := -1;
   seqNode := bodyNode;

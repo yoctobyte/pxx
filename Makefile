@@ -11852,6 +11852,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_inline_float_narrows26.O0 "$$($(TESTTMP)/test_inline_float_narrows26)" "$$(printf '0.33333334326744080\n16777216.0\n0.33333334326744080\n16777216.0\n0.25000000000000000\n16777217.0\n3.00000000000000000\n3.00000000000000000')"
 	./$(COMPILER) -O3 test/test_inline_float_result_narrows.pas $(TESTTMP)/test_inline_float_narrows26_O3
 	tools/expect_same.sh test_inline_float_narrows26.O3 "$$($(TESTTMP)/test_inline_float_narrows26_O3)" "$$(printf '0.33333334326744080\n16777216.0\n0.33333334326744080\n16777216.0\n0.25000000000000000\n16777217.0\n3.00000000000000000\n3.00000000000000000')"
+	./$(COMPILER) test/test_inline_record_result.pas $(TESTTMP)/test_inline_record_result26
+	tools/expect_same.sh test_inline_record_result26.O0 "$$($(TESTTMP)/test_inline_record_result26)" "$$(printf 'Fast2Sum 1.00000000000000000 0.00000000000000000001\nTwoSum   1.00000000000000000 0.00000000000000000001\nMkII     3 4\nMkMix    7 0.5000\nMkOne    2.5000\nNarrow   3 0\nCopyDd   1.00000000000000000\nPickDd   1.0000 2.0000\nHalfOnly 3.0000')"
+	./$(COMPILER) -O3 test/test_inline_record_result.pas $(TESTTMP)/test_inline_record_result26_O3
+	tools/expect_same.sh test_inline_record_result26.O3 "$$($(TESTTMP)/test_inline_record_result26_O3)" "$$(printf 'Fast2Sum 1.00000000000000000 0.00000000000000000001\nTwoSum   1.00000000000000000 0.00000000000000000001\nMkII     3 4\nMkMix    7 0.5000\nMkOne    2.5000\nNarrow   3 0\nCopyDd   1.00000000000000000\nPickDd   1.0000 2.0000\nHalfOnly 3.0000')"
 	./$(COMPILER) test/test_stderr_fd.pas $(TESTTMP)/test_stderr_fd26
 	tools/expect_same.sh test_stderr_fd26.1 "$$($(TESTTMP)/test_stderr_fd26 2>/dev/null)" "$$(printf 'out1\nout2')"
 	tools/expect_same.sh test_stderr_fd26.2 "$$($(TESTTMP)/test_stderr_fd26 2>&1 1>/dev/null)" "$$(printf 'e1 n=42 i=  7 b=TRUE')"
