@@ -43,3 +43,12 @@ leave `REC_NONE`/0 rather than inventing one, and let callers test.
 
 `make compiler/pascal26`; additive fields, so existing callers are unaffected
 by construction — which is the claim to check, not to state.
+
+## Premise holds verbatim at HEAD (frankS, 2026-09-05, Track P structural pass)
+
+`NodeArrNDInfo` (`compiler/pasparser_call.inc:619`) fills `NDInfoNDims`,
+`NDInfoLo[d]` and `NDInfoSpan[d]` on both its arms, and nothing else. There is
+no element size, no record id and no type kind in either arm. Not stale.
+
+Same caveat as its sibling: this is a structural claim, settled by reading the
+function, and a behavioural probe cannot fail on it.

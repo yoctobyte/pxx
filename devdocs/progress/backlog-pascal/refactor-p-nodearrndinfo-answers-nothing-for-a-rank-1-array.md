@@ -44,3 +44,20 @@ not assume: `pasparser_lval.inc` errors on `nIdx <> NDInfoNDims`.
 
 `make compiler/pascal26` + the Pascal suite's array coverage. Track T sweeps
 the matrix.
+
+## Premise holds verbatim at HEAD (frankS, 2026-09-05, Track P structural pass)
+
+`NodeArrNDInfo` is `compiler/pasparser_call.inc:619`. Both arms still gate on
+rank 2:
+
+- the `AN_IDENT` arm — `(ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2)`
+- the `AN_FIELD` arm — `(fIdx >= 0) and (UFldArrNDims[fIdx] >= 2)`
+
+`Result := False` is the initialiser, so a rank-1 array falls through both and
+the function answers False. Not stale.
+
+**No behavioural probe can settle this ticket and none should be attempted** —
+the summary says so itself (*"no Pascal program behaves wrong today"*), and a
+staleness pass that reaches for a repro here will find nothing and must not read
+that as a close. Structural claims are checked structurally; the check is a grep
+for the two `>= 2` guards, and it takes ten seconds.

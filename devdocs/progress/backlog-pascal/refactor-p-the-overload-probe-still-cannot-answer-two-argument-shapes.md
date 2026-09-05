@@ -67,3 +67,29 @@ suite is present -- absent, the harness prints SKIP and exits 0), fgl 7/7,
 before/after compile diff over the whole Pascal test corpus with a
 discrimination control -- a no-change sweep cannot tell "safe" from "the corpus
 never reaches the arm".
+
+## Half stale as of TODAY — five channels became seven (frankS, 2026-09-05)
+
+The summary says *"now fills the five argument-match channels"*. At HEAD there
+are **seven**: `MatchArgStrElemTk` and `MatchArgPtrElemTk` were added
+2026-09-05, the same day. `FillMatchArgChannelsAt`
+(`compiler/pasparser_call.inc:2377`) has the list, and its own comment already
+anticipates this — *"SEVEN of them since 2026-09-05 -- five, then
+MatchArgStrElemTk and MatchArgPtrElemTk -- so read the list below rather than
+this sentence's number."* The source guarded itself against the stale count and
+the ticket did not.
+
+**The two named gaps still stand**, which is the part that matters: neither new
+channel answers a generic type parameter (`tyUnknown` at the declaration) nor a
+bare routine name used as a procedural value. Fix the count in the summary; do
+not close.
+
+**A construct link worth having, and it is not mine to cluster.** The second gap
+— *"a bare routine name used as a procedural value types as neither"* — is the
+same construct as
+`bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode`,
+which **SEGFAULTS** at HEAD (verified this pass; live again since `2d6bfadd6`
+reverted `4760474da`). One shape, showing up here as a missing overload channel
+and there as a crash. If they share a cause, the refactor is not a tidy-up — it
+is the crash's fix, and this ticket's prio is wrong by a lot. Handed to frankB,
+which clusters by construct.
