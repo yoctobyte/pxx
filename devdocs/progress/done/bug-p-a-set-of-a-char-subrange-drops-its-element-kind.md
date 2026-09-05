@@ -115,4 +115,4 @@ ordinals through `Ord`, which was green throughout — the assertion class that
 could not have seen any of this.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 557d06627.
