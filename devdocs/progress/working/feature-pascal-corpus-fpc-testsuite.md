@@ -233,6 +233,31 @@ not re-export enum members. Nothing filed. Its skip reason (*"inc(enum) past
 range -- PXX's lax enum-as-ordinal model"*) misdescribes the row twice over --
 neither compiler reaches the `inc`.
 
+### Where the remaining 146 actually are — the priority list
+
+Clustered from the surviving `gap:` reasons (130 of the 146; the rest are
+`wontfix:`/`accepts-invalid:`). This is what "grow the umbrella by attempting the
+target" produced, in the order the corpus itself puts them:
+
+| rows | cluster |
+| --- | --- |
+| 42 | generics / `specialize` forms and constraints |
+| 23 | operator overloading (global, cross-unit, `in`, implicit `:=`) |
+| 13 | strings — shortstring / ansistring / pchar / widestring overload resolution |
+| 8 | old-style `object` types (virtual methods, ctor/dtor) |
+| 8 | enums and subranges-of-enum |
+| 4 | an RTL unit or symbol we do not have |
+| 2 each | typed-const initializers · for-in enumerators · variants / array of const |
+| 25 | uncategorised by this pass — read them individually |
+
+**Generics is a third of the remaining surface on its own**, and operator
+overloading is another sixth. Those two clusters are 65 of 130. Anyone
+continuing should take one cluster, not one row -- CLAUDE.md's group rule, and
+the corpus is already sorted for it.
+
+Counts reconcile: the file held 150 `gap:` rows, 20 of the 21 burned were `gap:`
+(the 21st, `tenum2`, was `wontfix:`), leaving 130.
+
 ### What is left
 
 146 skips, 142 of which the retry run confirms still fail. That is the real
