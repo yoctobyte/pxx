@@ -5,7 +5,7 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankS
 created: 2026-09-05
 summary: "MEASURED 2026-09-05 (frankS), and the direction is the OPPOSITE of what this ticket said. A generic template body resolves its symbols AT THE SPECIALIZATION SITE, in the specializing scope, and the declaring unit's scope is never consulted. Two defects, not one. (1) WRONG OBSERVABLE: a unit template calling its own LocalFill runs the PROGRAM's LocalFill when the program happens to declare that name -- the method's meaning depends on who specializes it. (2) LEGAL SOURCE REFUSED: remove the program's LocalFill and the unit no longer compiles at all -- `undefined variable (LocalFill)` against a procedure ten lines above the template method IN THE SAME FILE. So a template can never use its own unit's private helpers. Identical on pin v403, so pre-existing and not fallout from the template-visibility work. NOT `wontfix: dialect-pass`: FPC refusing this (`Global Generic template references static symtable`) is FPC diagnosing a limit its expansion model has; pxx has the SAME limit and silently rebinds instead of diagnosing. Raised 30 -> 55: a silent wrong answer plus a refusal of legal code is not a missing diagnostic. Corpus-free two-file repro in the body."
@@ -417,3 +417,75 @@ rewrite or a symbol-table change.
 Nothing about the DISPOSITION changes: row 5 still shows we support the
 construct in one position, so this is still a plain bug and still not
 `accepts-invalid`.
+
+## 2026-09-06 (frankS) — FIXED, `a0780b56d`
+
+`ParseSubroutine` sets `CurrentUnitIdx` to the template's DECLARING unit for the
+duration of a specialization method's body, resolved through
+`SpecTemplateDeclUnit` (`FindSpecialization` → `SpecTemplateIdx` →
+`TemplateUnitIdx`). Roughly eight lines plus one helper.
+
+It goes through `SpecTemplateIdx` and not through name matching because a name
+is not an identity — two files may each declare a `TBox<T>` and both mint
+`TBox$Integer`. Matching by name would pick the WRONG UNIT, which is the exact
+class of wrong answer this ticket is about.
+
+### Visibility alone was not enough, and that is the useful part
+
+The first attempt added a flag consulted by `DeclVisibleSect`, making the
+declaring unit's implementation merely REACHABLE from the body. It fixed defect
+(2) — the unit compiles again — and left defect (1) exactly as it was: the
+specializing scope's same-named routine still won, because being visible is not
+being preferred. **The silent wrong binding is the worse half and it survived
+the obvious fix.**
+
+Becoming the unit answers both, and the second half is correct rather than
+incidental: **a unit cannot see a PROGRAM's declarations**, and this body is the
+unit's code no matter where its tokens were pasted. `CurrentUnitIdx` was avoided
+at first because it also tags what a body DECLARES; that turned out to be
+exactly what makes it right.
+
+The visibility flag was then verified dead BY REMOVAL — all six rows unchanged
+without it — rather than assumed dead, and deleted.
+
+### Six rows, pinned vs HEAD
+
+| row | pinned | HEAD |
+| --- | --- | --- |
+| cross-unit, program shadows the name | `program priv` | **`unit priv`** |
+| cross-unit, program declares nothing | **COMPILE ERROR** | **`unit priv`** |
+| cross-unit, the unit's INTERFACE helper | `unit iface` | unchanged |
+| ordinary NON-generic method, identical shape | `unit priv` | unchanged |
+| specialization written inside its own unit | `unit priv` | unchanged |
+| the program's own call to its own routine | `program priv` | unchanged |
+
+The last four were ALREADY GREEN and are in the regression test because they are
+what a WRONG fix breaks. The final row especially: a "fix" that merely hid the
+program's copy would pass the headline row and break it.
+
+`test/test_generic_body_binds_in_its_declaring_unit.pas` +
+`test/generic_declunit_units/ugdecl.pas`, wired into `test-core`. The assertion
+fails on the pinned compiler (`program priv program priv ...`) and passes at
+HEAD. `gate.sh quick`: 16 PASS, only the standing `pinned builds live lib/rtl`.
+
+Two cross-unit generic tests read as compile failures in my first sweep; that
+was my harness omitting the `-Fu` the Makefile passes. With it both are green
+(`total ok 4 / 4`, `total ok 1 / 1`). Recorded because a missing flag and a
+regression look identical from outside.
+
+### What is NOT done, and it is this ticket's own stated Gate
+
+The Gate line asks for `tgeneric4.pp` to move from `fail(accepted-invalid)` to
+**pass-by-rejection**. This fix goes the other way: pxx now accepts that program
+and runs it CORRECTLY, which CLAUDE.md rates as not a defect ("us accepting what
+FPC rejects is not a defect"), so the `{ %fail }` row will stay red and needs a
+deliberate `pxx.skip` classification rather than a fix.
+
+**I cannot run or classify it here.** `library_candidates/` in this checkout
+holds only `busybox` and `sqlite`; the fpc-testsuite corpus is absent — the same
+reproducibility gap this ticket recorded a day ago, now biting its own Gate.
+Split out as its own row so it is not lost and is not claimed:
+[[bug-p-tgeneric4-is-a-fail-row-that-pxx-now-compiles-and-runs-correctly]].
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
