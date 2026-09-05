@@ -4946,6 +4946,77 @@ do not state it:**
 And when a negative result arrives from someone else, **the question is never
 "was it done carefully". It was.** The question is **what did it hold still.**
 
+## THE RESIDUAL-SET FALLACY — a partition shows causes DIFFER, never what they are, and what is LEFT OVER is not a group
+
+Named 2026-09-05, on a live case, and not written down here before.
+
+**The case.** Four guards were failing only on host `seven`, and one hypothesis
+was offered to explain all four: a live watcher daemon holding older code. Two
+have since been explained by something else entirely:
+
+- the **governor literal** (claude-T's), and
+- **`sync.sh` stranding mid-rebase** — seven has neither `~/.gitconfig` nor
+  `/etc/gitconfig`, so a rebase's commit dies with `Committer identity unknown`,
+  and *"still mid-rebase after resolution — refusing to amend"* is what that looks
+  like two layers up. **The test was passing on plexus because of the box.**
+
+**The hypothesis is now 0 for 2.** And the tempting next move — *"so the
+remaining two must be the watcher"* — is the fallacy:
+
+> **A partition shows that causes DIFFER. It never shows what any of them IS.**
+> Removing members from a set does not make the remainder cohere; it only makes
+> the remainder smaller.
+
+**The residual is not a group.** It has no property except *not yet explained*,
+which is a fact about the investigation and not about the code. Two guards left
+over from a disproved theory are **two independent questions**, and treating them
+as one is how a single bisect gets run against two causes and returns a sha that
+is right for neither.
+
+**This is the sibling of the elimination rule already in this collection** —
+*"not in X, therefore in Y" is wrong; the missing branch is usually "nowhere"* —
+and it is the harder half, because here the branch list was **correct**: the
+theory really was disproved for two members. The error is not in the elimination.
+**It is in reading the leftovers as a set.**
+
+**And it compounds with the ABSENT-reading rules.** A residual set is defined by
+what is *missing* from it — no explanation — and absence is exactly what agreement
+cannot detect. Three unexplained guards "agreeing" that they are unexplained is
+zero evidence of anything, and it feels like a pattern because they arrived in one
+report.
+
+**The handling that is correct, and it was done here:** the ticket says in as many
+words that **the remaining two should not be assumed to share a cause with each
+other.** Write that sentence down when a theory dies partway, because the next
+reader inherits a shortened list and no note saying the list was never a group.
+
+### The cheap discriminator for the commonest instance: read the FOLDER, not the summary
+
+Same night, the same shape one level up. This seat told a session that a peer had
+*"landed first and deeper"*, and the peer had **banked a diagnosis and parked
+it** — CLAUDE.md's *diagnosed something deeper than the session* path, **not a
+repair.** A session stood down from a collision that had stopped existing, and
+would not have re-checked: **"landed first and deeper" is exactly the class of
+claim a session accepts about a peer and never re-derives.**
+
+**The commit's own subject line carried the distinction** —
+`tickets(P): locate the generic nested-pointer mechanism`. *Locate.*
+
+> **"A commit exists" and "the work is done" are different facts, and the free
+> discriminator is `status:` and the FOLDER** — the ticket never left
+> `backlog-pascal` and never gained an owner.
+
+**Check the folder before believing a peer's summary of a peer's commit.** That is
+two hops, and two hops is exactly the distance at which a claim decays while
+keeping its confidence. Same animal as reading a sha's timestamp as a claim about
+a session, and as the three ticket NAMES that read as mechanisms in one night.
+
+**And the damage has a direction worth naming:** a false *coverage* claim removes
+a live row from everyone's queue at once, and **nothing ever re-checks a row that
+looks covered.** Its mirror, a false *attribution*, removes a finding from its
+author's record — and the only tell there is the credited party being **unable to
+source the quote**, which fires only if somebody asks.
+
 ## TWO APERTURES COMPOSE — a ticket sampled from the visible half, then probed from its slug, has been narrowed TWICE before anyone measures anything
 
 Two separate narrowings were measured here on 2026-09-05/06, by different
