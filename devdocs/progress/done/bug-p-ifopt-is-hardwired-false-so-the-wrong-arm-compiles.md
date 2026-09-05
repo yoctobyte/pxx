@@ -4,6 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "{$IFOPT X+} answered False for EVERY letter -- so the wrong arm of a conditional compiles, silently, with no diagnostic. R, Q, I and C were fixed first; Z was fixed 2026-09-05 when {$PACKENUM} gave it a variable to answer from ({$IFOPT Z+} is exactly "the enum minimum size is 4", measured across every spelling). WHAT REMAINS is G, J and X: fpc defaults them ON, pxx answers False, so a {$IFOPT X+} guarding extended-syntax code takes the else arm on a compiler that HAS extended syntax. Each remaining letter needs its own measured behavioural claim about pxx -- not a lookup in fpc's table -- which is why they are not one fix. A stays the useful negative: it is numeric and untracked, while Z is numeric and tracked, so neither letter predicts the other."
+status: done
 ---
 
 # {$IFOPT X+} is hardwired False, so the wrong arm compiles
@@ -111,3 +112,6 @@ by construction, because a slug cannot be edited without breaking citations.
 
 The residual stands as the summary states it: **G, J, X**, each needing its own
 measured behavioural claim about pxx.
+
+## Log
+- 2026-09-05 — resolved, commit G, J and X answer True unconditionally, each on its own measured behavioural claim about pxx rather than a lookup in fpc's table (6f84891c5); and the second copy of the decision in ExpandIncludes, which was dropping {$I} includes silently, now shares PasIfOptState (4038b32d0). Oracle test byte-identical to fpc 3.2.2 at 20 rows; two more tests for the chosen divergence and the guarded include, pin scores 3/20, 4/7 and 0/2. Residual split out as bug-p-the-include-pre-pass-cannot-see-a-switch-directive-written-above-an-ifopt (low-prio)..
