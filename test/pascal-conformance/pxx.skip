@@ -59,7 +59,6 @@ tforin2.pp	gap: for-in over a CALL-result string container (getstring(s)) + stri
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
 tforin8.pp	gap: IEnumerable/IEnumerator interfaces driving for-in
 tforin9.pp	gap: `enumerator MoveNext/Current` directives + operator Enumerator
-tgenconstraint37.pp	gap: generic constraints on forward-declared class/interface (T: IInterface)
 tgeneric102.pp	gap: specialize of generic class declared in another unit (inline class funcs)
 tgeneric107.pp	gap: inline specialize expression (specialize G<T>.Create as expression/procvar)
 tgeneric15.pp	gap: class inheriting from `specialize TStack<Integer>` as parent type
