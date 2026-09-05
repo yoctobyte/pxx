@@ -8857,6 +8857,39 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## AN EDGE AND ITS STATE ARE STORED IN DIFFERENT PLACES — `blocked-by:` IS A RELATIONSHIP, THE FOLDER IS THE VERDICT
+
+Measured 2026-09-06: a session read `blocked-by: [<slug>]` in a ticket's frontmatter
+and reported the ticket as gated. **The edge was real and the blocker had been in
+`done/` for thirteen minutes — in that session's own tree.** No pull would have helped;
+the resolve was already an ancestor of its own last commit.
+
+> **The frontmatter records that a relationship EXISTS. Only the blocker's folder
+> records whether it is still MET.** Reading one tells you nothing about the other, and
+> a `blocked-by:` line is just as present the day after its blocker closes.
+
+**The ranked queue has already done this arithmetic.** `ready_tickets()` admits a
+ticket only when `all(b in done for b in t.blockers)`, and `ready`'s own header says
+so: *"no unmet blocker; ranked — pull from the top."* **A row's PRESENCE in `ready` is
+already the claim that its edges are satisfied** — so a `blocked-by:` seen in the
+frontmatter of a row the tool just listed is a settled edge, not a warning.
+
+**The inverse still needs a human**, and it is the failure this does not cover: a
+blocking condition stated only in PROSE has no edge for the tool to evaluate, which is
+what `check`'s `STALE-PARK` and `PROSE-EDGE-NOT-IN-FRONTMATTER` apertures exist for.
+**One of them is checked continuously and the other is checked by whoever reads the
+body.** Do not confuse which kind you are looking at.
+
+### The caveat that WAS on that row, and it is the one a queue cannot carry
+
+The same ticket's summary opens `ATTEMPTED AND REVERTED 2026-09-05 (4760474da ->
+2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read
+"The attempt that failed" before retrying.` **A p60 at the top of a queue gets picked,
+and `ready` prints a slug and a number.** The hazard on a previously-attempted ticket
+is not its rank or its edges; it is that **someone already tried and the reason it
+failed is in the body.** Carry that in the hand-off, or the second attempt re-derives
+the first one's dead end at full price.
+
 ## NAME THE ENCODING, THEN ENUMERATE ITS READERS — A FIELD CENSUS IS CLOSED-WORLD AND A CALL-SITE CENSUS IS NOT
 
 Measured 2026-09-06 (frankA), finding a **third** reader of a field after a ticket had
