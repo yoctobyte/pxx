@@ -95,3 +95,40 @@ Meanwhile the snippet now in `objects.md` is hand-verified at HEAD `ce19e5482`
 not a substitute for the gate: the next person to edit that block gets no
 warning from `docsnip.py` at all.
 
+## 2026-09-05 — the census, measured, and the list a D session actually needs
+
+frankH found the scope and frank-coordinator relayed it; I re-measured rather
+than relaying, because the actionable artifact here is the exact unit list and
+an approximate one sends someone to "fix" a snippet that is fine.
+
+Compiled `program t; uses <U>; begin end.` for each of the 111 `lib/rtl/*.pas`
+units against `stable_linux_amd64/default/pinned`:
+
+- **83 compile.**
+- **24 fail with `unknown type: TMethod`** — and this is the outage:
+
+  `ast atexit base64 classes_lite configparser dns_resolved http httpjson io
+  json lfm markdown mimic_codecs mimic_string mimic_urllib_error
+  mimic_urllib_request pathlib re resources streams subprocess tls13_native
+  truststore typinfo`
+
+- **4 fail for something else and are NOT part of this** — `palparallel`,
+  `palpthread`, `palthread`, `palthreadobj` answer *"`__pxxclone` (thread
+  creation) requires `--threads`"*. They answer the same at HEAD and compile
+  with `--threads` at both, so that is a correct refusal, not the pin.
+
+**Splitting those four out is the point of re-measuring.** A raw "28 units fail
+under the pin" is true and would have been recorded as the blast radius of one
+cause; it is two causes, and only one of them expires with the next pin.
+
+Ancestry confirmed independently with `git merge-base --is-ancestor`: pin v403
+is `ce63beeeb`, and both `31f8b11bf` (TMethod as a builtin) and `a623307bd`
+(delete the RTL duplicates) are its descendants.
+
+**For whoever is next in `docs/**`:** if a snippet stopped compiling, check its
+`uses` clause against the 24 above before touching the snippet. `sysutils`,
+`math` and `classes` are all fine. A snippet that names one of the 24 is correct
+and the instrument is not — verify it with `compiler/pascal26` at HEAD instead,
+and say in the commit that you used HEAD and why, so the claim expires by
+itself.
+
