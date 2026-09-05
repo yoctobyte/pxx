@@ -497,14 +497,31 @@ correctly and to *refuse* correctly cannot both be served by a local
 special-case without the two answers drifting apart, which is the condition that
 makes a shared carrier worth its cost.
 
-### And it prices arm B slightly higher again
+### And it prices arm B higher — an AVAILABILITY obligation versus a COMPLETENESS one
 
-A side channel answering "is there an identity here" is enough for an execution
-site, which asks only when it is about to act. A refusal site asks about **every
-assignment and every argument in the program**, including the overwhelming
-majority that have no procedural target at all — so the channel has to be
-correct when the answer is *no*, at every site, not merely available when the
-answer is *yes*. That is a stronger obligation than
+**Note the direction: the section above argues FOR a carrier; this sub-point
+argues AGAINST the cheap arm. They are not the same claim and should not be
+read as one.**
+
+The two consumers look symmetric — same fact, two readers — and are not.
+frankD's naming, which is the compression worth keeping:
+
+- an **execution** site asks only when it is about to act, so a channel that is
+  merely **AVAILABLE** when the answer is *yes* suffices. That is an
+  **availability obligation**;
+- a **refusal** site asks about **every assignment and every argument in the
+  program**, the overwhelming majority of which have no procedural target at
+  all, so the channel must be reliably correct when the answer is **no** —
+  which is nearly always. That is a **completeness obligation**.
+
+Availability can be added incrementally, one column at a time, which is exactly
+what makes arm B look cheap. Completeness cannot: a channel that is right
+wherever anyone remembered to fill it is *correct* under the first obligation
+and *broken* under the second, and the difference does not show up until
+something in the gap is exercised — `2d6bfadd6` is what that costs.
+
+So this is a real argument against arm B rather than a restatement of the
+argument for a carrier. It is a stronger obligation than
 [[bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind]]
 imposed, and it is the same direction the `set of TCol` case pushed: arm B keeps
 needing to answer a more precise question than "one more LastType* column".
