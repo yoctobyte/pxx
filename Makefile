@@ -6595,7 +6595,11 @@ test-core: $(COMPILER)
 	@# own output for this same program, and the three files it writes were
 	@# compared BYTE FOR BYTE against FPC's (identical, 12/72/32 bytes).
 	./$(COMPILER) test/test_typed_file_of_t.pas $(TESTTMP)/test_typed_file26
-	tools/expect_same.sh test_typed_file26 "$$($(TESTTMP)/test_typed_file26 | tail -1)" "total ok 20 / 20"
+	tools/expect_same.sh test_typed_file26 "$$($(TESTTMP)/test_typed_file26 | tail -1)" "total ok 24 / 24"
+	@# bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic
+	@# The `console` row prints to stdout, so the assertion reads the LAST line only.
+	./$(COMPILER) test/test_read_write_as_method_name.pas $(TESTTMP)/test_rwname26
+	tools/expect_same.sh test_rwname26 "$$($(TESTTMP)/test_rwname26 | tail -1)" "total ok 7 / 7"
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
 	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1

@@ -59,7 +59,7 @@ var
   fr: file of TRec;
   fu: file;
   r: TRec;
-  i, n, sum: Integer;
+  i, n, sum, v: Integer;
   bufOut, bufIn: array[0..7] of Integer;
   got: Int64;
 begin
@@ -151,6 +151,29 @@ begin
   Chk('bufIn[0]', bufIn[0], 0);
   Chk('bufIn[7]', bufIn[7], 49);
   Close(fu);
+
+  { ---- a LITERAL and a CONSTANT-FOLDED expression as the write argument ----
+    Not decoration. The write side converts through a temp of the element type,
+    and that temp used to be taken only when the argument's width or kind
+    DIFFERED from the element's. A bare `42` for a `file of Integer` differs in
+    neither, so it took no temp and reached IR lowering as an AN_INT_LIT with no
+    address: `IR_UNSUPPORTED: frontend could not lower AST node (kind 1)`. The
+    variable form and the expression form both worked throughout, which is why
+    nothing else here caught it -- `i * 10` is Int64 and therefore always
+    converted. These rows pin the one shape that matched exactly.
+    Byte-compared against fpc 3.2.2: 12 bytes, identical. }
+  Assign(fi, pathI);
+  Rewrite(fi);
+  Write(fi, 42);
+  Write(fi, -7);
+  Write(fi, 1000000);
+  Close(fi);
+  Reset(fi);
+  Chk('literal size', FileSize(fi), 3);
+  Read(fi, v);  Chk('literal 42', v, 42);
+  Read(fi, v);  Chk('literal -7', v, -7);
+  Read(fi, v);  Chk('literal 1e6', v, 1000000);
+  Close(fi);
 
   writeln('total ok ', ok, ' / ', tot);
 end.

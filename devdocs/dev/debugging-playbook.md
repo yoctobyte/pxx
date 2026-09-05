@@ -3660,6 +3660,73 @@ The unifying tell, and it is the same one as everywhere else in this file: the
 artefact is **accurate about something adjacent** — what was true at write time —
 and silent about the layer that moved.
 
+### The harder direction: the comment YOU are writing, in the same sitting as the code
+
+Everything above is about reading someone ELSE's comment, and it has a remedy —
+`git log -S` it, read a caller, distrust its age. **There is a version with no
+second reader and no age.** Measured 2026-09-05 (frankB), landing typed files:
+
+```pascal
+{ ... an expression is very rarely already the element's width -- `Write(f, 42)`
+  and `Write(f, i * 10)` are both Int64 here for a `file of Integer`. }
+if isWrite and ... and ((sz <> declSz) or (Ord(argTk) <> SymFileElemTk[fileSym])) ...
+```
+
+**The second claim is true and the first is false.** `i * 10` evaluates at Int64
+and always took the conversion temp; a bare `42` is `tyInteger` at 4 bytes,
+matched the element on width AND kind, took no temp, and reached `IRLowerAddress`
+as an `AN_INT_LIT` with nothing to address — `IR_UNSUPPORTED: frontend could not
+lower AST node (kind 1)`. The premise was composed, not measured; the guard was
+then written to match the premise. **So the comment and the code agreed with each
+other, and the disagreement was with the compiler.**
+
+CLAUDE.md's rule is *"comment vs code: if they disagree, one is wrong and you do
+not know which"*. This is the case where they AGREE and are both wrong, which
+that rule cannot detect and no reviewer can either — the comment is not stale, it
+is minutes old and written by the same hand as the code, so it reads as the
+author's checked reasoning rather than as their prediction.
+
+**The tell is a comment that enumerates cases.** "`Write(f, 42)` and
+`Write(f, i * 10)` are both Int64" is two claims wearing one sentence, and the
+only thing separating them is running each. A sentence naming N examples is N
+assertions, and the sample you happened to test confirms the whole sentence —
+the same failure as "the name is not the thing", applied to your own prose.
+frankA hit the identical shape the same session from the other end, writing that
+a loose predicate *"would have swallowed every VALID Delphi generic-class method
+header"*; it would not have, and the valid case still compiled and still printed
+FPC's answer.
+
+**A SECOND INSTANCE, ONE HOUR LATER, BY THE AUTHOR OF THIS SECTION, IN THE
+COMMIT THAT ADDED IT.** The fix above was accompanied by a new shared predicate
+carrying the comment *"ONE predicate with two callers, deliberately"* — written
+to describe the normalisation being performed. It had **one** caller: the
+expression site was re-pointed at it and the statement site, whose inline
+condition the helper was extracted FROM, was left untouched. Nothing failed. The
+compiler self-hosted, the quick gate went green 17/17, `test-core` exited 0, and
+every row of the new test passed — because a duplicated condition and an
+extracted one behave identically, which is exactly why the sentence was safe to
+believe and worthless as evidence.
+
+**The two instances are the same failure in opposite directions.** The first
+wrote a false claim about the INPUT and shaped the guard to match it. The second
+wrote a true claim about the INTENDED DESIGN and shipped different code. Neither
+is catchable by comment-vs-code review, because in the first the comment and the
+code agree, and in the second the comment describes a refactor a reader would
+assume had been done. **Both were caught by re-reading the author's own diff
+before committing, which is the only instrument that sees either.**
+
+So the rule has a second half: **a comment describing a STRUCTURE — "one
+predicate", "the only caller", "both arms", "all three sites" — is a countable
+claim about the diff you are holding. Count it in the diff.** It is the same
+discipline as printing a denominator, applied to prose about your own change.
+
+**Rule: if a comment you are writing states that some input CANNOT reach the code
+below it, run that input before you write the sentence.** And prefer removing the
+condition to documenting why it is safe — the fix here deleted the gate entirely
+(a write to an ordinal/float element always takes the temp), which needs no
+premise to be true and no list of addressable node kinds to stay in sync with
+`IRLowerAddress`'s own.
+
 ## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
 
 Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
@@ -7188,3 +7255,94 @@ frankA's.
 
 The one-line form: **ask what your count could not include, and print the
 denominator so somebody else can ask too.**
+
+---
+
+## A CORPUS ROW ASSERTS A DIRECTION, AND EACH DIRECTION HAS ITS OWN WAY OF PASSING FOR NOTHING
+
+Two findings from 2026-09-05, one frankA's and one frankB's, kept as one entry
+because they are the same defect facing opposite ways and **neither one is
+visible from inside the other.** A conformance row says either *this must
+compile* or *this must be refused*. Both verdicts are one bit, and for each
+verdict there is a way to produce that bit without the feature under test
+existing at all.
+
+| the row says | it passes for nothing when | the tell |
+| --- | --- | --- |
+| **must be refused** (`{ %FAIL }`) | the compiler refuses for an unrelated reason — it cannot even PARSE the construct, so it never reaches the check being tested | the row goes RED the day a capability lands |
+| **must compile** (`{ %NORUN }`, and most positive tests) | the feature is parsed and DISCARDED — accept everything and every must-compile row is green | nothing. It stays green forever |
+
+**The must-refuse half, measured.** `tgenfunc17.pp` / `tgenfunc18.pp` assert that
+a generic routine whose implementation renames its type parameters is rejected.
+The pinned compiler rejected them, so they scored as passes — and it rejected
+them because it could not parse `generic procedure` at all, in the unit
+interface, before reaching any type parameter. `71deb21d4` added that syntax and
+both rows went red the same day. **Not a regression: the rows had never been
+testing the check, and the check had never existed.** The archive
+(`devdocs/progress/tstate/conformance.tsv`) still carries them as `pass` as of
+2026-09-02, so a later session diffing against it reads them as its own damage.
+
+**The must-compile half, measured.** `tgenconstraint37.pp` is `%NORUN` — it must
+compile — and it exercises generic constraints (`T: TObject`, `T: class`,
+`T: IInterface`) against forward-declared types. It compiles at HEAD. But a
+compiler that PARSED constraints and threw them away would compile it too, and
+would compile every other constraint row in the suite, and the whole family
+would read as a feature working. The row cannot tell the two apart. What
+separates them is a case that must be REFUSED, constructed by hand because the
+suite does not contain one at that spot:
+
+```
+generic TGenericTObject<T: TObject> = class end;
+TBad = specialize TGenericTObject<Integer>;      { must not compile }
+
+  pxx : generic constraint violated: ... but Integer is a value type
+  fpc : class type expected, but got "LongInt"
+```
+
+Both refuse, so the constraint is enforced rather than dropped, and only then
+does the green row mean what it says.
+
+### The discriminator, which is not the one either of us reached for first
+
+frankA's first general rule was that a newly-red `%FAIL` row is judged by the
+pin's refusal REASON. **That does not work**, and two rows of the same shape
+prove it: `tgeneric31` had the pin refusing for a reason unrelated to the row,
+and the newly-accepted construct turned out to be a diagnostic that should not
+have been deleted; `tgenfunc14` had the identical shape and was a check that had
+always been missing. Same evidence, opposite conclusions.
+
+**What actually discriminates is whether the newly-accepted construct was inside
+the CHANGE'S INTENDED SCOPE** — a question about the diff, not about the corpus.
+If the change meant to start accepting that construct, a `%FAIL` row going red
+is the row finally being tested; if it did not, the change deleted a diagnostic.
+
+And the must-compile half is that same question asked from the other side:
+**would this row still be green if the machinery did nothing?** For a positive
+row you answer it by constructing the vacuous-pass case, which is stronger than
+reasoning about it — the constructed refusal either happens or it does not.
+
+### The rule
+
+**For every corpus row you are about to trust, name the OTHER direction and go
+find it.** A must-compile row needs a must-refuse companion; a must-refuse row
+needs to be shown that the refusal comes from the check it names. If the suite
+does not contain the companion, write it by hand — it is five lines, and it is
+the only thing standing between a green row and a green row that means nothing.
+
+**And two harness-level ways to get the same nothing, both live in this tree:**
+`tools/run_pascal_conformance.sh` prints `SKIP — no suite at
+library_candidates/fpc-testsuite/tests/test` and **exits 0** when the corpus is
+absent, so any recorded green from a checkout without the corpus is not a weak
+result but no result wearing a pass; and it compares EXIT CODES, not output, so
+of 24 exit-clean rows re-attempted at HEAD, three ran to completion printing the
+wrong thing (`tarray2` printed a PChar as its pointer value, `tforin24` printed
+garbage where fpc prints `Monday`, `tclass12a` printed double where fpc prints
+80-bit Extended). **Assert the suite is present and read the COUNT, never the
+exit code.**
+
+Credit: the `%FAIL` direction, the scope discriminator and the harness findings
+are frankA's; the must-compile direction and its constructed control are
+frankB's.
+
+The one-line form: **a row that can only report one bit needs you to prove the
+bit came from the thing it names.**

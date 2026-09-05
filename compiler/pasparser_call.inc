@@ -2808,6 +2808,38 @@ begin
   Result := best;
 end;
 
+{ `Read` / `Write` / `Readln` / `Writeln` at the CURRENT token, naming a METHOD of
+  the enclosing class rather than the console intrinsic. The four names lex as
+  intrinsic keyword tokens (paslexer.inc), so every position that expects an
+  identifier has to ask this before dispatching -- pasparser_name.inc already
+  re-admits them in member-NAME and method-NAME position, which is why the
+  declaration and the qualified calls `Self.Read(b,c)` / `s.Read(b,c)` work.
+
+  ONE predicate with two callers, deliberately. The statement arm
+  (pasparser_stmt.inc, tkwriteln/tkwrite/tkReadln/tkRead) grew this test first
+  for `bug-bare-read-write-in-method-hits-intrinsic`, and ParseFactorCore was
+  never given it -- so `Read(B,C)` was a working STATEMENT and an
+  `expected expression` in any EXPRESSION, which is the exact shape
+  devdocs/dev/normalise-dont-special-case.md warns about: the second path is the
+  one that stays broken. Widening it in one place now widens it for both.
+
+  GATED ON A FOLLOWING `(` so a bare console `Write` / `Writeln` keeps the
+  intrinsic path, and ARITY-GATED so a call no member could accept falls through
+  to the intrinsic rather than binding to a member that cannot take it -- the
+  arity gate is not optional politeness, it is
+  bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity,
+  where the copy that asked FindUMeth (name alone) wrote an empty file and
+  returned True on x86-64 while refusing to build on three other targets. }
+function IntrinsicNamesSelfMethodHere: Boolean;
+begin
+  Result := False;
+  if not (CurTok.Kind in [tkRead, tkwrite, tkReadln, tkwriteln]) then Exit;
+  if (CurProc < 0) or (CurSelfClass < REC_UCLASS_BASE) then Exit;
+  if Tokens[TokPos].Kind <> tkLParen then Exit;
+  Result := FindUMethArityStrict(SelfMemberCi(CurTok.SVal), CurTok.SVal,
+                                 CountCallArgsAhead) >= 0;
+end;
+
 { Does ANY constructor of class ci take an `array of const` / open array at explicit argument
   position argIdx (0-based, Self excluded)? The `TFoo.Create(args)` path parses its arguments
   BEFORE it picks the overload -- it has to, since it ranks the overloads by argument type --

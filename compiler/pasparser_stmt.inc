@@ -3480,16 +3480,31 @@ begin
     sz := FileIOArgSize(destNode);
     elemTk := IntToTypeKind(SymFileElemTk[fileSym]);
     argTk := IntToTypeKind(ASTTk[destNode]);
-    { A WRITE takes an EXPRESSION, and an expression is very rarely already the
-      element's width — `Write(f, 42)` and `Write(f, i * 10)` are both Int64
-      here for a `file of Integer`. FPC converts; so do we, through a temp of
-      the ELEMENT type, which is why the element kind is carried beside the
-      width: narrowing needs to know signed from unsigned, and a width cannot
-      say. A READ has no such arm on purpose — its argument is the destination,
+    { A WRITE takes an EXPRESSION and the callee takes it by REFERENCE, so it goes
+      through a temp of the ELEMENT type — which both converts it and gives it an
+      address. That is why the element KIND is carried beside the width:
+      narrowing needs to know signed from unsigned, and a width cannot say.
+      A READ has no such arm on purpose — its argument is the destination,
       converting one would write the record into a temp nobody reads, and FPC
-      rejects a mismatched destination too. }
+      rejects a mismatched destination too.
+
+      UNCONDITIONAL FOR AN ORDINAL/FLOAT ELEMENT, and it did not start that way.
+      It was gated on `(sz <> declSz) or (kind <> elemkind)`, on the reasoning —
+      written into the comment that used to be here — that "`Write(f, 42)` and
+      `Write(f, i * 10)` are both Int64 here". The second is; THE FIRST IS NOT.
+      A bare literal is tyInteger at 4 bytes, so for a `file of Integer` it
+      matched on both counts, took no temp, and reached IRLowerAddress as an
+      AN_INT_LIT — `IR_UNSUPPORTED: frontend could not lower AST node (kind 1)`.
+      The comment asserted a fact about the world that the code was not checking,
+      which is the disagreement CLAUDE.md says to settle before touching either.
+      Settled by DELETING the condition rather than adding a not-addressable
+      disjunct: an addressability test would have to enumerate the storage node
+      kinds and would drift from IRLowerAddress's own list, whereas always
+      taking the temp needs no such list and costs one slot and one move.
+      An expression whose type is not ordinal/float still takes no temp and is
+      still refused below by the width check, which is what rejects
+      `Write(f, someAnsiString)` to a `file of Integer`. }
     if isWrite and (declSz > 0) and (SymFileElemTk[fileSym] > 0) and
-       ((sz <> declSz) or (Ord(argTk) <> SymFileElemTk[fileSym])) and
        (TypeIsOrdinal(elemTk) or TypeIsFloat(elemTk)) and
        (TypeIsOrdinal(argTk) or TypeIsFloat(argTk)) then
     begin
@@ -5366,10 +5381,7 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
       end
-      else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
-              (Tokens[TokPos].Kind = tkLParen) and
-              (FindUMethArityStrict(SelfMemberCi(CurTok.SVal), CurTok.SVal,
-                                    CountCallArgsAhead) >= 0) then
+      else if IntrinsicNamesSelfMethodHere then
       begin
         { An unqualified `Read`/`Write`/`Readln`/`Writeln` naming a METHOD of the
           enclosing class binds to that member (Self.method), like FPC — not the

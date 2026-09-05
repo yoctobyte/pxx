@@ -607,6 +607,32 @@ begin
     Exit;
   end;
   LastExprTk := tyInteger;
+  { An unqualified `Read`/`Write`/`Readln`/`Writeln` that names a METHOD of the
+    enclosing class is an ORDINARY IDENTIFIER here, not the console intrinsic:
+    `if Read(Buffer,Count) < Count` inside TStream.ReadBuffer is the shape, and
+    it is FPC's and Delphi's own RTL. The four names lex as keyword tokens, so
+    the case below has no arm for them and every such expression died on
+    `expected expression`.
+
+    NORMALISED RATHER THAN GIVEN A FOURTH ARM. The tkIdent arm below already
+    resolves an implicit-Self method call, with the overload and arity questions
+    asked correctly -- pasparser_stmt.inc's own copy carries a comment about
+    being the arm that did NOT ask them and stayed broken for it. So the token is
+    rewritten to tkIdent and falls into that arm, rather than a fresh copy of it
+    landing here to drift the same way.
+
+    The rewrite is applied to the TOKEN STREAM as well as to CurTok, because the
+    tkIdent arm hands `TokPos - 2` back to ParseLValueAST, which re-reads
+    Tokens[] and would otherwise see the keyword again. That is durable and it
+    is correct to be: the decision is about a member of the class whose method
+    body encloses this token, so a re-parse of the same position (a generic
+    body compiled per specialization) asks the same question of the same class
+    and gets the same answer. }
+  if IntrinsicNamesSelfMethodHere then
+  begin
+    CurTok.Kind := tkIdent;
+    if (TokPos - 1) >= 0 then Tokens[TokPos - 1].Kind := tkIdent;
+  end;
   case CurTok.Kind of
     tkInteger:
     begin

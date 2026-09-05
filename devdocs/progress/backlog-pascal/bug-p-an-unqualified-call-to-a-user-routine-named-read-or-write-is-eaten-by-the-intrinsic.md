@@ -79,14 +79,27 @@ Pascal world.
 | 1 | unqualified `Read(B,C)` in EXPRESSION position, inside a method | **`expected expression`** |
 | 2 | `Self.Read(B,C)`, same place | accepted |
 | 3 | `s.Read(B,C)` from outside the class | accepted |
-| 4 | unqualified `n := Read(B,C)` in STATEMENT position, inside a method | **`expected expression`** |
+| 4a | unqualified `Read(B,C);` as a BARE STATEMENT, inside a method | accepted |
+| 4b | unqualified `n := Read(B,C)` (assignment RHS) | **`expected expression`** |
+| 4c | unqualified `writeln(Read(B,C))` (argument) | **`expected expression`** |
 | 5 | unqualified `Write(B,C)` in expression position | **`expected expression`** |
 | 6 | global `function Read(var B; C: Longint): Longint;` | **`expected name`, at the DECLARATION** |
 
-So it is **QUALIFICATION**, not position: rows 2 and 3 go through the member
-path, which `IsMemberNameTok` already admits these tokens to. Rows 1, 4 and 5
-reach the primary parser, where `tkRead` is not an identifier and the intrinsic
-arm is the only thing that wants it.
+**CORRECTION to this ticket's first draft, which labelled row 4 "statement
+position" and had it failing.** It does not: a bare `Read(B,C);` statement is
+ACCEPTED, because `pasparser_stmt.inc`'s intrinsic arm already grew exactly this
+test for `bug-bare-read-write-in-method-hits-intrinsic`. What I had written as
+one statement-position row was an assignment whose RHS is an expression. The
+defect is **EXPRESSION POSITION ONLY**, which makes it the textbook
+`devdocs/dev/normalise-dont-special-case.md` case rather than a general
+name-resolution gap: the statement path was fixed, twice, and the expression
+path was never built, so the second path is the one that stayed broken.
+
+So it is **QUALIFICATION plus POSITION**: rows 2 and 3 go through the member
+path, which `IsMemberNameTok` already admits these tokens to, and row 4a goes
+through the statement arm that already asks. Rows 1, 4b, 4c and 5 reach
+`ParseFactorCore`, whose 8000-line `case CurTok.Kind of` has no arm for
+`tkRead`, so they land on its `else Error('expected expression')`.
 
 **Row 6 is a SECOND, EARLIER defect and should not be folded into the first.**
 `IsMethodNameKind` admits `tkRead` in method-name position, so the class member
