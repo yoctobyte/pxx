@@ -44017,123 +44017,28 @@ begin
           Error('String(): operand must be Char or string');
       end;
     end;
-    tkSysOpen:
-    begin
-      Next; Expect(tkLParen, '(');
-      if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or ((not TypeIsFrozenString(Syms[idx].TypeKind)) and
-                       (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
-      Expect(tkComma, ',');
+    { FIVE ARMS DELETED HERE 2026-09-05 (frankS). They matched tkSysOpen,
+      tkSysRead, tkSyswrite, tkArgCount and tkArgStr as TOKENS, and the lexer
+      stopped producing those tokens the same day: 5f177b181 made those
+      spellings SOFT keywords, so they now lex as plain tkIdent and the tk enum
+      members survive only as -Ord(tkXxx) intrinsic CALL ids. The Pascal
+      parsers have ZERO token-consuming arms for these left; pyparser.inc kept
+      its copies, which is the sibling-arm shape normalise-dont-special-case
+      warns about.
 
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-      ParseExpr;
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode;
-      ASTRight[argSeq] := argSeq2;
-      Expect(tkRParen, ')');
+      Proved dead four ways, and they fail differently: frankD's dynamic probe
+      (a NilPy program declaring its own paramstr/paramcount binds its own); a
+      reachability probe over all 830 .npy programs, 2026-09-04; the lexer
+      emitting no such token for either frontend; and the Pascal side already
+      having none.
 
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkSysRead:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
-      Expect(tkComma, ',');
-
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
-      ASTRight[argSeq] := argSeq2;
-      ParseExpr;
-      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
-      ASTRight[argSeq2] := argSeq3;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkSyswrite:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
-      Expect(tkComma, ',');
-
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
-      ASTRight[argSeq] := argSeq2;
-      ParseExpr;
-      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
-      ASTRight[argSeq2] := argSeq3;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkArgCount:
-    begin
-      Next;
-      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount);
-      { ParamCount is an Integer, and the node has to SAY so. Left unset it
-        defaulted to tyUnknown, and anything that materialises the value into a
-        hidden temp copied that: `for i := 0 to ParamCount do` gave the loop
-        LIMIT temp no type. x86-64 and the other backends do not inspect it and
-        happened to work; i386 checks every symbol it touches, so it refused —
-        which is why `uses pylib` could not be built for i386 AT ALL (pylib's
-        pysys_argv is exactly this loop), taking base64, http and
-        examples/net/httpdemo.pas with it, and every NilPy program besides.
-        The tkArgStr arm below never had the bug because it allocates its
-        destination temp explicitly typed. Hoisting the limit into a variable,
-        or using a USER function as the limit, both worked — that pair is what
-        localised it here rather than to the for-loop lowering.
-        bug-a-paramcount-node-has-no-type-so-i386-refuses-any-pylib-user }
-      ASTTk[node] := Ord(tyInteger);
-      CurASTNode := node;
-    end;
-    tkArgStr:
-    begin
-      { Inline ParamStr(i): the 2-arg ArgStr(i, var) codegen needs a destination
-        string. Synthesize a hidden frozen-string temp, copy argv[i] into it
-        (EmitArgvToString — a frozen buffer write, no managed release, so the temp
-        needs no nil-init), and yield the temp. Lets ParamStr(i) be used directly
-        in any expression (comparison, argument), not only as an assignment RHS.
-        The temp is tyString (frozen) even under managed strings, matching the
-        `String` keyword temp above. }
-      Next; Expect(tkLParen, '(');
-      ParseExpr;                            { index expression }
-      Expect(tkRParen, ')');
-      op := AllocVar('', tyString);
-      { 2-arg ArgStr call: arg0 = index, arg1 = the temp (lvalue) }
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      identNode := AllocNode(AN_IDENT);
-      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := identNode;
-      ASTRight[argSeq] := argSeq2;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
-      ASTLeft[node] := argSeq;
-      { AN_STR_FROM_CHAR: Left = the ArgStr side-effect, Right = read the temp. }
-      left := AllocNode(AN_STR_FROM_CHAR);
-      ASTLeft[left] := node;
-      identNode := AllocNode(AN_IDENT);
-      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-      ASTRight[left] := identNode;
-      ASTTk[left] := Ord(Syms[op].TypeKind);
-      CurASTNode := left;
-    end;
+      WHAT THE DELETION ALSO REMOVED, because it is not obvious from the diff:
+      every -Ord(tkSysOpen)/-Ord(tkArgStr) construction site in this file was
+      INSIDE these arms. So NilPy now has no reachable path to those five
+      intrinsics at all -- and it had none before either, since the arms could
+      not fire. That is a MISSING CAPABILITY, not a regression, and it was
+      invisible while the dead code stood in for it.
+      feature-n-nilpy-has-no-reachable-path-to-the-sys-and-arg-intrinsics }
     tkIdent:
     begin
       name := CurTok.SVal;
