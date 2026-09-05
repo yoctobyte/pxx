@@ -6586,6 +6586,22 @@ test-core: $(COMPILER)
 	@# have cost this file its oracle.
 	@$(TESTTMP)/test_fpcheapstatus26 | diff -u test/test_fpc_heap_status.expected - \
 	  || { echo 'test_fpc_heap_status: FAIL - live heap accounting or the System names regressed'; exit 1; }
+	./$(COMPILER) test/test_typed_const_from_named_const.pas $(TESTTMP)/test_tcfnc26
+	@# .expected is fpc 3.2.2's own output, byte for byte. The `arr integer` row
+	@# is the CONTROL and it passed before the fix: named constants were already
+	@# folded in initialisers, so only the STRING path was blind, and a test
+	@# without that row cannot tell a fix from a feature that always existed.
+	@$(TESTTMP)/test_tcfnc26 | diff -u test/test_typed_const_from_named_const.expected - \
+	  || { echo 'test_typed_const_from_named_const: FAIL - a named string const in an initialiser'; exit 1; }
+	@# The two NEGATIVE controls, as `!` steps because a refusal has no output to
+	@# diff. Loosening the guard from "is a string const" to "is an identifier"
+	@# passes every positive row above and fails exactly these two.
+	! ./$(COMPILER) test/test_typed_const_named_undeclared_fail.pas $(TESTTMP)/test_tcnu26 > $(TESTTMP)/test_tcnu.log 2>&1
+	! ./$(COMPILER) test/test_typed_const_named_wrongkind_fail.pas $(TESTTMP)/test_tcnw26 > $(TESTTMP)/test_tcnw.log 2>&1
+	@grep -q 'expected a string or char literal' $(TESTTMP)/test_tcnu.log \
+	  || { echo 'test_typed_const_named_undeclared_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	@grep -q 'expected a string or char literal' $(TESTTMP)/test_tcnw.log \
+	  || { echo 'test_typed_const_named_wrongkind_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --

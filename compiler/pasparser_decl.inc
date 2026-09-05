@@ -1873,6 +1873,90 @@ begin
   ParseRecordInitFieldsInto(symIdx, recId, elemIdx, isLocal, -1, 0, 0, 0, PI_ELEM_NONE);
 end;
 
+{ A string INITIALISER's text span, from either spelling that can carry one.
+
+  Four sites -- two array-constant element loops, the scalar typed-string const
+  and its `+` concatenation arm -- each asked `CurTok.Kind <> tkString` and
+  errored otherwise, so `const s1 = 'S1'; A: array[0..0] of ShortString = (s1);`
+  and its scalar twin `const X: ShortString = s1` were refused with
+  `expected a string or char literal` while naming a constant whose literal text
+  the compiler was already holding.
+
+  THE CONTROL THAT IDENTIFIES THE CAUSE: `const n1 = 7; A: array[0..0] of
+  Integer = (n1)` COMPILES. Named constants are folded in initialisers; it is
+  only the STRING path that never looked. So this was not a missing feature, it
+  was four copies of a token test standing in for a question about the program.
+
+  One helper rather than four edits, because the substitution is exact: an
+  untyped string const is STORED as its literal's (SOffset, SLen) span into
+  TokChars (see StrConstSOff/StrConstSLen in defs.inc), which is the very pair
+  every one of these sites already captures from the token. There is no copy and
+  no conversion -- the same span arrives from a different table.
+
+  Returns False without consuming anything when the token is neither, so each
+  caller keeps its own error text and its own recovery.
+  bug-p-a-typed-constant-initialiser-accepts-only-a-string-literal }
+function TakeStrInitSpan(var sOff, sLen: Integer): Boolean;
+var sci: Integer;
+begin
+  TakeStrInitSpan := False;
+  if CurTok.Kind = tkString then
+  begin
+    sOff := Tokens[TokPos - 1].SOffset;
+    sLen := Tokens[TokPos - 1].SLen;
+    Next;
+    TakeStrInitSpan := True;
+  end
+  else if CurTok.Kind = tkIdent then
+  begin
+    sci := FindStrConst(CurTok.SVal);
+    if sci >= 0 then
+    begin
+      sOff := StrConstSOff[sci];
+      sLen := StrConstSLen[sci];
+      Next;
+      TakeStrInitSpan := True;
+    end;
+  end;
+end;
+
+{ TakeStrInitSpan's copying twin, for the `+` concatenation arm, which builds a
+  fresh span in TokChars instead of pointing at an existing one. Appends the
+  current token's text -- a string literal's, or a named untyped string const's,
+  read back out of TokChars via its own span -- and advances past it. Returns
+  False without consuming when the token is neither, so the caller keeps its own
+  error text. Grows sLen by what it appended. }
+function AppendStrInitText(var sLen: Integer): Boolean;
+var si, sci, k: Integer;
+begin
+  AppendStrInitText := False;
+  if CurTok.Kind = tkString then
+  begin
+    for si := 1 to Length(CurTok.SVal) do
+    begin
+      if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+      TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(sLen);
+    end;
+    Next;
+    AppendStrInitText := True;
+  end
+  else if CurTok.Kind = tkIdent then
+  begin
+    sci := FindStrConst(CurTok.SVal);
+    if sci >= 0 then
+    begin
+      for k := 0 to StrConstSLen[sci] - 1 do
+      begin
+        if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+        TokChars[TokCharLen] := TokChars[StrConstSOff[sci] + k];
+        Inc(TokCharLen); Inc(sLen);
+      end;
+      Next;
+      AppendStrInitText := True;
+    end;
+  end;
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
@@ -2241,11 +2325,8 @@ begin
 	                for ParseVarSection). Capture the literal's span directly
 	                and record it as a Kind=1 (string literal) init, same as
 	                ParseConstSection's array-constant string handling. }
-	              if CurTok.Kind <> tkString then
+	              if not TakeStrInitSpan(scOff, scLen) then
 	                Error('array constant: expected a string or char literal');
-	              scOff := Tokens[TokPos-1].SOffset;
-	              scLen := Tokens[TokPos-1].SLen;
-	              Next;
 	              PendingInitSym[PendingInitCount]    := idx;
 	              PendingInitElem[PendingInitCount]   := arrLo + initElem;
 	              PendingInitFOff[PendingInitCount]   := -1;
@@ -2942,11 +3023,8 @@ begin
                 a Kind=1 (string literal) init so the emitter builds an
                 AN_STR_LIT assignment -- same managed-string coercion any
                 ordinary `s := 'literal'` already gets. }
-              if CurTok.Kind <> tkString then
+              if not TakeStrInitSpan(scOff, scLen) then
                 Error('array constant: expected a string or char literal');
-              scOff := Tokens[TokPos-1].SOffset;
-              scLen := Tokens[TokPos-1].SLen;
-              Next;
               if isLocalConst then
               begin
                 if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
@@ -3159,35 +3237,31 @@ begin
             StrConst registration, untouched, in the arm further down.
             bug-p-a-typed-string-constant-cannot-be-assigned }
           Expect(tkEq, '=');
-          if CurTok.Kind <> tkString then
+          if (CurTok.Kind <> tkString) and
+             ((CurTok.Kind <> tkIdent) or (FindStrConst(CurTok.SVal) < 0)) then
             Error('typed string constant: expected a string or char literal');
           if (Tokens[TokPos].Kind = tkPlus) then
           begin
+            { The CONCATENATION arm copies characters rather than taking a span,
+              so it cannot use TakeStrInitSpan -- but it is the same double case
+              and fixing only the single-operand arm would leave
+              `const s1 = 'a'; X: ShortString = s1 + 'b'` refused while
+              `X: ShortString = s1` compiled. AppendStrInitText is the copying
+              twin: it appends from EITHER spelling and errors on neither. }
             scOff := TokCharLen; scLen := 0;
-            for si := 1 to Length(CurTok.SVal) do
-            begin
-              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
-              TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
-            end;
-            Next;
+            if not AppendStrInitText(scLen) then
+              Error('typed string constant: expected a string or char literal');
             while CurTok.Kind = tkPlus do
             begin
               Next;
-              if CurTok.Kind <> tkString then
+              if not AppendStrInitText(scLen) then
                 Error('const string concatenation: expected a string or char literal');
-              for si := 1 to Length(CurTok.SVal) do
-              begin
-                if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
-                TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
-              end;
-              Next;
             end;
           end
           else
           begin
-            scOff := Tokens[TokPos-1].SOffset;
-            scLen := Tokens[TokPos-1].SLen;
-            Next;
+            if not TakeStrInitSpan(scOff, scLen) then
+              Error('typed string constant: expected a string or char literal');
           end;
           AllocStaticLocal := constIsStatic;
           DeclareInitialisedStringVar(name, scOff, scLen, cTk);

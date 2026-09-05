@@ -1,0 +1,9 @@
+arr named  : S1 lit
+arr literal: S1
+arr integer: 7
+scalar     : S1 S1
+cat n+l    : S1cd
+cat l+n    : abcd
+cat n+n    : S1cd
+cat l+l    : abcd
+var array  : S1
