@@ -5286,7 +5286,12 @@ session** on 2026-09-05/06 — `minstacksize`/`maxstacksize`, then
 (`compiler/compiler.pas:2469-2481`, whose doc comment cites an `--emit-obj` refusal
 as the case it was written for). **That is a rate for one author in one session, not
 a fleet rate** — but three misses of a one-line search is enough to treat the search
-as a step rather than an idea.
+as a step rather than an idea. **A fourth followed the next day** (`b7b9e309e`): the
+PChar adapter fallback carries a paragraph about *a default that is also a real
+answer*, one file over from the record-cast bug, reached through a different field,
+**and nobody had grepped for it.** That one is the hardest shape — the sibling
+shares a MECHANISM and not a NAME, so the grep has to be for the sentence, not the
+identifier.
 
 ## CARRY THE POPULATION IN THE SENTENCE, NOT JUST IN THE TABLE — two sessions reached this from opposite directions on one night
 
@@ -7410,6 +7415,68 @@ The general form, which is why this sits beside the DENOMINATOR section: **a
 search whose result includes the thing you searched for is not evidence about
 anything else.** Name what the count would have to EXCLUDE to mean what you want
 it to mean, and count that instead.
+
+## "WHICH SHARED ROUTINES DOES THIS REACH" AND "WHAT DOES IT HAND THEM" ARE DIFFERENT INSTRUMENTS — and a whole defect class is visible only to the second
+
+Measured 2026-09-06 (frankA, `b7b9e309e`), while answering whether a hand-built arm
+should be replaced by a delegation. **The answer was no, and the reason generalises
+past the case.**
+
+An escape census asks: **which shared routines does this loop reach?** All four
+opener paths reached the same ones, so the census printed agreement and had nothing
+to say. The defect was in the other question:
+
+> **What does the opener HAND the shared routine — what does it stamp on the node,
+> and does every CONSUMER of that field read the same encoding?**
+
+**Both copies were wrong, in the same place, self-consistently.** So no sweep caught
+it, and **"delegate like the other side does" would not have been a fix** — a
+shared walker reading a field the opener never filled is broken identically no
+matter how many openers delegate to it.
+
+### The cause was ONE NUMBER, and two AST dumps found it
+
+    t: array[0..2] of TRec,  a = 10 11 12
+
+    PRec(raw)[0..2].a    10 11 12      pointer-alias spelling
+    TRec(raw)[0..2].a    10  0  0      record-name spelling
+
+The same access under both spellings differed in exactly one field: **`ival=14` (an
+alias row) against `ival=0`.** The parser stamps **0 to mean "plain reinterpret, no
+adapter"**; `ir.inc` reads that same field as an **alias index**, and 0 passes its
+`< 0` test for "no alias" — **so the stride came from alias row zero, whatever type
+the program happened to declare first.**
+
+> **A DEFAULT THAT IS ALSO A REAL ANSWER CANNOT SIGNAL "NOT APPLICABLE".**
+
+This is CLAUDE.md's *"choose a probe whose right answer differs from the default"*
+**in the code direction rather than the test direction** — same trap, and the
+PChar adapter fallback **already carries a paragraph about it, one file over,
+through a different field, and nobody had grepped for it.**
+
+**The fix mints the row the cast should always have carried**, rather than teaching
+either of the two `ir.inc` readers what a record cast is. Two consumers read the
+field that way; the encoding is the thing to correct, not the readers.
+
+### Element 0 was right BY COINCIDENCE, and the read-back hid it
+
+`TRec(raw)[1].a := 71` left `t[1].a` at 11 **and then read back 71 through the same
+cast**, because the read goes to the same wrong address. **A store-vs-its-own-
+read-back row cannot fail on this** — the guard-that-cannot-fail shape produced by
+SYMMETRY rather than by a weak assertion, which is why it survives review. The
+fixture reads back through `t`.
+
+And element 0 answering correctly is the collision again: **it needs no stride**, so
+the right answer and the broken answer are the same number at index 0. A sweep that
+probed only the first element would have certified the bug.
+
+### The step for any "should these be one routine" question
+
+1. **Which shared routines does each opener reach?** — the escape census. Cheap, and
+   it answers a question about CONTROL FLOW.
+2. **What field does each opener stamp, and do all consumers decode it the same
+   way?** — a different instrument, answering a question about DATA. **This class is
+   invisible to (1).**
 
 ## A DUPLICATION TICKET'S REAL ARGUMENT IS NOT TIDINESS — it is that EACH COPY HAS TO BE TAUGHT EVERY LESSON AGAIN, and the teaching only happens when somebody hits that arm
 
