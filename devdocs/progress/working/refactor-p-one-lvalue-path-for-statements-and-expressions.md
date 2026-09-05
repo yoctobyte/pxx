@@ -584,3 +584,61 @@ gets the wrong number — this line is the copy that says so.
 Recorded rather than quietly left because the failure is exactly the one the
 commit is about: a count that travels in a summary while the measurement behind
 it says something else, and the summary is the part everyone reads.
+
+## 2026-09-06 (frankA) — the hand-off risk is MEASURED, and it is one mechanism
+
+This ticket's "catch to measure first" — *the expression parser resolves a
+trailing `.name` and may CALL it, which in target position must not happen* — is
+now measured rather than feared, and the answer changes what the merge has to
+build.
+
+**The flag this ticket asks for already exists, and it is not a flag.**
+`PropAccessIsWrite` (`pasparser_call.inc:751`) is a token LOOKAHEAD: after the
+name, either `:=` directly, or a balanced `[...]` group followed by `:=`. Every
+property arm in `pasparser_lval.inc` already calls it. So the hand-off does not
+need a caller-supplied "this is an assignment target" bit — the walker can see
+it for itself, and has been doing so.
+
+**Measured with side-effecting accessors rather than by reading.** A class whose
+getter and setter each `WriteLn` their own name turns "which accessor fired"
+into a printed trace. Nine target shapes off a plain receiver — plain property,
+indexed property, default property, each read and write, plus a property
+returning a pointer stored through — are **byte-identical to fpc 3.2.2,
+including which accessor fires and in which order.** The lookahead is correct on
+every shape that can be spelled.
+
+### The three that fail are ONE mechanism, and it is the merge
+
+Through a CAST-headed target, all three property spellings are refused:
+
+```
+PTC(raw)^.P := 21        expected ':=' before ';'      (fpc: SetV, v=21)
+PTC(raw)^.A[2] := 22     expected ':=' before ';'      (fpc: SetA)
+PTC(raw)^[3] := 23       expected ':=' before ';'      (fpc: SetA)
+```
+
+and all three are correct through the variable spelling `pc^...`, and all three
+pre-date pin v403. **The error text names the mechanism**: the statement path
+delegates, `ParseClassRecordSelectors` sees the `:=` via `PropAccessIsWrite`,
+performs the WHOLE store and returns a call node — and `ParseStatementAST` does
+not know the assignment already happened, so it demands its own `:=`.
+
+So the merge's real problem is **not** suppressing a call the expression path
+would make. It is the opposite: the shared walker sometimes does the entire
+statement, and the hand-off needs a way to say so. The class-cast arm already
+lives with this — its comment records `TDerived(b)[3] := 206` coming back "as a
+CALL, the caller took it for a method-call statement". **That convention is the
+thing to design, and it is smaller than the merge this ticket describes.**
+
+**A refusal is the safe failure here and worth noting as such**: these three are
+diagnostics, not wrong values. The one SILENT member of the same family was in
+expression position — `t := PTC(raw)^[3]` reading the object as a raw array,
+fixed in `25cdaac51` — which is the usual asymmetry: the target-position bug
+announces itself and the read-position bug does not.
+
+### What this ticket now needs
+
+Not a differential over every target shape — that is run, and the receiver-side
+answer is clean. It needs **one decision**: how a delegated walk reports "I
+consumed the assignment". Once that exists, the statement path's remaining
+duplicated walk can be deleted rather than converged arm by arm.
