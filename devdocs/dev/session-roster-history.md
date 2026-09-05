@@ -25092,3 +25092,53 @@ best-established figures are the ones most likely to be stale. The mirror of
 this seat's own 09-04 miss, where the stale count was its *own* prior correct
 one. Familiarity and corroboration both feel like verification; **neither
 carries a timestamp.**
+
+### The gate summary.log hazard — relayed to seven, and what the seat added
+
+`tools/gate.sh` began writing `$LOGDIR/summary.log` on `08096b259` so nobody
+reads a verdict off the wrapper's stdout. At eight sessions that fix acquired a
+new failure mode: **a waiter can find a NEIGHBOURING gate's summary.log.** It
+does not error — it returns another run's genuine, correct verdict. frankH hit
+it with three gates in flight and is writing the durable version into the
+playbook (`adf2f2f5f`). Relayed live to frankA/B/C/D/S/Z and frank-optimize.
+
+**The remedy is the printed line, and the seat's contribution was making it
+exact.** `LOGDIR="${TMPDIR:-/tmp}/pxx-gate-$$"` (gate.sh:24) is **PID-named**,
+and gate.sh:190 prints `gate: mode=<mode>  logs=/tmp/pxx-gate-<pid>`. Read
+`summary.log` from **that** path, from your **own** run's output. **Never by
+glob, never by newest mtime** — and mtime is the one to spell out, because it
+looks safe: a PID-named directory has no ordering relation to yours, a gate
+started later and finishing sooner wins that race, and a recycled PID is not
+monotonic. **An unattributed verdict is not a green** (frankA's phrasing, taken
+as a rule rather than a tip).
+
+### "AM I ALONE?" IS A MEASUREMENT, AND IT IS THIS SEAT'S ONE UNIQUE INSTRUMENT
+
+frankA asked it before gating. The tempting answer is *"nobody has told me"* —
+which is absence of evidence, minutes after a broadcast asking people to tell
+me. **The box answers it directly:** `pgrep -af 'gate\.sh'` counts live runs,
+and the wrapper's `cd /home/neo/<session>` in the process line **attributes
+each gate to a session** — an independent second source for a logdir that fails
+differently from the printed `logs=` line (process parentage vs. a printed
+string). Measured 19:39: **three concurrent gates** — frankA 892523, frankZ
+880953, and 878480 *inferred* to be frankB's from PID adjacency to its waiter
+and labelled as inference. Plus frankC sweeping every `test/*.c` in a loop under
+`PXX_ALLOW_FULL_SUITE=1` — a heavy build load that **does not appear if you
+grep for gates**. Load 9.04, 41G of 60G available, so no OOM risk that minute.
+This is the one question a worker structurally cannot answer and the seat can.
+
+**And the trap was armed in its worst possible state at that exact moment:
+`ls -td /tmp/pxx-gate-*` returned frankA's OWN directory.** The method frankA
+had just correctly rejected would have handed it the right answer — which is
+worse than a wrong one, because it certifies the method. It is also a race that
+flips mid-run, since every gate touches its directory as it writes. Textbook
+instance of CLAUDE.md's *"choose a probe whose right answer differs from the
+default"*: if the machinery did nothing, the row still passes.
+
+**Contention found by the same look, and nobody had reported it:** frankZ was
+running `tools/gate.sh quick` in the background **and** `make tools-devtest` in
+the foreground from one shell — self-contention on top of the three-way kind,
+which is the configuration that OOM-killed two runs last night. Told frankZ.
+Told frankC that its sweep's *timings* are unusable today while its *pass/fail*
+content is fine, and that a contention death drops a file out of a count
+silently — **report the denominator**.
