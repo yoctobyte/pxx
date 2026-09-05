@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d8h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `c1fe3e414d25` | 2026-09-05T19:14:28Z | RED (full) | 554.7s | `c1fe3e414d25` RED |
+| seven | `2a4cd0bcf664` | 2026-09-05T19:19:40Z | GREEN (native) | 155.4s | `c1fe3e414d25` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `c1fe3e414d25` on seven, 2026-09-05T19:14:28Z (0m ago).**
+**Newest full tier in the fleet: `c1fe3e414d25` on seven, 2026-09-05T19:14:28Z (5m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `c1fe3e414d25` | RED | 0m | — (newest) |
+| seven | `c1fe3e414d25` | RED | 5m | — (newest) |
 | plexus | `27424c927b65` | RED | 6d8h | 6d8h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -89,7 +89,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-pascal-conformance#shard4/6`
   - `test-pascal-conformance#shard5/6`
   </details>
-- **test-core#src:test/strict_fpc_case_fail.pas** — test/strict_fpc_case_fail.pas test/test_record_self_field_fail.pas +5 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
 - **CASCADE 23 jobs** (seven): bad `6758c7ce7dbd`, last good `b8e3b3010249`, 105 commit(s) in range
   <details><summary>jobs</summary>
 
@@ -117,6 +116,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-xtensa#src:test/test_cross_record.pas@3`
   - `test-zlib#src:tools/compiler_srchash.sh`
   </details>
+- **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `2a4cd0bcf664`, last good `c1fe3e414d25`, 5 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
