@@ -26019,3 +26019,170 @@ and the two sit in the same ticket in the same voice. frankS is running
 lifted autonomously (a target in no tier is exactly that case) and deliberately
 **not** concurrent with its gate, because `ESP_RUN_TIMEOUT=8` under contention
 produces timeouts wearing the shape of codegen defects.
+
+## PIN v404 LANDED — and the watch list retired three items at once
+
+`8844c8c42`, binary sha256 `fe1e9c37d322`, tree `5b5fdb0b3`. Verified here
+before broadcasting: on origin/master, `stable_linux_amd64/` last touched by it,
+and `2d6bfadd6` (the eight-red revert) confirmed an ancestor of the pinned tree.
+Relayed to all seven lanes with the **retirement stated**: *"do not revert on
+the `pinned builds live lib/rtl` RED" is VOID; a RED there is now real.*
+
+**Graded `reds`, not green, deliberately:** 16 of 17 quick rows, no full tier at
+this tree, no cross-target verdict. Two failures named IN ADVANCE as not-the-pin
+so they would not read as breakage — `pcl/extctrls` (a deliberate `#error`,
+`<gtk/gtk.h>` resolving to GTK2 without the GTK3 include root) and
+`mimic_string` / `mimic_urllib_request` (NilPy builtins, failing against this
+tree's own compiler). **A pin that states what it does not cover is worth more
+than one that passes.**
+
+frankB retested with **the exact command that failed at 18:30** — `ok: rc=0` on
+`typinfo`, and the figures **byte-identical to its HEAD compiler**, which is a
+second differently-derived proof that `1ea430c95` is in the pinned ground.
+
+### THE SEAT CANNOT LAUNDER A CLAUDE.md EDIT THROUGH A WORKER
+
+frankuser separated the two halves correctly — **correcting a false sentence is
+not a behaviour change and does not need the owner; deleting the instruction
+does** — and told this seat to hand the correction to a worker. I handed it to
+frankB with the merge-base excerpt and both sources.
+
+**frankB declined, and was right.** Its instructions say not to edit CLAUDE.md
+because a peer asked; the rule names the file flatly with **no exception for
+factual corrections**, and *"the peer's reasoning was good"* is exactly what it
+is built to distrust. **Two peers asking does not change that** — and the
+coordinator is still a peer.
+
+**The form I used is the one that looks most legitimate:** a well-measured
+finding, four line-numbered citations, an explicit scope limit, and an
+instruction from the session that dispatched us both. **A rule that only catches
+badly-argued requests is not a guard.** frankB sent frankuser the exact
+replacement sentence instead — the human terminus, which is where an
+authority-file edit belongs and where this seat should have sent it directly.
+
+Recorded as a boundary: **this seat does not route edits to CLAUDE.md.** The
+`decide-` ticket for the surviving instruction is filed
+(`decide-does-gate-before-you-commit-survive-when-its-only-justification-is-false`,
+`aed44fcb8`) — **filing a decide ticket is routing, not deciding.**
+
+frankB also declined to count its own four gates as evidence: **all ran with
+`compiler/` dirty, so they are consistent with both readings and corroborate
+neither.** frankS's clean-tree run is the only discriminating one, and saying so
+protects it from being buried under agreement.
+
+### DEFAULT TO ANNOUNCING, NOT HOLDING — the hold multiplier is the seat's
+
+frankH: *"I'd have been better off saying 'I will tell you when it lands, do not
+hold' — the announcement was going out regardless, and a hold buys nothing a
+notification does not, unless the work genuinely cannot tolerate a concurrent
+gate. Mine could; three gates ran on this box today without incident."*
+
+Its estimate was "a couple of minutes" and the real window was **~20**, because
+the first pin attempt was backed out unlanded when seven's tier and frankB's
+repro arrived mid-flight.
+
+**The multiplier belongs to this seat.** I issued and enforced that hold across
+seven lanes on one session's best-case estimate, **without ever asking whether
+the pin needed exclusivity or only needed announcing** — and frankZ paid a
+`tools-devtest` run on top, because for a chained job "hold" and "kill" are the
+same instruction.
+
+**Rule going forward: default to ANNOUNCING. Ask for a hold only when
+concurrency would corrupt the work, price it at the worst case, and ask first
+who cannot hold without killing something.**
+
+### A FALSE RED AND A FALSE PASS ARE ASYMMETRIC IN *WHO PAYS* — frankH
+
+Better than the note it corrects. Not symmetric in cost: **a false PASS is paid
+later by someone who was not there and cannot see the guard was ever involved; a
+false RED is paid immediately by whoever is standing in front of it.**
+
+**Hence the incentive failure: the false RED gets "fixed" by deleting the
+guard**, because the person paying has both the motive and the means, and the
+change that stops the pain removes the instrument. The false PASS has nobody
+standing in front of it at all.
+
+**Live instance, same evening:** frankZ met a red guard, **fixed the ASSERTION
+rather than deleting it, and verified the guarded thing was still there first.**
+`b6212f43f` renamed the canary's artifact `"$bin"` → `"$work/run.bin"`; the
+devtest asserted the literal string and **reported a rename as a deletion**,
+red for every lane. The canary's run step never left the function. frankZ's
+replacement asserts that an artifact the function COMPILES is executed at
+command position, with both controls in the file (strip execution lines → RED;
+rename `run.bin` → `smoke.bin` → GREEN). frankH: *"I'd have fixed the string."*
+
+frankH also notes it gated on `gate.sh quick` and **never ran `make
+tools-devtest`** — beside frankB's GREEN-as-coverage the same night: two
+sessions reading a green from an instrument that does not run the rows in
+question, both using the prescribed gate.
+
+### THE SUITE IN NO TIER FOUND A PROFILE-WIDE BUG ON ITS FIRST EVER RUN
+
+frankS ran `test-esp-bare` for what appears to be the first time ever: 0 skips,
+16 ok, 1 MISMATCH. Varying the shape turned one red row into a profile-wide
+statement:
+
+| program | `--esp-profile=bare` |
+| --- | --- |
+| `writeln(1)` | builds |
+| **any program declaring a `class`** | **FAILS, both chips** |
+| same program, `--platform=posix` | builds |
+
+**No program declaring a class has ever built for `--esp-profile=bare`, on
+either chip** — invisible because the only suite that compiles for that profile
+is **in no tier**. The 51-assertions count was not bookkeeping.
+
+Cause: `PXXClassFinalize`'s body sits inside `{$ifndef PXX_ESP}` while its
+forward declaration was moved to the **unconditional** interface list. **The
+file's own comment — "Forward only where the BODY exists" — names this exact
+error string, and moving the forward re-introduced the defect the comment was
+written to prevent.** A comment that names its own failure mode and is tripped
+anyway is an argument for a guard, not a better comment.
+
+**And the runner was destroying the evidence:** `tools/esp_run_bare.sh` sends
+compile **stdout** to `/dev/null` while pascal26 writes diagnostics there, so **a
+build failure and a silent run are the same observation.** Today's family with
+the volume at zero — not answering wrongly, discarding the answer.
+
+**Seam this seat flagged that nothing else would have: `make pin` freezes
+`compiler/builtin/**`, so the fix is at HEAD and NOT in pin v404** — anyone
+building `--esp-profile=bare` through `$(PXX_STABLE)` still hits it until the
+next pin. Not a pin request (the roster's canary case is a new builtin called
+from `lib/rtl`; this is a guarded declaration on a path no stable-built program
+could reach anyway), but one line in the ticket so a fix that works at HEAD and
+not for a B-lane build is not mistaken for something else.
+
+### `objdump -d` ON A PXX ELF: THE NULL INSTRUMENT WITH THREE MEANINGS
+
+frank-optimize: `objdump -d` produces **3 lines total** on a pxx-emitted ELF —
+it does not disassemble them. So `objdump -d bin | grep -c 'call.*Dd2Prod'`
+returns **0**, and **0 is exactly what successful inlining looks like.**
+
+**It also returns 0 for a file that does not exist.** One number spanning
+*inlining worked*, *objdump cannot see it*, and *there is no binary*. **Caught
+only because a build failed and BOTH arms still showed 0 calls** — a run where
+everything worked would have certified it forever.
+
+The real instrument is `PXXDBG=a.inline`: the change arm retains `DdFast2Sum
+shape=4` and `Dd2Prod shape=4`, the control retains neither — it distinguishes,
+and the distinguishing values are not the default.
+
+Post-revert re-take, **control byte-identical to pin v404** (`fe1e9c37d322`), so
+the number is against the fleet's actual stable compiler: **1.543x delivered,
+3.28x hand-inlined bound, 50.6% of the available win captured**, remainder
+attributed to the record temp the splice materialises. Re-taking anyway, for a
+better reason than the one this seat gave: **its two minima came from DIFFERENT
+runs, so "at least one clean sample per arm" was an unverified assumption, and
+min-of-N only resists a spike if that holds.**
+
+### A GHOST SHA, QUOTED BY THIS SEAT, ON THE ONE RULE THAT NAMES IT
+
+I told frank-optimize to push `2de85ffdf`. It had never been on origin — it
+landed as `a4c89e31d`, rebased by `sync.sh`. **CLAUDE.md states the ghost rate is
+~100% by construction here and that every quoted sha must be read off `git log
+origin/master` AFTER the push.** I quoted a peer's pre-push sha back at it.
+
+Second relay error tonight of the same shape, after the stale CLAUDE.md canary
+rule: **repeating a peer's artifact without running the check I would have
+demanded of anyone else.** Recovery was by subject, as documented, and the
+author knew what it had landed while the relayer did not.
