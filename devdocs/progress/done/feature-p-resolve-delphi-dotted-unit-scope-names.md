@@ -99,14 +99,25 @@ takes `{$IFDEF FPC}` → `{$ELSE} , LCLIntf`, so telling DWScript we are FPC sen
 it into **Lazarus**, while not telling it sends it into the Delphi RTL
 (`System.IOUtils`, `Posix.*`). Recorded on [[feature-embed-dwscript-rtti]].
 
-### The residual, named rather than left implied
+### The residual — MEASURED THE SAME DAY, AND IT IS NOT ONE
 
 `System.Move`, `System.Length`, `System.SetLength`, `System.FillChar` appear 54,
-6, 3 and 3 times in DWScript — those are **qualified identifiers**, not unit
-names, and this feature does not touch them. Delphi lets a unit-scope name
-qualify a routine. Nobody has measured whether pxx accepts that spelling; that
-question has no owner yet and is the next thing to probe if the Delphi corpus is
-pursued.
+6, 3 and 3 times in DWScript. Those are **qualified identifiers**, not unit
+names, and this feature does not touch them. This section first said nobody had
+measured whether pxx accepts that spelling and that the question had no owner.
+Measured immediately rather than left as an open question, because an ownerless
+residual in a `done/` ticket is exactly the kind of thing that gets re-derived
+as a blocker a month later:
+
+```pascal
+System.SetLength(s, 1);   { h  }
+System.Length(s)          { 1  }
+System.Move(a, b, 4);     { 7  }
+SysUtils.IntToStr(42)     { 42 }
+```
+
+**pxx already accepts all four and matches `fpc 3.2.2 -Mdelphi` output for
+output.** There is nothing to do here and nothing to file.
 
 ### Gate
 
