@@ -4,12 +4,12 @@ title: "A class property can only be backed by a static METHOD — never by a cl
 track: P
 prio: 50
 type: bug
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "PARTLY FIXED 2026-09-05. `class property V: T read FV write FV` over a `class var FV: T` now works for the TYPE-QUALIFIED spelling on BOTH declaring kinds -- `TCls.V` and `TRec.Val`, read and write, byte-identical to fpc 3.2.2 -- and terecs8 and tobject6 came OFF the skip list with output matching fpc, not merely exit 0. The cause was one thing wearing two diagnostics: both declaration parsers put any accessor that is not an instance FIELD into the METHOD slot, and the class-property access path built the name from those slots and called FindUMeth only, so a record was refused while PARSING the declaration while a class parsed and failed at the USE. The fix adds a FindClassVar fallback that re-enters on the backing global (pasparser_lval.inc), exactly as the class-VAR arm forty lines below already does, rather than growing a third accessor kind through the four UProp slots. STILL OPEN AT A THIRD SITE, AND THAT ONE CAN FAIL SILENTLY -- which is why it is worth more than the row count suggests. The INSTANCE-qualified and UNQUALIFIED spellings (`a.V := 7`, and a bare `SomethingStatic` inside the type's own static method) go through pasparser_lval.inc's instance accessor branch (the `UPropWriteMLen[pri] > 0` arm, ~line 831, and its read sibling just below), which does its own FindUMeth and has the identical missing arm -- today `setter method not found: FVal`, a clean error. THE DANGER IS IN THE FIX, NOT THE BUG: that branch builds a MakeAccessorCall with a live selfNode, and a class var is NOT per-instance, so a fix that reuses the surrounding shape instead of re-entering on the backing global would compile, run, and read PER-INSTANCE storage where the program asked for the shared slot -- a wrong value with no diagnostic, in place of the honest error we have now. Anyone taking this must assert SHARING (write through one instance, read through another) and not merely that it compiles. Two rows need it: terecs3 (behind a record-constructor wall first) and tstatic2. NOT the fix, measured and reverted earlier: widening only the record parse arms yields a declaration that cannot be used."
+summary: "FIXED 2026-09-05. `class property V: T read FV write FV` over a `class var FV: T` now works in EVERY spelling, on a class, a record and a class HELPER: type-qualified (`TCls.V`), unqualified inside an instance method and inside a `class procedure ... static`, Self-qualified, instance-qualified (`a.V`, and a record variable's `r.Val`), and inside a `with` scope -- which additionally could not see a bare class var at all. Thirteen forms, each read and write, each byte-identical to fpc 3.2.2. tstatic2 came OFF the skip list, verified by OUTPUT rather than exit code; terecs3 stays on it behind an unrelated record-constructor wall. The cause was one thing wearing several diagnostics: both declaration parsers put any accessor that is not an instance FIELD into the METHOD slot, so a class-var backing arrived there and every consumer resolved it with FindUMeth alone. Every arm re-enters ParseLValueAST on the backing GLOBAL rather than building a MakeAccessorCall against Self -- not a style choice: a class var is not per-instance, so the reuse-the-surrounding-shape fix would have compiled, run, and read PER-INSTANCE storage where the program asked for the shared slot, a wrong value with no diagnostic. test_class_property_through_an_instance.pas asserts SHARING (every write through one instance, every read back through another) with an ordinary instance field written in the same lines as the control that must NOT be shared. NOT the fix, measured and reverted: widening only the record parse arms yields a declaration that cannot be used."
 ---
 
 # A class property cannot be backed by a class var
@@ -145,3 +145,78 @@ wall it hits first. Left undone deliberately rather than attempted at the end of
 a session: it is a different lowering in a branch with a live `selfNode`, and
 the failure mode of getting it wrong is a silent per-instance read of shared
 storage.
+
+
+## Resolved 2026-09-05 — every spelling, and two arms fewer than the fix started with
+
+**Six sites, not the three the ticket named.** The boundary in the summary was
+again a hypothesis about what I had happened to look at. Enumerating FORMS
+rather than reading the parser found them in one pass — twelve probe files,
+each compiled by pxx and by fpc 3.2.2 and diffed on OUTPUT — and each error site
+was attributed exactly by temporarily tagging every `method not found` string
+with its own line number, because five sites shared one message and a single
+fire could not otherwise say which arm produced it.
+
+| form | pre-fix site | pre-fix diagnostic |
+| --- | --- | --- |
+| `V := 7` unqualified in an instance method | lval 839 | `setter method not found: FV` |
+| `x := V` unqualified in an instance method | lval 912 | `property getter method not found: FV` |
+| `a.V := 7`, `Self.V := 7`, `r.Val := 41` | lval 2464 | `setter method not found: FV` |
+| `x := a.V` | lval 2501 | `getter method not found: FV` |
+| bare name in a `class procedure ... static` | never reached | `undefined variable (SomethingStatic)` |
+| `with a do V := 7` / `with a do x := V` | never reached | `undefined variable (V)` |
+
+The last two are the ones the ticket could not have predicted from the first
+four, and they fail through a **different mechanism**: those paths are keyed on
+`CurSelfClass`, so a static class method — which has no Self and needs none for
+shared storage — never enters the property branch at all. The `with` scope had
+the wider gap: it could not resolve a bare `class var` either, only the property
+over one, so `with a do FV := 7` was `undefined variable` on a name the same
+method body resolves fine one line outside the `with`.
+
+**The recursion guard is load-bearing and was found by a segfault, not by
+review.** The with-scope block runs on every entry to `ParseLValueAST`,
+including the re-entry, and resolves from the same `identTokIdx` — so the first
+version recursed until the stack died, on three probes. `cvIdx <> idx` compares
+the resolved SYMBOL rather than gating on `idx < 0`, which keeps a with-scoped
+class var shadowing an unrelated global of the same name.
+
+**Two of the five arms were then removed as subsumed, and that was measured, not
+assumed.** Once the bare-name arm was keyed on `CurMethClass` (beside the
+existing bare class-VAR arm, for the same stated reason — a class procedure has
+no Self), the `CurSelfClass`-keyed arms at 839 and 912 became unreachable for
+this case. Deleting code because it looks dead is the error, so the A/B was:
+remove them, rebuild, re-run all thirteen forms plus the sharing test — all
+green — and specifically add the **class helper** probe, which is the one shape
+where `SelfMemberCi` and `CurMethClass` can disagree. It passes too. The fix is
+three arms, not five.
+
+**Direction is not a detail.** `tstatic2`'s property is
+`read FSomethingStatic write SetSomethingStatic` — a class var one way and a
+static method the other. An arm that resolved a class-var accessor without
+asking which direction was being parsed would have silently bypassed the setter.
+Only the slot for the direction actually being parsed may answer.
+
+**Negative control.** `test_class_property_through_an_instance.pas` was run
+against the pre-fix compiler (`80a583aed8c6`, this tree with only
+`pasparser_lval.inc` reverted): refused at the first row. Restoring the patch
+rebuilt to `64cd35f4668f`, byte-identical to the build the A/B produced, which
+is what makes the revert exact rather than approximately exact.
+
+**What the test asserts and why it is shaped that way.** Every access in the
+file would also compile against per-instance storage — one object, one slot,
+right answer for the wrong reason — so every write goes through one instance and
+every read comes back through **another**, and an ordinary instance field is
+written in the same lines as the control that must NOT be shared. That control
+prints `1 0` on the same run that the shared rows print `1`, so the file
+demonstrates it can distinguish the two, rather than asserting it can.
+
+**Conformance.** `tstatic2` compiles, runs `rc=0`, and prints fpc's own two
+lines — burned from the skip list on OUTPUT, not on exit code, which is the only
+reading that means anything given the harness compares exit codes. `terecs3`
+now fails on `a record constructor must have at least one parameter without a
+default`, an unrelated wall, and its skip reason says so. `terecs_u1` is a
+harness gap (a unit with no standalone-unit output) and is unaffected.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

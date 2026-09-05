@@ -20,13 +20,13 @@
   second write is what shows one slot behind the property. Expected output is
   fpc 3.2.2's own.
 
-  WHAT IS NOT COVERED, and it is measured rather than assumed: the
-  INSTANCE-qualified spelling `a.V := 7` still fails, at a third site —
-  pasparser_lval.inc's unqualified/instance setter path, which does its own
-  FindUMeth and has the identical missing arm (`setter method not found`). Two
-  conformance rows (terecs3, tstatic2) still need that one. Left out of this
-  file rather than left unmentioned, so nobody reads a green here as covering
-  it. bug-p-a-class-property-cannot-be-backed-by-a-class-var }
+  WHAT IS NOT COVERED HERE is every spelling that does not name the TYPE:
+  unqualified, Self-qualified, instance-qualified and with-scoped. Those were
+  five further sites with the identical missing arm and they landed the same
+  day, in test_class_property_through_an_instance.pas — which is also where the
+  SHARING is proved across two instances, something this file cannot do because
+  the type spelling has no instance to be wrong about.
+  bug-p-a-class-property-cannot-be-backed-by-a-class-var }
 program test_class_property_backed_by_a_class_var;
 {$mode delphi}
 

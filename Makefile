@@ -13736,10 +13736,19 @@ test-core: $(COMPILER)
 	# test covering one kind would pass while the other stayed broken. Writing
 	# through the type and reading back after a second write is what shows one
 	# slot behind the property; an instance-field-backed property would compile
-	# every line. The INSTANCE-qualified spelling `a.V := 7` is still
-	# unsupported at a third site and is deliberately not here.
+	# every line. The remaining spellings — unqualified, Self-qualified,
+	# instance-qualified and with-scoped — are the file below it.
 	./$(COMPILER) test/test_class_property_backed_by_a_class_var.pas $(TESTTMP)/test_clsprop_cv26
 	tools/expect_same.sh test_clsprop_cv26 "$$($(TESTTMP)/test_clsprop_cv26)" "$$(cat test/test_class_property_backed_by_a_class_var.expected)"
+	# Every spelling that is NOT `TypeName.Prop`: five further sites resolved the
+	# accessor slot with FindUMeth alone. Each write here goes through one
+	# instance and each read comes back through ANOTHER, because every line would
+	# also compile against per-instance storage — one object, one slot, right
+	# answer for the wrong reason. `Per` is an ordinary field written in the same
+	# lines and must NOT be shared; that row is what makes the shared rows mean
+	# something.
+	./$(COMPILER) test/test_class_property_through_an_instance.pas $(TESTTMP)/test_clsprop_inst26
+	tools/expect_same.sh test_clsprop_inst26 "$$($(TESTTMP)/test_clsprop_inst26)" "$$(cat test/test_class_property_through_an_instance.expected)"
 	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c

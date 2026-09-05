@@ -484,9 +484,58 @@ begin
             do ... Username := User` (ftpsend): rewrite to the backing field.
             Write accessor when an assignment follows, read otherwise; method
             accessors are out of scope here (fall through). }
+          { with-scoped CLASS VAR, bare (`with a do FV := 7`). The with operand
+            names the TYPE here, not the storage: a class var is one shared
+            global, so re-enter on it and drop withNode. Asked before the
+            property arm below because an own class var of that name is the
+            thing itself, not an accessor for something else.
+
+            `cvIdx <> idx` is the RECURSION guard and it is load-bearing: this
+            with-scope block runs on every entry, including the re-entry below,
+            and it resolves from identTokIdx -- the same token -- so without it
+            the re-entry finds the same class var and recurses until the stack
+            dies (measured: three probes segfaulted the compiler). Comparing the
+            resolved symbol rather than gating on `idx < 0` keeps a with-scoped
+            class var shadowing an unrelated global of the same name.
+            bug-p-a-class-property-cannot-be-backed-by-a-class-var }
+          cvIdx := FindClassVar(selfClassCi, fieldName);
+          if (cvIdx >= 0) and (cvIdx <> idx) then
+          begin
+            Result := ParseLValueAST(cvIdx, identTokIdx);
+            Exit;
+          end;
+
           pri := FindUProp(selfClassCi, fieldName);
           if pri >= 0 then
           begin
+            { ...and a with-scoped class PROPERTY backed by one. The accessor
+              slots read below are the FIELD pair; a class-var backing is in the
+              METHOD pair, because both declaration parsers put anything that is
+              not an instance field there. }
+            propFOff := 0; propFLen := 0;
+            if (CurTok.Kind = tkAssign) and (UPropWriteMLen[pri] > 0) then
+            begin
+              propFOff := UPropWriteMOff[pri];
+              propFLen := UPropWriteMLen[pri];
+            end
+            else if (CurTok.Kind <> tkAssign) and (UPropReadMLen[pri] > 0) then
+            begin
+              propFOff := UPropReadMOff[pri];
+              propFLen := UPropReadMLen[pri];
+            end;
+            if propFLen > 0 then
+            begin
+              methName := '';
+              for i := 0 to propFLen - 1 do
+                AppendChar(methName, TokChars[propFOff + i]);
+              cvIdx := FindClassVar(selfClassCi, methName);
+              if (cvIdx >= 0) and (cvIdx <> idx) then
+              begin
+                Result := ParseLValueAST(cvIdx, identTokIdx);
+                Exit;
+              end;
+            end;
+
             if (CurTok.Kind = tkAssign) and (UPropWriteFLen[pri] > 0) then
             begin
               propFOff := UPropWriteFOff[pri];
@@ -664,6 +713,45 @@ begin
         bug-p-two-classes-typed-consts-of-the-same-name-collide }
       if (cvIdx < 0) and (fldIdx < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
         cvIdx := FindClassConstSym(CurMethClass - REC_UCLASS_BASE, fieldName);
+
+      { …and a bare CLASS PROPERTY whose accessor for THIS DIRECTION is a class
+        var. Keyed on CurMethClass for the same reason the class var above is:
+        a `class procedure ... static` has no Self, and a class var needs none,
+        so the Self-keyed property path further down is never entered there and
+        the name came out as `undefined variable` (tstatic2).
+
+        THE DIRECTION IS NOT A DETAIL. tstatic2's property is
+        `read FSomethingStatic write SetSomethingStatic` — a class var one way
+        and a static method the other — so resolving the write side here would
+        silently bypass the setter. Only the slot for the direction actually
+        being parsed may answer.
+        bug-p-a-class-property-cannot-be-backed-by-a-class-var }
+      if (cvIdx < 0) and (fldIdx < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
+      begin
+        pri := FindUProp(CurMethClass - REC_UCLASS_BASE, fieldName);
+        if pri >= 0 then
+        begin
+          propFOff := 0; propFLen := 0;
+          if (CurTok.Kind = tkAssign) and (UPropWriteMLen[pri] > 0) then
+          begin
+            propFOff := UPropWriteMOff[pri];
+            propFLen := UPropWriteMLen[pri];
+          end
+          else if (CurTok.Kind <> tkAssign) and (UPropReadMLen[pri] > 0) then
+          begin
+            propFOff := UPropReadMOff[pri];
+            propFLen := UPropReadMLen[pri];
+          end;
+          if propFLen > 0 then
+          begin
+            methName := '';
+            for i := 0 to propFLen - 1 do
+              AppendChar(methName, TokChars[propFOff + i]);
+            cvIdx := FindClassVar(CurMethClass - REC_UCLASS_BASE, methName);
+          end;
+        end;
+      end;
+
       if cvIdx >= 0 then
       begin
         { Re-enter with the backing global resolved: the idx >= 0 path already
@@ -836,6 +924,16 @@ begin
           for i := 0 to UPropWriteMLen[pri] - 1 do
             AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
           mmi := FindUMeth(selfClassCi, methName);
+
+          { ...or a CLASS VAR. A property's accessor slot holds a NAME, and both
+            declaration parsers put anything that is not an instance FIELD into
+            the METHOD slot -- so a `class var` backing arrives here and the
+            diagnostic names the lookup that failed rather than the one that was
+            missing. Re-enter on the backing GLOBAL, exactly like the bare
+            class-var path above; do NOT build a MakeAccessorCall against
+            selfNode. That would compile and run and read PER-INSTANCE storage
+            where the program asked for the shared slot -- a wrong value with no
+            diagnostic. bug-p-a-class-property-cannot-be-backed-by-a-class-var }
           if mmi < 0 then Error('setter method not found: ' + methName);
           mpi := UMthProc_[mmi];
           Expect(tkAssign, ':=');
@@ -909,6 +1007,9 @@ begin
         for i := 0 to UPropReadMLen[pri] - 1 do
           AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
         mmi := FindUMeth(selfClassCi, methName);
+
+        { class-var backing -- the read sibling of the setter arm above, and it
+          fails the same way for the same reason. }
         if mmi < 0 then Error('property getter method not found: ' + methName);
         mpi := UMthProc_[mmi];
         mcallNode := MakeAccessorCall(selfClassCi, mmi, mpi, selfNode, -1);
@@ -2461,6 +2562,24 @@ begin
             for i := 0 to UPropWriteMLen[pri] - 1 do
               AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
             mmi := FindUMeth(mci, methName);
+
+            { class-var backing, reached through an INSTANCE qualifier: `a.V := 7`,
+              `Self.V := 7`, and a record variable's `r.Val := 41` all land here.
+              The qualifier is discarded on purpose -- a class var IS one shared
+              global, so the receiver names the type, not the storage, and fpc
+              3.2.2 agrees (measured: all three spellings print the same slot).
+              `node` (the receiver expression) is dropped with it. }
+            if mmi < 0 then
+            begin
+              cvIdx := FindClassVar(mci, methName);
+              if cvIdx >= 0 then
+              begin
+                if CurTok.Kind = tkIdent then Next; { consume property name }
+                Result := ParseLValueAST(cvIdx, TokPos - 1);
+                Exit;
+              end;
+            end;
+
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
 
@@ -2498,6 +2617,20 @@ begin
             for i := 0 to UPropReadMLen[pri] - 1 do
               AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
             mmi := FindUMeth(mci, methName);
+
+            { class-var backing -- the read sibling of the instance-qualified
+              setter arm above. }
+            if mmi < 0 then
+            begin
+              cvIdx := FindClassVar(mci, methName);
+              if cvIdx >= 0 then
+              begin
+                if CurTok.Kind = tkIdent then Next; { consume property name }
+                Result := ParseLValueAST(cvIdx, TokPos - 1);
+                Exit;
+              end;
+            end;
+
             if mmi < 0 then Error('getter method not found: ' + methName);
             mpi := UMthProc_[mmi];
 
