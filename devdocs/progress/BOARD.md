@@ -342,11 +342,12 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (28)
+## backlog-tools (29)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict | T | 55 | bug | A backgrounded `gate.sh`/`testmgr` run reports `exit code 0` in its completion notification while its own log says `testmgr: RED` / `gate: RED (exit 1)`. SEVEN independent sightings across at least three sessions since 2026-09-02. The notification is not wrong about anything — it reports the WRAPPER's exit status, and the wrapper succeeded at running the tier. It is read as the tier's verdict, because that is the only number a completion notification usually carries. CLAUDE.md already tells every agent to grep the log instead, which is a documented workaround for a live defect, not a fix. | — |
+| bug-t-a-commit-made-in-the-watcher-clone-during-a-gate-is-unreachable-from-any-ref | T | 50 | bug | The Track T watcher clone sits on a DETACHED HEAD whenever the daemon is mid-gate, because it checks out the sha under test. A commit made in that window is not merely unpushed -- it is unreachable from any ref (`git for-each-ref --contains <sha>` returns nothing) and one `git gc` from gone. Measured 2026-09-06 on seven: `038c3acf1` survived because the clone happened to be on `master` (`[ahead 2]`); `3815bee43`, same clone, same session, 90 minutes later, was born parentless of any branch. The repo's existing rule (`A LOCAL COMMIT IS NOT BANKING`) does not cover this, because the mitigation it prescribes -- remember to push -- never fires if you do not notice you were detached, and `git log --oneline -1` looks normal. The tell is one line: `git status -sb` printing `## HEAD (no branch)`. | — |
 | bug-t-a-negative-test-row-cannot-say-which-way-it-flipped | T | 45 | bug | In test-core's fail-fast recipe a `*_fail` row is `! ./$(COMPILER) ...` on one line and a `grep -q` for the expected message on the next, so THREE outcomes collapse into one indistinguishable failure: refused for the WRONG reason (fails at the grep), ACCEPTED (fails at the `!`), and the compiler CRASHED (fails at the `!`). All three read as 'the recipe stopped here'. Measured consequence, 2026-09-05: a *_fail test whose refusal had been deliberately lifted by its own feature commit sat at STEP 6 OF 15 and silently cost four fifths of the tier -- 3783 lines against 15253 once removed. The fix is to make the pair ATOMIC, not to add a helper. Positive control is available in the file: three shapes -- refused correctly, refused wrongly, accepted -- must produce three distinguishable verdicts. | — |
 | bug-t-a-restart-converts-owned-scratch-into-unowned-scratch-and-nothing-observes-it | T | 40 | bug | /tmp on plexus hit 99% (962M free of 94G); 45G of it was ONE orphaned session scratchpad holding 159,442 files, and deleting it returned the volume to 52%. The reported cause -- 'a benchmark harness that never deletes' -- does NOT reproduce: no committed tool in this repo emits `ab.a.<pid>.bin`/`.map`, so there is no harness to fix and the 'it will refill in about a week' prediction has no mechanism behind it. The actual defect is that a RESTART converts owned scratch into unowned scratch instantly, with no ceiling, no reaper and no owner, and nothing observes the transition -- the 45G was legitimate live scratch until the session that owned it stopped existing. Post-cleanup there are ZERO orphans: all 15.6G remaining was written today by live sessions. | — |
 | bug-t-lane-attribution-has-two-instruments-that-disagree | T | 45 | bug | 33 open tickets carry no `track:` frontmatter field, 30 of them in RANKED folders. The ranker still lanes them, via a cascade of fallbacks — a `feature-track-t-*` slug prefix, a `Track X` mention in the decl line, a `Track` bullet in the body. Any tool that reads `fm.get('track')` sees nothing for all 33. Two instruments, one answering about a field that is not there. Surfaced when a backlog sweep nearly mis-filed two tickets the ranker had been lanting as T all along; progress.py's own comment records the same class biting in the opposite direction on 2026-07-15. | — |
@@ -533,10 +534,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (1)
+## backlog-esp (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-s-install-esp32-target-names-a-package-that-is-virtual-only-on-26-04 | S | 25 | bug | `tools/install_esp32_target.sh:96` asks for `qemu-user-static`, which on 26.04/resolute survives as a PURE VIRTUAL package: three instruments say it exists and only `apt-cache policy` says it cannot be installed. The script's own `apt_has_candidate()` already does the correct `Candidate:` test, so it WARNS rather than dying and blocks nobody today -- but it will not install the renamed package on a fresh 26.04 box. Not urgent; filed so the rename lands with the measurement rather than being rediscovered. The real package is `qemu-user-binfmt`. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
 ## backlog-rust (0)
@@ -1081,6 +1083,7 @@ _none_
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
+- [p 50] [T] bug-t-a-commit-made-in-the-watcher-clone-during-a-gate-is-unreachable-from-any-ref
 - [p 50] [T] bug-t-the-full-suite-hooks-commit-message-exemption-does-not-cover-how-anyone-writes-one
 - [p 50] [T] bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
@@ -1301,6 +1304,7 @@ _none_
 - [p 25] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it] [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 25] [P] bug-p-a-char-array-row-of-a-2d-array-is-not-a-string
 - [p 25] [P] bug-p-set-membership-item-constant-truncated-to-32-bits
+- [p 25] [S] bug-s-install-esp32-target-names-a-package-that-is-virtual-only-on-26-04
 - [p 25] [T] bug-t-the-c-conformance-corpus-is-absent-from-this-checkout-so-make-test-c-covers-less-than-its-name
 - [p 25] [A] chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
