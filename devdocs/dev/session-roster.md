@@ -164,6 +164,34 @@ correct reading of an undated hold.
 - The same applies to your own silence: **an unanswered "is anyone on this?" is not a
   no**, and a session that got one from you an hour ago is still holding it.
 
+## A MAP IS READ AS DIRECTION BY THE RECEIVER, HOWEVER IT IS LABELLED
+
+Measured 2026-09-06. This seat sent an idle session a topic map: every hold with its
+retirement event, six unowned rows listed as *a fact about the artefact*, and the
+sentence **"I do not pick tickets and I am not picking one here."**
+
+The session worked the list, closed a row, and then said it was **not taking another
+until its user answered, because every piece of direction it had received that session
+had come from peers rather than from them.**
+
+**It was right, and the label did not help.** *"I am not picking"* is a statement about
+the sender's intent; **what arrives is a ranked list of unclaimed work from the seat
+that knows what everyone else is doing.** A session hunting for work cannot read that as
+anything but a suggestion, and there is no wording that fixes it — the same shape as a
+blank `owner:` field, where the withholding was principled and the reading was ordinary.
+
+- **Answer "what is free" when asked. Do not volunteer it unasked.** The question makes
+  the list a reply; its absence makes the list a nudge.
+- **The owner's "max the tokens" licenses ASKING whether a session is free.** It does
+  not license attaching a menu to the question, and the menu is the part that reads as
+  dispatch.
+- **When a session says its direction has all come from peers, agree plainly and stop.**
+  Reassurance from a peer is the one thing that cannot resolve it, and offering another
+  row at that moment is the failure the session just described.
+- Corollary for the whole fleet: **relaying a topic map is coordination; ranking it is
+  not.** If a list has to go out, say what is held and why, and leave the unheld rows
+  unordered.
+
 ## Flagging a ticket is what makes it collide — and `working/` is blindest then
 
 I cleared a collision from `working/`; frankA was mid-edit in that exact ticket
