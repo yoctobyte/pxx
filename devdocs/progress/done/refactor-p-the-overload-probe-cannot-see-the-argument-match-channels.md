@@ -332,4 +332,4 @@ check is not unblocked by this step and should not be attempted as if it were.
 The flags are cleared again on the way out, for the reason half 2 gives.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bd93477a4.
