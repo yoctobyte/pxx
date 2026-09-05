@@ -13984,6 +13984,16 @@ test-core: $(COMPILER)
 	# something.
 	./$(COMPILER) test/test_class_property_through_an_instance.pas $(TESTTMP)/test_clsprop_inst26
 	tools/expect_same.sh test_clsprop_inst26 "$$($(TESTTMP)/test_clsprop_inst26)" "$$(cat test/test_class_property_through_an_instance.expected)"
+	# A class property with ARGUMENTS, both spellings: a declared subscript
+	# `A[i: LongInt]` and the `index N` modifier. The class-name path built its
+	# accessor call by hand instead of using the four helpers in
+	# pasparser_call.inc, so it had no subscript arm at all and it CALLED
+	# PropIndexConstArg and then dropped the chain. Both work through an
+	# instance, which is why this read as a missing feature. The `index` pair is
+	# two properties over ONE accessor pair, so a dropped constant lands both on
+	# slot 0 and still prints a plausible number.
+	./$(COMPILER) test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26
+	tools/expect_same.sh test_clsprop_idx26 "$$($(TESTTMP)/test_clsprop_idx26)" "$$(cat test/test_class_property_indexed.expected)"
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was

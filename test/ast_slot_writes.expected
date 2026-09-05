@@ -257,6 +257,7 @@ AN_ARG Right asrtA1
 AN_ARG Right bfArgA
 AN_ARG Right cArgs
 AN_ARG Right clArgA
+AN_ARG Right cpArgs
 AN_ARG Right dfIdxHead
 AN_ARG Right excFoldA
 AN_ARG Right firstArg

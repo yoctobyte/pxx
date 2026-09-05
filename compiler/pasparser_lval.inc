@@ -372,7 +372,7 @@ var
   qualNameTok: Integer;   { token index of the member name in `TClass.member` }
   augPow: Boolean;   { `d[k] **= v` — `**` has no binary token, see PyAugDunderName }
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
-  mblobNode, cpPri, cpMmi, cpMpi: Integer;
+  mblobNode, cpPri, cpMmi, cpMpi, cpArgs: Integer;
   mkw, mslot, mnArgs: Integer;   { NilPy keyword argument: binding+1, target param, rebound count }
   cpIsAssign: Boolean;
   cpName: AnsiString;
@@ -1168,6 +1168,27 @@ begin
             begin
               cpIsAssign := (CurTok.Kind = tkAssign) or
                             ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
+              { An INDEXED class property puts the `:=` after the SUBSCRIPT, so
+                a zero-lookahead peek reads `[` and picks the READ accessor for
+                a write: `TC.A[2] := 7` came out as `wrong number of parameters
+                in call to TC.GetA`. Balance the bracket group the way the
+                instance arm below already does -- the property name is already
+                consumed here, so CurTok IS the `[` and the group starts at
+                TokPos-1. }
+              if (not cpIsAssign) and UPropIsIndexed[cpPri] and
+                 (CurTok.Kind = tkLBrack) then
+              begin
+                i := TokPos - 1; w := 0;
+                while i < TokCount do
+                begin
+                  if Tokens[i].Kind = tkLBrack then Inc(w)
+                  else if Tokens[i].Kind = tkRBrack then
+                  begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+                  Inc(i);
+                end;
+                if (i < TokCount) and (Tokens[i].Kind = tkAssign) then
+                  cpIsAssign := True;
+              end;
               cpName := '';
               if cpIsAssign then
               begin
@@ -1216,32 +1237,73 @@ begin
               ASTIVal[mselfArg] := ci;
               ASTTk[mselfArg] := Ord(tyPointer);
 
+              { The accessor's REAL arguments, in its declared order and before
+                the value. Two kinds and they are exclusive: a declared
+                subscript (`class property A[i: LongInt]`) is parsed from the
+                token stream, and an `index N` modifier is a constant. This arm
+                used neither -- it CALLED PropIndexConstArg and then dropped the
+                chain it built, and had no subscript arm at all -- so `TC.A[2]`
+                left the `[` for a caller with no use for it (`expected ')'
+                before '['`) and `class property P0: LongInt index 0` called a
+                one-parameter getter with none. Both spellings work through
+                every other receiver; this is the one-concept-two-paths shape
+                that pasparser_call.inc's four accessor helpers exist to stop,
+                and the eleventh site was not using them.
+                bug-p-a-class-property-cannot-be-indexed }
+              margIdx := -1; mlastArg := -1;
+              if UPropIsIndexed[cpPri] then ParsePropIndexArgs(margIdx, mlastArg)
+              else PropIndexConstArg(cpPri, margIdx, mlastArg);
+
               if cpIsAssign then
               begin
                 Expect(tkAssign, ':=');
                 ParseExpr;
+                cpArgs := AccessorArgChain(margIdx, mlastArg, CurASTNode);
+              end
+              else
+                cpArgs := margIdx;
+
+              if (not cpIsAssign) and (cpArgs < 0) then
+              begin
+                { No arguments at all: the plain `TJSONData.CompressedJSON`
+                  read, left on the static-call path VERBATIM. That path also
+                  parses a trailing `(...)`, which is behaviour this fix has no
+                  measurement about and therefore does not move. }
+                GenVirtSlot := UMthVirSlot[cpMmi];
+                mcallNode := GenMakeStaticMethodCall(cpMpi, mselfArg);
+              end
+              else
+              begin
+                { MakeAccessorCall is the INSTANCE dispatcher and cannot serve
+                  here: a class method's virtual dispatch reads the VMT out of
+                  the metaclass blob (AN_CLASS_VIRTUAL_CALL), not out of
+                  [Self+0]. This is GenMakeStaticMethodCall's own head, with the
+                  argument chain supplied rather than parsed from `(...)`. }
                 mcallNode := AllocNode(AN_CALL);
                 ASTIVal[mcallNode] := cpMpi;
                 ASTTk[mcallNode] := Ord(Procs[cpMpi].RetType);
+                if UMthVirSlot[cpMmi] >= 0 then
+                begin
+                  ASTKind[mcallNode] := AN_CLASS_VIRTUAL_CALL;
+                  ASTSOffset[mcallNode] := UMthVirSlot[cpMmi];
+                end;
                 margSeq := AllocNode(AN_ARG);
                 ASTLeft[margSeq] := mselfArg;
+                ASTRight[margSeq] := cpArgs;
                 ASTLeft[mcallNode] := margSeq;
-                mlastArg := AllocNode(AN_ARG);
-                ASTLeft[mlastArg] := CurASTNode;    { the value }
-                ASTRight[margSeq] := mlastArg;
-                { the index constant, if the property declares one }
-                PropIndexConstArg(cpPri, margIdx, mexprNode);
-                tk := tyInteger;
-                recName := REC_NONE;
-                Result := mcallNode;
-                Exit;
               end;
 
-              GenVirtSlot := UMthVirSlot[cpMmi];
-              mcallNode := GenMakeStaticMethodCall(cpMpi, mselfArg);
-              tk := Procs[cpMpi].RetType;
-              recName := ProcRetRecId[cpMpi];
-              if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+              if cpIsAssign then
+              begin
+                tk := tyInteger;
+                recName := REC_NONE;
+              end
+              else
+              begin
+                tk := Procs[cpMpi].RetType;
+                recName := ProcRetRecId[cpMpi];
+                if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+              end;
               Result := mcallNode;
               Exit;
             end;
