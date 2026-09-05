@@ -368,4 +368,4 @@ common one.** Ask of any sentinel, default or expected constant: *if the
 machinery did nothing at all, would this still read correct?*
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c01eb17a8.
