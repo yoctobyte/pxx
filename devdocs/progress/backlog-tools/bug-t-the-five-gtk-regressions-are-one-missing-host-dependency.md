@@ -8,7 +8,7 @@ found: 2026-09-05
 found-by: frankD
 owner: ""
 blocked-by: []
-summary: "Seven has NO GTK development headers, so five gtk jobs fail there every run, auto-file, and get closed by whoever verifies on a host that has them. It has happened FOUR times: 18 tickets in batches on 08-21, 08-30, 09-01 and 09-05, same five tests, closed every time. The disposition cannot be a fifth closure. The durable fix is the test declaring its precondition — SKIP or a message naming the missing package — because a job that cannot tell 'the feature is broken' from 'the toolchain is absent' generates tickets that close wrongly forever. Installing the headers is owner-only (sudo) and fixes this instance, not the shape."
+summary: "Seven lost its GTK development headers to the 2026-09-05 dist-upgrade (removed 15:20-17:30, reinstalled by hand 17:59:31), so the 09-05 batch of five gtk jobs failed there, auto-filed, and was closed by whoever verified on a host that has them. CORRECTED 2026-09-06: the 'it has happened four times' recurrence argument is FALSE and the other three batches are NOT this condition -- 08-21 ran on plexus and its own log tail shows gtk_init SUCCEEDING; 08-30 and 09-01 both failed deep inside headers that were present, against two different code defects, each root-caused and fixed. The five test NAMES recur because they carry the widest header surface in the suite, not because one condition recurs. The durable fix stands and is strengthened: a job that cannot tell 'the feature is broken' from 'the toolchain is absent' -- and a ticket set that cannot tell four causes apart -- produces closures nobody can audit."
 ---
 
 # Five gtk jobs refile every run because seven has no GTK headers
@@ -51,14 +51,69 @@ That is this repo's own *"nothing observably differs is a claim about ONE
 target"* in a variable the rule does not name: not an architecture, **the build
 host's installed packages**.
 
-## The recurrence is the argument
+## CORRECTED 2026-09-06 — the recurrence argument was wrong, and it inverts
 
-**18 gtk regression tickets, in batches on four dates** — 3 on 2026-08-21, then
-5 each on 08-30, 09-01 and 09-05 — **the same five tests, closed every time.**
-Counted independently by frankB and by me. A transient does not recur on a
-schedule with identical membership; a standing host condition does. **Every
-previous closure was as wrong as tonight's, and a fifth closure buys another
-fortnight.**
+The original section here read: *"18 gtk regression tickets, in batches on four
+dates — 3 on 2026-08-21, then 5 each on 08-30, 09-01 and 09-05 — the same five
+tests, closed every time. A transient does not recur on a schedule with
+identical membership; a standing host condition does. Every previous closure was
+as wrong as tonight's."* **Counted independently by frankB and by me, and both
+counts were right. The inference from them was not.**
+
+**The four batches have four different measured causes, and only the last is
+this ticket's.** Read off the `host` line and the log tail of each batch:
+
+| filed | rows | host | log tail | cause | closed |
+| --- | --- | --- | --- | --- | --- |
+| 08-21/22 | 3 | **plexus** | `ok: … gtk_init resolved and called successfully!` | the job **passed** on re-run; auto-closed by the plexus watcher at `de2de369ea6a` | correctly |
+| 08-30 | 5 | seven | `pascal26:90: undeclared identifier passed as argument 2 of '__pxx_read'`, on crtl's `pxx_env_buf` | `eefa85d70` — a static in a used header keeps its body, so crtl modules flow through the single-pass walk. Root-caused and reverted `2b64dd1e5`, verified by compiling either side | correctly, real code defect |
+| 09-01 | 5 | seven | `pascal26:311: call to undeclared function: __builtin_constant_p` | glib reaches for the builtin because `00ab464bf` claims `__GNUC__ 2.7`; reduced to the literal 0 beside `__builtin_expect` | correctly, real code defect |
+| 09-05 | 5 | seven | `uses: unit source not found: gtk` / `C include file not found: "gtk/gtk.h"` | **the headers were absent** | this ticket |
+
+**The middle two batches are positive evidence the headers were PRESENT.** You
+cannot reach line 90 of a crtl module pulled in behind `gtk.h`, or line 311 of
+glib, without having found and parsed `gtk/gtk.h` first. A missing header stops
+at line 2. **The failure depth is the discriminator, and it was in the tickets
+all along.**
+
+**Seven's own `apt` history closes it independently** (measured on the box, from
+`/var/log/apt/history.log` and `/var/log/dist-upgrade/main.log`, not inferred):
+
+```
+2026-08-29 16:36:24  libgtk-3-dev installed
+2026-08-29 17:09:56  libgtk2.0-dev installed
+   ... present throughout the 08-30 and 09-01 batches ...
+2026-09-05 15:20-17:30  dist-upgrade REMOVES both
+2026-09-05 17:54:19Z  tree tested          <- headers absent
+2026-09-05 17:58:16Z  batch auto-filed     <- headers absent
+2026-09-05 17:59:31Z  reinstalled by hand
+2026-09-05 19:15:54Z  all five pass at 2a4cd0bcf664
+```
+
+**So the passes at 19:15 are the reinstall, not the dist-upgrade** — the upgrade
+is what BROKE it. Any disposition that reads "the upgrade fixed it" is backwards,
+including the one this seat relayed as an unverified hypothesis on 09-05.
+
+### What the recurrence actually means
+
+**The same five names recur because those five tests carry the widest header
+surface in the suite** — Pascal `uses` onto a system header, a curated C binding,
+crtl modules pulled in behind both, and GCC builtins inside glib. **Anything that
+breaks C header import lands on exactly these five.** They are the canary set,
+so identical membership is the EXPECTED signature of four unrelated causes, not
+evidence of one.
+
+> **A recurring set of ticket NAMES was read as a recurring MECHANISM.** The
+> filer names a job; four different defects wear the same eighteen slugs. This is
+> the file's *"the name is not the thing"* at the scale of a ticket batch — and it
+> is the one scale where the aggregation is produced by our own tooling.
+
+**And the closure risk inverts.** The danger was never "eighteen closed on a
+wrong mechanism"; thirteen were closed on the RIGHT one. It is that a fifth pass
+tidies all eighteen under the host-dependency story and **erases two verified
+root causes** — `2b64dd1e5` and the `__builtin_constant_p` fix — leaving the next
+regression in either path with no prior. **Close the 09-05 five on the headers.
+Touch nothing older.**
 
 ## Disposition — two arms, and only one is ours
 
