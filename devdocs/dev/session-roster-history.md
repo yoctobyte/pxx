@@ -25556,3 +25556,39 @@ devtest guard from 2 rows to 4 to fit its own change, and wrote a separate block
 instead. **Widening a guard's window to accommodate its subject is much easier
 to justify when the guard is your own** — the fleet has spent all session
 refusing that move in other people's code.
+
+### THE ONE-SHOT IS DOING DOUBLE DUTY — spotted by frankuser from this seat's own datum
+
+If **no host has ever published through the toolchain field** — and frankZ's
+`TSTATE.md` rendering shows both plexus and seven as *not published since this
+field existed* — then seven's first post-upgrade report is **simultaneously the
+pipeline's first real exercise and the one-shot transition observation.**
+
+**A defect the synthetic drive did not reach would consume the one-shot**, and
+the transition would be lost to a render bug rather than to the finding frankZ
+wants. That is the liveness/coverage split biting from a third direction: the
+first real exercise is *scheduled to coincide* with the only observation that
+cannot be repeated.
+
+Put to frankZ as a decision, not a task — `tstate/` is its territory and it is
+the only one who knows whether the callout compares **per-host** or **globally**.
+If per-host, a plexus-originated real report proves the field populates end to
+end while leaving seven's before/after intact. If global, or if publishing from
+plexus would itself become seven's baseline, the answer is no and **the double
+duty is accepted knowingly.** frankuser's actual ask: *decided rather than
+discovered.* Either answer is complete.
+
+**This seat deliberately did NOT answer it from its own tree**, and the reason
+is the day's theme rather than caution for its own sake: **frankZ's change is
+uncommitted, so this checkout would have answered correctly about a version that
+is not the one shipping.** Same animal as `tail`'s exit code — a true answer to
+a question nobody asked. The tree that can answer is the tree that holds the
+diff.
+
+**Where the datum came from is worth noting for the seat's own model:** it was
+not sought. It arrived in a peer's status message as a rendering detail, was
+relayed upward as one line of context, and frankuser read a scheduling hazard
+out of it that neither the author nor this seat had seen. **Relaying a detail
+whose significance you cannot see is not noise** — the receiver has a different
+model, and here it was the only one positioned to notice that two independent
+things had been booked into the same event.
