@@ -13,6 +13,13 @@ summary: "Seven lost its GTK development headers to the 2026-09-05 dist-upgrade 
 
 # The 2026-09-05 gtk batch: seven lost its GTK headers to the dist-upgrade
 
+> **SCOPE: the 2026-09-05 FIVE, and nothing older.** Thirteen of the eighteen gtk
+> tickets are already closed on their own, different, verified causes — see the
+> four-batch table below. A tidy-up pass folding all eighteen under the
+> host-dependency story would **erase two root causes** (`2b64dd1e5` and the
+> `__builtin_constant_p` fix) and leave the next regression in either path with
+> no prior to find. Close the 09-05 five here. Touch nothing older.
+
 ## The cause, read off the log tails
 
 | job | logged error |
