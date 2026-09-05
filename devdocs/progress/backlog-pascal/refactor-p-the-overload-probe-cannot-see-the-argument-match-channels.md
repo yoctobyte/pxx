@@ -136,3 +136,54 @@ pass to anyone grepping for a failure. **Install the suite first**
 (`tools/install_lib_candidates.sh fpc-testsuite`) **and confirm it prints 346
 before trusting a green here** — a baseline of "SKIP" would let the whole
 widening land unmeasured.
+
+---
+
+## 2026-09-05 (frankA, later) — the suite is INSTALLED and the Gate's baseline number is stale: it is 347/2, not 346/0
+
+The note above said the conformance row could not answer. It can now —
+`tools/install_lib_candidates.sh fpc-testsuite` was run (it writes only into the
+gitignored `library_candidates/`, needs no authority, and says so itself:
+*"nothing entered the repo"*).
+
+**Measured baseline at `abe92579b`, before touching anything:**
+
+```
+test-pascal-conformance: 347 pass, 2 fail, 167 skip, 34 auto-gated (of 550)
+  FAILURES: tgenfunc17.pp(accepted-invalid) tgenfunc18.pp(accepted-invalid)
+tools/run_fgl_corpus.sh: 7 pass, 0 fail, 0 skip (of 7) — PASS
+```
+
+**The Gate section's `conformance 346/0` is wrong today, and wrong in the
+direction that would have cost a session.** Anyone taking this ticket, running
+the suite for the first time and seeing 347/2 would read two failures as damage
+they had just done. They are neither theirs nor new.
+
+### The two failures are unrelated to argument matching, and their old pass was accidental
+
+Filed as
+[[bug-p-a-generic-routines-implementation-type-parameters-are-not-checked-against-its-interface]].
+Both are `{ %FAIL }` rows about a `generic procedure` declared `<T>` and
+implemented `<S>`. **The pinned compiler rejects them because it cannot parse
+`generic procedure` at all** — it never looks at the type parameters — and a
+`%FAIL` row scores any refusal as a pass. `71deb21d4` added the syntax and the
+rows went red the moment the compiler could read the files.
+
+That matters here beyond bookkeeping: **`tstate/conformance.tsv` records both as
+`pass` as of 2026-09-02**, so the archive a later session would consult to
+establish "what was green before" carries the accidental pass too.
+
+### The working baseline for this ticket
+
+- conformance **347/2**, and the two FAILs are stable, named, and must not be
+  counted against a widening here;
+- fgl **7/7**, live;
+- so the acceptance test in the body still stands as written — a naive
+  kinds-only gate must not move either number, and the four refused calls in the
+  table are still the four classes to satisfy.
+
+**Assert the suite is present before reading any conformance result**: with
+`library_candidates/fpc-testsuite` absent the harness prints SKIP and **exits
+0**, so a green is indistinguishable from no run. That is the same shape as the
+`%FAIL`-passes-on-refusal above — two ways this one harness returns a pass for
+something that never happened.
