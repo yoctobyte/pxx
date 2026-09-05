@@ -602,11 +602,13 @@ begin
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
     here rather than at the call sites so that every caller — and every
     recursive re-entry through the expression layers — stays untouched. }
+  if NilPyUserCode then WriteLn('PROBE-ABOVE');
   if PyExprMode then
   begin
     PyParseFactorCore;
     Exit;
   end;
+  if NilPyUserCode then WriteLn('PROBE-BELOW');
   LastExprTk := tyInteger;
   { An unqualified `Read`/`Write`/`Readln`/`Writeln` that names a METHOD of the
     enclosing class is an ORDINARY IDENTIFIER here, not the console intrinsic:

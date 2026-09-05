@@ -237,3 +237,101 @@ type, not templates. Fixing the specializer would not have touched it: the
 specializer emits two ordinary class bodies, which is `plain` above.
 
 Slug deliberately NOT renamed — it is cited elsewhere and a rename breaks those.
+
+---
+
+# 2026-09-05, frankD: there are TWO mechanisms, and one fix was going to miss one
+
+Taking the repair (frankS located mechanism 1 and banked it; the ticket was
+never claimed). Before writing anything I went back to the two probes that did
+not fit my own model, and they do not fit because they are a different bug.
+
+The problem with the earlier matrix: `b_diffptr` gives the two aliases
+**different names** (`PC1`, `PC2`) and still fails. An alias-name collision in a
+flat table cannot explain that — `PC2` is unique. So something else is also
+wrong.
+
+## The discriminating pair
+
+Same program twice; the ONLY difference is whether the pointee is declared
+before or after the alias inside the class body.
+
+```pascal
+{ j_noforward — pointee FIRST }                 { b_diffptr — pointee AFTER }
+TA = class type TCell = record d: Integer; end;   TA = class type PC1 = ^TCell;
+               PC1 = ^TCell; var h: PC1; end;                    TCell = record d: Integer; end; …
+TB = class type TCell = record d: AnsiString; end; TB = class type PC2 = ^TCell;
+               PC2 = ^TCell; var h: PC2; end;                    TCell = record d: AnsiString; end; …
+```
+
+| probe | alias names | pointee names | pointee is a forward ref | result |
+| --- | --- | --- | --- | --- |
+| **j_noforward** | different | same (`TCell`) | **no** | **OK** `7 hi` |
+| **b_diffptr** | different | same (`TCell`) | **yes** | **REFUSED** |
+| **l_bothdiff** | different | different | no | **OK** `7 hi` |
+| **m_samealias** | **same** (`PCell`) | different | no | **REFUSED** |
+
+Two rows carry it. `m_samealias` fails with **no forward reference anywhere and
+different pointee names** — only the alias name is shared. `b_diffptr` fails with
+**unique alias names**, and becomes correct the moment the pointee is moved above
+it. One program, one line reordered, opposite verdicts.
+
+## Mechanism 1 — the alias NAME (frankS's, confirmed)
+
+`pasparser_decl.inc:6984` calls `RegisterPtrAlias` with the bare name and never
+consults `ParsingClassBodyCi`, so `TA.PCell` and `TB.PCell` are one row.
+`m_samealias` is the clean isolate: nothing else is shared.
+
+## Mechanism 2 — the forward POINTEE name, and it is a separate site
+
+`symtab.inc:16042 ResolvePendingPointerAliases`, line **16053**:
+
+```pascal
+targetName := GetSliceName(AliasTargetNOff[i], AliasTargetNLen[i]);
+ci := FindUClass(targetName);
+```
+
+A `^T` written above `T` is legal Pascal and is deliberately deferred — the
+`PtrElemDepth` guard tolerates the unknown name and this pass fixes it up
+afterwards. **It fixes it up by BARE NAME, globally.** Both class bodies declare
+`TCell`; `AddClassLikeType` correctly gave the second the qualified name
+`TB.TCell` and left the bare one with the first, so `FindUClass('TCell')` hands
+every deferred pointee the FIRST class's record. `b_diffptr` is the isolate.
+
+This site is untouched by an owning-class column on the alias table *by itself* —
+it does not read the alias name at all. A fix aimed only at mechanism 1 compiles
+`m_samealias` and leaves `b_diffptr` exactly as broken, with no test failing
+unless one is written for the forward spelling specifically.
+
+## Why they were one bug in the matrix
+
+Both are reached by the same everyday source, and the original repro triggers
+BOTH at once — `PCell = ^TCell` with `TCell` written after it is the ordinary way
+to spell a linked node, and the generic version inherits it. The earlier
+"keyed on NEITHER name" reading was a correct observation of a wrong model:
+there are two keys, and each probe defeats the other one's.
+
+## What this means for the repair
+
+One column still does it, which is the good news:
+
+- add `AliasOwnerCi` (`-1` = not declared inside a class body — **-1 and loud,
+  never `ci + 1`**, because class 0 is a real class);
+- `FindTypeAlias` admits a row when `AliasOwnerCi < 0`, or it equals
+  `ParsingClassBodyCi`, or it equals `MethImplOwnerCi` (the class declaration and
+  the out-of-line method bodies are two separate source ranges and both must
+  see the alias — a fix consulting only the first compiles the field and then
+  fails in the method);
+- `ResolvePendingPointerAliases` tries `FindNestedType(AliasOwnerCi[i],
+  targetName)` before falling back to `FindUClass`.
+
+The third bullet is the one that would have been missed. `normalise-dont-special-
+case` says it in advance: fixed one arm of a double case, grep for the sibling
+before closing.
+
+## Regression test
+
+`test/test_nested_pointer_alias_is_scoped_to_its_owner.pas`, and it must contain
+BOTH spellings — pointee-before-alias and pointee-after-alias — or it passes
+while half the bug is live. Every row uses two DIFFERENT pointee types for the
+`f_same` reason recorded above.
