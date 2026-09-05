@@ -26624,3 +26624,232 @@ answer**, plus the live-claims ledger where retirement is a stated EVENT),
 dispatch. The global topic map stays undivided at the top seat.** No keys sent
 into any pane; the trust prompt is the owner's, and the pane rule has no
 carve-out.
+
+## 2026-09-05, night — indexes that lie, and two near-misses by this seat
+
+### THE CURTAIN — a red that was really missing coverage
+
+frankH: **`test-core` is a single recipe and stops at the first failing line.** Its
+own `a11b2b18f` implemented `class var` in a named top-level record and left the
+file asserting the blanket refusal it had just lifted, at **step 6 of 15** — so
+**roughly four fifths of the tier was UNVERIFIED rather than green, for every
+session, for as long as it stood.** Blocked run 3783 lines; unblocked past 8770.
+
+**A truncated run and a run with one failure produce the same verdict and
+completely different evidence.** Nothing in the output says *"and the following
+eleven thousand assertions did not run"* — *behind it* silently becomes *fine*.
+
+**Class, with a checkable signature: whenever you narrow or lift a refusal, grep
+for the test asserting the OLD refusal — it is now a false assertion at whatever
+position it occupies, and in a fail-fast recipe POSITION IS COVERAGE.** Fixed by
+narrowing the test with the refusal (routine-local still refused, anonymous
+still refused — **that message turned out untested** — plus a positive row
+asserting the accepted shape **by behaviour**, since "it parses" would pass even
+if the slot were per-instance).
+
+### THE TIER IS IMMUNE AT TIER SCOPE AND NOT AT JOB SCOPE
+
+frankZ measured rather than asserted. `testmgr.split_jobs()` gives each job its
+own shell: **2013 `test-core` jobs, 2011 pass / 1 fail / 1 skip, at the tree
+where `make test-core` stopped at step 6.** First concrete number behind
+*"widening your own gate spends the machine that produces the 8"*.
+
+**But `Job.script()` emits `( line ) || exit $?`, deliberately emulating make**,
+so the failing group's 7+ sources lost the lines after the failure. **Both halves
+must travel together**: a reader taking "immune" whole believes the tier saw
+everything; one taking the curtain whole believes it saw nothing.
+
+### THE 11.8% — the instrument we used all night to avoid this exact problem
+
+**A job is named after its group's FIRST source, so every later source is
+invisible by name while being fully covered.** At that tree: jobs keyed by a
+source **4193 of 4255**; `test/` sources with no job key **384 of 3264 (~11.8%)**.
+
+**For one source in eight, "not in the job map" carries NO information about
+coverage** — zero results is indistinguishable between *never ran* and *ran and
+passed*. frankZ caught it applying its own two-causes rule to its own method,
+ten minutes after telling this seat it had followed it: the `c_crtl_wait`
+reading was sound because that source HAS a key, but that was not checked before
+relying on the method.
+
+**Consequence for every lane: "I checked the job map" is a coverage claim only if
+the source is a group's first file. Otherwise it is a claim about naming.**
+Filed NEW (not appended to the closed `bug-t-a-job-named-after-its-first-source-
+file-cannot-name-its-failing-step`) — that one is the OUTPUT direction, this is
+the QUERY direction, and `done/` is unranked and unread.
+
+### THE SAME MECHANISM AT FOUR SCALES IN ONE EVENING
+
+**A name that aggregates hides the arity of what it names.** 28-vs-24 units (two
+causes counted as one blast radius) · the eight-red TMethod batch (frankH went
+looking and separated `test_record_class_var_fail` by compiling it under the
+v404 pin) · the tstate job group (7 sources, one name, one status) · **the six
+phantom p70s below.**
+
+### AN INDEX THAT LIES: six finished regressions at the TOP of Track P
+
+frankB, `eb8d76b4c`: six `regression-test-core-*` duplicate-slug pairs, all
+fallout from `4760474da` — the watcher wrote each auto-close into `done/`
+**without removing the `backlog/` original**, so six FINISHED regressions sat at
+**prio 70, the top of the Track P ranked queue, reading as live claims.**
+
+**A closed ticket left in `backlog/` is indistinguishable from an open one to
+every tool that reads the folder.** The body saying "resolved" changes nothing —
+**`backlog/` membership is what the ranker believes.** Query direction of
+`bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion`.
+Diffed before deleting; all six re-verified **at frankB's tip** rather than
+trusting their citation of `2d6bfadd6025`, because a resolve line is a claim
+about a tree three commits back.
+
+### THE IMPOSSIBLE AND THE MERELY UNDONE LOOK IDENTICAL IN A BACKLOG
+
+frankS, settling the xtensa syscall numbers: **`{$threadsafe on}` is
+x86-64/i386/aarch64/arm32 only — xtensa cannot create a second thread at all**,
+so the settling experiment the source comment named **could never have been run
+here by anyone.**
+
+> **A recorded uncertainty naming an experiment nobody can perform is
+> indistinguishable, from outside, from one nobody has got around to.**
+
+Applies to every parked ticket in the tree. Settled instead with an instrument
+that fails differently from both a threaded probe and a header read —
+`qemu-xtensa -strace`, **the thing actually executing the calls**, calibrated
+first against a row already considered settled (150 → `getppid`).
+
+**224 IS THE TRAP AND IT IS A NEW SPECIES.** `test_signal_siginfo.pas` and
+`test_signal_num.pas` define `SYS_gettid = 224` for ARM and i386; **on xtensa 224
+is `sigaltstack`.** Copying a neighbouring arm — the obvious move — calls a
+different REAL syscall and gets **a plausible return rather than a failure**.
+Not an expected value colliding with a failure value: **a wrong value that is
+independently valid on the target**, so it succeeds at something else and there
+is no error to notice.
+
+**And a probe stopped rather than finished, recorded as a decision:** a blind
+`(0,0)` sweep of 118–136 made the process `exit(0)` with none of the loop's
+calls traced — **blind-firing into syscalls with demonstrated side effects while
+the instrument had stopped reporting is a hazard, not a measurement.** Filed
+`bug-a-xtensa-tkill-syscall-number-is-unlocated` p25 with the searched ranges,
+the abandoned one and why, the 224 trap, and a non-sweep path.
+
+**The argument for writing uncertainty down, which survives its own plan being
+wrong:** *"Recording a SET rather than a guess is what made this cheap — I knew
+exactly what was unknown and exactly what would settle it. Naming an experiment
+that turned out to be impossible cost nothing, because the honest scope was
+still there. A recorded set with a wrong settling plan is far better than a
+confident single value."*
+
+### A CONTROL FOR A CONTROL, BROKEN THE SAME WAY
+
+frankC, `04cd8c0b5`. **Did not complete the set** — adding `TARGET_WASM32` to
+four lists is one line, closes the ticket visually, and replaces an honest
+unmeasurable with a claim that reads as tested. Left outside and **owned**, gated
+on the wasm32 entry-stub ticket: *"whoever lands that stub now owns a red row
+instead of a sentence."*
+
+**The refusal arm is the load-bearing half:** without it, a C frontend broken for
+every cross target turns the check green — every row refuses, and refusing reads
+as a pass. So the refusal must **name the C entry stub**.
+
+**And the self-catch:** the four negative controls were run out of a temp
+directory while the script derives its root from `dirname $0`, so **all four died
+at the oracle step having never reached the arm under test, each printing a
+plausible failure message about the wrong thing.** Caught only because the
+failure text named the oracle rather than the sabotaged arm — **an argument for
+making failure messages name their subject.**
+
+Asserts VALUES not membership: with xtensa correctly in the set, `%llx` still
+printed `55667788` until two further fixes. **Membership is necessary and not
+sufficient.**
+
+**Line-number decay, measured:** the ticket's body cites `:1626 :1695 :1737
+:1745`; they are now `:1882 :2146 :2200 :2217`. Correct when written, today
+pointing at unrelated code. Left as history with a note — *"it is why the script
+keys off values and target names and never positions."*
+
+### UNSET AND UNSUPPORTED WERE THE SAME ENCODING
+
+frankB, `f8710ce54`. `for x in p` over a set PARAMETER refused for all three
+element kinds and all passing modes; the identical loop over a set LOCAL always
+worked. **The metadata was captured correctly and flowed only to
+`ProcParamSetEnumId` — the column the CALLER reads — while `ParseForInSetAST`
+reads the symbol, which nothing stamped.** So a set param carried `-1`/`0`,
+**byte-identical to "no element kind recorded."**
+
+**The diagnostic then named three supported cases while describing a set that was
+all three — true about the value stack, silent about the program. A diagnostic is
+an instrument and it lies the same way: by being correct about the wrong
+subject.**
+
+Boundary identified the cause (locals worked, record fields worked, every
+parameter mode failed) and **saved it from being merged into the alias-identity
+family it superficially resembled.** Four columns staged, not one, so `set of
+Char` and `set of 1..9` had no representation even if someone had stamped it.
+Test notes: the `local named` row **passed before the fix** and is a control, not
+evidence; the anonymous spelling lives in a separate file because fpc refuses it
+outright and **keeping it would have cost that file its oracle for seven other
+rows.**
+
+### frankA's ATTRIBUTION INSTRUMENT
+
+Ticket said two sites; there were **six**. Found by **enumerating FORMS** —
+twelve probe files, pxx against fpc 3.2.2, diffed on OUTPUT — rather than reading
+the parser, **and attributed by temporarily tagging every `method not found`
+string with its own line number**, because five sites share one message and a
+single fire could not otherwise say which arm produced it. *"That is the only
+reason the map is a map and not a guess."*
+
+The two unpredictable ones **fail through a different mechanism** (a bare name in
+`class procedure ... static`, and anything inside `with`, both keyed on
+`CurSelfClass`, so a static class method never enters the property branch and the
+name surfaces as `undefined variable`). **A shared symptom across two mechanisms
+is what a form enumeration separates and a code read merges.**
+
+Then **two of five arms came back out, measured** — remove → rebuild → re-run
+thirteen forms **plus a class-helper probe, the one shape where `SelfMemberCi`
+and `CurMethClass` can disagree.** Sharing test carries its own control: every
+line would also compile against per-instance storage, so writes go through one
+instance and reads through **another**, printing `1 0` beside the shared rows'
+`1` — **the file demonstrates it can distinguish the two rather than asserting
+it.** Negative control rebuilt **byte-identical** to the A/B build.
+
+### TWO NEAR-MISSES BY THIS SEAT, BOTH THE SAME SHAPE
+
+**1. "cwd unreadable" was a process that had EXITED.** Reporting box state before
+frankA's gate, a third gate pid showed an empty cwd and this seat published the
+cautious reading — *a third session may be gating unannounced*.
+`readlink /proc/<pid>/cwd` returns empty for a dead process AND for a live
+permission-denied one, and does not error. **An absence was read as a
+redaction.** The hedge INVENTED a peer, which is not the safe direction when the
+question is *am I alone* — frankA might have held for a session that did not
+exist. `ps -o ppid=` settled it in one command.
+
+**2. "The gates are done" is not "the box is clear."** The trigger promised to
+frank-optimize was *three gate verdicts land, then measure*. Both gates finished
+while **load stayed at 15.43** (frankH's full `test-core`, a compiler build,
+frankB's board-md). **The event chosen was a proxy for the question and moved
+independently of it.** Trigger corrected to read the LOAD directly, with gate
+verdicts only as the wake signal.
+
+**Both are frank-optimize's formulation, which is the sharpest statement of the
+whole night's class:**
+
+> **Neither instrument was wrong. Both answered the question they were built
+> for. They drifted because the QUESTION changed under them and the name still
+> fit.**
+
+That is why none of tonight's instruments ERRORED — `pascal26|pxx|make|fpc` is a
+correct pxx-process filter, `pgrep 'bash tools/gate\.sh'` is a correct gate
+detector, `tail`'s exit code is correct about `tail`. **The tell is not "is my
+instrument right" but "is this still the question it was built for."**
+
+### Standing arrangement with frank-optimize, and its stated failure mode
+
+Its p40 numbers were taken at load 12.9–15.2 (its contaminated regime; clean is
+~0). Annotated provisional rather than discarded — **a number with its conditions
+attached is still evidence.** This seat pings when load actually drops. **Failure
+mode stated to it explicitly: a session that finishes and does not report leaves
+this seat blind and it will not notice the silence, so ask rather than read
+silence as a busy box.** Load-independent half needs no re-take: 12 of 13
+examples byte-identical with the depth budget lifted, `compiler.pas`
+byte-identical at `-O0..-O3` despite 170 retained procs, `SumTo` declines — **the
+while/for slice is unimplemented, not unprofitable.**
