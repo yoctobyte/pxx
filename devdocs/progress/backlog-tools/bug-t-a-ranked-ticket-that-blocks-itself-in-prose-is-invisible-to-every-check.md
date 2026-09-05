@@ -105,3 +105,41 @@ prose that merely mentions a dependency requires reading each one, and exactly
 takes this, and it is recorded as a starting list on purpose: a hard number that
 turns out to be a glob artefact has cost this tree a night before, and
 frank-optimize declined to produce one.
+
+## A SECOND POPULATION, and it is bigger: the AGE queue surfaces tickets that predate the schema
+
+frankH, 2026-09-05, working the age queue and hitting it **four for four**:
+
+| ticket | what its frontmatter was |
+| --- | --- |
+| `feature-toolchain-cli-ux` | no summary, and no `blocked-by` edge for a block it asserts |
+| `feature-b-writeln-as-library` | the block in **prose only** |
+| `feature-tls-provider-abstraction` | **four lines. No `status`, no `owner`, no `type`, no `summary`** — at p53, sitting in `working/` |
+| `dwscript-rtti` and `feature-embed-pascal-script` | summaries that were **confidently wrong** |
+
+**Every one was in a ranked queue being offered to somebody.**
+
+> **A ticket old enough to be at the head of the age queue is old enough to
+> predate the schema everything now reads — and the queue that surfaces it is
+> the one that cannot see that.**
+
+**This is the same defect as the prose-block aperture, one layer out.** There the
+frontmatter contradicted the body; here **the frontmatter is absent or
+pre-schema**, and every downstream reader — `ready`, `next`, `check`,
+`effective_prio`, `board-md` — treats a missing field as a *stated* value:
+missing `blocked-by` reads as *no blockers*, missing `summary` reads as *nothing
+to say*, missing `status` reads as whatever the folder implies.
+
+**Why it selects for the oldest tickets specifically:** ranking by age is
+ranking by *distance from the current schema*. So the queue designed to surface
+neglected work **preferentially surfaces the work whose metadata is least
+trustworthy**, and hands it to whoever asked for the oldest thing.
+
+**Consequence for whoever builds the check asked for above: make it cover both
+populations.** They share a fix — a rule that reads a ticket's body against its
+frontmatter — and differ only in which side is missing. **And add a
+staleness-of-schema arm**: a ranked ticket with no `summary`, or with `blocked-by`
+absent while its prose asserts a block, is a finding regardless of folder.
+
+**Positive control, free and already collected:** the five above in their
+pre-repair state.

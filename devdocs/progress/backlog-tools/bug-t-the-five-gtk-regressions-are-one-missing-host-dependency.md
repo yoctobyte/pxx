@@ -338,10 +338,10 @@ built by hand** (GTK2 only on the search path → deliberate `#error`), **plexus
 built by the Makefile** (correct → passes). Only the first is a problem, and
 `decide-which-gtk-a-bare-gtk-gtk-h-means` is already in `decided/`.
 
-## Citation repair 2026-09-05 — `2b64dd1e5` was a ghost
+## Citation repair 2026-09-05 — the revert row cited a ghost
 
-`progress.sh check` reported `2b64dd1e5` as a DANGLING SHA. It is: the sha is not
-on origin and never was. **Recovered by matching the commit SUBJECT**, which is
+`progress.sh check` reported the revert row's sha as a DANGLING SHA. It was: not
+on origin, and never was. **Recovered by matching the commit SUBJECT**, which is
 this repo's prescribed method and works because the subject survives a rebase
 while the id does not:
 
@@ -351,8 +351,13 @@ ade0ce525  revert(C): "a static defined in a used header keeps its body"   <- th
 f5708eb77  fix(C): a static defined in a used header keeps its body -- scoped by provenance
 ```
 
-The row meant **the revert**, so `2b64dd1e5` -> **`ade0ce525`**. The ghost rate
-here is ~100% by construction: nearly every sync rebases, so a pre-push
+The row meant **the revert**, so it is now **`ade0ce525`**. The dead id is
+deliberately **not repeated here** — `git log -p` on this commit has it if anyone
+ever needs it, and a ticket body is the one place it can be mistaken for a live
+citation again. (`progress.sh check` flagged this very section on its first
+draft, for quoting the ghost while explaining that it was one: **a text
+instrument cannot tell a citation from a description of one** — the fourth
+instance of that class tonight.) The ghost rate here is ~100% by construction: nearly every sync rebases, so a pre-push
 `git log -1` reads a doomed id every time. Pass **no sha** to `resolve` and let
 `sync.sh` fill in `PENDING-COMMIT`.
 
