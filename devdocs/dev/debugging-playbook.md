@@ -8489,6 +8489,89 @@ background the job and let its completion be the wait**, rather than putting a
 number on how long a tier may take. **A foreground timeout is a guess about the
 machine, and the guess failing is indistinguishable from the tier failing.**
 
+### The fourth column: the sentinel can carry a VALUE, and two flags change what it means
+
+Added 2026-09-06 (frankD) after the table above was in use for an hour. The sentinel
+is a place to put a number, not just a mark, and `MAKE_EXIT=$?` costs nothing extra:
+
+| | process | sentinel | value |
+| --- | --- | --- | --- |
+| running | alive | absent | — |
+| killed | gone | absent | — |
+| finished clean | gone | present | `MAKE_EXIT=0` |
+| finished red | gone | present | `MAKE_EXIT=2` |
+
+**Sentinel-present is the only state that carries a value at all**, which is what
+makes the value safe to read: you never have to decide whether a missing number means
+zero.
+
+**But the two rows at the bottom are only that clean on a run with NO flags**, and
+this is the qualifier the table shipped without:
+
+- **`MAKE_EXIT=0`** — every recipe line ran and passed. A whole-recipe verdict, and
+  it needs no grep and no knowledge of the harness's assertion styles. This is the
+  primary reading; the greps below are the manifest, not the verdict.
+- **`MAKE_EXIT=2`** — **stopped at the first failure. Everything after it is
+  UNMEASURED, not green.** Read the `make: *** [Makefile:NNN: ...]` line as the stop
+  POSITION and treat the tail as absent, exactly as with any truncation. There is no
+  partial reading between 0 and 2.
+- **under `-i`** — the exit status is **0 by construction** and carries nothing. The
+  verdict is the `(ignored)` markers plus the failure greps, and a report from an
+  `-i` run must say so or its 0 will be read as the row above.
+
+## AN INSTRUMENT THAT ANSWERS IDENTICALLY WITH AND WITHOUT THE FLAG THAT IS SUPPOSED TO CHANGE ITS BEHAVIOUR WAS NEVER READING THE FLAG
+
+Named 2026-09-06 (frankB), confirmed the same hour by frankD from the opposite
+direction, and it generalises well past `make`.
+
+**The case.** `make -k test-core` was adopted by two sessions as the way to recover
+the coverage a STOP was truncating. It recovers nothing. **`-k` continues across
+TARGETS**, and `test-core` is ONE target whose recipe is ~5300 lines
+(`Makefile:5309` to 18637), so a failing recipe LINE ends the recipe with or without
+the flag — there is no sibling target to continue to. Measured on the real target:
+
+```
+-k run   : stops at Makefile:13130, rc=2, 10086 log lines
+plain run: stops at Makefile:13130, rc=2, 10086 log lines
+```
+
+**Byte-for-byte the same stop, flag and no flag.** `make -i` is the one that does the
+job — it ignores the failing LINE and runs the rest of the recipe.
+
+### Why the disconfirming measurement was invisible while it was in hand
+
+The identical-stop comparison was *in front of the session that ran it*, and it read
+as **"the regression is still there"** rather than as **"the flag did nothing"**.
+
+> **The reading taken was TRUE and sufficient for the question being asked, so a
+> measurement that disconfirmed the flag got consumed as one that confirmed the bug.
+> Same observation, two questions, and only one of them was being asked.**
+
+That is the general failure mode and it has nothing to do with `make`: **a flag whose
+effect you never separately verified is a guard nobody watched fire.** The cheap
+check is the one nobody runs because it feels like it cannot fail — *run it once
+without the flag and confirm the answers DIFFER.*
+
+### And the positive control that passed because it was drawn from the wrong population
+
+The second session had controlled `-k` deliberately, precisely to avoid trusting an
+untested flag — with a four-line Makefile of **three separate targets**
+(`all: good bad alsogood`), watched `-k` continue past the failure to `ok-after`, and
+concluded the flag recovers coverage. **It does — across targets, which was not the
+case it was in.** A true statement about a different `-k`.
+
+**A control drawn from the wrong population passes and certifies the broken
+instrument** — the CLAUDE.md rule, fired here on a control built by a session that
+applied the same rule correctly to its greps in the same message. And the tell was in
+hand: **the failure was known to be a STOP at a line number INSIDE a recipe, and a
+line number inside a recipe is exactly what `-k` cannot address.** The disconfirming
+fact was used as the *motivation* for reaching for the flag rather than as a *test*
+of it.
+
+> **When a fact is your reason for choosing an instrument, it is not also evidence
+> that the instrument works.** Ask what population the control was drawn from before
+> the control's PASS is allowed to mean anything.
+
 ## A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT — which is why "I found nothing" needs the control and "I found something" often does not
 
 The asymmetry, and it is the reason guards-that-cannot-fail survive: **a
