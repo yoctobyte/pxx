@@ -4979,6 +4979,61 @@ underneath it. Re-running **both** sides back to back gave 48/48 identical.
   surprising but structurally impossible, suspect the harness first**, and go
   find the shortest path that bypasses it.
 
+## INTERLEAVING CANCELS DRIFT, NOT DIFFERENTIAL SENSITIVITY — when the RATIO is a function of load, no amount of min-of-N fixes it
+
+The section above says: time every variant inside one interleaved loop, take
+each one's minimum. That is correct and it is **not sufficient for every
+comparison**, and the gap is not noise-shaped.
+
+Measured 2026-09-05 (frank-optimize, the inline-admission slices): the same
+min-of-7 interleaved run produced **1.543x on one occasion and 1.665x on
+another**. Not two noisy readings of one ratio — **two different true ratios**,
+because the arms respond to contention by different amounts. The control is
+call-heavy and loses more to cache and core pressure than the inlined arm does.
+
+> **Interleaving cancels DRIFT — a box that gets steadily busier affects both
+> arms alike and min-of-N picks the quiet moments. It cannot cancel
+> DIFFERENTIAL SENSITIVITY, because that moves the arms by unequal amounts in
+> the same instant.** The load is not noise around a fixed ratio; the ratio is a
+> function of the load.
+
+**The tell:** two properly interleaved runs on the same two binaries disagree by
+more than their own within-run spread. If min-of-N has tight spread *inside* each
+run and the runs still disagree, stop reaching for more repetitions — they will
+not converge, and a third run only picks a third point on a curve.
+
+**The fix is an instrument that does not measure time.** Ranked by what they can
+actually answer, because they are not interchangeable:
+
+| instrument | availability here | answers | cannot answer |
+| --- | --- | --- | --- |
+| **static disassembly diff** (`objdump -d`, see below) | now, free | *categorically*, did the call/spill/branch go away | **cannot price it** |
+| **`gprof` via an FPC `-pg` build** | now, free — see *"`perf` being blocked is not 'no profiler'"* | **CALL COUNTS on the real workload**, weighted by execution, deterministic | time shares are FPC's codegen, indicative only |
+| **callgrind**, `perf stat -e instructions:u` | **needs root** (`valgrind` not installed; `perf_event_paranoid = 4`) | dynamic instruction count — a genuine time proxy on fixed hardware | — |
+| wall/user time | now | the only thing that prices it | **exactly the reading this section is about** |
+
+**A COUNT FINDS A CANDIDATE; IT DOES NOT PRICE ONE.** Recorded because it has
+already produced a retraction here: **27,000 eliminated push/pop pairs once
+bought ~6%.** A static count telling you four calls are gone is a restatement of
+the change, not a measurement of it. Use counts to choose what to try and to
+prove a transform fired; use time — or a dynamic instruction count — to decide
+whether it stays.
+
+**Two traps in the static route, both of which return the same 0:**
+
+1. **pxx emits a minimal ELF with NO SECTION HEADERS unless `-g` is passed**, so
+   `objdump -d` yields **3 lines** and every `grep -c` is 0. With `-g`, the same
+   program disassembles to 13789 lines and 286 `call` instructions. **objdump is
+   fine.** Measured 2026-09-06, after the opposite mechanism had been recorded
+   in a commit message — *"objdump does not disassemble a pxx ELF"* would have
+   told the next reader to abandon a working instrument.
+2. **Even with `-g` there is no symbol table**, so `grep 'call.*<Leaf>'` matches
+   nothing on a perfectly good disassembly: **the name is absent, not the call.**
+
+So **three distinct conditions return 0** — no `-g`, no symbols, no such file —
+which is why they read as one clean finding. **Guard: line-count the
+disassembly before any grep, and print `NOSECT` rather than 0.**
+
 ## An optimisation's value is a property of the transform AGAINST A BASELINE — and the baseline moves, sometimes by your own hand
 
 Three items of one optimisation ticket were sized on 2026-08-27, ranked, and

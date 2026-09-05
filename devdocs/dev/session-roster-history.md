@@ -27602,3 +27602,65 @@ the check has to fire whether or not the author currently believes they need it.
 Two lanes converged on one tool within the hour from opposite directions:
 frank-optimize needs `perf` enabled to decide whether code stays, and seven's
 correction protects the retained kernel's copy of it.
+
+### CORRECTION to the entry above — "no load-independent instrument exists here" was too strong, TWICE
+
+This seat wrote that table hours ago and it was wrong in the direction that
+stops people looking. **Two instruments were already available, one of them
+documented in the file whose whole job is to answer that question.**
+
+1. **A static disassembly diff.** `objdump -d` works fine — frank-optimize's
+   earlier claim that it cannot read a pxx ELF was the wrong mechanism, retracted
+   in `10ddd4350`: **pxx emits a minimal ELF with no section headers unless `-g`
+   is passed.** Without it, 3 lines; with it, **13789 lines and 286 `call`
+   instructions**, same program, same compiler. And a second cause was folded
+   into the same fact — even with `-g` there is **no symbol table**, so
+   `grep 'call.*<Leaf>'` matches nothing on a good disassembly. **Three distinct
+   conditions return 0** (no `-g`, no symbols, no such file), which is exactly why
+   they read as one clean finding.
+
+2. **`gprof` via an FPC `-pg` build**, already in
+   `debugging-playbook.md` under *"`perf` being blocked is not 'no profiler'"* —
+   eleven seconds, no root. **The time shares are FPC's codegen and indicative
+   only; the CALL COUNTS are properties of the SOURCE and are exactly ours.**
+
+**That second one answers the question frank-optimize named as the blocker** —
+*nobody should pick a third slice by a third static metric before someone
+measures call-site frequency* — and it has been sitting in the playbook the whole
+time.
+
+> **The wrong mechanism is worse than the wrong observation, because it
+> generalises.** *"objdump cannot read our ELF"* tells the next reader to abandon
+> a working instrument; *"3 lines and zero matches"* tells them to look again.
+
+**Two sessions made the same error within the hour, and both had the answer
+written down.** frank-optimize's own notes said verbatim *"`objdump -d` needs
+`-g`, or it silently counts nothing"* — including the 3-line signature and the
+guard — in a session where that file was loaded; it re-derived the observation
+the hard way and shipped the wrong cause. This seat concluded *no load-independent
+instrument* **without grepping the playbook**, the file named for exactly that
+question, whose section index is free (`grep '^## '`).
+
+> **Having the memory did not stop either of us. Only re-deriving it did.** A
+> written rule is not an instrument: it fires only when someone chooses to
+> consult it, which is precisely the moment they believe they do not need to.
+
+**The owner ask narrows accordingly, and the better argument is the wider one.**
+Static diff answers *did the call go away* and **cannot price it** — a count
+finds a candidate, it does not price one; **27,000 eliminated push/pop pairs once
+bought ~6%.** Only a dynamic instruction count prices it, and both routes to one
+(`valgrind`, or lowering `perf_event_paranoid`) need root. **The value is not one
+optimisation slice: `paranoid = 4` is why the whole of Track O is reduced to
+stopwatches on a 12-core box shared by a dozen agents.** Still batched, not an
+interrupt.
+
+The differential-sensitivity limitation is now written where it belongs rather
+than only here — `debugging-playbook.md`, *"INTERLEAVING CANCELS DRIFT, NOT
+DIFFERENTIAL SENSITIVITY"*, with the instrument table, the two ratios and the
+three-zeros guard.
+
+**And one claim of frank-optimize's about the three pids was two claims.** The
+PPID reading held — taken while they were live, none descended from its shell.
+The **cwd** reading did not: it ran later, and a dead process and a permission
+denial both return the empty string. Reported together as though both supported
+the conclusion; only the first did.
