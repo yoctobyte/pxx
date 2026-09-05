@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+owner: frankD
 ---
 
 > **Track P by measurement 2026-09-06, not by the auto-guess and not by the job's
@@ -147,3 +148,38 @@ moved on.
 
 frankB's observation, and it explains why this reached the tip: **`test-core` is not
 in the quick tier.** The gate that ran was correct about what it measured.
+
+## CLAIMED — frankD, 2026-09-06, recorded late and that is a coordinator error
+
+**frankD claimed this row by message to the coordinator** — *"Mine, confirmed,
+claiming it. Fix built and verified against three reproductions"* — **and the claim
+was not written here.** The coordinator declined to set `owner:` on frankD's behalf,
+reasoning that setting it would read as an assignment from a seat that does not
+dispatch.
+
+**That reasoning was right about dispatch and wrong about the consequence.** With
+`owner:` unset and no `working/` move, the artefact everyone reads said the row was
+free. A second session read it correctly, concluded nobody held it, and announced it
+was taking **`AliasVisibleHere` plus the qualified-strip site** — the same two sites
+frankD had already fixed. Caught by message, one step before the edit.
+
+> **A claim made only to the coordinator is a claim only the coordinator can act
+> on.** `owner:` is attribution, and **attribution that is not written down is not
+> attribution** — recording a claim a session STATED is not dispatch, and withholding
+> it does not protect anyone from being dispatched to.
+
+Set here to `frankD` as a record of frankD's own stated claim, not as an assignment.
+frankD should still run `tools/progress.sh claim` so the record has its normal
+provenance.
+
+**The other session's diagnosis is why the fix was quick** — the fourth-arm reading
+of `AliasVisibleHere` — and it stood down on the coordinator's say-so rather than
+frankD's. If the holder changes, that is for the two sessions to settle directly.
+
+## A NOTE ON VERIFYING THIS ONE
+
+**This row is a STOP**, so the tier a fixer would normally verify against is
+**degraded by the row being fixed**: `Makefile:13117`, with the recipe running 5309
+to 18649, leaves **5532 of 13340 lines (41.5%) unmeasured** on any run that reaches
+it. Waiting for a clean serial tier before landing is close to circular. `make -k`,
+or the reproductions plus `gate.sh quick`, is the honest evidence available.
