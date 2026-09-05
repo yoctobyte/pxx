@@ -76,3 +76,19 @@ Daemon's working tree and detached HEAD never touched; clone clean afterwards.
 
 (1) is the one that fires without anyone remembering anything, which is the
 property this ticket exists for.
+
+## The procedure was used again the same hour, and it strengthens candidate (1)
+
+seven landed `e8f75c0b0` from the same clone: ran `git status -sb` first, saw
+`## HEAD (no branch)` with a gate running, and took the worktree route directly.
+**It worked, and it only worked because the check is mechanical.**
+
+**The new datum is the race.** On the first attempt origin had moved mid-rebase
+and the push was rejected; the retry landed it. On a clone whose remote advances
+every few minutes, **anything relying on the author's attention loses a race it
+does not know it is in** — the detached state and the moving remote are
+independent, and either alone is survivable.
+
+That is a second, independent argument for ranking the **pre-commit hook** first:
+not merely that people forget, but that the window between noticing and landing
+is itself contested.
