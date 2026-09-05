@@ -2,13 +2,13 @@
 slug: bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations
 title: "A pointer to a generic class's nested type keeps the FIRST specialization's pointee"
 track: P
-prio: 45
+prio: 55
 type: bug
 blocked-by: []
 status: backlog
 owner: ""
 created: 2026-09-05
-summary: "MECHANISM LOCATED 2026-09-05 (frankS), at ea4187d4d: the nested RECORD across two specializations WORKS (prints `7 hi`) and only the POINTER to it fails, with the error following declaration order — the first specialization's `PCell` wins and the second reuses it. Cause is pasparser_decl.inc:6984, the tkCaret arm, calling RegisterPtrAlias with the BARE name and never consulting ParsingClassBodyCi, while AddClassLikeType (pasparser_class.inc:350) qualifies the name and calls AddNestedType for a class or record in the same position. Class was fixed, then record; the POINTER arm is the third sibling of that double case and is still flat. HOISTING DOES NOT FIX IT — measured, forcing the pointee to hoist changes nothing, because the collision is on PCell and not on TCell. The fix is an owning-class column on the alias table plus scope-aware lookup; sentinel must be -1 since class 0 is real. Not a one-liner and not attempted: a core registry every type reference reads."
+summary: "GENERICS ARE NOT INVOLVED -- corrected by frankD 2026-09-05, population only; frankS's mechanism below is unchanged and is the deeper half. Two ORDINARY classes, no `generic` and no `specialize`, each declaring `type PCell = ^TCell; TCell = record d: X; end;`, compile the SECOND class's `n^.d := v` against the FIRST class's pointee; fpc 3.2.2 prints `7 hi`. That is pasparser_decl.inc:6984 registering the pointer alias under its BARE name with no owning-class column -- the third sibling arm AddClassLikeType already fixed for classes and records. Keyed on NEITHER name: different alias names and different pointee names each still fail. Records trigger it too. Prio 45->55: the population is every class or record with a nested pointer type, not templates. Measured at 4ef367091, binary 25113fd3, fpc 3.2.2, x86-64."
 ---
 
 # Repro
@@ -165,3 +165,75 @@ of `AddNestedType`. Two hazards for whoever takes it:
 Not attempted here: this is a core registry every type reference reads, so it is
 the destabilising kind that lands incrementally, not at the end of a session.
 The diagnosis is the deliverable.
+
+---
+
+# 2026-09-05, frankD: the generic is a passenger — population, not mechanism
+
+**frankS's diagnosis above stands and is the deeper half.** This section only
+widens who is affected. `pasparser_decl.inc:6984` registering under the bare name
+predicts exactly this, so the two findings agree; what follows is the part that
+changes the ranking rather than the repair.
+
+Strip the generics out and nothing changes:
+
+```pascal
+{$mode objfpc}
+program plain;
+type
+  TIntBox = class(TObject)
+    type PCell = ^TCell; TCell = record d: Integer; end;
+    var head: PCell; procedure Put(v: Integer); end;
+  TStrBox = class(TObject)
+    type PCell = ^TCell; TCell = record d: AnsiString; end;
+    var head: PCell; procedure Put(v: AnsiString); end;
+procedure TIntBox.Put(v: Integer);    var n: PCell; begin new(n); n^.d := v; head := n; end;
+procedure TStrBox.Put(v: AnsiString); var n: PCell; begin new(n); n^.d := v; head := n; end;
+var i: TIntBox; s: TStrBox;
+begin i := TIntBox.Create; s := TStrBox.Create; i.Put(7); s.Put('hi');
+      WriteLn(i.head^.d,' ',s.head^.d); end.
+```
+
+pxx: `error: incompatible types: cannot assign AnsiString to Integer`.
+fpc 3.2.2: **`7 hi`**.
+
+## Boundary — ten probes, all in the plain (non-generic) shape
+
+| # | shape | result |
+| --- | --- | --- |
+| a_direct | nested RECORD used directly, no pointer, two classes | **OK** `7 hi` |
+| e_one | **one** class, one nested pointer alias | **OK** `hi` |
+| h_mixed | class A uses a TOP-LEVEL alias, class B a nested one | **OK** `7 hi` |
+| f_same | two nested aliases, **both pointees Integer** | **OK** `7 9` — a trap, see below |
+| plain | two nested aliases, same names, different pointees | **REFUSED** |
+| b_diffptr | two nested aliases, **different alias names** (`PC1`/`PC2`) | **REFUSED** |
+| c_diffcell | two nested aliases, **different pointee names** (`TCellA`/`TCellB`) | **REFUSED** |
+| i_toplevelcell | two nested aliases, pointees are **top-level** records | **REFUSED** |
+| d_records | the same in two **records** rather than classes | **REFUSED** |
+| g_rev | `plain` with the two classes swapped | **REFUSED, message reversed** |
+
+- **The trigger is the SECOND class/record body to declare a nested pointer
+  alias.** One is fine (`e_one`); one nested plus one top-level is fine
+  (`h_mixed`).
+- **Keyed on neither name** (`b_diffptr`, `c_diffcell`). Worth stating explicitly
+  because "collides under the bare name" invites the reading that renaming one of
+  them is a workaround. It is not — there is no owning-class column at all, so two
+  differently-named nested aliases still land in one flat undifferentiated table.
+- `d_records` reproduces it in two **records**, so the fix has the same two-arm
+  shape `AddClassLikeType` already has. fpc rejects the record file for an
+  unrelated reason, so diff the CLASS form against fpc.
+
+## `f_same` is a trap, and any regression test must avoid it
+
+Two nested aliases whose pointees are **both `Integer`** print `7 9` and look
+like a passing control. They pass *because the wrong answer and the right answer
+are the same value.* A test written that way cannot fail — it would have been
+green through this entire bug. **Use two different pointee types.**
+
+## What it changes
+
+Prio 45 -> 55. The population is every class or record with a nested pointer
+type, not templates. Fixing the specializer would not have touched it: the
+specializer emits two ordinary class bodies, which is `plain` above.
+
+Slug deliberately NOT renamed — it is cited elsewhere and a rename breaks those.
