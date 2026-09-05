@@ -507,3 +507,53 @@ normalise-don't-special-case fix rather than a fourth mechanism.
   a Pascal parameter.
 - The wasm32 half of the "no adjacency" explanation. I am reasoning about why a
   stray write is survivable there; I did not read a wasm32 frame.
+
+---
+
+## 2026-09-06 (frankwasm) — the wasm32 adjacency row, which frankS marked unverified
+
+frankS's diagnosis says the overrun's VICTIM is a property of the target's
+frame layout, and left one wasm32 question open by reasoning rather than
+measurement: *whether a wasm32 frame has any adjacency here at all.* It does.
+Compiler `6715405814ba`.
+
+frankS's own prediction table, re-run on wasm32. All three yield an INTEGER, so
+nothing depends on reading a Variant:
+
+| parameters | body yields | native | wasm32 |
+| --- | --- | --- | --- |
+| `c: Variant` | const 9 | **SEGV, rc=139** | `got=0`, rc=0 |
+| `a: Integer; c: Variant` | `a` (=9) | `got=0` | `got=0` |
+| `a: Integer; c: Variant` | const 9 | **`got=9` — correct** | **`got=0` — wrong** |
+
+**The third row is the whole content.** On native it is the control that
+confirms the adjacency model: the Variant is second, so the neighbour it
+smashes is `a`, and a body that never reads `a` is therefore correct. wasm32
+gets it **wrong**, so on wasm32 the write lands on something that a
+constant-yielding body still depends on.
+
+**This CONFIRMS frankS's mechanism rather than competing with it** — "what it
+lands on is a property of the target's frame layout" is exactly what a
+different victim means. It also answers the open question in the affirmative:
+there is adjacency on wasm32, it simply is not `self`, which is why wasm32
+never faults.
+
+**The wasm32 symptom is uniform in a way native's is not.** Every wasm32
+generator with a Variant parameter measured so far yields **0**, whatever the
+body yields and whether or not the Variant is first — six programs across this
+ticket and my NilPy one. On native the symptom SPLITS by position (crash first,
+neighbour-clobber second). So the wasm32 victim looks like something on the
+value/return path rather than a parameter slot.
+
+**NOT measured, and it is the obvious next step for whoever fixes this:** which
+wasm32 frame slot the 16-byte restore actually lands on. I did not read the
+frame layout, and "looks like the value path" is inference from the uniformity,
+not from an offset. If the fix is cell promotion as frankS plans, this row is
+also the cheapest regression check — it must go to `got=9` on both targets, and
+row 2 to `got=9` as well.
+
+One correction to my own earlier section above: I wrote that the restored
+Variant being `{tag = 33, payload = 0}` was what produced the two symptoms.
+frankS is right that it is not — the malformed Variant is real and is Defect 2,
+but the symptoms come from the restore WRITING outside the slot it owns. My
+layout measurement stands; the story I hung on it does not.
