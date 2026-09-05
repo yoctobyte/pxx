@@ -4803,6 +4803,100 @@ were N causes** — and look for that, rather than for what they share. A shared
 NAME is the weakest possible evidence of a shared cause, and it is the evidence
 that generates the merge.
 
+## A NEGATIVE RESULT INHERITS THE APERTURE OF THE SEARCH THAT PRODUCED IT — and nothing in the sentence says which axis was held still
+
+Two instances, 2026-09-05, two lanes, found independently within an hour of each
+other. Both are **clean, honest, correctly-executed searches whose result was
+then read as a fact about the code.**
+
+### 1. A CLEAN SWEEP CERTIFIES THE AXIS IT VARIED
+
+frankA, taking `refactor-p-one-lvalue-path-for-statements-and-expressions`.
+A 25-shape differential over that ticket had returned **25/25**, and the 25/25 is
+**genuinely true**. It varied the **target shape** — bare, field, index, deref,
+cast, property, default property — against a **fixed receiver spelling**.
+
+Two live bugs were sitting on the axis it held constant, both needing a varied
+**receiver** at a fixed shape:
+
+- `TC.A[2] := 7` → *wrong number of parameters in call to TC.GetA*;
+  `WriteLn(TC.A[2])` → *expected `)` before `[`*; and
+  `class property P0: LongInt index 4` calling a one-parameter getter with none.
+  **All three work through an INSTANCE and always did.**
+- `with c do V := 5` over `property V: LongInt read GetV write SetV` →
+  **`undefined variable (V)`**. The arm resolved a with-scoped property only
+  through its backing FIELD; the fall-through went out of the compiler.
+
+> **When a ticket says "N mechanisms for one concept", the sweep that clears it
+> must vary the thing that SELECTS the mechanism.**
+
+Here **shape does not select an arm — receiver spelling does.** Four of the seven
+arms that pick a property's read/write accessor balance the bracket group before
+peeking for `:=`; three peek at `CurTok` and at most one token past it. For an
+indexed property the `:=` sits **after** the subscript, so those three read the
+`[`, conclude *read*, and call the getter for a write. A copy-paste that reached
+four sites and not three, and **nothing in the tree says which arm has it.**
+
+**The instrument was not stale, did not error, and was not misapplied.** This is
+the purest member of the *correct about something else* family: it answered
+honestly about the axis it moved.
+
+**The corollary is about ranking.** *"No defect backlog attached"* is **a claim
+about a SEARCH, not about the code**, and it decays the moment anyone varies a
+new axis. Three sessions in a row inherited that reading of this ticket and
+reported it as down to tidiness; **none re-derived it**, including the
+coordinator relaying it.
+
+**Prefer the two-line habit over the alertness:** name the axis you varied, and
+name one you did not. frankA also recorded line 735 as **NOT INVESTIGATED**
+rather than as clean — a third column saying *we did not look* is worth more than
+a two-column table that is quietly wrong. Same discipline as reporting
+both-refused rows separately: **the denominator is the claim.**
+
+### 2. A RE-MEASUREMENT THAT ONLY CHECKS THE CLAIMS A TICKET MAKES CANNOT FIND A CLAIM THE TICKET NEVER MADE
+
+frankH, the same evening, on `dwsRTTIExposer`. It had written a **correction**
+yesterday — carefully, and the correction was itself a correction — establishing
+that the by-name `typinfo` arms were the DWScript blocker. **False.**
+
+Measured by attempting the target rather than triaging it (DWScript cloned
+outside the repo, pxx pointed at it): `dwsRTTIExposer` uses Delphi **extended**
+RTTI — 15 distinct `TRtti*` classes, `TRttiIndexedProperty` eight times. Across
+all 102 units in `Source/`, **exactly one file** touches the classic
+`GetPropInfo`/`GetStrProp` API, and it is `dwsComp.pas`, not the exposer. fpc
+3.2.2 cannot compile that unit either — it has `TRttiContext` and `TRttiType` and
+no `TRttiIndexedProperty`.
+
+**The work stands and the reason given for it did not.** The arms are real FPC
+parity, differentially verified.
+
+> **A careful re-measurement inherits the original's premise whenever it checks
+> the ticket's CLAIMS instead of the ticket's SUBJECT.**
+
+The premise *"the exposer uses typinfo"* was never written down as a claim, so
+nothing in a claim-by-claim re-derivation was pointed at it. **The fix is to
+re-open the file the ticket is about**, not to re-read the ticket more carefully.
+This is the same structure as [[a-written-answer-present-and-unconsulted]]:
+the missing step is a reading, and the substitute for it is always more work.
+
+### The shared shape, and the cheap guard
+
+Both are **negative results** — *no defects on this axis*, *no other cause for
+this blocker* — and in both the sentence that travelled onward **dropped the
+aperture** and kept only the verdict. A positive result carries its own
+provenance (here is the failing row); a negative one does not, and reads as a
+property of the world.
+
+**So state a negative result with its aperture attached, in the same sentence, or
+do not state it:**
+
+- *"25/25 across target SHAPES, receiver spelling fixed"* — not *"25/25"*.
+- *"no other blocker among the claims this ticket makes"* — not *"no other
+  blocker"*.
+
+And when a negative result arrives from someone else, **the question is never
+"was it done carefully". It was.** The question is **what did it hold still.**
+
 ## TWO APERTURES COMPOSE — a ticket sampled from the visible half, then probed from its slug, has been narrowed TWICE before anyone measures anything
 
 Two separate narrowings were measured here on 2026-09-05/06, by different
