@@ -8440,6 +8440,37 @@ harness's own verdict line for a result, the sentinel for completion. The stable
 pattern here is worth a shared filter rather than being re-derived by each session
 that greps.
 
+**A third instance the same night, on the flag that replaced `-k`.** Under `make -i`
+the exit status is 0 by construction, so the verdict must come from the log, and the
+natural grep is `ignored` — make prints `make: [Makefile:N: <target>] Error 1
+(ignored)`. On a 5303-line in-flight log it returned **4, and all four were comment
+prose** (*"…each ignored the section"*, *"it was silently ignored -> independent
+variable"*, a slug containing `scopedenums-ignored`, and *"hint directives … ignored"*).
+**The count was 4 and the answer was 0.**
+
+> **The vocabulary of a test log is the vocabulary of a test log's COMMENTS.** This
+> recipe is ~5300 lines of commented rationale that make echoes, so `error`, `fail`,
+> `mismatch` and `ignored` all appear as English before they appear as verdicts.
+
+The anchored form is `^make.*Error.*(ignored)$`, and **the reason it works is
+mechanical rather than lucky: `make:` at column 0 is something a comment line cannot
+produce, because the `#` is always first.**
+
+> **The discriminator is the line's ORIGIN, not its wording.** Anchor on the speaker.
+> That generalises to every log any session greps and has nothing to do with `-i`.
+
+### Three flags, all green-looking by default
+
+Counted 2026-09-06, in one night, on one target:
+
+- **`-k`** does not do what it looks like it does (see the section below).
+- **`-i`** produces an exit status that **cannot come out false**.
+- **a backgrounded run** reports the **wrapper's** exit code, not the job's.
+
+**Each one independently turns a red into something that reads as green**, and all
+three are the ordinary way to run a long job. Whenever you reach for one, say in the
+report which of the three you used and what you read the verdict FROM.
+
 ### The live case that produced it
 
 The `test_record_nested_type_section` regression was a **STOP**, not a red row.
@@ -9027,6 +9058,73 @@ Two corollaries worth carrying:
   minutes the same week; this cost a day and left a ticket steering the next
   reader away from the correct fix.
 
+
+### The narrower sibling: TWO INSTRUMENTS POINTED AT THE SAME TARGET ARE AS NARROW AS THAT TARGET, EVEN WHEN THEY FAIL DIFFERENTLY
+
+Named 2026-09-06 (frankB), correcting its own claim from an hour earlier. It had
+designed a diagnostic by reading our source, then validated the predicted row set
+against **fpc** — a genuinely independent instrument that fails differently — and
+reported the agreement as corroboration.
+
+**It is corroboration about the SITE and not about the DOMAIN.** Both readings were
+taken on x86-64. On any question whose answer varies by target, *"my reading of the
+source"* and *"fpc's answer"* are **one reading counted twice**, however different
+their failure modes are, because the axis that would separate them was held constant
+in both.
+
+> **A second instrument buys you independence along the axes you varied, and nothing
+> along the axis you did not.** Name the axis before calling it a second source.
+
+## A RELAY'S CHARACTERISTIC ERROR: THE SHARED TERM SURVIVES THE COMPOSITION AND THE QUANTITY IT NAMES DOES NOT
+
+Measured 2026-09-06, on this file's coordinator, and caught in one message by the
+session it was sent to.
+
+Two open tickets, filed by the same author on the same day, both about `x in [...]`,
+both naming `ParseSetMembershipAST`, **both using the word "domain"**:
+
+| ticket | what "domain" means there |
+| --- | --- |
+| `bug-a-set-membership-32-bit-backends-truncate-the-set-constant` | the compare chain's **WIDTH**, once an element has been accepted |
+| `bug-p-the-two-arms-of-in-disagree-about-their-own-domain-silently` | the **LANGUAGE's legal element range**, which decides whether it should be accepted at all |
+
+The coordinator composed them and warned that a diagnostic asserting the second would
+be wrong on the three 32-bit targets that get the first wrong. **False.** A Pascal set
+is a 256-bit bitset over 0..255 (`compiler/defs.inc:2080`, `{ 21: Set — 32-byte
+bitset }`), so `4294967297` is out of domain by any width on any target and a
+truncation cannot hide it from a `< 0 or > 255` test. The two tickets are adjacent in
+one function and answer different questions: *should this element exist at all*, and
+*given that it does, is the comparison right*.
+
+### Why neither author could have caught it
+
+**Each ticket used the word correctly.** The error did not exist in either source; it
+came into being at the join, and the join is the one place neither author is looking.
+That makes it the specific failure mode of any seat whose job is to compose reports —
+and it is invisible from inside, because a shared term is the strongest-looking
+corroboration available and therefore the one nobody re-derives.
+
+> **When two reports agree on a word, check that they agree on the QUANTITY.** Two
+> authors using one term correctly for two different measurements is not a
+> disagreement anyone will report, because from each end nothing is wrong.
+
+### The check, and it is cheap
+
+Before relaying a composition, **name the quantity, in units**, that each source would
+have had to MEASURE to produce its sentence. If the two measurements are of different
+quantities, the composition is a new claim that neither author has taken and it needs
+its own evidence — say so, or do not send it.
+
+**The check cannot be "read the sources again"** (frankB's addition, and it is the
+part that changes what a reader does). Both authors used the word correctly, so no
+amount of re-reading either ticket surfaces it. **It is only detectable at the join**,
+which is why the remedy has to be an act performed ON the composition rather than more
+care taken with its inputs.
+
+**And the cost of getting it wrong scales with when it lands.** This one was free
+because the recipient was still designing: **a correction that arrives during the
+DESIGN is free, during the BUILD costs a rebuild, after the PUSH costs a revert** —
+the same window that makes an announced topic cheap.
 
 ## THE SYMPTOM IS OBSERVED AT THE CONSUMER, SO THE FIRST HYPOTHESIS IS ALWAYS ABOUT THE CONSUMER — and the consumer is the one component the symptom has already proved is running
 
