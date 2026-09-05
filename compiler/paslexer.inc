@@ -1854,10 +1854,39 @@ function PasIfOptState(const letter: AnsiString; var isOn: Boolean): Boolean;
   analogy from "numeric switches are tracked" would have made A wrong. Neither
   letter predicts the other and the table is the only authority.
 
-  The letters fpc defaults ON that we still do not hold -- G, J and X -- answer
-  False, which is wrong for a compiler that HAS extended syntax. Each needs its
-  own claim about pxx rather than a lookup in fpc's table, so they are
-  bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles, not this. }
+  G, J AND X JOINED ON 2026-09-05, and they are the class the table above cannot
+  decide: fpc TRACKS all three -- default ON, and a minus form really turns them
+  off -- while in pxx the underlying behaviour is UNCONDITIONAL, so there is no
+  variable to answer from and never will be. Each got its own measured claim
+  about this compiler rather than a lookup in fpc's column, and all three came
+  back the same shape:
+
+    X  extended syntax.  A discarded function result compiles, and PChar
+       arithmetic compiles. Both still compile with the minus form written
+       above them, so the minus form is INERT here. fpc, same two sources,
+       refuses the discarded result under it (Illegal expression). pxx is
+       permanently X-on.
+    J  writable typed constants.  `const K: Integer = 5;` then `K := 9` compiles
+       and prints 9, with and without the minus form. fpc's minus form makes
+       typed constants read-only. pxx is permanently J-on.
+    G  80286 code generation.  The subject does not exist here: the smallest x86
+       backend is i386 and there is no 8086 mode to leave, so the switch's
+       question is satisfied by construction on every target we emit for.
+
+  SO THEY ANSWER TRUE UNCONDITIONALLY, AND THE MINUS FORM DOES NOT MOVE THEM.
+  That is deliberate and it is the C rule again from the other side: IFOPT
+  reports THIS compiler's state, and after a minus form pxx's state is still on,
+  because the minus form did nothing. Tracking a request we do not honour would
+  make IFOPT answer about the SOURCE rather than about the COMPILER -- and the
+  program that asks is asking exactly whether its request took effect. A source
+  that writes the minus form and guards on it gets the arm that matches how pxx
+  will actually behave, which is the only arm that can be right for it.
+
+  This is the third distinct shape in this function and the reason no analogy
+  works: R/Q/I/C/Z answer from a VARIABLE; A answers False because the state is
+  untracked; G/J/X answer True because the behaviour is unconditional. Three
+  answers, and the only way to tell which a letter takes is to run the
+  behavioural probe. bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles }
 begin
   Result := True;
   if CaseEqual(letter, 'r') then isOn := RChecksVal
@@ -1874,6 +1903,10 @@ begin
     reports our own state truthfully, and agreeing with fpc would mean lying
     about it. (Bare spelling: see the header.) }
   else if CaseEqual(letter, 'c') then isOn := AssertionsVal
+  { G/J/X: unconditional here, so True with no variable behind it. See the
+    measured claims in the header -- this is NOT "fpc defaults them on". }
+  else if CaseEqual(letter, 'g') or CaseEqual(letter, 'j') or
+          CaseEqual(letter, 'x') then isOn := True
   else begin isOn := False; Result := False; end;
 end;
 

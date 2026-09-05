@@ -15,3 +15,6 @@ Z4    : Z+ yes
 Z4    : Z- no
 PE2   : Z+ no
 lower : r+ yes
+G+    : G+ yes
+J+    : J+ yes
+X+    : X+ yes

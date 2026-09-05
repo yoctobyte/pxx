@@ -60,4 +60,17 @@ begin
   { Lower case, which fpc accepts. }
 {$R+}
   {$IFOPT r+} Say('lower : r+ yes'); {$ELSE} Say('lower : r+ NO'); {$ENDIF}
+  { G, J and X: fpc defaults all three ON and so do we, so the PLUS rows are a
+    real oracle comparison and belong here. Their MINUS rows do NOT -- fpc
+    tracks the switch and pxx's behaviour is unconditional, so the answers
+    diverge on purpose and pinning them here would either fail or quietly
+    replace fpc's answer with ours. They live in
+    test_ifopt_unconditional_letters.pas, next to the behavioural probe that
+    justifies them. }
+{$G+}
+  {$IFOPT G+} Say('G+    : G+ yes'); {$ELSE} Say('G+    : G+ NO'); {$ENDIF}
+{$J+}
+  {$IFOPT J+} Say('J+    : J+ yes'); {$ELSE} Say('J+    : J+ NO'); {$ENDIF}
+{$X+}
+  {$IFOPT X+} Say('X+    : X+ yes'); {$ELSE} Say('X+    : X+ NO'); {$ENDIF}
 end.

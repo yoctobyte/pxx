@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-05
 found-by: frankB
 owner: ""
-blocked-by: []
+blocked-by: [feature-writeln-as-library]
 summary: "EXPRESSION-POSITION HALF IS FIXED (c7632de85): an unqualified Read/Write naming a METHOD of the enclosing class now resolves in expression position, through one predicate shared with the statement arm. WHAT REMAINS is row 6 of the table below -- a GLOBAL (non-method) routine cannot be NAMED Read/Write/Readln/Writeln at all: `function Read(var B; C: Longint): Longint;` is refused at the DECLARATION with `expected name`, because IsMethodNameKind in pasparser_name.inc admits these tokens in METHOD-name position and the routine-name path never got the same predicate. FPC accepts it -- `read` is not a reserved word there, which is the premise pasparser_name.inc is already written around. Ranked BELOW the fixed half on evidence rather than on shape: the FPC compiler corpus wanted the METHOD spelling, and no unit in it declares a global routine by these names, so nothing measured is blocked on this today."
 ---
 
@@ -230,3 +230,25 @@ blast radius enumerated — is
 **Work that one, not this one**: a fix aimed at the call site is aimed at the
 wrong half, and fixing only the declaration would leave a routine that is
 declared and then silently never called, which is worse than today's refusal.
+
+## 2026-09-05 (frankD) — row 6 is now the ONLY member of the cluster left
+
+Seven of the nine spellings landed as `5f177b181`: `SysOpen`, `SysRead`,
+`SysWrite`, `SysClose`, `SysFchmod`, `ArgCount`/`ParamCount` and
+`ArgStr`/`ParamStr` are soft keywords, declarable as any kind of name.
+`bug-p-sysopen-intrinsic-shadows-a-user-function-name` is closed by it.
+
+**`Read`/`Write`/`ReadLn`/`WriteLn` were deliberately excluded**, so row 6
+survives exactly as written. Not caution — those four carry the `:width:prec`
+format specifiers and the file-first variadic form, so converting them means
+moving that parsing into name dispatch, which is `feature-writeln-as-library`
+phase 2's job. `blocked-by` it now rather than racing it.
+
+**Do not "just" fix the declaration for these four.** The rule this ticket
+already states holds and the seven-spelling work confirmed the shape of it: the
+lexer mapping and the call-site dispatch move TOGETHER or the name is declared
+and then silently never called. In the seven's case the declaration site needed
+no edit at all — `pasparser_proc.inc:664` is `if CurTok.Kind <> tkIdent then
+Error('expected name')` and it simply started passing once the lexer stopped
+producing a dedicated kind. That is the whole fix for row 6 too, and it is why
+it cannot be done ahead of the call side.

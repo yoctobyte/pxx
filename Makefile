@@ -13906,6 +13906,14 @@ test-core: $(COMPILER)
 	# gets 7 of the 12 rows wrong.
 	./$(COMPILER) test/test_ifopt_tracks_the_switch_it_names.pas $(TESTTMP)/test_ifopt26
 	tools/expect_same.sh test_ifopt26 "$$($(TESTTMP)/test_ifopt26)" "$$(cat test/test_ifopt_tracks_the_switch_it_names.expected)"
+	# G/J/X are the third shape: fpc TRACKS them and our behaviour is
+	# unconditional, so IFOPT answers on after a minus form where fpc answers
+	# off. A chosen divergence, kept OUT of the oracle file above and pinned
+	# here BESIDE the behavioural probe that justifies it -- a discarded
+	# function result under X- and a typed constant written under J-. fpc
+	# refuses the second outright. Pin v404 scores 4/7.
+	./$(COMPILER) test/test_ifopt_unconditional_letters.pas $(TESTTMP)/test_ifopt_uncond26
+	tools/expect_same.sh test_ifopt_uncond26 "$$($(TESTTMP)/test_ifopt_uncond26 | tail -1)" "total ok 7 / 7"
 	# A subrange's bounds do not have to be LITERALS. Both type-level subrange
 	# arms keyed on a TOKEN KIND (tkInteger/tkMinus/tkString), so a bound that
 	# was a NAME fell through to the "is this a type name" arm and came back as
