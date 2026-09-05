@@ -3,10 +3,10 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: backlog
+status: known-incompat
 owner: ""
 created: 2026-09-05
-summary: "A unit may declare `generic procedure Test<T>;` in its interface and implement `generic procedure Test<S>;` — different type-parameter names — and pxx accepts it silently. FPC rejects it. Conformance rows tgenfunc17.pp and tgenfunc18.pp are the two live FAILs in an otherwise 347/2 run. NOT a regression to revert: the pin REFUSED these files because it did not support `generic procedure` at all, so its %FAIL pass was accidental; 71deb21d4 added the syntax and exposed a check that never existed."
+summary: "KNOWN DIVERGENCE, not a defect — SETTLED 2026-09-05 by measurement, and the reason is not the one this ticket assumed. A unit may declare `generic procedure Test<T>` and implement `generic procedure Test<S>`; pxx accepts the differing impl-side spelling, which is the same deliberate rule pxx.skip already records for tgeneric20 and tgeneric30 — the implementation side of a generic routine need not echo the interface's type-parameter spelling. A RENAME cannot mislead, because both spellings denote the same single position. A SWAP could, and would make this `gap: accepts-invalid` instead — but it is UNREACHABLE: no two-parameter generic routine parses at all, and the control that proves it has neither a swap nor a rename (`generic procedure Pair<T, S>` identical in both sections still refuses with `expected '>' before ','`). Filed as bug-p-a-generic-routine-supports-exactly-one-type-parameter. tgenfunc17/18 are now skip-listed `wontfix: dialect-pass` WITH A TRIPWIRE: when the one-parameter limit is lifted the swap becomes reachable and this question re-opens."
 ---
 
 # A generic routine's implementation type parameters are not checked
@@ -155,3 +155,49 @@ and the fix is a diagnostic rather than a rerating.
 Not yet measured: the pin cannot answer it (it refuses `generic procedure`
 outright — the same accidental-%FAIL trap this ticket already documents), so it
 needs a HEAD build. Do the swap probe first; the disposition follows from it.
+
+## 2026-09-05 (frankS) — SETTLED: dialect-pass, and the reason is that the hazard cannot be reached
+
+The measurement this ticket was waiting on is done, and it went the way frankD
+predicted — but not for the reason either of us gave.
+
+**The swap probe cannot be run, because no two-parameter generic routine parses
+at all.** Measured at `e0e0fb2ae4ed`:
+
+| construct | result |
+| --- | --- |
+| `generic procedure Solo<T>(a: T)` — one param, matching | **works**, prints `solo=5` |
+| `generic TPair<T, S> = class` — two params, CLASS | **parses and builds** |
+| `generic procedure Pair<T, S>` — two params, ROUTINE, *identical* in both sections | **`expected '>' before ','`** |
+
+The third row is the control that matters: it has **no swap and no rename**, and
+it still refuses. So the earlier reading — that pxx "accepts" the swap — was
+never tested; the construct does not exist. Filed as
+[[bug-p-a-generic-routine-supports-exactly-one-type-parameter]]:
+`GenericFuncs[].Param` is a single `AnsiString`, so the data model holds exactly
+one type parameter for a routine.
+
+**Therefore the disposition is `wontfix: dialect-pass`, matching tgeneric20 and
+tgeneric30**, and it is now safe rather than merely precedented:
+
+- A **rename** (`<T>` declared, `<S>` implemented) is all that can occur, and a
+  rename cannot mislead — both spellings denote the same single position. That
+  is exactly the "implementation side need not echo the interface's
+  type-parameter spelling" rule the two existing entries already record.
+- A **swap** could mislead, and is the case that would have made this
+  `gap: accepts-invalid` instead. It is unreachable.
+
+**The trap here was real and worth naming.** frankB's warning was that a known
+gap described one severity class too low is harder to find than an unknown one,
+*because the existing note answers the question you were about to ask*. Inheriting
+tgeneric20/30's bucket without measuring would have been exactly that. The bucket
+turns out to be right — but it is right because of a parse limitation nobody had
+connected to it, not because the family argument covers the swap. Those are
+different reasons and only one of them survives the parse gap being fixed.
+
+**So the skip entries carry a tripwire**, and this is the part that must not be
+dropped: when
+[[bug-p-a-generic-routine-supports-exactly-one-type-parameter]]
+lands, the swap becomes reachable and this question re-opens. The note in
+`pxx.skip` says so, so the next reader inherits the caveat and not just the
+verdict.

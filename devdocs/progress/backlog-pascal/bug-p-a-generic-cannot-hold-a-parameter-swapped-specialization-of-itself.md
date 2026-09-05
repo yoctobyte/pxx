@@ -54,3 +54,38 @@ that fix mode-Delphi answered `expected ':' before '>'` for both, so the two
 looked like one defect; afterwards the swapped case reaches the same honest
 refusal the objfpc surface always gave it, and the non-swapped one compiles and
 runs. Filed so the remaining half is not rediscovered as new.
+
+## 2026-09-05 (frankS) — the "round exhaustion" reading is WRONG; this ticket's own analysis stands
+
+I had this row noted privately as *deferral-round exhaustion rather than a real
+cycle detector* — the worry being that `circular generic specialization` is
+really "I ran out of rounds", which would mean **deep but acyclic** programs get
+refused with a message naming a cycle that does not exist. That would have
+refused legal source and moved the rank.
+
+**Measured, and it is not what happens.** A strictly acyclic chain of twelve
+generic classes, each naming the next, at `e0e0fb2ae4ed`:
+
+| probe | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `deep_rev` — each names an EARLIER-declared template | **builds**, prints `DEEPOK` | **builds** |
+| `deep_fwd` — each names a LATER-declared template | `unknown type: TBox1` | `Identifier not found "TBox1"` |
+
+Two things follow. First, depth alone does not produce the circular message —
+twelve levels resolve fine when declaration order allows it, so there is no round
+budget being exhausted. Second, the forward case is refused by **FPC too, with
+the same meaning**, so pxx is not diverging on ordering at all; `deep_fwd` is
+simply not legal in either.
+
+`unknown type` and `circular generic specialization` are therefore **different
+paths**, and the circular one fires only on genuine mutual dependency. **The
+ticket's own analysis is correct as written and prio 20 is right** — the
+diagnostic is honest, it names the real reason, and the change that would accept
+the construct is to how specialization is ORDERED (lazy: declare the name, fill
+the body on demand), not a repair to the recognizer.
+
+Recorded because the wrong reading was mine and it was the kind that survives:
+"the detector is really exhaustion" is a plausible story about a true observation,
+and nothing in the ticket contradicts it. The probe that settles it is the one
+whose right answer differs from the failure answer — an acyclic chain deep enough
+to exhaust a budget, which builds.
