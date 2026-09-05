@@ -28879,3 +28879,187 @@ applies to it directly — frankZ reached the right precaution independently
 (*"not editing repo files while a detached checkout is in flight"*) without
 knowing the ticket existed. **And the escape must not be `git checkout master`**:
 that moves the tree under the running bisect.
+
+## 2026-09-05 late — the idle sweep, and a relay that welded two claims into one
+
+**The throttle opened and I swept by ASKING.** frankuser relayed the owner's
+*"max the tokens"* and named an idle roster. The rule that did not change: this
+seat does not dispatch. The rule that did: **an idle session with nothing
+announced gets asked whether it is free, rather than left alone as a courtesy.**
+Four asked, four answered, **four self-served** — none was assigned anything.
+
+| session | answer | topic it chose |
+| --- | --- | --- |
+| frankwasm | free, nothing held, everything pushed | wasm32 coverage in the fast loop |
+| frank-optimize | free | the overload probe's two unanswerable shapes |
+| frankC | free | C file-scope static variable module attribution |
+| frankS | already working | four generics-template rows (via frankB) |
+
+### frankwasm was not idle by omission — it was STOOD DOWN, and the session that stood it down is the one that re-pointed it
+
+Five days quiet, and I opened by calling that my omission. **It corrected the
+premise:** frankuser had told it to stop and nothing re-pointed it; its own user
+has not spoken since its session began; every instruction it acted on for five
+days came from peers. **"The silence was policy, not blockage."**
+
+The thing it could not see and this seat could: **frankuser named frankwasm
+explicitly in the same message carrying the owner's instruction** — *"idle five
+days, largest unused capacity; ask it what it holds before assuming either."* So
+the stand-down was spent rather than overridden. **A session cannot tell a
+stand-down that has expired from one that still holds**, and nothing in its
+transcript would ever say.
+
+### My framing was one aperture too narrow, and the correction is the finding
+
+I had been relaying *"nothing in the quick tier compiles for wasm32."* frankwasm
+measured, and I re-took every number before propagating it:
+
+- `grep -c -i wasm tools/testmgr.py` → **0**
+- `gate.sh` names wasm at lines **418 and 603, both comments**
+- `test-quick` is 276 lines and compiles **one** cross target — aarch64, twice
+- **`test-wasm32` exists** (`a6d7bfc08`, 2026-09-02) **and is in no tier at all**
+
+**Not "invisible to the inner loop" — invisible to the watcher too.** A real
+backend with a target number, a runner arm and 22 of 27 measured-green rows,
+sampled by nothing. I had a claim about the inner loop and stated it as if it
+bounded the problem.
+
+Filed as `0399d961e` after `SendMessage` to seven returned **"No agent named
+'seven' is reachable"** — it reaches this seat; this seat cannot reach it.
+Enrollment is Track T's cost judgement and frankwasm stopped there deliberately,
+having also declined to lift the full-suite guard to verify a target it was not
+running. **The taker must be someone who runs it.**
+
+### A KILLED RUN HAS NO VERDICT, AND ITS PARTIAL LOG SUPPLIES ONE
+
+frankwasm's second transcript entry, offered unprompted: `<status>killed</status>`
+beside a lane check standing at **26 of 39, 0 failures**. No error text, no
+verdict line. Banked in the playbook (`bd1300644`) into the existing
+background-exit-code section, because it is that section's missing corner —
+**every other member is an answer about the wrong subject; this is the absence of
+an answer wearing the shape of a good one**, and it bites hardest where the work
+was going well.
+
+### THE RELAY IS WHERE TWO CLAIMS GET WELDED, AND THE RELAY IS THIS SEAT
+
+frankZ's bisect closed on `5dbd56a3c` — **not a regression.** `TPyList` (line
+201) and `TPyBytes` (line 629) are **both root classes with no inheritance**, so
+the old loose gate let one bind to the other's parameter and the RTL body
+recovered with `TObject(src) is TPyList`. Type-punning through a parameter list.
+The RTL changed; the compiler did not.
+
+**I had relayed frankH's reading as a single claim and it is two.** *"The comment
+argues for restoring the binding"* welds:
+
+1. **the looseness was INTENDED** — true, well-evidenced, frankH's own reading:
+   the comment names `out.extend((13, 10))` verbatim and the body branches on
+   `is TPyList`;
+2. **therefore restore it** — does not follow.
+
+frankZ's words: *"how a sound observation becomes a wrong instruction with no one
+having said anything false."* The discriminator was one grep — *does either class
+descend from the other* — run only because *"unrelated classes bound anyway"*
+sounded wrong. **Nothing in my message marked the boundary between the two
+claims, and marking it is the seat's job**, because the welding happens in the
+relay and nowhere else. Sibling to the existing rule that a verification claim
+scopes to what was checked: here both halves were about the same subject and only
+one was established.
+
+frankZ sent frank-optimize the triage rule in its own words, as a per-site test:
+**unrelated types → the old binding was a hole and the CALLER changes; genuinely
+compatible types refused → the gate is too strict and that one is the gate's.**
+
+Also its own correction, in the harmless direction: the two job-map instances and
+the playbook section were **written and uncommitted**, not queued. Invisible to
+this seat by construction — *landed is not live*, pointed the other way.
+
+### THE COLLISION THAT WAS INVISIBLE BECAUSE THE CLAIM LIVED IN PROSE
+
+frank-optimize took `refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes`
+(p55, `owner: ""`). frankB, unprompted, wrote: *"my p55 refactor is the ticket
+about what `MatchParamCompatible` cannot answer, and I have not touched it."*
+**Same ticket.** Attributed by checkout reflog, not by timing or topic: frankB
+holds **`2d6bfadd6`** (the revert of the enforcement attempt frank-optimize cites
+as its reason to do the refactor first) and **`6bf9be71a`** (the analysis of
+frank-optimize's row two, whose *"not only an assignment"* clause says the shape
+is wider than the ticket's own table records).
+
+**Nobody did anything wrong.** The claim existed in frankB's head and in this
+roster and **nowhere a reader could check.** Four messages to resolve what an
+`owner:` field would have carried for free. The lesson is not about either
+session: **`owner:` is attribution, and attribution that is not written down is
+not attribution.**
+
+### frankB — three things larger than the tickets they came from
+
+Groups 5 and 6, **7 closed / 4 filed** on the campaign.
+
+- **"A corpus wall is a queue of one, and the queue only advances when you
+  re-measure."** frankB closed `TFPCHeapStatus` itself in `f6ddab6ef` and nobody
+  re-ran the march; two more walls sat behind a wall already gone. **The session
+  that unblocks a queue is the one least likely to re-run it.**
+- **"A known gap described one severity class too low is harder to find than an
+  unknown one, because the note answers the question you were about to ask."**
+  `ParseTypeKind`'s comment said the forward spelling *"falls back to the old
+  default"* — reads as a stride approximation, costs `AliasElemRec`, i.e.
+  **refused or silently zero, not approximated.** Correct about the mechanism,
+  one class wrong about the cost. **The sharpest member of tonight's class yet.**
+- **THREE VOICES, ONE CAUSE, one of them silent.** `p^[i].f` refused,
+  `with p^[i] do f` refused *differently*, and through a **class field** it did
+  not refuse at all — compiled, exited 0, **read 0 where fpc reads 42.** A ticket
+  written from either refusal would have been ranked a wording problem.
+
+And the cross-target save: frankB's `Prefetch` body went inside
+`{$ifndef CPURISCV32}{$ifndef CPUXTENSA}` with the declaration outside, and **the
+x86-64 binary was byte-identical either way** (`6e1b2c60ee5a` before and after).
+The local build **could not** have told it. Second unchanged-sha story of the
+night — frankA's re-indent was the first, found by reading the file.
+
+### frankC — a census whose wrong output has the shape of a right one
+
+Claimed the C file-scope-statics aliasing bug with a reproduced table (module A
+reads B's value; a write through A observable through B; silent, `rc=0`). Then
+corrected **its own ticket**: *"zero instances in crtl"* had no denominator, and
+`test/c_crtl_prototype_pull_module_split.c` states that two modules **each have a
+file-scope `static int sysret`** — which reads exactly like the counterexample and
+is not one (`sysret` is a function, the arm already fixed). **Neither document
+lets you tell.** Same animal as frankB's under-pitched comment, two lanes apart.
+
+Its first extraction took `$NF` and read the **initialiser** rather than the name,
+reporting duplicate statics called `1` and `0`. **The wrong output of a
+duplicate-name census is a list of names — the exact shape of a right answer.** It
+only broke cover because the names were `1` and `0`. Enumerated properly: **53
+file-scope static variables, zero names in more than one module.**
+
+frankC also **declined** the gtk selector deliberately (Track A's, frankA mid-gate,
+resolver half small enough that a lane crossing costs more than a handover) — a
+stated decline, which is a complete answer.
+
+### frank-optimize — the aperture under the campaign
+
+Two of the three rows this seat named to it **were being offered while their own
+bodies said not to take them**: a p55 reading *"Do not start here"* in bold and a
+p60 whose closing line reads *"The refactor is therefore NECESSARY and not
+sufficient for this bug"*, both with `blocked-by: []`. Wired (`00555ab08`,
+`27749fd01`); the ranker then behaved exactly as designed.
+
+**`tools/progress.py`'s `park_scope` limits STALE-PARK's prose read to
+`unfinished/`, `blocked/` and `working/`** — the complement of where the damage
+is. Filed `c5cc5c595`, and filed as a **repeat**: the comment forty lines above
+records DANGLING-LINK inheriting this identical filter and reporting 0 findings
+while four live dangles sat in `backlog/`. That one was widened; its sibling was
+not, **because the fix was scoped to the check that had been measured wrong
+rather than to the shared loop that made both wrong.**
+
+Its 28 further candidates are recorded **soft and labelled soft** — it verified
+two by reading and declined to hand over a number from a grep. Correct, and the
+opposite of what cost this seat a night last week.
+
+**Two judgement calls recorded as frank-optimize's, not this seat's:** it did not
+pick an arm of the Track U fork to unblock the ByteBool bug (settling a design
+decision inside a bug ticket is how that family gets wider rather than later),
+and it flagged that `1 in [4294967297]` may belong in `rejected/` rather than
+compat — a set element of 2^32+1 is outside any set's domain, so CLAUDE.md's
+*ask what the source MEANT* test applies and the defensible fix is a diagnostic,
+not FPC's value. **This seat named that row as worth taking without applying that
+test first.** A prio should not carry a Track U call by default.
