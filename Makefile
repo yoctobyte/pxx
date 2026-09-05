@@ -22181,6 +22181,18 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_frame32k_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
 	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	# THE EPILOGUE CALL EVERY EXIT PATH MAKES, deliberately WITHOUT
+	# --xtensa-long-calls. EmitProgramEpilogue emits the __pxx_run_finalizers
+	# body last while every exit path forward-calls it, so its displacement is
+	# (end of program - call site) and the first Halt site in any image over
+	# ~512 KiB could not reach it with a 3-byte CALLn. This program is ordinary --
+	# `uses sysutils` plus one try/except, ~651 KB of code -- and was a hard
+	# compile error before the FiniRunnerProc reservation. Compared against the
+	# SAME program built natively, so the row carries no per-target constant.
+	# feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
+	./$(COMPILER) -Fulib/rtl test/test_xtensa_finalizer_call_reach.pas $(TESTTMP)/fincall_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_xtensa_finalizer_call_reach.pas $(TESTTMP)/fincall_xt
+	tools/expect_same.sh xtensa/finalizer_call_reach "$$(tools/run_target.sh xtensa $(TESTTMP)/fincall_xt; echo "exit=$$?")" "$$($(TESTTMP)/fincall_x64; echo "exit=$$?")"
 	# The proc exception CLEANUP FRAME (Call0 only). Neither of these is in the
 	# 129-source cross differential, which has no exception-unwind coverage at
 	# all — so before these two rows existed, xtensa releasing nothing on an

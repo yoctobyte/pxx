@@ -14774,12 +14774,34 @@ begin
       EmitXtensaLongCall(Procs[procIdx].BodyAddr);
       Exit;
     end;
-    if (Procs[procIdx].BodyAddr < 0) and XtensaLongCalls then
+    if (Procs[procIdx].BodyAddr < 0) and
+       (XtensaLongCalls or (procIdx = FiniRunnerProc)) then
     begin
       { --xtensa-long-calls: reserve the long form so ApplyCallFixups has
         somewhere to put a displacement CALLn cannot hold. The site goes in the
         SAME fixup list as every other call, distinguished by its anchor, so
-        nothing downstream needs a second list to walk. }
+        nothing downstream needs a second list to walk.
+
+        FiniRunnerProc IS RESERVED UNCONDITIONALLY, and that is not a heuristic
+        about size -- it is the one callee whose body we KNOW lands last.
+        EmitProgramEpilogue emits the __pxx_run_finalizers body after the main
+        body, while every exit path in the program emits a FORWARD call to it,
+        including the earliest. So its displacement is (end of program - call
+        site), and the first Halt site in any image over ~512 KiB of code cannot
+        reach it. That is why the wall reads as "programs over 512 KiB" for
+        every program shape, why an unrelated RTL edit can flip an image that
+        built yesterday, and why all three known failures name this one proc:
+        the C crtl case (offset 58526), #include <stdio.h> under posix, and a
+        Pascal `uses sysutils` with one try/except (offset 58938).
+
+        Widening only this call is the ticket's own stated goal -- "widen only
+        the forward calls that need it" -- and it costs the long form at exit
+        sites only, rather than at every forward call site in the program.
+
+        NOT A COMPLETE FIX and must not be read as one: a forward call between
+        two ordinary procs more than 512 KiB apart still refuses, and still
+        names --xtensa-long-calls. What is gone is the case every real program
+        meets first. feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image }
       EmitXtensaLongCallSlot(litPos, anchorPc);
       RecordInternalCallAt(procIdx, litPos, anchorPc);
       Exit;

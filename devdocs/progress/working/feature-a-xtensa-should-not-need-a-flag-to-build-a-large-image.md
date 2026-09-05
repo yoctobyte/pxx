@@ -188,3 +188,56 @@ as `blocked-by`, so `effective_prio` carries 45 here without anyone re-ranking:
 The offset in the message (58938 here, 58526 in the C case) is the *call site*,
 which barely moves; what moves is where `__pxx_run_finalizers` lands. That is
 the ticket's own point about the margin not being a property of the program.
+
+## Fixed for the case every real program meets, 2026-09-05 (frankS)
+
+**The wall was not really about image size — it was about ONE callee whose body
+is emitted last.** `EmitProgramEpilogue` emits the `__pxx_run_finalizers` body
+after the main body, while every exit path in the program emits a FORWARD call
+to it, including the earliest. Its displacement is therefore
+`(end of program - call site)`, so the first Halt site in any image over
+~512 KiB of code cannot reach it with a 3-byte CALLn.
+
+That explains the three things this ticket had recorded as separate puzzles:
+why the wall reads as "programs over 512 KiB" for every program shape; why an
+unrelated RTL edit (`4419e1aa7`) flipped an image *without changing its size*,
+by reordering that one body to the tail; and why all three known failures name
+the same proc — the C crtl case at offset 58526, `#include <stdio.h>` under
+posix, and the Pascal `uses sysutils` case at 58938.
+
+**Fix:** `EmitCallProc`'s xtensa arm now reserves the long form for a forward
+call to `FiniRunnerProc` unconditionally, `XtensaLongCalls` or not. This is not
+a size heuristic — it is the one callee we know *by construction* lands last.
+That is this ticket's own stated goal, "widen only the forward calls that need
+it", and it costs the wide slot at exit sites only: two call sites, and 4096
+bytes less than `--xtensa-long-calls` on the sysutils program (651116 vs
+655212). On a small program the two are byte-identical.
+
+Verified by RUNNING under qemu-xtensa, not by link success. All three formerly
+failing cases now build with no flag: the Pascal one prints `caught boom / done`,
+and `test/c_crtl_syscall_guarded_bodies.c` — the case that refuted this ticket's
+original premise — runs and prints its real output. Regressions checked:
+altstack, heap, signal predicate all still run correctly on xtensa; the
+`--xtensa-long-calls` path is untouched and still works; x86-64, riscv32, arm32
+and aarch64 all unaffected (the change is inside the xtensa arm).
+
+`test_xtensa_finalizer_call_reach` wires it, deliberately without the flag, and
+compares against the same program built natively so the row carries no
+per-target constant.
+
+## What is NOT fixed — the ticket stays open
+
+A forward call between two ordinary procs more than 512 KiB apart still refuses
+and still names `--xtensa-long-calls`. The general answer is unchanged and is
+still the untried one: whole-program relaxation, i.e. a second emit pass, since
+a call's fixups are whole-program where a jump's are per-body. **A veneer pool
+does not rescue the general case the way this ticket hoped**, and that is worth
+recording as a measured negative: at `ApplyCallFixups` every body is already
+placed, so a trampoline can only go at the end of the code section — and in the
+observed failure the call site was 586142 bytes from there, itself out of CALL0
+range. The veneer has to be reserved during emission to be reachable, which is
+the same information problem as the call it would fix.
+
+So this fix removes the case every real program meets first, and leaves the
+class. Whoever takes the general fix should know the veneer idea was measured
+and does not close it.
