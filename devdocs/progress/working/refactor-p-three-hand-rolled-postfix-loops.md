@@ -560,3 +560,38 @@ remaining three, but it cannot answer the next question, which is not "does this
 loop reach the shared routine" — all four do — but **"is the arm it built by
 hand instead of delegating the right arm at all"**. The expr record-cast twin's
 `AN_INDEX` is that arm.
+
+## 2026-09-06 (frankA, later) — the third instrument: census the FIELD, not the call site
+
+Two censuses have been run against these loops now, and they answer different
+questions:
+
+1. **the escape census** — which shared routines does this loop REACH?
+   All four Pascal loops reach `ResolveDerefShape` and
+   `ParseClassRecordSelectors`. Answer: they all escape. Instrument exhausted.
+2. **the encoding census** — what does this loop STAMP, and does every consumer
+   read the same encoding? Run today over the remaining three: they stamp one
+   identical triple on `AN_DEREF` and there is no second convention among them
+   (detail in [[refactor-p-one-lvalue-path-for-statements-and-expressions]]).
+
+The second instrument is the one that found a real bug, and it did so **not on
+a loop but on the OPENER** — the `AN_PTR_CAST` record-name arm stamping
+`ASTIVal := 0` as a fourth "none" in a field whose `>= 0` space is alias row
+indices. `b7b9e309e` / `8de0ee547`.
+
+**The transferable part is that it is closed-world in a way a call-site census
+is not.** "Which routines does this loop call" is answered by grepping the loop,
+and a grep can only confirm the sites you thought to look for — that is how the
+count of readers stood at two for a day when it was three. "Who reads this
+field on this node kind" is answered by grepping the FIELD, and the field has a
+finite number of mentions in the tree. Name the encoding first, then enumerate
+its readers; do not enumerate the readers you remember and infer the encoding.
+
+So the remaining question for these three loops is neither reach nor encoding.
+It is **control flow**: `ParseClassRecordSelectors`'s own loop is
+`[tkDot, tkLBrack]` with no `tkCaret`, so a hand-rolled loop that delegates and
+then `Break`s strands a following `^` in the token stream — measured once
+already as `TA(b).pi^`. Whether each remaining hand-built arm re-enters its own
+loop after delegating, or breaks, is the next thing to measure, and unlike the
+first two censuses it needs a differential rather than a grep, because the
+failure is a token nobody consumed.

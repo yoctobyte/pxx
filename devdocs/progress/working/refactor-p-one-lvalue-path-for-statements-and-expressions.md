@@ -480,3 +480,96 @@ minted row did not move that shape, which is the half that matters — the pin r
 is what says the agreement is not something my change arranged. Depth is not
 read for a record-name cast on any shape that can be written, so the blank is
 closed rather than left open.
+
+---
+
+## 2026-09-06 (frankA) — there are THREE readers of that field, not the two recorded above
+
+The paragraph "fixes **both** `ir.inc` sites" is a true statement about `ir.inc`
+and an incomplete census of the ENCODING. Running the census this ticket asks
+for — *what does the opener stamp, and does every consumer read the same
+encoding* — found a third reader outside `ir.inc`:
+
+```
+compiler/pasparser_lval.inc  ResolveDerefShapeAt
+      else if (DwDispatchKind(node) = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
+              (ASTIVal[node] < AliasCount) then
+      begin
+        tk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
+        recName := AliasElemRec[ASTIVal[node]];
+```
+
+`0` satisfies `>= 0 and < AliasCount`, so this arm was also answering from
+**alias row zero** for every record-name cast — the same defect as the two
+`ir.inc` sites, in the file this ticket is about, reached by a different guard
+spelling. `b7b9e309e` corrects it too, because the fix is at the WRITER.
+
+**How it was found is the transferable part.** Grepping the two sites I already
+knew about could only re-confirm them. Naming the ENCODING first —
+
+```
+-3 WideChar value cast   -2 PChar adapter   -1 plain value cast   >=0 alias row
+```
+
+— and then listing everyone who reads `ASTIVal` on an `AN_PTR_CAST` is what
+turned up the third. A census of an encoding is a different instrument from a
+census of call sites, and only the first one is closed-world.
+
+So the question posed above for the remaining three walks stands unchanged, with
+its scope corrected: *does every consumer of that field read the same encoding*
+means **every** consumer, and the count of consumers is itself something to
+measure rather than carry forward from the last commit message.
+
+The NilPy sibling of the same stamp (`pyparser.inc`) is the third copy of the
+WRITER; it is a separate commit and carries an explicitly unconstructed
+reachability claim rather than an implied repro.
+
+### …and the same census run over the THREE REMAINING LOOPS answers clean
+
+The measurement recorded above — *for each of the three remaining loops, what
+does its opener stamp on the node, and does every consumer of that field read
+the same encoding?* — is now run rather than promised. The three are
+`ApplyCallResultPtrSuffix` (`pasparser_lval.inc:5447`) and the two cast-suffix
+walks in `pasparser_expr.inc` (`:6767` record-name, `:7274` pointer-alias).
+
+All three stamp the SAME triple on the `AN_DEREF` they build:
+
+```
+ASTSOffset := remaining pointer levels     (0 = "this deref lands on the base")
+ASTSLen    := ultimate base type kind      (0 = tyUnknown = "not recorded")
+ASTIVal    := ultimate base record id      (REC_NONE = 0 = "no record")
+ASTTk      := StrValTk(tk)
+```
+
+and all three now reach `ResolveDerefShape` for it. **There is no second
+encoding among them.** The `AN_PTR_CAST` writer was the only disagreement, and
+it is fixed.
+
+Two apparent inconsistencies checked and dismissed, so nobody re-checks them:
+
+- `if baseRec > 0 then ASTIVal[n] := baseRec` (lval, stmt) versus a bare
+  `ASTIVal[n] := baseRec` (expr, pyparser) are **equivalent**, not two
+  conventions: `REC_NONE = 0` (`defs.inc:468`) and `AllocNode` zeroes `ASTIVal`
+  at birth (`ast_arena.inc:59`), and every producer initialises `baseRec` to
+  `REC_NONE` before the resolver runs, so the guard can only ever skip a write
+  of the value already there. Each node is freshly allocated per iteration, so
+  there is no re-stamp path where the guard could preserve a stale id.
+- the non-delegated `^` arm of `:6767` stamps `ASTIVal` and *not* depth/base.
+  That is correct and not an omission: it is the FIRST `^` on a record-name
+  cast, where the pointee is the cast's own record and the remaining depth
+  really is zero. Depth only becomes a question after delegation, which is the
+  arm that calls the resolver.
+
+**So the encoding is not what blocks the merge.** That was the open risk this
+ticket recorded, and the answer is that it is closed: the remaining three walks
+already agree with the shared walker about what an `AN_DEREF` carries. What is
+still unmeasured is the CONTROL-FLOW half — whether the shared walker consumes
+the same token sets (`ParseClassRecordSelectors`'s own loop is `[tkDot,
+tkLBrack]` with **no `tkCaret`**, which is precisely what stranded `TA(b).pi^`),
+and whether an assignment-target hand-off can suppress the call the expression
+path would make on a trailing `.name`. Those are the next measurement; the
+field-encoding question is answered and should not be re-opened.
+
+**Negative results are recorded here on purpose.** An agreement nobody wrote
+down is re-derived by the next session at full price, and worse, "not checked"
+and "checked, agrees" are the same silence in a ticket.
