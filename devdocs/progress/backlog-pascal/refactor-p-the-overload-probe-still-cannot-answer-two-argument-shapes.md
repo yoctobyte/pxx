@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: "frank-optimize"
 created: 2026-09-05
-summary: "ROW 2's CITATION IS FALSE AND THE 7/7 -> 0/7 IT EXPLAINED IS NOW UNEXPLAINED, OWNER NONE. `inherited Sort(ItemPtrCompare)` is not in fgl -- real fgl.pp is {$mode objfpc} and writes `@ItemPtrCompare` at all three sites (1051/1172/1297), both real shapes compile and match the oracle, and FPC refuses the bare spelling in objfpc anyway. The construct underneath WAS real and was a different bug -- the name never resolved on the method path, one cell of five, fixed in 8389db919 -- so row 2 is closed as a blocker but tyPointer-against-a-procedural-parameter is untested for a widened gate. Row 1 (generic type parameter, tyUnknown at the declaration) stands. AND THIS TICKET'"'"'S GATE CANNOT FAIL ON THIS BOX: test/pascal-conformance/ has zero .pas files, library_candidates/ is empty, and the harness prints SKIP and exits 0 -- on precisely the axis (seven conformance programs, tgeneric9) the widening broke last time. fgl 7/7 and quick are the axis that did NOT break and are not a substitute."
+summary: "ROW 2 NAMED THE RIGHT LINE AND THE WRONG SPELLING, AND THE MISSING CHANNEL IS A METHOD POINTER. Measured by actually widening the gate: the Pascal corpus loses 2 of 1864 programs and the fgl rung goes 7/7 -> 3/7, failing at fgl.pp:1051 and :1172 -- the `inherited Sort(@ItemPtrCompare)` lines, WITH the @. The parameter is `TFPSListCompareFunc = function(Key1, Key2: Pointer): Integer OF OBJECT`, so the shape with no channel is an @-taken routine or method address reaching a method-pointer parameter, NOT a bare routine name (bare is not in fgl, and FPC refuses it in objfpc mode anyway). Two of the three regressions are that one shape; the third is a GUID constant at test_getinterface_guid_b257:81. Row 1 (generic type parameter, tyUnknown at the declaration) fired ZERO times here, which is not evidence: the Pascal conformance directory holds no program files on this box, so the ticket gate cannot fail on that axis. The bare-name construct was a separate real bug and is fixed in 8389db919."
 ---
 
 # The residual from the channel refactor
@@ -303,3 +303,81 @@ be row 1, it may be a shape nobody has named, and it may be stale — the number
 predates the channels and predates `5dbd56a3c`. Whoever attempts the widening
 inherits this question and should expect the rung to move for a reason not
 written down anywhere.
+
+
+---
+
+## The widening was RUN, 2026-09-06 (frankO) — and it corrects my own correction above
+
+I wrote above that *"whatever took the fgl rung from 7/7 to 0/7 under a naive
+gate, it was not this line."* **That was wrong.** It is that line. Row 2 named
+the right location and mis-transcribed the spelling as a bare name; I then
+over-corrected from the mis-transcription to "the citation is irrelevant".
+Both errors were about the SPELLING — the location was right the whole time,
+and one run settled what reading the source text did not.
+
+### What was run
+
+The allowlist's two narrowing lines deleted, so the `nCand = 1` gate runs the
+full check:
+
+```pascal
+if not ((argTk[j] = tyPointer) or (argTk[j] = tyClass)) then continue;   { deleted }
+if not (TypeIsOrdinal(...) or ... tyFixedString) then continue;          { deleted }
+if not TypesCompatible(Procs[pi].Params[pj].TypeKind, argTk[j]) then ok := False;
+```
+
+Built (`converged`, sha256 `0ae9c53c6339`), measured, reverted with
+`git checkout --`, rebuilt back to `f2f11cd439e7`, fgl re-confirmed 7/7.
+
+### Result
+
+| measurement | before (`f2f11cd439e7`) | widened (`0ae9c53c6339`) |
+| --- | --- | --- |
+| Pascal corpus, 1864 programs | 1578 compile / 286 refuse | 1576 / 288 |
+| fgl rung | 7/7 | **3/7** |
+
+**Discrimination control, because a 4-row diff is exactly what a blind
+instrument also produces.** The same census run against the pinned compiler
+(`fe1e9c37d322`) differs from HEAD on **48 rows**, including
+`test_delphi_bare_proc_method_arg` (0 at HEAD, 1 at pin). So the census can see
+a difference; the 4 rows are 4 real rows, not an instrument that never reached
+the arm.
+
+### The three regressions, and two of them are ONE shape
+
+```
+fgl.pp:1051, :1172   inherited Sort(@ItemPtrCompare);
+                     -> TFPSListCompareFunc = function(Key1, Key2: Pointer): Integer OF OBJECT
+test_fpc_compat_batch2:138   l.UseCallback(@...)
+                     -> the row is literally named 'methodptr-param-arg-and-call'
+test_getinterface_guid_b257:81   h.QI(gFoo...)   -> a GUID constant
+```
+
+**So the shape with no channel is `@Routine` (or `@Obj.Method`) reaching a
+parameter whose type is a METHOD POINTER (`of object`).** The argument types
+`tyPointer`; the parameter is a procedural-of-object type; `TypesCompatible`
+says no — correctly about kinds and wrongly about the program. That is a real
+missing channel and it is what row 2 was pointing at all along. It is simply
+not "a bare routine name", and the bare spelling is refused by FPC in objfpc
+mode regardless.
+
+**Row 1 did not fire.** The generic-type-parameter gap, which the parent
+attributed to seven conformance programs and tgeneric9, produced **zero**
+regressions in the corpus available here. That is not evidence it is fixed —
+the Pascal conformance directory holds zero program files on this box, so the
+programs that would exercise it were never run. Absence measured where the
+population is absent.
+
+### What this ticket needs now
+
+1. A channel answering **"argument j is a routine or method ADDRESS"**, filled
+   where `AN_PROCADDR` is built, so the check can be told the argument is
+   address-shaped rather than being handed a bare `tyPointer`. Two of the three
+   regressions go away with that alone.
+2. The GUID row triaged separately — a different shape, one instance.
+3. Row 1 re-measured **only** on a box with the conformance suite fetched.
+   Nothing about it can be concluded here in either direction.
+
+The widening is NOT ready to land, and the reason is now specific rather than
+historical: it costs the fgl rung four drivers at a line that exists.
