@@ -83,7 +83,7 @@ is what this ticket exists to prevent.
 every target in its stated scope. Compiler not rebuilt.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e7b33cf2f.
 
 ## 2026-09-05 — the sweep was executed; the docs are clean, and here is the aperture
 
