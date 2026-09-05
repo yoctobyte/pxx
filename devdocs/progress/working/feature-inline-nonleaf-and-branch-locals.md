@@ -312,3 +312,60 @@ thirteen, and `built=13` is consistent with that.
 — the second-largest blocker, larger than `for`, and not in this ticket's
 remaining scope nor anywhere else. Filed as
 [[feature-opt-inline-bodies-with-a-statement-level-call]].
+
+## 2026-09-05 — CALL-SITE FREQUENCY MEASURED. The admission axis is saturated.
+
+I wrote that nobody should pick another slice by a static metric before someone
+measured call-site frequency. That measurement was available the whole time and
+neither I nor the coordinator looked: `perf` is denied here
+(`kernel.perf_event_paranoid = 4`), but **`compiler.pas` is FPC-bootstrappable
+and FPC supports `-pg`** — the playbook has said so under
+*"`perf` being blocked is not 'no profiler'"* for some time. Eleven seconds to
+build, and `gprof -b -p` prints call counts that are **properties of the SOURCE
+and exactly ours** (the time shares are FPC's codegen and only indicative; the
+counts are not).
+
+Workload: the `-pg` compiler compiling `examples/raytracer/raytracer.pas` at -O3.
+
+| | calls | share |
+| --- | --- | --- |
+| total attributed | 9,507,756 | |
+| to functions the inliner **already retains** | 1,235,476 | **13.0%** |
+| to functions it **declines on statement kind** | 106,690 | **1.12%** |
+
+**118 of the 156 declined functions are called ZERO times.** Three quarters of
+the remaining "opportunity" is code that does not execute at all in a real
+compile.
+
+And the 1.12% is concentrated, not spread:
+
+    TYPESLOTSIZE          case    39,995
+    RESIDENTREGOF         for     38,847
+    BUILTINRECFIELDCOUNT  case     6,053
+    FLOATRESIDENTXMMOF    for      4,283
+    DCENEWOFF             while    3,277
+
+The top two are 79k of the 107k — **0.4% of all calls each.**
+
+### What this decides
+
+**Admitting every remaining statement shape would touch ~1% of executed calls**,
+and inlining does not make a call free, so the realisable gain is a fraction of
+that. The inliner already covers the functions taking 13% of calls. **The axis is
+saturated and the remaining slices are not worth their risk** — this ticket's own
+history is a revert after 21 silent divergences, which is the price of being
+wrong in this machinery.
+
+**This retires all three static metrics, mine included.** Bound picked depth>1
+(changed 1 program of 13). Reach picked statement-calls (changed 0 of 16).
+Frequency now says why both failed: they counted shapes a validator could admit,
+and the shapes it cannot admit are overwhelmingly **cold**.
+
+**If anyone does pursue this, the answer is not "support `case` and `for`" — it
+is `TypeSlotSize` and `ResidentRegOf` specifically**, two functions worth 0.4%
+of calls each, and the honest first question is whether either is better served
+by not being a function call at all.
+
+**REMAINING SCOPE OF THIS TICKET IS THEREFORE CLOSED ON VALUE, NOT ON DIFFICULTY.**
+while/for bodies remain unimplemented and that is now a deliberate decision with
+a number behind it rather than an unfinished task.
