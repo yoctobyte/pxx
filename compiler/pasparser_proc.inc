@@ -1659,6 +1659,29 @@ begin
         bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
       pconst[i] := pconst[i-1];
       pout[i] := pout[i-1];   { shifts like pconst — see the note above it }
+      { ...and so does UNTYPEDNESS -- the third of the same family and the last
+        one still missing. It stayed invisible for as long as nothing asked a
+        METHOD parameter whether it was untyped: the flag landed one slot LEFT
+        of its parameter, so for `M(a: Integer; out b)` the typed `a` answered
+        untyped and the untyped `b` answered typed. TWO defects in opposite
+        directions out of the one omission, both measured on pin fe1e9c37d322
+        as well as at HEAD, so both pre-date the work that found them:
+
+          method   Integer(b) := 99   REFUSED, "cast-as-lvalue: the cast type
+            must be the same size as the variable" -- but `b` IS untyped, and
+            an untyped param has no declared width for the cast to disagree
+            with, which is the whole reason that arm exists. The byte-identical
+            FREE routine accepts it.
+          method   Int64(a) := 99     ACCEPTED -- an 8-byte store into a 4-byte
+            parameter slot, because `a` inherited b's untypedness. The
+            byte-identical FREE routine correctly refuses it. That is the
+            dangerous direction: a silent memory write, not a diagnostic.
+
+        IsUntypedVarParamSym (pasparser_stmt.inc) matches the NAME at slot i
+        against the FLAG at slot i, so a shift that moves one and not the other
+        mislabels both ends at once.
+        bug-p-the-self-shift-forgets-puntyped-so-a-method-param-is-mislabelled }
+      puntyped[i] := puntyped[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -1684,6 +1707,7 @@ begin
     pnames[0] := 'Self';
     pconst[0] := False;   { Self is never a `const` parameter }
     pout[0] := False;     { ...nor an `out` one }
+    puntyped[0] := False; { ...nor an untyped one: Self always has a type }
     if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
     begin
       { a HELPER's `class function ...; static;`: Self = the target BY VALUE
@@ -1803,6 +1827,8 @@ begin
         bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
       pconst[i] := pconst[i-1];
       pout[i] := pout[i-1];   { shifts like pconst — see the note above it }
+      { ...and untypedness, for the reason spelled out at the twin above }
+      puntyped[i] := puntyped[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -1817,6 +1843,7 @@ begin
     pnames[0] := '__genself';
     pconst[0] := False;
     pout[0] := False;
+    puntyped[0] := False; { ...nor an untyped one: Self always has a type }
     ptypes[0] := tyPointer;
     ptypesRec[0] := REC_NONE;
     ptypesPtrElemTk[0] := tyUnknown;

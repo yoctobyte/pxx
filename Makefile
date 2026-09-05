@@ -5109,6 +5109,12 @@ test-threads: $(COMPILER)
 	# one anyway). Unlike test_const64 this one DOES fail on x86-64 when broken.
 	./$(COMPILER) test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26
 	tools/expect_same.sh test_set_in_64bit_const_26 "$$($(TESTTMP)/test_set_in_64bit_const_26 | tail -1)" "SETIN64 OK"
+	# The implicit Self at param slot 0 shifts every per-param array with it;
+	# `puntyped` was the last one that did not, so a METHOD's untyped-param flag
+	# sat one slot left of its parameter. Asserted as a RELATION (method must
+	# match the byte-identical free routine), so it carries no per-target width.
+	./$(COMPILER) test/test_method_untyped_param_self_shift.pas $(TESTTMP)/test_method_untyped_param_self_shift_26
+	tools/expect_same.sh test_method_untyped_param_self_shift_26 "$$($(TESTTMP)/test_method_untyped_param_self_shift_26 | tail -1)" "METHUNTYPED OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"
