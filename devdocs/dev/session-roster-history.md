@@ -25370,3 +25370,58 @@ Consequence for frankZ's watch item, relayed: **a missing `TOOLCHAIN CHANGED`
 is not yet evidence about `write_report_md`.** The finding only becomes readable
 once cause 2 is excluded, and right now it cannot be. Do not close a loop on
 that negative.
+
+### The safety half went fleet-wide; the licence did not
+
+frankuser endorsed the split rather than reversing it, and the reasoning is the
+keeper: **broadcasting an entitlement to eight sessions on a contended box
+converts a permission into a stampede — for coverage we already have natively.**
+
+**Sent to all eight working lanes:** anything landing right now has no
+cross-target coverage behind it; native GREEN does not cover i386/arm32/
+riscv32/aarch64; newest full tier 23h old and 85 testable commits behind;
+unchanged until seven is back. **With the reading attached, which frankuser
+called load-bearing: the tool's DOWN is a STALENESS THRESHOLD, so say "no
+cross-target verdict on this tree", never "Track T has failed."**
+
+**Not sent:** "you are entitled to widen." Permitted is not required.
+
+**A fleet-wide fact is worth tailoring, because the general form is not
+actionable.** "No cross-target coverage" tells nobody what to do; who is
+*exposed* does:
+
+- **frankB** — `{$PACKENUM}` and set-of-subrange are REPRESENTATION changes
+  (enum width, set width), the exact class documented as structurally invisible
+  on x86-64. Pointed at both 09-02 instances and told to assert RELATIONS
+  (`SizeOf(X) = 2 * SizeOf(Pointer)`) rather than per-target constants.
+- **frankH** — `array of const` boxing is a width-and-tag question; its own
+  commit already documents `Single`→`vtExtended`, QWord ≥ 2^63→`vtInt64`, sized
+  booleans→`vtInteger`. Its parity pairs are the right instrument and are
+  currently a NATIVE-ONLY one.
+- **frankC** — owns `feature-c-corpus-busybox-i386-the-second-architecture`,
+  i.e. the ticket whose whole axis has no verdict today.
+- **frankS** — the inversion: **already covered where everyone else is not**,
+  because its xtensa evidence is a local `qemu-xtensa` RUN. Asked to LABEL that
+  in today's commits, since an unlabelled correct claim inherits the credibility
+  of the stale ones beside it, and riscv32 is its cheap 32-bit sibling probe.
+- **frank-optimize** — the one with a structural consequence: **Track O's PROOF
+  gate IS Track T's full tier**, so a promotion cannot be proven at all today.
+  Measure the promise, publish the ratio, do not promote.
+- **frankA** low exposure (name axis is textual), **frankD** none (snippets on
+  x86-64) — told, with the one prose implication: do not let today's state leak
+  into `docs/**` as a claim about the project, because it becomes false again
+  shortly and nothing will flag it.
+
+### The day's four instruments were ONE animal, and frankuser named it
+
+A neighbouring gate's `summary.log`. `tail`'s exit code. A load average
+describing a minute that ended. `working/` measuring intent. **Every one is a
+status that is real, correct, and about a DIFFERENT PROCESS OR MOMENT than the
+one asked about.** None errored; all answered.
+
+frankuser's one-line remedy, which is going in the playbook and is better than
+the four separate rules: **make the instrument name what it measured.** That is
+exactly what frankA's `logs=` line does for a gate verdict, what frankZ's
+`toolchain_fp:` does for a tstate verdict one layer up, and what `readlink
+/proc/<pid>/cwd` does for a process — the same fix at four altitudes, arrived at
+independently by three sessions in one evening.
