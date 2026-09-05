@@ -71,4 +71,4 @@ wrong half, and fixing only the declaration would leave a routine that is
 declared and then silently never called, which is worse than today's refusal.
 
 ## Log
-- 2026-09-05 — resolved, commit Fixed: sysopen/sysread/syswrite/sysclose/sysfchmod are soft keywords, declarable as any kind of name, intrinsics unchanged when unshadowed, System.X escape hatch. test/test_soft_keyword_sysargs.pas (20 rows), positive-controlled against pin v404. See bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names for the whole conversion and three corrections to its blast-radius section..
+- 2026-09-05 — resolved by `5f177b181` (the fix; closed in `6f8d72fb1`). Fixed: sysopen/sysread/syswrite/sysclose/sysfchmod are soft keywords, declarable as any kind of name, intrinsics unchanged when unshadowed, System.X escape hatch. test/test_soft_keyword_sysargs.pas (20 rows), positive-controlled against pin v404. See bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names for the whole conversion and three corrections to its blast-radius section..
