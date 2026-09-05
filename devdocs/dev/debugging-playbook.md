@@ -7792,3 +7792,70 @@ walked the probe out of the population: **the part I removed as incidental was
 the part that made the body get parsed.** When you simplify a probe, name what
 the removed element was doing, and if the answer is "it made the code under test
 run", you have not simplified it — you have disarmed it.
+## "FIXED AT HEAD" AND "FIXED FOR TRACK B" ARE DIFFERENT CLAIMS, and the gap between them reads as a live regression
+
+Two earlier sections read the pin seam from the debugging side -- *"The pinned
+binary reproduces it" may be a claim about a MIXED compiler* and *A pin freezes
+the BINARY, not what the binary READS* -- i.e. what a pinned run can and cannot
+exculpate. (Named rather than pointed at: they were directly above when this was
+written and a section landed between them within the hour.) This is the same
+seam read from the DELIVERY side, and it is the half that wastes other people's
+time rather than your own.
+
+**A pin freezes `compiler/**` and `compiler/builtin/**`. Everything a
+`$(PXX_STABLE)` consumer sees of your fix arrives only when someone pins.**
+`lib/rtl/**` and `lib/crtl/include/**` are read live, so a fix there is visible
+to Track B the moment it lands. A fix in the compiler is not visible to them at
+all until the next pin — and the two are indistinguishable from the author's
+chair, because `make compiler/pascal26` proves the fix and says nothing about
+who can reach it.
+
+So a compiler fix has TWO landing dates, and only the first one is in the git
+log. Between them the fix is real, tested, cited in `done/`, and inert for every
+lane that builds with the pin. Measured 2026-09-05, three instances in one
+evening:
+
+- **The one that cost weeks.** Every session working the corpus ladder stopped
+  at `generics.collections`, and it was read as a frontend gap. It was not.
+  `lib/rtl`'s `IEnumerator<T>` lacked `property Current` because the PIN
+  rejected a property in an interface; the parser fix had been sitting in
+  `done/` for days doing nothing. Pin v404 landed and the unit compiled end to
+  end. **Nobody was wrong about the code — the fix simply had not been
+  delivered**, and no instrument in the per-fix loop asks that question.
+- **The one that will be met as a regression.** No program declaring a `class`
+  had ever built for `--esp-profile=bare`. Fixed at HEAD the same evening — and
+  `make pin` freezes `compiler/builtin/**`, so it is NOT in v404. The next
+  person to hit it under `$(PXX_STABLE)` meets a fixed bug wearing the exact
+  shape of a live one.
+- **The mirror image, for calibration.** `31f8b11bf` added a builtin and
+  `a623307bd` used it from `lib/rtl`. That direction breaks INSTANTLY, because
+  the live half moved and the frozen half did not: 20 of 111 `lib/rtl` units and
+  all of `lib/pcl` stopped compiling under the pin the moment it landed.
+
+**The asymmetry is the thing to hold on to.** A change that makes the live tree
+NEED something new from the compiler breaks Track B immediately and loudly. A
+change that GIVES the compiler something new reaches Track B silently and late.
+The first has a gate row (`pinned builds live lib/rtl`). The second has nothing,
+and cannot have one — the tree is perfectly consistent; a fix is merely
+undelivered, which no assertion can distinguish from a fix nobody needed yet.
+
+**What to do about it, in the commit rather than in a process:**
+
+- When a `compiler/**` fix unblocks something someone else is waiting on, say so
+  in the commit message and say it needs a pin. That sentence is the only signal
+  that will still be there when they read it.
+- Before concluding "X is still broken", check whether the fix for X is inside
+  the pin's frozen half and whether a pin has happened since. `git log -1
+  --format=%h -- stable_linux_amd64/` gives the pin commit; if your fix is not
+  an ancestor of it, Track B has never seen it.
+- A `done/` ticket is not a delivery record. It says the work was finished, and
+  finished is not the same as reachable.
+- **Do not pin just to deliver one fix** — pins are graded, cost the fleet a
+  hold, and CLAUDE.md reserves them for the owner. Say the pin is needed and let
+  the sequencing happen.
+
+**And when a pin does land, expect a burst of "regressions" that are the
+opposite.** Everything the pin newly carries changes behaviour for every
+`$(PXX_STABLE)` consumer at once, including fixes that alter output a test was
+asserting. A red in the hours after a pin should be checked against the pin's
+own manifest before it is treated as new breakage.

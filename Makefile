@@ -5847,6 +5847,32 @@ test-core: $(COMPILER)
 	  || { echo 'test_method_arg_typecheck_fails: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_arg_typecheck_ok.pas $(TESTTMP)/test_margok26
 	tools/expect_same.sh test_margok26 "$$($(TESTTMP)/test_margok26)" "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
+	# A STRING LITERAL must not bind a pointer whose pointee is an unrelated
+	# type. Same family as the two rows above and the same architectural gap:
+	# TypesCompatible sees two KINDS. It grants tyPointer <- tyString for a real
+	# reason (a Pascal string marshals to a const char*, so a C binding needs no
+	# PChar() cast) and cannot see that ^TRec is not a char*, so `Take('Name')`
+	# compiled and read the literal's bytes as the record's fields. fpc 3.2.2
+	# refuses the same line ("Incompatible type for arg no. 1: Got "Constant
+	# String", expected "PRec"") and that was asserted, not assumed.
+	#
+	# Found through lib/rtl/typinfo.pas, which has no by-name
+	# GetStrProp(Instance, PropName) while FPC's typinfo does: every vendored
+	# FPC consumer writes the spelling we lack, the literal lands in the
+	# PPropInfo slot, and it SEGFAULTS instead of saying the overload is
+	# missing. Accepting what FPC rejects is normally not a defect here -- this
+	# one is, because it destroys a diagnostic and hides a missing overload.
+	#
+	# POSITIVE half matters more than the negative one. A pointer-general
+	# refusal landed the same day, ate `Show('-')` and `p := 'e'`, and was
+	# reverted -- quick did not run those rows and the self-host fixedpoint
+	# cannot see the shape at all, because compiler.pas never binds a Char to a
+	# PChar. Char->PChar is therefore an asserted row here, not a hope.
+	@./$(COMPILER) test/test_string_literal_not_a_typed_pointer_fails.pas $(TESTTMP)/test_slptrfail26 2>&1 \
+	  | grep -q 'no overload of Take matches these arguments' \
+	  || { echo 'test_string_literal_not_a_typed_pointer_fails: FAIL - a string literal still binds ^TRec'; exit 1; }
+	./$(COMPILER) test/test_string_literal_not_a_typed_pointer_ok.pas $(TESTTMP)/test_slptrok26
+	tools/expect_same.sh test_slptrok26 "$$($(TESTTMP)/test_slptrok26)" "$$(printf 'untyped literal = 1\npchar literal   = 2\nuntyped var     = 1\npchar from char = 2\npchar assign    = e\ntyped pointer   = 42\nnil to typed    = -1\nSTRING LITERAL POINTER OK')"
 	# ...and the same gate reaching the FREE path's own refusal predicate, which
 	# it could not before: an ARRAY argument must not bind a SCALAR parameter
 	# through a method, exactly as it already could not through a free call.
@@ -7578,8 +7604,34 @@ test-core: $(COMPILER)
 	grep -q "duplicate or overlapping case label" $(TESTTMP)/strict_fpc_case.log
 	! ./$(COMPILER) test/test_record_self_field_fail.pas $(TESTTMP)/test_rsf26 > $(TESTTMP)/test_rsf.log 2>&1
 	grep -q "record field cannot be of the enclosing record type" $(TESTTMP)/test_rsf.log
+	# `class var` in a record: the refusal NARROWED, it did not disappear, and
+	# these three rows are wired together so it cannot drift back to a blanket
+	# answer in either direction. a11b2b18f implemented it for a NAMED top-level
+	# record -- fpc 3.2.2 accepts that under advancedrecords (implied by mode
+	# delphi) -- and left this file asserting the blanket refusal it had just
+	# lifted. That is the shape the auto-filed ticket warns about: a feature
+	# landing makes its own refusal test go red, and the bisect converges on the
+	# commit correctly while the accusation is wrong.
+	#
+	# It also cost more than one red row. test-core is a SINGLE recipe and stops
+	# at the first failing line, so from step 6 of 15 every later row was
+	# UNVERIFIED rather than green -- about four fifths of the tier, for every
+	# session, for as long as this stood. A refusal test left behind by its own
+	# feature is not one red; it is a curtain.
+	#
+	# What still fails is about the record's IDENTITY, not its contents: a
+	# routine-local type is not global and its class var's storage would be, and
+	# an anonymous record has no type name to qualify `T.X` with.
 	! ./$(COMPILER) test/test_record_class_var_fail.pas $(TESTTMP)/test_rcv26 > $(TESTTMP)/test_rcv.log 2>&1
 	grep -q "class var is not allowed in a record type" $(TESTTMP)/test_rcv.log
+	! ./$(COMPILER) test/test_record_class_var_anon_fail.pas $(TESTTMP)/test_rcva26 > $(TESTTMP)/test_rcva.log 2>&1
+	grep -q "class var is not allowed in an anonymous record type" $(TESTTMP)/test_rcva.log
+	# ...and the accepted shape, asserted by BEHAVIOUR rather than by compiling:
+	# "it parses" would pass even if the slot were per-instance. Three bumps
+	# through two different instances must land in ONE slot. fpc 3.2.2 -Mdelphi
+	# produces this output byte-for-byte.
+	./$(COMPILER) test/test_record_class_var_ok.pas $(TESTTMP)/test_rcvok26
+	tools/expect_same.sh test_rcvok26 "$$($(TESTTMP)/test_rcvok26)" "$$(printf 'count = 3\nvia a = 3\nvia b = 3\nRECORD CLASS VAR OK')"
 	! ./$(COMPILER) test/test_enum_pointer_compare_fail.pas $(TESTTMP)/test_epc26 > $(TESTTMP)/test_epc.log 2>&1
 	grep -q "cannot compare an enum with a pointer" $(TESTTMP)/test_epc.log
 	! ./$(COMPILER) test/test_forin_enum_holes_fail.pas $(TESTTMP)/test_feh26 > $(TESTTMP)/test_feh.log 2>&1

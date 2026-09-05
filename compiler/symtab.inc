@@ -9489,6 +9489,57 @@ begin
     if (pe <> Ord(tyUnknown)) and (pe <> Ord(tyClass)) then
       Result := False;
   end;
+
+  { ...and the SAME narrowing for a STRING argument, which is the third channel
+    into a typed pointer and the one nothing was watching. TypesCompatible
+    grants `tyPointer <- tyString` (and <- tyAnsiString) for a real reason and
+    the rule stays: a Pascal string marshals to a const char*, so a C binding
+    can be called without writing PChar() at every site. But that rule sees two
+    KINDS, exactly like the tyClass rule above, and a `const char*` is not what
+    `PRec = ^TRec` is. Measured 2026-09-05:
+
+      function Take(p: PRec): Integer;  ...  Take('Name')
+
+    compiled with no cast written anywhere and read the string's bytes as the
+    record's fields; FPC says `Incompatible type for arg no. 1: Got "Constant
+    String", expected "PRec"`. Accepting what FPC rejects is normally not a
+    defect here -- this one is, because the acceptance DESTROYS a diagnostic and
+    turns it into a SIGSEGV, and the goal file asks for the answer that leaves
+    the mistake visible.
+
+    The mistake is not hypothetical and it is not a probe. lib/rtl/typinfo.pas
+    has no by-name `GetStrProp(Instance, PropName)` -- only
+    `(instance: Pointer; p: PPropInfo)` -- while FPC's typinfo does. So every
+    vendored FPC consumer spells `GetStrProp(t, 'Name')`, the literal lands in
+    the PPropInfo slot, and the program segfaults where it should have been told
+    the overload does not exist. That is how this was found: it is the segfault
+    feature-embed-dwscript-rtti predicted, arriving from a different cause than
+    the ticket names.
+
+    Permitted pointees are the ones a string genuinely IS: tyChar / tyWideChar
+    (PChar, PWideChar) and the tyUnknown sentinel, which is both the untyped
+    `Pointer` formal and what a registration path that never recorded a pointee
+    leaves behind -- failing OPEN there is deliberate and is the same reasoning
+    ProcParamPtrElemTk's own note in defs.inc gives.
+
+    Frozen string kinds are normalised first: TypesCompatible does that on its
+    own way in, so a tyShortString argument reaches here with its raw tag and
+    would otherwise walk straight past this guard.
+    bug-p-a-string-literal-binds-to-any-typed-pointer-parameter-and-segfaults }
+  if Result and (j >= 0) and (j < MAX_PROC_PARAMS)
+     and (Procs[i].Params[j].TypeKind = tyPointer)
+     and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+  begin
+    si := Ord(aTk);
+    if TypeIsFrozenString(aTk) then si := StrValTk(aTk);
+    if (si = Ord(tyString)) or (si = Ord(tyAnsiString)) then
+    begin
+      pe := ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j];
+      if (pe <> Ord(tyUnknown)) and (pe <> Ord(tyChar))
+         and (pe <> Ord(tyWideChar)) then
+        Result := False;
+    end;
+  end;
 end;
 
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
