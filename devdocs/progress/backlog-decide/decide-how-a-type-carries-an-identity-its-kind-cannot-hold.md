@@ -8,7 +8,7 @@ blocked-by: []
 status: open
 owner: ""
 created: 2026-09-05
-summary: "Two open bug families have ONE cause: a type whose LAYOUT is an existing kind but whose SEMANTICS are not. ByteBool/WordBool/LongBool are tyUInt8/tyUInt16/tyInteger so their C-ABI width is right, and nothing downstream can tell them from integers -- so `if a` and `if not a` BOTH fire (p55), WriteLn prints 1 for TRUE, and Ord answers 1 where fpc answers -1. Separately an alias to an enum, and a set's char element, drop their identity the same way (p40). The fork: (A) give the sized booleans distinct TTypeKinds, which touches defs.inc's kind numbering -- the ONE thing CLAUDE.md says to coordinate by message rather than edit; or (B) generalise the pattern an enum already uses (tyInteger PLUS an id) into a side channel carried through symbols, fields, params and the alias table, which closes BOTH families in one move. Recommendation: B. A costing of the Pascal-frontend arm is appended (frankB, 2026-09-05, compiler 47618f77c240) and DISPUTES the multiplier premise: the two families are independent, arm A has three in-tree precedents (tyBool8/tyUCS4Char/tyWideChar) that landed for +77..+144 and ~22 sites rather than the 565 feared, and tyWideChar is this same decision on a storable type taken the OTHER way because a node-level marker could not serve WriteLn. Choice still open with U."
+summary: "Two open bug families have ONE cause: a type whose LAYOUT is an existing kind but whose SEMANTICS are not. ByteBool/WordBool/LongBool are tyUInt8/tyUInt16/tyInteger so their C-ABI width is right, and nothing downstream can tell them from integers -- so `if a` and `if not a` BOTH fire (p55), WriteLn prints 1 for TRUE, and Ord answers 1 where fpc answers -1. Separately an alias to an enum, and a set's char element, drop their identity the same way (p40). The fork: (A) give the sized booleans distinct TTypeKinds, which touches defs.inc's kind numbering -- the ONE thing CLAUDE.md says to coordinate by message rather than edit; or (B) generalise the pattern an enum already uses (tyInteger PLUS an id) into a side channel carried through symbols, fields, params and the alias table, which closes BOTH families in one move. Recommendation: B. A costing of the Pascal-frontend arm is appended (frankB, 2026-09-05, compiler 47618f77c240) and DISPUTES the multiplier premise: the two families are independent, arm A has three in-tree precedents (tyBool8/tyUCS4Char/tyWideChar) that landed for +77..+144 and ~22 sites rather than the 565 feared, and tyWideChar is this same decision on a storable type taken the OTHER way because a node-level marker could not serve WriteLn. Then MEASURED against arm A: frankB narrowing an enum off tyInteger (324641046) detached the enum identity at seven sites guarded by `kind = tyInteger` and NOTHING failed, and frankB's `set of TCol` case shows a bare "is there an identity" channel would hand a bitset its element's member names, so B's channel must answer WHOSE identity it is. Choice still open with U."
 ---
 
 # Decide: how does a type carry an identity its kind cannot hold?
@@ -281,3 +281,49 @@ kinds individually.
 **Not done and deliberately not done:** no code, no `TTypeKind` edit, and
 `bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time` is left unclaimed —
 taking it would pre-empt the fork this ticket exists to settle.
+
+---
+
+## 2026-09-05, later — arm A's failure mode is no longer predicted, it is MEASURED
+
+frankB's `{$PACKENUM}` work (`324641046`, `167847e61`) narrows an enum's storage
+kind off `tyInteger`, which is arm A's move applied to enums. Its own report:
+
+> *"narrowing the enum's kind off tyInteger silently detached the enum's
+> IDENTITY at seven sites that guarded the stamp with `kind = tyInteger`.
+> WriteLn of a packed enum printed an ordinal instead of a member name —
+> through a variable, a record field and a cast — and nothing failed."*
+
+**Seven sites, no failure.** That is the enumerate-the-kinds hazard this ticket
+cited from `TypeIsAnyString`'s header, now observed rather than argued, on the
+first type that took arm A's shape. It strengthens the recommendation for B.
+
+### …and it sharpens what B must actually do
+
+The same report carries a constraint that the recommendation above was too loose
+about:
+
+> *"The kind half is NOT redundant with `enumId >= 0` and cannot just be
+> deleted: `set of TCol` leaves LastTypeEnumId holding the ELEMENT's id, so the
+> kind test is what stops a bitset inheriting a member name."*
+
+So "identity beside the kind" is not sufficient on its own. A channel that only
+answers *"is there an identity"* will hand a `set of TCol` its element's member
+names. **The channel has to answer whose identity it is** — bound to the thing
+being declared, not left as the most recent id any nested parse deposited. That
+is the window discipline every existing `LastType*` channel documents, and it is
+sharper here because for a set the "stale" value is not from an unrelated
+declaration but from a legitimate nested one.
+
+frankB's fix routes all seven through one predicate comparing against
+`EnumStorageTypeKind` rather than a list of kinds, which is the right local
+shape and is also the shape B would generalise: **one predicate, not N call
+sites each restating the rule.**
+
+### What has not changed
+
+Both bugs this fork would close still reproduce at `167847e61`, measured rather
+than assumed: an alias to an enum still prints `1` where fpc prints `tue`, and
+`Low`/`High` of `set of 'c'..'k'` still answer `99 107` where fpc answers `c k`.
+Neither was touched by the packenum work, which is expected — those losses are
+at the alias/set registration boundary, not at the kind-guard sites.
