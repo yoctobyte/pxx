@@ -22243,6 +22243,25 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_frame32k_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
 	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	# xtensa was the ONE target without this row -- i386, aarch64, arm32 and
+	# riscv32 all had it. The reason recorded on
+	# bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function was that xtensa
+	# refused `function f(...): array of T` outright, so the two dyn-array
+	# ownership guards in ir_codegen_xtensa.inc were correct but UNREACHABLE
+	# through a function result. That refusal is gone (fixed under
+	# bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target),
+	# and the guards were still unasserted -- code that became reachable without
+	# anything starting to watch it.
+	# -dPXX_ALLOC_CENSUS is what makes this the right ASSERTION CLASS: an
+	# ownership bug does not corrupt a value, it fails to give memory back, so
+	# every output row would still pass. The census puts allocs/frees/live IN the
+	# output, and the comparison is against the x86-64 build of the same source,
+	# so the row asserts a RELATION and carries no per-target constant.
+	# Measured 2026-09-05, LOCAL QEMU RUN: byte-identical to x86-64 through all
+	# four phases, ending allocs=7707 frees=7703 live=4 on both.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_xt
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_xt_x64
+	tools/expect_same.sh xtensa/test_dynarray_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/dao_xt; echo "exit=$$?")" "$$($(TESTTMP)/dao_xt_x64; echo "exit=$$?")"
 	# THE EPILOGUE CALL EVERY EXIT PATH MAKES, deliberately WITHOUT
 	# --xtensa-long-calls. EmitProgramEpilogue emits the __pxx_run_finalizers
 	# body last while every exit path forward-calls it, so its displacement is
