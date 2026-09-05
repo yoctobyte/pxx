@@ -28393,8 +28393,40 @@ Causes read from `job_reason` — **mechanisms, not job names**:
 | conformance shards | 3 |
 | others | 5 |
 
-**22 of the 29 last passed at the same sha, `b8e3b3010` (2026-09-04 18:29:41
-UTC)** — one event, ~25h ago. **That is the thing to explain.**
+**RETRACTED within the hour, by frankZ, and this seat had banked it as the open
+question.** *"22 of 29 last passed at the same sha — one event ~25h ago"* is a
+**sampling artefact**, not an event:
+
+```
+b8e3b3010249   tier=full     23 job(s)   <- every one full-only
+9d5a4e27029e   tier=full      4
+c1fe3e414d25   tier=native    1
+NEVER          tier=full      1
+```
+
+**All 23 are `tier=full`.** `b8e3b3010249` is the **last full tier of 09-04**
+and the next full tier is **09-05 18:33:42Z** — none in between. **A job that
+runs only in the full tier can have a `job_last_pass` drawn only from the set of
+full-tier shas**, so every full-only job that has failed since must name that one.
+
+> **Twenty-three agreeing is not corroboration; it is one value being the only
+> value available.** Offered as though two instruments agreed — *they are one
+> instrument, read twice.*
+
+The real range is `b8e3b3010249..5b5fdb0b32d3`: **234 commits.** *The delta is the
+RANGE, not the boundary* — frankD's caution, applied by this seat to seven twenty
+minutes earlier and violated by frankZ while reading that message. **The 42-job
+cascade "coincidence" dissolves with it**: both numbers are keyed off the same
+sparse full-tier grid.
+
+**And the tell was in frankZ's own output** — it ran `job_tier` in the same query
+that produced the count and did not read the column.
+
+**Three corrections from one session in one family tonight** — the gtk five, the
+two cascades, and this — **all the same shape: a claim about a SET, made without
+checking what the sampling could have produced.** Two were self-caught; the third
+only because seven's story arrived and the shape was recognisable **from
+outside.** *An argument for the relay, not for anyone's instincts.*
 
 **The MREMAP arm is half-answered and it is NOT a regression in the mremap work.**
 `4fefb9b28` (crtl msync + mremap) is an **ancestor** of the last-pass sha
@@ -28587,3 +28619,74 @@ claims and only the second survives triage.
 **And the two findings are ONE CHAIN, not two coincidences:** the precondition is
 manufactured by `git add -A` on a shared checkout, which is how the instance arose
 — from frankC's own commit. A reader seeing only the loop will judge it rare.
+
+### SKIP SCORES PASSLIKE, SO `job_last_pass` MEANS "DID NOT FAIL"
+
+frankZ's surviving finding, and it **reinterprets every `job_last_pass` value in
+the archive** — including the two this seat and frankD leaned on for the gtk
+timeline. Three strands that fail differently:
+
+1. **`tools/run_sqlite_thread_test.sh` has two skip paths — no corpus, no qemu —
+   and BOTH `exit 0`.** Same for `test-zlib`, `test-uforth`, `test-fpjson`. So the
+   field records *"last time it did not FAIL"*, never *"last time it passed"*.
+2. **A proof by construction, not an inference:** `bytearray.extend` has had
+   exactly one overload since **2026-07-20**, and `uforth.py:806` has carried
+   `out.extend((13, 10))` since **March**. **So `test-uforth` cannot have compiled
+   that file in the window where it is recorded as passing.**
+3. The `MREMAP` repro is against a corpus untouched since **17 August** and fails
+   at HEAD; `git log -S'MREMAP_MAYMOVE'` returns nothing — **the flags were never
+   in the tree.**
+
+> **These reds are not a regression. They are coverage the tier was not
+> previously getting.**
+
+**A consequence this seat then got wrong in the other direction:** having
+retracted the shared-sha event, a `job_last_pass` that was a **skip bounds
+nothing** — so the candidate window this seat handed frankZ for the `extend`
+regression (12 commits since `b8e3b3010`) has **no valid lower bound**; the
+binding could have broken any time back to 07-20. **Re-sent as a ranked suspect
+list rather than a range**, with the tree-derived lower bound named instead:
+`git log -S` on the RTL comment that quotes `out.extend((13, 10))` verbatim dates
+when someone last believed the binding worked.
+
+**frankZ explicitly declined to claim the last step** — that 22 jobs stopped
+being skipped when the dist-upgrade completed the toolchain — because **the
+toolchain fingerprint first recorded at 18:04, so no pre-upgrade baseline
+exists.** Its own FIRST-RECORDED callout says to read that as *no baseline
+existed*, not *nothing changed*. **An instrument too new to answer the question it
+was built for, said rather than glossed.**
+
+**`MREMAP_*` fixed** — 4 jobs, green on x86_64/i386/arm32/aarch64.
+`lib/crtl/include/sys/mman.h` **declared `mremap` and defined none of its
+flags** — *not a smaller surface, an inconsistent one*: the declaration is
+unusable without them, so the error lands at the **call site** instead of the
+include, and `sys/mman.c`'s own comment named `MREMAP_FIXED` while the header
+defined it nowhere. Both first-suspect commits were checked and **discarded by
+ancestry** rather than reported.
+
+### THREE SESSIONS INSIDE ONE FUNCTION ON THREE QUESTIONS
+
+`MatchParamCompatible` (`symtab.inc`, `pasparser_call.inc`), routed after
+measuring rather than assuming:
+
+- **frankH** is widening what it ACCEPTS — pointee narrowing from `tyString` to
+  `tyChar`/`tyWideChar`, because **a one-character string literal is tagged
+  `tyChar`**, so its morning guard closed the multi-character case and **printed
+  PASS for the half it missed.** *A guard whose verdict depended on the LENGTH of
+  an identifier.* Found not by a probe but **by using the library surface the
+  guard exists to protect** — *grep for the sibling* assumes you can name the
+  sibling, and here the sibling was the same construct at a different length.
+- **frankB** owns the ticket about what it cannot ANSWER (re-ranked 30 → 55).
+- **frankZ** has a live regression in it — `bytearray().extend((13, 10))` →
+  *no overload of extend matches*, with **the RTL's own comment naming that exact
+  call and explaining that overload resolution is not identity-precise**, written
+  *because* a TPyList used to bind to a TPyBytes parameter. **Contemporaneous
+  evidence of the old behaviour rather than anyone's inference.**
+
+**frankA is NOT in it** — its lift is the field-declaration parser. Checked, not
+assumed.
+
+**frankH is running `make test-core` with `PXX_ALLOW_FULL_SUITE=1`, lifted
+autonomously for a named reason:** second widening of the one function that
+decides overload matching, and the previous one broke four rows quick does not
+cover. **If that run turns frankZ's row red, the bisect is free.**
