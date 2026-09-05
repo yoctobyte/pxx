@@ -3,6 +3,12 @@ prio: 70
 track: P
 ---
 
+> **Track P CONFIRMED by measurement 2026-09-06 (frank-coordinator), not by the
+> auto-guess and not by the job's name.** The failing construct resolves through
+> `FindNestedType` (`compiler/pasparser_class.inc:159`), a `pasparser_*.inc` file,
+> which is Track P's lane. `compiler/symtab.inc` is also in the causing diff and is
+> A's shared internals — edit it if the fix needs it and say so, per CLAUDE.md.
+
 > **Track guessed as P from the FAILING STEP** — line 1 of 2, `./compiler/pascal26 test/test_record_nested_type_section.pas /tmp/test_rnts26`, which names `test/test_record_nested_type_section.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 3 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
 
 > **origin/master has advanced 6 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -37,3 +43,62 @@ pascal26:87: error: unknown type: TAlias
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGED AND NARROWED 2026-09-06 — live at HEAD, regression confirmed against the pin
+
+**Instrument:** `compiler/pascal26` rebuilt at HEAD `ef7b32135`, `converged after
+2 round(s)` (the recompute verb, not the stamp path), `sha256
+1e6f67eb4e67343ad727219a9e4dfbf9dfde272772b5921f67369f5133d2d283`. Exit codes read
+without a pipe.
+
+**Still failing at HEAD**, so the 6-commit advance did not fix it:
+
+```
+$ ./compiler/pascal26 test/test_record_nested_type_section.pas /tmp/test_rnts26
+pascal26:87: error: unknown type: TAlias
+  near: TSubCls ; a : TOuterR . >>> TAlias ; cl
+rc=1
+```
+
+Line 87 is `a: TOuterR.TAlias;`. **Lines 85 and 86 — `t: TOtherR.TSubRec` and
+`c: TOuterR.TSubCls` — were accepted**, because the compiler reached 87 to fail
+there. So nested records and nested classes still resolve through a qualified name.
+
+### The boundary, three minimal programs
+
+| probe | shape | HEAD | pinned |
+| --- | --- | --- | --- |
+| r1 | `TR = record type TAlias = Integer; …`, then `var a: TR.TAlias` | **rc=1** `unknown type: TAlias` | rc=0 |
+| r2 | same in a **class** — `TC = class type TAlias = Integer; end` | **rc=1** `unknown type: TAlias` | rc=0 |
+| r3 | nested **record** — `TR = record type TSub = record … end`, `var s: TR.TSub` | rc=0 | rc=0 |
+
+> **A qualified nested TYPE ALIAS is unresolvable at HEAD, in BOTH records and
+> classes. A qualified nested record still resolves. The pin accepts all three.**
+
+So this is a real regression rather than a pre-existing gap, it is **not** specific
+to records despite the test's name, and it is **not** about nested types in general
+— it is about an ALIAS declared in a nested `type` section.
+
+### The range, and the one buildable commit in it
+
+The watcher's range is 1 commit. `6e00f29b0d93` is a `tstate` commit and touches no
+buildable file. The only buildable commit between `10fa2709d830` and it is:
+
+**`c01eb17a8` — `fix(P): a nested pointer alias belongs to the type that declared
+it`**, touching `compiler/pasparser_decl.inc`, `compiler/symtab.inc`,
+`compiler/defs.inc`, closing
+`bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations` and
+adding `test/test_nested_pointer_alias_is_scoped_to_its_owner.pas`.
+
+**Authored in the frankD checkout** (`git -C /home/neo/frankD reflog | grep
+'^c01eb17a8 commit'`, one hit), session `01SqXmLQupsKseAhSMny3QkK`. That names the
+tree a commit was created in, not who wrote it — corroborate before treating it as
+authorship.
+
+**The mechanism is plausible and is NOT established here.** `FindNestedType`'s own
+forward declaration (`compiler/compiler.pas:66`) records that
+`symtab.inc`'s `ResolvePendingPointerAliases` calls it *"so a deferred `^T` inside
+a class body resolves to THAT body's T"* — i.e. the fix in range is precisely about
+how a nested alias is claimed by its owner. **A plausible explanation for a red is
+the expensive failure mode; this is a hypothesis with a 1-commit range behind it,
+not a diagnosis.** Reverting to check is the measurement nobody has taken.

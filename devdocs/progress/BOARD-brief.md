@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:22 blocked:8 backlog:7 backlog-umbrella:7 backlog-core:136 backlog-nilpy:98 backlog-tools:37 backlog-pascal:31 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3368 rejected:78`
+`working:20 unfinished:22 blocked:8 backlog:8 backlog-umbrella:7 backlog-core:136 backlog-nilpy:98 backlog-tools:37 backlog-pascal:31 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3368 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -66,7 +66,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 392, ranked
+## Ready — top 30 of 393, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -88,6 +88,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-core-test-record-nested-type-section
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [B]` feature-b-erroraddr-is-missing-from-system (unblocks 1)
@@ -97,6 +98,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
 - `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
