@@ -27280,3 +27280,156 @@ p45. Proposed CLAUDE.md text banked as a ticket rather than applied, at
 frankuser's instruction and this seat's own boundary. **Three sessions declined
 to edit CLAUDE.md on a peer's ask on 2026-09-05 and were right each time; this
 seat was the asking peer in two of them.**
+
+## 2026-09-06, before dawn — eighteen slugs, four causes, and a commit on no branch
+
+### THE RECURRENCE ARGUMENT WAS THE ERROR, AND TWO RIGHT COUNTS BUILT IT
+
+The gtk disposition rested on: *"18 tickets, four batches, the same five tests,
+closed every time. A transient does not recur on a schedule with identical
+membership; a standing host condition does."* **frankB and frankD counted 18
+independently. Both counts were right. The inference was false.**
+
+Four batches, **four measured causes**, and the `host:` line and log tail of each
+batch say so plainly:
+
+| filed | rows | host | log tail | cause | closed |
+|---|---|---|---|---|---|
+| 08-21/22 | 3 | **plexus** | `ok: … gtk_init resolved and called successfully!` | the job **passed** on re-run | correctly |
+| 08-30 | 5 | seven | `pascal26:90` on crtl's `pxx_env_buf` | `eefa85d70`, reverted `2b64dd1e5` | correctly, real defect |
+| 09-01 | 5 | seven | `pascal26:311: __builtin_constant_p` | glib, via `00ab464bf`'s `__GNUC__ 2.7` | correctly, real defect |
+| 09-05 | 5 | seven | `unit source not found: gtk` | absent headers | **the only one** |
+
+**The discriminator is failure DEPTH and it was in the tickets all night.** A
+missing header stops at **line 2**; you cannot reach line 90 of a crtl module
+pulled in behind `gtk.h`, or line 311 of glib, without having found and parsed
+it. **So the middle two batches are positive evidence the headers were PRESENT.**
+
+**Three independent instruments now agree**, and none can fail the way the others
+do: the ticket bodies; seven's `apt` history (installed 08-29, **REMOVED by the
+09-05 dist-upgrade**, reinstalled by hand 17:59:31 — so the 19:15 passes are the
+reinstall and *the upgrade is what broke it*, reversing this seat's hypothesis);
+and frankD's run-level census, `runs-seven.ndjson`, **32 reds in 1143 runs** in
+four bursts each closing within 15–90 minutes with hundreds of greens between.
+
+> **A recurring set of ticket NAMES was read as a recurring MECHANISM.** Those
+> five tests carry the widest header surface in the suite — Pascal `uses` onto a
+> system header, a curated C binding, crtl modules behind both, GCC builtins
+> inside glib — so **anything** that breaks C header import lands on exactly
+> those five. **Identical membership is the EXPECTED signature of four unrelated
+> causes.** This is *the name is not the thing* at the one scale where our own
+> filer manufactures the aggregation.
+
+**And the closure risk inverts.** The fear carried to the owner was "eighteen
+closed on a wrong mechanism". **Thirteen were closed on the right one.** The real
+hazard is a fifth pass tidying all eighteen under the host story and **erasing
+two verified root causes**, leaving the next regression in either path with no
+prior. Corrected `feb6590d7`: close the 09-05 five on the headers, touch nothing
+older.
+
+**frankB hit the same error the same night at ticket scale and measured its
+cost:** three slugs all saying *char array or string literal* split into **three
+unrelated mechanisms** under a construct probe. Grouping by label would have
+produced one ticket with three mechanisms and a premature close. Two scales, one
+morning, and neither was caught by the person who made it.
+
+### A SHA IS A POSITION, NOT A DELTA
+
+frankD, banking a **negative** result rather than deleting it. Working from the
+burst census it checked what each red-onset commit touched: docs only, tstate
+only, and for burst 4 a **two-line edit to `seven.json`** — and concluded the
+cause lay outside git, since a docs commit cannot break five C-header imports.
+
+Void. **The watcher samples the tip every ~8 commits, so the delta between the
+last green run and the first red one is a RANGE**: 12, 5 and 209 commits, hitting
+`compiler/`, `test/chdrstatic` and `lib/crtl/**` — exactly where the two real
+causes live.
+
+> **`git show --stat` does not error. It prints a real file list about the wrong
+> question.** Every earlier instance of that class answered about a different
+> tree, host or binary; **this one answers about the right object at the wrong
+> granularity.**
+
+Guard: whenever a watcher verdict is one end, the other end is `<last-green>` and
+the instrument is `git diff --name-only <last-green>..<first-red>`.
+
+**What caught it was git, not judgement, and that is the uncomfortable part.**
+frankD's rebase conflicted, it read the correction before resolving, and two rows
+were incompatible with its conclusion. **Ten minutes earlier there would be two
+contradictory corrections on one ticket with no marker saying which to believe —
+strictly worse than the original error, because a lone error gets corrected and a
+contradiction gets averaged.**
+
+### A COMMIT MADE DURING A GATE IS NOT UNPUSHED — IT IS UNREACHABLE
+
+seven, and it is a mechanism **this file's existing rule does not cover.** Two
+commits, **same clone, same author, same session, ninety minutes apart**:
+
+- `038c3acf1` — clone happened to be on `master` (`[ahead 2]`) → reached origin.
+- `3815bee43` — daemon mid-gate → **`git for-each-ref --contains` returned
+  NOTHING.** Not on an unpushed branch. On **no branch**, one `gc` from gone.
+
+The Track T watcher clone sits on a **detached HEAD whenever the daemon is
+mid-gate**, because it checks out the sha under test. *A local commit is not
+banking* prescribes pushing, and **push has nothing to name.**
+
+> The commit **succeeds**, prints a sha, and `git log --oneline -1` looks
+> perfectly normal. **`git log` is right about the object and silent about its
+> reachability.** The tell is one line: `git status -sb` → `## HEAD (no branch)`.
+
+Filed `d84a497f0` at p50, ranking a **pre-commit hook in the clone** first —
+the only candidate that fires without anyone remembering they were detached.
+`038c3acf1` survived by luck, not care, which is the argument against every
+attentional fix. The recovery is recorded too, because the obvious one
+(`git checkout master` in the clone) **would move the daemon's working tree
+mid-gate**.
+
+### THE FALSE RED COST EIGHTEEN TICKETS; THE FALSE GREEN COST NOTHING VISIBLE
+
+seven's provisioning pass walked the tree instead of waiting for reds: **163
+distinct `#include <…>` headers** across `test/ lib/ examples/`, all resolving;
+**15 sonames** bound by `external`, all correct; **~28 tools** probed. Nothing
+missing. But earlier the same session installed `clang`, `xdotool` and `wabt`,
+which had **never been on seven — no apt entry, ever.**
+
+**Skips score passlike.** So gtk was a host condition wearing a RED and those
+three were host conditions wearing a GREEN — same animal, opposite polarity, and
+**only one polarity generates tickets.** The false red was eventually caught after
+four rounds of triage; the false greens were silent for the life of the harness.
+**Arm 2's value is mostly on the side that produced no tickets at all**, which is
+the opposite of how a reader will rank it.
+
+The working counterexample to copy is `tools/wasm32_gap_census.sh:25-30`, whose
+comment already states the principle: *"a bucket that silently cannot fill is the
+same animal as the hole it was added to close."* frankD's refinement: **copy the
+shape, not the exit code — a census aborts, a job should SKIP and name the
+package.**
+
+### THREE INSTRUMENTS SUCCEED AND ONE TELLS THE TRUTH
+
+`qemu-user-static` survives on 26.04 as a **pure virtual package**. `apt-cache
+show`, `apt-cache showpkg` and `dpkg-query` all **succeed**; `apt-get install`
+fails. Only `apt-cache policy` → `Candidate: (none)` answers the question that was
+asked. An absent name and a virtual name **differ by which flavour of nothing they
+print**, so the test needs both arms. Filed against Track S (`d84a497f0`, p25):
+`install_esp32_target.sh:96` still names the dead package — it warns rather than
+dying, blocks nobody, and is filed rather than fixed **because verifying the
+rename on a host that already has the old package passes either way.**
+
+### THE GTK RESOLVER'S FALLBACK IS HARDCODED, ABSOLUTE, AND GTK-2
+
+frankD traced rather than reasoned: `strace` over `./pascal26
+test/test_c_gtk.pas` in a scratch dir holding only the `.pas`. It misses
+everything in order and lands on **`/usr/include/gtk-2.0/gtk/gtk.h`**, a
+hardcoded absolute fallback at `compiler/pasparser_proc.inc:3428`, roots at
+`cpreproc.inc:2507-2510`.
+
+**Two dependencies, not one** — the three `uses gtk` tests want `libgtk2.0-dev`,
+`gtk3_stock` wants the GTK3 package. That independently explains seven's own
+observation that installing `libgtk-3-dev` at 16:36:24 did not clear the four and
+`libgtk2.0-dev` at 17:09:56 did. **A correlation between two timestamps acquired a
+mechanism from a completely different instrument.**
+
+And `test/my_gtk.h` is a red herring, killed **with a positive control**: the file
+compiles `ok` in a directory that does not contain it. Absence of the file is the
+only proof it was never consulted, and almost nobody builds that control.
