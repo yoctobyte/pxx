@@ -148,11 +148,20 @@ its own documented wall, `for-in: enumerator has no readable Current` at
 [[feature-pascal-corpus-expansion]] records as a pin-ordering dependency rather
 than a bug.
 
-## Left open, deliberately
+## The residual left open here — MEASURED, and it was real
 
 While reading the walk I saw that a generic parameter CONSTRAINT spelled
 `<T: class>` reaches the `tkClass` arm and `DGenClassOpensBody` answers true for
-it, so a template declared after another template appears to increment the depth
-for its own constraint. Every arm of the test passes, so if it is real it is
-masked here. Not measured, not claimed, and not fixed in this commit —
-recorded so it is not re-derived from scratch.
+it. Every arm of this test passed, so it was masked, and it was recorded here as
+*"not measured, not claimed, and not fixed in this commit"*.
+
+Measured immediately afterwards and it reproduces:
+[[bug-p-a-generic-parameter-constraint-is-counted-as-a-type-body]], fixed in
+`f4f5cfee0`. `<T: class>` and `<T: record>` both derail the walk the same way;
+`<T: constructor>` does not, only because `constructor` reaches a different arm.
+Fixed by skipping the whole `< ... >` group rather than per keyword.
+
+Worth keeping as a pattern: the note was written because the observation could
+not be attributed at the time, and the alternative was to assert it (wrong — it
+was unmeasured) or drop it (wrong — it was real). A recorded residual with
+"unmeasured" on it cost one paragraph and saved the next person the reduction.
