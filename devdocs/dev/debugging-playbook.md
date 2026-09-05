@@ -6756,6 +6756,38 @@ is **dead in the self-host** and no input reaches the cap at all. **Grep-identic
 families, opposite reachability** — the grep cannot tell them apart and the
 running compiler can.
 
+### THE SYMMETRIC HALF — a probe's SUCCESS is not evidence either, and it fails more quietly
+
+The refusal side above has a diagnostic to read. **The success side has none**, and
+frankH had to guard against it an hour later.
+
+After the conversion, re-running the 13.8 MB input gave **`rc=0`**. **That is not
+the proof.** A pool that grew but **silently truncated** — dropped macro text past
+some boundary, mis-deduplicated a range — **also exits 0, also emits a binary, and
+the program still links**, because nothing in that file's macros has to be *used*.
+
+> **Both faces of a reachability probe have the same structure: it answers, it does
+> not error, and it is correct about something else.** The refusal was correct about
+> a neighbouring cap; the success is correct about the compiler not having crashed.
+
+**The two guards are different and neither substitutes for the other:**
+
+| face | the guard | why |
+| --- | --- | --- |
+| refusal | **whose message is this?** | answered by reading the diagnostic string |
+| success | **what would have been different if it had done nothing?** | **cannot** be read off anything — there is no string; it needs an assertion on the OUTPUT |
+
+**And the assertion class has to match the defect class of the table you
+converted.** For a content pool the defect is **wrong characters, not a crash**, so
+the row that matters is *"did the oversized input produce a CORRECT program"* — not
+*"did it exit 0"*. frankH ran the emitted program and separately diffed emitted
+bytes old-vs-new across the C test corpus.
+
+**With the positive control named, because a corpus comparison with no must-differ
+row is a guard that cannot fail:** the 13.8 MB file is the control — **old refuses,
+new succeeds** — and *"an empty diff log only means something once the control row
+is in it."*
+
 ### Corollary for anything with a family of MAX_ constants
 
 When several caps guard one pipeline, **an input large enough to test one is
