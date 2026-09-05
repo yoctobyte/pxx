@@ -335,3 +335,77 @@ permanent rows exist as the positive control a unification needs:
 
 The class-name spelling and the `index N` modifier are in
 `test/test_class_property_indexed.pas`.
+
+---
+
+## 2026-09-06 (frankA) — the statement side's two cast-target walks are ONE, and the census that gates it
+
+The note above left this ticket with *"what is still two parsers is the WALK —
+the statement side's cast-target loop against `ParseLValueAST`"*. The statement
+side did not have **a** cast-target loop; it had **two**, and they were character
+for character identical apart from the `^` arm — the delegation branch that
+hands `.` and `[` to `ParseClassRecordSelectors` was byte-identical between them.
+
+`ParseCastTargetSuffix` is now the one body (`8627d25ce`), and **the difference
+between the two copies collapsed to one boolean because it is a fact about the
+CAST rather than a preference:**
+
+| | the `^` arm |
+| --- | --- |
+| record-name cast | the pointee is the cast's own record, known here; the node carries `ival 0`, so there is no alias row and asking `ResolveDerefShape` would index alias 0 |
+| pointer-alias / PChar cast | the alias row carries depth, base kind and base rec, so the resolver is asked |
+
+Both copies had separately learned, months apart, that **after delegation the
+seed is never the answer** — the value in hand is a field and its pointee has
+nothing to do with the cast. `TA(b).pi^ := 7` and `PA(q)^.pi^ := 7` were each
+refused for exactly that and each fixed on its own copy. One routine is the only
+thing that stops that being a coincidence.
+
+103 insertions, 124 deletions. Two of the five hand-rolled Pascal postfix walks,
+so this is an increment on [[refactor-p-three-hand-rolled-postfix-loops]] too.
+
+### The census, and why it is a different axis from the 25-shape sweep
+
+The 25-shape sweep varies the target SHAPE at a fixed receiver and has been
+25/25 for two days. **A duplicated WALK is invisible to it**, the same way the
+receiver-spelling census found two live bugs that a shape sweep could not. So
+this one varies **the CAST SPELLING** at fixed shapes:
+
+- 7 openers — no cast, plain deref, call result, record-name deref, record-name
+  in place (no leading `^`), alias deref, alias double-deref — × 9 chains
+  (field, deref-field, index, deref2-field, method; read and write).
+- A second block for the two pointer-alias LOOKUP paths, which is this ticket's
+  own recorded *"one concept, two lookup paths, and the second one never got the
+  fallback"*: `PRec` via `FindTypeAlias` against `PInteger` via
+  `EnsureBuiltinPtrAlias`, plus PChar.
+
+Controls are OPENERS, not extra rows, so a chain wrong for everyone shows up as
+a COLUMN. The harness carries its own must-differ row, because `63 agree` and
+`63 rows that never compiled` print the same otherwise.
+
+**Identical on both sides of the change: 54 agree, 9 PXX-ONLY(no oracle), 1
+DIFFER which is the control.** The nine are the whole `TRec(raw)^` column — fpc
+refuses a record-name cast of an untyped pointer followed by a deref, and
+accepting what fpc rejects is not a defect. **No oracle is not no verdict:**
+that column answers 11/77/33/5/18/42/43/44/45, which is what all four
+oracle-backed openers answer, so it is internally consistent with them on every
+chain.
+
+### Recorded blanks, because a "not looked at" cell is a work queue
+
+- The class-name cast arm (`AN_CLASS_CAST`, a few hundred lines above) is NOT in
+  the opener set. Its chains are class fields, not record fields, so it needs
+  its own header rather than a row.
+- The `SetLength(TS(s), n)` and string-alias arms are not in it either; they
+  have permanent rows in `test/`.
+- No NilPy row was run. `pyparser.inc` keeps its own two copies **by design**
+  (`the-substrate-is-ast-and-ir-not-the-parser.md`), so they are not part of this.
+
+### What is left
+
+Three hand-rolled walks, all on the expression side: two in
+`pasparser_expr.inc` and one in `pasparser_lval.inc`. **They are not the same
+merge** — the expr record-cast twin hand-builds its own `AN_INDEX` arm where
+the statement side delegates `[`, so unifying those is a question about whether
+that arm is right, not about lifting a body. That is the next measurement, and
+it wants its own census of what indexing a record cast is supposed to yield.

@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-summary: "The `^ / .field / [i]` suffix chain is parsed by FIVE hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, two in pasparser_stmt.inc for cast targets) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask — ONE suffix parser instead of five — with no defect backlog attached, so rank it as a pure refactor. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be."
+summary: "FOUR now, down from five (8627d25ce): the TWO in pasparser_stmt.inc were character-for-character identical apart from the `^` arm and are one routine, ParseCastTargetSuffix -- the difference between them collapsed to one boolean because it is a fact about the CAST (a record-name cast knows its own pointee and carries no alias row; a pointer-alias cast has the whole triple and must ask ResolveDerefShape). The `^ / .field / [i]` suffix chain is parsed by FOUR hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, one shared cast-target walk in pasparser_stmt.inc) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask -- ONE suffix parser instead of four -- with no defect backlog attached, so rank it as a pure refactor. THE REMAINING THREE ARE NOT THE SAME MERGE the statement pair was: the expr record-cast twin hand-builds its own AN_INDEX arm where the statement side delegates `[` to ParseClassRecordSelectors, so unifying those asks whether that arm is RIGHT, not whether a body can be lifted. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be."
 status: working
 owner: frankA
 ---
@@ -528,3 +528,35 @@ has no defect backlog under it and a 46-row before/after instrument above it.**
 The generator is small enough to rebuild from the opener and chain lists here;
 it lives in ticket history rather than `test/` because it is a before/after
 instrument, and the one row that became permanent is in `test/`.
+
+---
+
+## 2026-09-06 (frankA) — five becomes four, and the merge told us why they were two
+
+`8627d25ce`. The two `pasparser_stmt.inc` loops are `ParseCastTargetSuffix`,
+one body, 103 insertions against 124 deletions. Full write-up in
+[[refactor-p-one-lvalue-path-for-statements-and-expressions]], which is where
+the before/after census lives; the part that belongs here is what the merge
+revealed about why there were two.
+
+**They differed in one arm and the difference was a FACT, not a preference.**
+The `^` arm has to know what a cast's pointee is, and that is different for the
+two casts: a record-name cast knows it (its own record) and carries `ival 0`, so
+there is no alias row and `ResolveDerefShape` would index alias 0; a
+pointer-alias cast carries the whole triple and must ask. One boolean. Everything
+else — including the delegation branch that hands `.` and `[` to
+`ParseClassRecordSelectors` — was byte-identical.
+
+**And both had learned the same lesson separately, months apart:** after
+delegation the seed is never the answer, because the value in hand is a field
+whose pointee has nothing to do with the cast. `TA(b).pi^ := 7` and
+`PA(q)^.pi^ := 7` were each refused for that and each fixed on its own copy.
+**That is this ticket's whole argument in one artefact** — not that five loops
+are untidy, but that each one has to be taught every lesson again, and the
+teaching is only ever noticed when someone hits the arm.
+
+The escape census this ticket built stays the right instrument for the
+remaining three, but it cannot answer the next question, which is not "does this
+loop reach the shared routine" — all four do — but **"is the arm it built by
+hand instead of delegating the right arm at all"**. The expr record-cast twin's
+`AN_INDEX` is that arm.
