@@ -356,3 +356,64 @@ demonstrably works today.
   of the specialization point and its scope is still live. That is the next
   measurement and it decides whether the fix is an anchor change or something
   larger.
+
+## 2026-09-06 (frankS) — CORRECTION: "one missing anchor case" is measured FALSE
+
+The section above closed by naming the next measurement — whether the declaring
+unit's implementation is a legal splice target — and flagged the anchor reading
+as not verified. It is wrong, and here is the row that kills it.
+
+Specialize `ug6`'s template in a THIRD unit's INTERFACE (`ug8`), which is
+exactly the `InInterface` / `UnitImplAnchor` path:
+
+```
+pascal26:17: error: undefined variable (PrivFill)
+  in: ug6.pas
+  near: TIntList . FillPriv ; begin PrivFill >>> ; end ;
+```
+
+**Identical failure.** `UnitImplAnchor` anchors into the SPECIALIZING unit's
+implementation (`ug8`'s), not the DECLARING unit's (`ug6`'s). So it solves a
+SYNTAX problem — a method body cannot sit in an interface section — and does
+nothing whatever for scope.
+
+### So the corrected sentence
+
+**A generic method body is re-parsed in the SPECIALIZING translation context,
+wherever that is. The anchor only picks a syntactically legal spot WITHIN that
+context.** There is no anchor into the declaring unit and adding one is not a
+small change, because by then the declaring unit is finished.
+
+Row 5 (same-unit specialization, correct) does NOT work because of anchor logic.
+It works because there the specializing context IS the declaring unit — the
+private symbols are in scope for the ordinary reason. One row can be explained
+by two different mechanisms and I picked the wrong one; the `ug8` row separates
+them and the earlier five did not.
+
+### And the declaring unit is already finished
+
+Not a new experiment — it follows from measurements already taken. `TList`,
+`TIntList` and `IfaceFill` all resolve, so `ug6`'s interface is loaded; and its
+method bodies are in `GenericMethods[]`, which only `BufferGenericMethod` fills,
+and that runs in the unit's IMPLEMENTATION. So `ug6`'s implementation has been
+parsed and left by the time anyone specializes from outside. Its private
+symbols are not merely unanchored, they are out of scope.
+
+### Where that leaves the fix
+
+The one moment the declaring unit's implementation scope is live AND the body's
+tokens are in hand is `BufferGenericMethod`. So a fix has to do its scope work
+THERE, not at the splice. The shape that fits this file's existing architecture
+(it rewrites tokens everywhere already): at buffer time, resolve the body's
+identifiers, and for each that binds to a unit-private symbol, rewrite the token
+to a unique global alias registered for the same proc — after which the body
+resolves correctly wherever it is later spliced.
+
+**Not verified, and it is the next measurement:** whether a unit-private proc
+can be given a second, global name without changing its linkage or its
+visibility to anything else. That is what decides whether this is a token
+rewrite or a symbol-table change.
+
+Nothing about the DISPOSITION changes: row 5 still shows we support the
+construct in one position, so this is still a plain bug and still not
+`accepts-invalid`.
