@@ -340,6 +340,37 @@ begin
   Result := GenMakeSlotAddr(vt);
 end;
 
+{ A managed STRING argument: give the generator a handle it can hold.
+
+  A string LITERAL argument was stored into the slot RAW — the literal's own
+  address, whose [-8] is the refcount word rather than a length, so `Length` in
+  the body read 1073741824 (2^30, the never-free sentinel). The ordinary call
+  path materialises a literal into a handle; the slot store did not, because
+  it goes through SlSet(g, off, val: Int64) and nothing on that path asks what
+  the parameter's type needs.
+
+  Assigning through an AnsiString local does the materialisation the normal path
+  does, and the local belongs to the function containing the for-in — so it also
+  RETAINS the string for the whole loop, which storing a bare handle into an
+  untracked slot never did. Same reasoning as GenMakeVariantArgTemp.
+  bug-a-a-string-literal-passed-to-a-stackless-generator-is-stored-without-being-materialised }
+function GenMakeStrArgTemp(argNode: Integer; var preSeq: Integer): Integer;
+var st: Integer;
+begin
+  st := AllocVar('', tyAnsiString);
+  preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+              GenMakeAssign(GenMakeIdent(st, tyAnsiString), argNode), -1));
+  Result := GenMakeIdent(st, tyAnsiString);
+end;
+
+{ Does argument `k` of this generator need the managed-string treatment? }
+function PasGenArgNeedsStrTemp(gpi, k: Integer): Boolean;
+begin
+  Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
+            (not Procs[gpi].Params[k].IsRef) and
+            (Procs[gpi].Params[k].TypeKind = tyAnsiString);
+end;
+
 { Does argument `k` of this generator need its ADDRESS taken?
 
   A BY-REF parameter's instance slot persists the caller's ADDRESS — that is the
@@ -606,42 +637,48 @@ begin
     begin
       if PyGenArgNeedsCell(gpi, 1) then a0 := GenMakeVariantArgCell(a0, assignG)
       else if PasGenArgNeedsTemp(gpi, 1) then a0 := GenMakeVariantArgTemp(a0, assignG)
-      else if PasGenArgNeedsAddr(gpi, 1) then a0 := GenMakeAddrOf(a0);
+      else if PasGenArgNeedsAddr(gpi, 1) then a0 := GenMakeAddrOf(a0)
+      else if PasGenArgNeedsStrTemp(gpi, 1) then a0 := GenMakeStrArgTemp(a0, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 1), a0), -1));
     end;
     if nargs >= 2 then
     begin
       if PyGenArgNeedsCell(gpi, 2) then a1 := GenMakeVariantArgCell(a1, assignG)
       else if PasGenArgNeedsTemp(gpi, 2) then a1 := GenMakeVariantArgTemp(a1, assignG)
-      else if PasGenArgNeedsAddr(gpi, 2) then a1 := GenMakeAddrOf(a1);
+      else if PasGenArgNeedsAddr(gpi, 2) then a1 := GenMakeAddrOf(a1)
+      else if PasGenArgNeedsStrTemp(gpi, 2) then a1 := GenMakeStrArgTemp(a1, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 2), a1), -1));
     end;
     if nargs >= 3 then
     begin
       if PyGenArgNeedsCell(gpi, 3) then a2 := GenMakeVariantArgCell(a2, assignG)
       else if PasGenArgNeedsTemp(gpi, 3) then a2 := GenMakeVariantArgTemp(a2, assignG)
-      else if PasGenArgNeedsAddr(gpi, 3) then a2 := GenMakeAddrOf(a2);
+      else if PasGenArgNeedsAddr(gpi, 3) then a2 := GenMakeAddrOf(a2)
+      else if PasGenArgNeedsStrTemp(gpi, 3) then a2 := GenMakeStrArgTemp(a2, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 3), a2), -1));
     end;
     if nargs >= 4 then
     begin
       if PyGenArgNeedsCell(gpi, 4) then a3 := GenMakeVariantArgCell(a3, assignG)
       else if PasGenArgNeedsTemp(gpi, 4) then a3 := GenMakeVariantArgTemp(a3, assignG)
-      else if PasGenArgNeedsAddr(gpi, 4) then a3 := GenMakeAddrOf(a3);
+      else if PasGenArgNeedsAddr(gpi, 4) then a3 := GenMakeAddrOf(a3)
+      else if PasGenArgNeedsStrTemp(gpi, 4) then a3 := GenMakeStrArgTemp(a3, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 4), a3), -1));
     end;
     if nargs >= 5 then
     begin
       if PyGenArgNeedsCell(gpi, 5) then a4 := GenMakeVariantArgCell(a4, assignG)
       else if PasGenArgNeedsTemp(gpi, 5) then a4 := GenMakeVariantArgTemp(a4, assignG)
-      else if PasGenArgNeedsAddr(gpi, 5) then a4 := GenMakeAddrOf(a4);
+      else if PasGenArgNeedsAddr(gpi, 5) then a4 := GenMakeAddrOf(a4)
+      else if PasGenArgNeedsStrTemp(gpi, 5) then a4 := GenMakeStrArgTemp(a4, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 5), a4), -1));
     end;
     if nargs >= 6 then
     begin
       if PyGenArgNeedsCell(gpi, 6) then a5 := GenMakeVariantArgCell(a5, assignG)
       else if PasGenArgNeedsTemp(gpi, 6) then a5 := GenMakeVariantArgTemp(a5, assignG)
-      else if PasGenArgNeedsAddr(gpi, 6) then a5 := GenMakeAddrOf(a5);
+      else if PasGenArgNeedsAddr(gpi, 6) then a5 := GenMakeAddrOf(a5)
+      else if PasGenArgNeedsStrTemp(gpi, 6) then a5 := GenMakeStrArgTemp(a5, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 6), a5), -1));
     end;
 

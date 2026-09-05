@@ -12011,6 +12011,17 @@ test-core: $(COMPILER)
 	# address-of-a-copy fix still yields 41 inside and leaves mm at 40 outside.
 	./$(COMPILER) test/test_stackless_gen_byref_param.pas $(TESTTMP)/test_slg_bparam26
 	tools/expect_same.sh test_slg_bparam26 "$$($(TESTTMP)/test_slg_bparam26)" "$$(printf '40 41 \n41 41\n11 22 \n11 22 ')"
+	# A managed STRING argument to a stackless generator, plus the row that
+	# exercises EVERY parameter kind at once. A string LITERAL was stored raw --
+	# the literal's own address, whose [-8] is the refcount sentinel -- so Length
+	# read 1073741824. Row 2 (from a variable) always worked and is what keeps
+	# this narrow: the defect is `a literal never becomes a handle here`, not
+	# `AnsiString parameters are broken`. Row 4 puts a Variant, a record, a
+	# string, a scalar var and an ordinal in ONE signature -- five parameter
+	# kinds answered by five different rules, all of which the caller and the
+	# generator must agree on.
+	./$(COMPILER) test/test_stackless_gen_string_param.pas $(TESTTMP)/test_slg_sparam26
+	tools/expect_same.sh test_slg_sparam26 "$$($(TESTTMP)/test_slg_sparam26)" "$$(printf '4 8 \n4 8 \n4 8 \n1 10 4 40 5 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
 	tools/expect_same.sh test_scheduler26 "$$($(TESTTMP)/test_scheduler26)" "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_scheduler_exc26
