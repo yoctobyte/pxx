@@ -115,4 +115,4 @@ today. Not widened into this fix because variables resolve through `FindSym`,
 which cparser calls 28 times against `FindProc`'s 3.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3f427655e.
