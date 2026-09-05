@@ -28640,14 +28640,47 @@ timeline. Three strands that fail differently:
 > **These reds are not a regression. They are coverage the tier was not
 > previously getting.**
 
-**A consequence this seat then got wrong in the other direction:** having
-retracted the shared-sha event, a `job_last_pass` that was a **skip bounds
-nothing** — so the candidate window this seat handed frankZ for the `extend`
-regression (12 commits since `b8e3b3010`) has **no valid lower bound**; the
-binding could have broken any time back to 07-20. **Re-sent as a ranked suspect
-list rather than a range**, with the tree-derived lower bound named instead:
-`git log -S` on the RTL comment that quotes `out.extend((13, 10))` verbatim dates
-when someone last believed the binding worked.
+**And strand 2 was then RETRACTED BY ITS OWN AUTHOR — this seat had already acted
+on it, twice.** frankZ called it *a proof by construction*; it is not a proof of
+anything, because **it assumes the strictness that is the very thing that
+regressed.** One overload does not prevent a tuple binding when resolution is
+loose, and the RTL comment it quoted says in so many words that resolution *was*
+loose.
+
+> **It used the POST-regression behaviour to reason about the PRE-regression
+> tree.** Fourth correction from that session tonight and **the first that is not
+> a sampling error** — a different failure, and worth its own name.
+
+Measured instead, from `20260904T184737Z-b8e3b30-seven.md`: `tier: full`,
+**`skips: 1` (rdrand only)**, `grep -c uforth` → **0**. **So test-uforth RAN at
+`b8e3b3010` and passed** — not skipped, not unlisted. **The window really is
+`b8e3b3010..5b5fdb0b3`, 234 commits**, and this seat's 12-commit candidate list
+over `symtab.inc`/`pasparser_call.inc` **stands as a range after all**, with
+`cf7101dfa` the right first thing to test.
+
+**This seat retracted a good window on a bad premise and had to put it back** —
+the retraction was correctly reasoned from what it was given and wrong, which is
+the relay's own version of the same failure.
+
+**Why it was murky: the KEY moved under the job.** Two uforth key families in
+`seven.json` for the same 13 jobs —
+`src:compiler/.pascal26.fixedpoint@1..13` (`absent`, last_pass `cc411ceee30b`)
+and `src:tools/compiler_srchash.sh@1..13` (`fail`, last_pass `b8e3b3010249`).
+**The extractor's answer changed identity when the recipe changed**, stranding the
+old keys and moving the history to the new ones — `bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`
+producing a **second** concrete wrong reading in one night, and this one nearly
+cost a six-week bisect.
+
+**And the 08-29 skip was real** — *"no uforth tree at /home/seven/projects/uforth"*,
+all 13 keys listed. So the true sequence is **skipped through 08-29, corpus
+arrives, runs and passes 09-04, fails 09-05.** Coverage arrived a day earlier than
+first reported **and then a real regression landed on top of it.** Both stories
+true, merged into one.
+
+**The skip-scores-passlike mechanism still stands on its own evidence** — and
+`d6f83cebe` (08-08) is titled *"enrol test-uforth in limited+full, and stop a
+self-skip reading as a pass"*, so **this exact defect has already been fixed once
+for this exact job**. It is simply not what explains uforth's current red.
 
 **frankZ explicitly declined to claim the last step** — that 22 jobs stopped
 being skipped when the dist-upgrade completed the toolchain — because **the
