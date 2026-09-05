@@ -11,7 +11,7 @@ blocked-by: []
 summary: "Seven lost its GTK development headers to the 2026-09-05 dist-upgrade (removed 15:20-17:30, reinstalled by hand 17:59:31), so the 09-05 batch of five gtk jobs failed there, auto-filed, and was closed by whoever verified on a host that has them. CORRECTED 2026-09-06: the 'it has happened four times' recurrence argument is FALSE and the other three batches are NOT this condition -- 08-21 ran on plexus and its own log tail shows gtk_init SUCCEEDING; 08-30 and 09-01 both failed deep inside headers that were present, against two different code defects, each root-caused and fixed. The five test NAMES recur because they carry the widest header surface in the suite, not because one condition recurs. The durable fix stands and is strengthened: a job that cannot tell 'the feature is broken' from 'the toolchain is absent' -- and a ticket set that cannot tell four causes apart -- produces closures nobody can audit."
 ---
 
-# Five gtk jobs refile every run because seven has no GTK headers
+# The 2026-09-05 gtk batch: seven lost its GTK headers to the dist-upgrade
 
 ## The cause, read off the log tails
 
@@ -27,7 +27,7 @@ words and the same cause, and **names the directory it searched**.
 
 Not GTK2, not GTK3, nothing at all.
 
-## It is not a code defect, and the proof is a timestamp
+## The 09-05 batch is not a code defect, and the proof is a timestamp
 
 The five were closed once tonight attributed to `4760474da` and its revert.
 That is impossible: they were tested at `7867c5481`, authored **17:54:19 UTC**,
@@ -117,8 +117,12 @@ Touch nothing older.**
 
 ## Disposition — two arms, and only one is ours
 
-1. **Install the GTK3 dev headers on seven.** Fixes this instance. `sudo` on a
-   machine, so **owner-only**; frank-coordinator is carrying it up.
+1. ~~**Install the GTK3 dev headers on seven.**~~ **DONE, and nothing is
+   pending on the owner.** The section above records the reinstall by hand at
+   2026-09-05 17:59:31 and the five passing at 19:15:54. Anyone still carrying
+   "seven needs sudo for GTK headers" upward should stop — that request is
+   closed. What is NOT closed is that a dist-upgrade can remove them again, and
+   only arm 2 covers that.
 2. **Make the job declare its precondition** — SKIP when the headers are absent,
    or fail with a message naming the missing package, instead of a compile error
    that reads like a defect. **This is the durable half and it is T's.**
@@ -128,6 +132,136 @@ for every optional system dependency: a job that cannot distinguish *"the featur
 is broken"* from *"the toolchain is absent"* will keep producing tickets that
 close wrongly. A SKIP says "not measured"; a RED asserts "broken", and only one
 of those is true here. Arm 2 is also the only arm that stops round five.
+
+**Arm 2 is already built once in this repo, for a different dependency, and its
+comment states the principle.** `tools/wasm32_gap_census.sh:25-30` refuses to
+run at all when `wasm-validate` is missing rather than scoring every source
+CLEAN:
+
+```sh
+if ! command -v wasm-validate >/dev/null 2>&1; then
+  echo "wasm32_gap_census: wasm-validate not found (wabt)." >&2
+  echo "  The invalid-ENCODING bucket cannot be filled without it, and a census" >&2
+  echo "  that quietly drops that bucket reports every such source as CLEAN." >&2
+  exit 2
+fi
+```
+
+> *"a bucket that silently cannot fill is the same animal as the hole it was
+> added to close"* — the file's own words, and precisely the gtk case with the
+> polarity flipped: there the absence manufactures a false CLEAN, here it
+> manufactures a false RED. **Copy the shape, not the exit code** — a census
+> aborts, a test job should SKIP and say which package.
+
+## The run-level census — the same correction, counted independently
+
+`devdocs/progress/tstate/runs-seven.ndjson`, 1143 runs, 2026-08-29T16:30:49Z →
+2026-09-05T19:27:24Z. Job `test-core#src:test/test_c_gtk.pas`:
+
+**RED in 32 runs of 1143 — 2.8%**, and never scattered. Four bursts, all five
+gtk jobs entering and leaving together:
+
+| burst | first red | cleared at | span |
+| --- | --- | --- | --- |
+| 1 | 08-29 16:30 `e417731e9007` | 08-29 17:15 `d93190c4aea5` | ~45 min (left edge is the archive's start, not the burst's) |
+| 2 | 08-30 00:34 `bfec13534396` | 08-30 02:04 `0200df7eabcd` | ~90 min, 13 runs |
+| 3 | 09-01 23:24 `1236bf31f930` | 09-02 00:31 `cddae9f3e250` | ~67 min, 8 runs |
+| 4 | 09-05 17:58 `7867c5481c01` | 09-05 18:13 `2d6bfadd6025` | ~15 min, 3 runs |
+
+Between the bursts the same five jobs pass on every run — hundreds of them.
+**This is the quantitative form of the correction above and it was reached from
+a different instrument** (the run archive, not the ticket bodies or seven's apt
+log), so it corroborates rather than repeats: "fails every run" is off by a
+factor of thirty-five, and four bounded windows that each close within the hour
+is the signature of four things being fixed, not of one thing standing.
+
+Recorded here because **a red is only ever as informative as the green behind
+it**: the next time these five go red, the question "is this the standing gtk
+problem?" has a number to answer it with.
+
+## NEGATIVE RESULT: "the onset commits are docs-only" is NOT evidence — I got this wrong
+
+Banked so nobody re-derives it. Working from the census above I checked what
+each burst's red-onset commit touched, found `bfec13534396` (docs only),
+`1236bf31f930` (tstate only) and `7867c5481c01` (**two lines of `seven.json`**),
+and concluded the cause had to lie outside git — five C-header imports cannot
+be broken by a docs commit.
+
+**The inference is void and the owner's per-batch causes are right.** The
+watcher samples the tip roughly every eight commits, so the delta between a
+green run and the next red one is the **commit RANGE**, not the onset commit's
+own diff. Measured: 12 commits between burst 2's green and red runs, 5 for
+burst 3, and **209** for burst 4 — touching `compiler/`, `test/chdrstatic` and
+`lib/crtl/**`, which is exactly where the owner's `eefa85d70` static-body defect
+and the glib `__builtin_constant_p` cause live.
+
+**A sha is a position, not a delta**, and `git show --stat <sha>` answers
+honestly about the wrong question. It does not error; it prints a real file
+list. Same family as this file's *"the name is not the thing"*, and the guard
+is to bracket the range with `git diff --name-only <last-green>..<first-red>`
+whenever a watcher verdict is the left-hand side.
+
+## What `uses gtk` actually resolves to — measured, and it names the file
+
+Traced on plexus with `strace -e trace=open,openat,newfstatat` over
+`./pascal26 test/test_c_gtk.pas`, in a scratch directory holding **only** the
+`.pas` file. The resolver misses every Pascal and local-header candidate in
+order — source dir, `lib/rtl`, `lib/pcl`, `lib/asmcore`, `compiler/builtin`,
+`lib/crtl/include`, `/usr/include/gtk.h` — and then succeeds here:
+
+```
+open("/usr/include/gtk.h", O_RDONLY)             = -1 ENOENT
+open("/usr/include/gtk-2.0/gtk/gtk.h", O_RDONLY) = 3
+```
+
+That is a **hardcoded absolute fallback**, `compiler/pasparser_proc.inc:3428`:
+
+```pascal
+ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
+```
+
+with the transitive include roots hardcoded beside it at
+`compiler/cpreproc.inc:2507-2510` (`/usr/include/gtk-2.0/`, the arch
+`gtk-2.0/include/`, glib, pango, cairo, atk, gdk-pixbuf). The build then reads
+some 5700 syscalls' worth of system GTK2 headers.
+
+**This is the file the failure-depth argument is about.** `/usr/include/gtk-2.0/
+gtk/gtk.h` absent stops you at `uses: unit source not found: gtk`; present, you
+get far enough in to reach line 90 of a crtl module or line 311 of glib. The
+depth discriminator has a path now.
+
+**Two corrections it forces:**
+
+- The three "compile-only" gtk tests are **not self-contained**. They depend on
+  the host's `libgtk2.0-dev` and its glib/pango/cairo/atk/gdk-pixbuf companions.
+  (frankZ inferred self-contained from `uses gtk` plus `test/my_gtk.h` having no
+  `#include` lines, and flagged the inference themselves.)
+- **`test/my_gtk.h` is a red herring twice over.** The resolver looks for
+  `gtk.pas`, `gtk.pp`, `gtk.c`, `gtk.h` — never for a `my_*` name; and the
+  positive control confirms it, `test_c_gtk.pas` copied to a directory with no
+  `my_gtk.h` in it still compiles `ok`.
+
+## Three dependency profiles, not one
+
+Read off the recipes by frankZ, 2026-09-05:
+
+- `test_c_gtk`, `_call`, `_types` — compile only; **GTK2 dev headers**.
+- `test_c_gtk_window` — compiles, then `xvfb-run -a` **executes** it
+  (`Makefile:14396-14397`): GTK2 headers *and* a GTK runtime *and* a virtual X
+  server. Its job group also names `lib/pcl/gtk3_c.h`.
+- `test_c_gtk3_stock` — `-Futest/gtk3stock -I/usr/include/gtk-3.0/`
+  (`Makefile:14405`): **GTK3** dev headers, a different package.
+
+So arm 2 is skipping on **two** conditions, not one — a build-time header absent
+and a runtime library or display absent. A single `HOST_LIBS` list merges them,
+and merging similar-looking things is how this batch reached eighteen slugs.
+
+## Dropped: the job-naming hypothesis
+
+frankZ ran `testmgr`'s own splitter over the live Makefile (2015 jobs): each of
+the five is its own job and the first and only source of its group. The tickets
+name the right tests; the ~11.8% job-map naming gap does not apply here, and the
+"fifth scale of one mechanism" line should not be carried further.
 
 ## A trap in the tickets, worth fixing in the filer
 
