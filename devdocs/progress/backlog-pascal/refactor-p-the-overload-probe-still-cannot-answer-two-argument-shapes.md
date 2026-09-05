@@ -226,3 +226,43 @@ missing.
 Anyone landing the widening needs `tools/install_lib_candidates.sh` run first,
 or the measurement is blind on the axis that broke it last time. fgl (7/7) and
 `testmgr --tier quick` are available and are NOT a substitute.
+
+## The seven argument loops, enumerated — because a count in a transcript is not a count
+
+Every parameter-driven loop in the Pascal parsers that reaches an argument
+EXPRESSION, at `8389db919`. Five funnel through `ParseArgExpr`; two call
+`ParseExpr` directly and therefore did NOT inherit the bare-routine-name fix:
+
+| loop | parses the argument with | via ParseArgExpr? |
+| --- | --- | --- |
+| `pasparser_call.inc:1994` | `ParseExpr` (2021), `ParseLValueAST` (2026) | **no** |
+| `pasparser_call.inc:2711` (the speculative probe) | `ParseArgExpr` (2752) | yes |
+| `pasparser_lval.inc:3019` | `ParseArgExpr` (3027), `ParseExpr` (3120) | partly |
+| `pasparser_lval.inc:3173` | `ParseArgExpr` (3204) | yes |
+| `pasparser_lval.inc:3481` | `ParseArgExpr` (3492) | yes |
+| `pasparser_lval.inc:4907` | `ParseArgExpr` (4928) | yes |
+| `pasparser_expr.inc:1274` | `ParseArgExpr` (1282), `ParseExpr` (1337) | partly |
+| `pasparser_expr.inc:1346` | `ParseArgExpr` (1361) | yes |
+
+(plus the two FREE-call loops in `pasparser_expr.inc:8369` and
+`pasparser_stmt.inc:7232`, which already called `TryDelphiBareProcArg`
+directly, and `pyparser.inc:49192` for NilPy.)
+
+**Why this table is worth more than the number.** Three of these reach an
+argument through `ParseExpr` rather than `ParseArgExpr`, so any future fix
+routed through the shared funnel covers five of seven and **silently misses
+three** — and the miss presents as "works in most places", which is the
+hardest shape to notice. The same applies to the `SetLength expects a string
+variable in IR codegen` refusal in
+[[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]],
+which frankH measured as **five per-target twins**
+(`ir_codegen386.inc:3284`, `_aarch64:3246`, `_arm32:2613`, `_riscv32:2906`,
+`_xtensa:3013`). Two tickets, two duplicated surfaces, and in both cases
+"it works" is asserted at whichever arm the test happens to reach.
+
+**And a count is not coverage.** frankH's `LoadFileBuf` case the same day is
+the discipline: reading every hit of a constant said the ceiling was live, and
+running the OLD binary on an input that should have broken it showed the path
+is intercepted by a builtin and never executes under a self-hosted pxx. Before
+claiming any of these eight arms is covered, make the current compiler FAIL on
+it first.
