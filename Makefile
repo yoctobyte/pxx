@@ -10502,10 +10502,27 @@ test-core: $(COMPILER)
 	$(TESTTMP)/csizeof_postfix_unparen26; tools/expect_same.sh csizeof_postfix_unparen26-rc "$$?" "42"
 	# bug-cfront-undeclared-type-in-cast-treated-as-zero: a cast to an undeclared
 	# type name is an ERROR with a did-you-mean (it used to degrade to the value
-	# 0 — a NULL fn pointer crashing far from the cast); value position keeps its
-	# degrade-to-0 leniency, which is what the corpora rely on.
-	./$(COMPILER) test/cundeclared_type_value_pos.c $(TESTTMP)/cundeclared_type_value_pos26
-	$(TESTTMP)/cundeclared_type_value_pos26; tools/expect_same.sh cundeclared_type_value_pos26-rc "$$?" "42"
+	# 0 — a NULL fn pointer crashing far from the cast).
+	#
+	# VALUE POSITION IS AN ERROR TOO SINCE 2026-09-05
+	# (bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error),
+	# so "it refused" no longer separates the cast path from the value path —
+	# and separating them is this row's whole job. The assertion is therefore on
+	# the MESSAGE: all four shapes must take the VALUE path, and none may be
+	# claimed by the cast check. The row it replaces asserted an exit status of
+	# 42, which was equally consistent with the cast check being absent.
+	@./$(COMPILER) test/cundeclared_type_value_pos.c $(TESTTMP)/cundeclared_type_value_pos26 \
+	   > $(TESTTMP)/cundeclared_type_value_pos.log 2>&1; \
+	 test $$? -ne 0 \
+	   || { echo 'cundeclared_type_value_pos: FAIL - four undeclared identifiers in value position must refuse'; \
+	        cat $(TESTTMP)/cundeclared_type_value_pos.log; exit 1; }
+	@test "$$(grep -c 'used as value' $(TESTTMP)/cundeclared_type_value_pos.log)" = 4 \
+	   || { echo 'cundeclared_type_value_pos: FAIL - expected one "used as value" per shape, got a different count'; \
+	        cat $(TESTTMP)/cundeclared_type_value_pos.log; exit 1; }
+	@if grep -q 'unknown type name' $(TESTTMP)/cundeclared_type_value_pos.log; then \
+	   echo 'cundeclared_type_value_pos: FAIL - the cast check claimed a shape it must not claim'; \
+	   cat $(TESTTMP)/cundeclared_type_value_pos.log; exit 1; \
+	 else echo "cundeclared_type_value_pos: 4 value-position refusals, none claimed by the cast check"; fi
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }
@@ -14785,10 +14802,10 @@ test-core: $(COMPILER)
 	# compile cleanly alone, and two sessions searched them for two days.
 	# bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall
 	@if ./$(COMPILER) --emit-obj test/c_ir_unsupported_reports_the_real_line.c $(TESTTMP)/c_irunsup.o 2>&1 \
-	     | grep -q '^pascal26:23: error: IR_UNSUPPORTED'; then \
-	  echo "c_ir_unsupported_reports_the_real_line: names line 23, the undeclared-type line"; \
+	     | grep -q '^pascal26:33: error: IR_UNSUPPORTED'; then \
+	  echo "c_ir_unsupported_reports_the_real_line: names line 33, the address-of-enum-constant line"; \
 	else \
-	  echo "c_ir_unsupported_reports_the_real_line: FAILED -- the diagnostic no longer names line 23."; \
+	  echo "c_ir_unsupported_reports_the_real_line: FAILED -- the diagnostic no longer names line 33."; \
 	  echo "  Either it regressed to the lexer position (a builtin unit), or it stopped refusing."; \
 	  ./$(COMPILER) --emit-obj test/c_ir_unsupported_reports_the_real_line.c $(TESTTMP)/c_irunsup.o 2>&1 | tail -3; \
 	  exit 1; \

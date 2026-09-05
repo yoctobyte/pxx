@@ -2572,16 +2572,39 @@ begin
           end
           else
           begin
-            { An unresolved identifier used as a value degrades to integer 0 — a
-              best-effort leniency for tokens a self-referential / unmodelled
-              macro leaves behind (and for the predefined-but-unmodelled
-              __LINE__/__FILE__/__func__ family, which are `__`-prefixed). Warn
-              on the non-reserved cases so a genuine missing symbol is surfaced
-              instead of silently becoming 0 — see the static-initializer sites
-              below, which is where sqlite's `(...)pread` in aSyscall[] hid the
-              file-VFS null-call. Reserved `__`-names stay silent to avoid spam. }
+            { An unresolved identifier used as a value is a HARD ERROR, and the
+              0 below is only the well-formed stand-in ErrorRecover's contract
+              demands — nothing downstream ever sees it, because ErrCount is
+              checked after the parse and no output is written when it is
+              nonzero.
+
+              IT WAS A WARNING UNTIL 2026-09-05, and the leniency's own stated
+              justification was that the corpora need carrying through tokens a
+              self-referential or unmodelled macro leaves behind. THAT WAS AN
+              EMPIRICAL CLAIM AND IT WAS MEASURED FALSE: the census in
+              bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error
+              compiled c-testsuite's 220, lua 5.4, the sqlite amalgamation and
+              625 further C test files and found ten warnings, ALL TEN
+              deliberate fixtures and zero real macro leftovers. The leniency
+              was carrying nothing.
+
+              What it WAS doing is documented in `bb0c9c1ff`: eighteen crtl
+              constants silently zero across eleven busybox translation units,
+              with the zero travelling to the kernel or onto the wire.
+              ETH_P_IP at 0 binds a packet socket to nothing. IPDEFTTL at 0 is
+              dropped by the first router — invisible locally, fatal one hop
+              out. O_NOFOLLOW at 0 is a security guard switched off. None of
+              those is a compile error and none is a run-time error; every one
+              of them compiled green. gcc rejects all of these spellings under
+              -std=gnu99, so this is the language's answer, not a house rule.
+
+              RESERVED `__`-NAMES STAY SILENT AND STILL DEGRADE TO 0. That
+              carve-out is a different animal and must survive: it covers the
+              predefined-but-unmodelled __LINE__/__FILE__/__func__ family and
+              the __builtin_* surface, where a missing name is OUR gap in a
+              namespace the program does not own, not the program's mistake. }
             if (Length(name) < 2) or (name[1] <> '_') or (name[2] <> '_') then
-              Warn('undeclared identifier ''' + name + ''' used as value (treated as 0)');
+              ErrorRecover('undeclared identifier ''' + name + ''' used as value');
             CLastExprUndeclared := True;   { see the flag's declaration (defs.inc) }
             node := AllocNode(AN_INT_LIT);
             ASTIVal[node] := 0;

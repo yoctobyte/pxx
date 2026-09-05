@@ -7,7 +7,7 @@ status: open
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
-summary: "pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler. THE CENSUS THIS TICKET ASKED FOR IS DONE (2026-09-05, compiler 9048792b2dc3): 10 warnings total across conformance 220, lua, the sqlite amalgamation and 625 test/*.c, and ALL TEN are deliberate test fixtures — ZERO real gaps. THE PREREQUISITE NAMED HERE IS ALSO DONE: locale.h now defines all six LC_* categories and the lua build is clean. So the remaining work is not the corpus, it is about five fixtures that exist to exercise the leniency, plus preserving the deliberate `__`-prefix carve-out. NOT re-measured at HEAD: busybox — five attempts recorded below, each failing differently."
+summary: "FIXED 2026-09-05 (frankC) FOR THE ARM THIS TICKET IS ABOUT: an undeclared identifier used as a value in a FUNCTION BODY is a hard error (ErrorRecover, so every one in a file is reported and no output is written), matching gcc -std=gnu99 and the call spelling. The `__`-prefix carve-out survives deliberately — __LINE__/__FILE__/__func__/__builtin_* are our gap in a namespace the program does not own. Three fixtures rewrote their intent, not their spelling; a fourth needed nothing; a fifth was never affected — my own census over-counted it, because it warned only under my sweep's flags and not under the -include the Makefile passes. Verified at 614ded15e88b: conformance 220/220, lua and sqlite build, gate.sh quick GREEN with the FPC canary actually run, and the refusal measured identically on i386/aarch64/arm32/riscv32. Busybox reproduces bb0c9c1ff's zero at HEAD, x86_64 only, 75 TUs with 75 ok: markers asserted. THE SIBLING ARM IS NOT FIXED AND IS THE ONE THAT MATTERS FOR BUSYBOX: a file-scope initializer is SILENT — see bug-c-an-undeclared-identifier-in-a-file-scope-initializer-is-silent."
 ---
 
 # An undeclared identifier is a warning as a value and an error as a call
@@ -319,3 +319,86 @@ the fault (`sv` in a unity build), not the compiler, and the re-run drops it.
 **Any future run of this census must assert that the subject compiled before
 trusting a zero** — `grep -c 'ok:'` beside `grep -c 'used as value'`, and the
 first number is the precondition for the second meaning anything.
+
+# 2026-09-05 (frankC, Track C): FLIPPED. And the census over-counted its own blast radius by one.
+
+`ErrorRecover`, not `Error` — the 0 literal the old path built is exactly the
+well-formed stand-in that contract asks for, so every undeclared identifier in
+a file is reported instead of only the first, and `ErrCount` being nonzero
+already suppresses all output. The change is one call at one site.
+
+## The blast radius was FOUR fixtures, not five, and my own census said five
+
+`test/c_cpp_macro_arg_shapes.c` appeared in the census warning list for
+`FORCED_BY_MINUS_INCLUDE` — and that name is `#define`d, to 41, in
+`test/c_cpp_forced_include.h`, which the Makefile passes with `-include` on
+both of its rows. It warned only because MY SWEEP did not reproduce the
+Makefile's command line. Under its real flags it compiles clean and prints its
+seven rows, before and after.
+
+**A census that compiles a corpus with its own flags is measuring a program the
+build never builds.** The failure is quiet in the safe direction here — it
+over-stated the work — but it is the same instrument error either way, and the
+tell was cheap: every other row in the list was a name nothing defines, and
+this one was a name something defines.
+
+## The three that did need rewriting, and what each really tests
+
+- **`cundeclared_type_value_pos.c`** — the fixture that existed to assert this
+  flip must never happen. Its stated reason was that the leniency "is what
+  carries the corpora through tokens a self-referential or unmodelled macro
+  leaves behind". That is an EMPIRICAL claim and the census measured it false:
+  the leniency was carrying nothing. Its real subject survives intact — that
+  `(X)`, `(X) + p` and `(X) - p` are shapes the CAST check must not claim — so
+  the assertion moved from an exit status of 42 to the MESSAGE: four
+  `used as value` diagnostics, zero `unknown type name ... in cast`. Stronger
+  than what it replaces, which was equally consistent with the cast check being
+  absent altogether.
+- **`macro_soup_lib.c`** — `#define SELF_REF_MACRO SELF_REF_MACRO + 1` now has
+  a declared object behind it. C 6.10.3.4/2 blue-paints a macro during its own
+  rescan, so this is the shape gcc accepts, and the test GAINED an oracle:
+  pxx and `gcc -std=gnu99` both give 7. "Does not hang" was all the old shape
+  could assert, because the value it produced was the compiler's own stand-in.
+- **`c_ir_unsupported_reports_the_real_line.c`** — this fixture has now been
+  broken twice by the same mistake: it borrowed somebody else's gap to
+  manufacture an AN_INT_LIT. `loff_t` (a real crtl hole, filled 09-04), then
+  `pxx_no_such_type_t` (chosen because crtl would never grow it — and then the
+  ground moved the other way, today). It is `&K` on an enum constant now: a
+  construct the language defines, declared in the file, depending on no gap in
+  anything. Line 23 -> 33.
+
+`cundeclared_fnptr_arg_rejected_b167.c` needed no change. It now reports both
+diagnostics and its row greps for the specific one.
+
+## Verified
+
+Gate is C tests + self-host + cross, and all three ran at `614ded15e88b`:
+
+- conformance **220 pass / 0 fail**; lua 5.4 and the sqlite amalgamation both
+  build; the five affected rows pass and `cundeclared_type_cast_fail` (the
+  sibling that must NOT change) is unchanged.
+- `gate.sh quick` **GREEN**, read from `summary.log` in the logdir MY OWN run
+  printed, never by mtime — and gated BEFORE committing, so the FPC seed canary
+  actually ran (`PASS  fpc seed compiles (forward decls)`) rather than printing
+  SKIP on a clean tree.
+- cross i386 / aarch64 / arm32 / riscv32: a clean C program still builds on
+  each, and the refusal fires identically on each (4 `used as value`, 0 cast
+  claims). Not argued from "diagnostics are frontend-only" — measured.
+- the sweep was 625 tried, **625 reached the compiler**, 0 no-output, so the
+  count of 5 has a denominator behind it and a contention death could not have
+  dropped a file out of it silently.
+
+## THE ARM THIS DOES NOT FIX, AND IT IS THE ONE THAT MATTERS FOR BUSYBOX
+
+`bug-c-an-undeclared-identifier-in-a-file-scope-initializer-is-silent`, filed
+today with the measurement. Four of seven shapes report NOTHING — scalar
+file-scope init, scalar file-scope expression init, an INTEGER aggregate
+element, and a file-scope `static` scalar. gcc errors on all seven.
+
+Found because a positive control FAILED, not because anything reported it:
+busybox attempt six counted `used as value` at 0 over 75 TUs, and before
+trusting that zero I injected an undeclared name into a real busybox TU. At
+file scope it exited `ok:` with no diagnostic at all. **`static const int f =
+O_NOFOLLOW;` is silent today**, which is the busybox constant shape exactly —
+so the census that found the 18 could not have found these, and neither can
+this one.
