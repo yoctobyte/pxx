@@ -55,3 +55,37 @@ Then re-run the corpus march: `cclasses`, `comphook`, `finput` and `cfileutl`
 should all move past `cclasses.pas:676`. The march recipe and the current wall
 table are on
 [[bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic]].
+
+## 2026-09-05 (frankA) — a SECOND, independent population needs the same symbol
+
+This was filed as the last wall on the FPC compiler-source corpus. It also gates
+the FPC **test-suite** corpus, from the other direction and by a different route:
+
+`erroru.pp`, a suite helper unit, uses `TFPCHeapStatus` and `GetFPCHeapStatus`,
+and **five conformance skip rows `uses` it** — `tobject1`, `tstring2`,
+`tstring4`, `tstring5`, `texception3`. Measured at `36d7e5fd4`, compiler
+`e6af001d6c0e3bf2`. Their skip reasons say "object", "strings" and "exception",
+three unrelated clusters, so nothing in the skip file could show they share a
+blocker; it was found by re-attempting every skip row and clustering on the
+compiler's first error rather than on the reason text.
+
+`feature-pascal-corpus-fpc-testsuite` now carries the `blocked-by` edge, so this
+ticket's `effective_prio` rises **because the dependency is real**, not because
+anyone argued for it: measured p50 → p65 after wiring.
+
+The first symbol in that unit is `ErrorAddr`, which is a separate and probably
+cheaper ticket — `feature-b-erroraddr-is-missing-from-system`, also wired. All
+three must land before any of the five rows moves, so neither ticket alone is a
+win on this population.
+
+### A cheap first move nobody has taken (frankB's, recorded here)
+
+The allocator census line already prints `arenas=1 bump=21`. If arena
+bookkeeping already tracks the size and the bump pointer, then **`CurrHeapSize`
+and `CurrHeapFree` may fall out of state that exists**, leaving only
+`CurrHeapUsed` needing a genuinely new counter. That would turn the design
+question at the heart of this ticket — do we pay a counter per allocation — into
+a much smaller one.
+
+**Not checked by anyone yet.** Do that before treating the always-on-counters
+decision as the starting point; it may be most of the ticket.
