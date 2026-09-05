@@ -3967,6 +3967,57 @@ begin
 the observable is far simpler than the one in the ticket, **the ticket's stated
 cause was scenery** — a property of the sighting, not of the defect.
 
+### The self-built version: A BATTERY THAT VARIES ONE AXIS CONFIRMS WHATEVER IS CONSTANT ACROSS IT
+
+Measured 2026-09-06 (frankwasm), and it is the same rule from the other side. Above,
+the scenery was **inherited** from a ticket. Here the investigator **built it**, which
+is worse, because a battery you designed yourself reads as evidence rather than as
+an assumption.
+
+**The setup.** A NilPy generator failing on wasm32; the repro contains a `while`
+loop, so the obvious reduction is *loops in generators*. **A six-shape battery
+appeared to confirm it** — including a shape whose loop sits *before* the only
+`yield` and still fails, which is exactly the sort of member that feels
+discriminating.
+
+**Then `def g(n): yield n` failed, with no control flow in it at all.**
+
+> **Every failing shape took a bound parameter and every passing one did not. Two
+> things had been varied and the correlation was read off the one under
+> examination.**
+
+The real boundary is **a generator that READS a parameter**; declaring one and never
+reading it is fine, multiple yields are fine, a loop in a parameterless generator is
+fine. `def g(n): i = n + 1; yield i` yields `1` — **the parameter reads as zero.**
+
+**The tell is inside the battery, not outside it: list what every FAILING member
+shares, not only what distinguishes them.** A battery is built by varying the
+suspected axis, so the confound is by construction constant across all of it, and
+the more members it has the more confirming it looks. Cf. *an A/B comparison is only
+valid when B is A minus exactly ONE thing* — a battery is a stack of A/Bs, and it
+inherits that requirement without ever stating it.
+
+**The discriminator that finally scoped it is worth copying:** the *same program
+shape* in Pascal — `generator; stackless;` with an **Integer** parameter — **works**
+on wasm32. That one row exonerates the slgen transform, the one-word slot path, the
+`$pc` dispatch and the unstructured-CFG lowering in a single measurement, leaving
+only how the NilPy parameter is represented. **A working control in a neighbouring
+language narrows harder than another failing shape in the same one.**
+
+### And the negative result that will be re-derived unless it is written down
+
+`bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate` **reads
+like a confirmed cause** for the above and is not it. The loop really does consult
+neither predicate — zero occurrences — and `ir_codegen.inc:13757` says that path is
+UNCHECKED **in its own comment.** Adding the guard the other six arms have **fixed
+nothing and regressed two passing rows** (`yield 1; yield 2` went `1,2` → `1`).
+Reverted.
+
+**So the no-parameter cases currently DEPEND on whatever that loop does**, and the
+two tickets must not be merged on resemblance. The diff is in the ticket so the next
+reader can disbelieve it cheaply — **which is the only thing that stops a plausible
+wrong cause being re-derived by the next person to notice the same comment.**
+
 ### The mechanism it uncovered, which is a LAYOUT and not a bug
 
 **There is ONE token array.** The main file goes in first, then each `uses`d
