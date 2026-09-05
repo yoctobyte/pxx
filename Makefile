@@ -13373,6 +13373,25 @@ test-core: $(COMPILER)
 	# feature-p-fpc-global-operator-overload-declarations
 	./$(COMPILER) test/test_operator_unary_and_keyword_forms.pas $(TESTTMP)/test_opunary26
 	tools/expect_same.sh test_opunary26 "$$($(TESTTMP)/test_opunary26)" "$$(cat test/test_operator_unary_and_keyword_forms.expected)"
+	# The DELPHI `class operator` NAME spellings — Add/Subtract/Multiply/
+	# Modulus/LeftShift/RightShift/Equal/NotEqual/GreaterThan/LessThan/
+	# LogicalAnd/LogicalOr/LogicalNot/Negative/Positive/In — plus the unary
+	# three in BOTH an rvalue and an address position. The names declare the
+	# same operators the symbols do; the table is asserted whole because a
+	# partial one is the arm that stays broken. Refused by pin v-current at
+	# `class operator TFoo.Add`, so this row is not a tautology.
+	# fpc 3.2.2 -Mdelphi's values.
+	./$(COMPILER) test/test_operator_delphi_names_and_unary.pas $(TESTTMP)/test_opdelphi26
+	tools/expect_same.sh test_opdelphi26 "$$($(TESTTMP)/test_opdelphi26)" "$$(cat test/test_operator_delphi_names_and_unary.expected)"
+	# The same two mechanisms in the objfpc SYMBOL spelling, so an older
+	# compiler gets past the declarations and fails on the thing under test:
+	# a unary overload in an address position (`(-a).F`, pin: IR_UNSUPPORTED
+	# kind 6), and an overloaded `and` returning Boolean, which pin COMPILES
+	# and answers TRUE for — a silent wrong value, reachable in source pxx
+	# already supported. Expected FALSE, and False is the answer only a real
+	# call can produce.
+	./$(COMPILER) test/test_operator_unary_address_and_boolean_and.pas $(TESTTMP)/test_opaddr26
+	tools/expect_same.sh test_opaddr26 "$$($(TESTTMP)/test_opaddr26)" "$$(cat test/test_operator_unary_address_and_boolean_and.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

@@ -52,13 +52,12 @@ tdefault1.pp	wontfix: needs FPC `variants` unit as shipped (Default() over Varia
 tdefault5.pp	gap: Default() on record/object containing TextFile field (delphi mode)
 tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes
-terecs6.pp	gap: Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)
 tforin24.pp	gap: enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
 tforin2.pp	gap: for-in over a CALL-result string container (getstring(s)) + string op-enumerator
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
 tforin8.pp	gap: IEnumerable/IEnumerator interfaces driving for-in
-tforin9.pp	gap: `enumerator MoveNext/Current` directives + operator Enumerator
+tforin9.pp	gap: `enumerator MoveNext` / `enumerator Current` member DIRECTIVES on an interface declaring its own enumerator protocol. `operator Enumerator(AList: TMyList): IMyIterator` itself parses
 tgeneric102.pp	gap: specialize of generic class declared in another unit (inline class funcs)
 tgeneric107.pp	gap: inline specialize expression (specialize G<T>.Create as expression/procvar)
 tgeneric15.pp	gap: class inheriting from `specialize TStack<Integer>` as parent type
@@ -78,9 +77,7 @@ tgenfunc10.pp	gap: inline `specialize` expression inside generic function body
 tgenfunc23.pp	gap: generic procedure overload on T vs array of T + inline specialize call
 tgenfunc8.pp	gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 tobject1.pp	gap: object constructor `fail`, erroru/ExitCode RTL support
-toperator78.pp	gap: global operator overloads on primitive/set types (**, ><, div, mod, and)
-toperator89.pp	gap: overloading implicit assignment operator `:=` (global operator)
-toperator9.pp	gap: operator overload for `in` on a record type not supported by the parser
+toperator78.pp	gap: operator overloads whose operands are NOT aggregates (LongInt ** LongInt, `and` over a set, `array of Char` operands, Pointer + ShortString). pxx refuses a binary overload when neither operand is a record/class, deliberately -- see the arity branch in pasparser_call.inc -- and also has no `**` token
 tover1.pp	gap: overload resolution across shortstring/ansistring/widestring/pchar params
 tsetsize.pp	wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
 tstring10.pp	gap: punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed)
@@ -98,7 +95,7 @@ tenum6.pp	gap: `Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool (
 texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
 tforin12.pp	gap: initializing array-of-char elements from string literals in an array const
-tforin15.pp	gap: `operator enumerator` (custom enumerator operator) not supported
+tforin15.pp	gap: `Twice = type Integer` is not an operator OPERAND type -- the table keys on (typeKind, recId) and a distinct scalar alias has no identity in it, so `operator enumerator(a: Integer)` and `operator enumerator(a: Twice)` cannot be told apart. `operator enumerator` itself parses
 tforin16.pp	gap: for-in over a string constant
 tforin26.pp	gap: user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
 tforin27.pp	gap: user function named `Write` (builtin name shadowing) + for-in over dynamic array
@@ -113,8 +110,8 @@ tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic typ
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
 tobject2.pp	gap: old-style `object` types with virtual methods, constructor/destructor
-toperator1.pp	gap: operator overloading (+) on records declared in units; cross-unit operator resolution
-toperator6.pp	gap: `operator :=` implicit-conversion overload + qword/int64 overload selection
+toperator1.pp	gap: an operator declared in a unit INTERFACE is not registered until its implementation BODY is parsed, so a circular implementation-`uses` compiles the second unit while the first one's operator is still pending. Cross-unit operators themselves WORK (controls in the ticket). bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
+toperator6.pp	gap: COMPILES AND RUNS, and exits 2 -- a silent wrong answer, not a refusal, so do not read this row's skip as a parse gap. `value := high(int64)+100` must select the QWord `operator :=` overload and selects the Int64 one. Constant typing plus conversion-overload ranking
 tover3.pp	wontfix: dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 tover4.pp	gap: 80-bit extended/cextended float type and overload resolution across single/double/extended
 tprocvar1.pp	gap: old-style `object` types with constructor/virtual methods (same gap as tobject2.pp / tsealed6.pp). Its procvar content passes now — the previous reason named three gaps (method pointers, @Class.Method, typed-const procvars) and a fourth found chasing it (anonymous procedural types); all are fixed, and unskipping shows `object constructor init` is what is left.
@@ -129,8 +126,8 @@ tcase2.pp	gap: subrange-of-enum type (workdays = mon..fri) and case over it
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	gap: advanced records in units — nested type/const/var/class var sections, static class methods
 tgenfunc15.pp	gap: generic array type templates + generic method overloads with array-of-T params
-toperator2.pp	gap: unit-level `operator +` overload on records (global operator overloading)
-toperator3.pp	gap: unit-level `operator +` overload on records, mutually-used units
+toperator2.pp	gap: same as toperator1 -- toperator2 and toperator3 use each other from their implementation sections, and the interface-declared operator is not in the table yet. bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
+toperator3.pp	gap: same as toperator1 -- the operator of a unit whose implementation is still being parsed is not visible. bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
 tarray16.pp	gap: dynamic-array const initializers ([1,2,3]) and delphi-mode generic function CheckArray<T>
 tarray18.pp	gap: `class operator :=` / Explicit on records taking open `array of LongInt`
 tclass12a.pp	gap: Extended-precision Str formatting — value identical, pxx prints double-width 3.1400000000000001E+000 vs FPC's 20-digit extended (no 80-bit Extended print path)
@@ -138,7 +135,7 @@ tclass12c.pp	gap: class-local const/type/var sections, `type Integer` distinct t
 tclass13.pp	wontfix: needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 tclass16.pp	gap: `class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
 terecs10.pp	gap: default indexed property on a record (advanced records)
-terecs14.pp	gap: `class operator` set on records (Explicit, :=, =, In, comparison operators)
+terecs14.pp	gap: `**` has no lexer token -- `class operator TFoo.**` lexes as two `*`, so the DECLARATION does not parse (pascal26: expected ':' before 'TFoo'). Everything else in the row -- the Delphi names, `><`, unary + and -, `:=`, In -- compiles now; adding the token is lexer.inc numbering and coordinates with Track A
 terecs15.pp	gap: record constructors with overloads (advanced records)
 terecs20.pp	gap: `class threadvar` inside a record + threading RTL
 terecs3.pp	gap: advanced-record features from a unit — class var/const/nested type, static class methods
@@ -167,8 +164,8 @@ tmoperator8.pp	gap: management operators AddRef/Copy/Initialize/Finalize on reco
 tmoperator9.pp	gap: record management operators Initialize/Finalize called for locals
 tobject6.pp	gap: `object` type with nested type/class var/const sections and class property
 tobject7.pp	gap: `object` with private nested type, typed const and static class property
-toperator91.pp	gap: class operators Explicit/Implicit overloaded on ShortString[N] result types
-toperator94.pp	gap: objfpc `class operator :=` implicit conversion to shortstring types — the duplicate-conversion check (parser.inc ~1860) falsely collides distinct frozen-string result kinds; root is the same String[N] tk inconsistency (tyString vs tyFixedString vs tyShortString) that toperator93 exposed at the use site
+toperator91.pp	gap: the duplicate-conversion check keys on the result type KIND, so String[80], String[90] and ShortString are one result type and the second Explicit/Implicit declaration is refused. FPC treats the capacities as distinct -- same tk inconsistency toperator93 exposed at the use site
+toperator94.pp	gap: same duplicate-conversion coarseness as toperator91, objfpc `class operator :=` spelling
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
 tstatic2.pp	gap: class var with static class property and inherited access
 tclass12b.pp	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced

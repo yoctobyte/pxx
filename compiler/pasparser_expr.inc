@@ -20,6 +20,44 @@
 
 procedure ParseFactor; forward;
 
+{ A UNARY operator overload on an aggregate operand, built as an ORDINARY CALL.
+
+  `-a`, `not a` and `+a` where the operand is a record/class that declares
+  `operator -/not/+ (const a: T): T`. Returns -1 when there is no such overload,
+  and the caller then keeps its own node.
+
+  A CALL, deliberately, and not a tagged AN_NEG/AN_NOT for ir.inc to re-resolve.
+  Both spellings produce the same machine code for `b := -a`, and they differ
+  everywhere else: an AN_NEG is not one of the five kinds ASTNodeIsCall names,
+  so IRLowerAddress had no arm for it and `(-a).F` — a FIELD selected off the
+  result — refused with `IR_UNSUPPORTED: could not lower AST node (kind 6)`,
+  as did `(not a).F` with kind 7. terecs6 asserts exactly that shape.
+  Growing IRLowerAddress two more kinds would have fixed those two lines and
+  left every other address position (an argument, a `with`, an index base) to
+  be discovered one at a time; a call is already correct in all of them.
+
+  So the tag-then-re-resolve path is gone rather than extended: the operand's
+  type is known here, the lookup is the same lookup, and doing it once in the
+  parser deletes the duplicate in ir.inc instead of adding a third copy.
+  devdocs/dev/normalise-dont-special-case.md
+  feature-p-fpc-global-operator-overload-declarations }
+function UnaryOpOverloadCall(opKind, operand: Integer): Integer;
+var pi, argN, callN: Integer;
+begin
+  UnaryOpOverloadCall := -1;
+  if (operand < 0) or (not TkIsRecordOrClass(ASTTk[operand])) then Exit;
+  pi := FindOpOverloadUnary(opKind, ASTTk[operand], ResolveNodeRec(operand));
+  if pi < 0 then Exit;
+  argN := AllocNode(AN_ARG);
+  ASTLeft[argN] := operand;
+  ASTTk[argN] := ASTTk[operand];
+  callN := AllocNode(AN_CALL);
+  ASTIVal[callN] := pi;
+  ASTLeft[callN] := argN; ASTRight[callN] := -1;
+  ASTTk[callN] := Ord(Procs[pi].RetType);
+  UnaryOpOverloadCall := callN;
+end;
+
 { Is this node a Boolean LITERAL, and which one?
 
   Deliberately AN_BOOL_LIT only. A `const B = False` is NOT folded, for the same
@@ -1408,6 +1446,16 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
+      { A record/class operand with `operator -` is a CALL and nothing below
+        applies to it -- the widening, the constant fold and the {$Q+} tag are
+        all about integer negation. See UnaryOpOverloadCall for why this is a
+        call rather than a tagged AN_NEG. }
+      unOvl := UnaryOpOverloadCall(Ord(tkMinus), left);
+      if unOvl >= 0 then
+      begin
+        CurASTNode := unOvl;
+        Exit;
+      end;
       node := AllocNode(AN_NEG); ASTLeft[node] := left;
       { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
         does. Left untagged, `-(a // b)` on an Int64-returning helper printed
@@ -1452,16 +1500,6 @@ begin
       end
       else if NegWidensToInt64(IntToTypeKind(ASTTk[left])) then ASTTk[node] := Ord(tyInt64)
       else ASTTk[node] := ASTTk[left];
-      { A UNARY operator overload on a record/class operand answers with its own
-        result type, exactly as the binary case does in ParseSimpleExpr. Only
-        the tag is set here; ir.inc turns the node into the call. Guarded on the
-        operand being an aggregate so a plain `-x` never touches the table.
-        feature-p-fpc-global-operator-overload-declarations }
-      if TkIsRecordOrClass(ASTTk[left]) then
-      begin
-        unOvl := FindOpOverloadUnary(Ord(tkMinus), ASTTk[left], ResolveNodeRec(left));
-        if unOvl >= 0 then ASTTk[node] := Ord(Procs[unOvl].RetType);
-      end;
       { {$Q+} region: unary minus is overflow-checked too. FPC raises
         EIntOverflow on `-Low(Int64)` and on nothing else once the widening
         above is in place — every narrower type's negation fits an Int64.
@@ -1527,20 +1565,20 @@ begin
         LastExprTk := tyBoolean;
         Exit;
       end;
-      node := AllocNode(AN_NOT); ASTLeft[node] := left;
       { `not` over an aggregate is only ever a user overload -- see the AN_NEG
-        arm above; same guard, same reason. Ahead of the bitwise/logical split
-        because neither answer is meaningful for a record. }
-      unOvl := -1;
-      if TkIsRecordOrClass(ASTTk[left]) then
-        unOvl := FindOpOverloadUnary(Ord(tkNot), ASTTk[left], ResolveNodeRec(left));
-      bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
+        arm above; same guard, same reason. Ahead of the node allocation and the
+        bitwise/logical split, because neither answer is meaningful for a record
+        and the overload's result is a call, not an AN_NOT. }
+      unOvl := UnaryOpOverloadCall(Ord(tkNot), left);
       if unOvl >= 0 then
       begin
-        ASTTk[node] := Ord(Procs[unOvl].RetType);
-        LastExprTk := IntToTypeKind(ASTTk[node]);
-      end
-      else if bitNot then
+        CurASTNode := unOvl;
+        LastExprTk := IntToTypeKind(ASTTk[unOvl]);
+        Exit;
+      end;
+      node := AllocNode(AN_NOT); ASTLeft[node] := left;
+      bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
+      if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
         { FPC complements `ord(x)` at the OPERAND's width: ord(char/boolean) is
@@ -9718,6 +9756,7 @@ end;
 procedure ParseSimpleExpr;
 var op: TTokenKind; neg: Boolean; left, right, node, opci: Integer;
     blv: Boolean;                 { a constant left operand of `or` }
+    hadPos: Boolean; posOvl: Integer;
 begin
   { Unary minus binds TIGHTER than the multiplicative level in EVERY frontend
     here — Pascal included. It used to be treated as an additive-level sign for
@@ -9736,10 +9775,27 @@ begin
     negates ONE factor — the path PyExprMode already took, for the same reason.
     bug-a-unary-minus-binds-looser-than-and-shr }
   neg := False;
-  { Unary plus is identity, so its binding is unobservable — keep eating it here
-    rather than teaching the factor a no-op case. }
+  { Unary plus is identity FOR EVERY BUILT-IN OPERAND, so its binding is
+    unobservable and eating it here is cheaper than teaching the factor a no-op
+    case. It is NOT identity for a record that overloads it: FPC calls
+    `class operator Positive(a: TFoo): TFoo` and terecs6 asserts a body that
+    changes the value (`Result.F := a.F+1`), so the identity reading would
+    print a different number rather than fail to compile.
+
+    So the plus is remembered rather than merely eaten, and the overload is
+    dispatched on the parsed operand -- the only point where its type is known.
+    The result is an ordinary AN_CALL, not a tagged unary node like AN_NEG's:
+    a call is what the operand shape already lowers correctly (const-by-ref
+    params, a record return), and it needs no AST kind and no ir.inc arm.
+    feature-p-fpc-global-operator-overload-declarations }
+  hadPos := (CurTok.Kind = tkPlus);
   Eat(tkPlus);
   ParseTerm;
+  if hadPos then
+  begin
+    posOvl := UnaryOpOverloadCall(Ord(tkPlus), CurASTNode);
+    if posOvl >= 0 then CurASTNode := posOvl;
+  end;
   if neg then
   begin
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;

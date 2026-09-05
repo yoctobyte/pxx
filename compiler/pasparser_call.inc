@@ -76,6 +76,9 @@ var
   isFunc, foundClose: Boolean;
   nameOff, nameLen: Integer;
   procIdx: Integer;
+  isClassOp: Boolean;          { the declaration was spelled `class operator` }
+  qualName: AnsiString;        { ...and the `TRec.` it was qualified with }
+  qualTk, qualRec: Integer;
 begin
   { `class operator TPt.+ (const a, b: TPt): TPt;` — FPC's ADVANCED-RECORD operator syntax.
     Both the `class` prefix and the `TRec.` qualifier are accepted and dropped: pxx keys an
@@ -83,16 +86,44 @@ begin
     information the signature does not already have. A plain top-level
     `operator + (a, b: TPt): TPt` was already supported and means exactly the same thing —
     this just lets FPC's spelling through to the same machinery. }
-  if CurTok.Kind = tkClass then Next;
+  isClassOp := (CurTok.Kind = tkClass);
+  if isClassOp then Next;
   Next; { consume 'operator' }
+  qualName := '';
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
   begin
+    qualName := GetTokenStrFromRaw(Tokens[TokPos - 1].SOffset, Tokens[TokPos - 1].SLen);
     Next;   { the TRec qualifier }
     Next;   { the dot }
   end;
+  { A `class operator` is a METHOD, so at top level it must name the record it
+    belongs to. `class operator Add(A, B: TFoo): TFoo;` written outside any type
+    is toperator10's %fail, and FPC says "constructors, destructors and class
+    operators must be methods".
+
+    This is reachable only from the top level: an in-record `class operator`
+    DECLARATION never arrives here at all -- ParseTypeSection's member loop skips
+    the signature to its `;` and discards it, because pxx keys an operator on its
+    operand types and the declaration carries nothing the definition does not. So
+    "no qualifier" here means "not attached to any record", with no third case.
+
+    Before the Delphi NAME spellings landed the row was refused for an unrelated
+    reason -- `Add` was not a recognised operator name -- and this check is what
+    replaces that accident with the rule it was standing in for. }
+  if isClassOp and (qualName = '') then
+    Error('constructors, destructors and class operators must be methods: a '
+          + '`class operator` outside a record or class body has no type to '
+          + 'belong to (write `class operator TRec.<op>`, or drop `class` for a '
+          + 'global operator)');
   opKind := CurTok.Kind;
   opKey := -1;
-  { The KEYWORD-spelled operators (and/or/xor/shl/shr/not) belong in this list
+  { `in` and `><` are here for the same reason the keyword ones are: both are
+    real operators the expression parser already builds an AN_BINOP for --
+    `Ord(tkIn)` at the membership arm, `tkSymDiff` all the way down to five
+    backends' codegen -- and neither could be OVERLOADED only because this list
+    did not name it. Nothing else had to change for `operator in`.
+
+    The KEYWORD-spelled operators (and/or/xor/shl/shr/not) belong in this list
     beside the punctuation ones: they are the same overloadable operators with a
     different lexeme, and FPC's own constexp.pas declares five of them on
     Tconstexprint. Leaving them out made `operator and (const a,b:T):T` a syntax
@@ -100,7 +131,7 @@ begin
     the language does not draw. `not` is the unary one; the arity branch below
     is what separates it. }
   if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
-                tkAnd, tkOr, tkXor, tkShl, tkShr, tkNot] then
+                tkAnd, tkOr, tkXor, tkShl, tkShr, tkNot, tkIn, tkSymDiff] then
     opKey := Ord(opKind)
   else if opKind = tkAssign then
     { `operator :=(src): TDst` — implicit conversion at assignment }
@@ -120,6 +151,50 @@ begin
     else if CaseEqual(CurTok.SVal, 'finalize') then opKey := OPK_FINALIZE
     else if CaseEqual(CurTok.SVal, 'addref') then opKey := OPK_ADDREF
     else if CaseEqual(CurTok.SVal, 'copy') then opKey := OPK_COPY
+    { THE DELPHI NAMES FOR THE OPERATORS ALREADY SPELLED ABOVE AS SYMBOLS.
+      `class operator Add(a, b: T): T` and `operator + (a, b: T): T` declare the
+      same thing; only the lexeme differs, exactly as `Implicit` and `:=` above
+      already do. So they map onto the SAME opKey rather than growing a second
+      key space -- the use site is an AN_BINOP carrying a token ordinal, and a
+      separate key would mean every lookup asking twice.
+      devdocs/dev/normalise-dont-special-case.md
+
+      The table is written WHOLE rather than filled in as rows demand it. A
+      partial table is the arm that stays broken: the corpus asks for Add,
+      Subtract, Multiply, Modulus, Negative, Positive, NotEqual, GreaterThan,
+      RightShift, LogicalAnd/Or/Xor/Not and In, and there is no reason the
+      thirteenth spelling should be the one that errors.
+
+      Delphi draws a Logical/Bitwise distinction that Pascal's `and`/`or`/`xor`/
+      `not` do not: both spellings mean the same operator on the same operand
+      types here, and pxx keys an operator on its operand types, so they
+      deliberately collapse onto one key. RightShift lands on tkShrLogical for
+      the reason the `shr` arm below documents -- the lexer gives `shr` no token
+      of its own and the AST carries the renamed ordinal. }
+    else if CaseEqual(CurTok.SVal, 'add') then opKey := Ord(tkPlus)
+    else if CaseEqual(CurTok.SVal, 'positive') then opKey := Ord(tkPlus)
+    else if CaseEqual(CurTok.SVal, 'subtract') then opKey := Ord(tkMinus)
+    else if CaseEqual(CurTok.SVal, 'negative') then opKey := Ord(tkMinus)
+    else if CaseEqual(CurTok.SVal, 'multiply') then opKey := Ord(tkStar)
+    else if CaseEqual(CurTok.SVal, 'divide') then opKey := Ord(tkSlash)
+    else if CaseEqual(CurTok.SVal, 'intdivide') then opKey := Ord(tkDiv)
+    else if CaseEqual(CurTok.SVal, 'modulus') then opKey := Ord(tkMod)
+    else if CaseEqual(CurTok.SVal, 'leftshift') then opKey := Ord(tkShl)
+    else if CaseEqual(CurTok.SVal, 'logicaland') then opKey := Ord(tkAnd)
+    else if CaseEqual(CurTok.SVal, 'bitwiseand') then opKey := Ord(tkAnd)
+    else if CaseEqual(CurTok.SVal, 'logicalor') then opKey := Ord(tkOr)
+    else if CaseEqual(CurTok.SVal, 'bitwiseor') then opKey := Ord(tkOr)
+    else if CaseEqual(CurTok.SVal, 'logicalxor') then opKey := Ord(tkXor)
+    else if CaseEqual(CurTok.SVal, 'bitwisexor') then opKey := Ord(tkXor)
+    else if CaseEqual(CurTok.SVal, 'logicalnot') then opKey := Ord(tkNot)
+    else if CaseEqual(CurTok.SVal, 'bitwisenot') then opKey := Ord(tkNot)
+    else if CaseEqual(CurTok.SVal, 'equal') then opKey := Ord(tkEq)
+    else if CaseEqual(CurTok.SVal, 'notequal') then opKey := Ord(tkNeq)
+    else if CaseEqual(CurTok.SVal, 'greaterthan') then opKey := Ord(tkGt)
+    else if CaseEqual(CurTok.SVal, 'greaterthanorequal') then opKey := Ord(tkGe)
+    else if CaseEqual(CurTok.SVal, 'lessthan') then opKey := Ord(tkLt)
+    else if CaseEqual(CurTok.SVal, 'lessthanorequal') then opKey := Ord(tkLe)
+    else if CaseEqual(CurTok.SVal, 'in') then opKey := Ord(tkIn)
     { `shr` is here rather than in the token list above because THE LEXER DOES
       NOT GIVE IT A TOKEN: `shl` lexes as tkShl (lexer.inc:327) and Pascal `shr`
       lexes as a plain tkIdent whose text is 'shr' -- ParseTerm spells the pair
@@ -133,7 +208,8 @@ begin
       together; test/test_operator_unary_and_keyword_forms.pas covers the pair and
       is what notices if they do not.
       bug-a-shr-reaches-the-ir-spelled-as-tkident }
-    else if CaseEqual(CurTok.SVal, 'shr') then opKey := Ord(tkShrLogical);
+    else if CaseEqual(CurTok.SVal, 'shr') then opKey := Ord(tkShrLogical)
+    else if CaseEqual(CurTok.SVal, 'rightshift') then opKey := Ord(tkShrLogical);
   end;
   if opKey < 0 then
     Error('expected operator symbol after operator keyword');
@@ -313,16 +389,33 @@ begin
   begin
     if Procs[procIdx].ParamCount <> 1 then
       Error('this operator must take exactly one parameter');
-    { FPC forbids conversion operators between two BUILT-IN ordinal types
-      (toperator90's Explicit LongInt -> Boolean %fail): a standard
-      conversion already exists. A string/record/class/float on either side
-      makes it a legal user conversion (tgenfunc8's LongInt <-> String). }
-    if ((opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT)) and
+    { FPC forbids an EXPLICIT conversion operator between two BUILT-IN ordinal
+      types (toperator90's `operator Explicit (LongInt): Boolean` %fail): a
+      standard conversion already exists, and a cast has to mean the standard
+      one. A string/record/class/float on either side makes it a legal user
+      conversion (tgenfunc8's LongInt <-> String).
+
+      THE IMPLICIT FORM IS ALLOWED and used to be refused here beside it,
+      because `Implicit` and `:=` share OPK with nothing separating them. The
+      corpus states the rule as a PAIR and states it explicitly: toperator89 is
+      `operator := (aArg: LongInt): Boolean` carrying `{ %NORUN }` and the
+      comment "overloading the implicit assignment is allowed", toperator90 is
+      the same conversion spelled `Explicit` carrying `{ %FAIL }` and the
+      comment "overloading the explicit assignment is NOT allowed". Same
+      operand types, same result type, opposite answers, differing only in the
+      key -- which is as clean a discriminator as this corpus offers, and it is
+      why this is not a widening judged by taste.
+      Nothing else in the %FAIL population depends on the `:=` half: the other
+      three refusable `operator :=` rows are tassignmentoperator1 (two
+      parameters -- the arity branch above) and toperator92/95 (two conversions
+      to the same result type -- the duplicate check below), and String is not
+      ordinal in any case. }
+    if (opKey = OPK_EXPLICIT) and
        (recId = REC_NONE) and TypeIsOrdinal(IntToTypeKind(opTypeKind)) and
        TypeIsOrdinal(Procs[procIdx].RetType) then
       Error('impossible operator overload: a standard conversion between these types exists');
   end
-  else if ((opKey = Ord(tkMinus)) or (opKey = Ord(tkNot))) and
+  else if ((opKey = Ord(tkMinus)) or (opKey = Ord(tkNot)) or (opKey = Ord(tkPlus))) and
           (Procs[procIdx].ParamCount = 1) then
   begin
     { The UNARY overload of a symbol that is also binary. `-` carries both in
@@ -331,10 +424,14 @@ begin
       `not` is unary only, and rides the same branch rather than getting one of
       its own.
 
-      Unary `+` is deliberately NOT here: ParseSimpleExpr eats a leading plus as
-      an identity before any node exists, so there is nothing to dispatch on and
-      supporting it would mean a second mechanism somewhere else. If a corpus
-      ever needs it, that is the ticket to open, not a line to add here.
+      Unary `+` is here too, since 2026-09-05. It was excluded because
+      ParseSimpleExpr ate a leading plus as an identity before any node existed
+      -- and the note said that if a corpus ever needed it, that was a ticket
+      rather than a line here. The corpus needs it: terecs6 and terecs14 both
+      declare `class operator Positive`, and terecs6 asserts the CALL happens
+      (its body returns a.F+1, so identity gives the wrong VALUE rather than a
+      diagnostic). ParseSimpleExpr now remembers the plus and dispatches on the
+      parsed operand; nothing else moved.
 
       Same operand rule as the binary branch: the operation must not already be
       predefined, i.e. the operand has to be an aggregate. }
@@ -393,6 +490,26 @@ begin
                               Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx], 0);
     if dupPi >= 0 then
       Error('duplicate conversion operator: this source type already converts to this result type');
+  end;
+  { `class operator TFoo.GreaterThan(i, j: TBar): Boolean` -- a qualified
+    operator none of whose types is the type it is qualified with. terecs7's
+    %fail, and FPC states the rule in its own message, which is where this
+    wording comes from rather than from a guess:
+      "Either the result or at least one parameter must be of type TFoo"
+    THE RESULT COUNTS, and that half is not decoration: a conversion INTO the
+    record -- `class operator TFoo.Implicit(a: Integer): TFoo` -- has no operand
+    of TFoo at all and is legal, verified against fpc 3.2.2 before this check
+    was written. Testing the operands alone would have refused it.
+
+    Only when the qualifier RESOLVES to a record: an unresolvable qualifier
+    would otherwise answer REC_NONE and make every operator under it illegal. }
+  if qualName <> '' then
+  begin
+    OperandTypeKindRec(qualName, qualTk, qualRec);
+    if (qualRec <> REC_NONE) and (recId <> qualRec) and (rightRec <> qualRec) and
+       (ProcRetRecId[procIdx] <> qualRec) then
+      Error('either the result or at least one parameter must be of type '
+            + qualName);
   end;
   RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
   if scalarTk2 <> tyUnknown then

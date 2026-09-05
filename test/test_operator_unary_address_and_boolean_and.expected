@@ -1,0 +1,6 @@
+neg stmt -1
+neg fld -1
+not stmt -2
+not fld -2
+and FALSE
+or TRUE

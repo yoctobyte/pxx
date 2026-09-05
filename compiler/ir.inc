@@ -9783,24 +9783,19 @@ begin
 
     AN_NEG:
     begin
-      { A UNARY operator overload on a record/class operand -- `-a` where
-        `operator - (const a:T):T` is declared. Same shape as the binary case in
-        the AN_BINOP arm: one IR_ARG, one call, result typed by the node the
-        parser already tagged. Before every arm below, because none of them
-        means anything for an aggregate operand.
+      { NO UNARY-OVERLOAD ARM HERE, and that is the fix rather than an omission.
+        `-a` on a record used to arrive as a TAGGED AN_NEG for this arm to
+        re-resolve into a call. It now arrives as the call itself, built in
+        ParseFactorCore where the operand's type is already known -- see
+        UnaryOpOverloadCall in pasparser_expr.inc for why. The tagged form was
+        correct for `b := -a` and wrong for `(-a).F`, because an AN_NEG is not
+        one of the kinds ASTNodeIsCall names and IRLowerAddress could not take
+        its address.
+        Deleted, not merely bypassed: the arm was left in place wrapped in an
+        Error() canary and the full suite run green with it live (2026-09-05),
+        and the canary was proved capable of firing by disabling the parser
+        path, which made it fire on the first repro.
         feature-p-fpc-global-operator-overload-declarations }
-      if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) then
-      begin
-        cpi := FindOpOverloadUnary(Ord(tkMinus), ASTTk[ASTLeft[node]],
-                                   ResolveNodeRec(ASTLeft[node]));
-        if cpi >= 0 then
-        begin
-          left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
-          first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, ASTLeft[node]));
-          Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
-          Exit;
-        end;
-      end;
       if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
       begin
         { `-p` on a promotable int: rewrite to `0 - p` so the ordinary promo
@@ -9990,24 +9985,9 @@ begin
 
     AN_NOT:
     begin
-      { A UNARY operator overload on a record/class operand -- `-a` where
-        `operator - (const a:T):T` is declared. Same shape as the binary case in
-        the AN_BINOP arm: one IR_ARG, one call, result typed by the node the
-        parser already tagged. Before every arm below, because none of them
-        means anything for an aggregate operand.
-        feature-p-fpc-global-operator-overload-declarations }
-      if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) then
-      begin
-        cpi := FindOpOverloadUnary(Ord(tkNot), ASTTk[ASTLeft[node]],
-                                   ResolveNodeRec(ASTLeft[node]));
-        if cpi >= 0 then
-        begin
-          left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
-          first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, ASTLeft[node]));
-          Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
-          Exit;
-        end;
-      end;
+      { No unary-overload arm here either, for the reason the AN_NEG arm above
+        spells out -- `(not a).F` was the second half of the same defect, kind 7
+        beside kind 6. }
       if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
       begin
         { PASCAL's `not` is BITWISE on an integer and LOGICAL on a Boolean, and
@@ -10326,12 +10306,30 @@ begin
         operand only when the left has not already decided the result. The parser
         tags a logical (both-operands-boolean) and/or with ASTTk = tyBoolean;
         bitwise integer and/or keep an ordinal type and fall through to the
-        unconditional IR_BINOP below. The result is held in a temp (a local when
+        unconditional IR_BINOP below.
+
+        THE NODE'S OWN tyBoolean STOPPED IMPLYING "both operands are boolean"
+        when `class operator LogicalAnd(a, b: TFoo): Boolean` became parseable:
+        the parser tags the node with the OVERLOAD'S result type, so a pair of
+        RECORD operands arrived here wearing tyBoolean and got short-circuited
+        as if they were flags. Each record lowered to its address -- always
+        non-nil -- so `a and b` answered True without ever calling the operator,
+        and terecs6 halted 18 where FPC prints ok. A silent wrong value, and it
+        would have been read as an `and` codegen bug rather than as this arm
+        firing on a shape it was never about.
+        So the operand test is spelled out instead of inferred from the result:
+        an aggregate operand means the operator is a CALL, which the overload
+        arm further down lowers, and which FPC does not short-circuit either
+        (both arguments are evaluated -- it is a function call).
+        feature-p-fpc-global-operator-overload-declarations }
+      { The result is held in a temp (a local when
         inside a proc, so recursion stays reentrant); the right operand's IR is
         lowered AFTER the conditional jump, so it sits past the branch in the
         linear statement stream and is skipped at runtime. }
       if ((Integer(ASTIVal[node]) = Ord(tkAnd)) or (Integer(ASTIVal[node]) = Ord(tkOr))) and
-         (IntToTypeKind(ASTTk[node]) = tyBoolean) then
+         (IntToTypeKind(ASTTk[node]) = tyBoolean) and
+         (not TkIsRecordOrClass(ASTTk[ASTLeft[node]])) and
+         (not TkIsRecordOrClass(ASTTk[ASTRight[node]])) then
       begin
         varIdx := AllocVar('', tyBoolean);
         endLabel := IRNewLabel;

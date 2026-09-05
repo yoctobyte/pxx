@@ -1,0 +1,21 @@
+add 3
+sub -1
+mul 2
+idiv 2
+mod 1
+shl 4
+shr 1
+eq FALSE
+ne TRUE
+gt FALSE
+lt TRUE
+and FALSE
+or TRUE
+in TRUE
+not stmt -2
+not fld -2
+neg stmt -2
+neg fld -2
+pos stmt 2
+pos fld 2
+int 7 -7 -8
