@@ -7441,6 +7441,41 @@ different copies"* is a **defect generator with a measured rate**, and the fix
 deletes future bugs rather than lines. **Go and look for the twin fixes before you
 rank it** — `git log` on both files for the same symptom is the whole search.
 
+### The inversion, and it is the strongest form of the argument: THE ONE SITE WITH NO COPY WAS THE ONE SITE THAT WAS RIGHT
+
+Measured 2026-09-06 (frankB), group 9, and it arrives at the same conclusion from
+the opposite end.
+
+A function's own name is its result variable. **Thirteen intrinsic destination
+sites did not know it** — `Str(7, G)`, `Val(s, G)`, `New(G)`, `Include(G, x)`,
+`ReallocMem(F, n)` inside their own function all answered `undefined variable`,
+while `Fill(G)` — **the same name passed to a user procedure's `var` parameter, in
+the same program** — worked.
+
+**The rule was already extracted, and exactly one caller knew.** `OwnNameResultSym`
+(`compiler/pasparser_lval.inc:220`) exists because somebody hit `Inc(FuncName[0])`
+in FPC's `cutils.pas`. Inc/Dec was wired to it; **twelve other sites each spelled
+`FindSym` then `ParseLValueAST` themselves**, and `SetLength` carried a
+**fourteenth inline restatement of the rule's four conditions**, written before the
+routine existed.
+
+> **Twelve copies that agree perfectly and are all missing the same fact.**
+> Agreement across copies of one origin is not corroboration — it is one reading,
+> counted twelve times.
+
+**And then the load-bearing row: `GetMem` was already GREEN.** FPC accepts the own
+name in all six probed shapes; pxx refused five. **`GetMem` passed because it takes
+its destination through `ParseExpr` and therefore never had a copy of the rule to
+be wrong about.**
+
+> **The one site with no copy is the one site that was right.**
+
+That is the argument for one routine rather than thirteen fixes, **and it came out
+of the measurement rather than out of taste** — which is what makes it usable in a
+ticket. When you are ranking a duplication, look for the outlier that WORKS and ask
+why: if the answer is *"it delegates and the others reimplement"*, the duplication
+is the defect and the count of copies is its severity.
+
 ### And gate a merge on the census that can SEE a duplicate
 
 frankA's control is worth copying, because the obvious census cannot fire. The
@@ -7452,6 +7487,65 @@ either side, **controls as openers**, and **its own must-differ row**.
 > **A census that cannot distinguish one copy from two is a positive control drawn
 > from the wrong population** — it passes, and it certifies nothing about the change
 > you actually made.
+
+## A TEST'S FAILURE MESSAGE IS A CLAIM ABOUT THE TEST'S OWN MODEL, NOT A MEASUREMENT — and it arrives pre-authored, so it skips the step where you notice you are theorising
+
+Named 2026-09-06 (frankB), and it is **separate from the two ordinary false-cause
+shapes** because of where the sentence comes from. The previous two were the
+investigator's own inferences, which at least announce themselves as thinking. This
+one was **printed by FPC's own testsuite**, and it carries the credibility of the
+corpus being marched against.
+
+**The case.** `texception3` runs and prints **`exception generates memory holes`**,
+then halts 100. *"EXCEPTION HANDLING LEAKS"* was written into `pxx.skip` and the
+ticket was started.
+
+**Then the control ran: 100 `IntToStr`/concat iterations with NO exception
+anywhere.**
+
+| | result |
+| --- | --- |
+| pxx | `Lost: 208 bytes` |
+| **fpc** | **`Lost: 64 bytes`** |
+
+**The oracle "leaks" by the same instrument.** `DoMem <> 0` is **a heap high-water
+reading, not a leak detector, in either compiler.** The allocation census agrees —
+1000 raise/handle iterations give `allocs=1871 frees=1868 live=3` — and
+`texception3` **passes all 119 exception sub-tests**; the only failing line is the
+last one.
+
+### Why this one gets waved through
+
+**A failure message names a mechanism**, in confident prose, written by someone who
+understood the test. It looks like the output of a diagnosis rather than the input
+to one. **The more respectable the corpus, the more that claim gets waved through**
+— and a conformance corpus is the most respectable thing in the room, because the
+whole point of marching against it is that it is right.
+
+> **The test's message is evidence about what its author believed the test
+> measures. It is not evidence about your compiler.**
+
+### The habit that caught it, and it is the one from the consumer rule
+
+**Find the reading about a DIFFERENT SUBSTANCE.** The test measures **the
+allocator's high-water mark**; the census measures **allocations**. They disagreed,
+and the control settled it in two minutes. Same move as *ask what else reads the
+field you believe was lost* — a second instrument only counts when it can fail
+differently, and here the second instrument was already in the tree.
+
+**Run the message's own claim against the ORACLE.** If fpc fails your leak check
+too, the check is not about leaks. That single row is the cheapest possible control
+and it is available whenever the corpus you are marching against is another
+implementation's.
+
+### And file the residual with an owner
+
+frankB did not close the loop by hand-waving the remaining oddity: **should
+`CurrHeapUsed` fall when a freed block is returned, and is a `262144 Kb` arena
+reservation against fpc's `352 Kb` right?** Filed as
+`bug-b-currheapused-does-not-return-to-its-prior-value-after-a-freed-block`, p20,
+Track B, **with neither question claimed as established.** An exculpation needs an
+owner for the residual question — *"not a leak"* is half a finding.
 
 ## A SET OF ONE HAS NO DISTRIBUTION — so every property of its single member reads as a property of the SET
 
