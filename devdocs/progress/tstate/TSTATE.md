@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d7h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `7867c5481c01` | 2026-09-05T17:58:11Z | RED (native) | 153.2s | `b8e3b3010249` RED |
+| seven | `f2c6ff3288b4` | 2026-09-05T18:04:47Z | RED (native) | 151.3s | `b8e3b3010249` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
@@ -94,6 +94,14 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-core#src:test/test_c_gtk_call.pas** — test/test_c_gtk_call.pas (seven): bad `7867c5481c01`, last good `b8e3b3010249`, 87 commit(s) in range
 - **test-core#src:test/test_c_gtk_types.pas** — test/test_c_gtk_types.pas (seven): bad `7867c5481c01`, last good `b8e3b3010249`, 87 commit(s) in range
 - **test-core#src:test/test_c_gtk_window.pas** — test/test_c_gtk_window.pas lib/pcl/gtk3_c.h (seven): bad `7867c5481c01`, last good `b8e3b3010249`, 87 commit(s) in range
+- **test-core#src:test/strict_fpc_case_fail.pas** — test/strict_fpc_case_fail.pas test/test_record_self_field_fail.pas +5 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_cast_to_array_type.pas** — test/test_cast_to_array_type.pas tools/expect_same.sh +1 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_char_literal_to_pchar_param.pas** — test/test_char_literal_to_pchar_param.pas tools/expect_same.sh (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_char_to_pchar_conversion.pas** — test/test_char_to_pchar_conversion.pas tools/expect_same.sh +3 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_dynarray_to_pointer_seam_leaks.pas** — test/test_dynarray_to_pointer_seam_leaks.pas tools/expect_same.sh +1 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_generator_instance_freed_on_escaping_raise.pas** — test/test_generator_instance_freed_on_escaping_raise.pas tools/expect_same.sh +1 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_pchar_from_a_string_literal.pas** — test/test_pchar_from_a_string_literal.pas tools/expect_same.sh (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **test-core#src:test/test_stackless_gen.pas** — test/test_stackless_gen.pas tools/expect_same.sh (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
