@@ -9558,7 +9558,20 @@ begin
   begin
     si := Ord(aTk);
     if TypeIsFrozenString(aTk) then si := StrValTk(aTk);
-    if (si = Ord(tyString)) or (si = Ord(tyAnsiString)) then
+    { tyChar is in this set because A ONE-CHARACTER STRING LITERAL IS TAGGED
+      tyChar, NOT tyString -- so the first spelling of this guard closed the
+      multi-character case and left `SetEnumProp(t, 'C', 'clGreen')` binding
+      'C' to the PPropInfo slot and segfaulting, while the same call with a
+      property named 'Col' was correctly refused. Measured 2026-09-05 against
+      the by-name typinfo arms this guard exists to make reachable: 'C' died,
+      'Col' lived. A guard whose behaviour depends on the LENGTH of an
+      identifier is not a guard anyone can reason about.
+      This refuses a Char VARIABLE into a non-char-pointee typed pointer too,
+      which is FPC's answer as well. It is NOT the over-wide refusal 4760474da
+      was reverted for: that one keyed off TypeIsOrdinal and caught Char into
+      PChar, which the pointee exclusion below explicitly permits. }
+    if (si = Ord(tyString)) or (si = Ord(tyAnsiString))
+       or (si = Ord(tyChar)) or (si = Ord(tyWideChar)) then
     begin
       pe := ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j];
       if (pe <> Ord(tyUnknown)) and (pe <> Ord(tyChar))

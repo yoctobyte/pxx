@@ -406,12 +406,12 @@ function GetClassName(cls: PClassRTTI): string;
 function CreateInstance(cls: PClassRTTI): Pointer;
 function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo; overload;
 function GetPropList(cls: PClassRTTI; list: PPropList): Integer; overload;
-function GetOrdProp(instance: Pointer; p: PPropInfo): Int64;
-procedure SetOrdProp(instance: Pointer; p: PPropInfo; v: Int64);
-function GetStrProp(instance: Pointer; p: PPropInfo): string;
-procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string);
-function GetMethodProp(instance: Pointer; p: PPropInfo): TMethod;
-procedure SetMethodProp(instance: Pointer; p: PPropInfo; const v: TMethod);
+function GetOrdProp(instance: Pointer; p: PPropInfo): Int64; overload;
+procedure SetOrdProp(instance: Pointer; p: PPropInfo; v: Int64); overload;
+function GetStrProp(instance: Pointer; p: PPropInfo): string; overload;
+procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string); overload;
+function GetMethodProp(instance: Pointer; p: PPropInfo): TMethod; overload;
+procedure SetMethodProp(instance: Pointer; p: PPropInfo; const v: TMethod); overload;
 function GetMethodAddr(cls: PClassRTTI; const name: string): Pointer;
 function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; value: Pointer): Boolean;
 { Field reflection over ANY field (published or not). GetFieldInfoByName walks
@@ -512,7 +512,7 @@ function IsPublishedProp(cls: PClassRTTI; const name: string): Boolean; overload
   here, and a streamer using this to decide what to write out will write it.
   Declared rather than omitted because streaming code calls it unconditionally;
   the divergence is stated here so nobody reads a True as authoritative. }
-function IsStoredProp(instance: Pointer; p: PPropInfo): Boolean;
+function IsStoredProp(instance: Pointer; p: PPropInfo): Boolean; overload;
 
 { GetPropList filtered by kind — FPC's three-argument form. The unfiltered
   two-argument one above stays exactly as it was. }
@@ -522,27 +522,27 @@ function GetPropList(cls: PClassRTTI; kinds: TTypeKinds; list: PPropList): Integ
   METHOD depending on GetKind/SetKind, exactly as GetOrdProp does — a property
   written `read GetFoo` is not a special case, it is the other half of the
   ordinary case. }
-function GetInt64Prop(instance: Pointer; p: PPropInfo): Int64;
-procedure SetInt64Prop(instance: Pointer; p: PPropInfo; v: Int64);
+function GetInt64Prop(instance: Pointer; p: PPropInfo): Int64; overload;
+procedure SetInt64Prop(instance: Pointer; p: PPropInfo; v: Int64); overload;
 
 { Float properties. Single and Double are distinguished by OrdType, since a
   float read at the wrong width is garbage rather than an approximation.
   Extended is read as Double: pxx's Extended IS a Double, so this is the honest
   answer and not a narrowing. }
-function GetFloatProp(instance: Pointer; p: PPropInfo): Double;
-procedure SetFloatProp(instance: Pointer; p: PPropInfo; v: Double);
+function GetFloatProp(instance: Pointer; p: PPropInfo): Double; overload;
+procedure SetFloatProp(instance: Pointer; p: PPropInfo; v: Double); overload;
 
 { Object-valued properties. Returns an untyped Pointer rather than TObject so
   this unit keeps its empty `uses`; cast at the call site. }
-function GetObjectProp(instance: Pointer; p: PPropInfo): Pointer;
-procedure SetObjectProp(instance: Pointer; p: PPropInfo; v: Pointer);
+function GetObjectProp(instance: Pointer; p: PPropInfo): Pointer; overload;
+procedure SetObjectProp(instance: Pointer; p: PPropInfo; v: Pointer); overload;
 
 { Enum properties by NAME, which is what a streamer reads and writes.
   GetEnumProp answers '' for a value with no name in the type (an out-of-range
   ordinal), and SetEnumProp leaves the property untouched for a name the type
   does not have — neither invents an ordinal. }
-function GetEnumProp(instance: Pointer; p: PPropInfo): string;
-procedure SetEnumProp(instance: Pointer; p: PPropInfo; const v: string);
+function GetEnumProp(instance: Pointer; p: PPropInfo): string; overload;
+procedure SetEnumProp(instance: Pointer; p: PPropInfo; const v: string); overload;
 
 { INSTANCE-TAKING OVERLOADS. FPC code writes `GetPropInfo(AnObject, 'Caption')`,
   not `GetPropInfo(GetInstanceRTTI(...), 'Caption')`, and a facade that forces
@@ -552,20 +552,22 @@ procedure SetEnumProp(instance: Pointer; p: PPropInfo; const v: string);
   (measured 2026-08-28). The class each resolves through is the RUNTIME one, so
   a property introduced by a descendant is found.
 
-  !! THESE ARE NOT REACHABLE YET, AND CALLING THEM CRASHES. !!
-  blocked-by [[bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer]]:
-  pxx lets a class instance convert implicitly to ANY typed pointer (FPC errors),
-  so the `PClassRTTI` arm above is a viable candidate for an object argument and
-  is PREFERRED over the exact class match. `GetPropInfo(obj, 'Num')` therefore
-  binds to the pointer arm, reads the object as an RTTI blob, and segfaults —
-  measured by instrumenting the arm below, which is never entered.
+  THESE ARE REACHABLE NOW. Until 2026-09-05 this note said the opposite, in
+  capitals: [[bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer]]
+  made the `PClassRTTI` arm a viable and PREFERRED candidate for an object
+  argument, so `GetPropInfo(obj, 'Num')` bound to the pointer arm, read the
+  object as an RTTI blob, and segfaulted. That ticket is `done`; its fix is the
+  pointee narrowing in `MatchParamCompatible`. Re-measured 2026-09-05 against a
+  published `Name`/`Count`, under BOTH `compiler/pascal26` at HEAD and the
+  PINNED stable, which is the one that matters for a Track B consumer: the
+  instance spelling binds, `GetOrdProp` answers 42 and `GetStrProp` answers
+  'zaphod'. No workaround spelling is needed any more, and the direction to use
+  `GetPropInfo(GetInstanceRTTI(Pointer(obj)), name)` is withdrawn — it still
+  works and is no longer required. `test/lib_typinfo_props.pas` used it under a
+  note pointing here; that note now points at this paragraph.
 
-  They are declared anyway, and deliberately: they are the correct code, the
-  hazard predates them (the same call bound to the pointer arm and crashed
-  before they existed), and the standing rule is to leave platonic code in place
-  and file the bug rather than reshape around it. **Until that ticket lands,
-  spell it `GetPropInfo(GetInstanceRTTI(Pointer(obj)), name)`** — which is what
-  `test/lib_typinfo_props.pas` does, with a note pointing here. }
+  The correction is kept rather than deleted because the warning was true when
+  written and a reader who remembers it needs to see it retracted, not vanish. }
 function GetPropInfo(instance: TObject; const name: string): PPropInfo; overload;
 function GetPropList(instance: TObject; list: PPropList): Integer; overload;
 function GetPropList(instance: TObject; kinds: TTypeKinds; list: PPropList): Integer; overload;
@@ -588,7 +590,7 @@ function PropIsType(instance: TObject; const name: string; kind: TTypeKind): Boo
   and is not a shape this unit can call through. Under the default brackets=False
   that is indistinguishable from a legitimately empty set; pass brackets=True
   when the difference matters, where '' and '[]' separate cleanly. }
-function GetSetProp(instance: Pointer; p: PPropInfo; brackets: Boolean = False): string;
+function GetSetProp(instance: Pointer; p: PPropInfo; brackets: Boolean = False): string; overload;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; const v: string); overload;
 
 { The same rendering and parsing, decoupled from an instance: `value` is the set
@@ -606,6 +608,45 @@ function StringToSet(p: PPropInfo; const v: string): Integer;
   (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
 function TypeKindSize(tk: Int64): Integer;
 function TypeKindSigned(tk: Int64): Boolean;
+
+{ THE FPC BY-NAME SPELLING. Every arm above takes a `PPropInfo` the caller had
+  to look up; FPC's typinfo also exposes each one taking the PROPERTY NAME, and
+  that is the spelling vendored FPC consumers actually write -- dwsRTTIExposer,
+  Lazarus' LCL, and anything reading a form file. Absent until 2026-09-05, so
+  `GetStrProp(obj, 'Name')` had no viable by-name candidate and fell to
+  `(instance: Pointer; p: PPropInfo)` with a STRING LITERAL in the PPropInfo
+  slot, which the compiler accepted and then dereferenced: a segfault, not a
+  diagnostic. HEAD refuses that call outright since
+  bug-p-a-string-literal-binds-to-any-typed-pointer-parameter-and-segfaults,
+  and these arms are what makes the refused spelling work instead of merely
+  stopping. Both halves are needed: the compiler fix alone converts a crash into
+  a compile error, which is better and is still a wall.
+
+  A NAME THAT NAMES NO PUBLISHED PROPERTY IS NOT AN ERROR HERE -- it reads as
+  nil, and every accessor already answers its zero for a nil PPropInfo (0, '',
+  nil, an empty TMethod). FPC raises EPropertyError instead. That divergence is
+  deliberate: this unit does not `uses sysutils` (see TiCompareText above, and
+  the Exception-collision it exists to avoid), so it has no exception class to
+  raise, and answering the zero keeps a misspelled name a visible wrong VALUE
+  rather than an unhandled trap in a scripting host. Call IsPublishedProp first
+  where the distinction matters. }
+function GetOrdProp(instance: TObject; const name: string): Int64; overload;
+procedure SetOrdProp(instance: TObject; const name: string; v: Int64); overload;
+function GetInt64Prop(instance: TObject; const name: string): Int64; overload;
+procedure SetInt64Prop(instance: TObject; const name: string; v: Int64); overload;
+function GetStrProp(instance: TObject; const name: string): string; overload;
+procedure SetStrProp(instance: TObject; const name: string; const v: string); overload;
+function GetFloatProp(instance: TObject; const name: string): Double; overload;
+procedure SetFloatProp(instance: TObject; const name: string; v: Double); overload;
+function GetObjectProp(instance: TObject; const name: string): TObject; overload;
+procedure SetObjectProp(instance: TObject; const name: string; v: TObject); overload;
+function GetEnumProp(instance: TObject; const name: string): string; overload;
+procedure SetEnumProp(instance: TObject; const name: string; const v: string); overload;
+function GetSetProp(instance: TObject; const name: string; brackets: Boolean = False): string; overload;
+procedure SetSetProp(instance: TObject; const name: string; const v: string); overload;
+function GetMethodProp(instance: TObject; const name: string): TMethod; overload;
+procedure SetMethodProp(instance: TObject; const name: string; const v: TMethod); overload;
+function IsStoredProp(instance: TObject; const name: string): Boolean; overload;
 
 implementation
 
@@ -956,6 +997,10 @@ var
   addr: Pointer;
   setter: TStrSetter;
 begin
+  { Every sibling accessor guards this and this one did not, which was
+    unreachable while a PPropInfo could only come from a lookup the caller
+    checked. The by-name arm below makes a nil p reachable from a typo. }
+  if p = nil then Exit;
   if p^.SetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.SetRef];
@@ -1545,6 +1590,94 @@ end;
 function PropIsType(instance: TObject; const name: string; kind: TTypeKind): Boolean;
 begin
   PropIsType := PropIsType(GetInstanceRTTI(Pointer(instance)), name, kind);
+end;
+
+{ The FPC by-name arms. Each is the PPropInfo arm with the lookup folded in;
+  the lookup answers nil for an unpublished name and every arm below tolerates
+  that -- see the interface note. }
+function GetOrdProp(instance: TObject; const name: string): Int64;
+begin
+  GetOrdProp := GetOrdProp(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetOrdProp(instance: TObject; const name: string; v: Int64);
+begin
+  SetOrdProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetInt64Prop(instance: TObject; const name: string): Int64;
+begin
+  GetInt64Prop := GetInt64Prop(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetInt64Prop(instance: TObject; const name: string; v: Int64);
+begin
+  SetInt64Prop(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetStrProp(instance: TObject; const name: string): string;
+begin
+  GetStrProp := GetStrProp(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetStrProp(instance: TObject; const name: string; const v: string);
+begin
+  SetStrProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetFloatProp(instance: TObject; const name: string): Double;
+begin
+  GetFloatProp := GetFloatProp(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetFloatProp(instance: TObject; const name: string; v: Double);
+begin
+  SetFloatProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetObjectProp(instance: TObject; const name: string): TObject;
+begin
+  GetObjectProp := TObject(GetObjectProp(Pointer(instance), GetPropInfo(instance, name)));
+end;
+
+procedure SetObjectProp(instance: TObject; const name: string; v: TObject);
+begin
+  SetObjectProp(Pointer(instance), GetPropInfo(instance, name), Pointer(v));
+end;
+
+function GetEnumProp(instance: TObject; const name: string): string;
+begin
+  GetEnumProp := GetEnumProp(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetEnumProp(instance: TObject; const name: string; const v: string);
+begin
+  SetEnumProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetSetProp(instance: TObject; const name: string; brackets: Boolean = False): string;
+begin
+  GetSetProp := GetSetProp(Pointer(instance), GetPropInfo(instance, name), brackets);
+end;
+
+procedure SetSetProp(instance: TObject; const name: string; const v: string);
+begin
+  SetSetProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function GetMethodProp(instance: TObject; const name: string): TMethod;
+begin
+  GetMethodProp := GetMethodProp(Pointer(instance), GetPropInfo(instance, name));
+end;
+
+procedure SetMethodProp(instance: TObject; const name: string; const v: TMethod);
+begin
+  SetMethodProp(Pointer(instance), GetPropInfo(instance, name), v);
+end;
+
+function IsStoredProp(instance: TObject; const name: string): Boolean;
+begin
+  IsStoredProp := IsStoredProp(Pointer(instance), GetPropInfo(instance, name));
 end;
 
 

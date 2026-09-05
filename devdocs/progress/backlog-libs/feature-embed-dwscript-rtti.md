@@ -214,3 +214,63 @@ One note for whoever takes it, from the ticket's own instruction: it says to
 delete this edge if the RTTI half turns out to reach only the type-level API.
 That is not why it went — the instance spelling was the blocker and it works
 now. If a NEW blocker appears, file it rather than reviving this slug.
+
+## 2026-09-05 (frankH) — the by-name typinfo half is LANDED; vendoring is what is left
+
+The CORRECTION above named two pieces of work. Both are now done, and the second
+one grew a third piece that only the first two could have exposed.
+
+**1. The by-name typinfo arms exist.** `lib/rtl/typinfo.pas` gained the sixteen
+FPC spellings it was missing — `GetOrdProp` / `SetOrdProp`, `GetInt64Prop` /
+`SetInt64Prop`, `GetStrProp` / `SetStrProp`, `GetFloatProp` / `SetFloatProp`,
+`GetObjectProp` / `SetObjectProp`, `GetEnumProp` / `SetEnumProp`, `GetSetProp` /
+`SetSetProp`, `GetMethodProp` / `SetMethodProp`, and `IsStoredProp`, each taking
+`(instance: TObject; const name: string)`. Each is the existing `PPropInfo` arm
+with the lookup folded in.
+
+**Differentially verified, not self-consistently.** `test/lib_typinfo_byname.pas`
+was compiled by `fpc 3.2.2 -Mdelphi -O1` against **FPC's own typinfo** and by pxx
+against ours, and the ten comparable rows matched **byte for byte** — including
+the set rendering in both bracket modes. The four rows that do not compare are a
+name that names no published property: FPC raises `EPropertyError`, we answer the
+accessor's zero. That divergence is deliberate and is stated in the unit's
+interface — typinfo cannot `uses sysutils` (the `Exception`-collision that
+`TiCompareText` exists to dodge), so it has no exception class to raise, and a
+zero keeps a misspelled name a visible wrong value rather than an unhandled trap
+inside a scripting host.
+
+**2. A stale WARNING was retracted, which is worth more than it sounds.**
+The interface carried, in capitals, *"THESE ARE NOT REACHABLE YET, AND CALLING
+THEM CRASHES"* over the `TObject`-taking lookups, plus a standing instruction to
+spell them `GetPropInfo(GetInstanceRTTI(Pointer(obj)), name)`. Re-measured under
+**both HEAD and the PINNED stable** — the pin being the one that matters to a
+Track B consumer — the instance spelling binds and answers correctly on both.
+The warning was true when written and false today, and a stale imperative in a
+header is obeyed long after it stops being true. Retracted in place rather than
+deleted, so a reader who remembers it sees it withdrawn.
+
+**3. THE GUARD HAD A SECOND ARM AND ONLY THE FIRST WAS CLOSED.** Exercising the
+new arms found that `SetEnumProp(t, 'C', 'clGreen')` segfaulted while
+`SetEnumProp(t, 'Col', 'clGreen')` worked. **A one-character string literal is
+tagged `tyChar`, not `tyString`**, so the pointee narrowing landed earlier the
+same day walked straight past it and the literal went into the `PPropInfo` slot
+exactly as before. A guard whose verdict turned on the LENGTH of an identifier —
+and one that printed nothing at all for the case it missed. Widened in
+`MatchParamCompatible` to include `tyChar`/`tyWideChar`, with the
+`PChar`/`PWideChar` pointee exclusion untouched, which is what keeps it clear of
+the over-wide refusal `4760474da` was reverted for; `Char -> PChar` remains an
+asserted row, not a hope.
+
+## What is actually left
+
+**Only the vendoring.** No compiler or RTL gap is known to block DWScript now,
+and the two this ticket did name are closed. The next session on it should clone
+DWScript outside the repo (the reversible half, as
+[[feature-embed-pascal-script]] did) and drive `dwsRTTIExposer` until something
+fails — per the umbrella rule, attempt the target rather than triage.
+
+**One delivery caveat, and it is the usual one.** The by-name arms need a
+compiler carrying the char-literal narrowing. **Under the current pin they still
+mis-resolve and crash**, so `test/lib_typinfo_byname.pas` is gated with
+`$(COMPILER)` and not `$(PXX_STABLE)`; it moves to the pinned `lib-test` set at
+the next pin. A Track B consumer built against the pin cannot use these arms yet.

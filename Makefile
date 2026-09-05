@@ -5873,6 +5873,25 @@ test-core: $(COMPILER)
 	  || { echo 'test_string_literal_not_a_typed_pointer_fails: FAIL - a string literal still binds ^TRec'; exit 1; }
 	./$(COMPILER) test/test_string_literal_not_a_typed_pointer_ok.pas $(TESTTMP)/test_slptrok26
 	tools/expect_same.sh test_slptrok26 "$$($(TESTTMP)/test_slptrok26)" "$$(printf 'untyped literal = 1\npchar literal   = 2\nuntyped var     = 1\npchar from char = 2\npchar assign    = e\ntyped pointer   = 42\nnil to typed    = -1\nSTRING LITERAL POINTER OK')"
+	# The SIBLING, and it is here because the first spelling of that guard
+	# missed it: a ONE-CHARACTER literal is tagged tyChar, not tyString, so
+	# `SetEnumProp(t, 'C', ...)` compiled and segfaulted while the identical
+	# call on a property named 'Col' was refused. A guard whose verdict turned
+	# on the LENGTH of an identifier. The _ok row above still asserts
+	# Char->PChar, which stays accepted -- that is the pair 4760474da was
+	# reverted for breaking, and it is asserted, not assumed.
+	@./$(COMPILER) test/test_one_char_literal_not_a_typed_pointer_fails.pas $(TESTTMP)/test_1clptrfail26 2>&1 \
+	  | grep -q 'no overload of Take matches these arguments' \
+	  || { echo 'test_one_char_literal_not_a_typed_pointer_fails: FAIL - a one-char literal still binds ^TRec'; exit 1; }
+	# ...and the library surface the whole guard exists to make reachable:
+	# typinfo's FPC by-name arms. BUILT WITH $(COMPILER), NOT $(PXX_STABLE),
+	# deliberately -- under the pin the literal still binds to the PPropInfo
+	# slot and this crashes. It moves to lib-test's pinned set at the next pin.
+	# Every row here was compared byte-for-byte against fpc 3.2.2 -Mdelphi -O1
+	# built with FPC'S OWN typinfo; the last four are the by-name-of-a-missing-
+	# property rows, which FPC raises on and we answer the accessor's zero for.
+	./$(COMPILER) -Fulib/rtl test/lib_typinfo_byname.pas $(TESTTMP)/lib_typinfo_byname
+	tools/expect_same.sh lib_typinfo_byname "$$($(TESTTMP)/lib_typinfo_byname)" "$$(printf 'name=zaphod\ncount=42\nbig=5000000000\nfloat=2.50\nenum1=clBlue\nenum3=clBlue\nset=clRed,clBlue\nsetbr=[clRed,clBlue]\nobj=TRUE\nstored=TRUE\nmissstr=[]\nmissord=0\nmissstored=FALSE\nunchanged=zaphod\nTYPINFO-BYNAME OK')"
 	# ...and the same gate reaching the FREE path's own refusal predicate, which
 	# it could not before: an ARRAY argument must not bind a SCALAR parameter
 	# through a method, exactly as it already could not through a free call.
