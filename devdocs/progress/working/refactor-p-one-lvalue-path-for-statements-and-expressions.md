@@ -466,10 +466,17 @@ and does every consumer of that field read the same encoding?** The escape
 census answers "which shared routines does this loop reach"; this one is "what
 does it hand them", and the two are not the same instrument.
 
-### Recorded blank
+### The recorded blank, and it is now closed
 
 `EnsureRecPtrAlias` mints a row with `AliasPtrDepth = 0` and no base kind, which
 is what `RegisterPtrAlias` writes; a source-declared `PRec = ^TRec` gets those
-filled by the `^T` parse. Every row of the fixture and all three censuses agree
-across the change, so nothing measured needs them — but **`^^` through a
-record-name cast was NOT probed** and is where a missing depth would show.
+filled by the `^T` parse. The shape that would read them is a double deref
+through the cast ITSELF, which the censuses do not spell — `deref2-fld` is
+`TRec(raw)^.n^.a`, whose second `^` is on a FIELD.
+
+**Probed rather than argued.** `TRec(raw)^^.a` beside `PPRec(raw)^^.a` over the
+same bytes: both answer 11, **and both answer 11 on pin v403 as well**. So the
+minted row did not move that shape, which is the half that matters — the pin row
+is what says the agreement is not something my change arranged. Depth is not
+read for a record-name cast on any shape that can be written, so the blank is
+closed rather than left open.
