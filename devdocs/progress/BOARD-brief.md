@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:17 unfinished:24 blocked:7 backlog:4 backlog-umbrella:7 backlog-core:134 backlog-nilpy:97 backlog-tools:22 backlog-pascal:41 backlog-decide:39 backlog-libs:17 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:4 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3312 rejected:76`
+`working:17 unfinished:24 blocked:7 backlog:9 backlog-umbrella:7 backlog-core:134 backlog-nilpy:97 backlog-tools:22 backlog-pascal:40 backlog-decide:39 backlog-libs:17 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:4 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3313 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
@@ -64,7 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 385, ranked
+## Ready — top 30 of 389, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -82,6 +82,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [P]` regression-test-core-test-c-gtk-3
+- `[p 70] [P]` regression-test-core-test-c-gtk-call-5
+- `[p 70] [P]` regression-test-core-test-c-gtk-types-3
+- `[p 70] [P]` regression-test-core-test-c-gtk-window-4
+- `[p 70] [P]` regression-test-core-test-c-gtk3-stock-3
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
@@ -91,10 +96,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
-- `[p 62] [N]` feature-nilpy-enum-class
 
-_355 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
