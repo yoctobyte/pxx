@@ -4926,6 +4926,7 @@ var
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
   savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
+  gmKw: Integer;       { first token of a generic METHOD header — see ExpandGenericMethod }
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -5804,6 +5805,17 @@ begin
             Next;   { consume `class`; the property branch parses the rest }
           end;
 
+          { `generic` before a method header -- the objfpc surface of a generic
+            METHOD. Consumed here so both surfaces arrive at the `<` test below
+            in the same shape and one routine does the expansion. Without this
+            arm the loop read `generic` as a field name and answered
+            `expected ':' before 'function'`.
+            feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+          if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic') and
+             ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction) or
+              (Tokens[TokPos].Kind = tkClass)) then
+            Next;
+
           isClassMethod := False;
           if (CurTok.Kind = tkClass) and ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
           begin
@@ -5831,6 +5843,22 @@ begin
             mnOff := Tokens[TokPos-1].SOffset;
             mnLen := Tokens[TokPos-1].SLen;
             Next;
+
+            { `Add<T>` -- a generic METHOD. Rewrite the declaration, its
+              definition and every use into one ordinary method per concrete
+              type argument, then re-read this member from the first token
+              written. Both surfaces arrive here: the objfpc `generic` keyword
+              was consumed above and the Delphi spelling never had one.
+              feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+            if (CurTok.Kind = tkLt) and (TokPos >= 3) and
+               ((Tokens[TokPos - 3].Kind = tkFunction) or
+                (Tokens[TokPos - 3].Kind = tkProcedure)) then
+            begin
+              gmKw := TokPos - 3;
+              if (gmKw >= 1) and (Tokens[gmKw - 1].Kind = tkClass) then Dec(gmKw);
+              ExpandGenericMethod(gmKw, TokPos - 1);
+              continue;
+            end;
 
             mNParams := 0;
             mRetType := tyInteger;

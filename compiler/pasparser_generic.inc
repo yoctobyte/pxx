@@ -4125,6 +4125,8 @@ begin
       Tokens[i].IVal := 0;
       Tokens[i].SOffset := TokCharsAppend(specName);
       Tokens[i].SLen := Length(specName);
+      TokSrcOff[i] := 0;   { it says F_C now -- see the note in ExpandGenericMethod }
+      TokSrcLen[i] := 0;
       if hasKw then RemoveTokens(i + 1, 4) else RemoveTokens(i + 1, 3);
     end;
     Inc(i);
@@ -4271,6 +4273,79 @@ begin
     (Tokens[gt + 1].Kind = tkSemicolon);
 end;
 
+function TokHeaderSemi(at: Integer): Integer;
+{ Index of the `;` that ends the routine HEADER starting at Tokens[at], or -1.
+  Paren depth is tracked for the reason SkipDeclHeaderToSemicolon tracks it:
+  `(a: Double; b: TCx)` puts a semicolon inside the parameter list. }
+var j, depth: Integer;
+begin
+  TokHeaderSemi := -1;
+  j := at; depth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(depth)
+    else if Tokens[j].Kind = tkRParen then Dec(depth)
+    else if Tokens[j].Kind = tkEOF then Exit
+    else if (Tokens[j].Kind = tkSemicolon) and (depth <= 0) then
+    begin
+      TokHeaderSemi := j;
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
+function TokRoutineBodyEnd(at: Integer): Integer;
+{ Index of the `;` after the final `end` of the routine DEFINITION starting at
+  Tokens[at], or -1. Same opener set as GenericMethodBodyEnd and the generic
+  FUNCTION's own body counter -- see the note at ParseGenericFunctionDef for why
+  the set is what it is and what a miscount costs. }
+var j, depth: Integer;
+begin
+  TokRoutineBodyEnd := -1;
+  j := at;
+  while (j < TokCount) and (Tokens[j].Kind <> tkBegin) do Inc(j);
+  if j >= TokCount then Exit;
+  depth := 1; Inc(j);
+  while (j < TokCount) and (depth > 0) do
+  begin
+    if (Tokens[j].Kind = tkBegin) or (Tokens[j].Kind = tkCase) or
+       (Tokens[j].Kind = tkTry) or (Tokens[j].Kind = tkAsm) then Inc(depth)
+    else if Tokens[j].Kind = tkEnd then Dec(depth);
+    Inc(j);
+  end;
+  if (j < TokCount) and (Tokens[j].Kind = tkSemicolon) then
+    TokRoutineBodyEnd := j;
+end;
+
+function GenericKwAt(at: Integer): Integer;
+{ `at`, or at-1 when the token before it is the `generic` keyword -- the first
+  token of the declaration whichever surface it is written in. }
+begin
+  GenericKwAt := at;
+  if (at > 0) and (Tokens[at - 1].Kind = tkIdent) and
+     CaseEqual(GetTokenStr(at - 1), 'generic') then
+    GenericKwAt := at - 1;
+end;
+
+procedure SetGenericRoutineSubs(const templateName, paramName, concreteName: AnsiString;
+                                concreteKind: TTokenKind);
+{ The one-parameter substitution set, loaded directly rather than through
+  SetSpecSubs -- which is keyed on a TEMPLATE ROW, and a generic ROUTINE has no
+  row: it is a token range, not a type. SpecSubShadowed is cleared explicitly
+  because it ACCUMULATES across the streams of one class template, so a finding
+  from the last class specialization would otherwise be read as this routine's. }
+var k: Integer;
+begin
+  SpecializeTemplateName := templateName;
+  SpecSubCount := 1;
+  SpecSubNames[0]  := paramName;
+  SpecSubValues[0] := concreteName;
+  SpecSubKinds[0]  := concreteKind;
+  for k := 0 to MAX_TEMPLATE_PARAMS - 1 do SpecSubShadowed[k] := False;
+  SpecSubShadowValid := False;
+end;
+
 procedure ParseGenericFunctionDef;
 { Both surfaces, one parser. The objfpc spelling opens with `generic`; the
   mode-Delphi spelling (`function Add<T>(...)`) has no keyword at all and is
@@ -4298,6 +4373,14 @@ begin
   Expect(tkLt, '<');
   if CurTok.Kind <> tkIdent then Error('expected generic type parameter');
   paramName := CurTok.SVal; Next;
+  { An optional CONSTRAINT -- `<T: class>`, `<T: IInterface>`, `<T: TBase>`.
+    pxx does not check constraints, so it is consumed and dropped; refusing to
+    PARSE one turns an unchecked rule into a syntax error, which is the worse of
+    the two answers and is what `expected '>' before ':'` on tgenfunc12 was. The
+    method path reads the same group through TokGenericParamGt, which skips a
+    constraint for the same reason. }
+  if CurTok.Kind = tkColon then
+    while (CurTok.Kind <> tkGt) and (CurTok.Kind <> tkEOF) do Next;
   Expect(tkGt, '>');
   { CurTok = '(' of param list, or ';' / ':' if no params }
 
@@ -4385,6 +4468,258 @@ begin
   TokPos := finalCur;
   Next;
   SpecializeInlineGenericFuncUses(gfi);
+end;
+
+procedure ExpandGenericMethod(startIdx, ltIdx: Integer);
+{ A generic METHOD, rewritten in the token stream into one ORDINARY method per
+  concrete type argument the program actually uses -- before the class-body
+  parser sees any of it.
+
+  Three halves, two surfaces each:
+
+    declaration   TTest = class [generic] [class] function Add<T>(..): T; end;
+    definition            [generic] [class] function TTest.Add<T>(..): T; ..
+    use                   t.specialize Add<LongInt>(..)  /  t.Add<LongInt>(..)
+
+  Afterwards the stream says `function Add_LongInt(..): LongInt;`,
+  `function TTest.Add_LongInt(..)` and `t.Add_LongInt(..)`, which is ordinary
+  Pascal every path below already handles. That is the point: a generic method
+  is not a new KIND of member, it is a member the program spells once and means
+  several times, so normalising it here is what keeps the class parser, the
+  method registrar, the VMT builder and the call path from each growing an arm.
+  devdocs/dev/normalise-dont-special-case.md
+
+  WHY THE USE SITES DECIDE. A generic routine has no code until something asks
+  for a type, so the set of methods to emit is a property of the whole token
+  stream, not of the declaration -- the same sweep-then-emit shape
+  SpecializeInlineGenericFuncUses uses for the free routine, with the same
+  consequence: a type argument nothing asks for emits nothing, and an unused
+  generic method's body is never type-checked.
+
+  SCOPE, AND IT IS A MEASURED LIMIT NOT A STYLISTIC ONE. Every edit here is at
+  or above the class body and the caller re-reads from `startIdx`. A use sitting
+  BELOW the declaration -- which is what a program calling a USED UNIT's generic
+  method looks like, since a unit's tokens are appended after the program's --
+  would need TokPos and every recorded DeclItem span moved with it, and
+  AdjustPass2Spans is a no-op outside the body pass. So that shape is left
+  entirely alone and still reports the old parse error rather than being half
+  rewritten. tgenfunc7 and tgenfunc9 are that shape and stay skipped.
+  feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+const MAX_GM_SPECS = 32;
+      MAX_GM_USES  = 128;
+var
+  mname, cls, sn, tparam: AnsiString;
+  gtIdx, declEnd, i, j, k, n, u, nSpec, nUse, removeFrom: Integer;
+  implStart, implNameIdx, implGt, implEnd, implRemove: Integer;
+  declTS, declTC, implTS, implTC: Integer;
+  specArg: array[0..MAX_GM_SPECS-1] of AnsiString;
+  specKind: array[0..MAX_GM_SPECS-1] of TTokenKind;
+  useName: array[0..MAX_GM_USES-1] of Integer;
+  useKw: array[0..MAX_GM_USES-1] of Boolean;
+  useSpec: array[0..MAX_GM_USES-1] of Integer;
+  seen, ok: Boolean;
+begin
+  if ParsingClassBodyCi < 0 then Error('a generic method outside a class body');
+  mname := GetTokenStr(ltIdx - 1);
+  cls   := GetTokenStrFromRaw(UClsNOff[ParsingClassBodyCi], UClsNLen[ParsingClassBodyCi]);
+  gtIdx := TokGenericParamGt(ltIdx);
+  if gtIdx < 0 then Error('unterminated type parameter list on ' + mname);
+  if Tokens[ltIdx + 1].Kind <> tkIdent then Error('expected generic type parameter');
+  tparam := GetTokenStr(ltIdx + 1);
+  declEnd := TokHeaderSemi(gtIdx);
+  if declEnd < 0 then Error('unterminated declaration of ' + mname);
+
+  { The DEFINITION, found by its own spelling: the class body is parsed before
+    any table knows the implementation exists. }
+  implStart := -1; implNameIdx := -1;
+  j := declEnd + 1;
+  while (j + 4 < TokCount) and (implStart < 0) do
+  begin
+    i := j;
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'generic') then Inc(i);
+    if Tokens[i].Kind = tkClass then Inc(i);
+    if ((Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkProcedure)) and
+       (i + 4 < TokCount) and
+       (Tokens[i + 1].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 1), cls) and
+       (Tokens[i + 2].Kind = tkDot) and
+       (Tokens[i + 3].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 3), mname) and
+       (Tokens[i + 4].Kind = tkLt) then
+    begin
+      implStart := i;
+      if (i > 0) and (Tokens[i - 1].Kind = tkClass) then implStart := i - 1;
+      implNameIdx := i + 3;
+    end;
+    Inc(j);
+  end;
+  if implStart < 0 then
+    Error('no definition found for generic method ' + cls + '.' + mname);
+  implGt := TokGenericParamGt(implNameIdx + 1);
+  if implGt < 0 then Error('unterminated type parameter list on ' + cls + '.' + mname);
+  implEnd := TokRoutineBodyEnd(implGt);
+  if implEnd < 0 then Error('unterminated body of ' + cls + '.' + mname);
+
+  { The USES. `.`-prefixed, so a free routine of the same name is not swept up.
+    A DEFINITION header is `.`-prefixed too -- `function TTest.Add<T>` -- and is
+    excluded by the shape that makes it a definition: an ident and a
+    `function`/`procedure` behind the dot. Excluding only THIS method's own
+    header by index was the first spelling and it was not enough: a SECOND class
+    declaring a method of the same name has a header of exactly the same shape,
+    so `function TDelphi.Add<T>` was read as a use of `TObjFpc.Add` with the
+    concrete type `T`, and the expansion emitted `Add_T` -- `unknown type: T`,
+    reported on the definition, from a defect in the sweep. }
+  nSpec := 0; nUse := 0; k := 0;
+  i := 1;
+  while i + 3 < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), mname) and
+       (Tokens[i + 1].Kind = tkLt) and
+       IsConcreteTypeArgKind(Tokens[i + 2].Kind) and (Tokens[i + 3].Kind = tkGt) and
+       not ((i >= 3) and (Tokens[i - 1].Kind = tkDot) and
+            (Tokens[i - 2].Kind = tkIdent) and
+            ((Tokens[i - 3].Kind = tkFunction) or (Tokens[i - 3].Kind = tkProcedure))) then
+    begin
+      ok := Tokens[i - 1].Kind = tkDot;
+      if (not ok) and (i >= 2) and (Tokens[i - 1].Kind = tkIdent) and
+         CaseEqual(GetTokenStr(i - 1), 'specialize') and (Tokens[i - 2].Kind = tkDot) then
+        ok := True;
+      if ok then
+      begin
+        if nUse >= MAX_GM_USES then Error('too many uses of generic method ' + mname);
+        seen := False; k := 0;
+        while k < nSpec do
+        begin
+          if CaseEqual(specArg[k], GetTokenStr(i + 2)) then begin seen := True; Break; end;
+          Inc(k);
+        end;
+        if not seen then
+        begin
+          if nSpec >= MAX_GM_SPECS then Error('too many specializations of ' + mname);
+          k := nSpec;
+          specArg[k]  := GetTokenStr(i + 2);
+          specKind[k] := Tokens[i + 2].Kind;
+          Inc(nSpec);
+        end;
+        useName[nUse] := i;
+        useKw[nUse]   := (Tokens[i - 1].Kind = tkIdent) and
+                         CaseEqual(GetTokenStr(i - 1), 'specialize');
+        useSpec[nUse] := k;
+        Inc(nUse);
+      end;
+    end;
+    Inc(i);
+  end;
+
+  { A USE SITE NAMES A METHOD, NOT A CLASS, and the token stream cannot say what
+    type the receiver has. So when two classes declare a generic method of the
+    same name, the first expansion rewrites `d.Add<Integer>` -- a use of the
+    OTHER class's method -- along with its own, and the second expansion then
+    finds nothing left to specialize and would silently leave its own generic
+    declaration in the stream. The set is the same set, so it is remembered by
+    NAME and read back here.
+
+    This OVER-APPROXIMATES on purpose: the second class gets a method per type
+    argument either class was asked for. Emitting one nobody calls is dead code;
+    not emitting one is a program that does not compile, and the over-emission
+    only happens for a name two classes share, which is exactly the case that
+    otherwise cannot work at all. }
+  if nSpec = 0 then
+  begin
+    k := 0;
+    while k < GMSpecCount do
+    begin
+      if CaseEqual(GMSpecMeth[k], mname) and (nSpec < MAX_GM_SPECS) then
+      begin
+        specArg[nSpec]  := GMSpecArg[k];
+        specKind[nSpec] := GMSpecKind[k];
+        Inc(nSpec);
+      end;
+      Inc(k);
+    end;
+  end
+  else
+  begin
+    k := 0;
+    while k < nSpec do
+    begin
+      if GMSpecCount < MAX_GENERIC_METHOD_SPECS then
+      begin
+        GMSpecMeth[GMSpecCount] := mname;
+        GMSpecArg[GMSpecCount]  := specArg[k];
+        GMSpecKind[GMSpecCount] := specKind[k];
+        Inc(GMSpecCount);
+      end;
+      Inc(k);
+    end;
+  end;
+  if nSpec = 0 then Exit;   { nothing asks for it; leave the stream alone }
+
+  { Every edit must be at or above the class body -- see SCOPE above. }
+  u := 0;
+  while u < nUse do
+  begin
+    if useName[u] <= implEnd then Exit;
+    Inc(u);
+  end;
+
+  { Capture both halves as templates WITHOUT their `<T>` groups: the
+    substitution engine renames the template name and every occurrence of the
+    parameter, and a group left behind comes out as `Add_LongInt<LongInt>`. }
+  declTS := TemplateTokenCount;
+  for i := startIdx to ltIdx - 1 do CaptureTemplateTokenFrom(i);
+  for i := gtIdx + 1 to declEnd do CaptureTemplateTokenFrom(i);
+  declTC := TemplateTokenCount - declTS;
+
+  implTS := TemplateTokenCount;
+  for i := implStart to implNameIdx do CaptureTemplateTokenFrom(i);
+  for i := implGt + 1 to implEnd do CaptureTemplateTokenFrom(i);
+  implTC := TemplateTokenCount - implTS;
+
+  { Descending, so no edit invalidates an index a later edit still needs. }
+  u := nUse - 1;
+  while u >= 0 do
+  begin
+    sn := mname + '_' + specArg[useSpec[u]];
+    Tokens[useName[u]].Kind := tkIdent;
+    Tokens[useName[u]].IVal := 0;
+    Tokens[useName[u]].SOffset := TokCharsAppend(sn);
+    Tokens[useName[u]].SLen := Length(sn);
+    { The token now SAYS something else, so its source span no longer describes
+      it. Left behind, the `near:` window prints the original `Add` while the
+      token is `Add_Integer` -- a diagnostic naming an identifier that is no
+      longer there, which is the exact failure TokSrcOff/TokSrcLen exist to fix
+      and which SpecializeToBuffer already clears for every token it rewrites. }
+    TokSrcOff[useName[u]] := 0;
+    TokSrcLen[useName[u]] := 0;
+    RemoveTokens(useName[u] + 1, 3);                   { `<` C `>` }
+    if useKw[u] then RemoveTokens(useName[u] - 1, 1);  { the `specialize` keyword }
+    Dec(u);
+  end;
+
+  implRemove := GenericKwAt(implStart);
+  RemoveTokens(implRemove, implEnd - implRemove + 1);
+  k := nSpec - 1;
+  while k >= 0 do
+  begin
+    SetGenericRoutineSubs(mname, tparam, specArg[k], specKind[k]);
+    n := SpecializeStreamAt(implTS, implTC, mname + '_' + specArg[k], implRemove);
+    if n < 0 then Error('generic method splice');
+    Dec(k);
+  end;
+
+  removeFrom := GenericKwAt(startIdx);
+  RemoveTokens(removeFrom, declEnd - removeFrom + 1);
+  k := nSpec - 1;
+  while k >= 0 do
+  begin
+    SetGenericRoutineSubs(mname, tparam, specArg[k], specKind[k]);
+    n := SpecializeStreamAt(declTS, declTC, mname + '_' + specArg[k], removeFrom);
+    if n < 0 then Error('generic method splice');
+    Dec(k);
+  end;
+
+  { Re-read the member from the first token just written. }
+  TokPos := removeFrom;
+  Next;
 end;
 
 { Parses: specialize Max<Integer> as MaxInt;

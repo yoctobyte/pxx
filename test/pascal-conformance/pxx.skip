@@ -151,14 +151,13 @@ tgeneric106.pp	gap: generic class with `class var` procvar field of type G<T>, m
 tgeneric30.pp	wontfix: dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 tgeneric78.pp	gap: generic class implementing specialized interface + method resolution clause
 tgeneric99.pp	gap: unit-/class-qualified `specialize` syntax (ugeneric99.specialize TTest<...>)
-tgenfunc12.pp	gap: generic methods with class/interface constraints and generic global functions
+tgenfunc12.pp	gap: the generic-method halves parse now (incl. the `<T: class>` constraint); what is left is `.Free` on a generic method RESULT and a free `specialize F<C>;` with no argument list
 tgenfunc19.pp	gap: generic global function + class helper method resolution via specialize
 tgenfunc3.pp	gap: generic class functions (generic class function Add<T>) not supported
-tgenfunc4.pp	gap: delphi-mode generic class function with inline type args
-tgenfunc5.pp	gap: generic instance methods (objfpc generic function ... <T>)
-tgenfunc6.pp	gap: delphi-mode generic instance method Add<T>
-tgenfunc7.pp	gap: generic functions/methods imported from another unit and specialized
-tgenfunc9.pp	gap: generic methods with private/protected visibility specialized from caller
+tgenfunc5.pp	wontfix: parses and runs since the generic-method work; the ROW calls an instance method on a never-Created object and pxx raises nil-reference 216 where fpc runs it. Pre-existing and unrelated to generics (an ordinary non-generic method on a nil receiver does the same on pin v403). Adding one `t := TTest.Create` makes it exit 0.
+tgenfunc6.pp	wontfix: same as tgenfunc5 — the Delphi surface of it. Parses now; the row never Creates its receiver and pxx refuses a nil one. With a Create it exits 0.
+tgenfunc7.pp	gap: a generic METHOD imported from another unit — the use sits BELOW the declaration in the token stream (unit tokens are appended after the program's), which the expansion deliberately leaves alone
+tgenfunc9.pp	gap: same shape as tgenfunc7 — a generic method across a uses clause, plus private/protected visibility from the caller
 tmoperator10.pp	wontfix: probes TypInfo GetTypeData ElType/ElType2 RTTI layout of dyn array
 tmoperator2.pp	gap: record Initialize/Finalize management operators with managed fields
 tmoperator3.pp	gap: record management operators Initialize/Finalize lifecycle

@@ -2294,6 +2294,7 @@ const
   MAX_PENDING_CONSTRAINTS = 256;   { deferred generic-constraint checks; see PendCon* }
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;
+  MAX_GENERIC_METHOD_SPECS = 256;   { see GMSpecMeth }
   MAX_PENDING_GFSPECS = 256;
   { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
     generic type) inside ONE template body -- see the nested-specialization
@@ -2562,6 +2563,18 @@ var
     the same shape for the same record.
     feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
   GenericFuncIsDelphi : array[0..MAX_GENERIC_FUNCS-1] of Boolean;
+  { Concrete type arguments a generic METHOD was asked for, keyed by the METHOD
+    NAME rather than by the class. A use site (`t.Add<Integer>(..)`) names a
+    method and a receiver whose type the token stream cannot resolve, so the
+    first class to expand a given name rewrites every use of that name --
+    including uses belonging to a DIFFERENT class's method of the same name.
+    This is how the second class recovers the set the first one consumed. See
+    ExpandGenericMethod for why over-approximating here is the right direction.
+    feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+  GMSpecMeth : array[0..MAX_GENERIC_METHOD_SPECS-1] of AnsiString;
+  GMSpecArg  : array[0..MAX_GENERIC_METHOD_SPECS-1] of AnsiString;
+  GMSpecKind : array[0..MAX_GENERIC_METHOD_SPECS-1] of TTokenKind;
+  GMSpecCount : Integer;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;
   { Class specializations seen in the current type section whose template

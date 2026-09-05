@@ -5851,6 +5851,12 @@ test-core: $(COMPILER)
 	# specialization must still be a comparison.
 	./$(COMPILER) test/test_generic_routine_both_spellings.pas $(TESTTMP)/test_grbs26
 	tools/expect_same.sh test_grbs26 "$$($(TESTTMP)/test_grbs26)" "$$(printf 'objfpc 5\nobjfpc HelloWorld\ndelphi 5\ndelphi HelloWorld\ncmp TRUE\nclassmeth 7')"
+	# The same declaration in the other two positions it can occupy: a generic
+	# METHOD, instance and class, in both surfaces. Two classes share a method
+	# NAME on purpose -- a use site names a method, not a class, so the first
+	# class to expand rewrites the other's uses too.
+	./$(COMPILER) test/test_generic_method_both_spellings.pas $(TESTTMP)/test_gmbs26
+	tools/expect_same.sh test_gmbs26 "$$($(TESTTMP)/test_gmbs26)" "$$(printf 'objfpc 5\nobjfpc HelloWorld\nobjfpc 42\nobjfpc abab\ndelphi 5\ndelphi HelloWorld\ndelphi 42\ndelphi abab')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
 	tools/expect_same.sh test_method_overload_types_b24826 "$$($(TESTTMP)/test_method_overload_types_b24826)" "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"

@@ -190,3 +190,121 @@ work and are unmoved by this. **The pass count moving by one is not the
 finding** — a `%FAIL` row is a pass by refusal, so this cluster's count says
 nothing on its own; the fail list read BY NAME is what caught tgeneric31, and a
 count would have shown 371 → 371 and looked like nothing had happened.
+
+---
+
+## 2026-09-05 (frankA) — half A, the METHOD positions, both surfaces
+
+`generic function Add<T>` inside a class body and the Delphi `function Add<T>`
+both parse now, as instance methods and as class methods, with the definition
+written `[generic] [class] function TTest.Add<T>` and the call written
+`t.specialize Add<C>(..)` or `t.Add<C>(..)`. Diffed against **fpc 3.2.2 output**
+per surface (fpc cannot hold both in one compilation): `5 / HelloWorld / 42 /
+abab` byte for byte on each.
+
+**It is not a new kind of member.** `ExpandGenericMethod` rewrites the three
+halves — declaration, definition, uses — into one ORDINARY method per concrete
+type argument, in the token stream, before the class-body parser sees any of it.
+Afterwards the stream says `function Add_Integer(..): Integer;`,
+`function TTest.Add_Integer(..)` and `t.Add_Integer(..)`, which every path below
+already handles. Nothing was added to the class parser, the method registrar,
+the VMT builder or the call path. That is the same sweep-then-emit shape the
+free routine has had since `71deb21d4`, which is why this was one normalisation
+job and not two features.
+
+### The rows, and what each one actually needs
+
+| row | state |
+| --- | --- |
+| `tgenfunc4` | **passes** — Delphi class function. Unskipped. |
+| `tgenfunc5` | parses and computes correctly; **the row never `Create`s its receiver** |
+| `tgenfunc6` | same, Delphi surface |
+| `tgenfunc12` | halves parse (incl. the `<T: class>` constraint); needs `.Free` on a method RESULT and a free `specialize F<C>;` with no argument list |
+| `tgenfunc7`, `tgenfunc9` | cross-unit — deliberately out of scope, see below |
+
+**`tgenfunc5` and `tgenfunc6` are not blocked by anything in this ticket.** Both
+declare `var t: TTest;` and never construct it, then call an instance method on
+that nil reference. fpc runs it — `Self` is nil and the body never touches it —
+and pxx raises `Runtime error 216 (nil reference)`. Measured to be **pre-existing
+and unrelated to generics**: an ordinary non-generic instance method on a nil
+receiver does exactly the same on pin v403, while fpc prints the answer. Adding
+a single `t := TTest.Create;` makes both rows exit 0, which is the measurement
+that separates "the feature does not work" from "the row is written this way".
+
+By `CLAUDE.md`'s *on par with the LANGUAGE, not with FPC* rule this divergence is
+**chosen, not tolerated**: a method call on an uninitialised object reference is
+only produced by a mistake, and pxx's answer is the one that leaves the mistake
+visible. So those two rows are `wontfix:`, with the reason recorded in
+`pxx.skip` rather than in a ticket nobody will read.
+
+### The limit, stated as a limit and not as an oversight
+
+Every edit the expansion makes is at or ABOVE the class body, and it bails out
+entirely if any use site sits below. A use below the declaration is exactly what
+a program calling a USED UNIT's generic method looks like — a unit's tokens are
+appended after the program's — and moving edits below the cursor would need
+`TokPos` and every recorded `DeclItem` span moved with them, while
+`AdjustPass2Spans` is a no-op outside the body pass. `tgenfunc7` and `tgenfunc9`
+are that shape and stay skipped, with the reason on the row.
+
+### Two defects the tests found and reading would not have
+
+**1. A use site names a METHOD, not a class.** With two classes declaring `Add`,
+the definition header `function TDelphi.Add<T>` is `.`-prefixed and matched the
+use pattern token for token, so it was read as a use of `TObjFpc.Add` with the
+concrete type `T` — the expansion emitted `Add_T` and answered `unknown type: T`
+on the definition. Excluding this method's own header by index was not enough;
+the discriminator is the SHAPE that makes a header a header (an ident and a
+`function`/`procedure` behind the dot).
+
+**2. And the same fact bites again at the rewrite.** The first class to expand a
+name rewrites every use of that name, including the other class's, so the second
+expansion found nothing left and would have silently left its own generic
+declaration in the stream. The set is remembered by NAME and read back
+(`GMSpecMeth`). It over-approximates on purpose: emitting a method nobody calls
+is dead code, not emitting one is a program that does not compile, and the
+over-emission only happens for a name two classes share — which is exactly the
+case that otherwise cannot work at all.
+`test_generic_method_both_spellings.pas` carries two same-named methods for
+this reason and is the only thing that exercises it.
+
+### One defect the tests did NOT find, and how it showed
+
+The rewritten use token got its new text but not its SPELLING CHANNEL, so
+`TokSrcOff`/`TokSrcLen` still pointed at the original source range: the `near:`
+window printed `t . Test . Free` while the token was `Test_TObject`. **A
+diagnostic naming an identifier that is no longer there** — nothing fails, the
+window just lies, and it was only visible because a row that still errors made
+me read one. `SpecializeToBuffer` clears both fields for every token it
+rewrites; the two hand-rolled rewrites (this one and the free routine's, which
+had the same omission since it was written) now do too.
+
+### The row this turned red, and why it stays red
+
+`tgenfunc14` — `{ %FAIL }`, a UNIT, asserting *"constraints must not be repeated
+in the definition"* — went from pass to `accepted-invalid`. It is this change's
+doing and the reason is worth stating precisely, because "pxx used to refuse it"
+is true and misleading.
+
+pxx refused it by refusing CONSTRAINTS ENTIRELY: `generic procedure Test<T: class>`
+in a unit interface hit the `:` and came out as *"unexpected token in a unit
+interface section"* — a syntax refusal, not the rule the row is about. Isolated
+through the runner's own synthesized driver (`program drv; uses tgenfunc14;`),
+which is the only way to reach it since pxx has no standalone-unit output and
+BOTH compilers refuse the file directly with the same unit message: **pin
+refuses, this build accepts.** fpc, compiling it properly as a unit, says
+`function header doesn't match the previous declaration "Test$1;"`.
+
+**Keeping the constraint change is still right, and it is not paid for by
+tgenfunc12** — which still does not pass. `generic function F<T: class>: T` is
+valid Pascal that pxx answered with `expected '>' before ':'`, and refusing
+valid code that real generic code writes is the worse of the two errors.
+Accepting a REDUNDANT constraint is `CLAUDE.md`'s *"us accepting what FPC rejects
+is not a defect"*, and pxx does not check constraints at all, so the rule has no
+correctness value here.
+
+It is left RED rather than skipped with `accepts-invalid:`, to sit with
+`tgeneric4`, `tgenfunc17` and `tgenfunc18` — the same family, the same
+disposition. Whoever decides that these four should stop occupying a permanently
+red list can move all four together; doing it for mine alone would hide the one
+row a reader has the most reason to check.
