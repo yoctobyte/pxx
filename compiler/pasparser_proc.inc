@@ -582,6 +582,7 @@ var
   zeroBytes : Integer;
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
+  retSetEnumId, retSetElemTk : Integer;   { `set of T` RESULT -- the sixth carrier; see defs.inc ProcRetSetEnumId }
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec, retPtrAlias : Integer;
@@ -807,6 +808,7 @@ begin
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesStrElemTk[i] := 0;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
+  retSetEnumId := -1; retSetElemTk := 0;
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE; retPtrAlias := -1;
@@ -1227,6 +1229,31 @@ begin
         if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
         else retEnumId := LastTypeEnumId;
       end;
+      { The SET result's element identity, under exactly the rule the enum arm
+        above states and for the same reason: an ARRAY result reaches here with
+        retType = the ELEMENT kind, so `function F: array of TMs` would be
+        indistinguishable at this line from `function F: TMs`. The result of the
+        first is an array and records no set element type -- that belongs to the
+        array type's own row.
+
+        THIS IS THE SIXTH CARRIER AND IT NEVER EXISTED. LastTypeSetEnumId and
+        LastTypeSetElemTk are set by ParseTypeKind for every set type and were
+        dropped on the floor here, so a set RESULT was the one place in this
+        frontend that could not answer what its elements are -- while a
+        variable, a record field, a property, a parameter and a type alias all
+        could. }
+      if retType = tySet then
+      begin
+        if (retArrAi >= 0) or retIsDynArr then
+        begin
+          retSetEnumId := -1; retSetElemTk := 0;
+        end
+        else
+        begin
+          retSetEnumId := LastTypeSetEnumId;
+          retSetElemTk := LastTypeSetElemTk;
+        end;
+      end;
       { The managed-string RESULT's element width, under exactly the rule the
         enum arm states above and for the same reason: an ARRAY result reaches
         here with retType = the ELEMENT kind, so `function F: array of
@@ -1533,6 +1560,7 @@ begin
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
     ProcRetElemTk[procIdx] := retElemTk;
+    ProcRetSetEnumId[procIdx] := retSetEnumId;  ProcRetSetElemTk[procIdx] := retSetElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
     ProcRetPtrAlias[procIdx] := retPtrAlias;
@@ -2057,6 +2085,7 @@ begin
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
       ProcRetElemTk[procIdx] := retElemTk;
+      ProcRetSetEnumId[procIdx] := retSetEnumId;  ProcRetSetElemTk[procIdx] := retSetElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
       ProcRetPtrAlias[procIdx] := retPtrAlias;
@@ -2112,6 +2141,7 @@ begin
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
   ProcRetElemTk[procIdx] := retElemTk;
+  ProcRetSetEnumId[procIdx] := retSetEnumId;  ProcRetSetElemTk[procIdx] := retSetElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrAlias[procIdx] := retPtrAlias;

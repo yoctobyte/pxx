@@ -1131,6 +1131,56 @@ begin
                               GenMakeIdent(setSym, tySet), bodyNode);
 end;
 
+function ParseForInSetCallAST(varIdx, contNode: Integer): Integer;
+{ `for x in F` where F is a CALL returning a set -- a plain function, a method,
+  an interface method or a procedural variable. -1 when `contNode` is not one,
+  so both callers can use it as the test as well as the handler.
+
+  A set reached through a SYMBOL had ParseForInSetAST and one reached through a
+  FIELD had ParseForInNodeAST's tySet arm. A call RESULT is the third source of
+  a set and had an arm in neither, so the two spellings failed with two
+  different messages: the bare `for m in F` fell off the end of the container
+  dispatch as "not a generator, enum type, or iterable variable", and the
+  qualified `for m in obj.Members` got as far as ParseForInNodeAST and said
+  "unsupported iterable expression". One gap, two messages, which is exactly
+  the shape the fixed-array arm above documents.
+
+  MATERIALISED INTO A HIDDEN LOCAL, AND THAT IS THE LOAD-BEARING HALF rather
+  than a tidiness choice. BuildForInSetLoop lowers to a membership SCAN and
+  reads the container once per candidate ordinal -- up to 256 times for a
+  `set of Char`. Cloning the call node into it, which is what routing this
+  through ParseForInNodeAST's existing tySet arm would have done, emits the
+  CALL inside the loop and fires every side effect 256 times. fpc evaluates the
+  container exactly once; so does this. test_for_in_over_a_set_valued_call's
+  row E counts the calls and is the row a fix that merely stops the refusal
+  still fails.
+
+  The element identity comes from ProcRetSetEnumId / ProcRetSetElemTk -- the
+  RETURN carrier, which did not exist before this fix. See defs.inc.
+  bug-p-for-in-over-a-set-returning-function-call-is-refused }
+var scSym, scProc, scAssign, scLoop, scSeq: Integer;
+begin
+  Result := -1;
+  if contNode < 0 then Exit;
+  if IntToTypeKind(ASTTk[contNode]) <> tySet then Exit;
+  scProc := NodeCallProcIdx(contNode);
+  if scProc < 0 then Exit;
+
+  scSym := AllocVar('', tySet);
+  SymSetEnumId[scSym] := ProcRetSetEnumId[scProc];
+  SymSetElemTk[scSym] := ProcRetSetElemTk[scProc];
+  SymSyncTypeRef(scSym);
+  scAssign := GenMakeAssign(GenMakeIdent(scSym, tySet), contNode);
+  scLoop := ParseForInSetAST(varIdx, scSym);
+
+  Result := AllocNode(AN_SEQ);
+  ASTLeft[Result] := scAssign;
+  scSeq := AllocNode(AN_SEQ);
+  ASTLeft[scSeq] := scLoop;
+  ASTRight[scSeq] := -1;
+  ASTRight[Result] := scSeq;
+end;
+
 { for x in <string|static array|dynarray|open-array var> do BODY:
     __i := lo;
     while __i <= hi do begin x := C[__i]; BODY; __i := __i + 1; end;
@@ -1447,6 +1497,7 @@ var
   fnElemTk, fnElemRec, fnElemCap: Integer;         { ...and its element, from DerefPtrArrayElem }
   fnStaticLo: Integer;                             { the container's own low bound }
   fnArrAi: Integer;                                { a FIXED-array call result's ArrType row }
+  fnSetCall: Integer;                              { a SET-valued call result, handled by ParseForInSetCallAST }
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
@@ -1619,6 +1670,16 @@ begin
   end
   else
   begin
+    { A set-valued CALL reached through a qualified name (`for m in obj.Members`)
+      arrives here as a call node with no symbol and no field, which is neither
+      of the two shapes above. Handled by the SAME routine the bare spelling
+      uses, so the two cannot drift apart again. }
+    fnSetCall := ParseForInSetCallAST(varIdx, contNode);
+    if fnSetCall >= 0 then
+    begin
+      Result := fnSetCall;
+      Exit;
+    end;
     Error('for-in: unsupported iterable expression');
     contTk := tyInteger; elemTk := Ord(tyInteger);
   end;
@@ -3086,6 +3147,20 @@ begin
          [tyString, tyAnsiString, tyShortString, tyFixedString] then
     begin
       Result := BuildForInStringValueLoop(varIdx, forcNode);
+      Exit;
+    end;
+
+    { ...or a SET VALUE that is neither a bare variable nor a field: a
+      set-returning CALL. ONE implementation, in ParseForInSetCallAST, shared
+      with the qualified spelling (`for m in obj.Members`) which lands in
+      ParseForInNodeAST instead -- the same "test HERE, handle THERE" rule the
+      dyn-array arm above states, and for the same reason: two arms that decide
+      independently what a set-valued call means is how the two spellings came
+      to have two different error messages in the first place. }
+    forcLoop := ParseForInSetCallAST(varIdx, forcNode);
+    if forcLoop >= 0 then
+    begin
+      Result := forcLoop;
       Exit;
     end;
 

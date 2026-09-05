@@ -3736,14 +3736,14 @@ begin
   if CurTok.Kind = tkInteger then
   begin
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := CurTok.IVal; ASTTk[n] := Ord(tyInteger); Next;
-    SetLitNoteElem(-1);
+    SetLitNoteElem(-1, ASTIVal[n]);
     Result := n;
   end
   else if CurTok.Kind = tkString then
   begin
     if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := Ord(CurTok.SVal[1]); ASTTk[n] := Ord(tyChar); Next;
-    SetLitNoteElem(-1);
+    SetLitNoteElem(-1, ASTIVal[n]);
     Result := n;
   end
   else if (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) >= 0) and
@@ -3753,7 +3753,7 @@ begin
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := Syms[sci].ConstVal; ASTTk[n] := Ord(Syms[sci].TypeKind);
     ASTEnumId[n] := SymEnumId[sci];
     Next;
-    SetLitNoteElem(sci);
+    SetLitNoteElem(sci, Syms[sci].ConstVal);
     Result := n;
   end
   else

@@ -1075,6 +1075,8 @@ AN_SEQ Left nd
 AN_SEQ Left node
 AN_SEQ Left outerCall
 AN_SEQ Left prevStmt
+AN_SEQ Left scAssign
+AN_SEQ Left scLoop
 AN_SEQ Left stmt
 AN_SEQ Left stmtNode
 AN_SEQ Left strAssign

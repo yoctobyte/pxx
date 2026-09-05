@@ -11485,6 +11485,7 @@ begin
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);  SetLength(ProcRetPtrAlias, n);
   SetLength(ProcRetPtrElemStrTk, n);
   SetLength(ProcRetEnumId, n);
+  SetLength(ProcRetSetEnumId, n);  SetLength(ProcRetSetElemTk, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
   SetLength(ProcRetDynDepth, n);
   SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
@@ -11552,6 +11553,8 @@ begin
   ProcRetPtrElemStrTk[ProcCount] := 0;   { the POINTEE's width, same recycled-slot rule }
   ProcRetStrElemTk[ProcCount]  := 0;
   ProcRetEnumId[ProcCount]     := -1;
+  ProcRetSetEnumId[ProcCount]  := -1;
+  ProcRetSetElemTk[ProcCount]  := 0;
   ProcRetPtrDepth[ProcCount]   := 0;
   ProcRetPtrBaseTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrBaseRec[ProcCount] := REC_NONE;

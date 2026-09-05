@@ -522,6 +522,32 @@ begin
   end;
 end;
 
+function NodeCallProcIdx(node: Integer): Integer;
+{ The callee's Procs row for a node that IS a call, in any of its four
+  spellings, and -1 for anything else -- including a call whose IVal is out of
+  range, which is the bounds check every reader of ProcRet* needs and which is
+  spelled beside each of them today.
+
+  ONE PLACE, because the four kinds are a LIST and a list spelled per site fails
+  by an absent member rather than by a divergent one. Census at the time of
+  writing: the full four-kind disjunction appears 8 times across the frontend
+  and AN_CALL_IND appears 62 times overall, so the existing spellings are NOT
+  migrated here -- that is a refactor with its own blast radius. This exists so
+  the NEXT reader of a ProcRet* column asks one question instead of writing a
+  ninth copy, and so that a fifth call kind has one place to be added.
+
+  Named for what it answers rather than for what it tests: `NodeIsCall` would
+  have made every caller follow it with the same ASTIVal read and the same
+  bounds check, which is three copies wearing one name. }
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if (ASTKind[node] <> AN_CALL) and (ASTKind[node] <> AN_VIRTUAL_CALL) and
+     (ASTKind[node] <> AN_INTF_CALL) and (ASTKind[node] <> AN_CALL_IND) then Exit;
+  if (Integer(ASTIVal[node]) < 0) or (Integer(ASTIVal[node]) >= ProcCount) then Exit;
+  Result := Integer(ASTIVal[node]);
+end;
+
 function NodeDynBaseTk(node: Integer): TTypeKind;
 { Base element type of a (possibly nested) dynamic-array expression, walking to
   the root symbol or field. tyUnknown if not a dynamic array. }

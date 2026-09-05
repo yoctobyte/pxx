@@ -6624,6 +6624,47 @@ test-core: $(COMPILER)
 	@# on a named type -- narrow that guard and this row is what says so.
 	@$(TESTTMP)/test_setparamforinanon26 | diff -u test/test_set_param_for_in_anon.expected - \
 	  || { echo 'test_set_param_for_in_anon: FAIL - an anonymous set parameter lost its element kind'; exit 1; }
+	./$(COMPILER) test/test_for_in_over_a_set_valued_call.pas $(TESTTMP)/test_forinsetcall26
+	@# .expected is fpc 3.2.2's own output, byte for byte. Rows C, D and F were
+	@# GREEN BEFORE the fix and are the boundary, not decoration: a set through a
+	@# record field, the assign-to-a-temp workaround, and an empty set result all
+	@# worked, which is what pins the defect to the set RESULT rather than to
+	@# `for-in` over a call in general. A test with only row A in it cannot tell
+	@# this fix from a fix to for-in over calls.
+	@# ROW E IS NOT A PARSE ASSERTION. A set loop lowers to a membership SCAN and
+	@# reads its container once per candidate ordinal -- 256 times for a set of
+	@# Char. So a CALL as the container must be materialised and evaluated ONCE,
+	@# side effects and all. `calls=2` is row A plus the `s := F` of row D. A fix
+	@# that merely stops the refusal still fails this row.
+	@# Row G is the QUALIFIED spelling (`for m in b.Members`) and it reaches a
+	@# different function: the bare form dies in the container dispatch, the
+	@# qualified one in ParseForInNodeAST, and before the fix they gave two
+	@# different error messages for one gap. Both now route through the same
+	@# ParseForInSetCallAST, and row G is what says so.
+	@$(TESTTMP)/test_forinsetcall26 | diff -u test/test_for_in_over_a_set_valued_call.expected - \
+	  || { echo 'test_for_in_over_a_set_valued_call: FAIL - a set-returning call is not iterable, or was evaluated more than once'; exit 1; }
+	@# NO FPC ORACLE for the values below, deliberately. fpc answers row A FALSE
+	@# after warning; we answer TRUE after warning. Matching the value a compiler
+	@# produces AFTER diagnosing its input is explicitly not a goal -- 300 is not
+	@# a set element and the source is already wrong. What WAS the defect is that
+	@# `x in [...]` has two lowerings with two different domains (an Int64 compare
+	@# chain when every element is constant, a 0..255 mask when any is a variable)
+	@# and nothing said so, so replacing a literal with a constant-valued variable
+	@# silently changed the answer. This row asserts the DIAGNOSTIC; the values
+	@# are pinned underneath it so a future change to them is visible.
+	@out=$$(./$(COMPILER) test/test_a_set_element_outside_the_domain_is_diagnosed.pas $(TESTTMP)/test_setdomain26 2>&1); \
+	  rc=$$?; n=$$(printf '%s\n' "$$out" | grep -c 'outside a set'); \
+	  test "$$rc" = "0" -a "$$n" = "3" \
+	  || { echo "test_a_set_element_outside_the_domain_is_diagnosed: FAIL - rc=$$rc, $$n out-of-domain warnings (want rc=0 and exactly 3: rows A, C and F)"; printf '%s\n' "$$out"; exit 1; }
+	@# THE COUNT IS 3 AND NOT "AT LEAST ONE", and that is the positive control.
+	@# Row E is `c in ['a'..'z']` -- an ordinary in-domain char range that must
+	@# stay SILENT. A check firing on every set literal passes an at-least-one
+	@# assertion on every row in this file and puts a false warning into the
+	@# compiler's own build output, which is the one stream every session reads
+	@# a thousand times a day for a single token and therefore does not read.
+	@# The three lines pxx warns on are the three fpc warns on, measured.
+	@$(TESTTMP)/test_setdomain26 | diff -u test/test_a_set_element_outside_the_domain_is_diagnosed.expected - \
+	  || { echo 'test_a_set_element_outside_the_domain_is_diagnosed: FAIL - the values under the diagnostic moved'; exit 1; }
 	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
 	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
 	@# RELATION, never a byte count: the absolute numbers are allocator- and

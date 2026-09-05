@@ -411,16 +411,57 @@ begin
   else if SetLitEnumId <> eid then SetLitMixed := True;
 end;
 
-procedure SetLitNoteElem(symIdx: Integer);
+procedure SetLitNoteElem(symIdx: Integer; v: Int64);
 { Tally one CONSTANT element by the symbol it came from (-1 = a literal integer
-  or char, which is never an enum member). Runtime elements are not tallied:
-  their ordinal type is not knowable here, and being lenient there costs a
-  diagnostic rather than producing a wrong value. }
+  or char, which is never an enum member) AND by its VALUE. Runtime elements are
+  not tallied: their ordinal type is not knowable here, and being lenient there
+  costs a diagnostic rather than producing a wrong value.
+
+  THE VALUE IS WHY THIS TAKES A SECOND ARGUMENT, and taking it here rather than
+  checking at the six sites is the whole design. `x in [...]` has TWO lowerings
+  and they had two different domains: all-constant elements become a COMPARE
+  CHAIN, which inherits the left operand's full Int64 range, while one variable
+  element switches the literal to a 256-bit MASK, which is a real Pascal set. So
+  `q in [300]` answered TRUE and `q in [r]` with r = 300 answered FALSE -- the
+  same operator, the same values, and the arm chosen by nothing more than
+  whether an element was spelled as a literal. Nothing was reported either way,
+  so replacing a literal with a constant-valued variable silently changed the
+  answer, which makes this a REFACTOR-time trap rather than a wrong answer that
+  ships.
+
+  A PASCAL SET IS 0..255 -- `tySet` is a 32-byte bitset (defs.inc), one bit per
+  ordinal -- so an element outside that range is not a set element on any
+  target, at any width. The check therefore asserts a fact about the LANGUAGE
+  and not about a backend's compare width, which matters because
+  bug-a-set-membership-32-bit-backends-truncate-the-set-constant is open against
+  the same function: that is the adjacent and independent question of whether
+  the comparison is right once an out-of-domain element has been ACCEPTED.
+
+  WARN, DO NOT CHANGE THE VALUE. fpc answers `q in [300]` FALSE after warning;
+  we answer TRUE after warning. Matching the value a compiler produces AFTER it
+  has diagnosed its input is explicitly not a goal (CLAUDE.md, "ON PAR WITH THE
+  LANGUAGE, NOT WITH FPC") -- 300 is not a set element, the source is already
+  wrong, and the compare chain answers what the programmer actually wrote. What
+  was the defect is that nobody said anything.
+
+  Six callers, all of which already had the value in hand: three in
+  ParseSetConst and three in ParseSetElementAST, which are two copies of the
+  same three-arm constant fold. Passing the value INTO the shared tally is what
+  makes a seventh caller unable to forget the rule -- it cannot compile without
+  supplying one. THE 255 IS NOT PERMANENT: decide-a-what-a-set-costs-bits-bytes-
+  bounds-and-what-file-of-t-writes-to-disk has as its live fork whether a set's
+  WIDTH should follow its declared bounds, and if that lands the legal range
+  becomes the declared type's and this constant is stale in the UNDER-warning
+  direction.
+  bug-p-the-two-arms-of-in-disagree-about-their-own-domain-silently }
 var eid: Integer;
 begin
   eid := -1;
   if symIdx >= 0 then eid := SymEnumId[symIdx];
   if eid < 0 then SetLitHasPlain := True else SetLitNoteEnum(eid);
+  if (v < 0) or (v > 255) then
+    Warn('set element ' + AInt64ToStr(v) + ' is outside a set''s 0..255 domain; '
+         + 'FPC rejects it, and the same element written as a variable is FALSE here');
 end;
 
 procedure SetLitCheckAgainst(targetEnumId: Integer);
@@ -475,14 +516,14 @@ begin
   if CurTok.Kind = tkInteger then
   begin
     Result := CurTok.IVal;
-    SetLitNoteElem(-1);
+    SetLitNoteElem(-1, Result);
     Next;
   end
   else if CurTok.Kind = tkString then
   begin
     if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
     Result := Ord(CurTok.SVal[1]);
-    SetLitNoteElem(-1);
+    SetLitNoteElem(-1, Result);
     Next;
   end
   else if CurTok.Kind = tkIdent then
@@ -490,7 +531,7 @@ begin
     idx := FindSym(CurTok.SVal);
     if (idx < 0) or (Syms[idx].Kind <> skConst) then Error('set item must be constant');
     Result := Syms[idx].ConstVal;
-    SetLitNoteElem(idx);
+    SetLitNoteElem(idx, Result);
     Next;
   end
   else Error('expected set item');

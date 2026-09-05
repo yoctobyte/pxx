@@ -60,6 +60,36 @@ begin
   Result := res;
 end;
 
+function AInt64ToStr(n: Int64): AnsiString;
+{ AIntToStr's 64-bit twin, and it exists for a reason worth stating: the first
+  caller is a diagnostic about a value being OUT OF RANGE, and handing such a
+  value to the 32-bit version truncates it -- `4294967297` prints as `1`, so the
+  message would have read "set element 1 is outside a set's 0..255 domain".
+  A message that range-truncates the value it is complaining about is the
+  instrument-that-lies-by-being-correct-about-something-else in its purest
+  form: the truncation is exactly the defect class the diagnostic exists to
+  report, performed by the report.
+
+  Same negative-side accumulation as AIntToStr and for the same reason -- see
+  its header; Low(Int64) has no positive representation either. }
+var rev, res: AnsiString; i: Integer; neg: Boolean;
+begin
+  neg := n < 0;
+  if not neg then n := -n;      { work in the negative half — see AIntToStr }
+  rev := '';
+  if n = 0 then AppendChar(rev, '0')
+  else
+    while n < 0 do
+    begin
+      AppendChar(rev, Chr(Ord('0') - Integer(n mod 10)));
+      n := n div 10;
+    end;
+  if neg then AppendChar(rev, '-');
+  res := '';
+  for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
+  Result := res;
+end;
+
 function RealTypeKind: TTypeKind;
 { What the type name `Real` MEANS on this target: the native float depth.
   xtensa and riscv32 have no hardware double, and `Real` being single-precision
