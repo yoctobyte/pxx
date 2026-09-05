@@ -13966,6 +13966,19 @@ test-core: $(COMPILER)
 	# refused and is deliberately not in this file.
 	./$(COMPILER) test/test_packed_array_field_in_a_record_and_a_class.pas $(TESTTMP)/test_pkarrfld26
 	tools/expect_same.sh test_pkarrfld26 "$$($(TESTTMP)/test_pkarrfld26)" "$$(cat test/test_packed_array_field_in_a_record_and_a_class.expected)"
+	# The THIRD copy of that parser: a variant branch. Merging it fixed a
+	# branch-field ALIGNMENT bug (a record-typed branch field was aligned to the
+	# pointer width, so a one-byte branch measured 8 where fpc says 1 -- and the
+	# same field in the record's FIXED part was already right, so pxx
+	# contradicted itself), multi-dimensional arrays in a branch, and `packed`.
+	# It also had to make DELIBERATE a refusal that used to be accidental: a
+	# dynamic array in a branch was rejected only because this copy had no
+	# dynamic-array arm at all, so inheriting the shared one would have silently
+	# added a construct fpc rejects. That refusal is asserted, not assumed.
+	./$(COMPILER) test/test_packed_array_field_in_a_variant_branch.pas $(TESTTMP)/test_vbrfld26
+	tools/expect_same.sh test_vbrfld26 "$$($(TESTTMP)/test_vbrfld26)" "$$(cat test/test_packed_array_field_in_a_variant_branch.expected)"
+	! ./$(COMPILER) test/test_dynarray_in_a_variant_part_refused.pas $(TESTTMP)/test_vbdyn26 > $(TESTTMP)/test_vbdyn.log 2>&1
+	grep -q "a dynamic array is not allowed in a variant part" $(TESTTMP)/test_vbdyn.log
 	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c

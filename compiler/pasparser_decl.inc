@@ -3896,144 +3896,22 @@ begin
         break;
       end;
       if CurTok.Kind <> tkIdent then Error('expected field name in variant part');
-      fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
-      nFldNames := 1; Next;
-      while CurTok.Kind = tkComma do
-      begin
-        Next;
-        if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-        fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset; fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-        Inc(nFldNames); Next;
-      end;
-      Expect(tkColon, ':');
-      isArr := False; arrLen := 1;
-      if CurTok.Kind = tkArray then
-      begin
-        Next; Expect(tkLBrack, '[');
-        { Through ParseArrayDimBounds, like every other array-bound site: a whole
-          ordinal TYPE as the index (`array[Byte]`, `array[TKind]`) as well as the
-          `lo..hi` const-expression form. See the class-field site above --
-          normalise-dont-special-case: this was the same concept's third copy. }
-        ParseArrayDimBounds(loVal, hiVal);
-        arrLen := hiVal - loVal + 1;
-        Expect(tkRBrack, ']'); Expect(tkOf, 'of');
-        fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
-        fEnumId := LastTypeEnumId;
-      end
-      else
-      begin
-        { A NAMED array type in a branch (`0: (a: TArr)`), which this copy did
-          not have an arm for at all. ParseTypeKind answers the ELEMENT kind for
-          such a name, so the field was sized as one element: `TArr =
-          array[0..3] of Integer` in a branch made the whole record FOUR bytes
-          where FPC says 16, and `r.a[2] := 42` wrote twelve bytes past its end.
-          Silent -- it even reads back correctly, because the read goes to the
-          same wrong place.
-
-          The two other copies of this parser have had the arm for months; this
-          is the third and it is not in the ticket that counts them.
-          refactor-p-the-field-declaration-parser-exists-twice
-
-          DYNAMIC named arrays are deliberately NOT handled: FPC refuses any
-          reference-counted type in a variant part ("Data types which require
-          initialization/finalization cannot be used in variant records") and so
-          does pxx, one message earlier. That missing arm is correct. }
-        fAi := -1;
-        if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-        if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
-        begin
-          if ArrTypeNDims[fAi] >= 2 then
-            { REFUSED rather than mis-sized. The branch's own offset bookkeeping
-              is single-dimension (one loVal, one arrLen), so a multi-dim alias
-              cannot be recorded here without the dimension table the fixed part
-              carries -- and the alternative is what this arm replaced: a
-              24-byte array silently occupying 4. The inline spelling
-              `array[0..1, 0..2] of T` is already refused in a branch, one
-              message earlier, so this makes the two spellings agree. }
-            Error('a multi-dimensional array type is not supported in a variant '
-                  + 'part yet -- it would be sized as a single element '
-                  + '(refactor-p-the-field-declaration-parser-exists-twice)');
-          isArr := True;
-          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-          fRec := ArrTypeElemRec[fAi];
-          fEnumId := ArrTypeElemEnumId[fAi];
-          loVal := ArrTypeLo[fAi];
-          arrLen := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
-          Next;   { consume the named array type }
-        end
-        else
-        begin
-          fTk := ParseTypeKind; fRec := LastTypeRecId;
-          fEnumId := LastTypeEnumId;
-        end;
-      end;
-      { Frozen strings, exactly as the FIXED part of the record does it a few
-        hundred lines down. This arm was simply absent: a `string[N]` branch got
-        TypeSlotSize(tyFixedString) = 8 bytes and was registered as tyFixedString
-        rather than tyString+UFldStrCap. So the field READ back as an address
-        (`v.s` printed a number) AND the record was undersized — a `case` with a
-        `string[40]` branch measured 16 bytes where it needs 52, so writing the
-        field ran past the end of the record. Silent both ways.
-        bug-a-a-frozen-string-field-in-a-variant-part-is-8-bytes-and-untyped }
-      fStrCap := 0;
-      if fTk = tyString then
-      begin
-        fSize := LOCAL_STR_CAP + 8;
-        fAlign := TARGET_PTR_SIZE;
-      end
-      else if (fTk = tyFixedString) or (fTk = tyShortString) then
-      begin
-        fStrCap := LastTypeStrCap;
-        if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
-        fSize := FrozenStrSlotSize(fTk, fStrCap);
-        fAlign := FrozenStrAlign(fTk);
-      end
-      else
-      begin
-        fSize := TypeStorageSize(fTk, fRec);
-        fAlign := TypeFieldAlign(fTk);
-      end;
-      if isPackedRecord then fAlign := 1;
-      if isArr then fSize := fSize * arrLen;
-      for fni := 0 to nFldNames - 1 do
-      begin
-        branchFieldOff := AlignTo(branchFieldOff, fAlign);
-        if fStrCap > 0 then
-        begin
-          { tyShortString KEEPS ITS OWN TAG -- recording it as tyString would
-            hand every reader an 8-byte prefix for a one-byte one. }
-          if fTk = tyShortString then
-            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec)
-          else
-            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(tyString), fRec);
-          UFldStrCap[UFldCount-1] := fStrCap;
-        end
-        else
-          AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
-        UFldIsArray[UFldCount-1] := isArr;
-        UFldArrLen[UFldCount-1] := arrLen;
-        UFldDynDepth[UFldCount-1] := 0;
-        { …and its ENUM IDENTITY, which is the FOURTH thing this copy was missing
-          and the one nobody counted. The enum-on-a-field work stamped
-          ParseRecordFields and ParseTypeSection's class arm -- the two copies
-          refactor-p-the-field-declaration-parser-exists-twice names -- and there
-          are THREE: `case Integer of 0: (c: TColor)` printed `1` where the same
-          field in the fixed part, and in a class, printed `Green`. FPC prints
-          Green in all three.
-          bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal }
-        UFldEnumId[UFldCount-1] := fEnumId;
-        { …and its LOW BOUND, exactly as the fixed part records it. This site is
-          the third copy of the same concept (the comment on the bounds parse
-          above says so) and it was the copy that still indexed from the raw
-          index: `case Integer of 1: (arr: array[1..2] of SmallInt)` overlaid the
-          branch two bytes into the tag's neighbour, so `v.arr[1]` read the HIGH
-          half of the 0-branch's first field.
-          bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
-        if isArr then UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := loVal;
-        branchFieldOff := branchFieldOff + fSize;
-      end;
-      if fAlign > classAlign then classAlign := fAlign;
-      if fAlign > vMaxAlign then vMaxAlign := fAlign;
+      { The third copy. Its per-field block was the same grammar again, with
+        single-dimension bookkeeping and no dynamic-array arm; routing it here
+        gives a branch field the fixed part's multi-dimension table and the
+        fixed part's ALIGNMENT, and takes the deliberate refusal above in place
+        of the accidental one. vMaxAlign is the running max this routine
+        maintains; classAlign is the whole record's and can only grow, so
+        folding one into the other after the call is the same answer.
+        refactor-p-the-field-declaration-parser-exists-twice }
+      ParseFieldDeclInto(ci, branchFieldOff, vMaxAlign, isPackedRecord, True, True,
+                         0, VIS_PUBLIC);
+      if vMaxAlign > classAlign then classAlign := vMaxAlign;
+      { The separator is the CALLER's, in all three loops -- the shared routine
+        stops after the hint directives. Dropping this line when the block was
+        lifted cost a whole gate: `0: (MinValue: Int64; MaxValue: Int64)` in
+        lib/rtl/typinfo.pas re-entered the loop sitting on the `;` and said
+        `expected field name in variant part`. }
       Eat(tkSemicolon);
     end;
     Expect(tkRParen, ')');
@@ -4479,13 +4357,14 @@ begin
 end;
 
 procedure ParseFieldDeclInto(ci: Integer; var curFieldOff, classAlign: Integer;
-                             isPackedRecord, inRecordBody: Boolean;
+                             isPackedRecord, inRecordBody, inVariantPart: Boolean;
                              pub, vis: Integer);
 { ONE field-declaration parser for `X, Y: T;` -- in a record body, a class body
   and (next commit) a variant branch. It parses the comma-separated names and
   the type (inline fixed or dynamic array, named array alias, scalar, frozen
   string), computes size and alignment, appends the fields, and eats the
-  trailing hint directives and `;`.
+  trailing hint directives. It does NOT eat the separating `;` -- that belongs
+  to the caller's loop, which is where all three copies had it.
 
   IT EXISTED THREE TIMES. Not two: the ticket said two and undercounted, which
   is the dangerous direction -- ParseRecordVariantPart is a third copy and had
@@ -4723,6 +4602,21 @@ begin
     else if fAlign > TokPackRecords[TokPos - 1] then
       fAlign := TokPackRecords[TokPos - 1];
   end;
+  { A VARIANT BRANCH may not hold a reference-counted type: its storage is
+    shared with the other branches, so nothing can know which finaliser to run.
+    fpc says so ("Data types which require initialization/finalization cannot be
+    used in variant records") and this copy used to say it too -- by ACCIDENT.
+    It simply had no dynamic-array arm, so `array of Integer` came out as
+    `expected '[' before 'of'`, a grammar complaint that happened to land on the
+    right answer. Now that the arm exists here, the refusal has to be deliberate
+    or the merge would have quietly ADDED a construct fpc rejects.
+    NOT COVERED and measured: `string` and `IUnknown` in a branch are accepted by
+    pxx and refused by fpc today, on a path that does not come through here.
+    That is a separate gap and it is older than this routine. }
+  if inVariantPart and fIsDyn then
+    Error('a dynamic array is not allowed in a variant part -- its storage is '
+          + 'shared with the other branches, so nothing can know which '
+          + 'finaliser to run');
   if isArr then
     fSize := fSize * arrLen;
   { A by-value field of the record's OWN type (direct or transitive) is
@@ -5028,7 +4922,7 @@ begin
 
     if CurTok.Kind = tkIdent then
     begin
-      ParseFieldDeclInto(ci, curFieldOff, classAlign, isPackedRecord, True,
+      ParseFieldDeclInto(ci, curFieldOff, classAlign, isPackedRecord, True, False,
                          0, VIS_PUBLIC);
       Eat(tkSemicolon);
     end
@@ -6885,7 +6779,7 @@ begin
             ParsePropertyDecl(ci, curPublished)
           else if CurTok.Kind = tkIdent then
           begin
-            ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False,
+            ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False, False,
                                curPublished, curVis);
           end
           else

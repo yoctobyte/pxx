@@ -16,14 +16,12 @@
   every line here and fail those pairs -- so "it compiles" is not what is being
   checked.
 
-  THE THIRD DECLARING KIND IS DELIBERATELY ABSENT AND IT IS STILL BROKEN: a
-  variant branch (`1: (e: packed array[0..1] of TCell)`) is refused today, and
-  fpc accepts it. ParseRecordVariantPart is a THIRD copy of this parser and has
-  not been merged, because merging it is not a paste -- its branch bookkeeping
-  is single-dimension and its refusal of reference-counted types is CORRECT and
-  specific to variant parts, so both would have to become parameters. Left out
-  rather than left unmentioned, so nobody reads a green here as covering it.
-  test_packed_array_field_in_a_variant_branch.pas is where that lands.
+  THE THIRD DECLARING KIND IS NOT HERE BECAUSE IT HAS ITS OWN FILE, and it has
+  more to assert: merging ParseRecordVariantPart fixed a branch-field ALIGNMENT
+  bug and multi-dimensional arrays as well as `packed`, and it had to turn an
+  ACCIDENTAL refusal of reference-counted types into a deliberate one. See
+  test_packed_array_field_in_a_variant_branch.pas. This file stays scoped to the
+  two kinds it names, so a green here never reads as covering three.
   refactor-p-the-field-declaration-parser-exists-twice }
 program test_packed_array_field_in_a_record_and_a_class;
 {$mode objfpc}{$H+}

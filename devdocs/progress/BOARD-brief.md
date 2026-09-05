@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:19 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:30 backlog-pascal:40 backlog-decide:43 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:72 known-incompat:3 float:25 done-followup:3 decided:146 done:3349 rejected:78`
+`working:18 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:30 backlog-pascal:40 backlog-decide:43 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:72 known-incompat:3 float:25 done-followup:3 decided:146 done:3350 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -26,7 +26,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 - `refactor-p-one-lvalue-path-for-statements-and-expressions` [P] — owner: frankA
-- `refactor-p-the-field-declaration-parser-exists-twice` [P] — owner: frankA
 - `refactor-p-three-hand-rolled-postfix-loops` [P] — owner: frankA
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate

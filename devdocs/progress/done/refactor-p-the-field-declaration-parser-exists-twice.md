@@ -5,10 +5,10 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-status: working
+status: done
 owner: frankA
 created: 2026-08-25
-summary: "THREE copies, not two, and the uncounted one had two SILENT defects (both fixed 2026-09-05; the lift is still open). `ParseRecordFields` (pasparser_decl.inc, now ~3840) and the class-body field arm inside `ParseTypeSection` (now ~6150) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken."
+summary: "DONE 2026-09-05: one `ParseFieldDeclInto`, three callers. The field-declaration parser existed THREE times -- `ParseRecordFields`, `ParseTypeSection`'s class arm and `ParseRecordVariantPart` -- and the uncounted third had two silent defects plus, found by the lift, three more: branch fields took no alignment, multi-dimensional arrays in a branch were mis-sized, and `packed array` was refused. The dynamic-array refusal was accidental (no arm at all) and is now deliberate, with a message."
 ---
 
 # Measured, 2026-08-25
@@ -128,3 +128,72 @@ overlay. **Lift the spec parse and the sizing; leave the offsets alone.** A lift
 that tries to unify the offset half will fight the variant part's overlay model
 and is the version of this refactor that goes wrong.
 
+
+# Resolved 2026-09-05 (frankA) -- landed in three commits
+
+`ParseFieldDeclInto(ci; var curFieldOff, classAlign; isPackedRecord,
+inRecordBody, inVariantPart; pub, vis)` sits before `ParseRecordFields` and is
+called from all three sites. The amendment above was right about the split: the
+routine parses the type spec and does the sizing, and every caller keeps its own
+offset bookkeeping -- the variant part passes `branchFieldOff` and its own
+running `vMaxAlign`, folding that into `classAlign` after the call, which is the
+same answer because the record's alignment can only grow.
+
+Three arms are gated on `inRecordBody`, because they are about a RECORD and not
+about a field: the `{$PACKRECORDS}` / `packed record` clamp, the refusal of a
+by-value field of the record's own type, and the class-typed-field `UClsAlign`
+lookup. One arm is gated on `inVariantPart`: a dynamic array is now refused with
+a sentence saying WHY (its storage is shared with the other branches, so nothing
+can know which finaliser to run). That refusal existed before by ACCIDENT -- the
+copy simply had no dynamic-array arm, so `array of Integer` came out as
+`expected '[' before 'of'`.
+
+## What the merge FIXED, each against fpc 3.2.2 as the oracle
+
+| | pre-merge pxx | pxx now / fpc |
+| --- | --- | --- |
+| branch field alignment (`SizeOf` of two branch records) | 8 8 | 4 1 |
+| multi-dimensional array in a branch | mis-sized | 7 7 24 24 |
+| `packed array` field in a branch | refused | 33 33 16 16 |
+
+The alignment row is the one that had pxx contradicting ITSELF: the same field
+declared in the fixed part got the fixed part's alignment and in a branch did
+not.
+
+## Measured and deliberately NOT fixed
+
+- A class field of `object` type is aligned to pointer width rather than to its
+  own alignment (`TC.InstanceSize` 24 against fpc's 16). Space, not
+  correctness, and pxx's class header already differs by 6 bytes for unrelated
+  reasons.
+- `string` and `IUnknown` in a variant branch: pxx accepts, fpc refuses. Older
+  than this routine and out of scope; recorded in the test header.
+
+## The two things the lift got wrong, both caught by an instrument
+
+1. **FPC is single-pass and pxx is not.** `ParseRecordVariantPart`'s call sits
+   ABOVE the routine, so the tree self-hosted, passed `--tier quick`, and broke
+   the bootstrap seed -- `pasparser_decl.inc(3901,7) Error: Identifier not found
+   "ParseFieldDeclInto"`, caught by the forwardlint row and the FPC seed canary
+   and by nothing else. A `forward;` in `pasparser_name.inc` fixed it, and the
+   rebuild was BYTE-IDENTICAL, which is what a forward declaration should be.
+2. **The separating `;` is the CALLER's, in all three loops.** It was dropped
+   when the block was lifted, so `0: (MinValue: Int64; MaxValue: Int64)` in
+   `lib/rtl/typinfo.pas` re-entered the loop sitting on the `;`. Two quick rows
+   RED, including one whose name has nothing to do with records -- anything
+   linking typinfo.
+
+## Tests
+
+- `test/test_packed_array_field_in_a_variant_branch.pas` -- the alignment,
+  multi-dimension and `packed array` rows above; expected output is fpc's own.
+- `test/test_dynarray_in_a_variant_part_refused.pas` -- a must-not-compile
+  fixture asserted on the MESSAGE, not on the exit code. fpc refuses it too.
+- `test/test_packed_array_field_in_a_record_and_a_class.pas` -- the sibling from
+  the previous commit, header updated now that the third kind is covered.
+
+The negative control was real: the pre-merge compiler (`2a37001fc113`) was
+rebuilt and refuses the new test.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

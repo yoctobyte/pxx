@@ -598,6 +598,15 @@ function GenMakeStringValueIndex(valNode: Integer): Integer; forward;
   since a parameter's type is itself a type }
 function ParseProcTypeSignature: Integer; forward;
 procedure EatProcTypeCallConv(mpi: Integer); forward;
+{ The one field-declaration parser, called from a record body, a class body and
+  a variant branch. ParseRecordVariantPart's call sits ABOVE the body, and pxx
+  resolves across the unit while FPC resolves in source order -- so without this
+  the tree self-hosts, passes --tier quick, and breaks the bootstrap seed. That
+  is the declaration-order class the FPC seed canary exists for, and it is what
+  caught this one. refactor-p-the-field-declaration-parser-exists-twice }
+procedure ParseFieldDeclInto(ci: Integer; var curFieldOff, classAlign: Integer;
+                             isPackedRecord, inRecordBody, inVariantPart: Boolean;
+                             pub, vis: Integer); forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord, isObjectType: Boolean); forward;
 procedure ParseTypeSection; forward;  { body in pasparser_decl.inc; ParseRecordFields' nested-`type` arm sits ABOVE that body, which FPC's declaration order needs — bug-a-fpc-seed-drift-emitasmx64-forward }
 function IsHintDirectiveName(const nm: AnsiString): Boolean; forward;
