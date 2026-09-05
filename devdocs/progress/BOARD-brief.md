@@ -5,11 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:19 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:33 backlog-pascal:39 backlog-decide:44 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:3 float:25 done-followup:3 decided:146 done:3358 rejected:78`
+`working:22 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:33 backlog-pascal:36 backlog-decide:44 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:3 float:25 done-followup:3 decided:146 done:3358 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file` [P] — owner: frankA
+- `bug-p-a-spurious-unknown-directive-warning-cannot-fail-any-test-we-have` [P] — owner: frankA
+- `bug-p-error-context-near-quotes-an-unrelated-token-stream` [P] — owner: frankA
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -66,7 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 393, ranked
+## Ready — top 30 of 390, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -99,4 +102,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-generics
 
-_363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

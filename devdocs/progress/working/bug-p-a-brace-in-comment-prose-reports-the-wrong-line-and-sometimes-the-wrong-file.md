@@ -4,8 +4,8 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "`{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording."
-status: backlog
-owner: unassigned
+status: working
+owner: frankA
 ---
 
 # A brace in comment prose reports the wrong line, and sometimes the wrong file

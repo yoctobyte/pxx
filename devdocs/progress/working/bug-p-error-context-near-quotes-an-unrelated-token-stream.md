@@ -2,10 +2,10 @@
 track: P
 prio: 35
 type: bug
-status: backlog
+status: working
 found: 2026-09-01
 found-by: claude-T
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "A compile error's `near:` excerpt can quote text from a completely unrelated token stream — RTL/builtin unit source with no relation to the file being compiled. The line number and the diagnosis are correct; only the excerpt is wrong, so it does not error and does not look wrong. Reproduces on a 10-line program: the same `undefined variable` error gives a CORRECT excerpt in a trivial program and a bogus one once the unit declares a generic specialization alias, which brackets it tightly."
 ---
