@@ -1654,20 +1654,61 @@ function PasDirectiveClass(const command, name: AnsiString; sign: Char): Integer
 
   bug-p-an-unknown-compiler-directive-is-silently-ignored }
 const
+  { THE NAME AXIS, SWEPT 2026-09-05 -- the complement of the value-axis sweep
+    that fixed $ALIGN and $ASMMODE. The tree census this warning already has is
+    PRESENT-TENSE: it can only find a name some source HERE spells. A name that
+    real FPC code uses and this tree never mentions is structurally invisible to
+    it, and warns -- under -Werror, fails -- the first time someone compiles
+    such a source.
+
+    So the population swept was fpc 3.2.2's OWN sources rather than ours, and
+    every candidate was then RUN through both compilers rather than read off a
+    list. The discriminator is what fpc says about the NAME, not whether it
+    compiles: fpc answering `Illegal compiler directive "$X"` means fpc does not
+    know it either and our warning is correct; fpc answering anything else --
+    a note, a target-specific warning, or an error about the VALUE -- means fpc
+    knows the name and ours was a false positive. A bare probe cannot be the
+    only spelling, because a directive that requires a value errors under fpc
+    for the value and reads as recognition either way; $ASMCPU is exactly that
+    case and is why the verdict keys on fpc's message and not on its exit code.
+
+    Positive control: a directive nobody can know warns under both compilers.
+
+    The names below joined this list from that sweep, each with fpc's own words:
+      asmcpu      Error: Illegal assembler CPU instruction set specified ""
+      copyright   Warning: Copyright only supported for target netware
+      hugecode    Note: Ignored compiler switch "HUGECODE"
+      hugepointerarithmeticnormalization,
+      hugepointercomparisonnormalization
+                  Warning: Directive ... is ignored for the current target
+      minstacksize  Warning: MINSTACKSIZE is not supported by the target OS
+      screenname  Warning: Screenname only supported for target netware
+
+    All are class 0 under the membership rule below and not merely "ignored":
+    every one is a target knob fpc itself drops on this target, and $ASMCPU
+    RESTRICTS the assembler's instruction set, so ignoring it is strictly more
+    permissive -- the same reading that puts $X- here. $MINSTACKSIZE is the
+    sibling of $MAXSTACKSIZE, which was already listed; the pair is the
+    grep-for-the-sibling case this repo keeps meeting. }
   { Space-delimited and searched WITH both delimiters, so 'h' cannot match
     'hints'. Lowercase; the caller folds case. }
   PAS_INERT_DIRECTIVES =
     ' i q include ' +
     ' d e f g j l m n o p s t u v w x y ' +
-    ' apptype checkpointer codealign codepage coperators debuginfo description ' +
+    ' apptype asmcpu checkpointer codealign codepage coperators copyright ' +
+    ' debuginfo description ' +
     ' excessprecision extendedsyntax externalsym fputype goto hints hppemit ' +
+    ' hugecode hugepointerarithmeticnormalization ' +
+    ' hugepointercomparisonnormalization ' +
     ' imagebase implicitbuild implicitexceptions includepath inline legacyifend ' +
     ' libexport librarypath link linkframework linklib localsymbols ' +
-    ' macro maxfpuregisters maxstacksize memory minfpconstprec mmx modeswitch ' +
+    ' macro maxfpuregisters maxstacksize memory minfpconstprec minstacksize ' +
+    ' mmx modeswitch ' +
     ' namespace nodefine notes objectchecks objectpath objexportall openstrings ' +
     ' optimization output_format pascalmainname pic pointermath pop profile push ' +
     ' pyextension referenceinfo region endregion resource rtti safefpuexceptions ' +
-    ' saturation setpeflags setpeoptflags setpeosversion setpesubsysversion ' +
+    ' saturation screenname setpeflags setpeoptflags setpeosversion ' +
+    ' setpesubsysversion ' +
     ' setpeuserversion smartlink stackframes static stringchecks syscalls ' +
     ' threadname threading typedaddress typeinfo unitpath varpropsetter ' +
     ' varstringchecks version wait warn warnings weakpackageunit writeableconst ' +

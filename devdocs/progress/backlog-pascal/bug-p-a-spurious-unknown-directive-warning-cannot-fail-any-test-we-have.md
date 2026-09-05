@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "PRIO CONFIRMED AT 35 BY THE 2026-09-05 CENSUS AUDIT -- its demand line is not a corpus (valid code stops compiling under -Werror), unlike its sibling, which was parked. The unknown-directive warning (2026-09-04) classifies against a hand-curated list of ~101 names. A name missing from it makes valid code warn — under -Werror, fail — and NO INSTRUMENT WE HAVE CAN SEE THAT: a spurious warning exits 0, so a PASS/FAIL corpus sweep records it as PASS. Two real false positives have already been found and fixed by hand ({$A n}, 153d59777) or filed ({$setc} family, p40). Needs a stderr-counting guard, not a compile sweep. A SECOND AXIS is recorded here and HAS NOW BEEN SWEPT (2026-09-05): a KNOWN directive carrying an unrecognised VALUE is invisible to this warning, which keys on the directive NAME. Censusing fpc 3.2.2's own sources for directive VALUES rather than names returned two real members on the first pass -- {$ALIGN ON}/{$ALIGN OFF} and {$ASMMODE gas}/{$STANDARD} -- both fixed. THE VALUE AXIS IS THEREFORE CLOSED FOR THE 46 NAMES THIS COMPILER DISPATCHES ON AND THE NAME AXIS IS NOT: the stderr-counting instrument this ticket asks for is still the open work."
+summary: "PRIO CONFIRMED AT 35 BY THE 2026-09-05 CENSUS AUDIT -- its demand line is not a corpus (valid code stops compiling under -Werror), unlike its sibling, which was parked. The unknown-directive warning (2026-09-04) classifies against a hand-curated list of ~101 names. A name missing from it makes valid code warn — under -Werror, fail — and NO INSTRUMENT WE HAVE CAN SEE THAT: a spurious warning exits 0, so a PASS/FAIL corpus sweep records it as PASS. Two real false positives have already been found and fixed by hand ({$A n}, 153d59777) or filed ({$setc} family, p40). Needs a stderr-counting guard, not a compile sweep. A SECOND AXIS is recorded here and HAS NOW BEEN SWEPT (2026-09-05): a KNOWN directive carrying an unrecognised VALUE is invisible to this warning, which keys on the directive NAME. Censusing fpc 3.2.2's own sources for directive VALUES rather than names returned two real members on the first pass -- {$ALIGN ON}/{$ALIGN OFF} and {$ASMMODE gas}/{$STANDARD} -- both fixed. THE VALUE AXIS IS CLOSED FOR THE NAMES THIS COMPILER DISPATCHES ON. THE NAME AXIS HAS NOW BEEN SWEPT TOO (2026-09-05, frankA), against the population the tree census structurally cannot see: fpc 3.2.2's OWN 9197 sources rather than ours, every candidate RUN through both compilers, and the verdict keyed on whether fpc recognises the NAME (`Illegal compiler directive` = fpc does not know it either = our warning is right) rather than on exit code. SEVEN false positives found and fixed -- asmcpu copyright hugecode hugepointerarithmeticnormalization hugepointercomparisonnormalization minstacksize screenname -- all names fpc knows and deliberately ignores on this target, so valid FPC code warned and under -Werror failed. Guarded by the fixture's TOTAL row, which emits 13 on the pre-change compiler and 6 after. STILL OPEN: residual 2 (nothing can see a name LEAVING the inert list), and residual 1 narrowed rather than closed -- a name used only by Delphi, a vendor unit or FPC 3.3+ is still invisible."
 ---
 
 # A spurious unknown-directive warning cannot fail any test we have
@@ -167,3 +167,60 @@ census at all — that instrument keys on the directive NAME. Measured
 2026-09-05: `{$TOTALLYUNKNOWNDIRECTIVE}` warns and `{$MODE TOTALNONSENSE}` was
 completely silent. A value-space hole is a second axis the name-space census
 cannot see, and `{$MODE}` will not be the only directive with one.
+
+## The NAME axis, swept 2026-09-05 (frankA) — residual 1 is closed against fpc's own sources
+
+Residual 1 said the present-tense census "bounds what is broken now, not what
+the list is missing", because a name absent from THIS tree but present in real
+FPC code is structurally invisible to a harness that walks our sources. That is
+the half frankD's clean 2166-source run could not speak to, and it is now swept.
+
+**Population: fpc 3.2.2's own sources**, 9197 files under
+`/usr/share/fpcsrc/3.2.2` (compiler, rtl, packages) — deliberately not this
+tree, because this tree is the population that was already clean. 130 distinct
+directive words appear there.
+
+**Method: run them, do not read them.** Every candidate was compiled by BOTH
+compilers rather than diffed against the curated list, so an error in reading
+our own list cannot produce a finding or hide one.
+
+**The discriminator is what fpc says about the NAME, not whether it compiles.**
+fpc answering `Illegal compiler directive "$X"` means fpc does not know the name
+either and our warning is CORRECT. fpc answering anything else — a note, a
+target-specific warning, or an error about the VALUE — means fpc knows the name
+and ours was a false positive. This mattered: a bare probe makes a
+value-requiring directive error under fpc, and on exit code alone `$ASMCPU`
+reads identically to a name fpc rejects. **Positive control:** an invented name
+warns under both compilers.
+
+**Seven false positives, each with fpc's own words:**
+
+| directive | fpc 3.2.2 says | uses in fpc's sources |
+| --- | --- | --- |
+| `asmcpu` | `Error: Illegal assembler CPU instruction set specified ""` | 3 |
+| `copyright` | `Warning: Copyright only supported for target netware` | 1 |
+| `hugecode` | `Note: Ignored compiler switch "HUGECODE"` | 1 |
+| `hugepointerarithmeticnormalization` | `Warning: Directive … ignored for the current target platform` | 1 |
+| `hugepointercomparisonnormalization` | same | 1 |
+| `minstacksize` | `Warning: MINSTACKSIZE is not supported by the target OS` | 1 |
+| `screenname` | `Warning: Screenname only supported for target netware` | 2 |
+
+All seven are class 0 under the existing membership rule, and `asmcpu` is the
+one worth stating: it RESTRICTS the assembler's instruction set, so ignoring it
+is strictly more permissive — the same reading that already puts `$X-` on the
+list. `minstacksize` is the sibling of `maxstacksize`, which was listed;
+grep-for-the-sibling would have found it years earlier than a census did.
+
+**The fix is guarded, and the guard fails on the old compiler.** All seven join
+the silent block of `test_pascal_directive_unknown_warns.pas`, whose TOTAL
+assertion is the only row that can catch an inert directive starting to warn.
+Measured: the pre-change compiler `e6af001d6c0e3bf2` emits 13 warnings on that
+fixture and the post-change one emits 6.
+
+**What this does NOT close.** The sweep is bounded by fpc 3.2.2's own sources; a
+name used only by Delphi, by a vendor unit, or by FPC 3.3+ is still invisible,
+so residual 1 is narrowed to "outside FPC's own tree", not eliminated. Residual
+2 (nothing can see a name LEAVING the inert list) is untouched by this and
+remains the open half — though the fixture's re-populated class-1 block now
+makes the adjacent version of that failure visible, which is how this sweep
+found `test-core` red.

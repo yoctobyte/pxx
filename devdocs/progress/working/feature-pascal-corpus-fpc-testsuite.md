@@ -438,3 +438,69 @@ by things that have nothing to do with generic routines —
 and fixed — it was a real diagnostic the change had removed; `tgenfunc14`, kept,
 because accepting a redundant constraint is not a defect). Read by NAME or you
 see nothing.
+
+---
+
+## 2026-09-05 (frankA) — the skip list re-clustered by MEASURED first error, not by reason text
+
+The 2026-09-05 cluster table above was built from the skip file's REASON TEXT.
+Three clusters taken from it since have each turned out to be mislabelled —
+generics was ten mechanisms, strings/pchar seven, "enums" was really "a subrange
+bound must be a literal token", "object" conflated three unrelated constructs.
+**A reason line is a symptom label written by whoever last looked**, so this pass
+did not read any of them: every skip row was re-attempted with
+`--retry-skips` and clustered on the compiler's own first error.
+
+Measured at `36d7e5fd4`, compiler `e6af001d6c0e3bf2`, 133 rows re-attempted:
+**5 now exit-clean, 128 still failing**, 132 with a captured first error.
+
+| rows | measured first error |
+| --- | --- |
+| 25 | `expected '…' before '…'` |
+| 17 | `%FAIL test compiled (…)` |
+| 16 | `undefined variable (…)` |
+| 5 | `class var is not allowed in a record type` |
+| 5 | `an object type cannot have a constructor -- pxx lowers `object` as a value type ` |
+| 4 | `exit code 1 (…)` |
+| 3 | `expected name` |
+| 2 | `dynamic array initializer not supported` |
+| 2 | `duplicate definition of '…' with the same parameter types; the later body wins, ` |
+| 2 | `not a constant` |
+| 2 | `exit code 216 (…)` |
+| 2 | `incompatible types: cannot assign AnsiString to Integer` |
+| 2 | `no operator overload found for record operands (…) — PXXDBG=a.opovl prints the l` |
+| 2 | `duplicate conversion operator: this source type already converts to this result ` |
+43 further rows are singletons — 57 distinct errors over 132 rows.
+
+### What the labels were hiding: five rows are ONE helper unit
+
+`tobject1`, `tstring2`, `tstring4`, `tstring5` and `texception3` all fail inside
+**`erroru.pp`**, a suite helper they all `uses`, on exactly three System symbols
+we do not have: **`erroraddr`, `TFPCHeapStatus`, `GetFPCHeapStatus`**. Their
+skip reasons say "object", "strings" and "exception" — three different clusters,
+none of them the cause, and nothing in the reason text could ever have shown
+that they are one unit. `TFPCHeapStatus` is also the wall four FPC units hit in
+`goal-compile-fpc-compiler`, so **that symbol pays twice**; frankB has taken it
+(`feature-b-getfpcheapstatus-needs-always-on-heap-accounting` covers the heap
+half, and `erroraddr` is new work).
+
+### The 25 uncategorised: measured, and they really are singletons
+
+`ready`-style triage kept deferring these as "read them individually". They were
+run instead: **24 rows produce 17 distinct first errors**, the largest sharing
+four (`%FAIL` accepted-invalid rows). There is no cluster hiding in them — the
+absence of a label was accurate. That is a finding, not a null: it means the
+remaining cheap wins are NOT here, and the burn-down should take the three
+measured walls above instead.
+
+### Two caveats on the exit-clean five
+
+`tarray2 tclass12a tforin24 tgenfunc3 tstring1` now exit 0. The runner already
+says loudly that **exit-clean is not correct** — it compares exit codes, not
+output — and three of these five are known to print wrong values. `tgenfunc3`
+and `tstring1` are the two not yet explained and are the only burn candidates;
+neither was diffed against fpc here, so neither was burned.
+
+**Numbers carry their tree:** everything above is at `36d7e5fd4` with compiler
+`e6af001d6c0e3bf2`, taken after frankB's `{$PACKENUM}`, `{$H-}` and named-set
+work landed. A row measured before those is measuring a different compiler.

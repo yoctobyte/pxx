@@ -13998,14 +13998,20 @@ test-core: $(COMPILER)
 	grep -q "note: barehint" $(TESTTMP)/test_pascal_message_severities.log
 	grep -q "note: barenote" $(TESTTMP)/test_pascal_message_severities.log
 	grep -q "warning: barewarning" $(TESTTMP)/test_pascal_message_severities.log
-	# The unknown-directive terminal arm. THE TOTAL IS THE SILENCE CONTROL: 19
-	# inert directives sit above the five that must warn, so a count above five
-	# means one of those started warning and the diagnostic is on its way to
-	# being switched off. bug-p-an-unknown-compiler-directive-is-silently-ignored
+	# The unknown-directive terminal arm. THE TOTAL IS THE SILENCE CONTROL: the
+	# inert block sits above the rows that must warn, so a total above the
+	# expectation means one of those started warning and the diagnostic is on
+	# its way to being switched off. The inert block is not counted here on
+	# purpose -- a number in a comment gets read as a census and this one went
+	# stale twice already. Measured 2026-09-05 against the PRE-change compiler
+	# (e6af001d6c0e3bf2): the same fixture emits 13 warnings there and 6 here,
+	# so these rows fail on a compiler without the name-axis fix.
+	# bug-p-an-unknown-compiler-directive-is-silently-ignored
+	# bug-p-a-spurious-unknown-directive-warning-cannot-fail-any-test-we-have
 	./$(COMPILER) test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns26 > $(TESTTMP)/test_pascal_directive_unknown_warns.log 2>&1
 	tools/expect_same.sh test_pascal_directive_unknown_warns.unknown "$$(grep -c 'unknown compiler directive' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "2"
-	tools/expect_same.sh test_pascal_directive_unknown_warns.unimpl "$$(grep -c 'recognised but not implemented' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "3"
-	tools/expect_same.sh test_pascal_directive_unknown_warns.total "$$(grep -c 'warning:' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "5"
+	tools/expect_same.sh test_pascal_directive_unknown_warns.unimpl "$$(grep -c 'recognised but not implemented' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "4"
+	tools/expect_same.sh test_pascal_directive_unknown_warns.total "$$(grep -c 'warning:' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "6"
 	grep -q "unknown compiler directive {\$$PACKRECRDS}" $(TESTTMP)/test_pascal_directive_unknown_warns.log
 	tools/expect_same.sh test_pascal_directive_unknown_warns "$$($(TESTTMP)/test_pascal_directive_unknown_warns26)" "ok"
 	# The same arm across pxx's TWO WALKS of every source (ExpandIncludes, then
