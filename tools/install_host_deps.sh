@@ -49,11 +49,22 @@ python3-dev         # Python.h/pythread.h/structmember.h -- test_cpyext_*.npy
 libsqlite3-dev      # libsqlite3 -- test-sqlite-threads, test-sqlite-parity
 tcl-dev             # libtcl8.6.so.0 -- lib/pcl/tk.pas
 tk-dev              # libtk8.6.so.0  -- lib/pcl/tk.pas, the tkinter demo
-libgtk2.0-dev       # the FOUR `uses gtk` tests. pasparser_proc.inc:3428 falls back
-                    # to a HARDCODED /usr/include/gtk-2.0/gtk/<name>.h -- so gtk3
-                    # dev alone does NOT satisfy them. Measured 2026-08-29: the
-                    # failures did not clear until this landed, 33 min after -3-dev
-libgtk-3-dev        # test_c_gtk3_stock only (`uses gtk3_c` -> /usr/include/gtk-3.0)
+# BOTH gtk dev packages. Do NOT restate here which one serves the four
+# `uses gtk` tests -- that answer moves. The last-resort fallback in the resolver
+# is a HARDCODED absolute path at compiler/pasparser_proc.inc:3428, and THAT LINE
+# IS THE SOURCE OF TRUTH. Read it rather than trusting this comment; it names
+# /usr/include/gtk-N.0/gtk/<name>.h for whichever N is current.
+# As of 2026-09-05 that N is 2, so the four land on libgtk2.0-dev. An owner
+# decision of 2026-08-31 (gtk3 is a sane default in 2026) is pending
+# implementation and will move them to libgtk-3-dev. test_c_gtk3_stock is
+# unaffected either way: it says `uses gtk3_c` and reads /usr/include/gtk-3.0.
+# INSTALL BOTH -- the ATTRIBUTION moves, the REQUIREMENT does not. These two rows
+# have gone correct-then-wrong twice in twelve hours, both times because someone
+# (me, both times) copied the CURRENT VALUE of :3428 into prose beside a package
+# name. A manifest pinned to a literal that another lane is moving is a time
+# bomb; cite the ADDRESS of the literal, not its value.
+libgtk2.0-dev
+libgtk-3-dev
 
 xvfb                # 6 GUI jobs; testmgr treats xvfb as an exclusive resource
 xdotool             # gui_realwindow() real-window-size assertion; SKIPS SILENTLY
