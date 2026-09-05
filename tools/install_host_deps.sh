@@ -51,9 +51,15 @@ tcl-dev             # libtcl8.6.so.0 -- lib/pcl/tk.pas
 tk-dev              # libtk8.6.so.0  -- lib/pcl/tk.pas, the tkinter demo
 # BOTH gtk dev packages. Do NOT restate here which one serves the four
 # `uses gtk` tests -- that answer moves. The last-resort fallback in the resolver
-# is a HARDCODED absolute path at compiler/pasparser_proc.inc:3428, and THAT LINE
-# IS THE SOURCE OF TRUTH. Read it rather than trusting this comment; it names
-# /usr/include/gtk-N.0/gtk/<name>.h for whichever N is current.
+# is a HARDCODED absolute path in compiler/pasparser_proc.inc, and THAT LINE IS
+# THE SOURCE OF TRUTH. Find it by PATTERN, never by line number:
+#     grep -n "ConcatThree.*usr/include/gtk" compiler/pasparser_proc.inc
+# It names /usr/include/gtk-N.0/gtk/<name>.h for whichever N is current.
+# Cited this way because the line NUMBER is itself a value that moves: this
+# comment said :3428 and the flip below shifted it to :3439 in the same commit
+# that changed N, so a line-number citation was stale the moment it mattered.
+# tools/testmgr.py has it right and got there first -- _USES_FALLBACK_RE regexes
+# the ConcatThree call out of the compiler source rather than storing a position.
 # It has been 2 and is now 3 (flipped by a409e19b5, owner ruling of 2026-08-31,
 # gtk3 is a sane default in 2026). Deliberately not restating the current value
 # again: this comment has been wrong twice already and the whole point is that
