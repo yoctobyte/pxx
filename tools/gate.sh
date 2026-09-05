@@ -12,7 +12,9 @@
 #   tools/gate.sh check     print what would run, and the box's state
 #
 # Exit status is the gate's: 0 = green. The summary names every step and its
-# result, so a failure does not need the logs to be located first.
+# result, so a failure does not need the logs to be located first. The same
+# summary is written to $LOGDIR/summary.log, so a backgrounded run's verdict
+# can be read from a FILE rather than from the wrapper's exit status.
 set -uo pipefail
 
 MODE="${1:-quick}"
@@ -21,6 +23,23 @@ cd "$ROOT" || exit 1
 
 LOGDIR="${TMPDIR:-/tmp}/pxx-gate-$$"
 mkdir -p "$LOGDIR"
+
+# THE SUMMARY MUST LAND IN A FILE, NOT ONLY ON STDOUT — otherwise the advice
+# this repo gives everywhere ("background the gate and grep the LOG for the
+# verdict, because the wrapper reports its own exit status") cannot be followed,
+# since the step lines and the verdict existed ONLY in stdout. Measured
+# 2026-09-05: a full gate's $LOGDIR held 23 per-step logs and no summary, so the
+# tidy PASS block was reachable only through the exact channel the rule says not
+# to trust. The per-step logs are still the primary record of WHY a step failed;
+# this file is the record of WHAT the verdict was.
+SUMMARY="$LOGDIR/summary.log"
+: > "$SUMMARY"
+
+# Every line that forms the summary goes through say(): stdout for the caller,
+# and $SUMMARY for whoever reads the log afterwards. Deliberately not
+# `exec > >(tee ...)` — a tee in a process substitution can lose the FINAL line
+# when the script exits, and the final line is the verdict.
+say() { printf '%s\n' "$*"; printf '%s\n' "$*" >> "$SUMMARY"; }
 PINNED="stable_linux_amd64/default/pinned"
 
 # Track T's watcher runs testmgr on whatever box it lives on, and a full matrix
@@ -35,10 +54,10 @@ note_contention() {
   others=$(pgrep -fc 'testmgr\.py|twatch\.py' 2>/dev/null) || others=0
   load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo '?')
   if [ "${others:-0}" -gt 0 ]; then
-    echo "gate: NOTE Track T tooling is running here ($others process(es)), load $load"
-    echo "gate:      expect this to take 2-3x longer than on an idle box"
+    say "gate: NOTE Track T tooling is running here ($others process(es)), load $load"
+    say "gate:      expect this to take 2-3x longer than on an idle box"
   else
-    echo "gate: box idle-ish (load $load)"
+    say "gate: box idle-ish (load $load)"
   fi
 }
 
@@ -48,11 +67,11 @@ step() {           # step <name> <logfile> <command...>
   start=$(date +%s)
   if "$@" > "$log" 2>&1; then
     end=$(date +%s)
-    echo "  PASS  $name  ($((end - start))s)"
+    say "  PASS  $name  ($((end - start))s)"
     return 0
   fi
   end=$(date +%s)
-  echo "  FAIL  $name  ($((end - start))s)  log: $log"
+  say "  FAIL  $name  ($((end - start))s)  log: $log"
   tail -n 15 "$log" | sed 's/^/        /'
   return 1
 }
@@ -110,11 +129,11 @@ stale_binary_hint() {
   binmt=$(stat -c %Y compiler/pascal26 2>/dev/null) || return 0
   [ -n "$newest" ] && [ -n "$binmt" ] || return 0
   if [ "$binmt" -lt "$newest" ]; then
-    echo "gate: NOTE compiler/pascal26 is OLDER than the last commit touching"
-    echo "gate:      compiler/ ($(git log -1 --format='%h %s' -- compiler/ | cut -c1-60))"
-    echo "gate:      That is a STALE BINARY, not a miscompile — a sibling landed a"
-    echo "gate:      compiler change and this checkout has not rebuilt."
-    echo "gate:      Run 'make compiler/pascal26' (~12s) and re-gate."
+    say "gate: NOTE compiler/pascal26 is OLDER than the last commit touching"
+    say "gate:      compiler/ ($(git log -1 --format='%h %s' -- compiler/ | cut -c1-60))"
+    say "gate:      That is a STALE BINARY, not a miscompile — a sibling landed a"
+    say "gate:      compiler change and this checkout has not rebuilt."
+    say "gate:      Run 'make compiler/pascal26' (~12s) and re-gate."
   fi
 }
 
@@ -144,8 +163,8 @@ pinned_rtl_canary() {
   local pin=stable_linux_amd64/default/pinned
   local src=test/test_uses_sysutils.pas
   local bin="$LOGDIR/pinned-rtl-canary.bin"
-  [ -x "$pin" ] || { echo "gate: (no pinned binary at $pin)"; return 0; }
-  [ -f "$src" ] || { echo "gate: (canary fixture $src is gone)"; return 0; }
+  [ -x "$pin" ] || { say "gate: (no pinned binary at $pin)"; return 0; }
+  [ -f "$src" ] || { say "gate: (canary fixture $src is gone)"; return 0; }
   "./$pin" "$src" "$bin" || {
     echo "^^ the PINNED binary cannot COMPILE the tree's lib/rtl."
     echo "   An 'undefined variable' naming a lib/rtl unit means a commit added"
@@ -168,11 +187,11 @@ pinned_rtl_canary() {
   }
 }
 
-echo "gate: mode=$MODE  logs=$LOGDIR"
+say "gate: mode=$MODE  logs=$LOGDIR"
 note_contention
 
 if [ "$MODE" = check ]; then
-  echo "gate: would run:"
+  say "gate: would run:"
   case "${2:-quick}" in *) :;; esac
   echo "  quick -> self-host fixedpoint (pinned seed) | testmgr --tier quick   (~30s)"
   echo "  lib   -> make lib-test"
@@ -205,7 +224,7 @@ then
   step "pinned builds live lib/rtl" "$LOGDIR/pinned-rtl-canary.log" \
        pinned_rtl_canary                                              || RC=1
 else
-  echo "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
+  say "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
 fi
 
 # Literal short-jump displacements. CheckRel8 already guards the OVERFLOW class
@@ -240,7 +259,7 @@ if [ -f tools/rel8_literal_span_check.py ]; then
   step "rel8 literal-jump spans" "$LOGDIR/rel8-literal-span.log" \
        python3 tools/rel8_literal_span_check.py --selftest .        || RC=1
 else
-  echo "  FAIL  rel8 literal-jump spans — tools/rel8_literal_span_check.py is MISSING"
+  say "  FAIL  rel8 literal-jump spans — tools/rel8_literal_span_check.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -275,7 +294,7 @@ if [ -f tools/forwardlint.py ] && [ -f compiler/compiler.pas ]; then
   step "fpc seed compiles (forward decls)" "$LOGDIR/forwardlint.log" \
        python3 tools/forwardlint.py                                   || RC=1
 else
-  echo "  FAIL  fpc seed compiles — tools/forwardlint.py or compiler/compiler.pas is MISSING"
+  say "  FAIL  fpc seed compiles — tools/forwardlint.py or compiler/compiler.pas is MISSING"
   echo "        Both are TRACKED, so this is a broken tree rather than a configuration."
   RC=1
 fi
@@ -298,7 +317,7 @@ if [ -f tools/abi_oracle_lint.py ]; then
   step "backends ask the ABI oracle" "$LOGDIR/abi-oracle-lint.log" \
        python3 tools/abi_oracle_lint.py                              || RC=1
 else
-  echo "  FAIL  backends ask the ABI oracle — tools/abi_oracle_lint.py is MISSING"
+  say "  FAIL  backends ask the ABI oracle — tools/abi_oracle_lint.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -319,7 +338,7 @@ if [ -f tools/iropname_lint.py ]; then
   step "IROpName names every IR op" "$LOGDIR/iropname-lint.log" \
        python3 tools/iropname_lint.py                                 || RC=1
 else
-  echo "  FAIL  IROpName names every IR op — tools/iropname_lint.py is MISSING"
+  say "  FAIL  IROpName names every IR op — tools/iropname_lint.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -348,7 +367,7 @@ if [ -f tools/gen_crtl_map.py ]; then
   step "crtl name map is not stale" "$LOGDIR/crtl-map.log" \
        python3 tools/gen_crtl_map.py --check                          || RC=1
 else
-  echo "  FAIL  crtl name map is not stale — tools/gen_crtl_map.py is MISSING"
+  say "  FAIL  crtl name map is not stale — tools/gen_crtl_map.py is MISSING"
   echo "        It is TRACKED, so its absence is a broken tree rather than a"
   echo "        configuration, and skipping would pass green for a tree with no"
   echo "        checker in it."
@@ -372,7 +391,7 @@ if [ -f tools/ast_slot_overloads.py ]; then
   step "AST slot-write census matches its snapshot" "$LOGDIR/ast-slot-census.log" \
        python3 tools/ast_slot_overloads.py --self-check                        || RC=1
 else
-  echo "  FAIL  AST slot-write census — tools/ast_slot_overloads.py is MISSING"
+  say "  FAIL  AST slot-write census — tools/ast_slot_overloads.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -392,7 +411,7 @@ if [ -f tools/silent_assertion_check.py ]; then
   step "every Makefile assertion can fail and can say why" "$LOGDIR/silent-assertion.log" \
        python3 tools/silent_assertion_check.py                                 || RC=1
 else
-  echo "  FAIL  Makefile assertion check — tools/silent_assertion_check.py is MISSING"
+  say "  FAIL  Makefile assertion check — tools/silent_assertion_check.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -411,7 +430,7 @@ if [ -f tools/devtest_case_registration.py ]; then
   step "every devtest case defined is a devtest case run" "$LOGDIR/devtest-registration.log" \
        python3 tools/devtest_case_registration.py                              || RC=1
 else
-  echo "  FAIL  devtest case registration — tools/devtest_case_registration.py is MISSING"
+  say "  FAIL  devtest case registration — tools/devtest_case_registration.py is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -430,7 +449,7 @@ if [ -f tools/test_no_full_suite_hook.sh ]; then
   step "the full-suite hook still refuses a sweep" "$LOGDIR/no-full-suite-hook.log" \
        sh tools/test_no_full_suite_hook.sh                               || RC=1
 else
-  echo "  FAIL  the full-suite hook still refuses a sweep — tools/test_no_full_suite_hook.sh is MISSING"
+  say "  FAIL  the full-suite hook still refuses a sweep — tools/test_no_full_suite_hook.sh is MISSING"
   echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
   echo "        configuration. A gate arm that skips on a committed file passes green"
   echo "        for a tree that has no checker in it at all."
@@ -467,7 +486,7 @@ if [ -f tools/check_test_wiring.py ] \
   step "this push wires the tests it adds" "$LOGDIR/test-wiring.log" \
        python3 tools/check_test_wiring.py --since "origin/$GATE_BRANCH" || RC=1
 else
-  echo "  SKIP  this push wires the tests it adds (no origin/$GATE_BRANCH ref)"
+  say "  SKIP  this push wires the tests it adds (no origin/$GATE_BRANCH ref)"
 fi
 
 # A frozen-string operand kind fed to a width-aware normaliser must come from
@@ -626,7 +645,7 @@ case "$MODE" in
 
     if [ -n "$seed_pid" ]; then
       if wait "$seed_pid"; then
-        echo "  PASS  FPC seed canary (concurrent)"
+        say "  PASS  FPC seed canary (concurrent)"
         # Record only when the tree's compiler/ IS the commit -- with local
         # edits in flight, what we just proved is not any sha, and stamping
         # HEAD would suppress the next run for a state never built.
@@ -634,7 +653,7 @@ case "$MODE" in
           git rev-parse HEAD > "$seed_green_file" 2>/dev/null || true
         fi
       else
-        echo "  FAIL  FPC seed canary (concurrent)  $LOGDIR/fpc-seed.log"
+        say "  FAIL  FPC seed canary (concurrent)  $LOGDIR/fpc-seed.log"
         # The error is thousands of lines above the tail — FPC keeps warning
         # after the error that stopped it — so surface it rather than the tail.
         grep -E "Error:|Fatal:" "$LOGDIR/fpc-seed.log" | head -5 | sed 's/^/        /'
@@ -657,9 +676,9 @@ case "$MODE" in
         RC=1
       fi
     elif command -v fpc >/dev/null 2>&1; then
-      echo "  SKIP  FPC seed canary (compiler/ unchanged, and seeded green at ${seed_green:0:12})"
+      say "  SKIP  FPC seed canary (compiler/ unchanged, and seeded green at ${seed_green:0:12})"
     else
-      echo "  SKIP  FPC seed canary (fpc not installed)"
+      say "  SKIP  FPC seed canary (fpc not installed)"
     fi
     if [ "$MODE" = full ]; then
       step "make test-nilpy"    "$LOGDIR/test-nilpy.log" make test-nilpy || RC=1
@@ -670,8 +689,13 @@ case "$MODE" in
     step "make lib-test"        "$LOGDIR/lib-test.log" make lib-test     || RC=1
     ;;
   *)
-    echo "gate: unknown mode '$MODE' (quick | lib | full | check)"
-    exit 2
+    # FALL THROUGH to the verdict line rather than exiting here. This arm used to
+    # `exit 2` directly, which made it the one path that returned a nonzero status
+    # WITHOUT publishing it — the exact failure the comment below exists to
+    # prevent, exempted by an early exit. It is also the cheapest RED available,
+    # so it doubles as the positive control that a RED verdict reaches the log.
+    say "gate: unknown mode '$MODE' (quick | lib | full | check)"
+    RC=2
     ;;
 esac
 
@@ -689,5 +713,5 @@ esac
 # 1)` is visibly the wrapper's error rather than a suspected bug in here. Same
 # property as the seed canary naming the sha it stands on — publish the evidence
 # you rely on, so a reader can check the claim instead of trusting it.
-if [ "$RC" = 0 ]; then echo "gate: GREEN (exit 0)"; else echo "gate: RED (exit $RC)"; fi
+if [ "$RC" = 0 ]; then say "gate: GREEN (exit 0)"; else say "gate: RED (exit $RC)"; fi
 exit "$RC"

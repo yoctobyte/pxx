@@ -7427,3 +7427,83 @@ frankB's.
 
 The one-line form: **a row that can only report one bit needs you to prove the
 bit came from the thing it names.**
+
+## "GREP THE LOG FOR THE VERDICT" HAD NO FILE BEHIND IT — the summary existed only in the channel the rule says not to trust
+
+This repo tells every lane to background `tools/gate.sh` and **read the verdict
+out of the log**, because a backgrounded run's notification reports the
+WRAPPER's status and has said `exit code 0` over `gate: RED (exit 1)` three
+times in one day. The advice is right. Until `2026-09-05` it was also
+**unfollowable**: the gate's `$LOGDIR` held one log per STEP and no summary, so
+the step lines and the final verdict lived **only on stdout** — exactly the
+channel the rule warns about. Measured on a wide run: 23 per-step logs,
+`summary.log` absent.
+
+`gate.sh` now writes `$LOGDIR/summary.log` through a `say()` helper, byte-identical
+to stdout, so the verdict is a file. Two details worth keeping:
+
+- **Not `exec > >(tee ...)`.** A tee in a process substitution can lose the
+  FINAL line when the script exits, and the final line is the verdict. An
+  explicit helper that appends has no race.
+- **The unknown-mode arm used to `exit 2` before the verdict line**, so the one
+  path that returned nonzero was the one path that never published it — the
+  rule's own exemption. It now falls through, which also makes
+  `tools/gate.sh <nonsense>` the cheapest RED available and therefore the
+  positive control that a RED verdict reaches the file.
+
+**Reading the verdict off a run that predates this — or off any harness that
+only streams — is still a real skill, so here is the method.** The per-step logs
+are the record of WHY a step failed; they do not carry a verdict. For the two
+expensive steps the verdict is `make`'s own failure bracket and nothing else:
+
+```
+grep -E '^make(\[[0-9]+\])?: \*\*\*' "$LOGDIR"/test.log "$LOGDIR"/test-nilpy.log
+```
+
+No match = no invocation in that log failed. Do **not** use a `FAIL|RED|Error`
+grep for this; see the next section for why it reports three hits on a green
+run.
+
+## AN INSTRUMENT THAT READS TEXT CANNOT TELL AN ASSERTION FROM A DESCRIPTION OF ONE — five instances in one night, five different tools
+
+Every one of these is a text matcher doing exactly what it was asked, on a
+string that DESCRIBES the thing rather than BEING it. None errored. All
+answered.
+
+1. **`.claude/hooks/no-full-suite.sh` refused a ticket body, a logbook line, and
+   a commit message** for containing a suite name in prose. The third is the
+   sharpest: the hook asks authors to "say in the commit why the quick tier was
+   not enough", then refuses the commit for saying it. Filed as
+   `bug-t-the-full-suite-hook-refuses-writing-about-the-suite-not-just-running-it`.
+2. **A `FAIL|RED|Error` grep matched three logs of a GREEN gate.** The hits
+   were Makefile comments that `make` echoes as it runs (*"the failure was a
+   SILENT WRONG VALUE"*), `echo "FAIL: ..."` arms inside `case`/`if` shells that
+   **never fired**, and `silent-assertion.log`'s own success line — which reads
+   `OK -- every Makefile assertion can fail and can say why` and contains the
+   word *fail*. A guard's PASS text naming the thing it guards against is normal
+   and good; it also makes the guard's output indistinguishable from its
+   failure to a naive matcher.
+3. **`pgrep -f 'gate.sh quick'` matched its own waiter.** `until ! pgrep -f
+   'gate.sh quick'; do sleep 5; done` was still looping **21 hours** later: the
+   waiter's own `bash -c` command line contains the pattern, so the condition can
+   never become true. The `[g]ate.sh` bracket trick fixes the self-match — but
+   note it does NOT save you if the same shell prints the plain string elsewhere
+   (an `echo` explaining the pattern is enough to re-match it).
+4. **A line-anchored rewrite skipped the one line that mattered.** Converting
+   `gate.sh`'s summary `echo`s with `^[ \t]*echo "gate:` rewrote 28 sites and
+   missed the verdict, because the verdict sits after `then` on a one-line `if`.
+   **A `^`-anchored pattern is a claim about FORMATTING, not about code.** The
+   result would have been a `summary.log` carrying every PASS and no verdict —
+   the precise failure the change existed to prevent. Caught only because the
+   positive control asserted `diff <(stdout) summary.log` was EMPTY rather than
+   asserting the file merely existed.
+5. **`grep -L`, `git log -S`, and a store-local `cat-file`** are the older
+   members of the same family, already in this file.
+
+**The discriminator is always the same shape: match on something only the real
+thing can emit, never on its NAME.** `make`'s `^make: \*\*\*` bracket cannot be
+produced by a comment. Command position cannot be produced by a heredoc body. A
+pid whose `/proc/<pid>/exe` is the interpreter and whose `argv[1]` is the script
+cannot be produced by a shell that merely mentions it. And when you must match
+text, **assert the negative control**: run the matcher against a case that must
+NOT match, in the same run, or you have a grep that cannot come out clean.
