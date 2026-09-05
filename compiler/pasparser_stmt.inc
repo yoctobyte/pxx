@@ -370,6 +370,7 @@ end;
 
 function ParseForInGeneratorAST(varIdx, gpi, recvNode, elemPrologue: Integer): Integer;
 var
+  dbgK: Integer;   { PXXDBG=a.slslot probe only }
   savedHoist, argHoist, hoistSeq: Integer;
   bodyNode, nargs, gIdx: Integer;
   a0, a1, a2, a3, a4, a5: Integer;
@@ -498,6 +499,18 @@ begin
       while ASTRight[hoistSeq] >= 0 do hoistSeq := ASTRight[hoistSeq];
       ASTRight[hoistSeq] := assignG;
       assignG := argHoist;
+    end;
+    if PxxDbgEnabled('a.slslot') then
+    begin
+      WriteLn('a.slslot caller: proc=', Procs[gpi].Name, ' nargs=', nargs,
+              ' instsize=', ProcGenInstSize[gpi], ' paramcount=', Procs[gpi].ParamCount);
+      for dbgK := 1 to nargs do
+        if dbgK < Procs[gpi].ParamCount then
+          WriteLn('a.slslot   arg', dbgK, ': storeoff=', SL_OFF_SLOTS + 8 * (dbgK - 1),
+                  ' paramsym=', Procs[gpi].Params[dbgK].SymIdx,
+                  ' symgenslot=', SymGenSlot[Procs[gpi].Params[dbgK].SymIdx],
+                  ' realoff=', SL_OFF_SLOTS + 8 * SymGenSlot[Procs[gpi].Params[dbgK].SymIdx],
+                  ' tk=', Ord(Procs[gpi].Params[dbgK].TypeKind));
     end;
     if nargs >= 1 then
     begin
@@ -2437,6 +2450,10 @@ begin
       Inc(CurGenSlotNext);
       Continue;
     end;
+    if PxxDbgEnabled('a.slslot') then
+      WriteLn('a.slslot assign: sym=', Syms[i].Name, ' kind=', Ord(Syms[i].Kind),
+              ' tk=', Ord(tk), ' slot=', CurGenSlotNext,
+              ' off=', SL_OFF_SLOTS + 8 * CurGenSlotNext);
     if tk = tyVariant then
     begin
       { A VARIANT is a 16-byte {tag, payload} pair, so it gets a two-word slot
