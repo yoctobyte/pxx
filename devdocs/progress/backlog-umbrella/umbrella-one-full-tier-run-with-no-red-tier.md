@@ -1213,3 +1213,45 @@ callout existed (`2bdbe4249`, 18:29:11Z), so every later report correctly finds
 
 The `toolchain:` line is unconditional and spelled out in full, which is what
 makes this possible without the callout.
+
+## 2026-09-05, later — the retirement condition FIRED, as stated
+
+Full tier `c1fe3e414d25`, seven, 19:14:28Z, `toolchain_fp b926fcc528d9`.
+`merge-base --is-ancestor 8844c8c42 c1fe3e414d25` is true, so this is the first
+full tier after pin v404.
+
+**`grep -c TMethod` on the report: 0.** The eight-plus `lib-test`/`demos`
+NEW-REDs of the previous tier are gone, with nobody touching a line. The
+retirement condition recorded above is met, and the inverse condition — a
+persisting TMethod red meaning v404 did not do what its commit message says —
+did not fire.
+
+### The class-var group is STILL-RED and that is NOT a harness disagreement
+
+`test-core#src:test/strict_fpc_case_fail.pas` is still red here, while frankH's
+run of that target went GREEN end to end (15,253 lines against the blocked
+run's 3,783). Those look like two instruments disagreeing. They are not:
+
+    tier tree   c1fe3e414d25   2026-09-05 19:01:13Z
+    the fix     8727b1907      2026-09-05 19:14:59Z   (+13m46s)
+
+`merge-base --is-ancestor 8727b1907 c1fe3e414d25` is FALSE. **The tier predates
+the fix by thirteen minutes and forty-six seconds.** Its red is a correct
+statement about the tree it measured.
+
+### THE PATTERN, three instances in one evening
+
+On a tree moving this fast, **a tier's verdict is a statement about a tree that
+is typically minutes old, and every natural reading of it is present tense.**
+
+| the reading | the offset | which way |
+|---|---|---|
+| NEW-REDs "argue for a pin" | pin v404 landed **6m55s** later | already fixed |
+| class-var "disagrees" | the fix landed **13m46s** later | already fixed |
+| `TOOLCHAIN FIRST RECORDED` "did not fire" | baseline latched **8m22s** earlier | never could |
+
+In all three the report is correct and the *tense* is what misleads. **Before
+reading a tier as a finding, check what landed between its tree and now** —
+`git log <tier-sha>..origin/master -- <the files the red depends on>` costs one
+command and settles it. Two of these three were caught only because somebody
+checked at ref level rather than reasoning from the clock.
