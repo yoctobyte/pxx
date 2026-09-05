@@ -16,7 +16,7 @@ summary: "Seven lost its GTK development headers to the 2026-09-05 dist-upgrade 
 > **SCOPE: the 2026-09-05 FIVE, and nothing older.** Thirteen of the eighteen gtk
 > tickets are already closed on their own, different, verified causes — see the
 > four-batch table below. A tidy-up pass folding all eighteen under the
-> host-dependency story would **erase two root causes** (`2b64dd1e5` and the
+> host-dependency story would **erase two root causes** (`ade0ce525` and the
 > `__builtin_constant_p` fix) and leave the next regression in either path with
 > no prior to find. Close the 09-05 five here. Touch nothing older.
 
@@ -73,7 +73,7 @@ this ticket's.** Read off the `host` line and the log tail of each batch:
 | filed | rows | host | log tail | cause | closed |
 | --- | --- | --- | --- | --- | --- |
 | 08-21/22 | 3 | **plexus** | `ok: … gtk_init resolved and called successfully!` | the job **passed** on re-run; auto-closed by the plexus watcher at `de2de369ea6a` | correctly |
-| 08-30 | 5 | seven | `pascal26:90: undeclared identifier passed as argument 2 of '__pxx_read'`, on crtl's `pxx_env_buf` | `eefa85d70` — a static in a used header keeps its body, so crtl modules flow through the single-pass walk. Root-caused and reverted `2b64dd1e5`, verified by compiling either side | correctly, real code defect |
+| 08-30 | 5 | seven | `pascal26:90: undeclared identifier passed as argument 2 of '__pxx_read'`, on crtl's `pxx_env_buf` | `eefa85d70` — a static in a used header keeps its body, so crtl modules flow through the single-pass walk. Root-caused and reverted `ade0ce525`, verified by compiling either side | correctly, real code defect |
 | 09-01 | 5 | seven | `pascal26:311: call to undeclared function: __builtin_constant_p` | glib reaches for the builtin because `00ab464bf` claims `__GNUC__ 2.7`; reduced to the literal 0 beside `__builtin_expect` | correctly, real code defect |
 | 09-05 | 5 | seven | `uses: unit source not found: gtk` / `C include file not found: "gtk/gtk.h"` | **the headers were absent** | this ticket |
 
@@ -118,7 +118,7 @@ evidence of one.
 **And the closure risk inverts.** The danger was never "eighteen closed on a
 wrong mechanism"; thirteen were closed on the RIGHT one. It is that a fifth pass
 tidies all eighteen under the host-dependency story and **erases two verified
-root causes** — `2b64dd1e5` and the `__builtin_constant_p` fix — leaving the next
+root causes** — `ade0ce525` and the `__builtin_constant_p` fix — leaving the next
 regression in either path with no prior. **Close the 09-05 five on the headers.
 Touch nothing older.**
 
@@ -337,3 +337,26 @@ like three bugs: **seven** (no headers → `unit source not found`), **plexus
 built by hand** (GTK2 only on the search path → deliberate `#error`), **plexus
 built by the Makefile** (correct → passes). Only the first is a problem, and
 `decide-which-gtk-a-bare-gtk-gtk-h-means` is already in `decided/`.
+
+## Citation repair 2026-09-05 — `2b64dd1e5` was a ghost
+
+`progress.sh check` reported `2b64dd1e5` as a DANGLING SHA. It is: the sha is not
+on origin and never was. **Recovered by matching the commit SUBJECT**, which is
+this repo's prescribed method and works because the subject survives a rebase
+while the id does not:
+
+```
+eefa85d70  fix(C): a static defined in a used header keeps its body
+ade0ce525  revert(C): "a static defined in a used header keeps its body"   <- the revert
+f5708eb77  fix(C): a static defined in a used header keeps its body -- scoped by provenance
+```
+
+The row meant **the revert**, so `2b64dd1e5` -> **`ade0ce525`**. The ghost rate
+here is ~100% by construction: nearly every sync rebases, so a pre-push
+`git log -1` reads a doomed id every time. Pass **no sha** to `resolve` and let
+`sync.sh` fill in `PENDING-COMMIT`.
+
+Worth noting what this row was doing: it is one of the two root causes the
+summary warns a tidy-up pass would **erase**. A dangling citation on a
+load-bearing "do not merge these" argument is the worst place for one — the
+reader who checks it finds nothing and concludes the cause was imaginary.

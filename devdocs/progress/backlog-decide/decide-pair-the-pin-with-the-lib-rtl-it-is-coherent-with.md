@@ -1,0 +1,88 @@
+---
+slug: decide-pair-the-pin-with-the-lib-rtl-it-is-coherent-with
+track: U
+type: decide
+prio: 55
+status: new
+owner: user
+found: 2026-09-05
+found-by: frankZ, filed by frank-coordinator
+blocked-by: []
+summary: "USABLE ROLLBACK DEPTH IS ZERO. Measured across nine pins against the current tree's 54 `lib/rtl` root units: HEAD 0 failures, v404 2, v375..v403 all 14, v365 and v354 both 54. Every historical pin is STRICTLY WORSE than the current one, and `trackt pinstatus` names v354 as the recovery target -- so following the advice it prints moves you from 2 broken roots to 54. The cause is that `make revert` is `git checkout $SRC -- $(STABLE_DEFAULT_DIR)` and nothing else: the pin moves back and `lib/rtl` does not. NO ARGUMENT TO THAT COMMAND PRODUCES A COHERENT PAIR, because the pair is only coherent within one era -- each new builtin mints a cliff, roughly one a fortnight (`0f6a04644` __pxxblockmove 08-21, `31f8b11bf` System.TMethod 09-04). THIS IS NOT A REASON TO GATE A PIN and must never be read as one; if anything it argues for pinning MORE promptly, since the current pin is the best rollback target in existence. What it falsifies is a PREMISE, not a practice."
+---
+
+# Pair the pin with the `lib/rtl` it is coherent with
+
+## The measurement
+
+frankZ, nine pins, each asked to compile the current tree's **54 `lib/rtl` root
+units**:
+
+| pin | root units it cannot compile |
+| --- | --- |
+| HEAD | **0** |
+| v404 (current) | **2** |
+| v375 … v403 | **14** each |
+| v365 | **54** |
+| v354 | **54** |
+
+> **Usable rollback depth is ZERO.** Every historical pin is strictly worse than
+> the one in place.
+
+And `trackt pinstatus` names **v354** as the recovery target, selected by
+`pin_is_green()`. **Following the advice it prints takes you from 2 broken roots
+to 54.**
+
+## The fork
+
+`make revert` is `git checkout $SRC -- $(STABLE_DEFAULT_DIR)` and nothing else,
+so **the pin moves back and `lib/rtl` does not.** Incoherent by construction.
+
+**And no argument to that command fixes it, because the pair is only coherent
+within one era.** Each new builtin mints a cliff: `0f6a04644` minting
+`__pxxblockmove` on 08-21, `31f8b11bf` minting `System.TMethod` on 09-04 —
+**roughly one builtin a fortnight and one cliff per builtin.**
+
+Options, none of them small, which is why this is a `decide-` and not a fix:
+
+1. **Revert the pair.** `make revert` moves `stable_linux_amd64/**` *and* the
+   `lib/rtl` tree to the same era. Restores real rollback; means a revert is no
+   longer a one-directory operation and interacts with whatever else has landed
+   in `lib/rtl` since.
+2. **Pin the pair.** `make pin` records the `lib/rtl` era alongside the binary, so
+   a pin is a self-contained artefact. More storage, and the coherent unit becomes
+   the thing to reason about rather than the binary.
+3. **Accept depth zero and say so.** Rollback stops being a recovery story; the
+   remedy for a bad pin becomes *pin again from a fixed tree*. Cheapest, and it
+   requires deleting the recovery clause everywhere it is cited rather than
+   leaving it hollow.
+
+**Recommendation: 3 now and 1 or 2 deliberately.** Option 3 costs nothing, is
+already true in fact, and stops the false clause being quoted; the design change
+can then be ranked on its own merits instead of under time pressure from a red.
+
+## What this is NOT
+
+**It is not a reason to gate, delay or condition a pin.** frankZ put that in its
+own ticket in those words and it must survive relay:
+
+> **A valid pin is the self-host fixedpoint. Nothing else may block one.**
+
+If anything this argues for pinning **more** promptly — **the current pin is the
+best rollback target in existence, and every hour it ages the gap widens.**
+
+**What it falsifies is a premise, not a practice.** *"A red is a reason to pin
+sooner, not later"* is sound **only while recovery works**, and `track-t.md`'s
+*"a bad pin is recovered, not prevented"* has not been true for some time.
+**Either that claim becomes true again or it stops being cited.** What it must not
+do is keep being quoted as load-bearing while it is hollow — which is exactly
+what it was being quoted for on the night this was measured, by this coordinator,
+to four sessions.
+
+## Split out deliberately
+
+**`bug-t-pinstatus-names-a-rollback-target-nobody-validated`** is the cheap half
+and is **not** part of this decision, so it can land without waiting on the design
+call: `pinstatus` has the canary's logic to hand and should either run it or mark
+the line unvalidated. **A tool naming a target nobody validated is worse than a
+tool naming none.**

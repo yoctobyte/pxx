@@ -154,6 +154,29 @@ pin is **recovered, not prevented**
 (`task-t-pin-fast-track-t-owns-verification`). Track A pays 34s instead of 25
 minutes, and T supplies the verdict afterwards.
 
+> **PREMISE MEASURED FALSE 2026-09-05 — "recovered" does not currently work, and
+> this clause must not be cited as load-bearing until it does.** frankZ measured
+> nine pins against the current tree's 54 `lib/rtl` root units: HEAD 0 failures,
+> v404 (current) 2, v375..v403 fourteen each, v365 and v354 **all 54**. **Usable
+> rollback depth is ZERO** — every historical pin is strictly worse than the one
+> in place — and `make revert` restores only `stable_linux_amd64/**`, so the pin
+> moves back and `lib/rtl` does not. Each new builtin mints a cliff, roughly one
+> a fortnight (`0f6a04644`, `31f8b11bf`).
+>
+> **This is NOT a reason to gate, delay or condition a pin.** A valid pin is the
+> self-host fixedpoint and nothing else may block one; if anything, zero rollback
+> depth argues for pinning **sooner**, since the current pin is the best rollback
+> target in existence. **What is falsified is the PREMISE, not the practice** —
+> the fast/unverified trade was made *because* a bad pin could be recovered, and
+> that half has not been true for some time.
+>
+> Either the claim becomes true again (`decide-pair-the-pin-with-the-lib-rtl-it-is-coherent-with`)
+> or it stops being cited. **What it must not do is keep being quoted while
+> hollow** — it was quoted as load-bearing to four sessions on the night it was
+> measured. Cheap half split out as
+> `bug-t-pinstatus-names-a-rollback-target-nobody-validated`, since `pinstatus`
+> names v354 and v354 compiles none of the 54.
+
 That second half was missing, and the gap is invisible unless you go looking
 for it. The escalation ladder deepens **HEAD**; a pin is whatever HEAD happened
 to be when a human ran `make pin`. By the time the box climbs from the fast

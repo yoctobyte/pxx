@@ -92,3 +92,19 @@ independent, and either alone is survivable.
 That is a second, independent argument for ranking the **pre-commit hook** first:
 not merely that people forget, but that the window between noticing and landing
 is itself contested.
+
+## DANGLING SHAS BY DESIGN
+
+`progress.sh check` flags `3815bee43` as a dangling sha. **It is right, and that
+is the entire finding.** This ticket exists because that commit is unreachable
+from any ref — `git for-each-ref --contains` returns nothing — so a citation of
+it *cannot* resolve, and repointing it would delete the evidence.
+
+The companion `038c3acf1` **does** resolve, and the pair is the measurement: same
+clone, same session, ninety minutes apart, opposite outcomes, the only difference
+being whether the daemon was mid-gate. **Both citations must stay exactly as they
+are.**
+
+This is the escape working as designed rather than a bookkeeping exemption: the
+check has to let a ticket say *the dangle is the subject*, or it fires forever on
+the one case handled correctly.
