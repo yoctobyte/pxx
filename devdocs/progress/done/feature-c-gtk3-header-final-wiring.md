@@ -236,4 +236,4 @@ uncommitted, which is the only state in which that canary runs at all. All four
 (`test_gtk_window`, `test_pcl_helloworld`) builds and links GTK 3.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a409e19b5.
