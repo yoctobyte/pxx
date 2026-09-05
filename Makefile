@@ -14082,6 +14082,23 @@ test-core: $(COMPILER)
 	# accessor prints a number 100 too small rather than failing to compile.
 	./$(COMPILER) test/test_with_scoped_property_method_accessors.pas $(TESTTMP)/test_withprop26
 	tools/expect_same.sh test_withprop26 "$$($(TESTTMP)/test_withprop26)" "$$(cat test/test_with_scoped_property_method_accessors.expected)"
+	# ONE indexed property through EVERY receiver spelling — bare inside a
+	# method, Self-qualified, instance-qualified and with-scoped. `:=` follows
+	# the SUBSCRIPT, so an arm that peeks at the next token sees `[` and calls
+	# the GETTER for a write; the getter adds 100, so a wrong choice prints a
+	# number 100 off rather than failing to compile. The four spellings were
+	# four separate copies of that peek.
+	./$(COMPILER) test/test_indexed_property_every_receiver_spelling.pas $(TESTTMP)/test_idxprop_recv26
+	tools/expect_same.sh test_idxprop_recv26 "$$($(TESTTMP)/test_idxprop_recv26)" "$$(cat test/test_indexed_property_every_receiver_spelling.expected)"
+	# ...and the same matrix over FIELD accessors, which has NO fpc oracle by
+	# construction: fpc refuses a subscript on a field-backed property, so this
+	# is a pxx extension and accepting it is not a defect. Answering
+	# DIFFERENTLY in four places was — three answers from one declaration, and
+	# the with-scope one stored through the READ field silently, with the
+	# read-back agreeing because it read the same wrong place. read and write
+	# are different fields on purpose: with one field every row passes.
+	./$(COMPILER) test/test_indexed_property_over_a_field_is_one_answer.pas $(TESTTMP)/test_idxprop_fld26
+	tools/expect_same.sh test_idxprop_fld26 "$$($(TESTTMP)/test_idxprop_fld26)" "$$(cat test/test_indexed_property_over_a_field_is_one_answer.expected)"
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was

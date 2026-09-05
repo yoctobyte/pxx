@@ -392,7 +392,7 @@ var
   helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
   idxHelperNode: Integer;   { a type-helper call on an INDEXED receiver — `a[i].ToUpper` }
   w, withNode, recId: Integer;
-  propFOff, propFLen, propW: Integer;   { propW: bracket depth for the indexed-property `:=` peek — NOT `w`, which is the with-stack cursor }
+  propFOff, propFLen: Integer;
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
@@ -513,12 +513,13 @@ begin
               METHOD pair, because both declaration parsers put anything that is
               not an instance field there. }
             propFOff := 0; propFLen := 0;
-            if (CurTok.Kind = tkAssign) and (UPropWriteMLen[pri] > 0) then
+            isAssign := PropAccessIsWrite(TokPos - 1);
+            if isAssign and (UPropWriteMLen[pri] > 0) then
             begin
               propFOff := UPropWriteMOff[pri];
               propFLen := UPropWriteMLen[pri];
             end
-            else if (CurTok.Kind <> tkAssign) and (UPropReadMLen[pri] > 0) then
+            else if (not isAssign) and (UPropReadMLen[pri] > 0) then
             begin
               propFOff := UPropReadMOff[pri];
               propFLen := UPropReadMLen[pri];
@@ -536,7 +537,14 @@ begin
               end;
             end;
 
-            if (CurTok.Kind = tkAssign) and (UPropWriteFLen[pri] > 0) then
+            { THE SILENT ONE. This peek used to be `CurTok.Kind = tkAssign`, so
+              `with c do A[3] := 9` over
+              `property A[i: LongInt]: LongInt read FR write FW` saw the `[`,
+              chose the READ field, and stored through FR -- with the read-back
+              agreeing, because the read went to the same wrong place. The
+              instance-qualified and Self spellings of that identical line both
+              stored through FW. }
+            if PropAccessIsWrite(TokPos - 1) and (UPropWriteFLen[pri] > 0) then
             begin
               propFOff := UPropWriteFOff[pri];
               propFLen := UPropWriteFLen[pri];
@@ -591,24 +599,7 @@ begin
               thing the eleven hand-rolled accessor calls each got wrong in
               their own way, and it is why this arm asks rather than builds.
               bug-p-a-with-scoped-property-with-method-accessors-is-undefined }
-            isAssign := (CurTok.Kind = tkAssign);
-            { An INDEXED property puts the `:=` after the SUBSCRIPT. The
-              property name is already consumed on entry (prevTok is the
-              caller's `TokPos - 1`), so CurTok IS the `[` and the group starts
-              at TokPos - 1. }
-            if (not isAssign) and UPropIsIndexed[pri] and
-               (CurTok.Kind = tkLBrack) then
-            begin
-              i := TokPos - 1; propW := 0;
-              while i < TokCount do
-              begin
-                if Tokens[i].Kind = tkLBrack then Inc(propW)
-                else if Tokens[i].Kind = tkRBrack then
-                begin Dec(propW); if propW = 0 then begin Inc(i); Break; end; end;
-                Inc(i);
-              end;
-              if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
-            end;
+            isAssign := PropAccessIsWrite(TokPos - 1);
 
             if isAssign and (UPropWriteMLen[pri] > 0) then
             begin
@@ -818,12 +809,13 @@ begin
         if pri >= 0 then
         begin
           propFOff := 0; propFLen := 0;
-          if (CurTok.Kind = tkAssign) and (UPropWriteMLen[pri] > 0) then
+          isAssign := PropAccessIsWrite(TokPos - 1);
+          if isAssign and (UPropWriteMLen[pri] > 0) then
           begin
             propFOff := UPropWriteMOff[pri];
             propFLen := UPropWriteMLen[pri];
           end
-          else if (CurTok.Kind <> tkAssign) and (UPropReadMLen[pri] > 0) then
+          else if (not isAssign) and (UPropReadMLen[pri] > 0) then
           begin
             propFOff := UPropReadMOff[pri];
             propFLen := UPropReadMLen[pri];
@@ -916,26 +908,60 @@ begin
         this path sees it). See bug-unqualified-property-in-method. }
       selfClassCi := SelfMemberCi(fieldName);
       pri := FindUProp(selfClassCi, fieldName);
-      isAssign := (CurTok.Kind = tkAssign);
+      isAssign := PropAccessIsWrite(TokPos - 1);
       selfIdx := Procs[CurProc].Params[0].SymIdx;
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
       ASTTk[selfNode] := Ord(Syms[selfIdx].TypeKind);   { tyRecord for an advanced-record method }
-      if UPropIsIndexed[pri] then
+      if UPropIsIndexed[pri] and
+         (((isAssign) and (UPropWriteFLen[pri] > 0)) or
+          ((not isAssign) and (UPropReadFLen[pri] > 0))) then
+      begin
+        { An indexed property with a FIELD accessor. The subscript is an ARRAY
+          index on the backing field, NOT a pair of accessor arguments, so the
+          `[` has to stay in the stream for the trailing-selector loop -- which
+          is why this is decided BEFORE ParsePropIndexArgs rather than inside
+          the method branch below.
+
+          FPC refuses this declaration outright (`Incompatible types: got
+          "Array[0..3] Of LongInt" expected "LongInt"`), so there is no oracle
+          for it and pxx accepting it is not a defect. Answering DIFFERENTLY in
+          four places is: `c.A[1]`, `Self.A[1]` and `with c do A[1]` all
+          resolved it through the selector walker's field arm, and the bare
+          spelling alone said `indexed property has no setter`. An internal
+          inconsistency is a bug under any policy -- the same reason the
+          variant part's own alignment row was one.
+          refactor-p-one-lvalue-path-for-statements-and-expressions }
+        if isAssign then
+        begin
+          propFOff := UPropWriteFOff[pri]; propFLen := UPropWriteFLen[pri];
+        end
+        else
+        begin
+          propFOff := UPropReadFOff[pri]; propFLen := UPropReadFLen[pri];
+        end;
+        fieldName := '';
+        for i := 0 to propFLen - 1 do
+          AppendChar(fieldName, TokChars[propFOff + i]);
+        fldIdx := FindUField(selfClassCi, fieldName);
+        if fldIdx < 0 then Error('property backing field not found: ' + fieldName);
+        viaProp := True;
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := selfNode;
+        { codegen re-resolves the field by its own span, as every other
+          property-to-field rewrite here does }
+        ASTSOffset[fieldNode] := propFOff;
+        ASTSLen[fieldNode] := propFLen;
+        tk := IntToTypeKind(UFldTk[fldIdx]);
+        recName := UFldRec_[fldIdx];
+        ASTTk[fieldNode] := Ord(tk);
+        node := fieldNode;
+        { falls through to the trailing-selector loop, which takes the `[i]` }
+      end
+      else if UPropIsIndexed[pri] then
       begin
         if CurTok.Kind <> tkLBrack then
           Error('indexed property requires an index: ' + fieldName);
-        { write iff `:=` follows the bracket group (CurTok = '[', at TokPos-1) }
-        isAssign := False;
-        i := TokPos - 1; w := 0;
-        while i < TokCount do
-        begin
-          if Tokens[i].Kind = tkLBrack then Inc(w)
-          else if Tokens[i].Kind = tkRBrack then
-          begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
-          Inc(i);
-        end;
-        if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
         ParsePropIndexArgs(margIdx, mlastArg);
         methName := '';
         if isAssign then
@@ -1252,29 +1278,7 @@ begin
             cpPri := FindUProp(ci, fieldName);
             if cpPri >= 0 then
             begin
-              cpIsAssign := (CurTok.Kind = tkAssign) or
-                            ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
-              { An INDEXED class property puts the `:=` after the SUBSCRIPT, so
-                a zero-lookahead peek reads `[` and picks the READ accessor for
-                a write: `TC.A[2] := 7` came out as `wrong number of parameters
-                in call to TC.GetA`. Balance the bracket group the way the
-                instance arm below already does -- the property name is already
-                consumed here, so CurTok IS the `[` and the group starts at
-                TokPos-1. }
-              if (not cpIsAssign) and UPropIsIndexed[cpPri] and
-                 (CurTok.Kind = tkLBrack) then
-              begin
-                i := TokPos - 1; w := 0;
-                while i < TokCount do
-                begin
-                  if Tokens[i].Kind = tkLBrack then Inc(w)
-                  else if Tokens[i].Kind = tkRBrack then
-                  begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
-                  Inc(i);
-                end;
-                if (i < TokCount) and (Tokens[i].Kind = tkAssign) then
-                  cpIsAssign := True;
-              end;
+              cpIsAssign := PropAccessIsWrite(TokPos - 1);
               cpName := '';
               if cpIsAssign then
               begin
@@ -2619,22 +2623,8 @@ begin
 
       if pri >= 0 then
       begin
-        isAssign := (CurTok.Kind = tkAssign) or ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
-        { Indexed property `obj.Items[i] := v`: `:=` follows the subscript, not the
-          name. Peek past the bracket group (CurTok = name, TokPos = `[`). }
-        if UPropIsIndexed[pri] and (not isAssign) and
-           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLBrack) then
-        begin
-          i := TokPos; w := 0;
-          while i < TokCount do
-          begin
-            if Tokens[i].Kind = tkLBrack then Inc(w)
-            else if Tokens[i].Kind = tkRBrack then
-            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
-            Inc(i);
-          end;
-          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
-        end;
+        { CurTok is still the NAME on this path, so the group starts at TokPos. }
+        isAssign := PropAccessIsWrite(TokPos);
         { AUGMENTED assignment through a method-backed property — `s.state += 1`.
           `isAssign` only ever tested for `:=`, so this fell into the READ arm
           below: the getter was called, its RESULT was handed to the assignment
@@ -4727,22 +4717,8 @@ begin
       if ci >= 0 then pri := FindUProp(ci, fieldName);
       if pri >= 0 then
       begin
-        isAssign := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign);
-        { Indexed property write: `:=` follows the subscript — peek past the
-          bracket group (CurTok = name, TokPos = `[`). }
-        if UPropIsIndexed[pri] and (not isAssign) and
-           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLBrack) then
-        begin
-          i := TokPos; w := 0;
-          while i < TokCount do
-          begin
-            if Tokens[i].Kind = tkLBrack then Inc(w)
-            else if Tokens[i].Kind = tkRBrack then
-            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
-            Inc(i);
-          end;
-          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
-        end;
+        { CurTok is still the NAME on this path, so the group starts at TokPos. }
+        isAssign := PropAccessIsWrite(TokPos);
         if isAssign then
         begin
           if UPropWriteFLen[pri] > 0 then
@@ -5115,19 +5091,7 @@ begin
         convention and the same walk ParseLValueAST's own default-property arm
         uses.
         bug-p-a-class-cast-cannot-index-a-default-property-as-an-assignment-target }
-      dfIsAssign := False;
-      if dfPri >= 0 then
-      begin
-        dfI := TokPos - 1; w := 0;
-        while dfI < TokCount do
-        begin
-          if Tokens[dfI].Kind = tkLBrack then Inc(w)
-          else if Tokens[dfI].Kind = tkRBrack then
-          begin Dec(w); if w = 0 then begin Inc(dfI); Break; end; end;
-          Inc(dfI);
-        end;
-        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfIsAssign := True;
-      end;
+      dfIsAssign := (dfPri >= 0) and PropAccessIsWrite(TokPos - 1);
 
       if dfIsAssign and (dfPri >= 0) then
       begin

@@ -718,6 +718,61 @@ begin
 end;
 
 
+{ ---- The ONE read-or-write decision for a property access ------------------
+  A property access chooses its READ or its WRITE accessor by looking for `:=`,
+  and for an INDEXED property that `:=` sits after the whole subscript group,
+  not after the name. Seven sites in pasparser_lval.inc make that choice --
+  bare name in a method, `Self.P`, `c.P`, `TCls.P`, with-scope, the selector
+  walker, the default property -- and the three-line balanced scan had been
+  copy-pasted to four of them. Nothing at any site said which kind it was, and
+  the difference was invisible until an indexed property reached one of the
+  other three: measured 2026-09-05, ONE declaration
+  (`property A[i: LongInt]: LongInt read FR write FW`, distinct backing fields)
+  gave THREE answers across four receiver spellings -- `c.A[2]` and `Self.A[1]`
+  stored through FW, a bare `A[1]` was refused outright, and
+  `with c do A[3] := 9` stored through **FR**, silently, with the read-back
+  agreeing because the read went to the same wrong place.
+
+  `afterNameTok` is the index in Tokens[] of the first token AFTER the property
+  name, because the callers do not agree on whether the name is consumed: the
+  arms reached from ParseLValueAST's entry have it consumed already (CurTok is
+  the `[` or the `:=`, so pass `TokPos - 1`), while the selector walker still
+  has CurTok on the name (pass `TokPos`). That disagreement is exactly why two
+  of the copied scans started at TokPos and two at TokPos - 1, and why the
+  parameter is spelled out rather than derived here.
+
+  The bracket test is on the TOKEN and not on UPropIsIndexed: a FIELD-backed
+  property whose field is an array carries a subscript group too, and pxx
+  accepts that spelling (FPC does not, so there is no oracle for it -- but
+  answering differently in four places is an internal inconsistency, which is a
+  defect under any policy). One group only, deliberately: `P[i][j] := v`
+  indexes the property's RESULT, which is not a write to the property, and all
+  four proven copies stopped at the first group. }
+function PropAccessIsWrite(afterNameTok: Integer): Boolean;
+var i, w: Integer;
+begin
+  Result := False;
+  if afterNameTok >= TokCount then Exit;
+  if Tokens[afterNameTok].Kind = tkAssign then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if Tokens[afterNameTok].Kind <> tkLBrack then Exit;
+  i := afterNameTok; w := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(w)
+    else if Tokens[i].Kind = tkRBrack then
+    begin
+      Dec(w);
+      if w = 0 then begin Inc(i); Break; end;
+    end;
+    Inc(i);
+  end;
+  Result := (i < TokCount) and (Tokens[i].Kind = tkAssign);
+end;
+
 { Parse an indexed-property subscript `[e1 {, e2}]` (bracket not yet consumed)
   into a chain of AN_ARG nodes. head = first arg, tail = last (so a setter's value
   arg can be spliced after). Supports multi-index `obj.Cells[a, b]` / `obj[a, b]`. }

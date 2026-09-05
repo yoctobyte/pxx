@@ -265,3 +265,73 @@ adding a case — the same move the three earlier increments made.
    here need a varied RECEIVER (class name, with-scope) at a fixed shape. The
    sweep was sound and its population was the wrong axis — which is why it read
    as 25/25 while two arms were broken.
+
+---
+
+## 2026-09-05 (frankA, later) — the peek IS unified, and the seventh row paid for itself
+
+The note above named the next increment as *"unify the peek, not the parsers"*
+and recorded line 735 as **NOT investigated** rather than as clean. Both of
+those decided what happened next.
+
+### `PropAccessIsWrite(afterNameTok)` — one decision, nine call sites
+
+It lives in `pasparser_call.inc` beside the other accessor helpers. The
+parameter is the index of the first token AFTER the property name, spelled out
+rather than derived, because **the callers do not agree on whether the name is
+consumed**: arms reached from `ParseLValueAST`'s entry have it consumed already
+(pass `TokPos - 1`), the selector walker still has `CurTok` on the name (pass
+`TokPos`). That disagreement is exactly why two of the copied scans started at
+`TokPos` and two at `TokPos - 1`, and it is the thing a shared helper has to
+carry rather than hide.
+
+Its bracket test is on the TOKEN, not on `UPropIsIndexed`, which is what closed
+the seventh row.
+
+### Investigating line 735 took one probe and found the silent one
+
+The row said "we did not look". Looking cost one file. A FIELD-backed property
+**can** carry a subscript in pxx — fpc refuses that declaration, so there is no
+oracle and accepting it is not a defect — and with `read FR write FW` over two
+array fields, **one declaration gave three answers across four receiver
+spellings**:
+
+| spelling | before |
+| --- | --- |
+| `c.A[2] := 7` | FW — correct |
+| `Self.A[1] := 8` | FW — correct |
+| `A[1] := 8` (bare, in a method) | refused: `indexed property has no setter: A` |
+| `with c do A[3] := 9` | **FR — stored through the READ field, silently** |
+
+The with-scope row is the one worth the test: it stores through the read field
+**and the read-back agrees**, because the read goes to the same wrong place. An
+`expect_same` row comparing a write to its own read-back cannot fail on it.
+
+Both are fixed — the peek unification fixes the with-scope store, and the bare
+arm gained the field-backed branch it never had (decided BEFORE
+`ParsePropIndexArgs`, because a field backing takes the subscript as an ARRAY
+index and the `[` has to stay in the stream for the suffix loop). All four
+spellings now store through FW and read from FR.
+
+**No oracle is not the same as no verdict.** fpc refuses this declaration, so
+there is nothing to differ from — but answering differently in four places is
+an INTERNAL inconsistency, which is a defect under any policy, the same
+standing the variant part's own alignment row had.
+
+### What is left of this ticket
+
+The peek is one function. What is still two parsers is the **walk** — the
+statement side's cast-target loop against `ParseLValueAST` — and that is the
+original ask, now with no accessor-direction defects left under it. Two
+permanent rows exist as the positive control a unification needs:
+
+- `test/test_indexed_property_every_receiver_spelling.pas` — one indexed
+  property through bare / `Self.` / `c.` / with-scope, expected output fpc's
+  own, getter +100 so a wrong direction prints 100 off rather than failing.
+- `test/test_indexed_property_over_a_field_is_one_answer.pas` — the same matrix
+  over FIELD accessors, asserted for internal consistency against **no oracle by
+  construction**, with read and write on DIFFERENT fields because that is the
+  only way a wrong choice is observable.
+
+The class-name spelling and the `index N` modifier are in
+`test/test_class_property_indexed.pas`.

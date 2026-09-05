@@ -1,0 +1,6 @@
+bare  FR=0 FW=1
+self  FR=0 FW=2
+qual  FR=0 FW=3
+with  FR=0 FW=4
+read  41
+read  41
