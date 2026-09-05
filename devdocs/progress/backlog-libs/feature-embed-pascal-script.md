@@ -3,7 +3,8 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) STILL OPEN, and it is NOT what the ticket described: `tstring` is declared `10: (tstring: Pointer)` in a variant record, so `tbtstring(vari^.tstring)` is a POINTER SLOT REINTERPRETED AS A MANAGED STRING -- a real reinterpret, not the value-level no-op that was fixed on 2026-09-02. That idiom appears 93 times in uPSCompiler.pas alone and is how this codebase stores every string; it is the whole remaining wall. RE-RUN AGAINST THE REAL FILE, not against repros: the clone is outside the repo and the attempt now stops at 2753 with `SetLength expects a string variable in IR codegen`. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
+blocked-by: [bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]
+summary: "ATTEMPTED 2026-09-01, RE-MEASURED 2026-09-05 -- premise CURRENT, two of three walls down. uPSUtils compiles CLEAN on the pinned stable (-Mobjfpc, no other flags). uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661); (3) STILL OPEN and now LOCATED, in the compiler, not here: `tstring` is `10: (tstring: Pointer)` in a variant record, so `tbtstring(vari^.tstring)` reinterprets a POINTER SLOT as a managed string, and pxx treats that cast as a value-level no-op. The attempt stops at line 2753 with `SetLength expects a string variable in IR codegen`; the idiom appears 93 times in uPSCompiler.pas alone and is how the codebase stores every string. THE REFUSAL IS THE LOUD HALF ONLY -- measured 2026-09-05, the same cast in an rvalue position does NOT refuse, it returns the pointer: `t(p) := 'abc'; writeln(t(p))` prints `4261104` and `Length(t(p))` answers the pointer, against fpc's `abc` and `3`, while the STORE is correct (`p = Pointer(s)` is TRUE). So lifting the refusal alone would turn a hard stop into silent wrong values across all 93 sites. Boundary varied and measured: casts over a string variable, a `^AnsiString` deref and an AnsiString record field ALL work; only a Pointer-typed slot fails, with or without indirection. Compiler gap filed in the owning lane as [[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]], with the measured finding that a parser-only retype is insufficient (the IR still lowers a pointer load). uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, the reversible half of the ticket's own two options."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -374,3 +375,56 @@ Note that 1930 is the same animal as 2753 — `twidestring` is
 record. Wall (2) and wall (3) were always ONE capability seen through two
 statements; the index arm happened to be reachable without it and the
 `SetLength` arm is not.
+
+## RE-MEASURED 2026-09-05 — premise CURRENT, and the ticket records only the LOUD half
+
+Reproduced exactly as written: the attempt stops at
+`SetLength expects a string variable in IR codegen`. Wall (3) is real and
+unchanged. What follows is the part the ticket did not have.
+
+**The boundary, by varying the operand rather than the access path.** Nine
+probes, `type t = AnsiString`:
+
+| operand of `t(...)` in `SetLength(t(...), 2)` | result |
+| --- | --- |
+| `s: AnsiString` (no cast at all) | compiles, `ab` |
+| `s: AnsiString` (cast) | compiles, `ab` |
+| `p^` where `p: ^AnsiString` | compiles, `ab` |
+| record field of type `AnsiString` | compiles, `ab` |
+| `p: Pointer` | **refused** |
+| `Pointer` field, direct | **refused** |
+| `Pointer` field via a record pointer | **refused** |
+
+So the discriminator is **the kind of the slot, not the indirection and not the
+record** — every string-typed slot works. That matters for this ticket because
+`uPSCompiler.pas` stores strings in `Pointer` variant arms exclusively; there is
+no partial-success path where some of the 93 sites work.
+
+**THE SILENT HALF, which is not in the summary above and is worse than the
+refusal.** The same cast in an rvalue position does not refuse — it returns
+the POINTER:
+
+```
+t(p) := 'abc'; writeln(t(p));   pxx: 4261104     fpc: abc
+Length(t(p))                    pxx: 4265208     fpc: 3
+p = Pointer(s)                  pxx: TRUE        fpc: TRUE
+Length(s)                       pxx: 3           fpc: 3
+```
+
+The STORE is correct — the pointer in the slot is the right pointer. Every READ
+through the cast is wrong, with no diagnostic. A vendored uPSCompiler would not
+have stopped at 2753; it would have compiled further and produced numbers where
+strings belong. **A ticket blocked on a refusal is safer than the state after
+that refusal is lifted**, so the two must be fixed together.
+
+**Filed as its own Track P ticket, per this repo's rule that a Track B ticket
+meeting a compiler gap files it in the owning lane:**
+[[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]].
+That ticket carries the cause (the `strAliasCast` arm returns the operand with
+its own kind, correct for a string operand and a no-op for a pointer one), and
+the measured reason a **parser-only fix is not enough**: retagging the node made
+`writeln` print `abc` followed by out-of-bounds memory and left `Length` still
+answering the pointer, because the IR lowers the load from the symbol. Tried,
+measured, reverted — a wrong number is not improved by becoming an OOB read.
+
+This ticket is now `blocked-by` that one rather than by an unlocated wall.
