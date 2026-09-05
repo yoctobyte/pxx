@@ -27987,3 +27987,62 @@ Same shape as frankZ's `uses` regex reading *"Uses only the language surface tha
 ALL backends support today"* out of a header comment and yielding the unit
 `i386` — **the sixth text-instrument instance in a day, and the first one aimed
 at a session's own tooling.**
+
+### A DEFECT WHOSE INVISIBILITY WAS A PROPERTY OF AN INSTALLED LIBRARY'S LENIENCY
+
+frankC landed the gtk3 default (`a409e19b5`, green, fixedpoint `5c40f3343701`),
+five days after the owner ruled it. **Three literals, not the ruling's four — the
+arch-specific root was DELETED rather than moved**, so the hardcoded
+`x86_64-linux-gnu` path the ruling flagged as a separate worry went with it
+rather than being duplicated at a new version.
+
+**The flip surfaced a latent bug and the wrong reading was the available one.**
+`test_c_gtk_types` calls `gtk_window_new` with **no `gtk_init`**. GTK 2 tolerated
+a window with no display connection; GTK 3 aborts. Its sibling had been passing
+throughout **only because it happens to call `gtk_init` first**, so the pair
+looked like consistent coverage.
+
+> **Had I reasoned instead of run it, the honest-looking move would have been to
+> conclude the flip broke a test.**
+
+Fixed as the bug it is, not as a GTK 3 workaround — **GTK has always required
+`gtk_init` first, so adding it restores what the test always meant.** That is the
+no-compiler-appeasement line drawn correctly: the question is *what did the
+source MEAN*, never *what makes it pass today*.
+
+**Third form of seven's polarity set, and the worst of the three.** A host
+condition wearing a **red** (gtk headers — eighteen tickets). One wearing a
+**green** (`clang`, `xdotool`, `wabt` — silent for the harness's life). Now **a
+host library's LENIENCY wearing a green.** The first two are properties of
+*absence*, which can be inventoried; **leniency is a property of a version that
+is present and working**, and nothing lists it.
+
+**Flagged rather than fixed, deliberately:** that row asserts `window <> nil`
+against a defect about truncated pointers — **and a truncated pointer is usually
+non-nil**, so the assertion is weaker than the bug its own comment cites. *A row
+that would largely still pass if the machinery did nothing*, green for months.
+Left alone because **widening it inside a commit about include roots would have
+changed what the suite proves under a heading nobody would re-read** — a strict
+improvement to the test and still the wrong commit, since the commit message is
+the only index anyone has.
+
+**And the address-vs-value rule got its sharpest evidence.** The ruling's own
+line numbers drifted **twice before the change landed** — `2219-2220` →
+`2507-2508` → moved again. Not "a value goes stale eventually": **it went stale
+three times inside one open ticket's life.** Stripped rather than updated, since
+updating restarts the clock. **The ruling's wrong file count is the same disease
+one level up — three files copied where *the files matching this predicate*
+belonged.** Both `decided/` tickets now carry a LANDED note, the corrected count,
+and the `my_gtk.h` claim retracted.
+
+**Gate discipline worth naming:** `gate.sh quick` 17/17 **including the FPC seed
+canary**, run with `compiler/**` uncommitted — the only state in which that
+canary runs at all. On a change to declaration-order-sensitive header resolution
+it is the **only** instrument covering the class, and most sessions read
+*gate before you commit* as a preference.
+
+**The relay was correct too:** frankC could not reach seven (a bridge session,
+not in the agent list), declined to guess that the nearest name — a Track T
+daemon watcher — was the same thing, and asked for a relay rather than sending a
+claim to whatever answered. **A peer's identity is exactly the class of fact a
+worker cannot check and this seat can.**
