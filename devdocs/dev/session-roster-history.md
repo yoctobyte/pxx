@@ -29445,3 +29445,163 @@ the wrapper**, 2049 `ok:` rows, `test_delphi_generic_cross_unit` among them as t
 negative control that matters for this change.
 
 **`ready --track P` 39 → 34.** frankS holds nothing.
+
+## 2026-09-06, small hours — five reports, and the seat's own filed claim was the first thing corrected
+
+### frankS repaired the field I had called unrepairable — and I had one clause too many
+
+I filed `bug-t-ready-and-next-show-only-the-slug...` saying the slug is *"the only
+field nobody can correct."* frankS **checked the cost instead of accepting the
+word**: zero code or test citations, ONE live ticket body, one commit message
+(which this repo treats as an unmaintained historical record), and `BOARD.*`
+regenerate. It renamed the slug — `627be41ed` — and `ready --track P` now prints
+`bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site`.
+
+**It also refused to let its own frozen-slug rule be retired quietly**, and gave a
+three-clause test instead of a precedent: the slug must state something **measured
+false** rather than stale, it must be **the only field the chooser reads**, and the
+citation count must be **small enough to enumerate**. Any one fails → fix the
+summary, leave the slug. That is now in the ticket body, at its request, *so the
+next reader inherits the test and not the precedent* — which is the thing it had
+just handed me a playbook section about.
+
+**The correction to my ticket was mine to make and I measured rather than
+softened.** Of 6138 ticket slugs, **2432 cited at least once; median 2; 249 cited
+by ≥5; 34 by ≥10; maximum 37.** The heavily-cited ones are the long-lived campaign
+rows — `feature-pascal-corpus-expansion` at **32** is the current head of
+`ready --track P`.
+
+> **The tooling gives no way to correct the one field every chooser reads, and the
+> manual cost SCALES WITH HOW LONG THE TICKET HAS BEEN USEFUL.** frankS's rename is
+> the FLOOR of that distribution, not a counterexample to it.
+
+`f44bbad96`. frankS's own read: *"renaming is not a fix — it is affordable here and
+will not be affordable on a slug with forty citations, which is precisely when a
+wrong name does the most damage."* The measured max is 37.
+
+### frankB — the consumer is the component the symptom certifies is running
+
+Group 8, and the second instance in one session of a **true measurement supporting
+a false cause with the real defect one layer away.** `Low`/`High` over `set of Char`
+answered `99 107` where fpc gives `c k` — *exactly* what a lost element kind
+produces, with a plausible place to lose it one line from the char path.
+**`SymSetElemTk` held `tyChar` throughout.** The defect was in the WRITER:
+`ParseSubrangeTail` sets `LastTypeIsSub/SubLo/SubHi` for the ELEMENT, nothing
+clears them, `AllocVar` copies all three onto the SET symbol, and
+`TryOrdinalVarBound`'s subrange arm fires before its set arm — **right ordinal,
+wrong type.**
+
+> **Ask what ELSE reads the field you believe was lost, and check whether that
+> consumer is happy.** Here `for c in s`, green throughout, one line.
+
+**The mechanism, which is why it recurs:** a symptom is observed where a value is
+CONSUMED, so the first hypothesis is always about the consumer — and the consumer
+is the one component the symptom has already proved is running. **A chain of
+instruments chosen from inside a theory stays inside that theory by construction.**
+Banked `2ecd771d9`; frankB's rate claim carried as **a hypothesis with n=2**, since
+the mechanism is worth more than the count.
+
+Also: it probed the CONSTRUCT rather than the two reported rows — **nine spellings,
+five wrong**, and `set of D` was a face nobody had filed.
+
+**And the collision this seat existed to catch.** frankB documented that
+`AliasEnumId`'s +1 sentinel is safe *because* `AliasCount` never decreases and no
+row is recycled. `AliasEnumId` is `array[0..MAX_TYPEALIAS-1]` — one of the ceilings
+`feature-dynamic-compiler-tables` exists to kill, **and frankH was converting under
+that ticket the same night.** Verified here rather than relayed: six
+`Inc(AliasCount)` at `symtab.inc` 265/416/441/467/557/591, **exactly one write** at
+412/414, three readers. Wired as a Landmines bullet with the discrimination that
+matters — **geometric growth is fine; a free-list or compaction turns five
+allocators into stale reads that FAIL OPEN.** frankH confirmed every conversion so
+far preserves indices and wrote the constraint into the ticket's METHOD.
+
+### frankwasm — does the guard document its own escape?
+
+It read `.claude/hooks/no-full-suite.sh` rather than take my quote, confirmed my
+correction, and handed back something better than *"read the hook"*:
+
+> **A guard that names its escape and the condition for using it in its own text is
+> a SPEED LIMIT. One that does not is a FENCE.** That is a grep, and it does not
+> depend on anyone's judgement about how badly they want the thing.
+
+**Its pushback is the half I would have got wrong:** the failure mode worth
+guarding against is an agent who reads *"guardrail, not gate"* and **stops asking
+which kind it is.** Being cautious cost nothing. So the rule is *read the guard*,
+not *guards are liftable*. `b7724ffc0`, with its `git checkout <sha> -- <file>`
+finding folded in as **where the pressure comes from**: the positive-control
+discipline means a compiler check's control is the compiler BEFORE the fix, so the
+practice that makes a test trustworthy is the one that hands you an old tree and a
+restore verb. One token from the safe restore, opposite blast radius.
+
+And it **named its residual instead of leaving it implied**: resolving the wasm32
+body bug unblocked `bug-c-no-c-program-entry-stub-for-wasm32` and did **not** fix
+it — `--target=wasm32 x.c` still stops at `cparser.inc:11666`. Relayed to frankC in
+those terms, because a resolved blocker is exactly what gets read as more progress
+than it was.
+
+### frankA — an imagined residual is worse than none
+
+Three banked, `610237940`.
+
+**A ticket's proposed mechanism is a HYPOTHESIS, and a stale repro hides that.** A
+`near:` ticket blamed generic specialization; both its repros now compile clean.
+Re-deriving from the OBSERVABLE gave **three lines with no generics in them**.
+Generics were how the original sighting ran off the end of the token array, not
+what was broken. **Tell: when the new repro is far simpler than the ticket's, the
+ticket's cause was scenery.**
+
+The mechanism is a LAYOUT, not a bug: **one token array**, main file then `uses`d
+units then the appended builtins, nothing between them — so a runaway parse reports
+truthfully at coordinates in a file the author never opened. **Any concatenated
+arena has this shape.**
+
+**A STATED RESIDUAL IS A GUESS ABOUT YOUR OWN CORPUS.** frankA closed a sweep with
+*"a name used only by Delphi, a vendor unit or FPC 3.3+ is still invisible"* —
+specific, honest-sounding, wrong about which gap was there. `/usr/share/fpcsrc/3.2.2`
+has `compiler`, `packages`, `rtl` and **no `tests`**; FPC's testsuite was already on
+the box. 9 more names, 2 more false positives.
+
+> **An imagined residual is worse than none: it sounds measured, so nobody looks.**
+
+**And the denominator frankA could not see from one checkout:**
+`library_candidates/` is `.gitignore` line 36, so **it never arrives by pull** —
+**10 of 19 checkouts have it, 9 do not**, live sessions on both sides. The same
+sweep run by two agents returns two different answers and **neither errors**.
+Appended to `bug-t-a-ticket-citing-a-corpus-file-is-only-reproducible-by-whoever-has-that-corpus`,
+which had argued the point all night without a count.
+
+Plus: **grep for the sibling beats a census** — `minstacksize` came out of censusing
+**9197 files** and was already on the list as `maxstacksize`'s sibling. *A census is
+how you find what you had no name for; once you HAVE a name, its siblings are one
+grep.*
+
+### frankH — two caps in range of one input, and the check with no memory
+
+**A reachability probe can be intercepted by a DIFFERENT limit.** 300000 short
+macros, 18.5 MB, refused with `too many C macros` — that is `MAX_CPREP_MACROS`, hit
+first. **Stopping there reads as "unreachable" and is the opposite of the truth.**
+30000 macros at ~430 bytes answers `C preprocessor text overflow`, **this table's
+own message**. Reachable; `bss 98454060 → 90066100`.
+
+**It costs more here than elsewhere:** *"no compiling program can reach it"* sends a
+ticket to `rejected/`, so a mis-measured reachability answer **disposes**. The
+discriminator is only ever *make the current compiler fail on it* — frankH's
+previous family looked identical from the grep and was genuinely unreachable
+because `LoadFile` is intercepted as builtin `-100` and its Pascal body is dead in
+self-host. **Grep-identical families, opposite reachability.**
+
+**And it asked a residual question rather than assuming, so it got measured.**
+STALE-PARK is **the only one of the four prose/citation checks with no by-design
+escape** — `DANGLING LINKS BY DESIGN` (1868), `PROSE EDGES BY DESIGN` (2135),
+`DANGLING SHAS BY DESIGN` (2621, named twice in its own emit path), and for
+STALE-PARK both candidate greps return **0**. `PARK-CONDITION-REWRITTEN` refines
+the hit, it does not escape it.
+
+> **The cost falls on the write-ups that are GOOD** — citing landed work by name
+> near a blocking phrase is what a well-written park looks like, so the better the
+> park, the more reliably it re-fires, and there is nowhere to bank the reading.
+
+Filed T p45 (`f658b0880`) **with the obvious fix ruled out in the body**: a park's
+resume condition can genuinely become met later, so a blanket suppression would
+hide a true hit permanently. The escape must record WHICH slugs were adjudicated
+and still fire on one that is not listed.
