@@ -54,10 +54,11 @@ tk-dev              # libtk8.6.so.0  -- lib/pcl/tk.pas, the tkinter demo
 # is a HARDCODED absolute path at compiler/pasparser_proc.inc:3428, and THAT LINE
 # IS THE SOURCE OF TRUTH. Read it rather than trusting this comment; it names
 # /usr/include/gtk-N.0/gtk/<name>.h for whichever N is current.
-# As of 2026-09-05 that N is 2, so the four land on libgtk2.0-dev. An owner
-# decision of 2026-08-31 (gtk3 is a sane default in 2026) is pending
-# implementation and will move them to libgtk-3-dev. test_c_gtk3_stock is
-# unaffected either way: it says `uses gtk3_c` and reads /usr/include/gtk-3.0.
+# It has been 2 and is now 3 (flipped by a409e19b5, owner ruling of 2026-08-31,
+# gtk3 is a sane default in 2026). Deliberately not restating the current value
+# again: this comment has been wrong twice already and the whole point is that
+# :3428 answers it and prose cannot. test_c_gtk3_stock was never affected -- it
+# says `uses gtk3_c` and reads /usr/include/gtk-3.0 directly, never the fallback.
 # INSTALL BOTH -- the ATTRIBUTION moves, the REQUIREMENT does not. These two rows
 # have gone correct-then-wrong twice in twelve hours, both times because someone
 # (me, both times) copied the CURRENT VALUE of :3428 into prose beside a package
