@@ -76,3 +76,53 @@ an upper bound: these bodies cleared the earlier gates and hit this kind, but
 admitting the kind does not make them all inline. And a function whose body calls
 something is doing more work per call than a pure leaf, so the value per site is
 lower than the leaf case even where it fires.
+
+## 2026-09-05 — IMPLEMENTED AND MEASURED: it delivers nothing on real programs
+
+Implemented (`InlineStmtCallOk`, -O3, rejecting any callee with an explicitly
+by-ref parameter because a `var` argument lets the callee write a caller local
+the retention dataflow models as untouched). Correct: -O0/-O1/-O2/-O3 agree,
+FPC 3.2.2 agrees byte-for-byte, the by-ref control declines as designed, and
+`test_inline_stmt_call.pas` asserts side-effect COUNT and ORDER with two
+non-commuting effects rather than values alone.
+
+**Then measured, and the result is negative:**
+
+| | |
+| --- | --- |
+| call-statement declines | 67 -> 13 distinct functions |
+| **`while` declines** | **102 -> 118** |
+| `compiler.pas` retained | 170 -> 173 |
+| `compiler.pas` -O3 code | +4096 bytes |
+| **16 real example programs** | **0 changed. byte-identical.** |
+
+**The `while` count RISING is the whole story.** Bodies that used to die at the
+call statement now travel further and die at a loop instead. They did not become
+inlinable; they failed later. 54 stopped declining at the call and 16 immediately
+re-declined at a `while`, and of whatever remained, enough failed at a call SITE
+(retention is per-proc; the splice still has to qualify where it is called) that
+**not one of sixteen real programs emits a different byte.**
+
+### The finding is bigger than this ticket
+
+Two slices, chosen by two DIFFERENT criteria, both delivered ~nothing:
+
+- **depth>1 non-leaf**, picked on the biggest BOUND (3.12x): changed 1 program of 13.
+- **statement-level call**, picked on the biggest REACH (67 blocked functions):
+  changed 0 programs of 16.
+
+**So "reach beats bound" — the correction this ticket was filed under — is ALSO
+not predictive.** A static count of bodies a validator rejects does not predict
+delivered value any better than a microbenchmark ceiling did. Both are counts of
+shapes that COULD be admitted; neither counts what is actually executed.
+
+What would predict it is dynamic: how often a retained body is CALLED on a hot
+path. Nothing here measures that, and both of tonight's slices are evidence that
+the static proxies are exhausted. **The honest reading is that the inline
+admission axis is close to saturated on real code** — the bodies worth inlining
+are largely already inlined, and the remaining rejected shapes are rejected in
+code that does not run hot.
+
+**A third slice picked by a third static metric should not be attempted without
+first measuring call-site frequency.** That is the ticket this one should spawn,
+not another admission widening.

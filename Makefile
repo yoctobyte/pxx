@@ -13900,6 +13900,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O3 test/test_inline_depth2.pas $(TESTTMP)/sweep_inl_depth2_O3 >/dev/null
 	tools/expect_same.sh sweep_inl_depth2_O0 "$$($(TESTTMP)/sweep_inl_depth2_O0)" "$$($(TESTTMP)/sweep_inl_depth2_O3)"
 	tools/expect_same.sh sweep_inl_depth2_O3 "$$($(TESTTMP)/sweep_inl_depth2_O3)" "$$(printf 'Top      208\nTopEff   360\ngcount   6\nRecSum   55')"
+	# A bare procedure-call STATEMENT in an inline body. g= is the assertion
+	# that matters: a statement call exists to have an EFFECT, so a value check
+	# is nearly blind here -- it cannot see an effect that ran twice, ran out of
+	# order, or did not run. TwoEffects uses two non-commuting bumps so a
+	# reordering splice changes g while every returned value stays correct.
+	# UsesVar is the by-ref control: it must NOT inline, because a `var` arg
+	# lets the callee write a caller local the dataflow models as untouched.
+	# Values are FPC 3.2.2's.
+	./$(COMPILER) test/test_inline_stmt_call.pas $(TESTTMP)/sweep_inl_stmtcall_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_inline_stmt_call.pas $(TESTTMP)/sweep_inl_stmtcall_O3 >/dev/null
+	tools/expect_same.sh sweep_inl_stmtcall_O0 "$$($(TESTTMP)/sweep_inl_stmtcall_O0)" "$$($(TESTTMP)/sweep_inl_stmtcall_O3)"
+	tools/expect_same.sh sweep_inl_stmtcall_O3 "$$($(TESTTMP)/sweep_inl_stmtcall_O3)" "$$(printf 'EffThenRes 30 g=15\nTwoEffects 14 g=78\nSandwich   21 g=18\nUsesVar    30')"
 	./$(COMPILER) test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O3 >/dev/null
 	tools/expect_same.sh sweep_resid_uni_O0 "$$($(TESTTMP)/sweep_resid_uni_O0)" "$$($(TESTTMP)/sweep_resid_uni_O3)"

@@ -506,6 +506,61 @@ end;
   when BOTH arms (with an else present) performed them; Result must be
   definite at the end. All locals scalar ordinal. Retains the whole chain
   with param/local/Result idents rewritten to placeholders. }
+{ A bare procedure-call STATEMENT in an inline body (-O3). The expression arm
+  of InlineExprSimple already accepts a call in VALUE position; this is the same
+  call in statement position, which the AN_SEQ walker rejected outright and which
+  blocks 67 distinct functions across the example corpus + compiler.pas -- more
+  than `for`, second only to `while`
+  (feature-opt-inline-bodies-with-a-statement-level-call).
+
+  WHY IT NEEDS NO NEW DATAFLOW, which is the whole reason it is cheaper than the
+  loop slices: a statement call is straight-line and ALWAYS executes, so
+  definite-assignment state passes through it unchanged. A loop body may run zero
+  times and does not.
+
+  NO EXPLICITLY BY-REF PARAMETER IS ALLOWED, and this is the guard that matters.
+  A `var`/`out` argument lets the callee WRITE a caller local, which the retention
+  dataflow models as untouched -- it would read as definitely-assigned when the
+  callee had in fact assigned it, or worse, a local the analysis believes it owns
+  would change under a placeholder. Rejecting the whole callee is conservative
+  and cheap; nothing here tries to prove which argument aliases what.
+  `const` is included in ProcParamExplicitByRef, so a const record param declines
+  too. That costs reach and is the right trade until someone measures it.
+
+  The callee's own side effects are ordered by InlineRetentionSawCall, which
+  forces the splice to temp-capture EVERY argument -- the same rule non-leaf
+  slice 1 established and fuzzed. }
+function InlineStmtCallOk(callNode, procIdx, retSym: Integer): Boolean;
+var cpi2, argN, argCnt, i: Integer;
+begin
+  InlineStmtCallOk := False;
+  if OptLevel < 3 then Exit;
+  if callNode < 0 then Exit;
+  if ASTKind[callNode] <> AN_CALL then Exit;
+  if ASTRight[callNode] <> -1 then Exit;        { plain call shape only }
+  cpi2 := ASTIVal[callNode];
+  if (cpi2 < 0) or (cpi2 >= ProcCount) then Exit;
+  if ProcExternal[cpi2] or ProcCdecl[cpi2] or ProcVariadic[cpi2] then Exit;
+  if ProcIsGenerator[cpi2] or ProcIsStackless[cpi2] then Exit;
+  { A function called as a statement discards its result; that is fine for a
+    scalar, but an aggregate return travels through a hidden destination pointer
+    and is not worth the complexity here. }
+  if Procs[cpi2].IsFunc and (not InlineScalarTk(Procs[cpi2].RetType)) then Exit;
+  for i := 0 to Procs[cpi2].ParamCount - 1 do
+    if ProcParamExplicitByRef[cpi2 * MAX_PROC_PARAMS + i] then Exit;
+  argN := ASTLeft[callNode]; argCnt := 0;
+  while argN <> -1 do
+  begin
+    if ASTKind[argN] <> AN_ARG then Exit;
+    if not InlineExprSimple(ASTLeft[argN], procIdx, True, retSym, True) then Exit;
+    argN := ASTRight[argN];
+    Inc(argCnt);
+  end;
+  if argCnt <> Procs[cpi2].ParamCount then Exit;
+  InlineRetentionSawCall := True;
+  InlineStmtCallOk := True;
+end;
+
 procedure TryRetainInlineStmtBody(procIdx, bodyNode, retSym: Integer);
 var i, j, seqN, stmtN, startNext, cloned: Integer;
 begin
@@ -541,6 +596,14 @@ begin
     begin
       if OptLevel < 3 then Exit;             { 2c lands behind -O3 first }
       if not InlineIfValidate(stmtN, procIdx, retSym) then Exit;
+    end
+    else if ASTKind[stmtN] = AN_CALL then
+    begin
+      if not InlineStmtCallOk(stmtN, procIdx, retSym) then
+      begin
+        DbgInlineDeclinedStmt(procIdx, ASTKind[stmtN]);
+        Exit;
+      end;
     end
     else
     begin
