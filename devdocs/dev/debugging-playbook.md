@@ -7348,6 +7348,13 @@ right, the size is right.
 > to MUTATE**, and then assert on the CALLER's variable — with the fix absent, `mm`
 > stays at 40 while every read-only row passes.
 
+**And the read-only test is the one that looks finished**, which is why this needs to
+be a rule rather than an instinct. Its author's account: *"I wrote the read-only test
+first, it passed, and the mutation row only got written because another session's
+`const` result made me ask what distinguished the two by-ref spellings."* Nothing about
+a green read-only suite suggests a missing operation — **the gap is in what the test
+DOES, and a test's shape is not something a pass can report on.**
+
 So the rule is one level more specific than *match the assertion class to the defect
 class*: **match the assertion's OPERATION to the defect's mechanism.** Corruption needs
 a read; aliasing needs a write; a leak needs an allocation count; a width needs a
