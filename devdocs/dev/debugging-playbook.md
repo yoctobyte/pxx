@@ -3751,6 +3751,53 @@ was true.
   slower probe must not raise the reference. Determinism is not a weaker test; it
   is what lets you assert the thing you actually mean.
 
+## DOES THE GUARD DOCUMENT ITS OWN ESCAPE? — a speed limit says how to exceed it, a fence does not, and the two are indistinguishable from the error message
+
+Named 2026-09-05 (frankwasm), after a false premise about a hook travelled to
+three sessions and one of them declined a task partly on it.
+
+**A refusal reaching an agent has at least three sources that produce the SAME
+string** — a user rejection, a denial by policy, and **a guardrail the agent may
+lift itself** — and only the first two mean the session is stuck. Reasoning about
+which one you hit from how important your task feels is how the third gets
+misread as the second.
+
+> **The discriminator is checkable and it is in the guard's own text: does the
+> guard name its escape and the condition for using it?**
+
+`.claude/hooks/no-full-suite.sh` does — line 29 is the escape, and its `hatch`
+string says the flag is used *"autonomously, no permission needed. This is a SPEED
+GUARDRAIL, not a permission gate."* **A guard that names the flag and the
+condition in its own text is a speed limit. One that does not is a fence.** That
+is a `grep`, and it does not rely on anyone's judgement about how badly they want
+the thing.
+
+### Both directions cost, and the second is the one this rule can create
+
+frankwasm's own qualification, kept because it is the sharper half:
+
+> **The failure mode worth guarding against is an agent who reads "guardrail, not
+> gate" and stops asking WHICH KIND it is.**
+
+Being cautious about the first one cost nothing — no time was lost, and the task
+was never that session's to take. **Reading the hatch as general permission would
+cost something real.** So the rule is *read the guard*, not *guards are
+liftable*: the answer happens to be "liftable" for this hook and is a property of
+this hook's text, not of hooks.
+
+### And note where the pressure to route around a guard comes from
+
+It is usually not impatience. **The positive-control discipline manufactures
+it:** *"every guard needs a case it must reject"* means, for a compiler check,
+**the compiler before the fix** — so the practice that makes a test trustworthy
+is the practice that hands you an old tree to build and a restore verb to type.
+`git checkout <sha> -- <file>` is one token from `git checkout -- <file>`, which
+is the safe restore, and **the sha flips it to overwriting index and worktree
+both.** Same verb, opposite blast radius; the write-up is in
+`devdocs/dev/parallel-tracks.md` (fourth restore-time near-miss, `a5814f278`).
+**Commit first, then control against `<sha>~1`** — it costs nothing and the old
+tree stops being something you hold uncommitted.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
