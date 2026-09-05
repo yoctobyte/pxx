@@ -261,4 +261,4 @@ assumed.
 Landed: `e0035f9ac` (resume), `8dafca722` (export once per proc + the test).
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d0a3f4397.
