@@ -90,3 +90,31 @@ The three repros above with their direct-call controls, each **reading an
 element or calling through**, never merely compiling: two of the three fixed
 columns in this family turned a refusal into a silent wrong value when only half
 the fix was in, so a compiles-or-not check certifies nothing here. Oracle: FPC.
+
+## Reproduces at HEAD, at the CALL — and the near miss is worth recording (frankS, 2026-09-05)
+
+At `0bbd82cd7` (compiler/pascal26 sha `7fca108e4b85`), with all three return
+types NAMED, as this ticket writes them:
+
+```pascal
+type
+  TIA = array of Integer;  TA3 = array[0..2] of Integer;
+  TInner = function(n: Integer): Integer;
+  TF = function(n: Integer): TIA;  TF3 = function(n: Integer): TA3;
+  TOuter = function: TInner;
+var fp: TF; fq: TF3; fo: TOuter;
+begin WriteLn(fp(3)[2]); WriteLn(fq(4)[2]); WriteLn(fo()(41)); end.
+```
+
+`pascal26:11: error: expected ')' before '['` — the declarations all parse and
+the first CALL is where it refuses, exactly as the summary states.
+
+**The first probe of this pass got it wrong in a way that would have read as a
+result.** It spelled the return type inline (`function: array of Integer`) and
+got `pascal26:3: error: unknown type: array` — a refusal at the DECLARATION, for
+an anonymous array type, which is a different and genuinely illegal construct.
+Same ticket, same slug, plausible error, wrong claim. A staleness pass that
+accepted it would have recorded "refuses at declaration" over a ticket whose
+whole point is that declarations parse and calls do not — and the next reader
+would have gone looking in `ParseProcTypeSignature`'s declaration path, where
+there is nothing wrong.
