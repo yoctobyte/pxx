@@ -7340,6 +7340,98 @@ keeps the logs, *and* that a success still removes the directory completely.
 Only the second one stops a retention fix from quietly becoming the disk leak it
 was avoiding. Landed as `1b2c0b5dc`.
 
+## CORROBORATION IS ONLY AS WIDE AS THE LAYER IT WAS TAKEN AT — four readings that fail differently still agree by construction if they all describe the same substance
+
+Measured 2026-09-04/05 (frankB, `bug-p-a-char-array-row-through-a-pointer-deref-loads-short`).
+The section above says two readings that fail the same way are one reading. This
+is the harder case, one level up: **readings that genuinely fail differently, are
+each independently true, and still converge on the wrong cause — because they
+share a LAYER rather than a failure mode.**
+
+`s := q^[1]` over `^array[0..2, 0..5] of Char` gave three characters where fpc
+gives six, while `q^[0]` gave all six. Two rows of one array, two answers. Four
+instruments were brought to it and they did not share a failure mode:
+
+| reading | said |
+| --- | --- |
+| the store dump | byte-identical to fpc |
+| the address probe | the address is provably right |
+| the IR comparison | the row lowering is right |
+| instrumented row count | `rowCnt=6` |
+
+All four were **correct**. The diagnosis they supported — a load that stops
+early, with the ticket's own advice *"do not fix this by widening
+`ASTCharArrayCap`"* — was **wrong**, and it cost a day and told the next reader
+to avoid the fix that worked.
+
+The defect was not in the load at all. `New(q)` sized the block with
+`TypeSlotSize(PtrElemTk)` — the pointee's ELEMENT kind — so an 18-byte pointee
+got ONE byte, rounded to 16 by the allocator. Row 1 (bytes 6..11) read
+`103 104 32 0 0 0`. **Three characters and a terminator is indistinguishable
+from a reader that stops early**, and the store fit inside 16 bytes, so the store
+half stayed clean and actively corroborated the wrong theory.
+
+**What the four readings had in common was not a failure mode — it was a layer.
+Every one of them was a measurement about the compiler's ADDRESSING, and the
+defect was in the ALLOCATOR, one layer down.** A defect below the layer you are
+sampling makes every reading at that layer true and the conclusion false, which
+is precisely why the ordinary "check it against a second source that fails
+differently" discipline does not fire: it was satisfied, four times over.
+
+This is frankB's missing-copy rule (stated in passing, not yet a section here)
+one level up — *a rule spelled per caller
+fails by an ABSENT copy, not a divergent one, so reading the copies against each
+other cannot find it because they agree.* N copies of a rule agree and cannot
+find the (N+1)th; N measurements at one layer agree and cannot find the layer
+below. **Both fail by an ABSENT reading rather than a divergent one.**
+
+**WHY they shared a layer is the actionable half, and it is not bad luck.** The
+four readings shared a layer *because of how they were obtained*: each was the
+natural next instrument for the previous one's answer. The address probe followed
+the store dump; the IR comparison followed the address; the predicate
+instrumentation followed the IR. **A chain of instruments selected by the
+previous instrument's answer stays inside one layer BY CONSTRUCTION**, because
+every choice in the chain is made from inside the theory. Nothing in that chain
+could have proposed *"dump the raw bytes and compare with fpc"* — that reading
+only exists if you step outside the theory to pick it.
+
+So the tell below has a precondition: it is **not** enough to go looking for a
+different-substance reading once you are already suspicious, because by then you
+are choosing from inside the same theory that produced the chain. **Pick it
+before the chain starts, or pick it by asking what your theory does not talk
+about at all.** frankB's theory talked about addresses, extents and node kinds
+for a day and never once mentioned how many bytes existed.
+
+**The practical tell, and it is the part you can act on: all four instruments
+described the PROGRAM; none described the MEMORY.** Printing the raw pointee
+bytes beside fpc's took thirty seconds and was the only reading at the other
+layer — and nothing in the load path would ever suggest doing it, because within
+that layer it looks redundant.
+
+> **When a set of measurements is converging, ask what LAYER they share, not just
+> whether they could go wrong the same way. Then find the one reading that is
+> about a different SUBSTANCE — bytes rather than nodes, allocation rather than
+> addressing, the heap rather than the AST — and take it, especially when it
+> seems redundant.**
+
+Two corollaries worth carrying:
+
+- **`New` of a pointer to an ARRAY type was a silent heap overflow on every
+  use** — measured gaps 16/16/32 against fpc's 32/32/32. The RECORD pointee arm
+  was already correct, because `RecSize` answers for it. That is why nothing
+  caught it in months: **the one arm that works is the one everybody writes.**
+  Fixed in `ArrTypeByteSize` (`symtab.inc`), which is `SizeOf(TNamedArray)`'s own
+  rule lifted out of `pasparser_expr.inc` so all three callers — `SizeOf`,
+  `New(p)`, `New(PType)` — ask one question.
+- **The expensive failure is not a green that should be red — it is a RED WHOSE
+  EXPLANATION IS COHERENT, and every reading in it independently true.** A
+  coherent story resting on one unverified number is caught by ordinary
+  discipline. This one had no unverified number. Alarm gets investigated;
+  coherence gets believed. A harness failing toward false alarm cost twenty
+  minutes the same week; this cost a day and left a ticket steering the next
+  reader away from the correct fix.
+
+
 ## A CORRECTED COUNT CAN STILL BE A COUNT OF THE WRONG POPULATION — fixing the instrument does not fix the question
 
 Measured 2026-09-02 (frankC), across the phase-2 shortstring conversion.

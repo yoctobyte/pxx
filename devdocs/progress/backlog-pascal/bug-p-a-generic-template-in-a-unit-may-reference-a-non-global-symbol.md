@@ -70,3 +70,77 @@ the green.
 `fail(accepted-invalid)` to pass-by-rejection, with the refusal naming the
 template/symtable problem and not something incidental. Check WHY it refuses,
 not that it refuses.
+
+## 2026-09-05 (frankS) — a corpus-free repro, and the question this ticket has not asked
+
+**First, a reproducibility gap nothing in this ticket says.** `tgeneric4.pp` and
+`ugeneric4.pp` live in `library_candidates/fpc-testsuite/tests/test`, which is
+**not fetched in every checkout** — mine has only `busybox` and `sqlite`. A
+ticket whose evidence is a corpus path is reproducible only by whoever already
+has the corpus, and the reader cannot tell from the ticket. So here is the shape
+rebuilt from scratch, in two files anyone can paste. It reproduces FPC's exact
+error, at the call site, so it is faithful:
+
+`ug4.pas`:
+
+```pascal
+unit ug4; {$mode objfpc}
+interface
+type
+  generic TList<_T> = class(TObject)
+    procedure Fill;
+  end;
+implementation
+procedure LocalFill;               { the UNIT's LocalFill }
+begin WriteLn('UNIT LocalFill'); end;
+procedure TList.Fill;
+begin LocalFill; end;
+end.
+```
+
+`tg4.pas`:
+
+```pascal
+program tg4; {$mode objfpc}
+uses ug4;
+procedure LocalFill;               { the PROGRAM's own LocalFill }
+begin WriteLn('PROGRAM LocalFill'); end;
+type TIntList = specialize TList<Integer>;
+var l: TIntList;
+begin
+  LocalFill;                       { control: must print PROGRAM }
+  l := TIntList.Create;
+  l.Fill;                          { must print UNIT }
+end.
+```
+
+FPC 3.2.2 refuses at the unit, never reaching the program:
+`ug4.pas(11,21) Error: Global Generic template references static symtable`.
+
+**Second, and this is the part that decides the ticket: it does not say which
+`LocalFill` pxx binds.** "pxx accepts it silently" is a statement about
+acceptance, and the disposition turns entirely on the value:
+
+| if `l.Fill` prints | then | disposition |
+| --- | --- | --- |
+| `UNIT LocalFill` | pxx resolved the template in its declaring context, which is what the source MEANT | FPC's refusal is an **implementation limit**, not a language rule — `wontfix: dialect-pass` |
+| `PROGRAM LocalFill` | the template captured the **caller's** namespace; its meaning depends on who specializes it | a real wrong-observable bug, and a bad one |
+
+The first row has a standing precedent in the very same skip list:
+`tgeneric14.pp wontfix: dialect-pass — test header says %fail is an FPC
+IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule
+— PXX passing is correct`. FPC's objection here is the same family: a *global*
+generic template is re-expanded in the importer's context, where a unit-private
+`LocalFill` has no global assembler symbol. That is a fact about FPC's expansion
+model, and this ticket's own body already concedes it — *"the assembler symbol is
+not global and would fail at link time"*.
+
+**Not yet measured, and it must be measured before either bucket is written
+down.** The pin cannot answer: it refuses `ugeneric4.pp` at the header
+(`expected '>' before '>='`), which is the accidental-%FAIL trap this ticket
+already documents. It needs a HEAD build.
+
+Note the trap in reading the control: the program's own `LocalFill` call MUST
+print `PROGRAM`. If both lines print `PROGRAM`, check the control before
+concluding capture — a probe where the wrong answer and one right answer share a
+spelling is the collision this repo has been bitten by before.
