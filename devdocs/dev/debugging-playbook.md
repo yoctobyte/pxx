@@ -6853,6 +6853,69 @@ search whose result includes the thing you searched for is not evidence about
 anything else.** Name what the count would have to EXCLUDE to mean what you want
 it to mean, and count that instead.
 
+## A SET OF ONE HAS NO DISTRIBUTION — so every property of its single member reads as a property of the SET
+
+Measured 2026-09-05. A neighbour of the residual-set fallacy, not the same rule:
+that one is about *leftovers having no shared property*; **this one is about a
+sample of one reading as a conclusion.**
+
+**The case.** `trackt pinstatus` names **v354** as the rollback target, selected
+by `pin_is_green()`. v354 **cannot compile a single one of the current tree's 54
+`lib/rtl` root units.** Nine pins measured: HEAD 0 failures, v404 (current) 2,
+v375..v403 fourteen each, v365 and v354 **54**. **Usable rollback depth is zero —
+every historical pin is strictly worse than the one in place.**
+
+**Nobody asked whether v354 could build anything.** v354 was the whole of *"green
+pins available"*, so **"the green pin" and "v354" were the same string**, and a
+property of that string got read as a property of the category. With nothing to
+compare it against, the question never formed.
+
+> **An elimination that leaves exactly ONE candidate produces the most confident
+> wrong answer available, because the usual tell — several plausible options —
+> is gone.**
+
+Two candidates would have made somebody ask *which is better*, and **that
+question is what would have surfaced the 54.** One candidate answers a question
+nobody asked, in the voice of an answer to the question they did.
+
+### The guard, and it is not a count
+
+**The tell is not the cardinality. It is the ABSENCE OF A COMPARISON.**
+
+So the check is **"what would I compare this against?"** — and when the answer is
+*nothing*, **that is the signal, not the reassurance it reads as.** A sole
+survivor of a filter feels like a result and is a measurement with a denominator
+of one.
+
+This is a denominator failure, not a leftovers failure, which is why it sits here
+rather than beside the residual rule. Same family as reporting the both-refused
+rows separately, and as *count then list — the odd match is the finding*: **a set
+you never enumerated cannot show you its odd member.**
+
+### The same shape in a REPORT: "what remains" standing in for "what cannot be done"
+
+The author of the pin measurement caught this in its own sign-off an hour later,
+and the correction is worth as much as the finding.
+
+It listed nine remaining tier reds in one sentence. Two of the nine were genuinely
+blocked (an A+S decision; three censuses needing rulings), two needed a corpus the
+box lacks and fetching is an outbound act — **and seven job lines were neither
+blocked, nor owned by anyone else, nor missing an input. It had simply never
+looked at them.**
+
+> **A true statement — *"these are what remain"* — standing in for one that was
+> never checked: *"these are what cannot be done."***
+
+**The list is real; the membership criterion silently changed between writing it
+and reading it.** And it changed in the direction that closes work, which is the
+expensive direction — the same asymmetry as a false coverage claim, where nothing
+re-checks a row that looks handled.
+
+**The guard is the same one:** the set was never compared against anything. *What
+would distinguish a member of this list that is blocked from one I merely have not
+opened?* If nothing in the list carries that distinction, **the list is not
+evidence about blockage at all** — it is evidence about where the author stopped.
+
 ## An instrument that reports a RESULT should report its DENOMINATOR
 
 Named 2026-08-31 (frankS), from three instruments that failed the same way in
