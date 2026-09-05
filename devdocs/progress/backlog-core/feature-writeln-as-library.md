@@ -3,7 +3,7 @@ prio: 40
 track: A
 type: feature
 status: backlog
-summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. Phases 2 (`expr:w:p` via a vtFormatted tag) and 3 (the library write/writeln over array of const) are untouched. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
+summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. PHASE 3 COMPLETE 2026-09-05 (65b62b148): lib/rtl/libwriteln.pas renders every type byte-identically to the builtin, asserted as PAIRS so a divergence names the type; all formatting is in Pascal and only 'emit bytes to a descriptor' stays in the compiler. Phase 3 was only worth doing once phase 1 landed -- this ticket's own 2026-07-20 note calling it 'a strictly worse writeln nobody would call' was true then and stale from 2026-09-01. THREE known holes, all in the BOXING and so unreachable from a vector reader: a QWord >= 2^63 renders signed (filed), the sized booleans render 1/0 (filed, and appended as a fourth consumer to decide-how-a-type-carries-an-identity-its-kind-cannot-hold), and a Single renders as a Double -- that last is NOT a defect, fpc has no vtSingle either, and its parity row is asserted as DIFFERENT so it goes red if one ever appears. Phase 2 (`expr:w:p` via a vtFormatted tag) is UNTOUCHED and unclaimed: its bracket spelling is contained in ParseVarRecLiteralAST, but its elided spelling has to loosen the shared argument loops, so it needs coordinating with whoever holds the Pascal frontend. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
 ---
 
 # write/writeln as a library function (via `array of const` + variadic sugar)
@@ -369,4 +369,56 @@ is written. Whoever takes phase 3 should treat it as a known hole rather than
 re-derive it from a failing parity row.
 
 Phases 2 and 3 remain untouched. Phase 3 is scoped, not started.
+
+---
+
+## 2026-09-05 (frankH) — phase 3 landed: `lib/rtl/libwriteln.pas`
+
+`65b62b148`. Track B, no `compiler/**` touched. What the unit is and why it is
+shaped that way is in its own header; what belongs here is the three decisions
+a later reader would otherwise re-litigate.
+
+**1. The byte sink is still the builtin, and that is the design.** Each routine
+assembles one `AnsiString` and hands it to `write(s)` / `write(StdErr, s)`. All
+the FORMATTING — the part that is incomplete and hard to change in codegen —
+moves into Pascal; the only thing left in the compiler is emitting bytes to a
+descriptor. That is also what makes the unit portable to every backend including
+ESP, since it needs no syscall of its own. Phase 4 (file handles) extends the
+sink; it does not need to revisit the formatting.
+
+**2. Parity is asserted as PAIRS, not as a golden file alone.** Every type is
+printed once through each renderer, so a divergence names the TYPE rather than
+saying "output differs". The `.expected` stops the two drifting together and the
+fpc oracle says the bytes are right rather than merely agreed.
+
+**The `double` row is the one that discriminates and it was chosen that way.** A
+library renderer reaching for the obvious tool, `sysutils.FloatToStr`, prints
+`3.5` where the builtin prints ` 3.5000000000000000E+000` — and **every other
+row still passes with that mistake in place.** Proved by putting `FloatToStr`
+back and watching the row go red, rather than by arguing it.
+
+**3. One pair is asserted as DIFFERENT on purpose**, which is rarer than it
+looks and is why it is written down. A `Single` boxes as `vtExtended`; there is
+no `vtSingle` in this compiler or in fpc, measured both ways, so the width is
+gone before any vector reader sees it. Not a defect — fpc's `writeln(Single)`
+and `writeln(Double)` match ours exactly, and an fpc library writeln would lose
+the same width for the same reason. The row exists so that if a `vtSingle` ever
+appears it goes RED and tells whoever added it that the library can now do
+better. An omitted row would have said nothing.
+
+### The two holes that ARE ours, kept apart on purpose
+
+They look like one finding and they are not:
+
+- **`QWord` boxes as `vtInt64`** where fpc emits `vtQWord`. `vtQWord` is
+  declared here and emitted by nothing — an identity that HAS a carrier which
+  nothing writes to.
+- **The sized booleans box as `vtInteger`** — an identity with NO carrier at
+  all, which is why it went to
+  [[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]] as a fourth
+  consumer rather than being filed as a bug with a fix.
+
+They were found in one program and that is their only relationship. Bundling
+them would send whoever takes the first one looking for a fork that does not
+apply to it.
 
