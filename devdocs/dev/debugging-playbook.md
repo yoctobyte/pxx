@@ -7922,3 +7922,63 @@ cannot mention it — the recipe has already exited. Wiring it into the tier's
 own failure path needs a wrapper around a Track T target and is not done. Until
 then: **when a tier stops, run the tool before you believe the shape of what you
 saw.**
+
+## A SLUG IS FROZEN AT FILING AND THE TICKET KEEPS BEING WORKED — the residual lives in the SUMMARY
+
+Measured 2026-09-05 (frankS), sweeping 46 Track P tickets at `0bbd82cd7` under a
+one-minute-per-ticket budget. **Three probes written from the slug came back
+green on tickets whose live half was untouched, and all three briefly closed a
+ticket that still reproduces.** A fourth reproduced for the wrong reason.
+
+**Why the slug cannot be trusted and cannot be fixed.** A slug is the citation
+key: `blocked-by:` edges, commit messages, other tickets' bodies and `resolve`
+records all name it. Renaming it breaks every one of those, so it is *correctly*
+never edited — which means it freezes at the moment of filing while the ticket
+goes on being worked for weeks. CLAUDE.md requires the **summary** to stay true
+and says nothing of the kind about the slug, because the slug is an address and
+the summary is the claim. **The address is stale by construction; the claim is
+maintained.**
+
+The three, and each green was correct about something:
+
+| slug says | HEAD says | what the summary said |
+| --- | --- | --- |
+| `ifopt-is-hardwired-false` | `{$R+}` → ON, `{$R-}` → OFF | R/Q/I/C/Z fixed; **G, J, X** remain — all three still OFF |
+| `an-operator-...-is-not-registered-until-its-body-is-parsed` | a plain `uses` resolves the operator fine | needs a **circular** implementation-`uses`; *"both non-circular cases work"* |
+| `a-default-value-is-accepted-on-an-open-array-parameter` | now refused, with a good diagnostic | half fixed — the wrong **reason** on the `['x']` spelling stands |
+
+**The failure is not carelessness and a slower pass does not fix it.** A probe
+built from `ifopt-is-hardwired-false` picks `R` or `Q` — the obvious letters,
+the ones any reader would reach for — and those are precisely the letters
+already fixed. The probe is drawn from the wrong population *by following the
+ticket's own name*. It exits 0, prints a plausible value, and does not error,
+because it is measuring something real.
+
+**And the quantity it returns has a different name than the one you wanted.** A
+staleness sweep that reads only the slug does not measure staleness. It measures
+**how much of the original report has already been fixed, and reports the fixed
+part** — which is the highest-confidence green you can get, since that half was
+verified by whoever fixed it. The stronger the earlier work on a ticket, the
+more convincing the false close.
+
+**The fix is one line in the budget, not a bigger budget.** Read the summary
+first, then aim the probe at the residual. One minute still buys a reproduce; it
+does not buy knowing which claim of a multi-claim ticket you just probed, and
+saying so is what makes the surviving verdicts worth anything.
+
+**The tell, when you are the one holding it:** you probed the headline claim and
+it came back clean, on a ticket somebody has clearly worked hard. Treat an
+*easy* green on a well-worked ticket as the signal to read the summary, not as
+the result. A ticket nobody has touched since filing is the only one whose slug
+still describes it.
+
+**Same animal, different surface** (frankB, the same night): six regression rows
+closed GREEN on a host that has `/usr/include/gtk-2.0` and `/usr/include/gtk-3.0`
+while the machine that filed them has neither. Running the full job at HEAD
+rather than the failing step at the filed sha was right, and neither could catch
+it — **the discriminator was never in the tree.** A green measured where the
+precondition cannot fail, and a green measured on the half already fixed, are
+the same error wearing a host name instead of a slug.
+
+Related: "The instrument answered, correctly, about something else"; "A CONTROL
+has to be the commit under test"; "Do not read a green as coverage".
