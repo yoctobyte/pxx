@@ -96,3 +96,72 @@ above, in their pre-fix state. A rule that does not flag them is not the rule.
 and making 19 tickets reproducible by populating ten checkouts is the expensive
 answer to the cheap problem — and it decays the moment an eleventh session
 starts.
+
+## AUDIT 2026-09-05 — the hazard did NOT fire on tonight's campaign. Intersection EMPTY.
+
+Asked for by frankuser and run by frank-coordinator, **which was not in the
+campaign and closed nothing** — the sweeping session must not audit its own
+output.
+
+**Population:** 61 tickets added to `done/` or `rejected/` on origin in 14 hours.
+(Renames land as adds, so moves out of `working/` are captured.)
+
+**Instrument 1 — does any closure cite a corpus?** Scanned for
+`library_candidates`, `fpc-testsuite`, `c-testsuite`, `rtl-generics`,
+`tgeneric*.pp`, `ugeneric*.pp`, `tgenfunc*`, `busybox`, `sqlite`, `lua`,
+`quickjs`, `duktape`, `reportlab`, `html5lib`, `tinycss2`, `webencodings`.
+**Seven hits.** Every one closed on a **FIX**, none on a non-reproduction:
+
+| ticket | closing sha | tree | corpus cited | present there? |
+| --- | --- | --- | --- | --- |
+| multi-dim array typedef corrupts neighbours | `5435c14a7` | frankC | busybox | **yes** |
+| undeclared identifier in a file-scope initializer | `3bfc63fef` | frankC | busybox, sqlite | **yes** |
+| undeclared identifier used as a value | `54ad11adf` | (frankC, per its own text) | busybox, c-testsuite, lua, quickjs, sqlite, duktape | **yes** for all present ones |
+| pointer to a typedef'd array segfaults | `249e29cfa` | frankC | busybox | **yes** |
+| two same-named file-scope statics alias | `ec1a1d7b6` | (frankC, per its own text) | sqlite | **yes** |
+| `of object` derails the Delphi generic anchor | `1ea430c95` | frankB | rtl-generics | **yes** |
+| two same-named statics share one procs row | `3f427655e` | frankC | c-testsuite, sqlite | **yes** |
+
+frankC's checkout holds `busybox c-testsuite lua sqlite`; frankB's holds
+`rtl-generics`. **Every cited corpus was present in the checkout that closed the
+ticket.**
+
+**Instrument 2, which fails differently — does any closure REST on a
+non-reproduction?** Rather than trusting the citation scan, matched the closure
+*basis* across all 61: *"does not reproduce"*, *"cannot reproduce"*, *"no longer
+reproduces"*, *"not reproducible at HEAD"*, *"already fixed by"*.
+
+> **Count: ZERO. Not one of tonight's 61 closures rests on a non-reproduction.**
+
+So the hazard had nothing to fire on. A second pass looking for summaries that do
+**not** assert a fix found 18 — three real tickets and fifteen auto-filed
+`regression-*` rows with empty summaries — and **none of the 18 cites a corpus.**
+
+### The one that is the INVERSE of the hazard, and it is the reassuring row
+
+`bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor`
+(`1ea430c95`, frankB) is the case this ticket fears, run backwards. Corpus rung 6a
+(**rtl-generics `Generics.Defaults`, five `of object`**) had been recorded green
+**twice, by two independent sessions, six days earlier, with byte-identical
+figures** (`code=671512B procs=1661`). Re-measured at tip it **failed outright** —
+a regression from `b613b5fcf`, bisected with pin-seeded builds.
+
+**The corpus being PRESENT is what turned a stale green into a found regression.**
+Which is the argument for the reconstruction remedy rather than against it: the
+value is in the input existing where the probe runs, not in where it came from.
+
+### The aperture of this audit, stated because a negative result inherits it
+
+- **Instrument 2 matches a fixed phrase list.** A closure written as *"probed and
+  it works now"* would not match. That is the real residual and it is why
+  instrument 1 was run independently rather than as a filter.
+- **Two of the seven shas did not resolve by checkout reflog** — the known failure
+  mode of that instrument. Corroborated by each ticket's own text naming frankC,
+  which fails differently.
+- **This checkout holds NO corpus at all**, so what was verified is *presence in
+  the closing checkout*, not that the probe actually read the file.
+- **Scope: 14 hours, `done/` and `rejected/` only.** Says nothing about closures
+  before that window.
+
+**The campaign's numbers stand as reported:** `ready --track P` 53 → 39, and no
+closure in it is reopened by this ticket.
