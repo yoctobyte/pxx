@@ -98,4 +98,4 @@ Text round-trip row while this bug is open. **Fold that class back in when this
 is fixed** — its presence is a marker.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 98eb6127f.
