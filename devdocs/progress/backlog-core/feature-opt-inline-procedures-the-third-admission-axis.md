@@ -86,4 +86,4 @@ census of how many procedure calls exist), PROOF from Track T's full tier.
 Behind `-O3` first. **`tools/optfuzz.sh` is the designated net for splice
 machinery** — it covers this one, unlike the float axis, since pasmith generates
 integer procedures freely
-([[bug-t-pasmith-generates-no-float-code-so-optfuzz-cannot-see-float-optimizations]]).
+([[bug-t-pasmith-returns-only-integer-kinds-so-optfuzz-is-blind-to-the-return-type-axis]]).
