@@ -87,4 +87,4 @@ what was correct once the bytes were there. See its RESOLVED section.
   widened the 3-D subscript-count guard to a base nothing exercised it on.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f09e669ae.
