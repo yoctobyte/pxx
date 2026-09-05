@@ -101,7 +101,34 @@ begin
     elemTk := tyInteger;
   end
   else
+  begin
     elemTk := ParseTypeKind();
+    { A subrange element that is NOT spelled with integer literals -- `set of
+      'c'..'k'` -- reaches here instead of the arm above, because that arm is
+      guarded on tkInteger. ParseTypeKind's own subrange tail parsed it and left
+      the bounds in LastTypeSub*, correct and live, one line away and unread: so
+      this procedure registered Hi < Lo, meaning "not a subrange", and Low/High
+      fell back to the ELEMENT TYPE's full range -- 0 and 255 where fpc answers
+      99 and 107.
+
+      ONLY THE NAMED SPELLING WAS WRONG, which is what hid it. `var b: set of
+      'c'..'k'` is parsed by ParseTypeKind's own set arm, which does capture the
+      bounds, so the inline form answered 99 and 107 all along and only
+      `type TCS = set of 'c'..'k'` lost them. Two paths for one concept, and the
+      second one stayed broken -- normalise-dont-special-case.
+
+      This is the BOUNDS half only. The element KIND is still dropped (both
+      spellings print 99 and 107 where fpc prints c and k), and that half is
+      decide-how-a-type-carries-an-identity-its-kind-cannot-hold's business, not
+      this fix's -- but the bounds are needed under EITHER arm of that fork, so
+      capturing them here pre-empts nothing.
+      bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
+    if LastTypeIsSub then
+    begin
+      elemLo := LastTypeSubLo;
+      elemHi := LastTypeSubHi;
+    end;
+  end;
   { the element parse records the enum identity in LastTypeEnumId; carry it
     as the set's element enum for RTTI. }
   LastTypeSetEnumId := LastTypeEnumId;

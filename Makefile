@@ -6496,6 +6496,14 @@ test-core: $(COMPILER)
 	@# kind out from under seven `kind = tyInteger` identity guards.
 	@$(TESTTMP)/test_packenum26 | diff -u test/test_packenum.expected - \
 	  || { echo 'test_packenum: FAIL - a packed enum stopped behaving like an enum'; exit 1; }
+	./$(COMPILER) test/test_set_elem_bounds.pas $(TESTTMP)/test_setelembounds26
+	@# .expected is fpc 3.2.2's own output. The inline rows are the control: they
+	@# were already right, so a run that only checks the alias rows cannot tell
+	@# the fix from a coincidence. `alias chars ck` is the element KIND surviving
+	@# the alias; the inline spelling still prints ordinals there and that half
+	@# belongs to decide-how-a-type-carries-an-identity-its-kind-cannot-hold.
+	@$(TESTTMP)/test_setelembounds26 | diff -u test/test_set_elem_bounds.expected - \
+	  || { echo 'test_set_elem_bounds: FAIL - a set element subrange lost its bounds'; exit 1; }
 	./$(COMPILER) test/test_scopedenums.pas $(TESTTMP)/test_scopedenums26
 	tools/expect_same.sh test_scopedenums26 "$$($(TESTTMP)/test_scopedenums26)" "$$(printf '0\n2\n1\ncase-ok')"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip

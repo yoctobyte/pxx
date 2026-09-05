@@ -1,0 +1,7 @@
+char inline 99 107
+char alias  99 107
+int  inline 1 10
+int  alias  1 10
+enum whole  0 3
+enum sub    1 2
+alias chars ck

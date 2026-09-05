@@ -3,7 +3,7 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-summary: "Two measured losses of a type's IDENTITY at a registration boundary, both pre-existing on pin v403. (1) `type TDays = D` where D is an enum: a variable declared through the ALIAS prints its ORDINAL where fpc prints the member name -- `WriteLn(a)` gives `1`, not `tue` -- because enums are tyInteger plus an id and the alias table has no column for the id. The same variable's `case` still works, since members resolve globally, which is what hides it. (2) `Low`/`High` of a `set of 'c'..'k'` answer 99 and 107 where fpc answers c and k: the element's CHAR kind is dropped while its BOUNDS survive. Same family as the AliasStrCap / AliasStrElemTk / AliasFileElemTk gaps already fixed in RegisterGeneralAlias -- a fact that is live in a LastType* channel at registration and has nowhere to be written."
+summary: "Two measured losses of a type's IDENTITY at a registration boundary, both pre-existing on pin v403. (1) `type TDays = D` where D is an enum: a variable declared through the ALIAS prints its ORDINAL where fpc prints the member name -- `WriteLn(a)` gives `1`, not `tue` -- because enums are tyInteger plus an id and the alias table has no column for the id. The same variable's `case` still works, since members resolve globally, which is what hides it. (2) `Low`/`High` of a `set of 'c'..'k'` answer 99 and 107 where fpc answers c and k: the element's CHAR kind is dropped. The BOUNDS half was a SECOND defect and is FIXED (2026-09-05): the bounds survived only in the INLINE spelling -- through `type TCS = set of 'c'..'k'` they were lost too and Low/High answered 0 and 255, the element type's full range. The remaining open half is the element KIND on the inline spelling, which is the decide-fork's business. Same family as the AliasStrCap / AliasStrElemTk / AliasFileElemTk gaps already fixed in RegisterGeneralAlias -- a fact that is live in a LastType* channel at registration and has nowhere to be written."
 ---
 
 # A type alias drops the enum identity; a set drops its char element kind
@@ -79,3 +79,50 @@ folded, and wants the set-type-name `Low`/`High` question answered first.
 names this and the sized-boolean bug as the two families ONE mechanism would
 close, and recommends the side-channel arm — which is this ticket's suggestion
 (1) generalised. Settle that first; the carry sites are shared.
+
+## 2026-09-05 — (2) re-measured at a moving tip, and split into three
+
+frankA's "both bugs still reproduce" row was stamped at `167847e61`, before the
+`{$H-}` commit touched `pasparser_decl.inc` and `pasparser_expr.inc`; they said
+so and stood down rather than re-take it. Re-taken here at tip `e9a885ba2`,
+compiler `ba573b6cf02a`. Row 1 reproduces exactly as written. Row 2 is not one
+defect but **three**, and the ticket above had measured only the first spelling:
+
+| spelling | Low/High bounds | element kind |
+| --- | --- | --- |
+| `var b: set of 'c'..'k'` (inline) | **99 107 — right** | dropped, prints ordinals |
+| `type TCS = set of 'c'..'k'` (alias) | **0 255 — WRONG** | dropped |
+| `Low(TCS)` on the TYPE NAME | refused: `undefined variable (TCS)` | — |
+
+All three confirmed pre-existing against the pinned compiler.
+
+**The bounds half is FIXED.** `ParseSetElemSpec` sets `elemLo := 0; elemHi := -1`
+and captures bounds only inside its `tkInteger` arm, so a subrange spelled any
+other way took `else elemTk := ParseTypeKind()` and registered `Hi < Lo` — "not
+a subrange" — after which `Low`/`High` fell back to the element TYPE's range.
+`ParseTypeKind`'s own subrange tail had already left the correct bounds in
+`LastTypeSubLo`/`Hi`, live and one line away, unread. Only the NAMED spelling
+was wrong because only it reaches that branch. The fix reads the channel that
+was already correct; it is four lines and adds no column.
+
+**This does not pre-empt [[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]].**
+The bounds are needed under EITHER arm of that fork — a side channel and a new
+`TTypeKind` both still have to know that the element range is 99..107 — so
+capturing them here decides nothing. The element KIND is the half that needs the
+fork, and it is untouched.
+
+**Attribution, by ablation.** Removing the fix and rebuilding reproduced
+`ba573b6cf02a` byte-identically and put back exactly two rows: char alias
+`99 107` -> `0 255`, enum-subrange alias `1 2` -> `0 3`. **The ablated build
+still COMPILED the probe**, so the pin's `unknown type: sun` refusal was fixed
+earlier by someone else and is NOT claimed here.
+
+Test: `test/test_set_elem_bounds.pas` + `.expected` (fpc 3.2.2's own output,
+seven rows). The inline rows are the control — they were right before the fix,
+so a run checking only the alias rows cannot tell a fix from a coincidence. The
+`alias chars ck` row is the element kind surviving the ALIAS path, which is why
+the two halves are separable at all: the inline spelling still prints `99107`
+there and stays open.
+
+**Still open on (2):** the element KIND on the inline spelling (fork), and
+`Low`/`High` of a set TYPE NAME being refused outright.
