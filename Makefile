@@ -6711,6 +6711,20 @@ test-core: $(COMPILER)
 	@# alias boundary rather than in the formatter.
 	@$(TESTTMP)/test_etai26 | diff -u test/test_enum_type_alias_keeps_identity.expected - \
 	  || { echo 'test_enum_type_alias_keeps_identity: FAIL - an enum alias dropped its identity again'; exit 1; }
+	./$(COMPILER) test/test_low_high_carry_the_ordinals_identity.pas $(TESTTMP)/test_lhoid26
+	@# .expected is fpc 3.2.2's own output. The sibling of the row above, on the
+	@# VARIABLE spelling: every bound below was already the right ORDINAL and
+	@# printed as an integer, so an assertion on Ord() cannot see any of it --
+	@# row K asserts exactly that and was green throughout. TWO causes: the enum
+	@# rows were a missing channel (TryOrdinalVarBound reported a kind and had
+	@# nowhere to put an identity); the SET rows were LastTypeIsSub leaking out
+	@# of the element parse onto the set symbol, so the subrange arm answered
+	@# ahead of the set arm and typed the bound with the SET's kind -- row E
+	@# (for-in, green throughout) is what separates that from a lost element
+	@# kind. Rows I and J are controls that cannot distinguish a fix from a
+	@# no-op and exist only to catch a widening.
+	@$(TESTTMP)/test_lhoid26 | diff -u test/test_low_high_carry_the_ordinals_identity.expected - \
+	  || { echo 'test_low_high_carry_the_ordinals_identity: FAIL - a bound lost the ordinal it is a value of'; exit 1; }
 	./$(COMPILER) test/test_forward_pointer_to_array_type.pas $(TESTTMP)/test_fpta26
 	@# .expected is fpc 3.2.2's own output. `PArr = ^TArr` above `TArr = array[..]
 	@# of T` -- the shape FPC's own cclasses.pas uses, and the last PARSER wall on

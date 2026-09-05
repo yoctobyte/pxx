@@ -7570,7 +7570,8 @@ end;
   High/Low-of-array-variable path). A name that resolves to a VARIABLE is left
   for that path. }
 function TryOrdinalVarBound(symIdx: Integer; wantHigh: Boolean;
-                            var v: Int64; var tkOut: TTypeKind): Boolean;
+                            var v: Int64; var tkOut: TTypeKind;
+                            var eidOut: Integer): Boolean;
 { Low(x)/High(x) where x is an ordinal VARIABLE -- `var b: Byte` gave 0 and -1,
   and so did every other scalar: Byte, SmallInt, Char, Boolean, Integer, an
   enum, and a named subrange. Only the array-variable arms and the type-name
@@ -7587,10 +7588,20 @@ function TryOrdinalVarBound(symIdx: Integer; wantHigh: Boolean;
   The bound's type comes back in tkOut so the literal prints like fpc's:
   Low(Char) is #0 and not 0, Low(Boolean) is FALSE and not 0. A named subrange
   keeps its base type (`TL = 'a'..'e'` is a Char), which is what SymSubLo/Hi are
-  already stamped alongside for {$R+}. }
+  already stamped alongside for {$R+}.
+
+  AND AN ENUM NEEDS A SECOND FACT A KIND CANNOT HOLD, which is eidOut. An enum
+  value is a storage kind PLUS an identity, and this routine reported only the
+  kind -- so `Low(a)` for `var a: D` answered the right ordinal 0 and printed
+  `0` where fpc prints `mon`. The TYPE-NAME spelling `Low(D)` was correct the
+  whole time, because TryFoldHighLowType stamps ASTEnumId on the node it
+  builds; the two spellings of one intrinsic disagreed because only one of them
+  had a channel for the answer. `set of D` had the same hole one level down on
+  the element. -1 = not an enum. }
 var eLo, eHi: Integer;
 begin
   Result := False;
+  eidOut := -1;
   if (symIdx < 0) or (symIdx >= SymCount) then Exit;
   if Syms[symIdx].IsArray then Exit;
   tkOut := Syms[symIdx].TypeKind;
@@ -7609,6 +7620,7 @@ begin
   begin
     EnumTypeOrdRange(SymEnumId[symIdx], eLo, eHi);
     if wantHigh then v := eHi else v := eLo;
+    eidOut := SymEnumId[symIdx];
     Result := True;
     Exit;
   end;
@@ -7638,6 +7650,7 @@ begin
     begin
       EnumTypeOrdRange(SymSetEnumId[symIdx], eLo, eHi);
       if wantHigh then v := eHi else v := eLo;
+      eidOut := SymSetEnumId[symIdx];
       Result := True;
       Exit;
     end;
@@ -7699,6 +7712,57 @@ begin
   else v := ArrTypeLo[ai];
   idxTk := ArrTypeIdxTk[ai]; idxEnumId := ArrTypeIdxEnumId[ai];
   Result := True;
+end;
+
+function TrySetTypeBound(const nm: AnsiString; wantHigh: Boolean; var v: Int64;
+                        var elemTk, elemEnumId: Integer): Boolean;
+{ Low(T)/High(T) where T is a named SET type -- `TS = set of 'c'..'k'` answered
+  `undefined variable (TS)` while `Low(s)` over a VARIABLE of that type answered
+  c and k. fpc takes both and gives the ELEMENT type's bounds for each.
+
+  The SET-alias twin of TryArrayTypeBound, and written as one function called
+  from both TryConstHighLowValue and TryFoldHighLowType for the reason that one
+  already gives: those two are one concept in two places, and a rule spelled
+  once per caller fails by a MISSING copy rather than a divergent one, which no
+  diff of the two arms can find because they agree.
+
+  The three-way is TryOrdinalVarBound's set arm exactly -- recorded element
+  subrange first, then the element enum's ordinal range, then the element kind's
+  own bounds -- and it has to be, or the type name and the variable would answer
+  differently for the same set. An element kind of 0 (nothing recorded) declines
+  rather than inventing a range.
+  bug-p-a-set-of-a-char-subrange-drops-its-element-kind }
+var ai, eLo, eHi: Integer;
+begin
+  Result := False;
+  elemTk := 0; elemEnumId := -1;
+  ai := FindTypeAlias(nm);
+  if (ai < 0) or (AliasTk[ai] <> Ord(tySet)) then Exit;
+  elemTk := AliasSetElemTk[ai];
+  if AliasSetElemHi[ai] >= AliasSetElemLo[ai] then
+  begin
+    if wantHigh then v := AliasSetElemHi[ai] else v := AliasSetElemLo[ai];
+    Result := True;
+    Exit;
+  end;
+  { AliasElemTk is where RegisterSetAlias parks the element ENUM ID for a set
+    row -- not a type kind. See its header. }
+  if AliasElemTk[ai] >= 0 then
+  begin
+    EnumTypeOrdRange(AliasElemTk[ai], eLo, eHi);
+    if wantHigh then v := eHi else v := eLo;
+    elemEnumId := AliasElemTk[ai];
+    { tyInteger and NOT the element's storage kind, deliberately: an enum value
+      is `tyInteger PLUS an id` by this compiler's own convention (see
+      ParseSubrangeTail), and StampArrIdxType only carries the id alongside
+      tyInteger. Handing back a packed one-byte storage kind here would drop
+      the identity at the stamp and print the ordinal -- the exact defect this
+      arm exists to close, one layer further out. }
+    elemTk := Ord(tyInteger);
+    Result := True;
+    Exit;
+  end;
+  Result := (elemTk <> 0) and OrdinalTypeBound(IntToTypeKind(elemTk), wantHigh, v);
 end;
 
 function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
@@ -7794,6 +7858,18 @@ begin
     Next;
     Result := True; Exit;
   end;
+
+  { …and a named SET type, whose bound is a value of its ELEMENT type. Same
+    helper as the expression twin below, same publish-the-ordinal rule as the
+    array arm one line up. }
+  if TrySetTypeBound(nm, wantHigh, v, tabIdxTk, tabIdxEnumId) then
+  begin
+    if (IntToTypeKind(tabIdxTk) = tyBoolean) or (IntToTypeKind(tabIdxTk) = tyChar) then
+      CEOrdTk := IntToTypeKind(tabIdxTk);
+    if tabIdxEnumId >= 0 then CEEnumId := tabIdxEnumId;
+    Next;
+    Result := True; Exit;
+  end;
 end;
 
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
@@ -7866,6 +7942,17 @@ begin
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
     { the type-name twin of the variable arms in pasparser_expr.inc -- same
       helper, so `Low(TC)` and `Low(c)` cannot drift apart }
+    StampArrIdxType(outNode, tabIdxTk, tabIdxEnumId);
+    Result := True; Exit;
+  end;
+
+  { …and a named SET type. StampArrIdxType is the same stamp the array arm
+    uses -- an index type and a set's element type are both "the ordinal this
+    bound is a value OF", and giving them one stamper is what keeps
+    `Low(TS)` and `Low(s)` from drifting. }
+  if TrySetTypeBound(nm, wantHigh, bv, tabIdxTk, tabIdxEnumId) then
+  begin
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
     StampArrIdxType(outNode, tabIdxTk, tabIdxEnumId);
     Result := True; Exit;
   end;

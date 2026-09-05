@@ -1,0 +1,15 @@
+1 enum type name   : mon wed
+2 enum alias name  : mon wed
+3 enum variable    : mon wed
+4 enum alias var   : mon wed
+A set of charsub   : c k
+B set of named sub : c k
+C set of enum      : mon wed
+D set of Boolean   : FALSE TRUE
+E for-in was green : d f
+F set type charsub : c k
+G set type enum    : mon wed
+H const from type  : c k mon wed
+I CONTROL int sub  : 1 10
+J CONTROL set int  : 1 10
+K ordinals unmoved : 9 0 2

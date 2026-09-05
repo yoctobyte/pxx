@@ -143,8 +143,37 @@ carries them and not a message log:
    fine. The third face is why a grep for the segfault does not find the whole
    population: a procedure has no result to jump through, so the same missing
    answer surfaces as a name-resolution error instead. Scope the row to "the
-   argument position", not "the assignment", and expect the procedure spelling
-   to need the same answer.
+   argument position", not "the assignment".
+
+   **CORRECTED 2026-09-05 by frank-optimize's measurement, and the correction
+   changes the REMEDY, not the population.** I wrote above that the machinery
+   exists on the Delphi side and the answer is missing outside it, which reads
+   as "make the bare name bind its address everywhere". That is wrong. FPC in
+   DEFAULT mode refuses all three:
+
+   ```
+   f := G       Incompatible types: got "SmallInt" expected "<procedure variable type...>"
+   Use(G)       Incompatible type for arg no. 1: Got "SmallInt"
+   Use(G) proc  Incompatible type for arg no. 1: Got "untyped"
+   ```
+
+   So reading the bare name as a call is FPC's behaviour too, and the type
+   error is the CORRECT outcome outside Delphi mode. The first two faces are a
+   missing DIAGNOSTIC that we turn into a crash, not a missing address-binding
+   channel -- which is what
+   [[bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode]]
+   said in its own summary all along ("erroring like FPC is the fix"). Making
+   them bind would have us accepting in objfpc mode what FPC deliberately
+   refuses, and the mode directive is the thing that is supposed to decide it.
+   Refusing is also the much smaller job.
+
+   The three-face split is still the right scoping -- it is what led to the
+   real defect in the ARGUMENT position, which frank-optimize landed as
+   `8389db919`: `TryDelphiBareProcArg` was called from the two free-call
+   argument loops and from NilPy and from NONE of the seven method ones, so
+   `s.Run(MyCompare)` never resolved the name at all and the gate never got to
+   abstain. One cell of a five-cell matrix, found by varying the SPELLING
+   rather than chasing the crash.
 
 3. **Anything worth keeping from the reverted `4760474da`?** I have not
    re-measured it, so treat this as unmeasured: the part I would look at first

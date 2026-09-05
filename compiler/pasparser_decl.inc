@@ -135,6 +135,22 @@ begin
   LastTypeSetElemTk := Ord(elemTk);
   LastTypeSetElemLo := elemLo;
   LastTypeSetElemHi := elemHi;
+  { AND THE ELEMENT'S SUBRANGE-NESS MUST NOT ESCAPE ONTO THE SET. The element
+    parse above left LastTypeIsSub/SubLo/SubHi set for `set of 'c'..'k'`, and
+    the AllocVar chokepoint copies those onto the SET symbol -- so the set
+    variable came out flagged `SymIsSub` with bounds 99..107. Those bounds are
+    the ELEMENT's and they already have a home three lines up.
+
+    It was not merely redundant. TryOrdinalVarBound tests SymIsSub BEFORE its
+    set arm, so `Low(s)` took the subrange arm, answered the right ordinal 99
+    and typed it with the SET's own kind -- printing `99` where fpc prints `c`.
+    The bounds were right and the KIND was the set's, which is why the reading
+    looked like a lost element kind: SymSetElemTk was tyChar the whole time and
+    the arm that would have used it was never reached. `for c in s` reads that
+    same field and worked throughout, which is the measurement that separates
+    the two explanations.
+    bug-p-a-set-of-a-char-subrange-drops-its-element-kind }
+  LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
 end;
 
 { The STORAGE WIDTH of an enum type, decided once at its declaration.

@@ -570,6 +570,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szExprTk: TTypeKind;
     hlBoundV: Int64;
     hlBoundTk: TTypeKind;
+    hlBoundEid: Integer;   { TryOrdinalVarBound's enum identity; -1 = not an enum }
     hlValTk: TTypeKind; hlCap: Integer;          { High/Low over a STRING operand }
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
@@ -5749,13 +5750,19 @@ begin
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
         else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
-                TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk) then
+                TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk, hlBoundEid) then
         begin
           { High of an ordinal VARIABLE is its type's upper bound. Without this
             arm it fell into the Length-1 fallback below and answered -1 for
-            every scalar -- see TryOrdinalVarBound. }
+            every scalar -- see TryOrdinalVarBound.
+            The enum identity rides alongside the kind, the same pair
+            TryFoldHighLowType stamps for the TYPE-NAME spelling: without it
+            `High(a)` printed 2 where fpc prints wed, while `High(D)` was
+            right, so one intrinsic answered differently for two spellings of
+            the same question. bug-p-low-and-high-of-an-enum-variable-print-the-ordinal }
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := hlBoundV; ASTTk[CurASTNode] := Ord(hlBoundTk);
+          if hlBoundEid >= 0 then ASTEnumId[CurASTNode] := hlBoundEid;
           LastExprTk := hlBoundTk;
           Exit;
         end
@@ -5935,13 +5942,17 @@ begin
           { `Low(p^)`: the pointee's declared lower bound. }
           ASTIVal[CurASTNode] := dpaLo
         else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
-                TryOrdinalVarBound(idx, False, hlBoundV, hlBoundTk) then
+                TryOrdinalVarBound(idx, False, hlBoundV, hlBoundTk, hlBoundEid) then
         begin
           { Low of an ordinal VARIABLE is its type's lower bound; the `else 0`
             below answered 0 for Integer, SmallInt and every named subrange.
-            Paired with the High arm above -- see TryOrdinalVarBound. }
+            Paired with the High arm above -- see TryOrdinalVarBound, including
+            the enum identity, which the two must stamp identically or
+            `Low(a)..High(a)` prints one end as a name and the other as a
+            number. }
           ASTIVal[CurASTNode] := hlBoundV;
           ASTTk[CurASTNode] := Ord(hlBoundTk);
+          if hlBoundEid >= 0 then ASTEnumId[CurASTNode] := hlBoundEid;
           LastExprTk := hlBoundTk;
           Exit;
         end
