@@ -8345,3 +8345,72 @@ that reports success are the same instrument.**
 Related: "A GUARD THAT CANNOT FAIL IS NOT A GUARD" (CLAUDE.md); "Do not read a
 green as coverage"; "A guard whose failure mode is a SILENT FALLBACK cannot be
 distinguished from a guard that is absent".
+
+## "OUT OF REACH" IS AN INFERENCE FROM A PROBE, NOT A PROPERTY OF THE TARGET — and it is the quiet member of this family
+
+**The shape.** You invoke a thing one way, it refuses, and you write down that
+the thing *cannot be done*. The refusal is real. The conclusion is a
+generalisation over every other way you did not try — and unlike the loud
+members of this family, **it does not look like a measurement gone wrong. It
+looks like a fact about the system**, so it survives in prose where a bad number
+would be re-derived.
+
+**The rule: a target is out of reach only after the PROFILES IT HAS have been
+tried.** Substitute *flags*, *modes*, *platforms*, *output kinds* for profiles.
+An absence asserted about a **target** needs the same interrogation as an
+absence asserted about a **search**.
+
+**Measured 2026-09-05 (frankC), and the instance is my own.**
+`tools/c_va_arg_every_target.sh` invoked every target with no `--platform`, so
+xtensa met its **default** profile — the ESP one, which has no standalone entry
+stub *by design* — refused at the entry stub, and the row printed:
+
+```
+xtensa    refuses  no C entry stub yet -- outside this check by construction
+```
+
+That sentence was false when it was written:
+
+```
+--target=xtensa                    refuses at the entry stub (ESP default)
+--target=xtensa --platform=posix   BUILDS, and qemu-xtensa RUNS it
+                                   1122334455667788 42 2.50   == gcc, exactly
+```
+
+**The refusal was real and the conclusion drawn from it was false.** One target
+was being reported as unmeasurable while it was fully measurable, so a `va_arg`
+slot-width set that the ticket called "complete only because two targets cannot
+compile C" had in fact been **verifiable by running** for a day. `built` floor
+5 → 6.
+
+**Why this one is worth a section when the loud ones are not.** Four other
+instrument-lies were caught the same day, all within minutes, because each
+produced a visibly odd *value*. This one produced a **sentence**, in a committed
+script and in a ticket, and survived a day — including being re-read by its own
+author while writing the neighbouring paragraph. The failure mode of this class
+is that the output is grammatical, confident, and about the world.
+
+**The discriminator is cheap and nobody runs it:** before writing "X cannot",
+enumerate the ways X can be invoked and try the ones you have not. Here it was
+one flag. `--platform=bare`, tried in the same sweep, answered `unknown option`
+— **the compiler rejecting the flag, not the profile refusing the program** —
+which would have become a second false sentence about a profile had it not been
+read.
+
+### Four same-day instances, as instances — the rules for these are already in this file
+
+Cited so the family is visible in one place. **Do not re-derive these here**;
+the sections that own them are named, and they are named by HEADING rather than
+line number because this file's line numbers drift constantly.
+
+| what was read | what it was actually correct about | section that owns the rule |
+| --- | --- | --- |
+| `strace` returning a 1-line trace | `ptrace` blocked — *did not measure*, not *did not happen* | **A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT** |
+| `grep -c` exiting 1 on a count of 0 | a **successful** measurement of zero; the `\|\| echo "unavailable"` fired on a good result | **The instrument answered, correctly, about something else** |
+| `sync.sh \| tail` reading as success | the pipeline's status is `tail`'s; the tool had exited 1 loudly | **A probe needs a control for DELIVERY, not only for behaviour** |
+| `--platform=bare` "refusing" | `unknown option` — the flag rejected, not the program | this section |
+
+The third is worth one extra line because of *where* it happened: the tool's own
+source comment warns about `| tail` **in those words**, and it was read that
+night, in that function's neighbourhood, by the person who had already done it.
+**Reading is not adopting**, and the interval between the two was minutes.

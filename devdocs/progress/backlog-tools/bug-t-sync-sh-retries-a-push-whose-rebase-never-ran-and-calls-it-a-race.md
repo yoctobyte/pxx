@@ -13,6 +13,27 @@ summary: "push_with_retry() ignores rebase_onto_origin()'s result, and rebase_on
 
 # `sync.sh` retries a push whose rebase never ran, and calls it a race
 
+## The bug is the FALSE DIAGNOSIS. The retry budget is a symptom.
+
+Every iteration prints:
+
+```
+sync: push raced another writer — rebasing and retrying (n/N)
+```
+
+That is a **diagnosis, not an observation.** The observation is "the push was
+rejected". The cause, in the case this ticket is about, is a rebase that **could
+not begin** — and it was false in all 42 lines it produced on 2026-09-05.
+
+**A wrong mechanism printed 42 times is worse than no message**, because the next
+reader inherits it as evidence. Raising the budget does not change the number of
+true statements it makes; it raises the number of false ones.
+
+**An empty unmerged set means BOTH "resolved cleanly" and "never ran".** That is
+the expected-value-collides-with-the-failure-value shape: the value the code
+tests for is also the value the failure produces, so the test cannot separate
+them. See "would this still pass if the machinery did nothing".
+
 ## Reproduced, minimally, in a throwaway repo
 
 Upstream commits `stray.txt`; the local clone has an **untracked** `stray.txt`
@@ -78,9 +99,25 @@ That is working: sync.sh exits 1 and says `YOUR WORK IS NOT ON ORIGIN`, loudly.
 This ticket is about **which cause it names** and **whether retrying can ever
 help**.
 
-Related, and the reason the precondition is not exotic: an untracked file
-colliding with an incoming tracked one is what `git add -A` on a shared checkout
-manufactures. That is how tonight's instance arose (`d1e332e1e`).
+## ONE CHAIN, NOT TWO COINCIDENCES — and it constrains how a fix is verified
+
+The precondition — an untracked file colliding with an incoming **tracked** one
+— is exactly what `git add -A` on a shared checkout manufactures. That is how
+this instance arose: my own commit (`a409e19b5`) swept two scratch files onto
+origin, and the untrack commit that fixed it (`d1e332e1e`) was the one that
+could not push. **The bug created its own precondition.**
+
+Two consequences for whoever takes this:
+
+1. **It is not rare.** A reader who sees only the loop will judge it a freak
+   contention event. It needs one session to commit a file another session has
+   untracked, which is the normal state of a shared checkout with scratch in it.
+2. **A fix verified on a tree where the precondition CANNOT OCCUR has not been
+   verified.** Checking `rebase_onto_origin`'s status and re-running a normal
+   contended push proves nothing about this path — the rebase succeeds, so the
+   new check never fires. **The positive control has to be the blocked rebase
+   itself**: an untracked file that collides with an incoming tracked one, which
+   the throwaway-repo recipe above sets up in six commands.
 
 ## One caller-side note, not part of the fix
 
