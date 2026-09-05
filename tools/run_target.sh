@@ -41,13 +41,23 @@ fi
 # against the expected output. The diff then reads exactly like the target
 # producing nothing, i.e. like a compiler bug.
 #
-# MEASURED 2026-09-04, and it cost real triage: host seven has no wasmtime, and
+# MEASURED 2026-09-04, and it cost real triage: host seven HAD no wasmtime, and
 # six test-core rows auto-filed as regressions in one run -- fpn26/wasm32,
 # fpfld26/wasm32, tidref26/wasm32, dsspal26/wasm32, entpal26/wasm32 and the
 # futex row -- each naming a different test and a different commit. Four of them
 # were read as four separate defects in freshly added tests. All six were one
 # missing binary. The compiler was correct on every one: re-run on a host WITH
 # wasmtime, at the same commit, every row passes.
+#
+# PREMISE MOVED 2026-09-05: seven reports wasmtime 48.0.1 installed. The
+# INCIDENT above is history and stays; the present-tense reading of it does not.
+# It was being cited as a live fact this evening -- correctly, from a header that
+# had gone stale -- to justify a design choice. THE DESIGN CHOICE IS UNAFFECTED
+# and stands on its own: a quick-tier row that reddens on a host gap is still
+# worse than none, and asserting an IMPORT rather than an exit code matches the
+# assertion class to the defect class without needing any runtime at all. What
+# changes is only that "seven has no wasmtime" is no longer a premise anyone may
+# reason from. Cite `command -v wasmtime` on the box, never this comment.
 #
 # NOT A SKIP. An unrun test is not a passing test and this still exits nonzero
 # and still reddens the row -- what changes is that the row now names the HOST
