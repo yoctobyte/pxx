@@ -1382,6 +1382,34 @@ end;
   `case` is NOT counted -- a record variant part introduces no `end` of its own
   -- and `interface`/`object` are, because in a type section they are type
   constructors.
+
+  ...EXCEPT that `of object` is not one. `TCb = function(x: Integer): Integer of
+  object;` is a method-pointer type and its `object` opens NOTHING, so counting
+  it added a depth this walk could never take back. ONE is enough to break a
+  whole unit: with depth stuck above 0 the `implementation` arm below -- which
+  is guarded on depth = 0 -- never fires, so the walk leaves the type section it
+  exists to stop at, and the routine bodies it then crosses each Dec on their
+  own `end` until the count happens to reach 0 again somewhere in the middle of
+  the implementation. A depth-0 `;` there looks exactly like a type declaration
+  boundary, so the minted alias was spliced BETWEEN TWO ROUTINE BODIES with no
+  `type` in force: `unexpected token in a unit implementation section`, reported
+  ~1750 lines before the use that caused it.
+
+  NOT counting `object` at all is the wrong fix and the test says so: a real
+  `TOld = object F: Integer; G: Integer; end` IS a body, and with it uncounted
+  the `;` between its fields becomes a candidate anchor -- measured, the alias
+  landed there (`; G : Integer ; TBox3$TArg specialize`). The discriminator is
+  the PRECEDING TOKEN, not the word.
+
+  This is the third entry in this walk's keyword list to be wrong and the third
+  in a different direction: `constructor`/`destructor` were soft keywords absent
+  from a list of hard ones; `implementation` is correctly soft; `object` is a
+  real type constructor that is ALSO a modifier word.
+
+  Found on rtl-generics' Generics.Defaults, which has five `of object` and had
+  compiled end to end at 4f42b78b9 -- a corpus rung recorded green by two
+  independent sessions with byte-identical figures, six days stale.
+  bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor
   bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template }
 function DGenDeclAnchor(fromIdx, useIdx: Integer): Integer;
 var k, depth, paren: Integer;
@@ -1394,7 +1422,8 @@ begin
     if Tokens[k].Kind = tkLParen then Inc(paren)
     else if Tokens[k].Kind = tkRParen then Dec(paren)
     else if (Tokens[k].Kind = tkRecord) or
-            DGenIdentIs(k, 'object') or DGenIdentIs(k, 'interface') then
+            (DGenIdentIs(k, 'object') and ((k = 0) or (Tokens[k-1].Kind <> tkOf))) or
+            DGenIdentIs(k, 'interface') then
       Inc(depth)
     else if Tokens[k].Kind = tkClass then
     begin

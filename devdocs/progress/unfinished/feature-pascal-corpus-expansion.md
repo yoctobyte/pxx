@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: unfinished
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current`, REDUCED to `for LValue in AEnumerable` over an IEnumerable<T> at :1480 -- which is NOT a bug but a PIN-ORDERING dependency: our IEnumerator<T> lacks `property Current` only because the pinned compiler still rejects a property in an interface, while HEAD accepts it (bug-p-a-property-in-an-interface-declaration-is-rejected is DONE). Track B builds lib/rtl with the PINNED compiler, so the one-line RTL addition must wait for a make pin. Remaining distance on rung 6b: one pin, one RTL line, re-measure. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "READ THE 2026-09-05 SECTION AT THE BOTTOM BEFORE ANY OTHER FIGURE IN THIS FILE. Rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30 and was NOT green on 2026-09-05: b613b5fcf broke it the next day and nobody re-ran it, so 6b appeared to stop inside 6a's file and the ladder had moved BACKWARDS while reading as a floor. Fixed (bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor); 6a compiles again and 6b is back at its own wall. THE STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- the better-confirmed a rung is, the more it gets re-cited instead of re-measured. Re-run the rung before you trust any row here. The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current`, REDUCED to `for LValue in AEnumerable` over an IEnumerable<T> at :1480 -- which is NOT a bug but a PIN-ORDERING dependency: our IEnumerator<T> lacks `property Current` only because the pinned compiler still rejects a property in an interface, while HEAD accepts it (bug-p-a-property-in-an-interface-declaration-is-rejected is DONE). Track B builds lib/rtl with the PINNED compiler, so the one-line RTL addition must wait for a make pin. Remaining distance on rung 6b: one pin, one RTL line, re-measure. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -2060,3 +2060,77 @@ discovery three hours in.
 Left in `unfinished/` and still owned by frankB. Nothing here is claimed; the
 summary is corrected because rule 2 requires it and this file is the one that
 tells its own readers to trust only the canonical table.
+
+## 2026-09-05 (frankB) — RUNG 6a WAS NOT GREEN, AND THE RECORD IS WHY NOBODY KNEW
+
+Took this off `next --track P`. Re-measured rung 6a at tip `36d7e5fd4` before
+doing anything with it, and it failed:
+
+```
+pascal26:1064: error: unexpected token in a unit implementation section:
+                      it starts no declaration (a mistyped section header?)
+  in: .../generics.defaults.pas
+  near: ( AComparison ) ; end ; >>> THashService$TDelphiHashFactory  specialize
+```
+
+`$` cannot occur in Pascal source, so that is a MINTED alias spliced into the
+token stream. 6b stopped in the same file rather than its own, so the wall
+everyone was driving toward had moved backwards.
+
+**Fixed:** [[bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor]].
+`DGenDeclAnchor` counted the `object` in `of object` as opening a type body;
+`Generics.Defaults` has five. Regression from `b613b5fcf` (2026-08-31), the day
+after this file recorded 6a green. Bisected over 3425 commits.
+
+### Current state, measured, not cited
+
+| rung | result |
+| --- | --- |
+| 6a `generics.defaults` | **compiles end to end** — `code=687896B data=138472B bss=127228B procs=1780`, 16s |
+| 6b `generics.collections` | `for-in: enumerator has no readable Current` at `generics.collections.pas:1481`, 3m31s |
+
+6b is back at the wall this file's summary already describes (a pin-ordering
+dependency on `IEnumerator<T>.Current`, not a frontend bug). **6a's figures do
+NOT match the 2026-08-30 record** (`671512B` / `1661 procs`) and are not claimed
+to: six days of codegen moved in between. Equality would have been the surprise.
+
+### What this file should take from it
+
+The two 2026-08-30 arrivals at `code=671512B procs=1661` were genuinely
+independent and byte-identical, which is the strongest corroboration this file
+has ever had for any row — and **corroboration is about the READING, not about
+the AGE.** Two correct measurements of a tree that no longer exists look exactly
+like the discipline working. The better-confirmed a rung is, the more it gets
+re-CITED rather than re-MEASURED, so the best-established rows are the ones most
+likely to be stale.
+
+**A ladder's recorded rung reads as a floor** — the thing already achieved — so a
+LATER rung failing inside an EARLIER rung's file reads as new depth rather than
+as regression. That is the tell to watch for here specifically: if rung N+1's
+error names rung N's file, re-run rung N before reading anything else.
+
+Two confounds this file has recorded three times were checked before calling it a
+regression, and both mattered:
+
+- **Is it the same program?** `md5sum` on `library_candidates/...` and
+  `/usr/share/fpcsrc/3.2.2/packages/rtl-generics/src/...` — identical for both
+  units. The three "THE TWO PROBES ARE DIFFERENT PROGRAMS" incidents above are
+  all this check.
+- **Is it the same invocation?** Reproduced under frankwasm's exact recorded
+  `-Fu` form, not only under the one in "How to re-measure".
+- **The PIN IS NOT A CONTROL HERE.** It cannot build the current `lib/rtl` at
+  all (`typinfo.pas`, `a value of this type has no members`). A baseline that
+  fails HARDER than expected is invisible as a control and reads as
+  corroboration; read what a red baseline actually says before counting it.
+
+### And a note for anyone bisecting this compiler
+
+Seeding each bisect step from the binary the previous step left behind does not
+work and is not neutral: the compiler doing the building then changes at every
+step, and a tip compiler refuses six-day-old compiler sources outright
+(`LoadFile expects string variables in IR codegen` in `cpreproc.inc`). That
+appeared as five consecutive build SKIPs and a range that never narrowed — a
+degenerate bisect wearing the shape of a running one. **Reseed from the PIN at
+every step** (`cp stable_linux_amd64/default/pinned compiler/pascal26`, `touch`
+the sources, then `make`), assert the log says `converged after` rather than
+`verified`, and it converges normally.

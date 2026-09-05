@@ -6504,6 +6504,15 @@ test-core: $(COMPILER)
 	@# belongs to decide-how-a-type-carries-an-identity-its-kind-cannot-hold.
 	@$(TESTTMP)/test_setelembounds26 | diff -u test/test_set_elem_bounds.expected - \
 	  || { echo 'test_set_elem_bounds: FAIL - a set element subrange lost its bounds'; exit 1; }
+	./$(COMPILER) -Futest test/test_delphi_generic_of_object_anchor.pas $(TESTTMP)/test_dgen_ofobj26
+	@# .expected is fpc 3.2.2's own output. Arm 2 is the negative control (the
+	@# same declaration WITHOUT `of object`, which never broke) and arm 3 is the
+	@# one that fails under the lazy fix of never counting `object` at all --
+	@# without it, a run cannot tell the right fix from the wrong one. The `unit`
+	@# row is the corpus shape: the use sits in a routine body in a unit's
+	@# IMPLEMENTATION, the only place the original diagnostic could be produced.
+	@$(TESTTMP)/test_dgen_ofobj26 | diff -u test/test_delphi_generic_of_object_anchor.expected - \
+	  || { echo 'test_delphi_generic_of_object_anchor: FAIL - the alias anchor derailed again'; exit 1; }
 	./$(COMPILER) test/test_scopedenums.pas $(TESTTMP)/test_scopedenums26
 	tools/expect_same.sh test_scopedenums26 "$$($(TESTTMP)/test_scopedenums26)" "$$(printf '0\n2\n1\ncase-ok')"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
