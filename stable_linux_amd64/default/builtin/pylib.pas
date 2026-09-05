@@ -2683,6 +2683,15 @@ function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiStr
   refactor-a-one-signature-record-for-every-callable-carrier }
 function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
 
+{ The bound slot for `name` on `cls` or any ancestor. pyeval's PyHasAttr asks
+  this unit the question rather than walking the parent chain a second time, so
+  it is exported surface; it was reachable from there only through the
+  interface leak
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). The full
+  rationale stays with the body. }
+function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
+                         var kind: Int64): Pointer;
+
 implementation
 
 { Python's whitespace set for the argument-less strip()/isspace():
@@ -6621,7 +6630,6 @@ procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
   guarantees the key is not already present, so no PyVarEq dup check here. }
 var mask, pos: NativeUInt; slotp: PInteger;
 begin
-          ' hashcap=', d.FHashCap, ' fkeys=', Int64(NativeInt(d.FKeys)), ' keyIdx=', keyIdx);
   mask := NativeUInt(d.FHashCap) - 1;
   pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
   while True do
@@ -6797,7 +6805,6 @@ var
   i: Integer;
   src, dst: PPyVarRec;
 begin
-          ' self=', Int64(NativeInt(Pointer(Self))), ' hashcap=', FHashCap);
   i := indexof(k);
   if i < 0 then
   begin
@@ -6805,8 +6812,6 @@ begin
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
-            ' fhash=', Int64(NativeInt(FHash)), ' hashcap=', FHashCap,
-            ' countermode=', Ord(FCounterMode));
     PyVarSlotSet(dst, src);
     { register the new key in the index (grow keeps load factor <= 0.5, so a
       slot is always free). FHashCap is 0 only for the never-grown empty dict,
@@ -12166,6 +12171,30 @@ begin
   if argsv <> nil then
   begin
     Result := TPyList(argsv);
+    { RETURN A NEW REFERENCE, because the OTHER arm does. The caller's protocol
+      for a property result is one owned reference per read -- it stores the
+      result into a managed temp, releasing whatever that temp held before, and
+      never retains. That is exactly right for the derived arm below, which
+      hands back a freshly built tuple; handing back the STORED field borrowed
+      made every read one release too many, and the object's own finalize then
+      released argsv a second time.
+
+      It was invisible for as long as a caught NilPy exception was never freed:
+      nothing else ever released argsv, so the surplus release merely drained a
+      leaked block and looked like cleanup. Freeing the exception (the `except X
+      as e` leak fix) makes the two collide, and it lands as a use-after-free on
+      whatever block the allocator recycled into that address -- observed as
+      `e.args` printing `()` on every second iteration of a loop that raises,
+      which is a freed-and-reused tuple, not a wrong args computation.
+      Measured with -dPXX_OBJTRACE: the release of iteration N's tuple fires
+      during iteration N+1's read, and -dPXX_HEAP_DEBUG names it outright as
+      `RELEASE of a FREED object`.
+
+      A mixed-ownership result is the bug -- one arm borrowed, one owned -- so
+      the fix is to make both arms owned rather than to teach the caller which
+      arm it got. No Pascal code reads this property (it exists for NilPy), so
+      the retain has no unreleased consumer. }
+    PXXObjRetain(Pointer(Result));
     Exit;
   end;
   Result := TPyList.Create;

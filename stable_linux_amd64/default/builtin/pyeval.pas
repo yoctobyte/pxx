@@ -332,6 +332,14 @@ const
   PK_BIGINT = 9;   { integer/hex literal that overflows Int64; TkText = its text }
 
 type
+  { Its own alias, not `builtin`'s. Every unit that needs a pointer alias
+    declares one: they are deliberately NOT exported, because an alias in an
+    ambient unit's interface silently re-types a user's own name of the same
+    spelling -- the trap that shipped once as builtinheap's `PWord = ^NativeInt`
+    outranking the builtin `PWord = ^UInt16`. This one resolved through
+    `builtin`'s implementation section until that boundary was enforced
+    (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
+  PAnsiString = ^AnsiString;
   PPyRec = ^TPyRec;
   TPyRec = record
     VType:   Int64;
