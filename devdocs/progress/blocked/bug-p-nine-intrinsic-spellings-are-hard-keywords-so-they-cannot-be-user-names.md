@@ -1,14 +1,17 @@
 ---
-prio: 55
+prio: 30
 track: P
-summary: "ONE CAUSE, NINE SPELLINGS, and it is not the one either existing ticket describes. `Read`, `Write`, `ReadLn`, `WriteLn`, `SysOpen`, `SysRead`, `SysWrite`, `SysClose`, `SysFchmod`, `ArgCount`/`ParamCount`, `ArgStr`/`ParamStr` are HARD keywords: the lexer maps each spelling to a dedicated token, so `procedure Write;` fails at the DECLARATION with `expected name` and the name is unusable anywhere. Every other intrinsic (Str, Val, New, Length, SetLength, Reset, Rewrite, Halt, Inc, Ord, Chr, Round, Copy, Insert, Delete, Move, GetMem...) declares fine -- measured across 37 spellings, exactly these fail -- which is what proves the mechanism is the dedicated token and not intrinsic-ness. fpc ACCEPTS all of them as user names. THE FIX SHAPE IS ALREADY IN-TREE AND DOCUMENTED: ord/chr/low/high/length were converted to SOFT keywords under bug-hard-keyword-intrinsics-block-identifier-use -- they lex as tkIdent, the parser dispatches on the NAME, and the tk enum members survive only as -Ord(tkXxx) call ids. The shadow infrastructure exists too: SoftIntrinsicOpen/SoftIntrinsicOpenSym (symtab.inc) with the `System.X` escape hatch. DO NOT START THIS WITHOUT READING THE BLAST RADIUS SECTION -- five files, a token-ORDER dependency, and a second frontend, which is why it is filed rather than done."
-owner: frankD
+type: bug
+status: blocked
+owner: "frankD"
+blocked-by: [feature-writeln-as-library]
+summary: "SEVEN OF NINE DONE 2026-09-05 (5f177b181): SysOpen/SysRead/SysWrite/SysClose/SysFchmod and ArgCount/ParamCount, ArgStr/ParamStr are soft keywords -- declarable as routine/param/local/field/method names, intrinsics unchanged unshadowed, System.X escape, test/test_soft_keyword_sysargs.pas 20 rows positive-controlled against pin v404. WHAT IS LEFT is Read/Write/ReadLn/WriteLn ONLY, and it is deliberately not this ticket's to do: those four carry the `:width:prec` format specifiers and the file-first variadic form, so their parsing belongs with feature-writeln-as-library phase 2 (frankH) -- blocked-by it now rather than racing it. The blast-radius section below is CORRECTED in three places by the work: no codegen site keys on a token kind (all use -Ord(tkXxx) call ids), pyparser.inc's five arms are proven-dead rather than a second copy, and pasparser_prog.inc's range test was not an ORDER hazard but a SILENT one -- it stopped matching and a wasm32 module lost its WASI imports with a clean `ok:`."
 ---
 
 # Nine intrinsic spellings are hard keywords, so none can be a user name
 
 - **Type:** bug — Track P (Pascal frontend); the lexer half is shared with A
-- **Status:** working
+- **Status:** blocked on `feature-writeln-as-library` phase 2 for the last four spellings; the other seven landed 2026-09-05 as `5f177b181`
 - **Found:** 2026-09-05 (frankB), from frankS's reading during the P staleness pass
 
 ## What was measured

@@ -237,6 +237,17 @@ That is a **hardcoded absolute fallback**, `compiler/pasparser_proc.inc:3428`:
 ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
 ```
 
+> **SUPERSEDED THE SAME EVENING, AND THE PACKAGE CHANGED WITH IT.** Traced at
+> `0930d5440`. frankC then landed `a409e19b5` — the gtk3 default ruled on 08-31
+> and unimplemented for five days — which **deletes** this arm; at HEAD it is
+> `/usr/include/gtk-3.0/gtk/` at `pasparser_proc.inc:3439`, and the arch-specific
+> `gtk-2.0/include/` root (GTK 2 keeps `gdkconfig.h` there; GTK 3 does not) is
+> gone rather than moved. So the four `uses gtk` tests now want **`libgtk-3-dev`,
+> not `libgtk2.0-dev`** — the same package as `gtk3_stock`, which collapses the
+> two build-time dependency profiles below into one. The trace above is the
+> pre-flip tree and is kept because it is what the failure-depth argument was
+> measured against; do not read the line number or the package off it.
+
 with the transitive include roots hardcoded beside it at
 `compiler/cpreproc.inc:2507-2510` (`/usr/include/gtk-2.0/`, the arch
 `gtk-2.0/include/`, glib, pango, cairo, atk, gdk-pixbuf). The build then reads

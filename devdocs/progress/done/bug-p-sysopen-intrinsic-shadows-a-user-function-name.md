@@ -5,7 +5,7 @@ track: P
 prio: 15
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: ""
 created: 2026-08-27
 summary: "sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15."
@@ -69,3 +69,6 @@ blast radius enumerated — is
 **Work that one, not this one**: a fix aimed at the call site is aimed at the
 wrong half, and fixing only the declaration would leave a routine that is
 declared and then silently never called, which is worse than today's refusal.
+
+## Log
+- 2026-09-05 — resolved, commit Fixed: sysopen/sysread/syswrite/sysclose/sysfchmod are soft keywords, declarable as any kind of name, intrinsics unchanged when unshadowed, System.X escape hatch. test/test_soft_keyword_sysargs.pas (20 rows), positive-controlled against pin v404. See bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names for the whole conversion and three corrections to its blast-radius section..
