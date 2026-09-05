@@ -11171,3 +11171,71 @@ traded the type system for one method. **Ask whether the old behaviour was
 correct, not merely whether it was intended** — one `grep` for the class
 declarations separated them, and only "unrelated classes bound anyway" sounding
 wrong prompted it.
+
+## ONE DEFECT, TWO OBSERVABLES, SELECTED BY THE DESTINATION'S PRIOR STATE — and a suite that constructs fresh objects sees only the quiet one, forever
+
+Measured 2026-09-06, `99fa7984f`. A Variant stored through a pointer did not
+reach the pointee on wasm32: `WasmVariantAddr` dispatched on `IRKind =
+IR_LOAD_SYM` alone, and that opcode is two questions — a VARIANT symbol's
+address is its slot, a POINTER symbol's address is the slot's VALUE. The bytes,
+for `pv^ := 42` into a variant holding 0:
+
+```
+native   1 0 0 0 0 0 0 0 | 42 0 0 0 0 0 0 0     tag=1,  payload=42
+wasm32  42 0 0 0 0 0 0 0 |  0 0 0 0 0 0 0 0     tag=42, payload=0
+```
+
+**The payload lands where the tag belongs. What that LOOKS like depends
+entirely on what was in the destination already:**
+
+| destination before | what you observe |
+| --- | --- |
+| PRISTINE (freshly allocated, zeroed) | nothing traps; the read answers `None` / `0`. A quiet wrong value. |
+| LIVE (holds a real value) | the tag is overwritten with a payload; the NEXT read raises `variant holds an unknown tag`, arbitrarily far from the store. |
+
+So **the same program passes or fails depending on what ran before it** — and a
+suite that constructs fresh objects for every case only ever meets the quiet
+arm. Both of ours did: the reporting session's rows were all `got=0` or absent
+output, and a peer independently confirmed no unknown-tag case anywhere in its
+Variant work. Neither of us had seen the loud half of our own bug.
+
+**THE ASSERTION OPERATION IS THE WRONG ONE, not just the expected value.** This
+is the sibling of *MATCH THE ASSERTION CLASS TO THE DEFECT CLASS*, one step
+further in: the second arm's damage is not in the value you read back, it is in
+the STATE YOU LEAVE for the next reader. `expect_same` on the value cannot
+observe it, however well chosen the value is, because the corruption's victim
+has not run yet.
+
+**So the question to ask of a store-shaped defect is "does its observable depend
+on what was in the destination?"** If yes, one row is not coverage — run a
+PRISTINE destination and a LIVE destination as separate rows. In
+`test/wasm/check_variantptr.sh` they are `int-thru` and `int-over-live`, and
+against a compiler built from pre-fix source they fail differently: `int-thru=0`
+against a wanted 42, and `read-thru` TRAPPING rather than answering. A check
+that ran only the first would have been green on half its own bug.
+
+**THE EXPECTED VALUE MUST NOT COLLIDE WITH THE FAILURE VALUE, and here the
+collision is the default one.** The quiet arm produces `0` and `None`. Any row
+expecting either would pass with the store doing nothing at all — which is
+exactly what the store was doing. No row in that slice expects 0 or None,
+deliberately.
+
+**WHY IT WORE THE COSTUME OF THE NEAREST FEATURE.** It was filed as a NilPy
+generator bug, and twelve lines of plain Pascal reproduce it (`p: ^Variant;
+New(p); p^ := 42`). A cell-promoted generator parameter gets a 16-byte
+`pycell_new` cell that the caller seeds with `cell^ := arg` — the exact shape —
+and **a zeroed cell's `VType` is precisely what `None` is.** The failure
+therefore presented as a correct-looking Python semantic rather than as memory
+corruption, and the whole first day of the hunt was spent inside the generator
+machinery. The rows that broke it out were shape variations, not more probing
+of the suspected subsystem: a body that writes then reads showed the write
+surviving two later yields while the initial read stayed empty, and two
+parameters that did not alias proved each cell was distinct and valid. Cell,
+resume, yield and state machine all correct; only the SEED missing.
+
+**And the two frames that were structurally identical are what redirected the
+search.** Dumping `PXXDBG=a.ir` for both the caller and the callee on native
+and on wasm32 and diffing them produced nothing but symbol and proc
+renumbering. Identical IR with divergent behaviour says the frontend is not
+the defect, and that single measurement moved the hunt into the backend after a
+day of narrowing in the wrong file.
