@@ -64,7 +64,14 @@ var
   got: Int64;
 begin
   ok := 0; tot := 0;
-  tmpdir := GetEnvironmentVariable('TESTTMP');
+  { TESTMGR_TMP FIRST: testmgr launches jobs through an env allowlist
+    (PXX_ TESTMGR_ LC_ QEMU_ plus a fixed set), and TESTTMP is not in it -- so
+    reading TESTTMP alone returns nothing under testmgr and the fallback lands
+    on the shared /tmp path, which is exactly as collision-prone as the literal
+    it was written to avoid. TESTTMP second is what `make test
+    TESTTMP=$(mktemp -d)` exports; /tmp last keeps a bare run byte-identical. }
+  tmpdir := GetEnvironmentVariable('TESTMGR_TMP');
+  if tmpdir = '' then tmpdir := GetEnvironmentVariable('TESTTMP');
   if tmpdir = '' then tmpdir := '/tmp';
   pathI := tmpdir + '/test_typed_file_i.bin';
   pathR := tmpdir + '/test_typed_file_r.bin';

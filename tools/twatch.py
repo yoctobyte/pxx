@@ -1862,6 +1862,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                        "%s-%s-%s.md" % (ts, sha[:7], host))
     path = os.path.join(clone.path, rel)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # The toolchain this box is running NOW. Both callers write a report for a
+    # run that has just finished here, so "now" and "at run time" are the same
+    # reading -- but a report that arrives carrying its own is believed over
+    # this one, so a future replay path cannot stamp today's emulator onto an
+    # old verdict.
+    toolchain = report.get("toolchain") or host_toolchain()
     lines = ["---",
              "sha: %s" % sha,
              "parent_tested: %s" % (parent or "none"),
@@ -1881,6 +1887,21 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # harness predates the fix it appears to contradict can then be
              # discarded on sight instead of investigated.
              "code_fp: %s" % (CODE_FP or "unknown"),
+             # ...and which TOOLCHAIN RAN IT. A cross-target verdict is a
+             # statement about an emulator as much as about the compiler, and
+             # until 2026-09-05 nothing in the archive said which one. seven,
+             # the box that does all the sweeping, ran qemu 8.2.2 where plexus
+             # ran 10.2.1, and `c_crtl_wait.c`'s riscv32 rusage row was red on
+             # one and green on the other from byte-identical compiler bytes.
+             # A reader who diffed the tree, found nothing, and checked
+             # `code_fp` had no third thing to look at, so the honest reading
+             # ("true about a 2024 emulator") was unavailable and the wrong one
+             # ("the compiler regressed") was the only one on offer.
+             # ABSENCE IS PRINTED, not omitted: a runner that is missing is the
+             # condition that produced six false regression tickets in one day.
+             # bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain
+             "toolchain: %s" % toolchain_line(toolchain),
+             "toolchain_fp: %s" % (fp_of_toolchain(toolchain) or "unrecorded"),
              # WHICH binary produced this verdict. The json has carried it since
              # the mid-run-change check; the markdown is what a human reads days
              # later, and "verify against a KNOWN sha" is unusable if the report
@@ -1903,6 +1924,22 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
              "flaky: %s" % len(report.get("flaky") or []),
              "---", ""]
+    # A TOOLCHAIN CHANGE IS THE ONE EVENT THAT RE-BASELINES EVERY CROSS-TARGET
+    # ROW AT ONCE, and it arrives looking like ordinary noise: a batch of rows
+    # changing answer with no commit to blame. Announced the way a hardware
+    # epoch is, and for the same reason -- the numbers on either side are not
+    # comparable and nothing else in the document would say so. Seven's
+    # dist-upgrade on 2026-09-05 is the first one this can see.
+    prev = ((st or {}).get("toolchain") or {}).get("fp")
+    now_fp = fp_of_toolchain(toolchain)
+    if prev and now_fp and prev != now_fp:
+        lines += ["> **TOOLCHAIN CHANGED on this host since its previous run** "
+                  "(`%s` -> `%s`). Every cross-target row here was measured by "
+                  "a different emulator than the last verdict on this box, so "
+                  "a job that moved may have moved for that reason and not for "
+                  "a commit. Compare against the `toolchain:` line of the "
+                  "report you are diffing against, not against this one alone."
+                  % (prev, now_fp), ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
                   "at %ss with %s job(s) never reached, and was torn down. What "
@@ -3268,6 +3305,14 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # degraded marker, so the host stops reporting DOWN on its own the moment
     # it recovers (a reseed usually does it) with no manual clearing.
     st.pop("infra", None)
+    # Latched AFTER write_report_md, so the report above compares against the
+    # PREVIOUS run's toolchain rather than against the one it just stamped.
+    # Top-level rather than inside `st["last"]` on purpose: twatch_timeout_
+    # verdict_devtest asserts that literal's shape by slicing a fixed window,
+    # and a new key inside it would push later fields out of that window --
+    # widening the window to fit this would weaken a guard to accommodate it.
+    _tc = host_toolchain()
+    st["toolchain"] = dict(_tc, fp=fp_of_toolchain(_tc))
     # The latched summary carries the three fields that decide what it MEANS.
     #
     # It used to hold date/sha/tier/verdict/wall only, and `last_full` is a copy
@@ -6827,6 +6872,132 @@ def host_hardware():
 # written rather than on what the box is.
 HW_KEYS = ("cpu", "sockets", "cores", "threads", "mhz_max", "mem_total_kb",
            "kernel", "gcc", "governor", "turbo")
+
+
+# The runner binaries a cross-target row can actually reach, from
+# tools/run_target.sh's `need <bin>` lines plus the wasmtime arm, which does not
+# use `need` because it also looks in ~/.local/bin. Explicit rather than parsed
+# out of the shell script: the list is tiny and stable, and a parse that stopped
+# matching would silently shrink the fingerprint to nothing while still printing
+# a line. twatch_toolchain_devtest.py holds the two in step instead, and fails
+# when run_target.sh grows a runner this does not name.
+RUNNER_BINARIES = ("qemu-i386", "qemu-arm", "qemu-aarch64", "qemu-riscv32",
+                   "qemu-riscv64", "qemu-xtensa", "wasmtime")
+_TOOLCHAIN_CACHE = {}
+
+
+def _tool_version(binary):
+    """`binary --version`, reduced to its version number. -> str, or None.
+
+    None means MEASURED ABSENT, and the caller must render it as ABSENT rather
+    than omitting the entry: a runner that is not installed is exactly the
+    condition that produced six false regression tickets on 2026-09-04, all
+    accusing the compiler, all caused by wasmtime not being on the box.
+
+    wasmtime is resolved the way run_target.sh resolves it -- PATH, then
+    ~/.local/bin -- because reporting ABSENT for a box that runs it fine would
+    be the same defect pointing the other way.
+    """
+    cands = [binary]
+    if binary == "wasmtime":
+        cands.append(os.path.expanduser("~/.local/bin/wasmtime"))
+    for cand in cands:
+        try:
+            out = subprocess.run([cand, "--version"], capture_output=True,
+                                 text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.returncode != 0:
+            continue
+        head = ((out.stdout or "") + (out.stderr or "")).splitlines()
+        if not head:
+            continue
+        m = re.search(r"\b(\d+\.\d+(?:\.\d+)?)\b", head[0])
+        return m.group(1) if m else head[0].strip()[:40]
+    return None
+
+
+def host_toolchain():
+    """What RAN the cross-target rows, as {name: version-or-None}.
+
+    THE ARCHIVE FINGERPRINTED THE CODE AND THE HARDWARE AND NOT THIS, and that
+    is the gap this closes. `code_fp` says which harness, `hw_fp` says which
+    machine, `compiler_sha256` says which binary -- and a cross-target verdict
+    is also a statement about an EMULATOR, which nothing recorded. Measured
+    2026-09-04: seven, the box that does all the sweeping, ran qemu 8.2.2 on
+    kernel 6.8.0-138 with gcc 13.3.0 while plexus, the box every lane develops
+    on, ran qemu 10.2.1 on 7.0.0-30 with gcc 15.2. `c_crtl_wait.c`'s riscv32
+    rusage row was red on one and green on the other from BYTE-IDENTICAL
+    compiler bytes, and no field in the archive could tell a reader that.
+
+    So "cross-target red on seven, green locally" had a standing environmental
+    explanation and no way to check it, and it looks like a compiler bug every
+    time. Same family as run_target.sh discarding its exit code: there a
+    missing binary was invisible, here the VERSION of a present one was.
+
+    Cached per process: these do not change under a running daemon, and a
+    dist-upgrade restarts it.
+    """
+    if _TOOLCHAIN_CACHE:
+        return dict(_TOOLCHAIN_CACHE)
+    tc = {}
+    try:
+        tc["kernel"] = os.uname().release
+    except (OSError, AttributeError):
+        tc["kernel"] = None
+    tc["gcc"] = _tool_version("gcc")
+    for b in RUNNER_BINARIES:
+        tc[b] = _tool_version(b)
+    _TOOLCHAIN_CACHE.update(tc)
+    return dict(tc)
+
+
+def toolchain_line(tc):
+    """One frontmatter line. Absence is LOUD; a collapsed group names its size.
+
+    The qemu entries collapse to one version only when they agree, and the
+    collapsed form still says how many agreed -- `qemu=8.2.2(6 of 6)` -- so a
+    box that has three of them cannot read as a box that has six. When they
+    disagree, every one is spelled out, because a mixed toolchain is precisely
+    the state a reader would otherwise never suspect.
+    """
+    if not tc:
+        return "unrecorded (older harness)"
+    def ver(v):
+        return "ABSENT" if v is None else v
+    parts = ["kernel=%s" % ver(tc.get("kernel")), "gcc=%s" % ver(tc.get("gcc"))]
+    qemus = {k: tc[k] for k in tc if k.startswith("qemu-")}
+    present = sorted({v for v in qemus.values() if v is not None})
+    missing = sorted(k[5:] for k, v in qemus.items() if v is None)
+    if len(present) == 1 and not missing:
+        parts.append("qemu=%s(%d of %d)"
+                     % (present[0], len(qemus), len(qemus)))
+    elif qemus:
+        parts.append("qemu=" + ",".join(
+            "%s:%s" % (k[5:], ver(qemus[k])) for k in sorted(qemus)))
+    for k in sorted(tc):
+        if k in ("kernel", "gcc") or k.startswith("qemu-"):
+            continue
+        parts.append("%s=%s" % (k, ver(tc.get(k))))
+    return " ".join(parts)
+
+
+def fp_of_toolchain(tc):
+    """12 hex over the whole dict, ABSENCE INCLUDED.
+
+    A runner appearing or disappearing has to move this: installing wasmtime on
+    seven changed what six jobs measured, and a fingerprint that hashed only
+    the versions it found would have been identical before and after.
+    """
+    if not tc:
+        return ""
+    return hashlib.sha256(
+        json.dumps(tc, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def host_toolchain_fp():
+    """The current toolchain fingerprint, for stamping a run with it."""
+    return fp_of_toolchain(host_toolchain())
 
 
 def fp_of_hardware(hw):

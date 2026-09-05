@@ -337,7 +337,7 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (23)
+## backlog-tools (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -357,7 +357,6 @@ _none_
 | bug-t-the-shell-loop-rule-reads-prose-as-a-loop-and-teaches-the-reflex-that-defeats-it | T | 40 | bug | no-full-suite.sh rule 3 fires when a command contains BOTH a `test/*.pas`-shaped string and the bare word `for` — and both conditions are met by a python heredoc iterating in memory, and by a heredoc WRITING A TICKET whose prose happens to say `test/*.pas` and `for`. Hit twice in one session while doing neither. The same file already recognises this class and fixed it for rule 2c ('reading about the rule, not running it, and refusing that is pure noise — the first thing this rule did on the day it landed'); rule 3 did not get the treatment. The cost is not the retry: the documented escape is PXX_ALLOW_FULL_SUITE=1, so the lesson a agent learns is to prefix it reflexively, which is exactly how a guardrail the owner asked for twice stops guarding. | — |
 | bug-t-the-sort-comm-locale-desync-has-now-been-found-three-times-independently | T | 40 | bug | Under a UTF-8 locale `sort` ignores punctuation at the primary level while `comm` compares bytes, so a name containing `-`, `_` or `/` sorts into a position `comm` does not expect. comm prints `file 1 is not in sorted order` to STDERR and KEEPS MERGING out of step, so the caller gets a wrong answer and a zero exit. Three tools here hit it INDEPENDENTLY and each fixed it in place with its own explanatory comment: elf_alloc_same.sh, selfhost_stamp_devtest.sh, and busybox_diff.sh (44e7ea61f, today). All three are correct NOW. This ticket is that there is no shared helper and no lint, so the fourth caller will write the bug again — two is a smell, three is a design flaw. | — |
 | bug-t-the-watcher-auto-close-left-six-tickets-in-backlog-and-done-at-once | T | 45 | bug | twatch's auto-close wrote six tickets into `done/` on 2026-09-03 (`3dcfe8404`) WITHOUT removing their `backlog/` copies, so six resolved regressions kept ranking as open at prio 70 until 2026-09-04. The close commit is `6 files changed, 355 insertions(+)` and ZERO deletions, while the code at `twatch.py:5002` plainly does `os.unlink(src)` and appends BOTH paths to what it publishes. **The obvious explanation is EXCLUDED by measurement**: publish()'s own sequence — `git checkout <branch>`, `git add -- <paths>`, `git commit -- <paths>` — records a deletion correctly when the clone is already on the branch (reproduced in a scratch repo: `b.md \| 1 -`). So the fault is UPSTREAM of publish, not in it: either `src` did not name the backlog copy in that clone, or that clone did not have the filing commit `59344428a` (same host, 2h47m earlier) when it built `paths`. The duplicates themselves are cleared; this is the mechanism, unfixed, and it will recur on the next auto-close. | — |
-| bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain | T | 70→85 | bug | seven is the box that does the sweeping and its whole emulator toolchain is a Debian generation behind the box every lane develops on: qemu-riscv32/arm/xtensa/i386 all 8.2.2 against plexus's 10.2.1, kernel 6.8.0-138 against 7.0.0-30, gcc 13.3.0 against 15.2. tstate records `code_fp` and `hw_fp` and NO toolchain fingerprint, so a cross-target red caused by the emulator is indistinguishable from a compiler bug and there is no field a reader can check. First instance measured and isolated: test-core#src:test/c_crtl_wait.c's riscv32 rusage row, red on seven and green on plexus from byte-identical compiler bytes. The class will fire again and will look like a compiler bug every time. | — |
 | chore-t-tools-devtest-00-is-six-reds-with-four-causes | T | 75 | chore | tools-devtest#00 is the ONLY red job left in the full tier and has been red in all 8 full runs of 2026-09-02, while native is GREEN — so it is invisible to every lane gating on native or `gate.sh quick`. Its 6 failing guards are FOUR causes, not one: a sync.sh fold-safety refusal added 2026-08-29 trips two guards written before it; three are censuses/ratchets working correctly and reporting real tree drift (one already has a decide- ticket); one is a genuine behavioural gap (the bench fingerprint ignores the CPU governor). Only ONE of the four is a plain bug to fix. | — |
 | feature-t-a-test-s-expected-transcript-should-live-beside-the-pas-not-in-the-makefile-recipe | T | 50 | feature | A whole-transcript test's expected output lives in an inline printf inside a 12000-line Makefile, so EXTENDING THE TEST LOOKS COMPLETE FROM INSIDE THE TEST -- you add rows to the .pas, the .pas is self-consistent and its own comments agree, and the assertion it is judged by is in a file you never opened. That is what cost 18 hours of RED on the native tier (2ba37ba91 added rows j..n; the printf still said a..i). Proposal: let a `.expected` file beside the .pas be the default source, as several tests already do, and keep the inline printf only where the transcript is target-dependent. NOT started -- filed at frankuser's suggestion and explicitly not to be done without asking, since it touches many recipes. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
@@ -887,9 +886,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3311)
+## done (3312)
 
-3311 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3312 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -974,7 +973,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [T] bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain (unblocks 2)
+- [p 85] [T] regression-test-core-c-crtl-wait (unblocks 1)
 - [p 80] [A] bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - [p 80] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
@@ -1361,7 +1360,6 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — feature-port-windows-pe
-- **2** — bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain
 - **2** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 - **2** — decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
