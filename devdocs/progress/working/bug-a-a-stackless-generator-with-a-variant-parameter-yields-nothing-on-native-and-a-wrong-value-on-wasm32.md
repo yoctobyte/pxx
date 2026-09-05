@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: working
 found-by: frankwasm (while reducing bug-a-a-nilpy-generator-fails-on-wasm32)
-summary: "A `generator; stackless;` routine with a VARIANT PARAMETER SEGFAULTS on native x86-64 (not zero iterations -- that was an inference from absent output; measured rc=139) and gives one wrong iteration on wasm32. ROOT CAUSE FOUND 2026-09-06: three parties disagree on what a Variant parameter is. The callee frame slot holds a one-word POINTER (a Variant value-param is passed by reference), the instance reserves 2 slots (correct for a value), and the caller stores 8 bytes via SlSet after an implicit Variant->Int64 conversion. `Syms[i].IsRef` is FALSE for a Variant value-param, so AssignStacklessSlots routes it to the tyVariant arm instead of the correct by-ref arm directly above, and SlUnblob then writes 16 bytes into that 8-byte pointer slot -- overrunning the ADJACENT frame slot. When the Variant is the FIRST parameter the neighbour is the hidden `self`, which is zeroed, so the step function does SlGet(nil, 0). That is the crash. When it is not first, the neighbour is another parameter, which is silently clobbered to 0. ONE mechanism, all rows."
+summary: "FIXED ON NATIVE (0f6b627d7), WASM32 CONFIRMATION OUTSTANDING. A `generator; stackless;` routine with a VARIANT PARAMETER segfaulted on native x86-64 (not `zero iterations` -- that was an inference from absent output) and gave one wrong iteration on wasm32. Root cause: a Variant value parameter is passed BY REFERENCE, so its frame slot holds a POINTER to the 16 bytes, but nothing marks it IsRef -- so the slot pass blob-copied SIXTEEN bytes into an EIGHT-byte slot and overran the ADJACENT frame slot. Variant FIRST clobbered the hidden `self`, so the step function dereferenced its own null instance; Variant SECOND clobbered the previous parameter to 0. ONE out-of-bounds write, adjacency choosing the symptom. The fix gives it one pointer word at all three sites and has the caller materialise the argument into a local of the enclosing function and store its ADDRESS. Verified on native against the pinned compiler across seven programs; STAYS OPEN until frankwasm re-measures wasm32, because the wasm32 victim was never identified and a green native column is not evidence about it."
 owner: frankS
 ---
 
@@ -557,3 +557,87 @@ Variant being `{tag = 33, payload = 0}` was what produced the two symptoms.
 frankS is right that it is not — the malformed Variant is real and is Defect 2,
 but the symptoms come from the restore WRITING outside the slot it owns. My
 layout measurement stands; the story I hung on it does not.
+
+## 2026-09-06 (frankS) — FIXED on native, `0f6b627d7`. Open on wasm32.
+
+`SLVariantByRefParam` names the case once and all three sites ask it:
+`AssignStacklessSlots` gives a Variant value parameter ONE pointer word,
+`SLSaveLocals` and `SLRestoreLocals` move that word raw. The caller
+materialises the argument into a local of the function containing the for-in
+(`GenMakeVariantArgTemp`) and stores its ADDRESS.
+
+**Why a local and not the by-ref arm as-is.** Routing it straight to the by-ref
+arm would persist the CALLER's address, and that arm is written for a `var`
+argument, which already has an address that outlives the loop. A value argument
+does not. The local this fix mints belongs to the function containing the
+for-in, so it outlives the whole loop — which is exactly the property
+`PyGenArgNeedsCell`'s own comment says a Pascal argument has and a Python
+temporary does not. This is therefore NilPy's existing design with the heap cell
+replaced by something a Pascal program already has: no `pycell_new` (a unit a
+Pascal program has no reason to have in scope) and nothing to leak.
+
+### Verification, with the pinned compiler as the positive control
+
+| program | pinned | HEAD |
+| --- | --- | --- |
+| Variant only, body READS it | `rc=139` | `got=7` |
+| read across two yields | `rc=139` | `7 8` (survives suspension) |
+| Variant second, body reads the FIRST param | `got=0` | `9 7` (the predicted row) |
+| two Variant parameters | `rc=139` | `4 9` |
+| Variant + Integer | `rc=139` | `4 9` |
+| managed (string) payload read after a yield | `rc=139` | `5 10` |
+| Variant generator driven in a repeated loop | `rc=139` | `1 10 2 20 3 30` |
+
+`test/test_stackless_gen_variant_param.pas` is wired into `test-core`; its
+assertion PASSES at HEAD and FAILS on the pinned compiler, so it is a guard that
+can fail. `test_stackless_gen` matches its expected output byte for byte, and
+four NilPy generator tests still pass — NilPy's Variant params are already
+`IsRef`, so they take the by-ref arm and never reach the new predicate.
+
+`gate.sh quick`: every check PASS except `pinned builds live lib/rtl`, the known
+fleet-wide condition (the pinned binary cannot compile two NilPy units that use
+`pyvar_is_objtag` / `pyvar_is_inttag`, builtins added without a pin). Unrelated;
+the remedy is a pin.
+
+**The FPC seed canary earned its keep.** The first version of this fix called
+`GenMakeSlotAddr` from a site above its declaration — pxx resolves across the
+unit, FPC resolves in source. `make compiler/pascal26` and `--tier quick` both
+passed with that present; only the canary saw it. `GenMakeSlotAddr` now sits
+above its first caller.
+
+### On Defect 1, honestly
+
+The six caller stores asked `SL_OFF_SLOTS + 8*(k-1)` — the ARGUMENT index —
+while the generator reads `8*SymGenSlot[]` — the SLOT index. `GenArgSlotOff` now
+asks the same map the generator reads. But the only Pascal shape that made the
+two diverge was **the Variant parameter taking two slots**, which this fix
+removes. Every other parameter kind already takes exactly one: records and `var`
+params go to the by-ref arm, open arrays and ordinals to the one-word arm.
+Measured on a five-parameter probe (`Variant, record, AnsiString, var Int64,
+Integer`): `storeoff == realoff` on all five.
+
+So this half is **hardening, not a demonstrated second fix.** I could not build a
+Pascal program that still diverges after the Variant change, and I am not
+claiming one. It stays because the caller assuming a layout the callee computes
+is the coupling that produced this bug once.
+
+### WHY THIS TICKET IS NOT RESOLVED
+
+The wasm32 victim was never identified. frankwasm measured that the write lands
+on something else there (uniform `got=0`, no fault, whatever the body yields),
+and inferred the value/return path from the uniformity rather than from an
+offset. A green native column says nothing about that. frankwasm has the three
+rows to re-run and will report; **resolving now would remove the row from
+everyone's attention on the strength of a target nobody re-measured.**
+
+### Two further defects found while boundary-testing this, both PRE-EXISTING
+
+Neither is caused by this fix — both fail identically on the pinned compiler.
+
+- `bug-a-a-var-parameter-of-a-stackless-generator-stores-the-value-where-the-slot-expects-an-address`
+  — the SIBLING of this defect in the opposite direction: here the slot was
+  right and the generator wrong; there the generator is right and the caller
+  supplies a value where an address is expected. SIGSEGV.
+- `bug-a-a-string-literal-passed-to-a-stackless-generator-is-stored-without-being-materialised`
+  — `Length` reads `1073741824` (2^30, a literal's refcount sentinel). An
+  AnsiString VARIABLE works, which is the boundary that keeps it narrow.
