@@ -25484,3 +25484,75 @@ first, unprompted**; `feature-c-corpus-busybox-i386-the-second-architecture`
 stays unmeasured. Both preconditions asserted: 75 `ok:` = 75 objects = 75 per-TU
 logs. The `test/` C sweep: **625 tried, 625 reached the compiler, 0 no-output** —
 denominator carried.
+
+### Gate traffic became continuous — and the binding constraint is MEMORY, not load
+
+19:53 two, 19:54 two, 19:57 three (frankH 1072135, frankB 1073964, frankA
+1115652), frankZ queuing a fourth **sequentially** behind its own
+`tools-devtest`, frank-optimize rebuilding the compiler twice while editing
+`compiler/inline_expand.inc`. Load 12.49 / 10.81 / 8.66 and climbing.
+
+**Nobody has been asked to hold, and two who offered were cleared.** The
+standing rule this seat is now applying: **contention costs wall-clock; only
+memory pressure costs correctness.** 41G of 60G free throughout, so the answer
+was proceed every time. Two OOM kills last night happened at a different memory
+state, not a different gate count — **the gate count was never the variable**,
+and treating it as one would have serialised the fleet for nothing.
+
+The corollary to relay with a clearance: **a slow gate today is not a hung
+gate**, and a death with no verdict line is frankS's middle case
+(`grep -c 'gate: \(GREEN\|RED\)'` = 0), not a defect in the change under test.
+
+### A FILE overlap declined, out loud, with the sequencing fact substituted
+
+frankA took `class var` in record types — `pasparser_decl.inc`, the exact file
+frankuser flagged as the frankA↔frankB boundary at dispatch — while frankB was
+gating. **Not flagged, and said so explicitly rather than silently**: `class
+var` in records and set-of-subrange / `{$PACKENUM}` are different QUESTIONS
+sharing a file, and git merges files.
+
+**What was substituted for the flag is the part worth copying: the sequencing
+fact.** frankB may land into that file while frankA's gate runs, so expect the
+rebase and re-verify after it rather than trusting the pre-push measurement.
+That converts "you two might collide" — which is not true and not actionable —
+into a concrete thing frankA can do, and it is the same discipline frankA had
+already applied at `b61bc782d`.
+
+### "Low exposure" stated as a MECHANISM plus its falsification
+
+frankA on its own cross-target exposure, and this is the form to ask for:
+*a caller added to the existing `ParseDeclTypeDesc` + `AllocFromDeclTypeDesc`
+path, no new storage model — and if I am wrong, record class vars break on
+EVERY target, which native coverage does see.*
+
+**It did not claim the category, it gave the mechanism and named how it would
+fail.** "Low exposure" is normally exactly where a native-only green hides, so
+the claim is only checkable when it says what would falsify it. Same discipline
+as frankC stating "x86_64 only" first and leaving the i386 ticket unmeasured —
+opposite direction, identical rigour.
+
+### frankZ sharpened the T reading past this seat's version, in time to change code
+
+This seat told frankuser the exit code *"does not settle cause 2"*. frankZ:
+**staleness is a property of the ARCHIVE, not of the daemon**, so `--status`
+cannot separate "daemon dead" from "daemon alive, box busy upgrading" **in
+either direction, by construction**.
+
+The difference is operational, not stylistic: *inconclusive today* invites
+someone to re-run it hopefully; *cannot ever answer this* says *only the
+appearance of a report can*. Carried to frankuser while the pass was still being
+written — a relay that arrives before the code is worth more than one that
+arrives before the record.
+
+**And a cheap pre-check fell out of it.** frankZ's `TSTATE.md` rendering shows
+BOTH hosts as `_not published since this field existed_` — **including plexus,
+which is not upgrading.** So the zero is not seven-specific, and cause 2 can be
+excluded by the first host of EITHER name publishing. frankZ wrote both rows as
+words rather than blanks deliberately: **a blank cell in a comparison table
+reads as agreement**, which is the ticket's own defect one layer up.
+
+**The refusal worth keeping:** frankZ declined to loosen `cross_currency_block`'s
+devtest guard from 2 rows to 4 to fit its own change, and wrote a separate block
+instead. **Widening a guard's window to accommodate its subject is much easier
+to justify when the guard is your own** — the fleet has spent all session
+refusing that move in other people's code.
