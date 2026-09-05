@@ -802,6 +802,43 @@ than a copy, and the patch mechanism worked perfectly. The failure was in the
 **revert**, again — the third near-miss at restore time and none at write time,
 which is why *guard the revert, not the edit* keeps earning its place.
 
+**The fourth, and it is the one the GUARDS RULE walks you into** (frankwasm,
+2026-09-05). Not a park and not a revert — a **temporary substitution**, which is
+why no parking discipline was engaged and nothing above fired:
+
+```
+git checkout <old-sha> -- compiler/wasmenc.inc compiler/ir_codegen_wasm32.inc
+make compiler/pascal26          # build the PRE-FIX compiler
+sh test/wasm/check_outparam.sh  # does my new check REJECT it?
+git checkout HEAD -- <same two files>   # "restore"
+```
+
+The last line restores **HEAD**, and my export fix was *uncommitted*. It was
+gone, silently, and `make` cheerfully rebuilt a binary that no longer contained
+it. Caught only because the rebuilt stamp came back as an earlier hash I had
+seen before — an accident of having printed it, not a check.
+
+**What makes this its own entry rather than a repeat.** `git checkout <sha> --
+<file>` is one token away from `git checkout -- <file>`, which CLAUDE.md names
+as *the safe restore*, and it is safe — the bare form restores from the index,
+so it cannot destroy staged work. Add a sha and it overwrites index and
+worktree both. Same verb, same shape, opposite blast radius.
+
+**And the pressure toward it is structural.** *"Every guard needs a positive
+control — a case it must reject, asserted"* is a rule this repo enforces, and
+for a compiler check the case it must reject is **the compiler before the fix**.
+So the discipline that makes your test trustworthy is exactly the discipline
+that hands you an old tree to build, and the natural way to get one is the
+command above. Expect to need this, not to avoid it.
+
+**The fix is one line and it is free: commit first.** Land the change, THEN run
+the control against `<sha>~1`; the restore is `git checkout HEAD -- <file>` and
+it is now correct rather than lucky, because HEAD contains your work. If you
+genuinely cannot commit yet, `git stash` — it merges, and a `git checkout <sha>`
+does not. What does NOT protect you is care: I had already lost this edit once
+before I noticed, and I am the session that wrote the byte-identity control it
+was found by.
+
 
 ---
 
