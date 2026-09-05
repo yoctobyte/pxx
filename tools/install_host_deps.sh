@@ -75,8 +75,20 @@ git curl wget unzip openssl   # fetchers/hashers used by tools/install_*.sh
 # self-referential residue -- `linux-tools-6.8.0-139` depends on libpython3.12t64
 # and that kernel is retained on purpose as the fallback, which is also why
 # `apt-get autoremove` correctly declines to take them. They clear when the old
-# kernel goes. Do not force-remove them to tidy up: that breaks perf for the
-# kernel you are keeping in order to be able to boot it.
+# kernel goes. Do not force-remove them to tidy up: `apt-get remove
+# libpython3.12t64` takes linux-tools-6.8.0-139{,-generic} with it, and with them
+# /usr/lib/linux-tools-6.8.0-139/perf -- the KERNEL-MATCHED perf for the fallback
+# you are keeping in order to be able to boot it.
+# The box does not lose perf outright: /usr/bin/perf (linux-perf 7.0.0-31.31,
+# reports 7.0.14, links libpython3.14) is a separate binary and is unaffected.
+# Note linux-tools-7.0.0-31 ships NO perf on this release -- linux-perf provides
+# it -- so the two are not a matched pair and only the 6.8 one is at risk.
+# Unrelated to packaging: perf COUNTS here but only as root.
+# /proc/sys/kernel/perf_event_paranoid is 4, so unprivileged
+# `perf stat -e instructions:u` reports "No supported events found" while
+# `sudo perf stat -e instructions:u /bin/true` returns a real count. If you need
+# a load-independent instruction counter, it is available -- it is denied, not
+# missing. Changing the sysctl is a security-posture decision, not a fix here.
 
 # qemu is deliberately NOT in DEPS: tools/install_qemu.sh owns it, including the
 # 24.04->26.04 rename (qemu-user-static is a PURE VIRTUAL package on resolute,
