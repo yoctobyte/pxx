@@ -3,7 +3,7 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-summary: "`f := G;` where `f` is a procedural variable and `G` a function compiles OUTSIDE `{$mode delphi}` and segfaults at runtime. FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix."
+summary: "ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. `f := G;` where `f` is a procedural variable and `G` a function compiles OUTSIDE `{$mode delphi}` and segfaults at runtime. FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix."
 ---
 
 # A bare function name assigned to a procedural variable segfaults outside Delphi mode
@@ -58,3 +58,92 @@ which had claimed the mode markers *"do not switch PXX into a different semantic
 mode"*. They do; this is one of the two deltas, and it is the one that crashes.
 
 Filed rather than fixed: Track P frontend work, and frankB holds that topic.
+
+## 2026-09-05 (frankB) — it is FOUR paths, the root cause is real, and my fix was reverted
+
+### What is established and should not be re-derived
+
+Reproduced, then the SHAPE varied before fixing. The same value reaches a
+procedural slot four ways. **pxx accepted all four silently and all four
+SIGSEGV; FPC rejects all four:** `v := G`, `r.f := G` (record field),
+`a[0] := G` (array element), `TakesIt(G)` (argument). The first three funnel
+through one check; argument position is `TypesCompatible` and is a separate
+path.
+
+**The root cause is not a missing rule.** There IS a single assignment
+type-check (`AssignKindsIncompatible`, one call site in `ir.inc`). It never ran
+here, for two independent reasons in `AssignSideKind`, either of which alone was
+enough:
+
+1. **The destination was invisible on purpose** — `if SymProcSig[si] >= 0 then
+   Exit; { procvar: the kind is the RESULT's }`. Probed rather than trusted, and
+   the comment was right: `Syms[].TypeKind` for `f: TF` where
+   `TF = function: Integer` is **Integer**, so `f := G` reads as
+   `Integer := Integer`, the two sides **agree**, and the check passes.
+2. **The source had no arm at all** — no `AN_CALL` case, so a call result
+   short-circuited the whole check, *"looking, as before, exactly like a check
+   that fired and passed"*, which is that function's own words about the
+   previous three times.
+
+A ticket saying "no rule for bare procvar names" would send someone to add a
+fifth special case. That is why this section exists.
+
+### The attempt that failed, and exactly why
+
+`4760474da` typed a procedural slot as `tyPointer`, added the call-result arm,
+and then added the rule the pair needs in both `AssignKindsIncompatible` and
+`TypesCompatible`:
+
+```pascal
+if (pType = tyPointer) and (aType <> tyPointer) then  { WRONG }
+```
+
+**`TypeIsOrdinal` includes `tyChar`.** So this refused every legal
+Char-into-PChar binding along with the procedural case — `Show('-')` and
+`p := 'e'`, both of which this dialect allows and both of which have dedicated
+tests. Thirteen rows went red on seven's NATIVE tier (eight NEW-RED plus five
+gtk jobs that changed cause under an unchanged STILL-RED colour). Reverted in
+`2d6bfadd6` rather than narrowed again, because a second speculative narrowing
+stacked on a broken one, ungated, with a pin in flight, is three risks
+compounding.
+
+**Why the gate did not catch it, which is the reusable part:** `gate.sh quick`
+does not run those rows, and the self-host fixedpoint **cannot see the shape at
+all** — `compiler.pas` never binds a Char to a PChar. A GREEN was read as
+coverage it never had.
+
+### What the real fix needs
+
+**The rule must be PROCEDURAL-TARGET-specific, not pointer-general.** The defect
+is an ordinal reaching a slot that will be **called**; a PChar is a pointer that
+will be **read**, and `TTypeKind` cannot tell them apart. That is one more
+consumer of
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]] — and note the
+shape it adds to that fork: the identity is needed at a REFUSAL site, where
+getting it wrong rejects working code rather than mis-executing it.
+
+**Any retry must run these by name before it is believed:**
+`test_char_literal_to_pchar_param`, `test_char_to_pchar_conversion`,
+`test_pchar_from_a_string_literal`, `test_cast_to_array_type`,
+`test_dynarray_to_pointer_seam_leaks`, `test_stackless_gen`,
+`test_generator_instance_freed_on_escaping_raise`, `strict_fpc_case_fail`.
+
+### Do NOT "fix" it by adopting Delphi's binding
+
+Binding the address in the default mode also removes the crash and accepts
+strictly more programs. It was rejected deliberately: `defs.inc` documents
+`DelphiMode` as *"the one behavioural delta"* of this dialect, and adopting
+Delphi's answer everywhere deletes that delta. It is a dialect decision, not
+something to arrive at while fixing a segfault. `docs/reference/modes.md`
+already tells users to write `@F` here (frankD, confirmed).
+
+### Related: three spellings of one rule, counted and deliberately not unified
+
+`TypesCompatible` now has (or nearly has) three narrowings of "a pointer formal
+cannot see its pointee": the existing `tyClass` one, this procedural one, and
+frankH's `tyPointer <- tyString` work. Three is the count
+`root-cause-over-microfix.md` calls a design flaw — but frankH's judgement,
+which I accept, is that they do not share an ANSWER: each permits a different
+pointee set, so a shared helper would take that set as a parameter and share the
+`if` while sharing none of the thinking. Unify when the pointee question has one
+answer; this revert is evidence we do not have it yet for the procedural case.
