@@ -7199,8 +7199,17 @@ begin
     anonymous bodies the frontend emits for typed-const initialisers, all
     called `main`. A colliding name is suffixed with its slot, so the FIRST
     routine of a given name keeps the plain name a test can reach it by and
-    the rest stay addressable rather than being dropped. }
-  if WasmExportTaken(nm) then
+    the rest stay addressable rather than being dropped.
+
+    ONCE PER PROC, NOT ONCE PER CHUNK. A resumed body is the same slot, already
+    exported by its first chunk; exporting it again asked for the same name
+    twice and hit the duplicate-export refusal, which is why TWO managed `out`
+    parameters would not compile at all before the resume landed. That refusal
+    was doing its job — it is the guard that catches a body lowered more than
+    once — so the fix is not to relax it but to stop asking. }
+  if resumed then
+    { already exported by the first chunk of this body }
+  else if WasmExportTaken(nm) then
     WasmAddExport(nm + '$' + WasmIntStr(WasmCurSlot), WEK_FUNC,
                   WasmCurSlot)
   else
@@ -7211,12 +7220,18 @@ end;
   by design: a module with trapping holes must never look like a complete one. }
 procedure WasmReportCoverage;
 begin
-  { THE SLOT-REWRITE CENSUS. A proc whose body is written twice keeps only the
-    second, and nothing else in this pipeline says so: the module validates, the
-    program runs, and one of the two bodies is simply not there. Reported beside
-    the coverage numbers because it is the same KIND of fact -- something the
-    module does not contain -- and because a count printed on every wasm32 build
-    is how the size of it stops being an impression.
+  { THE SLOT-REWRITE COUNTER. It began as a census — a proc whose body was
+    written twice kept only the second, and nothing else in this pipeline said
+    so: the module validated, the program ran, and one of the two bodies was
+    simply not there. WasmBodyResume fixed that, so the census is answered and
+    this is now an INVARIANT: it should read zero on every build, because a
+    second seal of a slot is supposed to arrive as a resume.
+
+    Kept rather than deleted, and the distinction matters. The mechanism that
+    made this silent is still here — sealing a slot overwrites it, with no
+    diagnostic — so a future path that reaches WasmBodyEnd on a live slot
+    WITHOUT resuming loses code exactly as before. This is the only thing that
+    would say so. check_outparam.sh asserts it reads zero.
     bug-a-wasm32-emits-a-separate-function-per-compileast-call-... }
   if WasmSlotRewrites > 0 then
   begin
