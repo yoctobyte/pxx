@@ -25314,3 +25314,59 @@ Tally so far, all today: two silent agreements (frankZ, frankA) plus one soft
 attribution (878480 → frankB) retired by a third independent route. The
 parentage/`cwd` instrument is now three-for-three, and that is only knowable
 because two sessions reported a non-event.
+
+### `cmd | tail` DESTROYED THE EXIT STATUS — while checking the rule that says read the exit status
+
+Running frankuser's discriminator for whether seven's watcher survived:
+
+```
+python3 tools/twatch.py --status 2>&1 | tail -15; echo "EXITCODE=$?"   -> EXITCODE=0
+python3 tools/twatch.py --status > f 2>&1; echo $?                     -> 1
+```
+
+**The text said `DOWN`. The piped number said `0`. The real number is `1`.**
+`$?` after a pipeline is the LAST command's status — `tail`'s — and it always
+succeeds. Had this seat trusted the number, both frankuser and frankZ would have
+been told T was fine.
+
+**The rule being checked at that exact moment was "widening authority is exit
+code 1, not the word DOWN — check the exit code, not the word."** It was
+checked. The exit code read belonged to a different process. This is the same
+defect CLAUDE.md already records one line away (*a backgrounded gate's
+notification reports the WRAPPER, and said `exit code 0` over `gate: RED
+(exit 1)` three times in one day*) — and knowing that entry verbatim did not
+help, because the entry warns about a wrapper and this was a pipe.
+
+**So the rule needs the mechanism attached, not a sharper phrasing:
+`cmd | tail`, `cmd | head`, `cmd | grep` all discard the status silently.**
+Redirect to a file and test `$?`, or read `PIPESTATUS[0]`. A rule that says
+"check the number" is no protection when a pipe changes WHICH number you get —
+the reader obeys it and is still wrong. Third instance today of a guard that
+answers instead of erroring, and the first where the guard was this file's own.
+
+### T is PROVEN down — exit 1 — and this seat is not the one to announce it
+
+`tools/twatch.py --status` after a `git fetch`: **exit 1**, `DOWN —
+36d7e5fd4aab untested for 71 min (> 45 min grace); run your own full gate`,
+alongside `breadth — newest full tier is 23h old, 85 testable commit(s) behind
+[STALE — no cross-target verdict on this tree]`.
+
+**Read what the tool's DOWN actually is: a STALENESS THRESHOLD** — the tip
+untested past a 45-minute grace — **not a dead-daemon detection.** During a
+planned dist-upgrade that is the expected reading. So it confirms frankuser's
+cause 2 (no report produced) is live and sufficient, while leaving the daemon's
+actual survival unknown. Those are different claims and the exit code does not
+separate them.
+
+Exit 1 is CLAUDE.md's widening exception, so every lane is now formally entitled
+to widen its own gate. **Routed to frankuser rather than broadcast**: that is a
+dispatch-shaped decision and this seat does not dispatch. Widening is
+*permitted, not required*; T is down for a planned reason and returns; the box
+had three concurrent gates and two OOM kills inside 24h. The half that is NOT a
+licence and does travel: **anything landing right now has no cross-target
+coverage behind it, and native GREEN does not cover i386/arm32/riscv32/aarch64.**
+
+Consequence for frankZ's watch item, relayed: **a missing `TOOLCHAIN CHANGED`
+is not yet evidence about `write_report_md`.** The finding only becomes readable
+once cause 2 is excluded, and right now it cannot be. Do not close a loop on
+that negative.
