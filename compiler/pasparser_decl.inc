@@ -6981,6 +6981,28 @@ begin
           which is what the alias arm in ParseTypeKind wants and this arm does
           not. Two spellings of `^`, two different right answers. }
         LastTypePointerElemAlias := LastTypePointerAlias;
+        { `PCell = ^TCell` inside a class body, where TCell is declared BELOW it
+          in that same body -- ordinary Pascal, and how every linked node is
+          spelled. The name is not unknown here, so the PtrElemDepth deferral
+          does not trigger: another class already declared a TCell and won the
+          bare spelling, so ParseTypeKind resolves eagerly to THAT record and
+          the alias silently points into a different class.
+
+          Force it back onto the pending path when the pointee we just resolved
+          is some OTHER class's nested type. ResolvePendingPointerAliases runs
+          after the type section, asks this class's own nested types first, and
+          gets the right answer; a field declared through the alias meanwhile
+          keeps UFldPtrAlias and is re-read by that same pass, which is the
+          machinery a genuinely-forward `^T` already relies on.
+
+          NOT fixed up after the body closes, which was tried first and is
+          worse: by then `head: PCell` has captured the wrong pointee, so the
+          program compiles and prints a garbage integer for a string field --
+          a refusal turned into a silent wrong value.
+          bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
+        if (ParsingClassBodyCi >= 0) and (LastTypeRecId >= REC_UCLASS_BASE) and
+           IsNestedTypeOfOther(LastTypeRecId - REC_UCLASS_BASE, ParsingClassBodyCi) then
+          LastTypeRecId := REC_NONE;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
         AliasPtrElemArrAi[AliasCount-1] := aPtrArrAi;
         { ...and AFTER the call, for the same reason the line above is:

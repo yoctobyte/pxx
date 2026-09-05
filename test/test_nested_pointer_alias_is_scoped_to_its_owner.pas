@@ -31,7 +31,7 @@
 
   Row 5 keeps a TOP-LEVEL alias of the same name reachable from outside any
   class -- the scoping must not make ordinary unit-level aliases invisible. }
-{$mode objfpc}{$H+}
+{$mode objfpc}{$H+}{$modeswitch advancedrecords}   { the record rows need it under fpc }
 program test_nested_pointer_alias_is_scoped_to_its_owner;
 
 type

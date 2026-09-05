@@ -63,6 +63,7 @@ function CModuleOfTok(t: Integer): Integer; forward;   { real body in dbg_fileta
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
 function NodeDynDepth(node: Integer): Integer; forward;   { real body in ast_arena.inc; symtab.inc's IsNodeArray asks it, and used to carry a second copy of the walk that drifted (ditto) }
+function FindNestedType(ci: Integer; const nm: AnsiString): Integer; forward;   { real body in pasparser_class.inc; symtab.inc's ResolvePendingPointerAliases asks it, so a deferred `^T` inside a class body resolves to THAT body's T rather than to whichever class won the bare name (ditto) }
 function TargetHasSignalRuntime: Boolean; forward;   { real body in ir_codegen.inc, which is THE one predicate for "can this build install a signal handler"; lexer.inc's PasApplyPlatformDefines turns it into the PXX_HAS_SIGNALS define, and a second copy there would be the sixth signal site and the one that goes stale (ditto) }
 {$include lexer.inc}
 {$include paslexer.inc}   { the Pascal lexer, carved out of lexer.inc 2026-09-04. HERE, not

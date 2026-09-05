@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:133 backlog-nilpy:98 backlog-tools:36 backlog-pascal:34 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3365 rejected:78`
+`working:20 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:133 backlog-nilpy:98 backlog-tools:36 backlog-pascal:33 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3366 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it` [C] — blocked-by: bug-a-wasm32-emits-a-separate-function-per-compileast-call-so-a-proc-built-in-two-calls-loses-a-body
+- `bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it` [C]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -67,7 +67,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 391, ranked
+## Ready — top 30 of 390, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -100,4 +100,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-generics
 
-_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -5,7 +5,7 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: backlog
+status: done
 owner: "frankD"
 created: 2026-09-05
 summary: "GENERICS ARE NOT INVOLVED -- corrected by frankD 2026-09-05, population only; frankS's mechanism below is unchanged and is the deeper half. Two ORDINARY classes, no `generic` and no `specialize`, each declaring `type PCell = ^TCell; TCell = record d: X; end;`, compile the SECOND class's `n^.d := v` against the FIRST class's pointee; fpc 3.2.2 prints `7 hi`. That is pasparser_decl.inc:6984 registering the pointer alias under its BARE name with no owning-class column -- the third sibling arm AddClassLikeType already fixed for classes and records. Keyed on NEITHER name: different alias names and different pointee names each still fail. Records trigger it too. Prio 45->55: the population is every class or record with a nested pointer type, not templates. Measured at 4ef367091, binary 25113fd3, fpc 3.2.2, x86-64."
@@ -366,3 +366,6 @@ That generalises, and it is the same animal as two cases already written down:
 and the collision is invisible precisely because the colliding legal value is the
 common one.** Ask of any sentinel, default or expected constant: *if the
 machinery did nothing at all, would this still read correct?*
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

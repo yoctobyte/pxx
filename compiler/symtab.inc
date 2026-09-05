@@ -206,11 +206,66 @@ begin
   Result := True;
 end;
 
+{ Is UClass `c` a nested type declared inside some class OTHER than `ownerCi`?
+
+  The question a `^T` inside a class body has to ask before accepting a global
+  T. When two bodies each declare `TCell`, AddClassLikeType gives the first the
+  bare name and qualifies the second as `TB.TCell` -- so a later body asking for
+  a bare `TCell` finds the FIRST one, which is not a global type at all. It is
+  another class's private nested type that merely won the bare spelling. }
+function IsNestedTypeOfOther(c, ownerCi: Integer): Boolean;
+var k: Integer;
+begin
+  IsNestedTypeOfOther := False;
+  for k := 0 to NestedTypeCount - 1 do
+    if (NestedTypeCi[k] = c) and (NestedTypeOwner[k] <> ownerCi) then
+    begin
+      IsNestedTypeOfOther := True;
+      Exit;
+    end;
+end;
+
+{ Commit the alias row under construction: stamp the three SCOPE facts and
+  advance the count. Every Register*Alias ends here.
+
+  One place rather than six copies, and the reason is the bug this was added
+  for: the rule "a nested declaration belongs to its owner" was spelled at
+  AddClassLikeType and simply MISSING at RegisterPtrAlias, and a rule spelled
+  per call site fails by an ABSENT copy rather than a divergent one -- so the
+  sites that are wrong agree perfectly with each other and reading them against
+  one another finds nothing. Folding Inc(AliasCount) in is the load-bearing
+  half: a new Register*Alias that forgets to call this does not get an
+  unstamped row, it gets NO row, which fails immediately and loudly instead of
+  registering something globally visible that should not be. }
+procedure AliasCommit;
+begin
+  AliasUnitIdx[AliasCount]  := CurrentUnitIdx;
+  AliasDeclImpl[AliasCount] := DeclInImplNow;
+  AliasOwnerCi[AliasCount]  := ParsingClassBodyCi;   { -1 when not in a class body }
+  Inc(AliasCount);
+end;
+
+{ May a name lookup HERE see alias row `a`?
+
+  A class's own body is TWO ranges of source -- the declaration, and the
+  out-of-line method implementations -- carried by two different variables,
+  because ParsingClassBodyCi is -1 while `procedure TFoo.Bar` is parsed and
+  MethImplOwnerCi is the class there. Both must see the alias: a version
+  consulting only the first compiles `var head: PCell` in the class body and
+  then fails on `var n: PCell` in the method, which is the same declaration. }
+function AliasVisibleHere(a: Integer): Boolean;
+begin
+  AliasVisibleHere := (AliasOwnerCi[a] < 0) or
+                      (AliasOwnerCi[a] = ParsingClassBodyCi) or
+                      (AliasOwnerCi[a] = MethImplOwnerCi);
+end;
+
 function FindTypeAlias(const name: AnsiString): Integer;
-var i, bestRank, r: Integer; lo, name2: AnsiString;
+var i, bestRank, r: Integer; lo, name2: AnsiString; owned, bestOwned: Boolean;
 begin
   Result := -1;
   bestRank := -2;
+  bestOwned := False;
   name2 := name;
   lo := ULower(name2);
   i := 0;
@@ -226,11 +281,28 @@ begin
       classes: `uses a, b` binds b's `TAlias` and b's enum type. Ties keep the
       FIRST row, so a single declaration and two rows from one unit are
       unaffected. bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
-    if UNameMatch(AliasNOff[i], AliasNLen[i], lo) and
+    if UNameMatch(AliasNOff[i], AliasNLen[i], lo) and AliasVisibleHere(i) and
        DeclVisibleSect(AliasUnitIdx[i], AliasDeclImpl[i], IMPLTAB_ALIAS, i) then
     begin
       r := UsesRankOf(CurrentUnitIdx, AliasUnitIdx[i]);
-      if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
+      { An alias declared in the class body we are inside SHADOWS a unit-level
+        one of the same name -- the ordinary inner-scope rule. AliasVisibleHere
+        has already excluded every OTHER class's rows, so any owned row still
+        here is owned by the scope we are in.
+
+        TWO KEYS, COMPARED IN ORDER, and NOT a bonus added to the rank. Adding
+        one is what this first did and it inverted the answer: UsesRankOf
+        returns MaxInt for a row in the CURRENT unit -- a sentinel, not a
+        count -- so `r + bonus` overflowed to a large negative and the nested
+        alias ranked LAST of everything. Measured: `owner=-1 r=2147483647`
+        against `owner=7 r=-2146483649`. Nothing can be "larger than any rank"
+        when the top of the range is already the sentinel, which is the same
+        collision-with-a-legal-value trap this table's own AliasOwnerCi comment
+        describes for class 0. }
+      owned := AliasOwnerCi[i] >= 0;
+      if (Result < 0) or (owned and (not bestOwned)) or
+         ((owned = bestOwned) and (r > bestRank)) then
+      begin Result := i; bestRank := r; bestOwned := owned; end;
     end;
     Inc(i);
   end;
@@ -261,8 +333,7 @@ begin
   AliasProcSig[AliasCount] := -1;
   AliasFileElemTk[AliasCount] := 0;
   AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 { Defined further down this include; RegisterGeneralAlias below needs it to
@@ -412,8 +483,7 @@ begin
     AliasEnumId[AliasCount] := LastTypeEnumId + 1
   else
     AliasEnumId[AliasCount] := 0;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 procedure RegisterMethodPtrTypeAlias(noff, nlen, sigPi, methodRec: Integer);
@@ -437,8 +507,7 @@ begin
   AliasProcSig[AliasCount] := sigPi;
   AliasFileElemTk[AliasCount] := 0;
   AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 procedure RegisterProcTypeAlias(noff, nlen, sigPi: Integer);
@@ -463,8 +532,7 @@ begin
   AliasProcSig[AliasCount] := sigPi;
   AliasFileElemTk[AliasCount] := 0;
   AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 function FindArrayType(const name: AnsiString): Integer;
@@ -553,8 +621,7 @@ begin
   AliasProcSig[AliasCount] := -1;
   AliasFileElemTk[AliasCount] := 0;
   AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 function GetSliceName(off, len: Integer): AnsiString;
@@ -587,8 +654,7 @@ begin
   AliasProcSig[AliasCount] := -1;
   AliasFileElemTk[AliasCount] := 0;
   AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
-  Inc(AliasCount);
+  AliasCommit;
 end;
 
 function FindEnumType(const name: AnsiString): Integer;
@@ -16086,7 +16152,25 @@ begin
     if (AliasTk[i] = Ord(tyPointer)) and (AliasElemRec[i] = REC_NONE) and (AliasTargetNLen[i] > 0) then
     begin
       targetName := GetSliceName(AliasTargetNOff[i], AliasTargetNLen[i]);
-      ci := FindUClass(targetName);
+      { A deferred `^T` declared INSIDE a class or record body means that
+        body's T. `PCell = ^TCell` written above `TCell` is ordinary Pascal --
+        it is how every linked node is spelled -- and the PtrElemDepth guard
+        tolerates the unknown name precisely so this pass can finish the job.
+        It finished it with FindUClass(bare name), GLOBALLY: when two class
+        bodies each declare a TCell, AddClassLikeType correctly qualifies the
+        second as `TB.TCell` and leaves the bare name with the first, so every
+        deferred pointee in the program got the FIRST class's record.
+
+        A SECOND site, not the alias-name one. This code never reads the alias
+        name at all, so the owning-class column on its own does not reach it:
+        with only that fix, two nested aliases with DIFFERENT names still
+        collide whenever the pointee is written below them, and nothing fails.
+        The discriminator is one line moved -- pointee above the alias compiles,
+        pointee below it is refused.
+        bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
+      ci := -1;
+      if AliasOwnerCi[i] >= 0 then ci := FindNestedType(AliasOwnerCi[i], targetName);
+      if ci < 0 then ci := FindUClass(targetName);
       if ci >= 0 then
       begin
         if UClsIsRecord[ci] then

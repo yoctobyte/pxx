@@ -14399,6 +14399,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_gennestfld26 "$$($(TESTTMP)/sweep_gennestfld26)" "$$(printf '2 one 2\n1 x')"
 	./$(COMPILER) test/test_generic_nested_type_identity.pas $(TESTTMP)/sweep_gennestid26
 	tools/expect_same.sh sweep_gennestid26 "$$($(TESTTMP)/sweep_gennestid26)" "$$(printf '2 one\n1 7\n1 10')"
+	# A nested pointer alias belongs to the class or record that declared it.
+	# Two bodies each declaring `PCell = ^TCell` with DIFFERENT pointee types
+	# shared one flat alias row, so the second was type-checked against the
+	# first's field. Expected output is fpc 3.2.2's, taken from fpc and not
+	# written by hand. Row 6 is the unit-level alias of the same name, which
+	# must stay reachable -- scoping the nested ones must not hide it.
+	#
+	# EVERY ROW USES TWO DIFFERENT POINTEE TYPES ON PURPOSE. Give both classes
+	# an Integer pointee and the test prints the right answer while reading the
+	# WRONG row, because the two values coincide -- that variant was green
+	# throughout the entire bug.
+	./$(COMPILER) test/test_nested_pointer_alias_is_scoped_to_its_owner.pas $(TESTTMP)/sweep_nestptralias26
+	tools/expect_same.sh sweep_nestptralias26 "$$($(TESTTMP)/sweep_nestptralias26)" "$$(printf '1 int=7\n2 str=hi\n3 dbl=2.5\n4 reca=11\n5 recb=rec\n6 top=99\nOK')"
 	# The ONE row here with no external oracle: the trampoline ABI proof reaches
 	# pxx's own RTTI (GetInstanceRTTI / GetMethInfoByName), which FPC has no
 	# equivalent of, so it cannot be compiled there at all. The values below are
