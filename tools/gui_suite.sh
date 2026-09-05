@@ -27,6 +27,19 @@ GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
 [ -n "$GTK3_INC" ] || GTK3_INC="-I/usr/include/gtk-3.0/"
 
 fail=0
+# EVERY SKIP HERE USED TO BE INVISIBLE IN THE VERDICT. A box with no xvfb-run
+# and no xdotool printed "GUI suite OK" and exited 0 while every real-window
+# check -- the entire point of a GUI suite -- silently did not run. That is a
+# green measured where the precondition cannot fail, and it is the same shape as
+# a gtk regression closing GREEN on the one host that has the headers.
+# A skip for a MISSING TOOL is counted; a skip for "it did not build" is not,
+# because that one is downstream of a FAIL the suite already reported.
+dep_skips=0
+missing_deps=""
+note_dep_skip() {   # $1 = the tool that is absent
+  dep_skips=$((dep_skips + 1))
+  case " $missing_deps " in *" $1 "*) ;; *) missing_deps="$missing_deps $1" ;; esac
+}
 
 say() {
   printf '%s\n' "$*"
@@ -236,7 +249,7 @@ gui_window_smoke() {
   local log="/tmp/gui_test_${name}_win.log"
   if ! have_xvfb; then
     say "SKIP  $name (real window) -- xvfb-run not installed"
-    return
+    note_dep_skip xvfb-run; return
   fi
   if [ "$(timeout 30 xvfb-run -a "$bin" --gui-smoke 2>"$log" | tail -1)" != "$expect" ]; then
     say "FAIL  $name -- real-window smoke: $(tail -1 "$log")"; fail=1; return
@@ -262,8 +275,8 @@ have_xdotool() { command -v xdotool >/dev/null 2>&1; }
 gui_realwindow() {
   local name="$1" bin="$2" minw="$3" minh="$4"; shift 4
   local log="/tmp/gui_test_${name}_realwin.log"
-  if ! have_xvfb; then say "SKIP  $name (real window size) -- xvfb-run not installed"; return; fi
-  if ! have_xdotool; then say "SKIP  $name (real window size) -- xdotool not installed"; return; fi
+  if ! have_xvfb; then say "SKIP  $name (real window size) -- xvfb-run not installed"; note_dep_skip xvfb-run; return; fi
+  if ! have_xdotool; then say "SKIP  $name (real window size) -- xdotool not installed"; note_dep_skip xdotool; return; fi
   local geo
   geo="$(timeout 30 xvfb-run -a bash -c '
     bin="$1"; shift
@@ -309,7 +322,7 @@ life_smoke() {
   fi
   if ! have_xvfb; then
     say "SKIP  life (real window) -- xvfb-run not installed"
-    return
+    note_dep_skip xvfb-run; return
   fi
   if ! timeout 30 xvfb-run -a "$out" --smoke >"$log" 2>&1; then
     say "FAIL  life -- real-window smoke: $(tail -1 "$log")"; fail=1; return
@@ -356,6 +369,17 @@ fi
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."
   exit 1
+elif [ "$dep_skips" -ne 0 ]; then
+  # NOT "OK". Nothing failed, and $dep_skips checks never ran, so this run
+  # cannot tell a working GUI from a broken one. Exit 2 is this repo's
+  # "cannot answer" code (tools/gcc_diff_probe.sh, tools/c_corpus_probe.sh,
+  # tools/wasm32_gap_census.sh all use it for a missing oracle) -- deliberately
+  # NOT 0, because `make gui-test` going green on a box that cannot open a
+  # window is the exact false green this counter exists to stop.
+  say "GUI suite INCONCLUSIVE -- nothing failed, but $dep_skips real-window check(s) did not run."
+  say "  missing:$missing_deps"
+  say "  Install them and re-run; a pass without these has not opened a window."
+  exit 2
 else
   say "GUI suite OK"
   exit 0
