@@ -219,7 +219,20 @@ end.
 EOF
 "$root/compiler/pascal26" --target=wasm32 "$work/heap.pas" "$work/h.wasm" \
     > /dev/null 2>&1
-node "$work/run.js" "$work/h.wasm" > "$work/heap.txt"
+# NODE'S OWN WASI, not the inline shim above, and the difference is not
+# cosmetic. This program GROWS the heap, and the growth path reaches the PAL —
+# so unlike the slice (fd_write + proc_exit) this module imports the whole WASI
+# surface: prestat, path_open, fd_seek, clock_time_get, random_get, 15 in all.
+# The inline shim provides two of them, and a wasm import that is not a
+# callable is a LinkError at instantiation, before a line of the program runs.
+#
+# Not fixed by adding stubs. check_pal.sh states the reason and it applies here:
+# a shim that provides exactly what the backend happened to need agrees with the
+# backend by construction. wasihost.js checks $sp on a normal return, same as
+# run.js, so nothing is given up.
+mkdir -p "$work/heapbox"
+node --no-warnings "$here/wasihost.js" "$work/h.wasm" "$work/heapbox" \
+    > "$work/heap.txt"
 base=$(sed -n 1p "$work/heap.txt")
 blocks=$(sed -n 2p "$work/heap.txt")
 spread=$(sed -n 3p "$work/heap.txt")

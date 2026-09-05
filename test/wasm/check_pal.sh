@@ -19,14 +19,32 @@
 # resolved at instantiation. There is nothing to add a {$ifdef CPU_WASM32}
 # block to — the mechanism differs, not the constants.
 #
-# THE NEGATIVE BELOW IS A MECHANICAL EXPIRY, and it is the reason the backend
-# needs no compiler change. Selection is `-Fu` on the unit search path:
-# AddDefaultPasUnitDirs appends the posix default AFTER the user's -Fu dirs, so
-# an explicit override wins. The check asserts that the default is still posix
-# — i.e. that the same program still FAILS without the flag. The day wasm32
-# selects the wasi directory by default (a compiler.pas change, a shared-file
-# arm this branch has not taken), this goes red and the paragraph above has to
-# be rewritten rather than quietly outliving its cause.
+# THE EXPIRY FIRED — 2026-09-05. This section used to assert the opposite of
+# what it asserts now, and the change is recorded rather than overwritten
+# because the two states are one commit apart and the old one is still what a
+# dozen-plus Makefile rows assume.
+#
+# It used to say: selection is `-Fu` on the unit search path, the default is
+# posix, so the same program must still FAIL without the flag — and the day
+# wasm32 selected wasi by default this would go red and the paragraph would
+# have to be rewritten. That day came. The check did exactly what it was built
+# to do: it exited 1 saying REWRITE MY SCOPE NOTE, which is why this paragraph
+# exists instead of a stale one nobody noticed.
+#
+# WHAT IS TRUE NOW, and all three are asserted below rather than described:
+#   1. `--target=wasm32` with no -Fu at all compiles and runs.
+#   2. It is BYTE-IDENTICAL to an explicit `-Fulib/rtl/platform/wasi` build.
+#      Compiling is not evidence that it selected wasi; identity is.
+#   3. An explicit `-Fulib/rtl/platform/posix` STILL WINS and still dies on
+#      `undefined variable (SYS_openat)`.
+#
+# (3) is not a leftover — it is a live trap and the reason to keep testing it.
+# AddDefaultPasUnitDirs appends the target's own PAL AFTER the user's -Fu dirs,
+# deliberately, so an explicit override beats the default. A Makefile row that
+# hardcodes `-Fulib/rtl/platform/posix` is therefore correct natively and wrong
+# cross, and it fails with a PARSE error naming a Linux syscall constant, which
+# reads like a compiler bug rather than a flag that is doing what it was asked.
+# That misreading has already cost one session a false report.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -56,31 +74,57 @@ if ! diff -u "$work/posix.i" "$work/wasi.i" > "$work/iface.diff"; then
 fi
 echo "ok  all $(wc -l < "$work/wasi.i") PAL entry points declared, same set as posix"
 
-# --- the negative that motivates the file, and its expiry -------------------
-if "$root/compiler/pascal26" --target=wasm32 "$here/pal_slice.pas" \
-     "$work/nodir.wasm" > "$work/nodir.txt" 2>&1; then
-  echo "ok  wasm32 now resolves the PAL without -Fu — the default backend"
-  echo "    selection has landed. REWRITE this script's scope note: the"
-  echo "    explicit-flag rationale above no longer describes the build."
+# --- selection: the default, its identity, and the override -----------------
+# (1) no -Fu at all. This is what every ordinary build does, so it is also the
+#     compile whose output the primary assertion below runs.
+if ! "$root/compiler/pascal26" --target=wasm32 \
+      "$here/pal_slice.pas" "$work/p.wasm" > "$work/cov.txt" 2>&1; then
+  echo "FAIL a PAL-using program no longer compiles for wasm32 with no -Fu."
+  echo "     The default backend selection is what makes the target usable;"
+  echo "     without it every `uses SysUtils` program needs an explicit flag:"
+  sed 's/^/     /' "$work/cov.txt"
   exit 1
 fi
-if ! grep -q 'SYS_openat' "$work/nodir.txt"; then
-  echo "FAIL without -Fu the build fails for a DIFFERENT reason than the"
-  echo "     posix default PAL — this negative no longer tests what it says:"
-  head -4 "$work/nodir.txt"
+head -1 "$work/cov.txt"
+
+# (2) COMPILING IS NOT EVIDENCE IT PICKED WASI. It could have found some third
+#     thing, or a stub, and still produced a module. Identity with the explicit
+#     build is the assertion; anything else is an inference.
+"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+    "$here/pal_slice.pas" "$work/p_explicit.wasm" > "$work/explicit.txt" 2>&1
+if ! cmp -s "$work/p.wasm" "$work/p_explicit.wasm"; then
+  echo "FAIL the default build is not the same module as an explicit"
+  echo "     -Fulib/rtl/platform/wasi build, so the default resolved to"
+  echo "     something else. Sizes: $(wc -c < "$work/p.wasm") vs $(wc -c < "$work/p_explicit.wasm")"
   exit 1
 fi
-echo "ok  without -Fu the same program still dies on posix's SYS_openat —"
-echo "..  the default PAL is unchanged and the override is what selects wasi"
+echo "ok  the default IS wasi — byte-identical to an explicit -Fu build, not"
+echo "..  merely a build that happened to succeed"
+
+# (3) The override still wins, and this is the live trap: a Makefile row that
+#     hardcodes the posix PAL is correct natively and wrong cross.
+if "$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/posix \
+     "$here/pal_slice.pas" "$work/px.wasm" > "$work/px.txt" 2>&1; then
+  echo "FAIL an explicit -Fulib/rtl/platform/posix no longer overrides the"
+  echo "     default on wasm32. AddDefaultPasUnitDirs appends the target PAL"
+  echo "     AFTER the user's dirs precisely so an override wins; if that"
+  echo "     stopped being true, every -Fu in the tree means something else."
+  exit 1
+fi
+if ! grep -q 'SYS_openat' "$work/px.txt"; then
+  echo "FAIL the posix override fails for a DIFFERENT reason than reaching for"
+  echo "     a Linux syscall number — this no longer tests what it says:"
+  head -4 "$work/px.txt"
+  exit 1
+fi
+echo "ok  an explicit posix -Fu still overrides and still dies on SYS_openat"
+echo "..  — the trap a hardcoded platform flag sets for a cross build, and it"
+echo "..  reads like a compiler bug rather than a flag doing as it was told"
 
 # --- the primary assertion --------------------------------------------------
 "$root/compiler/pascal26" -Fulib/rtl/platform/posix \
     "$here/pal_slice.pas" "$work/native" >/dev/null
 "$work/native" > "$work/native.txt"
-
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
-    "$here/pal_slice.pas" "$work/p.wasm" > "$work/cov.txt" 2>&1
-head -1 "$work/cov.txt"
 wasm-validate "$work/p.wasm"
 
 # Run against node's own WASI, not wasmhost.js. The moment anything calls a PAL
