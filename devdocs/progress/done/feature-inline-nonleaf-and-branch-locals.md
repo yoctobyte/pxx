@@ -378,4 +378,4 @@ by not being a function call at all.
 **REMAINING SCOPE OF THIS TICKET IS THEREFORE CLOSED ON VALUE, NOT ON DIFFICULTY.**
 while/for bodies remain unimplemented and that is now a deliberate decision with
 a number behind it rather than an unfinished task.
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 134125edd.
