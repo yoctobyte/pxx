@@ -6,7 +6,7 @@ owner: frank-optimize
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-04 (follow-up split from [[feature-inline-routines]])
 - **Umbrella:** the `-O2`/`-O3` tier of [[feature-optimization-levels]]; the
   earlier inline slices (v1 pure-expr, 2a if-then-else Result, 2b straight-line
@@ -361,6 +361,15 @@ wrong in this machinery.
 Frequency now says why both failed: they counted shapes a validator could admit,
 and the shapes it cannot admit are overwhelmingly **cold**.
 
+**THE AXIS WAS NEVER BOUND-VS-REACH. IT IS STATIC-VS-EXECUTED, and both of my
+earlier positions were on the wrong side of it.** I corrected myself once, from
+"biggest bound" to "biggest reach", and that correction was still a static metric
+and still wrong. Stated this way because the failure mode is picking a FOURTH
+static metric — most-call-sites-in-source, most-lines, most-parameters — and
+finding it also predicts nothing. A count of source shapes cannot predict
+delivered value no matter how the count is refined. **The only metric that
+predicted anything was a count of what actually ran.**
+
 **If anyone does pursue this, the answer is not "support `case` and `for`" — it
 is `TypeSlotSize` and `ResidentRegOf` specifically**, two functions worth 0.4%
 of calls each, and the honest first question is whether either is better served
@@ -369,3 +378,4 @@ by not being a function call at all.
 **REMAINING SCOPE OF THIS TICKET IS THEREFORE CLOSED ON VALUE, NOT ON DIFFICULTY.**
 while/for bodies remain unimplemented and that is now a deliberate decision with
 a number behind it rather than an unfinished task.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

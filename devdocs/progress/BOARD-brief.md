@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:24 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:134 backlog-nilpy:97 backlog-tools:29 backlog-pascal:40 backlog-decide:42 backlog-libs:17 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:72 known-incompat:3 float:25 done-followup:3 decided:146 done:3344 rejected:78`
+`working:19 unfinished:24 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:134 backlog-nilpy:97 backlog-tools:29 backlog-pascal:40 backlog-decide:42 backlog-libs:17 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:72 known-incompat:3 float:25 done-followup:3 decided:146 done:3345 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -16,7 +16,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
-- `feature-inline-nonleaf-and-branch-locals` [O] — owner: frank-optimize
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankA
