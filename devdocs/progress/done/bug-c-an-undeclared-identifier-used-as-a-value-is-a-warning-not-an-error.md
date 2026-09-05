@@ -3,7 +3,7 @@ slug: bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error
 track: C
 type: bug
 prio: 45
-status: open
+status: done
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
@@ -402,3 +402,6 @@ file scope it exited `ok:` with no diagnostic at all. **`static const int f =
 O_NOFOLLOW;` is silent today**, which is the busybox constant shape exactly —
 so the census that found the 18 could not have found these, and neither can
 this one.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
