@@ -598,6 +598,41 @@ It is not the same as a broken tool. A broken tool announces itself. This
 returns a clean, plausible, *true* answer, which is why it survives review: the
 reader checks whether the instrument worked, and it did.
 
+### The worst case of it: a grep for a name the fact never spells
+
+Measured 2026-09-05 (frankS), **immediately before a deletion**, which is where
+this costs the most — the next reader cannot notice what is not there.
+
+Two searches, both confident, both wrong, on the way to removing five parser
+arms:
+
+- `grep paramcount compiler/pyparser.inc` → **134 hits, every one
+  `Procs[].ParamCount`**, an unrelated struct field. *A search that returns
+  plenty and answers nothing.* Volume reads as coverage.
+- `grep tkSysOpen compiler/paslexer.inc compiler/pylexer.inc` → **zero**, which
+  reads as *the token is already gone.* It is not. The keyword table matches
+  **character by character on the spelling** (`if (s[1]='s') and (s[2]='y')…`),
+  so **the token name appears nowhere near the code that produces it.**
+
+The second is the sharper one and it is not merely lossy: **the instrument is
+looking at a representation the fact never takes.** A zero there is structurally
+incapable of being anything else, so it cannot distinguish "this token is
+retired" from "this lexer is table-driven" — and the first of those was the
+conclusion being reached.
+
+**The rule:** before believing a grep about a SYMBOL, ask what form the fact
+takes in the source. Enum members reached through a table, a dispatch array, a
+generated name, or a character-by-character matcher **do not contain their own
+identifier at the site that decides them.** Search for the SPELLING (`'sysopen'`)
+or for the construction (`-Ord(tkSysOpen)`), and confirm with something that
+fails differently — running the compiler and watching whether the construct is
+accepted is the cheap one, and it is what settled this.
+
+Corollary that is easy to miss: `-Ord(tkSysOpen)` sites and `tkSysOpen:` case
+arms are **different populations**. Here every construction site sat *inside*
+the dead arms, so counting "uses of the token" would have said the token was
+live while every one of those uses was unreachable.
+
 | what was asked | what the instrument answered | how it read |
 | --- | --- | --- |
 | does `AllocMem` zero-fill? | does this allocator hand back zeroed pages? (it does, even for a recycled block, even under `-dPXX_HEAP_DEBUG`) | **green — and plain `GetMem` passes identically** |
