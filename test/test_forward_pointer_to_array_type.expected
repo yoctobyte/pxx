@@ -1,0 +1,8 @@
+forward  read field  : 42
+in-order read field  : 42
+forward  with-scope  : 42
+in-order with-scope  : 42
+forward  write field : 7
+in-order write field : 7
+forward  scalar elem : 1234567890123
+forward  class field : 42

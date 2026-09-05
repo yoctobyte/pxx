@@ -6661,6 +6661,16 @@ test-core: $(COMPILER)
 	@# alias boundary rather than in the formatter.
 	@$(TESTTMP)/test_etai26 | diff -u test/test_enum_type_alias_keeps_identity.expected - \
 	  || { echo 'test_enum_type_alias_keeps_identity: FAIL - an enum alias dropped its identity again'; exit 1; }
+	./$(COMPILER) test/test_forward_pointer_to_array_type.pas $(TESTTMP)/test_fpta26
+	@# .expected is fpc 3.2.2's own output. `PArr = ^TArr` above `TArr = array[..]
+	@# of T` -- the shape FPC's own cclasses.pas uses, and the last PARSER wall on
+	@# the FPC compiler-source march. The DECLARATION-ORDER pairs are the controls:
+	@# every forward row has an in-order twin that worked before the fix, and a
+	@# declaration order changing whether a program parses is the tell. Row
+	@# `class field` is why this is a bug and not a diagnostic complaint -- through
+	@# a class field the same shape did not refuse at all, it read 0 for 42.
+	@$(TESTTMP)/test_fpta26 | diff -u test/test_forward_pointer_to_array_type.expected - \
+	  || { echo 'test_forward_pointer_to_array_type: FAIL - a forward pointer to an array type lost its element'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --

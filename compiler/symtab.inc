@@ -16049,6 +16049,37 @@ begin
           AliasPtrBaseRec[i] := AliasElemRec[i];
         end;
       end
+      else if FindArrayType(targetName) >= 0 then
+      begin
+        { The pointee is a named FIXED-ARRAY type declared BELOW this row --
+          `PHashItemList = ^THashItemList;` written above
+          `THashItemList = array[0..N] of THashItem`, which is how FPC's own
+          cclasses.pas spells it and is ordinary Pascal.
+
+          ParseTypeKind's `^T` arm asks FindArrayType and takes the element
+          shape from the ArrType entry, and its own comment records that a
+          forward spelling "is not covered -- the entry does not exist yet --
+          and falls back to the old default". This is that fix, in the pass that
+          exists to run after the type section, where the entry now does exist.
+
+          It is not merely a stride fallback. With the element record lost,
+          `p^[i].f` is REFUSED (`a value of this type has no members`) and
+          `with p^[i] do f` is refused differently (`Integer has no members`),
+          while the identical declarations in the OTHER ORDER compile and run --
+          a declaration order changing whether a program parses, which the
+          pointer-to-pointer arm below already names as the tell. Through a
+          CLASS FIELD the same shape does not refuse at all: it reads 0.
+          bug-p-a-forward-pointer-to-a-named-array-type-loses-its-element }
+        a := FindArrayType(targetName);
+        AliasPtrElemArrAi[i] := a;
+        AliasElemTk[i] := ArrTypeElemTk[a];
+        AliasElemRec[i] := ArrTypeElemRec[a];
+        if AliasPtrDepth[i] = 1 then
+        begin
+          AliasPtrBaseTk[i] := AliasElemTk[i];
+          AliasPtrBaseRec[i] := AliasElemRec[i];
+        end;
+      end
       else
       begin
         targetAlias := FindTypeAlias(targetName);
