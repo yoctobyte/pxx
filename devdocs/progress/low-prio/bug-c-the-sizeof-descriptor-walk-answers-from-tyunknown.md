@@ -48,6 +48,29 @@ paths disagree about what "I do not know" costs, and that disagreement has to
 be settled before either is allowed to decline. Whoever takes this should
 decide the unknown-type answer ONCE and have both read it.
 
+### AND THE DECLINE PATH HAS NEVER RUN — measured, not inferred
+
+**`cOK` was False in ZERO of 10932 descriptor walks** across 629 C test files,
+lua 5.4 and the sqlite amalgamation (census below). Three sites in the function
+set `cOK := False`; **none of them fired.**
+
+This section is written as though the job were REBALANCING an existing
+mechanism. It is not. **Whoever adds a decline is adding the first one**, with
+
+- no live caller that has ever exercised it,
+- no evidence the caller's `CurTok.Kind <> tkRParen` exclusion — the thing this
+  ticket blames for making the wrong answer final — behaves as assumed under a
+  decline that actually happens, because one never has,
+- and therefore no regression to measure against.
+
+So the cost is **introduce, not adjust**, and the risk is not "might regress a
+site" but "no site has ever run this". That is the sentence that stops the next
+taker estimating this wrong, and it is why the precondition above is a real
+precondition rather than a caution.
+
+*(It is also, in miniature, this ticket's own subject: a guard that cannot fail
+sitting inside the ticket about a guard that cannot fail.)*
+
 ## What is established
 
 - The general expression path types these operands correctly today:
@@ -55,9 +78,10 @@ decide the unknown-type answer ONCE and have both read it.
   fix, on the identical operand.
 - The depth fix (`SymPtrDepth`/`SymPtrBaseTk`/`SymPtrBaseRec` in the walk)
   removes the pointer-to-pointer route to `tyUnknown` and nothing else.
-- Not measured: which other operands still reach `tyUnknown` here, and whether
-  any real program spells one. **That census is the first job** — if the
-  answer is none, this is `rejected/` rather than a low prio, per CLAUDE.md.
+- ~~Not measured: which other operands still reach `tyUnknown` here~~ —
+  **DONE, see the census below.** One operand in the whole corpus reaches it
+  (`sqlite3.c:137935`) and the default answers it correctly. Not none, so not
+  `rejected/`; one and correct, so not worth doing.
 
 ## A NEARBY defect that is measurably NOT this one, found 2026-09-05 (frankC)
 

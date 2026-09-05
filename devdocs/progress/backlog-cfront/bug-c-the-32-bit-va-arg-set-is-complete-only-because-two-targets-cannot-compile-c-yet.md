@@ -6,7 +6,7 @@ type: bug
 blocked-by: []
 status: backlog
 created: 2026-08-31
-summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it, gated only by bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it -- whoever lands that stub owes the same one-line widening in the same commit. THE TRIGGER IS NOW EXECUTABLE (2026-09-05, frankC): tools/c_va_arg_every_target.sh asserts, per target, that a build matches gcc exactly and that a REFUSAL names the C entry stub — the second arm being what stops a frontend broken for all cross targets from turning the check green. Proved a guard by ablation: TARGET_RISCV32 removed from the four sets made riscv32 print 0.00 where gcc says 2.50, which is the silent-wrong-values defect this ticket describes. NOTHING WAS WIDENED — the set is untouched and wasm32 stays unmeasurable by construction. The `Cross (aarch64)` comment residual at cparser.inc:2093 is also done -- the sibling at :2171 was reworded when xtensa landed and this one was missed."
+summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it, gated only by bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it -- whoever lands that stub owes the same one-line widening in the same commit. THE TRIGGER IS NOW EXECUTABLE (2026-09-05, frankC): tools/c_va_arg_every_target.sh asserts, per target, that a build matches gcc exactly and that a REFUSAL names the C entry stub — the second arm being what stops a frontend broken for all cross targets from turning the check green. Proved a guard by ablation: TARGET_RISCV32 removed from the four sets made riscv32 print 0.00 where gcc says 2.50, which is the silent-wrong-values defect this ticket describes. NOTHING WAS WIDENED — the set is untouched and wasm32 stays unmeasurable by construction. The `Cross (aarch64)` comment residual at cparser.inc:2093 is also done -- the sibling at :2171 was reworded when xtensa landed and this one was missed. XTENSA IS NOW VERIFIED RATHER THAN ASSUMED (2026-09-05): the script gave every target its DEFAULT profile, so xtensa hit the ESP one, refused at the entry stub, and the row printed `outside this check by construction' -- false. With `--platform=posix' the same subject builds and qemu-xtensa RUNS it, matching gcc exactly, and all four set sites key on TargetArch alone so the profile cannot launder the result. 6 of 7 targets now assert VALUES; the built floor moved 5 -> 6. ONLY WASM32 IS STILL UNMEASURABLE, and it refuses at the entry stub on every profile it has. The ESP shipping path is covered too: `--emit-obj' must produce a Tensilica Xtensa REL object exporting app_main as a GLOBAL FUNC, which is the name the IDF links and calls."
 ---
 
 # The 32-bit `va_arg` set is complete only because two targets cannot compile C
@@ -153,9 +153,8 @@ and after.
 `bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it`
 (`unfinished/`). Whoever lands that stub owns the widening, in the same commit —
 and now also owns a row that will go RED the moment they do not, rather than a
-sentence they may not read. **xtensa under the ESP profile** is also outside
-this script's reach: it refuses on hosted linux, which this asserts, and
-compiles C on the ESP profile, which this does not exercise.
+sentence they may not read. **xtensa was ALSO listed here and that was wrong in both
+directions** — corrected below.
 
 ## Line numbers above have drifted, and that is the point of not chasing them
 
@@ -166,3 +165,79 @@ correct when written and now point at unrelated code — **a stale line number
 does not error, it points somewhere**, which is exactly why the script that
 landed today keys off VALUES and target names rather than positions. Left in
 place as history; grep for the set literal instead.
+
+# 2026-09-05 (frankC, second pass): xtensa was never out of reach, and I had the profiles backwards
+
+The section above said xtensa *"refuses on hosted linux ... and compiles C on
+the ESP profile"*. **Both halves are the wrong way round.** Measured at
+`026c85149032`:
+
+```
+--target=xtensa                      refuses at the entry stub (the ESP default profile)
+--target=xtensa --platform=posix     BUILDS, and qemu-xtensa RUNS it
+                                     1122334455667788 42 2.50   == gcc, exactly
+```
+
+The script invoked every target with no `--platform`, so xtensa met its DEFAULT
+profile — the ESP one, which has no standalone entry stub **by design** — and
+printed `outside this check by construction`. **The refusal was real and the
+conclusion drawn from it was false.** A target is only out of reach after the
+profiles it actually has have been tried, and nobody had tried them.
+
+This is the same shape as the ticket itself, one level up. The ticket is about a
+set that looks complete because the members that would falsify it cannot run;
+this was a row that looked out of reach because the one invocation tried could
+not run. **An absence belonging to the instrument, read as an absence in the
+world** — and I wrote the sentence claiming it the day before.
+
+**The profile cannot launder the measurement**, which is the part that makes
+this a verification rather than a coincidence: all four `TargetArch in [...]`
+sites key on `TargetArch` **alone** and consult no platform or profile, so
+`--platform=posix` exercises byte-for-byte the same va_arg lowering an ESP build
+does. It changes the entry stub and the runtime, not the slot widths. **So
+xtensa's membership in the 4-byte set is now asserted by running, not assumed
+from a refusal.**
+
+`built` floor raised **5 -> 6**. Lowering it again to re-admit a silent xtensa
+refusal is the regression that number now exists to catch.
+
+## wasm32 is genuinely out of reach, checked the same way rather than inherited
+
+`--target=wasm32` and `--target=wasm32 --platform=posix` both refuse at the C
+entry stub. (`--platform=bare` is **not an option at all** — the compiler
+answers `unknown option`, so an earlier reading of "bare refuses" was the
+compiler rejecting my flag, not the program. Checked, because a refusal whose
+message I had not read is the thing this whole ticket is about.) The trigger
+stays armed for wasm32 and nothing was widened.
+
+## The ESP shipping path is now covered — frankS's residual, closed
+
+frankS (`2beb2abec`): the standalone ELF is not how C reaches an ESP32.
+`--emit-obj` is — the IDF links our object and calls `app_main` — and **that
+path needs no entry stub, so the guard this script asserts never runs on it.**
+Nothing in the suite would have noticed it regressing.
+
+The new row asserts the **contract**, not the exit status: a real *Tensilica
+Xtensa* relocatable object exporting `app_main` as a **GLOBAL FUNC**. `exit 0`
+alone would pass on an empty file, and a `LOCAL` app_main is a build the IDF
+cannot use. Its subject is stdarg-only and deliberately **not** the main one:
+`c_va_arg_every_target.c` includes `<stdio.h>`, and printf drags in a crtl that
+does not link on this path yet (`PXXMemZero not found`), so reusing it would
+make the row red for a true statement about the wrong thing — and someone would
+delete it.
+
+## Controls, from the repo root this time
+
+Four, each made to fail, each failing with **its own arm's message** rather than
+a generic one:
+
+| sabotage | fired |
+| --- | --- |
+| xtensa's `--platform=posix` removed | the built floor, `only 5 target(s)` |
+| expected symbol `app_main` -> a name not exported | the GLOBAL FUNC contract |
+| the emit-obj build retargeted to **x86_64** | the Machine check, printing `Advanced Micro Devices X86-64` |
+| the emit-obj subject swapped to `$SRC` | the emit-obj build arm |
+
+The third is the one worth keeping: it is a **real object from the wrong
+target**, not a corrupted file, so it is drawn from the population the assertion
+is about.
