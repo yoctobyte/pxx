@@ -153,6 +153,16 @@ fi
 > manufactures a false RED. **Copy the shape, not the exit code** — a census
 > aborts, a test job should SKIP and say which package.
 
+**And do not rank arm 2 by the eighteen tickets, because the eighteen are the
+CHEAP side of it.** A false RED is loud: it cost four rounds of triage and it
+was eventually caught. A false CLEAN costs nothing visible and is never caught
+at all. Seven reports that `clang`, `xdotool` and `wabt` have **never** been
+installed on that box — no apt entry, ever — so whatever they gate has been
+quietly unmeasured for the entire life of the harness, with no ticket, no red
+and no census line to notice. (frank-coordinator, 2026-09-05, from seven's own
+apt history.) **Most of arm 2's value is on the side that has produced no
+tickets**, and a reader who ranks it by the gtk batch will rank it too low.
+
 ## The run-level census — the same correction, counted independently
 
 `devdocs/progress/tstate/runs-seven.ndjson`, 1143 runs, 2026-08-29T16:30:49Z →
