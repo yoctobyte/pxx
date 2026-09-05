@@ -88,3 +88,26 @@ and printed nothing were the same observation** — empty output, nonzero rc. Th
 row survived a repro at `ESP_RUN_TIMEOUT=40` and a second chip before a by-hand
 compile showed the real error. The runner now prints the compiler's diagnostic
 on failure and is unchanged on success.
+
+## If you are hitting this RIGHT NOW, read this first
+
+**Symptom:** `error: unresolved forward: PXXClassFinalize` when building any
+program that declares a `class` for `--esp-profile=bare`.
+
+**Discriminator, and it takes one command:** build the same program with
+`compiler/pascal26` at HEAD instead of `$(PXX_STABLE)`. If HEAD builds it and
+the pinned compiler does not, you are seeing the pin, not a regression.
+
+**Why:** fixed at HEAD in `6758c7ce7`, which lands in `compiler/builtin/
+builtinheap.pas`. `make pin` **freezes `compiler/builtin/**`**, and pin v404
+(`8844c8c42`) was cut ~20 minutes before the fix. So the pinned compiler still
+carries the unguarded declaration and will until the next pin.
+
+**This is not a regression in either direction.** Nothing that used to build
+stopped building: no class program could build for this profile at all, on
+either chip, for as long as the profile has existed. The pinned compiler is
+*correctly older* — the same shape as the `__GNUC__` case in CLAUDE.md's Track B
+notes, where a green under the pin was correct about a different compiler.
+
+**Do not work around it** by reshaping the source. Build that program at HEAD,
+or wait for the next pin.
