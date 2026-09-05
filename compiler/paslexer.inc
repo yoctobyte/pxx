@@ -2178,12 +2178,117 @@ begin
       writeln('pascal26:', SrcLine, ': note: ', messageText)
     else if CaseEqual(command, 'mode') then
     begin
+      { THE DIALECT FAMILY WE TARGET, AND THE FRONT DOOR FOR EVERY OTHER ONE.
+
+        Owner decision 2026-09-05 (decide-which-pascal-dialects-pxx-targets):
+        *"we target general fpc mode and even delphi mode, for now that is
+        enough, our goal is not to support every pascal language on this planet,
+        especially not if it's not in active use."*
+
+        objfpc / fpc / tp / delphiunicode / pxx are FPC-and-Delphi-family modes
+        and map to PXX's default (objfpc-ish) dialect, which is one superset:
+        within the family the modes differ only in ways this compiler already
+        treats as one language, so accepting them inert is honest.
+
+        macpas / iso / extendedpascal are DIFFERENT LANGUAGES that FPC also
+        implements, and this is where the previous comment was WRONG rather than
+        merely incomplete. It said "non-delphi modes are accepted but INERT",
+        and for MacPas that is false and measured false: `{$ifc}`/`{$elsec}`/
+        `{$endc}` are unrecognised, so BOTH ARMS of a conditional compile and the
+        program built is not the program written
+        (bug-p-macpas-conditional-directives-are-ignored-so-both-arms-compile,
+        parked in rainy-day/ by the same decision). A comment asserting the
+        safety property that the open ticket disproves is the reason a check
+        here reads as unnecessary to whoever arrives next.
+
+        SO AN UNRECOGNISED MODE IS AN ERROR, and that is one check said EARLY --
+        a MacPas program declares its dialect several lines before its first
+        `{$ifc}` -- rather than six directives' worth of dialect knowledge said
+        late, and said only for whichever dialect somebody happened to census.
+
+        This makes `mode` behave like both of its neighbours in this same
+        handler rather than being their exception: `{$MIMIC}` already errors on
+        an unknown target, and `{$ASMMODE}` was fixed for EXACTLY this defect --
+        "silently accepted-and-ignored for EVERY value", so `{$asmmode att}`
+        compiled clean and mis-encoded. Same shape, same file, one arm still
+        open. devdocs/dev/normalise-dont-special-case.md
+
+        It also closes the typo hole, which is the part that is not about
+        dialects at all: `DelphiMode := CaseEqual(name, 'delphi')` sorted the
+        whole value space into two buckets, so `{$MODE TOTALNONSENSE}` compiled
+        silently. That is a KNOWN directive with an unrecognised VALUE, which
+        the 2026-09-04 unknown-DIRECTIVE warning cannot see -- it keys on the
+        directive name. Different axis, so this is the missing arm and not a
+        second path to the same one. }
+      { THE ACCEPTED LIST IS BOUNDED BY FPC'S OWN, ASKED RATHER THAN RECALLED.
+        Measured against fpc 3.2.2 on 2026-09-05: it has exactly eight modes --
+        fpc, objfpc, tp, delphi, delphiunicode, macpas, iso, extendedpascal --
+        and rejects anything else (`-Mturbo` is `Illegal parameter`, and
+        `{$mode turbo}` is `Illegal compiler switch "TURBO"`). A draft of this
+        line carried `turbo` as an alias, which is invented: it is in neither
+        spelling. So the five FPC-family names below plus pxx's own are the
+        WHOLE of what FPC accepts and we implement, and the three that error are
+        the whole of what FPC accepts and we do not. Nothing is left to a tail.
+
+        We ERROR where fpc merely warns, deliberately: fpc has a real
+        implementation of the mode it is being asked for and can carry on
+        meaningfully, and we do not. Compiling MacPas as objfpc is a wrong
+        PROGRAM, so the mistake is left visible rather than warned past
+        (devdocs/dev/the-goal-cross-cross.md, "prefer the answer that leaves the
+        mistake visible"). }
+      if not (CaseEqual(name, 'delphi') or CaseEqual(name, 'objfpc') or
+              CaseEqual(name, 'fpc') or CaseEqual(name, 'tp') or
+              CaseEqual(name, 'delphiunicode') or CaseEqual(name, 'pxx')) then
+      begin
+        { THE SEVERITY IS SET BY WHAT HAS BEEN MEASURED, NOT BY THE POLICY.
+          The policy says which dialects we target; it does not say how badly
+          each untargeted one goes wrong, and those are different questions.
+
+          macpas ERRORS because the harm is measured and specific: its
+          conditional family is unrecognised, so BOTH ARMS of `{$ifc}` compile
+          and the binary is not the program written
+          (bug-p-macpas-conditional-directives-are-ignored-so-both-arms-compile,
+          repro re-run 2026-09-05).
+
+          iso and extendedpascal WARN, because no such measurement exists for
+          them and a first draft that errored on all three was WRONG IN A WAY
+          THE SUITE CAUGHT: conformance row tcase50 (`{ %NORUN }`,
+          `{$mode ExtendedPascal}`, a `case ... otherwise` block) COMPILES here
+          and went red. That is real code we build correctly, refused on a harm
+          nobody had demonstrated -- the narrowing that
+          bug-p-a-spurious-unknown-directive-warning-cannot-fail-any-test-we-have
+          exists to warn about, one directive further along. Promote either to
+          an error the day someone measures a divergence, and cite it here.
+
+          A value FPC ITSELF rejects errors, because it cannot be a working
+          program's intent -- fpc 3.2.2 has exactly eight modes and answers
+          `Illegal compiler switch` to anything else, so this arm catches
+          `{$MODE TOTALNONSENSE}` and the typos, which is the half that is not
+          about dialects at all. }
+        if CaseEqual(name, 'iso') or CaseEqual(name, 'extendedpascal') then
+          WarnAt(SrcLine, '{$MODE ' + name + '} names a Pascal dialect pxx does '
+                 + 'not implement -- compiled as the default (objfpc-ish) '
+                 + 'dialect, which is right for some programs and silently '
+                 + 'wrong for any that rely on ' + name + ' semantics. '
+                 + 'See decide-which-pascal-dialects-pxx-targets')
+        else if CaseEqual(name, 'macpas') then
+          ErrorAt(SrcLine, 'unsupported {$MODE ' + name + '}: pxx does not '
+                  + 'implement MacPas, and ignoring it is not harmless -- the '
+                  + '{$ifc}/{$elsec}/{$endc} conditionals are unrecognised, so '
+                  + 'BOTH arms compile and the binary is not the program '
+                  + 'written. Deferred, not refused for ever: see '
+                  + 'decide-which-pascal-dialects-pxx-targets')
+        else
+          ErrorAt(SrcLine, 'unknown {$MODE ' + name + '}: not a mode fpc 3.2.2 '
+                  + 'accepts either (its modes are fpc, objfpc, tp, delphi, '
+                  + 'delphiunicode, macpas, iso, extendedpascal). pxx targets '
+                  + 'the FPC and Delphi ones -- see '
+                  + 'decide-which-pascal-dialects-pxx-targets');
+      end;
       { {$mode delphi} toggles the one behavioural delta PXX honours: the
         @-optional procedural value (a bare function name bound to a proc-typed
-        target takes its address). objfpc/fpc/tp/macpas all map to PXX's default
-        (objfpc-ish) dialect — DelphiMode off. PXX is otherwise a single dialect
-        superset, so non-delphi modes are accepted but inert. }
-      DelphiMode := CaseEqual(name, 'delphi');
+        target takes its address). }
+      DelphiMode := CaseEqual(name, 'delphi') or CaseEqual(name, 'delphiunicode');
       { Delphi does not nest same-type comments; FPC modes do. A later
         {$NESTEDCOMMENTS ...} still overrides. }
       NestedComments := not DelphiMode;

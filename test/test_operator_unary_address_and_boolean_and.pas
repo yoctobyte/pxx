@@ -8,8 +8,8 @@ program test_operator_unary_address_and_boolean_and;
      expression in two positions. The overload used to be TAGGED onto AN_NEG /
      AN_NOT for ir.inc to re-resolve, and neither is one of the kinds
      ASTNodeIsCall names, so IRLowerAddress had no arm and the field selection
-     died with `IR_UNSUPPORTED ... (kind 6)` / `(kind 7)`. Measured on pin
-     v-current: it refuses this file at the `(-a).F` line.
+     died with `IR_UNSUPPORTED ... (kind 6)` / `(kind 7)`. Measured on pin v403
+     (214500da2): it refuses this file at the `(-a).F` line.
 
   2. AN OVERLOADED `and` THAT RETURNS Boolean. This one printed a WRONG VALUE,
      which is why it needs its own row rather than a compile check: the parser
@@ -17,7 +17,14 @@ program test_operator_unary_address_and_boolean_and;
      reached ir.inc's short-circuit and/or arm wearing tyBoolean and were
      evaluated as two flags — each record lowering to its own address, never
      nil — so `a and b` answered True and the operator was never called.
-     Measured on pin v-current: prints TRUE. fpc 3.2.2 prints FALSE.
+     PRESENT IN PIN v403 (214500da2, an ancestor of origin/master), FIXED AT
+     HEAD. Measured 2026-09-05, same source, three compilers: pin v403 prints
+     `and TRUE`, HEAD prints `and FALSE`, fpc 3.2.2 prints `and FALSE`. It
+     matters because every Track B/E consumer builds against $(PXX_STABLE), so
+     until the next pin, VERIFYING OPERATOR-OVERLOAD BEHAVIOUR UNDER THE PIN
+     GIVES A GREEN THAT IS CORRECT ABOUT AN OLDER COMPILER -- the same shape as
+     the C `__GNUC__` case this repo already recorded. If a result here
+     surprises you, the pin is the variable.
 
      THE EXPECTED VALUE IS FALSE AND THAT IS THE WHOLE ASSERTION. 1 and 2 is 0,
      so False is an answer only a real call can produce; a row whose operands

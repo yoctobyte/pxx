@@ -13389,13 +13389,30 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_opdelphi26 "$$($(TESTTMP)/test_opdelphi26)" "$$(cat test/test_operator_delphi_names_and_unary.expected)"
 	# The same two mechanisms in the objfpc SYMBOL spelling, so an older
 	# compiler gets past the declarations and fails on the thing under test:
-	# a unary overload in an address position (`(-a).F`, pin: IR_UNSUPPORTED
-	# kind 6), and an overloaded `and` returning Boolean, which pin COMPILES
-	# and answers TRUE for — a silent wrong value, reachable in source pxx
-	# already supported. Expected FALSE, and False is the answer only a real
-	# call can produce.
+	# a unary overload in an address position (`(-a).F`, pin v403:
+	# IR_UNSUPPORTED kind 6), and an overloaded `and` returning Boolean, which
+	# pin v403 COMPILES and answers TRUE for — a silent wrong value, reachable
+	# in source pxx already supported, and PRESENT IN THE PIN B/E BUILD
+	# AGAINST. Expected FALSE, and False is the answer only a real call can
+	# produce.
 	./$(COMPILER) test/test_operator_unary_address_and_boolean_and.pas $(TESTTMP)/test_opaddr26
 	tools/expect_same.sh test_opaddr26 "$$($(TESTTMP)/test_opaddr26)" "$$(cat test/test_operator_unary_address_and_boolean_and.expected)"
+	# {$MODE} HAS A REJECT ARM. Two rows, two different reasons, and neither
+	# has another witness: a dialect we do not implement (MACPAS — a wrong
+	# PROGRAM, both arms of its conditionals compile) and a VALUE that is not a
+	# mode at all (a typo — invisible to the unknown-DIRECTIVE warning, which
+	# keys on the directive name). The permissive direction needs no row: every
+	# test and every lib/rtl unit carries {$mode objfpc}/{$mode delphi}/
+	# {$MODE PXX}, so a refusal that was too wide cannot survive one build.
+	# decide-which-pascal-dialects-pxx-targets
+	if ./$(COMPILER) test/test_mode_directive_unsupported_refused.pas $(TESTTMP)/test_mode_unsup26 >/dev/null 2>&1; then \
+	  echo "FAIL: {$$MODE MACPAS} compiled — an unimplemented dialect must be refused at the front door"; exit 1; \
+	fi
+	./$(COMPILER) test/test_mode_directive_unsupported_refused.pas $(TESTTMP)/test_mode_unsup26 2>&1 \
+	  | grep -q "decide-which-pascal-dialects-pxx-targets"
+	if ./$(COMPILER) test/test_mode_directive_typo_refused.pas $(TESTTMP)/test_mode_typo26 >/dev/null 2>&1; then \
+	  echo "FAIL: {$$MODE TOTALNONSENSE} compiled — a known directive with an unrecognised value"; exit 1; \
+	fi
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26
