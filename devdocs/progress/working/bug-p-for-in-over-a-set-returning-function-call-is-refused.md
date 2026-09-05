@@ -2,12 +2,13 @@
 prio: 35
 track: P
 summary: "`for x in F` where F is a function RETURNING A SET is refused with `for-in: not a generator, enum type, or iterable variable`; fpc 3.2.2 accepts it and prints `0 2`. NARROW AND MEASURED: the same loop over a DYNARRAY-returning function works, and so does `for m in F.s` where F returns a RECORD holding the set -- so this is not `for-in over a call` in general, it is the SET result specifically. Assigning to a temp first (`s := F; for m in s`) works and is the workaround. Found beside bug-p-a-set-parameter-loses-its-element-kind-so-for-in-refuses-it and deliberately NOT folded into it: that one was a missing symbol stamp on a parameter, this one never reaches the set path at all (different diagnostic, from the container dispatch rather than from BuildForInSetLoop), so a fix for one is no evidence about the other."
+owner: frankB
 ---
 
 # `for x in F` is refused when F returns a set
 
 - **Type:** bug — Track P (Pascal frontend)
-- **Status:** backlog, unclaimed
+- **Status:** working
 - **Found:** 2026-09-05 (frankB), while fixing the set-PARAMETER stamp
 
 ## Repro

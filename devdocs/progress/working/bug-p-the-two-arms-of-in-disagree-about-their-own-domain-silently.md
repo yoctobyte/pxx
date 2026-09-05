@@ -5,9 +5,10 @@ summary: "ParseSetMembershipAST picks a compare chain when every element is cons
 track: P
 type: bug
 prio: 35
-status: backlog
+status: working
 found: 2026-09-05
 found-by: frankO (the check bug-p-set-membership-item-constant-truncated-to-32-bits asked for by name)
+owner: frankB
 ---
 
 ## The fact
