@@ -372,3 +372,38 @@ a different path and its own comment says it fires only when a nested type is
 used as a GENERIC ARGUMENT, which a pointee is not. That is deeper than a
 cluster pass should microfix, so the diagnosis is banked with the controls
 rather than half-applied.
+
+### The mechanism count — 41 rows are ~10 mechanisms, and the 7 that COMPILE are all defects
+
+The cluster collapses, as predicted. Re-censused against the compiler AFTER
+mechanism 1 landed, so this is the current picture and not the entry one.
+
+| rows | mechanism | state |
+| --- | --- | --- |
+| 8 | tight `>=` in a generic header | **FIXED** `9a3b8f38c` — 4 rows pass, 4 advanced into the mechanisms below |
+| 4 | `generic function F<T>` as a CLASS METHOD | filed [[feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling]] |
+| 4 | Delphi `function F<T>` — free routine and method | same ticket (one fix likely serves both) |
+| 3 | missing diagnostic: a generic without specialization used as a variable type | tgeneric83/84/85 — pxx ACCEPTS |
+| 2 | pointer to a nested type shared across specializations | filed [[bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations]] |
+| 2 | `expected ':' before '.'` | unexamined |
+| 1 | missing diagnostic: generic declared inside a generic | tgeneric21 — pxx ACCEPTS |
+| 1 | `{ %result=201 }` range check never raised | tgeneric7 — pxx exits 0 |
+| 2 | compiles, fails its own self-check | tgeneric15, tgeneric16 |
+| ~11 | singleton diagnostics | unexamined |
+
+**Seven rows already COMPILE, and not one of them is burnable.** Four are `%FAIL`
+rows pxx wrongly accepts, one expects a runtime range check pxx never raises,
+two run and fail their own assertions. Every one is the "compiles fine, behaves
+wrong" class — the class an exit-code harness cannot see and the burn-down above
+is most at risk from.
+
+**I nearly burned four of them.** `fpc built no binary` was read as "unit-shaped,
+so compile-only agreement". It was not: fpc produced no binary because fpc
+REJECTS them. Two causes, one observation, and the discriminator is the
+directive block — read with the runner's own `directives()`, three of the four
+turned out to share ONE missing diagnostic ("Generics without specialization
+cannot be used as a type for a variable"). Second time in one session that
+`%FAIL` nearly turned a defect into a green row, in a new disguise.
+
+**So the cluster is roughly 10 mechanisms behind 41 rows**, and the top three
+account for 16 of them. Generics is not 42 problems.
