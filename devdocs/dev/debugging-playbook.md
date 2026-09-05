@@ -4736,6 +4736,45 @@ service is the subject: `systemctl is-active` is a true statement about now that
 implies nothing about the next boot, and the two questions are asked with almost
 the same word.
 
+
+### A KILLED RUN HAS NO VERDICT, AND ITS PARTIAL LOG SUPPLIES ONE
+
+Measured 2026-09-05, frankwasm, offered unprompted while answering a health
+question. A lane check was backgrounded; the session's entire record of it is one
+line:
+
+> `<status>killed</status>` — Background command "Final lane gate at landed sha" was stopped
+
+At the moment it died it stood at **26 of 39 checks, 0 failures**. There is no
+error text, because nothing errored. There is no verdict line, because a verdict
+is written at the END.
+
+**Every other member of this section is an answer about the wrong subject. This
+one is the ABSENCE of an answer wearing the shape of a good one** — a log whose
+every visible row is green, beside a status word that is not a result at all.
+`killed` is neither pass nor fail; it is the run declining to say. The reader
+supplies the rest, and **the greener the prefix, the more confidently they supply
+it** — so this failure mode is worst exactly where the work was going well.
+
+**A partial log is not evidence about the rows it never reached.** Same
+arithmetic as reporting the both-refused rows separately: the DENOMINATOR is the
+claim. Here the denominator is 26 and the claim being read off it is 39.
+
+frankwasm re-ran to completion (39/39) rather than banking the prefix, and that
+is the whole remedy: **a run that did not finish is a run you have not made.**
+
+**The general form, and it sharpens the discriminator for this entire section.**
+Do not ask only *what is this the answer to* — ask **is this an answer at all.**
+A status vocabulary that mixes outcomes with non-outcomes — `killed`, `timeout`,
+`cancelled`, `skipped` in the same field as `pass` and `fail` — invites a reader
+scanning for "not fail" to score every non-outcome as success. That is the same
+animal as a SKIP routed into the bin built to ignore it, and the same animal as
+`job_last_pass` recording *the last time it did not FAIL*.
+
+**So check the TERMINATOR, never the tail.** A run you did not watch end is
+unproven however green the part you saw — and unlike a red, it leaves nothing
+behind that looks like a problem.
+
 ## A SAMENESS CLAIM SCOPES TO WHAT YOU CHECKED, EXACTLY LIKE A PRESENCE OR ABSENCE CLAIM — and only the first of the three feels like it needs it
 
 Three forms of one rule, all measured 2026-09-05, in one day, by people being
