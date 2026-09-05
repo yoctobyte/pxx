@@ -49,11 +49,21 @@ assembler, linker, or C compiler invoked during the build.
   optimisation level; the other self-hosting targets are covered by the
   cross-target suites in the test matrix rather than by the per-change gate.
 - **Two string ABIs.** The default build uses managed, reference-counted
-  strings; a `hello world` executable is approximately 31 KB. Compiling with
-  `-uPXX_MANAGED_STRING` selects an older frozen-string ABI with no dynamic
-  allocation for strings; the same program is a 287-byte static ELF. Both
-  figures were verified on this checkout. See
-  [Types](../language/types.md#strings).
+  strings. Compiling with `-uPXX_MANAGED_STRING` selects an older frozen-string
+  ABI with no dynamic allocation for strings. For a `hello world` that is one
+  `writeln`, the difference is about 15x:
+
+  | | executable |
+  | --- | --- |
+  | default (managed strings) | 68,376 bytes |
+  | `-uPXX_MANAGED_STRING` (frozen) | 4,408 bytes, statically linked |
+
+  Measured 2026-09-05 at commit `ce19e5482` and identical under the pinned
+  compiler, so re-running it is the check: compile
+  `program hello; begin writeln('hello world'); end.` both ways and compare.
+  Both binaries are already stripped; `strip` changes neither. Expect these
+  numbers to move as the RTL does — they are a ratio worth knowing, not a
+  guarantee. See [Types](../language/types.md#strings).
 - **Six code-generating targets, one compiler.** x86-64, i386, aarch64, and
   arm32 self-host byte-identical. riscv32 covers both bare-metal ESP32-C3 and
   hosted 32-bit RISC-V Linux, whose binaries run under `qemu-riscv32`; xtensa
