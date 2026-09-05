@@ -217,6 +217,35 @@ procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integ
                             var remDepth, ptrBaseTk, ptrBaseRec: Integer); forward;
 function IndexDynArrayValue(node, elemTk, elemRec, dynDepth, tailRec: Integer; var outTk: TTypeKind): Integer; forward;   { the ONE materialisation point for a suffix on a dyn-array VALUE }
 
+procedure StampDerefFromShape(derefNode: Integer; var node: Integer;
+                             var tk: TTypeKind; var recName: Integer);
+{ Finish a `^` whose pointee CANNOT be answered from the opener, and stamp the
+  deref node the way the main chain stamps its own.
+
+  Three hand-rolled postfix walks each learned the same lesson separately and
+  each wrote this block out by hand: once the walk has left the thing the
+  opener described -- a call RESULT after the first `^`, a cast's chain after
+  it was handed to ParseClassRecordSelectors -- the value in hand is a FIELD or
+  an ELEMENT with a pointee of its own, and answering from the opener's alias
+  or the call's element type tags the deref with something unrelated. The bytes
+  were always right; only the TAG was wrong, which is why every instance of it
+  was found as a silently wrong PRINT rather than as an error.
+
+  So this is the shared body, not a fourth copy: the encoding it writes is the
+  one every AN_DEREF in the tree carries (levels REMAINING in ASTSOffset, the
+  ultimate base in ASTSLen/ASTIVal), and IsNodePChar and IRPointerStride read
+  exactly those. refactor-p-three-hand-rolled-postfix-loops. }
+var rem, baseTk, baseRec: Integer;
+begin
+  rem := 0; baseTk := Ord(tyUnknown); baseRec := REC_NONE;
+  ResolveDerefShape(node, tk, recName, rem, baseTk, baseRec);
+  ASTSOffset[derefNode] := rem;
+  ASTSLen[derefNode]    := baseTk;
+  if baseRec > 0 then ASTIVal[derefNode] := baseRec;
+  ASTTk[derefNode]      := StrValTk(tk);
+  node := derefNode;
+end;
+
 function OwnNameResultSym(const name: AnsiString): Integer;
 { The result variable a bare OWN NAME reads, or -1 when `name` is not the
   current function's own name. FPC's `FuncName` synonym for `Result`, e.g.
@@ -5444,7 +5473,6 @@ var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldNam
     dpeTk, dpeRec, dpeCap: Integer;            { `f()^[i]` element, from DerefPtrArrayElem }
     epDepth, epBaseTk, epBaseRec: Integer;     { …and that element's OWN pointer levels }
     movedOffCall: Boolean;                     { has the walk left the call node? }
-    rdRem, rdBaseTk, rdBaseRec: Integer;       { …then the shape comes from ResolveDerefShape }
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -5521,13 +5549,7 @@ begin
           the ticket asks for this loop to be converged one arm at a time. }
         if movedOffCall then
         begin
-          rdRem := 0; rdBaseTk := Ord(tyUnknown); rdBaseRec := REC_NONE;
-          ResolveDerefShape(node, tk, recId, rdRem, rdBaseTk, rdBaseRec);
-          ASTSOffset[sub] := rdRem;
-          ASTSLen[sub] := rdBaseTk;
-          if rdBaseRec > 0 then ASTIVal[sub] := rdBaseRec;
-          ASTTk[sub] := StrValTk(tk);
-          node := sub;
+          StampDerefFromShape(sub, node, tk, recId);
           Continue;
         end;
         tk := IntToTypeKind(elemTk); recId := elemRec;

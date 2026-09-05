@@ -1,0 +1,8 @@
+1 var  meth rec  7
+2 cast meth rec  7
+3 var  prop rec  7
+4 cast prop rec  7
+5 var  prop char Z
+6 cast prop char Z
+7 var  prop pp   99
+8 cast prop pp   99

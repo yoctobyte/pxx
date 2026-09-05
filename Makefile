@@ -14228,6 +14228,10 @@ test-core: $(COMPILER)
 	# row cannot fail on this. 8 rows differ on pin v403.
 	./$(COMPILER) test/test_record_name_cast_strides_by_its_record.pas $(TESTTMP)/test_recncast26
 	tools/expect_same.sh test_recncast26 "$$($(TESTTMP)/test_recncast26)" "$$(cat test/test_record_name_cast_strides_by_its_record.expected)"
+	# a `^` after a member the cast walk DELEGATED: every cast row is paired with
+	# the same chain off a plain variable, which was right on the pin too
+	./$(COMPILER) test/test_a_deref_after_a_delegated_member_on_a_pointer_cast.pas $(TESTTMP)/test_dlgderef26
+	tools/expect_same.sh test_dlgderef26 "$$($(TESTTMP)/test_dlgderef26)" "$$(cat test/test_a_deref_after_a_delegated_member_on_a_pointer_cast.expected)"
 	# DIAGNOSTIC LOCATION, both asserted on the MESSAGE and not the exit code:
 	# each file was always refused, and the whole defect was where the refusal
 	# pointed, so an exit-code row passes on the bug.

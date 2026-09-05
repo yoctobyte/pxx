@@ -538,7 +538,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     rcDelegated: Boolean;   { the record-name cast handed its chain to the shared walker }
-    rcRem, rcBaseTk, rcBaseRec: Integer;   { …so a following `^` asks ResolveDerefShape }
+    pcDelegated: Boolean;   { …and the pointer-alias cast below, which is the same fact about the other opener }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     ndFlat: Integer;   { flattened N-D subscript tail from ParseNDSubscriptTail, or -1 }
@@ -6808,13 +6808,7 @@ begin
               ResolveDerefShape. }
             if rcDelegated then
             begin
-              rcRem := 0; rcBaseTk := Ord(tyUnknown); rcBaseRec := REC_NONE;
-              ResolveDerefShape(node, tk, recName, rcRem, rcBaseTk, rcBaseRec);
-              ASTSOffset[indexNode] := rcRem;
-              ASTSLen[indexNode]    := rcBaseTk;
-              if rcBaseRec > 0 then ASTIVal[indexNode] := rcBaseRec;
-              ASTTk[indexNode] := StrValTk(tk);
-              node := indexNode;
+              StampDerefFromShape(indexNode, node, tk, recName);
               Continue;
             end;
             { Carry the pointee record id on the deref node so ResolveNodeRec
@@ -7282,6 +7276,7 @@ begin
             Exit;
           end;
           { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
+          pcDelegated := False;
           while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
           begin
             if CurTok.Kind = tkCaret then
@@ -7289,6 +7284,17 @@ begin
               Next;
               indexNode := AllocNode(AN_DEREF);
               ASTLeft[indexNode] := node;
+              { Once this chain has been handed to ParseClassRecordSelectors the
+                value in hand is a METHOD RESULT or a PROPERTY, whose pointee has
+                nothing to do with the alias this expression was cast through --
+                so ask the shared resolver rather than the alias row. Identical
+                fact to the record-name cast's twin above; the THIRD opener to
+                need it and the first to get the shared body instead of a copy. }
+              if pcDelegated then
+              begin
+                StampDerefFromShape(indexNode, node, tk, recName);
+                Continue;
+              end;
               { After ^ the type is the pointee of the CURRENT node, which is
                 not always the cast: by the second `^` in `PRec(raw)^.n^` the
                 node is the FIELD `n`, and answering from aliasIdx here typed
@@ -7449,7 +7455,21 @@ begin
               begin
                 node := ParseClassRecordSelectors(node, recName, tk);
                 recName := REC_NONE;
-                Break;
+                pcDelegated := True;
+                { ParseClassRecordSelectors' own loop is [tkDot, tkLBrack] with
+                  NO tkCaret in it, so Break'ing here left a following `^` in
+                  the token stream and nobody consumed it: `PTC(raw)^.GetP^` and
+                  `PTC(raw)^.Pp^` were refused outright with "expected ')'
+                  before '^'" while `pc^.GetP^` and `pc^.Pp^` -- the same chains
+                  off a plain variable -- compiled and printed 42, and fpc 3.2.2
+                  accepts all four. One opener of two, which is what says this is
+                  the cast arm and not the shape. Pre-dates the pinned compiler.
+                  Same defect and same fix as the record-name twin above, found
+                  by asking of each remaining hand-rolled walk not what it
+                  REACHES but whether it re-enters after delegating.
+                  refactor-p-three-hand-rolled-postfix-loops (fixed there, not filed separately) }
+                if CurTok.Kind <> tkCaret then Break;
+                Continue;
               end;
               { ...and a metaclass-typed field is a RECEIVER, not something to walk
                 into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A
