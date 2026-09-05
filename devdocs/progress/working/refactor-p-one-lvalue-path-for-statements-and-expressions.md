@@ -573,3 +573,14 @@ field-encoding question is answered and should not be re-opened.
 **Negative results are recorded here on purpose.** An agreement nobody wrote
 down is re-derived by the next session at full price, and worse, "not checked"
 and "checked, agrees" are the same silence in a ticket.
+
+**Correction to the subject line of `1af1ad7ab`.** It reads *"the reader count
+was 2, not 3"*, which says the opposite of the finding. **It was recorded as 2
+and it is 3.** The body of that commit and both sections above are correct; only
+the subject is inverted, and it is pushed, so it cannot be amended without
+rewriting a shared master. Anyone grepping commit subjects for the reader count
+gets the wrong number — this line is the copy that says so.
+
+Recorded rather than quietly left because the failure is exactly the one the
+commit is about: a count that travels in a summary while the measurement behind
+it says something else, and the summary is the part everyone reads.
