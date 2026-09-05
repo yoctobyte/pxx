@@ -325,3 +325,71 @@ writing the arm; the four working openers make a ready-made oracle.
 
 Probes are reconstructible from the table above in about five lines each; the
 matrix is one heredoc per opener against `fpc -Mdelphi -O1`.
+
+---
+
+## 2026-09-05 (frankA) — the table's remaining `ResolveDerefShape` gaps, worked: THREE more faces, one per loop
+
+The corrected census left `ResolveDerefShape` absent from two loops and asked
+whether each could reach the shape the arm exists for. Both could. Working the
+table row by row produced three more divergences against fpc 3.2.2, all
+pre-existing in pin v403 and **all confirmed failing ALONE on the pin** — which
+mattered, because in one program the parse error masks the two stores behind it.
+
+Field `pi: ^Integer` in a record; `b` the variable, `q: Pointer`, `PA = ^TA`:
+
+| # | shape | pinned pxx | fpc 3.2.2 | loop |
+| --- | --- | --- | --- | --- |
+| 1 | `TA(b).pi^` (read) | `error: expected ')' before '^'` | 42 | `expr` record-name cast |
+| 2 | `TA(b).pi^ := 7` | `cannot assign Integer to record` | stores | `stmt` record-cast target |
+| 3 | `PA(q)^.pi^ := 7` | `cannot assign Integer to record` | stores | `stmt` alias-cast target |
+
+Controls green on the pin AND at HEAD: `b.pi^`, `vpa^.pi^`, `PA(q)^.pi^` (read),
+`b.pi^ := 7`, `vpa^.pi^ := 7`. **Four openers spell chain 1 and only one was
+wrong**, which is what says these are about the opener rather than the shape.
+
+### Three different mechanisms, and the third is the interesting one
+
+- **(1) the token was never consumed.** The record-cast arm delegates every
+  `.name` to `ParseClassRecordSelectors` and then `Break`s. That walker's own
+  loop is `[tkDot, tkLBrack]` — no `tkCaret` — so a trailing `^` is simply left
+  in the stream. Not a wrong value; a parse error two tokens later, which is why
+  it reads as a syntax problem and not a walker problem.
+- **(2) a private notion of what `^` yields.** The stmt record-cast loop stamped
+  `tyRecord` and the CAST's record on the deref node. Identical to the
+  call-result bug in `7095ca817` and to the alias-cast bug `ResolveDerefShape`
+  was originally written for.
+- **(3) the resolver was CALLED, was RIGHT, and its answer was thrown away.**
+  The stmt alias-cast loop already called `ResolveDerefShape`. Downstream sat an
+  adapter fallback: *if* `tyInteger` and `REC_NONE` and no depth and no base rec,
+  restore the alias, because the PChar adapter cast carries no alias row for the
+  resolver to read. **That test is both the resolver's decline signature and a
+  true answer for `^Integer`.** After delegation the true reading is the common
+  one, so the fallback put the cast's record back over a correct answer.
+
+**(3) is the one to remember**, because the census cannot see it. The escape was
+present; the call was there; the arm was reached. A census of *which routines a
+loop calls* scores that loop as having the arm — and it did, and it was still
+wrong. Gated on the same delegation bit the other two fixes needed: a default
+that is also a real answer cannot signal "not applicable", so membership needs
+its own bit rather than being inferred from the value.
+
+### What the table looks like now
+
+All five Pascal loops reach `ResolveDerefShape` or provably need not. What
+remains open on this ticket is the unification itself, plus one row banked
+separately: `ParseClassRecordSelectors` is still absent from
+`ApplyCallResultPtrSuffix`, so a record METHOD through a call result is refused
+(see the previous section — frankH has since released that function, so it is
+takeable).
+
+Regression rows: `test/test_cast_field_deref.pas`, byte-identical to fpc 3.2.2
+`-Mdelphi -O1`, refused by the pinned compiler. It carries the PChar adapter
+rows as the control that narrowing the fallback in (3) did not disable it where
+it is the right answer.
+
+**One coverage limit, stated rather than glossed:** the adapter fallback's
+narrowing is gated on delegation, and an adapter cast cannot BE delegated —
+`PChar`'s pointee has no fields — so "adapter cast plus delegation" is not a
+constructible shape and the new guard has no positive control drawn from it.
+The adapter rows prove only that the undelegated path still works.

@@ -12964,6 +12964,20 @@ test-core: $(COMPILER)
 	# Whole output compared, byte-identical to fpc 3.2.2 -Mdelphi -O1.
 	./$(COMPILER) test/test_callres_field_deref.pas $(TESTTMP)/test_cfd26
 	tools/expect_same.sh test_cfd26 "$$($(TESTTMP)/test_cfd26)" "$$(cat test/test_callres_field_deref.expected)"
+	# ...and the same disease through the two CAST openers, all three faces.
+	# TA(b).pi^ was a parse error (the record-cast arm Break'd after delegating
+	# to ParseClassRecordSelectors, whose loop has no tkCaret, so the `^` was
+	# left in the stream); TA(b).pi^ := 7 was refused because the target got
+	# stamped with the CAST's record; PA(q)^.pi^ := 7 was refused even though
+	# that loop already CALLED ResolveDerefShape -- its answer was discarded by
+	# an adapter fallback whose test cannot tell a decline from a true Integer.
+	# Each face was confirmed to fail ALONE on the pinned compiler: in one
+	# program the parse error masks the two stores behind it.
+	# The var/vardrf rows are the opener control, the PChar rows the control
+	# that the narrowed fallback still fires where it is right.
+	# Whole output compared, byte-identical to fpc 3.2.2 -Mdelphi -O1.
+	./$(COMPILER) test/test_cast_field_deref.pas $(TESTTMP)/test_cfd2_26
+	tools/expect_same.sh test_cfd2_26 "$$($(TESTTMP)/test_cfd2_26)" "$$(cat test/test_cast_field_deref.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

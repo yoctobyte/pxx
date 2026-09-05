@@ -498,6 +498,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
+    rcDelegated: Boolean;   { the record-name cast handed its chain to the shared walker }
+    rcRem, rcBaseTk, rcBaseRec: Integer;   { …so a following `^` asks ResolveDerefShape }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     ndFlat: Integer;   { flattened N-D subscript tail from ParseNDSubscriptTail, or -1 }
@@ -6625,6 +6627,7 @@ begin
           node := indexNode;
           tk := tyRecord;
         end;
+        rcDelegated := False;
         while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
         begin
           if CurTok.Kind = tkCaret then
@@ -6632,6 +6635,41 @@ begin
             Next;
             indexNode := AllocNode(AN_DEREF);
             ASTLeft[indexNode] := node;
+            { Once the chain has been handed to ParseClassRecordSelectors, the
+              value in hand is a FIELD, and its pointee is nothing to do with
+              the record this expression was cast to. `TA(b).pi^` where
+              `pi: ^Integer` was refused outright -- "expected ')' before '^'"
+              in argument position, "a statement cannot start with '^'" in an
+              assignment -- because the `^` was never consumed at all: the dot
+              arm below Break'd out of this loop after delegating, and the
+              shared walker's own loop is [tkDot, tkLBrack] with no tkCaret in
+              it. So the token was simply left in the stream.
+
+              Three other openers spell the same chain and all three were right
+              throughout, on the pinned compiler too: `b.pi^`, `vpa^.pi^` and
+              `PA(q)^.pi^`. One opener of four -- which is what says this is
+              the cast arm and not the shape.
+
+              Stamping baseRec here would be the same defect one step on: that
+              is the CAST's record, and after delegation the deref's pointee is
+              the field's. Ask the shared resolver, exactly as the pointer-alias
+              loop below does, rather than carrying a private notion of what a
+              `^` yields (devdocs/dev/normalise-dont-special-case.md).
+              Found by the escape census in
+              refactor-p-three-hand-rolled-postfix-loops: this loop was one of
+              the two reaching ParseClassRecordSelectors but not
+              ResolveDerefShape. }
+            if rcDelegated then
+            begin
+              rcRem := 0; rcBaseTk := Ord(tyUnknown); rcBaseRec := REC_NONE;
+              ResolveDerefShape(node, tk, recName, rcRem, rcBaseTk, rcBaseRec);
+              ASTSOffset[indexNode] := rcRem;
+              ASTSLen[indexNode]    := rcBaseTk;
+              if rcBaseRec > 0 then ASTIVal[indexNode] := rcBaseRec;
+              ASTTk[indexNode] := StrValTk(tk);
+              node := indexNode;
+              Continue;
+            end;
             { Carry the pointee record id on the deref node so ResolveNodeRec
               (AN_DEREF, ASTIVal>0 path) resolves trailing .field offsets. }
             ASTIVal[indexNode] := baseRec;
@@ -6680,7 +6718,12 @@ begin
             begin
               node := ParseClassRecordSelectors(node, recName, tk);
               recName := REC_NONE;
-              Break;
+              { The shared walker consumes every `.` and `[` it can, so the only
+                suffix token that can still be here is `^` -- and Break'ing
+                unconditionally is what orphaned it. See the caret arm above. }
+              if CurTok.Kind <> tkCaret then Break;
+              rcDelegated := True;
+              Continue;
             end;
             { ...and a metaclass-typed field is a RECEIVER, not something to walk
               into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A

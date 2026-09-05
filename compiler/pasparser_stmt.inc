@@ -5229,6 +5229,7 @@ var
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   castElemTk: Integer; pcharCast: Boolean;   { PChar(p)^ := c as a statement target }
   castElemRec, castDerefRem, castDerefBaseTk, castDerefBaseRec: Integer;   { the alias's own row, kept for the adapter fallback }
+  stDelegated: Boolean;   { the cast-target walk handed its chain to ParseClassRecordSelectors }
   lfTmp, lfCall, lfAsn: Integer;   { LoadFile into a non-identifier destination — see its parse arm }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
@@ -7347,6 +7348,7 @@ begin
                 indexing, default properties) already exist once.
                 bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed;
                 devdocs/dev/normalise-dont-special-case.md }
+              stDelegated := False;
               while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
               begin
                 if CurTok.Kind = tkCaret then
@@ -7354,6 +7356,32 @@ begin
                   Next;
                   fieldNode := AllocNode(AN_DEREF);
                   ASTLeft[fieldNode] := valNode;
+                  { After the chain has gone to ParseClassRecordSelectors the
+                    value in hand is a FIELD, and stamping tyRecord/castRec here
+                    is the CAST's record, not the field's pointee.
+                    `TA(b).pi^ := 7` with `pi: ^Integer` was refused --
+                    "incompatible types: cannot assign Integer to record" --
+                    because the TARGET had been typed as the record. The same
+                    store off a plain variable, `b.pi^ := 7`, was right
+                    throughout, and that is the control saying this is the
+                    opener.
+                    Same escape the rvalue twin in pasparser_expr.inc needed;
+                    this and that twin were the two of five postfix loops
+                    reaching ParseClassRecordSelectors without
+                    ResolveDerefShape. refactor-p-three-hand-rolled-postfix-loops }
+                  if stDelegated then
+                  begin
+                    castDerefRem := 0; castDerefBaseTk := Ord(tyUnknown);
+                    castDerefBaseRec := REC_NONE;
+                    ResolveDerefShape(valNode, castTk, castRec,
+                                      castDerefRem, castDerefBaseTk, castDerefBaseRec);
+                    ASTSOffset[fieldNode] := castDerefRem;
+                    ASTSLen[fieldNode]    := castDerefBaseTk;
+                    if castDerefBaseRec > 0 then ASTIVal[fieldNode] := castDerefBaseRec;
+                    ASTTk[fieldNode] := Ord(castTk);
+                    valNode := fieldNode;
+                    Continue;
+                  end;
                   ASTIVal[fieldNode] := castRec;   { pointee rec for ResolveNodeRec }
                   castTk := tyRecord;
                   ASTTk[fieldNode] := Ord(tyRecord);
@@ -7364,6 +7392,7 @@ begin
                   castPrevTok := TokPos;
                   valNode := ParseClassRecordSelectors(valNode, castRec, castTk);
                   castRec := ResolveNodeRec(valNode);
+                  stDelegated := True;
                   { The walker consumes the whole chain it can, so a second turn
                     of this loop only happens for a following `^`. If it consumed
                     NOTHING the loop would spin, so stop rather than hang. }
@@ -7562,6 +7591,7 @@ begin
                   writes, for the same readers.
                 refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend }
               castElemRec := castRec;
+              stDelegated := False;
               while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
               begin
                 if CurTok.Kind = tkCaret then
@@ -7571,13 +7601,25 @@ begin
                   ASTLeft[fieldNode] := valNode;
                   castDerefRem := 0; castDerefBaseTk := Ord(tyUnknown);
                   castDerefBaseRec := REC_NONE;
-                  castTk := IntToTypeKind(castElemTk); castRec := castElemRec;
+                  { The alias in hand is the right SEED only while the walk
+                    is still on the cast itself. Once ParseClassRecordSelectors
+                    has returned a field, seeding from castElemTk/castElemRec
+                    overwrites the field's own type with the record the alias
+                    points at -- and the resolver cannot undo that where it
+                    declines. `PA(q)^.pi^ := 7` was refused for this reason and
+                    NOT for want of the ResolveDerefShape call, which was
+                    already here: the call was right and its input was not. }
+                  if not stDelegated then
+                  begin
+                    castTk := IntToTypeKind(castElemTk); castRec := castElemRec;
+                  end;
                   ResolveDerefShape(valNode, castTk, castRec,
                                     castDerefRem, castDerefBaseTk, castDerefBaseRec);
                   ASTSOffset[fieldNode] := castDerefRem;
                   ASTSLen[fieldNode]    := castDerefBaseTk;
                   if castDerefBaseRec > 0 then ASTIVal[fieldNode] := castDerefBaseRec;
-                  if (castTk = tyInteger) and (castRec = REC_NONE) and
+                  if (not stDelegated) and
+                     (castTk = tyInteger) and (castRec = REC_NONE) and
                      (castDerefRem = 0) and (castDerefBaseRec <= 0) then
                   begin
                     { No shape on the node at all -- the PChar ADAPTER cast
@@ -7585,7 +7627,23 @@ begin
                       so it falls to that walk's final else and answers
                       tyInteger. For it the alias in hand IS the right answer,
                       as it always was. Same fallback, same test, as the rvalue
-                      twin. }
+                      twin.
+
+                      ...but the test cannot tell "the resolver DECLINED" from
+                      "the resolver correctly answered Integer", because
+                      tyInteger/REC_NONE/0/0 is both the decline signature and a
+                      true answer. Once the chain has been delegated to
+                      ParseClassRecordSelectors that second reading is the
+                      common one -- `PA(q)^.pi^ := 7` with `pi: ^Integer`
+                      resolves to exactly tyInteger, REC_NONE, no depth -- and
+                      restoring the alias there put the CAST's record back over
+                      a correct answer, so the store was refused with
+                      "incompatible types: cannot assign Integer to record".
+                      The ResolveDerefShape call was already here and was right;
+                      its answer was being discarded afterwards.
+                      A default that is also a real answer cannot signal
+                      "not applicable", so the membership question needs its own
+                      bit: after delegation the alias is never the answer. }
                     castTk  := IntToTypeKind(castElemTk);
                     castRec := castElemRec;
                   end;
@@ -7597,6 +7655,7 @@ begin
                   castPrevTok := TokPos;
                   valNode := ParseClassRecordSelectors(valNode, castRec, castTk);
                   castRec := ResolveNodeRec(valNode);
+                  stDelegated := True;
                   { The walker consumes the whole chain it can, so a second turn
                     of this loop only happens for a following `^`. If it consumed
                     NOTHING the loop would spin, so stop rather than hang. }
