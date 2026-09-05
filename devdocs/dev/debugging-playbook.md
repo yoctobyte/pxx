@@ -5422,15 +5422,22 @@ correspondence. **The arities matched, and that was the whole of the argument.**
 so nothing depends on reading a parameter:
 
 ```
-c: Variant                ->  no iterations
-c: Variant; a: Integer    ->  no iterations
+c: Variant                ->  SEGFAULT (rc=139)
+c: Variant; a: Integer    ->  SEGFAULT (rc=139)
 a: Integer; c: Variant    ->  got=9   correct
 a: Integer                ->  got=9   correct
 ```
 
 **Both symptoms occur on NATIVE, from one binary, decided by the parameter list and
-not by the target.** Zero iterations happens **exactly when the FIRST parameter is a
-Variant**. And the offset defect **does not touch the headline repro at all**: for
+not by the target.** The crash happens **exactly when the FIRST parameter is a
+Variant**.
+
+> **The `rc=139` in that table is itself a correction.** Both the ticket and the
+> measuring session first wrote those rows as *"no iterations"* / *"the step function
+> reports has-next False on its first call"* — **inferences from ABSENT OUTPUT that
+> nobody checked an exit status against.** The tell was `rc=$?` on a program printing
+> nothing, free and available for hours. Anyone citing these rows as evidence about a
+> state machine declining to start is reading them wrong: **it is a crash.** And the offset defect **does not touch the headline repro at all**: for
 `Gen(n: Variant)`, `storeoff=48` and `realoff=48` **agree**, because for the first
 parameter the argument index and the slot index coincide however you compute them.
 
@@ -5454,6 +5461,35 @@ is harder to detect than a wrong fact**, because every component survives checki
 > **A composition of two measurements is a THIRD measurement, and nobody has taken
 > it.** Two readings that each hold one axis fixed cannot, between them, say
 > anything about how the axes interact.
+
+### The stronger edge, once the cause was found: the cross was NECESSARY and would not have been SUFFICIENT
+
+**Root cause, 2026-09-06: there is ONE mechanism — an out-of-bounds stack write —
+and ADJACENCY decides which symptom you see.** The step prologue gives a Variant
+parameter **eight** bytes at `-0x10(%rbp)`, then restores **sixteen**:
+`-0x10 + 16 = -0x0`, so the write runs over `-0x8(%rbp)`, **which is `self`. The
+generator zeroes its own instance pointer and dereferences it.** Variant first → the
+neighbour is `self` → crash. Variant not first → the neighbour is another parameter
+→ silent clobber.
+
+> **Neither session was varying the right axis, because neither had identified the
+> quantity that actually differed.** One varied the parameter list, one varied the
+> target — **and the thing that separated the symptoms was the frame slot ADJACENT to
+> the one under test**, which is not a property of any row in either sweep.
+
+**So the guard above holds and needs a second clause.** *"Nobody varied the cross"*
+was true and diagnostic; *"the cross would have produced a fuller table and still not
+named the cause"* is the stronger and more useful statement. **A sweep can only
+separate causes along axes somebody thought to print** — and the six negative results
+that found nothing target-specific were **right**, precisely because the defect lives
+in no compile-time quantity at all.
+
+**And the positive control is what a real one looks like:** the mechanism predicted a
+row nobody had run — **Variant SECOND, with a body that READS the first parameter**,
+which the existing passing row did not do because its body yielded a constant.
+Predicted `got=0` rather than `got=9`, no crash. **Measured `got=0`.** It also
+retired the last open mechanism (*"non-Variant parameters read 0"*), which was never
+a store failing — **it was the neighbour being overwritten.**
 
 ### The other half, supplied by the session whose report was composed
 
@@ -7212,6 +7248,79 @@ typed-const-array promotion near 2 MB **with no diagnostic**, sending a large ar
 back to ~29 bytes of startup code per element. A performance cliff with no message
 is the same animal as a guard that cannot fail, pointing the other way.
 
+## A FIELD LEFT BLANK ON PURPOSE AND A FIELD NEVER FILLED IN ARE INDISTINGUISHABLE AT THE READER
+
+Measured 2026-09-06, on this file's coordinator, and caught one step before a
+duplicate fix.
+
+A p70 regression was claimed **by message**: *"Mine, confirmed, claiming it. Fix
+built and verified against three reproductions."* The coordinator **declined to set
+`owner:`** on the claimant's behalf, reasoning that setting it would read as an
+assignment from a seat that does not dispatch.
+
+**Right about dispatch. Wrong about the consequence.** With `owner:` unset and no
+`working/` move, the artefact everyone reads said the row was free. A second session
+read it correctly, announced the topic, and was one step from editing **the same two
+functions the claimant had already fixed.**
+
+> **"An unset `owner:` is the ONE fact on that ticket nobody wrote, and I read it as
+> if somebody had."** — the session that nearly duplicated the work.
+
+**That is the missing-copy shape at the artefact layer.** A blank means *"nobody has
+claimed this"* and it equally means *"the claim exists somewhere this file cannot
+represent"*, and **the reader is the one who has to tell them apart, from a field
+that carries no evidence either way.**
+
+### Why blaming either party produces no rule
+
+**The withholding was principled and the reading was ordinary.** A rule saying *set
+the field* invites a seat that must not dispatch to write assignments; a rule saying
+*do not read a blank as free* makes every blank field unusable. **Neither fires next
+time**, and the next reader may not have announced the topic first — which is the
+only reason this one was cheap.
+
+> **The artefact needs a place where "claimed by message" can be written WITHOUT
+> reading as a dispatch** — a `claimed-by:` distinct from `owner:`, or a dated body
+> line. Until then the coordinator holds a fact that changes what other sessions may
+> do, in a form only the coordinator can act on.
+
+**The general rule:** when you decline to write something down because writing it
+would carry the wrong meaning, **you have not avoided the meaning — you have moved
+the ambiguity onto the reader**, who has less information than you did. Say it in a
+form that carries the right meaning, or say it somewhere else, but do not leave the
+blank to speak.
+
+### And the window that made it free
+
+The claim arrived **while the second session was reading**, not while it was
+building. Its own note is the useful part:
+
+> **A claim that arrives during the READ is free; one that arrives during the BUILD
+> costs a rebuild; one that arrives after the PUSH costs a revert.**
+
+**So what worked was that it announced the topic before starting** — not that anyone
+was fast. Announcing first is what converts a collision into a message.
+
+### The mechanical sibling: a claim MOVES the file
+
+Same night, same ticket, a second way the artefact and the work came apart. Claiming
+renamed the file `backlog-core/` → `working/`; two later commits **reused a path
+resolved BEFORE the claim**, creating a second, frontmatter-less file in a ranked
+folder while the ticket anyone opened carried only the original filing.
+
+**Every write succeeded. The content was all there. `git log` on the slug looked
+healthy.** Only a tool reading the FOLDER as the lock could see it —
+`progress.sh check` caught it two independent ways (NO-FRONTMATTER and
+DUPLICATE-SLUG) and prescribed the repair: **concatenate, keep one, never delete
+before diffing.**
+
+> **A claim moves the file, so re-resolve the path from the folder after claiming
+> rather than reusing a captured one.**
+
+**And it is invisible from inside the session that causes it**, which is the shared
+property with the blank field above: both are failures the author cannot observe and
+only a reader — human or tool — encounters.
+
 ## A REACHABILITY PROBE CAN BE INTERCEPTED BY A DIFFERENT LIMIT, AND THAT REFUSAL LOOKS EXACTLY LIKE YOUR ANSWER — read WHOSE message it is
 
 Measured 2026-09-06 (frankH), converting `CPrepChars` off its fixed 8 MB cap.
@@ -8196,6 +8305,60 @@ size but `TypeStorageSize(tyUnknown)`, i.e. nothing recorded at all.
 **Re-measure the ticket's own numbers before you accept its diagnosis.** It
 costs one compile, and a stale number does not error — it points somewhere.
 
+
+## A STREAM YOU CONSULT FOR A SINGLE VERDICT IS NOT A STREAM YOU ARE MONITORING
+
+Named 2026-09-06 (frankB), correcting its own weaker first formulation — which is
+why it is worth the heading.
+
+The compiler warns about **its own sources**, on every build:
+
+```
+pascal26:195: warning: bare own name 'WasmBodyReasonList' reads the result of
+parameterless function WasmBodyReasonList; write WasmBodyReasonList() for a
+recursive call, or Result to read the result
+```
+
+`compiler/ir_codegen_wasm32.inc:186,195` — `WasmBodyReasonList := WasmBodyReasonList
++ '…'`, an accumulate through the bare own name. **Under FPC the RHS is a RECURSIVE
+CALL, not a read**, so the seed build of that path recurses without bound; it
+survives only because the path runs when a wasm body is already broken. It is the
+exact shape `331fdae5f` fixed once already for `EmitObjTargetList`.
+
+**It has been printing on every build every session on this box has run, and it
+scrolls past every time.**
+
+### The weak framing and the strong one
+
+The first formulation was *"a warning nobody reads is the same animal as a guard
+nobody watches fire."* **True, and it is the weaker half**, because it suggests the
+fix is to assign a reader.
+
+> **The stronger half: this is the compiler's own build output — every one of us
+> reads that stream every twelve seconds, for ONE TOKEN (`converged`). Reading a
+> stream for one token is what makes the rest of it invisible.**
+
+**A stream consulted for a single verdict is not a stream under observation.** The
+reader's eye is trained to one substring, and everything else is background by
+design — the attention is not absent, it is *spent*, and spent narrowly on purpose.
+
+**That is why `gate.sh` logs get grepped and build output does not**: the gate log
+is read as a document with an unknown answer in it; the build stream is read as a
+question with a known shape of answer. **The second is faster and it is why nobody
+sees anything else in it.**
+
+### What follows
+
+- **A diagnostic in a high-frequency, single-token stream needs a second home** — a
+  file, a count in a report, a gate row — or it is decorative no matter how correct
+  it is.
+- **Grep the build output deliberately, once**, rather than assuming that having
+  looked at it a thousand times constitutes having read it. `WarnSelfResult`'s output
+  across `compiler/**` is one grep, and it is an argument for reading the whole
+  stream rather than for fixing one line.
+- **The count is the argument, not the instance.** Six occurrences of this construct
+  have now been found by six different routes; the seventh should be found by asking
+  the compiler.
 
 ## A VERDICT THAT IS A COUNT CAN BE CHECKED AGAINST AN EXPECTED COUNT; A VERDICT THAT IS AN ABSENCE CANNOT
 
