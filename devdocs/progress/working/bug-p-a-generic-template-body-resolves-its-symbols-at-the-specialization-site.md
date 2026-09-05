@@ -5,8 +5,8 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-05
 summary: "MEASURED 2026-09-05 (frankS), and the direction is the OPPOSITE of what this ticket said. A generic template body resolves its symbols AT THE SPECIALIZATION SITE, in the specializing scope, and the declaring unit's scope is never consulted. Two defects, not one. (1) WRONG OBSERVABLE: a unit template calling its own LocalFill runs the PROGRAM's LocalFill when the program happens to declare that name -- the method's meaning depends on who specializes it. (2) LEGAL SOURCE REFUSED: remove the program's LocalFill and the unit no longer compiles at all -- `undefined variable (LocalFill)` against a procedure ten lines above the template method IN THE SAME FILE. So a template can never use its own unit's private helpers. Identical on pin v403, so pre-existing and not fallout from the template-visibility work. NOT `wontfix: dialect-pass`: FPC refusing this (`Global Generic template references static symtable`) is FPC diagnosing a limit its expansion model has; pxx has the SAME limit and silently rebinds instead of diagnosing. Raised 30 -> 55: a silent wrong answer plus a refusal of legal code is not a missing diagnostic. Corpus-free two-file repro in the body."
 ---

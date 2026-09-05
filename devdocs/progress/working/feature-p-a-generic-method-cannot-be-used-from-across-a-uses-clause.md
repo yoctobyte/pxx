@@ -5,8 +5,8 @@ track: P
 prio: 30
 type: feature
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-05
 summary: "ExpandGenericMethod rewrites a generic method into one ordinary method per concrete type argument, and every edit it makes is at or ABOVE the class body. A program calling a USED UNIT\'s generic method is the shape where a use sits BELOW the declaration -- unit tokens are appended after the program\'s -- so the expansion bails out whole and the row still reports the old parse error. tgenfunc7 and tgenfunc9. The free ROUTINE already solved this, at the uses clause; the method needs the same move plus TokPos and DeclItem-span bookkeeping the routine did not."
 ---
