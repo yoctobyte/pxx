@@ -6547,6 +6547,19 @@ test-core: $(COMPILER)
 	@# on a named type -- narrow that guard and this row is what says so.
 	@$(TESTTMP)/test_setparamforinanon26 | diff -u test/test_set_param_for_in_anon.expected - \
 	  || { echo 'test_set_param_for_in_anon: FAIL - an anonymous set parameter lost its element kind'; exit 1; }
+	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
+	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
+	@# RELATION, never a byte count: the absolute numbers are allocator- and
+	@# target-dependent, so a per-target constant would pin this to x86-64's
+	@# arena and fail correctly-different numbers elsewhere. The LEAK row is the
+	@# positive control and the reason the file exists -- a live counter that is
+	@# never decremented passes every other row here. It asserts `>= payload`
+	@# rather than `= 64000` because pxx counts payload bytes and fpc counts its
+	@# own block overhead (64000 vs 96000, both true about their own allocator);
+	@# the relation is what both must satisfy, and asserting the constant would
+	@# have cost this file its oracle.
+	@$(TESTTMP)/test_fpcheapstatus26 | diff -u test/test_fpc_heap_status.expected - \
+	  || { echo 'test_fpc_heap_status: FAIL - live heap accounting or the System names regressed'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --

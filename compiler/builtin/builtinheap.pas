@@ -335,6 +335,18 @@ type
     Runs after rc hits 0 and before the block is freed; it releases the
     object's children recursively. nil = no finalizer (plain free). }
   TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
+
+  { System.TFPCHeapStatus -- FPC 3.2.2's exact field list and order
+    (rtl/inc/heaph.inc:18), because a record laid out differently is worse than
+    an absent one: it compiles and reads the wrong member. FPC types these
+    `ptruint`; NativeUInt is our spelling of the same width. }
+  TFPCHeapStatus = record
+    MaxHeapSize,
+    MaxHeapUsed,
+    CurrHeapSize,
+    CurrHeapUsed,
+    CurrHeapFree  : NativeUInt;
+  end;
 var
   { System.ExitCode. FPC declares it in System scope, so it is spelled without
     a unit qualifier anywhere in a program; builtinheap is linked into every
@@ -352,6 +364,21 @@ var
                        then zero it so an expected halt(100) exits 0. }
   ExitCode: Longint;
 
+  { System.ErrorAddr -- FPC declares it `ErrorAddr: codepointer = nil`
+    (rtl/inc/systemh.inc:680), a writable typed constant in System scope. Same
+    reasoning as ExitCode above for living here: builtinheap is linked into
+    every binary and its interface names resolve bare.
+
+    We do not yet SET it (no runtime-error path records the faulting address),
+    and that is deliberate rather than pending: the erroru.pp idiom the pair
+    exists for only ever WRITES it -- `exitcode := 0; erroraddr := nil` -- to
+    clear an expected error before the finalization check reads exitcode. A
+    reader that wanted a real faulting address would need the runtime-error
+    machinery to record one, which is a separate piece of work and is filed as
+    such. Declaring it nil-and-writable is honest; declaring it and quietly
+    filling it with a plausible-looking value would not be. }
+  ErrorAddr: Pointer;
+
   { Set by pylib's INITIALIZATION section, so it is live for the whole run of
     any NilPy program. Do not go back to installing it from a constructor: it
     used to be set only by pylib/pyeval's CONTAINER constructors (pylist_new,
@@ -365,6 +392,11 @@ var
     are kept as a belt on any profile whose unit initialization does not run.
     feature-nilpy-object-reclamation }
   PXXObjFinalizeHook: TPXXObjFinalize;
+{ System.GetFPCHeapStatus. Reports what this runtime actually knows and
+  nothing more -- see the body for which fields are exact on which allocator
+  profile, and why the calloc-backed profiles report no reserve rather than a
+  plausible-looking one. }
+function GetFPCHeapStatus: TFPCHeapStatus;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
 function PXXObjAllocRaw2(size: NativeInt): Pointer;
@@ -829,6 +861,22 @@ var
                         None sentinel or boxed int reaching a retain would
                         otherwise fault reading [p-8]) }
   HeapHigh : Int64;   { highest arena end ever mapped }
+  { Live heap accounting, UNCONDITIONAL -- the census counters above it are
+    cumulative (bytes ever handed out) and behind -dPXX_ALLOC_CENSUS, so
+    neither could answer `how much is in use right now`, which is what
+    System.GetFPCHeapStatus reports. BSS-zeroed, so no initialiser.
+    Maintained at ONE site per allocator profile: PXXAlloc rounds `size` at the
+    top before any path branches, so a single add there covers bin reuse, the
+    large first-fit list and the bump path alike, and PXXFree has the same
+    chokepoint after its nil guard. That is why this is six small sites and not
+    an accounting layer -- the rounding already funnels every path.
+    PXXRealloc needs none: it routes through both, and its shrink case KEEPS
+    the block, which is correctly no change. }
+  HeapLiveBytes   : Int64;   { payload bytes currently handed out, 8-rounded }
+  HeapPeakBytes   : Int64;   { high-water mark of HeapLiveBytes }
+  HeapMappedBytes : Int64;   { arena bytes mapped, native profile only (0 elsewhere: a
+                               calloc-backed profile does not own the reserve and must
+                               not invent a figure for it) }
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
@@ -997,6 +1045,45 @@ end;
 
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
+{ Subtract a block from the live-bytes counter, given its PAYLOAD address.
+
+  One helper rather than three copies because all three allocator profiles
+  (native arena, ESP-IDF calloc, -dPXX_LIBC_HEAP calloc) use the identical
+  8-byte size header, so the arithmetic is genuinely one thing; duplicating it
+  is how the three would drift.
+
+  AND THE NATIVE PROFILE DOES NOT CALL IT -- it carries these four lines inline,
+  which is the one deliberate duplication here and it is MEASURED, not assumed.
+  8,000,000 alloc/free pairs of 64 bytes, interleaved min-of-5:
+
+      no accounting at all   0.52 s
+      inline at the free site 0.55 s   (+5.8%)
+      through this helper     0.60 s   (+15.4%)
+
+  So the CALL was roughly two thirds of the whole cost of live accounting, on a
+  path whose entire body is a bin pop and a 64-byte zero. The two calloc-backed
+  profiles keep the call because a libc/IDF `free()` dwarfs it there and one
+  copy is worth more than 3 ns. If you change the arithmetic, change BOTH, and
+  re-run the churn row in test_fpc_heap_status.pas -- it is what catches an add
+  and a subtract that are not the same quantity.
+
+  The plausibility guard is not defensive padding. PXXFree's own large-block
+  arm already carries the comment "or a header we cannot trust", so an
+  implausible size is a state this code path expects to see -- and subtracting a
+  garbage value would not merely lose the figure, it would make HeapLiveBytes
+  negative and every later reading meaningless. Skipping leaves the counter
+  reading HIGH, which is the conservative direction for a number whose main
+  consumer is a leak check: a missed subtraction shows as a leak that is not
+  there, never as a leak concealed. }
+procedure HeapDecLive(payloadAddr: Int64);
+var sz: Int64;
+begin
+  if payloadAddr = 0 then Exit;
+  sz := PMachineWord(payloadAddr - 8)^;
+  if (sz >= 8) and ((sz and 7) = 0) then
+    HeapLiveBytes := HeapLiveBytes - sz;
+end;
+
 function HeapMmap(len: Int64): Int64;
 {$ifdef PXX_ESP}
 var
@@ -1145,11 +1232,14 @@ begin
   p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
   PMachineWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
+  HeapLiveBytes := HeapLiveBytes + size;
+  if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 end;
 
 procedure PXXFree(p: Pointer);
 begin
   if p = nil then Exit;
+  HeapDecLive(Int64(p));
   free(Pointer(Int64(p) - 8));
 end;
 
@@ -1189,11 +1279,14 @@ begin
   Result := Pointer(p + 8);                      { payload }
   if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
   if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
+  HeapLiveBytes := HeapLiveBytes + size;
+  if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 end;
 
 procedure PXXFree(p: Pointer);
 begin
   if p = nil then Exit;
+  HeapDecLive(Int64(p));
   pxx_libc_free(Pointer(Int64(p) - 8));
 end;
 
@@ -1302,6 +1395,8 @@ begin
 {$endif}
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));   { round up to 8 -- see the note at PXXAlloc }
+  HeapLiveBytes := HeapLiveBytes + size;
+  if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 {$ifdef PXX_ALLOC_CENSUS}
   CensusAllocs := CensusAllocs + 1;
   CensusBytes := CensusBytes + size;
@@ -1428,6 +1523,7 @@ begin
       and the `PMachineWord(base)^ := size` below faults on it. }
     if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;
     HeapEnd := HeapPtr + arena;
+    HeapMappedBytes := HeapMappedBytes + arena;   { cold path: once per arena }
 {$ifdef PXX_ALLOC_CENSUS}
     CensusArenas := CensusArenas + 1;
 {$endif}
@@ -1804,7 +1900,7 @@ end;
 
 procedure PXXFree(p: Pointer);
 var
-  addr: Int64;
+  addr, liveSz: Int64;
 {$ifdef PXX_HEAP_DEBUG}
   victim: Int64;
 {$else}
@@ -1817,6 +1913,17 @@ var
 begin
   addr := Int64(p);
   if addr = 0 then Exit;
+  { Live accounting, same placement argument as the census line below and one
+    more besides: the header is read here rather than in the {$else} arm below,
+    because under -dPXX_HEAP_DEBUG that arm does not run (the block goes to
+    quarantine instead) and the block is nonetheless no longer the program's.
+    Guarded on a PLAUSIBLE header -- the free path already distrusts it, and a
+    garbage size must not be allowed to corrupt the counter. Skipping an
+    implausible one drifts the figure HIGH, which is the safe direction for a
+    number a leak check reads. }
+  liveSz := PMachineWord(addr - 8)^;
+  if (liveSz >= 8) and ((liveSz and 7) = 0) then
+    HeapLiveBytes := HeapLiveBytes - liveSz;
 {$ifdef PXX_ALLOC_CENSUS}
   { Counted after the nil guard, so `frees` is comparable with `allocs`: a nil
     free is not a free, and counting it would make live look negative. }
@@ -1892,6 +1999,39 @@ begin
 end;
 {$endif}
 {$endif}  { PXX_ESP_IDF else: native allocator bodies }
+
+{ System.GetFPCHeapStatus -- FPC's field names, our honest numbers.
+
+  WHAT IS EXACT, AND ON WHICH PROFILE. HeapLiveBytes and HeapPeakBytes are
+  maintained at the alloc/free chokepoints on ALL THREE profiles, so
+  CurrHeapUsed and MaxHeapUsed are exact everywhere. HeapMappedBytes counts
+  arena bytes and is native-only: a calloc-backed profile (ESP-IDF,
+  -dPXX_LIBC_HEAP) does not own the reserve and cannot see it.
+
+  SO THE CALLOC PROFILES REPORT NO RESERVE RATHER THAN A GUESS. There,
+  CurrHeapSize comes out equal to CurrHeapUsed and CurrHeapFree is 0 -- which
+  reads as "this allocator holds exactly what it handed out", the true statement
+  available to us. The alternative was to report the process's RSS or some
+  arena estimate as though it were our heap, and a number that LOOKS like a
+  reserve is worse than an obviously-absent one: it cannot be told from a real
+  measurement by anyone reading the record.
+
+  MaxHeapSize is CurrHeapSize because arenas are never unmapped -- the peak
+  reserve IS the current reserve. That is a property of this allocator, not a
+  simplification, and it stops being true the day an arena is returned. }
+function GetFPCHeapStatus: TFPCHeapStatus;
+var live, mapped: Int64;
+begin
+  live := HeapLiveBytes;
+  if live < 0 then live := 0;      { a distrusted header skipped a subtraction }
+  mapped := HeapMappedBytes;
+  if mapped < live then mapped := live;   { calloc profiles: no reserve known }
+  Result.CurrHeapUsed := NativeUInt(live);
+  Result.MaxHeapUsed  := NativeUInt(HeapPeakBytes);
+  Result.CurrHeapSize := NativeUInt(mapped);
+  Result.MaxHeapSize  := NativeUInt(mapped);
+  Result.CurrHeapFree := NativeUInt(mapped - live);
+end;
 
 {$ifdef PXX_ESP}
 { ESP lean dynamic array: unmanaged elements only (no per-element retain/release

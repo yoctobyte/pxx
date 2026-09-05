@@ -1,0 +1,10 @@
+erroraddr writable : TRUE
+size >= used       : TRUE
+free = size - used : TRUE
+peak >= used       : TRUE
+maxsize >= size    : TRUE
+alloc is visible   : TRUE
+free is visible    : TRUE
+peak kept the max  : TRUE
+no drift over 2000 : TRUE
+leak >= payload    : TRUE
