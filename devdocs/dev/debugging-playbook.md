@@ -4659,6 +4659,58 @@ service is the subject: `systemctl is-active` is a true statement about now that
 implies nothing about the next boot, and the two questions are asked with almost
 the same word.
 
+## A SAMENESS CLAIM SCOPES TO WHAT YOU CHECKED, EXACTLY LIKE A PRESENCE OR ABSENCE CLAIM — and only the first of the three feels like it needs it
+
+Three forms of one rule, all measured 2026-09-05, in one day, by people being
+careful:
+
+- **presence** — "I found X" invites "where?", and everybody scopes it.
+- **absence** — "there is no X" *sounds* complete. It is not: it is **"I did not
+  find X in the places I looked"**, and the places are the claim. Instance: a
+  session reported "the jobs map has no per-job recency" after checking one
+  field; `seven.json` carries `job_last_pass`, 4493 entries, two keys away.
+- **sameness** — **"these eighteen tickets are the same issue" is a claim about
+  the FILER'S OUTPUT, not about the failures.** Instance: eighteen gtk tickets,
+  filed in four batches, wearing the same five test names, over **four
+  different mechanisms** — a job that passed on re-run; `__pxx_read` undeclared
+  (`eefa85d70`, reverted `2b64dd1e5`); `__builtin_constant_p` undeclared in
+  glib (via `00ab464bf`); and finally absent dev headers.
+
+The sameness form is the dangerous one because **the tidy-up is the failure
+mode**. Nobody mis-files eighteen tickets in one act; they accumulate, someone
+notices the duplication, and folding them under one cause **erases the three
+real fixes underneath**. Thirteen of those eighteen had been closed on the
+RIGHT cause before anyone proposed unifying them.
+
+**So before merging N reports into one cause, ask what would differ if they
+were N causes** — and look for that, rather than for what they share. A shared
+NAME is the weakest possible evidence of a shared cause, and it is the evidence
+that generates the merge.
+
+## FAILURE DEPTH IS EVIDENCE ABOUT WHAT WAS PRESENT — a later line number proves the earlier dependency resolved
+
+The instrument that separated those four batches, and it costs nothing:
+
+| batch | log tail | what the DEPTH proves |
+|---|---|---|
+| 09-05 | `unit source not found: gtk` | stopped at line 2 — the header was never found |
+| 08-30 | `pascal26:90: undeclared identifier '__pxx_read'` | **line 90 is inside a crtl module pulled in behind `gtk.h`** |
+| 09-01 | `pascal26:311: call to undeclared function: __builtin_constant_p` | **line 311 is inside glib** |
+
+**You cannot reach line 311 without having parsed `gtk/gtk.h`.** So the two
+middle batches are *positive evidence the headers were present* — which is a
+claim about the host, derived entirely from a line number in a compiler
+message, with no access to the box at all. Seven's `apt` log agreed
+independently: the packages were installed 2026-08-29, **removed by the 09-05
+dist-upgrade**, reinstalled by hand 17:59:31.
+
+**Generalise it: a failure deep inside a dependency proves every earlier
+dependency resolved.** When several reports share a symptom, sort them by where
+they died before deciding they share a cause — depth partitions them for free,
+and it is available in the log you already have. It also runs the other way: a
+hypothesis that requires a dependency to be *absent* is refuted by any failure
+that could only occur *inside* it.
+
 ## THE TIER SEES WHAT YOUR LOCAL RECIPE CANNOT — 2011 jobs past the point `make` stopped
 
 The argument that breadth belongs to Track T and that widening your own gate
