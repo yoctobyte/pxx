@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: working
 found-by: frankwasm (while reducing bug-a-a-nilpy-generator-fails-on-wasm32)
-summary: "A `generator; stackless;` routine that declares a VARIANT PARAMETER produces ZERO iterations on native x86-64 and ONE iteration with a garbage value (0) on wasm32. Six-line Pascal repro, no NilPy involved. It does NOT depend on the body reading the parameter -- a body that yields a constant fails identically -- so it is the parameter's SLOT, not its use. A Variant LOCAL is fine, an Integer parameter is fine, a Variant return is fine; only a Variant PARAMETER. Pre-existing on the pinned compiler. This is an ALL-TARGETS bug found on the native oracle, not a wasm32 one."
+summary: "A `generator; stackless;` routine with a VARIANT PARAMETER SEGFAULTS on native x86-64 (not zero iterations -- that was an inference from absent output; measured rc=139) and gives one wrong iteration on wasm32. ROOT CAUSE FOUND 2026-09-06: three parties disagree on what a Variant parameter is. The callee frame slot holds a one-word POINTER (a Variant value-param is passed by reference), the instance reserves 2 slots (correct for a value), and the caller stores 8 bytes via SlSet after an implicit Variant->Int64 conversion. `Syms[i].IsRef` is FALSE for a Variant value-param, so AssignStacklessSlots routes it to the tyVariant arm instead of the correct by-ref arm directly above, and SlUnblob then writes 16 bytes into that 8-byte pointer slot -- overrunning the ADJACENT frame slot. When the Variant is the FIRST parameter the neighbour is the hidden `self`, which is zeroed, so the step function does SlGet(nil, 0). That is the crash. When it is not first, the neighbour is another parameter, which is silently clobbered to 0. ONE mechanism, all rows."
 owner: frankS
 ---
 
@@ -326,3 +326,184 @@ Only the headline one-parameter repro was probed on wasm32. frankS's
 multi-parameter cases were not re-run there, and the open mechanism (earlier
 integer stores lost when a Variant is anywhere in the argument list) was not
 investigated on wasm32 at all.
+
+## 2026-09-06 (frankS) — ROOT CAUSE. It is a frame-slot OVERRUN, and the ticket's core claim was wrong
+
+**The headline claim in this ticket — mine and the original — was an inference
+from absent output, and it is false.** "Native produces no output at all, so the
+step function reports has-next False on its very first call" describes a state
+machine declining to start. It does not. **The program SEGFAULTS**: `rc=139`,
+confirmed with markers (`[BEFORE|]`, never reaches `AFTER`). My own "zero
+iterations" phrasing in the sections above inherits the error; read them with
+that correction. A crash has a location, which is why this was the cheap case
+the moment anyone checked an exit code instead of stdout.
+
+### The mechanism, end to end
+
+`gdb` on the headline repro (`function Gen(c: Variant): Integer; generator;
+stackless; begin yield 9; end;`):
+
+```
+SIGSEGV at 0x427b2f, inside SlGet (0x427ae5..0x427b50)
+  rdi = 0   (g)      rsi = 0   (off)
+  rax = g + off = 0 ; mov (%rax),%rax     <-- NULL deref
+```
+
+`SlGet(nil, 0)` is the read of the **state** field. So the instance pointer is
+NULL — but `SlNew` is fine and its result IS stored:
+
+```
+SlNew called, instSize=64   -> returned 0x7fffe7e00008, stored to global 0x437038
+Gen entered:  self(rdi) = 0x7fffe7e00008        <-- correct
+after SlUnblob: self@-0x8 = (nil)               <-- destroyed by the restore
+                varlocal@-0x10 = 7
+```
+
+The step function's prologue:
+
+```
+sub    $0x20,%rsp
+mov    %rdi,-0x8(%rbp)        ; self
+mov    %rsi,-0x10(%rbp)       ; c  -- ONE WORD
+lea    -0x10(%rbp),%rax       ; dst = &c
+mov    $0x10,%eax             ; 16 bytes
+call   SlUnblob(self, 48, &c, 16)
+mov    -0x8(%rbp),%rax        ; reload self -> now 0
+call   SlGet                  ; SlGet(nil, 0)  -> SIGSEGV
+```
+
+`-0x10 + 16 = -0x0`. **The 16-byte restore runs over `-0x8(%rbp)`, which is
+`self`.** The word it writes there is the Variant's payload half — never
+written by the caller's 8-byte `SlSet`, so it is 0. The generator zeroes its
+own instance pointer and then dereferences it.
+
+### Three parties, three different ideas of what a Variant parameter is
+
+| party | what it thinks `c: Variant` is | measured |
+| --- | --- | --- |
+| caller (`ParseForInGeneratorAST`) | an Int64 value — `SlSet` 8 bytes after an implicit Variant→Int64 conversion | slot word = `7` |
+| instance (`AssignStacklessSlots`) | a 16-byte value — `Inc(CurGenSlotNext, 2)` | `instSize=64`, 2 slots |
+| callee frame | a one-word **pointer** — the real ABI | `mov %rsi,-0x10(%rbp)`, 8 bytes |
+
+Three mechanisms for one concept. Per `root-cause-over-microfix.md` that is the
+design-flaw count, not the smell count.
+
+**The callee is the one that is right.** A Variant VALUE parameter is passed by
+reference — measured on a plain non-generator function, which spills exactly one
+word and calls through it:
+
+```
+function F(c: Variant): Integer;
+  sub $0x10,%rsp ; mov %rdi,-0x8(%rbp) ; mov -0x8(%rbp),%rax ; mov %rax,%rdi ; call 0x41eb23
+```
+
+So the 8-byte frame slot is CORRECT. What is wrong is that the generator
+treats that pointer slot as though it held the 16-byte value.
+
+### Why it never reaches the arm that already handles this
+
+`AssignStacklessSlots` has the right arm, and it sits directly ABOVE the one
+that fires:
+
+```pascal
+if Syms[i].IsRef then          { by-ref param: the slot persists the caller ADDRESS
+begin                            (one pointer word); save/restore go through AN_SLOTADDR }
+  SymGenSlot[i] := CurGenSlotNext; Inc(CurGenSlotNext); Continue;
+end;
+...
+if tk = tyVariant then         { 16-byte {tag,payload}: two slots, SlBlob/SlUnblob }
+```
+
+`PXXDBG=a.slslot` on the repro:
+
+```
+a.slslot assign: sym=c kind=2 tk=22 slot=0 off=48
+```
+
+`kind=2` is `skParam`, `tk=22` is `tyVariant` — and it took the **Variant** arm.
+**`Syms[c].IsRef` is False for a Variant value-parameter that the ABI
+nevertheless passes by reference.** This is frankB's missing-copy shape exactly:
+the correct handling exists, is adjacent, and is simply never reached. The bug
+is an ABSENT classification, not a divergent one.
+
+### One mechanism explains every row, and it predicted a new one
+
+Adjacency decides the symptom. Frame slots go downward in declaration order:
+`self@-0x8`, first param `@-0x10`, second `@-0x18`. A 16-byte write into a
+one-word slot always lands on the slot ABOVE it.
+
+| shape | neighbour clobbered | predicted | measured |
+| --- | --- | --- | --- |
+| `c: Variant` | `self` | crash | `rc=139` |
+| `c: Variant; a: Integer` | `self` | crash | `rc=139` |
+| `a: Integer; c: Variant` (body yields 9) | `a`, unread | works | `got=9` |
+| `a: Integer` | — | works | `got=9` |
+
+The first three were already in this ticket as a table with no explanation. The
+fourth row below is the one the mechanism PREDICTED before it was run — Variant
+second, and a body that READS the clobbered parameter:
+
+```pascal
+function Gen(a: Integer; c: Variant): Integer; generator; stackless;
+begin yield a; end;
+...  for x in Gen(9, 7) do writeln('got=', x);
+```
+
+Predicted `got=0` (a clobbered by the payload half), not `got=9`, and no crash.
+**Measured `got=0`, `rc=0`.** That is the positive control for this diagnosis:
+a row whose right answer differs from both the working value and the crash.
+
+This also retires my own open mechanism. "Non-Variant parameters read 0" is not
+a second defect and not a store that failed to take effect — it is the
+neighbour being overwritten by the Variant's restore.
+
+### What this says about the native/wasm32 split
+
+frankwasm has now measured that every compile-time quantity is identical on the
+two targets — slot offsets, `instsize`, `sizeof(Variant)`, zero-fill, and
+`{tag, payload}` member placement (six negative results). That is consistent
+with this cause and it explains why: **the defect is not in any compile-time
+quantity, it is an out-of-bounds WRITE into a stack frame**, and what a stray
+16-byte store lands on is a property of the target's frame layout, not of the
+generator machinery. Native puts `self` in the way and dies; wasm32 does not
+have that adjacency in a linear overwritable frame, survives, and yields the
+garbage 0. **Two symptoms, one out-of-bounds write, no third thing** — which is
+where frankwasm's inference was pointing, reached from the other end.
+
+### A Variant LOCAL is fine, and the contrast is the proof
+
+```
+LOCAL:      lea -0x20(%rbp),%rdi ; mov $0x10,%rcx ; rep stos   <- 16 bytes reserved at -0x20
+PARAMETER:  mov %rsi,-0x10(%rbp)                               <- 8 bytes, adjacent to self
+```
+
+The step function sizes a Variant LOCAL by its type and a Variant PARAMETER by
+the ABI word. Only the parameter path is wrong, which is exactly what this
+ticket's original boundary-finding said without knowing why.
+
+### The fix is NOT to route it to the by-ref arm
+
+Tempting and wrong: that arm persists the caller's ADDRESS, and a generator
+outlives the `for-in` statement's argument temp. Persisting a pointer to a dead
+temp trades a reproducible crash for a use-after-free.
+
+The generator must OWN the Variant by value, which means all three parties
+above have to agree on that one answer:
+- caller stores the 16 bytes (`SlBlob`), not an Int64 conversion of them;
+- the step function needs a real 16-byte frame home for the parameter, and
+  every read of `c` must go through it rather than through the incoming pointer.
+
+The machinery for exactly this already exists and is what NilPy uses — cell
+promotion (`SymCellPtr`), whose own comment in this procedure says it is "how a
+Nil Python generator persists a variant across a yield without this pass having
+to understand variant ARC". A Pascal stackless generator does not cell-promote
+its Variant parameters. That is the next thing to try, and it is a
+normalise-don't-special-case fix rather than a fourth mechanism.
+
+### Not verified
+
+- That cell promotion is the right vehicle. It is a strong candidate because it
+  already solves this problem for another frontend; I have not made it fire for
+  a Pascal parameter.
+- The wasm32 half of the "no adjacency" explanation. I am reasoning about why a
+  stray write is survivable there; I did not read a wasm32 frame.
