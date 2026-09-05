@@ -10532,6 +10532,18 @@ test-core: $(COMPILER)
 	   echo 'cundeclared_type_value_pos: FAIL - the cast check claimed a shape it must not claim'; \
 	   cat $(TESTTMP)/cundeclared_type_value_pos.log; exit 1; \
 	 else echo "cundeclared_type_value_pos: 4 value-position refusals, none claimed by the cast check"; fi
+	# THE 32-BIT va_arg SET'S TRIGGER, EXECUTABLE. The four
+	# `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA]`
+	# sets in cparser.inc are complete for a reason that has nothing to do with
+	# the set: the members that would falsify them cannot compile a C program.
+	# A new C-capable target left out of them falls into the "not x86-64" arm,
+	# gets aarch64's 8-byte two-bank layout, and produces WRONG VALUES with no
+	# diagnostic from the second argument on. The script asserts values against
+	# gcc on every target that builds, and asserts that every target which
+	# REFUSES does so at the C entry stub -- without that second arm, a frontend
+	# broken for all cross targets would turn the whole check green.
+	# bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet
+	tools/c_va_arg_every_target.sh
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }

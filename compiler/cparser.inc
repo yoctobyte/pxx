@@ -2092,11 +2092,23 @@ begin
         end;
         if TargetArch <> TARGET_X86_64 then
         begin
-          { Cross (aarch64): TWO banks, like SysV but 8+8 eight-byte slots --
-            integers and pointers from the GP region at [0..56], floating point
-            from the FP region at [64..120]. A struct-by-value tail argument is a
-            POINTER on this target (see vaRecId below), so it reads GP whatever
-            the record contains. Reading a double out of the GP area was the
+          { The 64-bit two-bank branch. THE CONDITION IS "not x86-64" AND ITS
+            ONLY MEMBER IS aarch64 -- the sibling site below carries the same
+            note, and this one still said "Cross (aarch64)", naming its sole
+            occupant rather than the set it selects. That is what made a 32-bit
+            target landing here a MEASUREMENT to see rather than a reading:
+            varargs produce wrong values, not a diagnostic, starting at the
+            second argument. Same trigger as the sibling,
+            bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet,
+            and it is now enforced rather than written down --
+            tools/c_va_arg_every_target.sh fails the moment a target that
+            reaches here should have been in the 4-byte set above.
+
+            TWO banks, like SysV but 8+8 eight-byte slots -- integers and
+            pointers from the GP region at [0..56], floating point from the FP
+            region at [64..120]. A struct-by-value tail argument is a POINTER
+            on this target (see vaRecId below), so it reads GP whatever the
+            record contains. Reading a double out of the GP area was the
             receiving half of the same defect the caller half had.
             bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
           if TypeIsFloat(vt) and (vaRecId = REC_NONE) then
