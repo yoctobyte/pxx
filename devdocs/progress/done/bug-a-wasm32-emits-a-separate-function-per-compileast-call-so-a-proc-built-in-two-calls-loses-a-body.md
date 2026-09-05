@@ -244,7 +244,8 @@ future path reaching `WasmBodyEnd` on a live slot without resuming loses code
 exactly as before, and this is the only thing that would say so.
 `check_outparam.sh` asserts it reads zero.
 
-**Evidence** (binary `ca571451b5d1`):
+**Evidence** (compiler self-host stamp `ca571451b5d1` — that is a BINARY sha256
+prefix, not a commit; the pre-fix control binary was `450d7de641d8`):
   - both repros match native and validate; the 6-routine slice diffs clean
   - **78 corpus modules byte-identical pre/post**, and the only two that differ
     are the two known-affected repros — the comparison's positive control
@@ -258,7 +259,10 @@ stops at an explicit `C program entry stub not implemented for this target yet`,
 which is its own missing work in Track C, not this mechanism. Measured, not
 assumed.
 
-Landed: `e0035f9ac` (resume), `8dafca722` (export once per proc + the test).
+Landed: `460f439f6` (resume), `cf23cfaf0` (export once per proc + the test).
+(Both read off `git log origin/master` AFTER the push and confirmed with
+`git merge-base --is-ancestor`. The ids I wrote before pushing — `e0035f9ac`,
+`8dafca722` — were rewritten by the rebase and are ghosts.)
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d0a3f4397.
