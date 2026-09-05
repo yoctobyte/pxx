@@ -7321,6 +7321,51 @@ before diffing.**
 property with the blank field above: both are failures the author cannot observe and
 only a reader — human or tool — encounters.
 
+## THE PROBE MUST READ THE THING THE DEFECT CORRUPTS — AND FOR AN ALIASING DEFECT IT MUST WRITE IT
+
+Measured 2026-09-06 (frankS), closing the stackless-generator group, and it is the
+next rung under *choose a probe whose right answer differs from the default*.
+
+**Four repros, all with bodies that yielded a CONSTANT.** Every one passed on the row
+where the `Variant` parameter was second — **because the clobbered parameter was never
+read.** `got=9` was simultaneously the right answer and the answer a completely broken
+slot produces.
+
+> **A value assertion can only see corruption of a value the program actually
+> consults.** A probe that computes its answer without touching the damaged thing is a
+> guard that cannot fail, and it will not look like one: it has a real expected value,
+> a real comparison, and a real pass.
+
+**The fix only became verifiable when the body READ the thing the defect corrupts.**
+
+### The aliasing half, which no read can reach
+
+A `var` parameter **must alias the caller's variable**. A defect that hands the
+generator the address of a *copy* satisfies every read: the value is right, the type is
+right, the size is right.
+
+> **An assertion that only READS cannot distinguish an alias from a copy. The probe has
+> to MUTATE**, and then assert on the CALLER's variable — with the fix absent, `mm`
+> stays at 40 while every read-only row passes.
+
+So the rule is one level more specific than *match the assertion class to the defect
+class*: **match the assertion's OPERATION to the defect's mechanism.** Corruption needs
+a read; aliasing needs a write; a leak needs an allocation count; a width needs a
+relation. **Getting the class right and the operation wrong still yields a guard that
+cannot fail.**
+
+### And the dense row is a good GUARD and a bad DIAGNOSTIC
+
+The group's closing test ends with a generator taking a `Variant`, a record, an
+`AnsiString`, a scalar `var` and an ordinal **in one signature** — and that single row
+fails on the pinned compiler for **all three defects at once**. The group was found the
+other way round, one defect at a time, over hours.
+
+**Both facts are worth keeping.** A dense row is the cheapest standing guard and it
+cannot tell you which of three things broke; the minimal rows are what separated them
+and are useless as a tripwire. **Write both, and say which is which**, or a later
+reader takes the dense row's red as one defect.
+
 ## A REACHABILITY PROBE CAN BE INTERCEPTED BY A DIFFERENT LIMIT, AND THAT REFUSAL LOOKS EXACTLY LIKE YOUR ANSWER — read WHOSE message it is
 
 Measured 2026-09-06 (frankH), converting `CPrepChars` off its fixed 8 MB cap.
@@ -8539,6 +8584,34 @@ a long job. **Whenever you reach for one, say in the report which you used and w
 you read the verdict FROM** — the flag is part of the measurement's provenance, not a
 detail of how it was launched.
 
+### The one instrument that identifies the ENDING instead of hunting for a stop
+
+frankA's, the same night, and it is the structural answer to why the whole family
+leans one way:
+
+> **Every instrument above detects a STOP. An ending and a kill both present as "no
+> stop found", so they can only ever fail toward the safe-looking answer.**
+
+The complement is a **positive identification of completion**: compare the log's last
+line to the **last recipe line of that target in the Makefile.**
+
+```
+awk '/^test-nilpy:/{f=1} f&&/^[a-zA-Z_-]+:/&&!/^test-nilpy:/{f=0} f' Makefile | tail -1
+tail -1 <log>
+```
+
+Byte-identical means the recipe reached its final line. **A SIGTERM, a `make` stop and
+an `-i` run all leave a last line that is some OTHER line of the recipe**, so it fails
+differently from every member of the family — and, unlike the exit status, **it still
+works under `-i`**, where the rc is 0 by construction and carries nothing.
+
+**Its own failure mode, stated by its author:** it cannot see a tier that ran its last
+row and skipped rows in the middle. **So it goes BESIDE the anchored greps, never
+instead of them** — completion and cleanliness are two questions, and this one answers
+only the first. Run both, and the sentinel makes three: *did it finish* (sentinel),
+*did it reach the end* (terminal row), *was anything red* (anchored greps).
+
+
 ### The live case that produced it
 
 The `test_record_nested_type_section` regression was a **STOP**, not a red row.
@@ -8666,6 +8739,51 @@ performed properly. **None of them is a rule about WHEN.**
 CLAUDE.md rule *print `sha256sum compiler/pascal26` beside every number you report*,
 which is easy to quote at other people and easy not to apply to a green handed to you.
 
+### The general form: THE METADATA A RESULT TRAVELS WITH IS NOT PART OF WHAT WAS VERIFIED
+
+frank-optimize's generalisation, the same day, and it covers more than notifications:
+
+> **The sha was verified. The date was supplied by the courier.**
+
+A result carries a payload that was measured and an envelope that was not — a
+timestamp, a delivery order, a "completed" verb, an exit code from a wrapper, the
+folder it arrived in. **Every one of those reads as an attribute of the finding and
+none of them was under test.** It is the same split as *a source read refutes a
+SPELLING and only execution refutes a LOCATION*: the parts of a claim fail
+independently, and the ones nobody measured fail silently.
+
+**Practical form for any harness that emits a summary line: stamp BOTH.** A census that
+prints `[cc=<sha12>]` can attach every row to a binary and still cannot attach one to a
+moment — which is fine while runs are foreground and the clock is shared, and wrong the
+first time a result is backgrounded, cached, or relayed.
+
+### The remedy that makes it a FILE CHECK instead of a timing argument
+
+frankH's, the same night, and it is the constructive form of *do not touch the
+instrument while it is measuring*:
+
+> **A harness that names its subject by PATH inherits every later write to that path.
+> One that COPIES its subject first cannot.**
+
+A differential that runs `compiler/pascal26` is exposed to every rebuild any session
+does during the run — its own included. A differential that copies the two binaries to
+`s26.old` / `s26.new` and runs *those* has no window in which its subject can be
+swapped, and the claim becomes checkable by inspection:
+
+```
+s26.new  01:12:35  265449b9eec3
+s26.old  01:13:11  64fdd2227c9f
+log      01:14:00   <- run starts after both
+now      01:32:24   <- 18 min in, both mtimes unmoved, both shas as claimed
+```
+
+**The copy costs a few megabytes and converts "was this the right binary?" from an
+argument about timing into a file check.** Same move as preferring a count over an
+absence, one level down: make the thing falsifiable by inspection rather than by
+reasoning about when.
+
+
+
 ### What the standing ask becomes
 
 A report of a long-running measurement should carry four things, not one:
@@ -8738,6 +8856,37 @@ of it.
 > **When a fact is your reason for choosing an instrument, it is not also evidence
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
+
+## NAME THE ENCODING, THEN ENUMERATE ITS READERS — A FIELD CENSUS IS CLOSED-WORLD AND A CALL-SITE CENSUS IS NOT
+
+Measured 2026-09-06 (frankA), finding a **third** reader of a field after a ticket had
+recorded two and a re-grep had confirmed two.
+
+The missed one was `ResolveDerefShapeAt` (`pasparser_lval.inc`), which guards its
+typed-pointer-cast arm on `ASTIVal >= 0 and < AliasCount` — **a condition `0`
+satisfies** — so it answered from alias row zero for every record-name cast. It is not
+in `ir.inc`, so **grepping the two sites already known could only re-confirm them.**
+
+> **"Which routines does this loop reach" is answered by grepping the loop, and a grep
+> confirms only the sites you thought of. "Who reads this FIELD on this node kind" is
+> answered by grepping the field — and the field has a finite number of mentions.**
+
+**So name the ENCODING first, then enumerate its readers.** Here that is
+`-3` WideChar, `-2` PChar, `-1` plain value cast, `>= 0` alias row — four cases, and
+every reader must decide among them. **Never enumerate the readers you remember and
+infer the encoding from them**, which is a call-site census wearing a field census's
+clothes and is open-world in exactly the direction that hides a site.
+
+**Record the clean answer too.** The same census over the three remaining postfix loops
+found one identical triple on `AN_DEREF` and no second convention. *"Not checked"* and
+*"checked, agrees"* are the same silence in a ticket, and the second gets re-derived at
+full price by the next reader.
+
+### The sibling search that actually finds these
+
+A duplicated defect is usually found by **a text search on the COPIED COMMENT**, not on
+the code: in this case the comment was verbatim across the two frontends while the
+surrounding identifiers were not. **The prose is the part a copy preserves exactly.**
 
 ## A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT — which is why "I found nothing" needs the control and "I found something" often does not
 
