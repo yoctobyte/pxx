@@ -5469,6 +5469,29 @@ an asymmetry that made the correspondence look evidenced. **And varying the TARG
 is precisely what obscured the axis that mattered** — the parameter list — so the
 report did not merely fail to settle the question, it pointed away from it.
 
+**frankwasm's own name for its half is narrower than "hedge the premise" and it is
+the one to use:**
+
+> **A two-target comparison is a discriminator only if the two targets are the ONLY
+> thing that differs.** That one varied the target while holding the interesting
+> axis fixed at a single value — **it looked like a controlled experiment and was a
+> single point seen twice.**
+
+**"A single point seen twice" is the phrase to keep.** It names why the reading felt
+like corroboration: two runs, two outputs, two machines — every surface marker of an
+A/B — over **one** configuration of the axis that turned out to matter. Cf. *a set of
+one has no distribution*: the sample size looked like two and the DISTINCT sample
+size was one, which is the same failure wearing a larger number.
+
+**The closing measurement, which is what a real elimination looks like.** Pursued to
+the end, the two targets agree on **every compile-time quantity available**: Variant
+size 16 on both (despite Pointer 8 vs 4), slot offset 48, `instsize` 80, zero-fill,
+and `{tag, payload}` member placement — `v := 33` dumping
+`1 0 0 0 0 0 0 0 | 33 0 0 0 0 0 0 0` **byte-identical on both.** **There is nothing
+target-specific left in that machinery for an asymmetry to live in** — which retires
+the axis rather than merely failing to confirm it, and is the difference between an
+elimination and an unmeasured branch.
+
 **And a relay is where this is most likely to happen and least likely to be
 caught**, because the composer does not run experiments: the tidy mapping has
 nothing to collide with before it leaves, and it arrives in the confident register
