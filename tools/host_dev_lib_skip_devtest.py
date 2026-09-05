@@ -81,9 +81,22 @@ def main():
           "found %d: %s" % (len(roots), ", ".join(roots)) if roots else
           "NONE — the parse stopped matching, and a guard with no roots "
           "silently checks nothing")
-    check(any("gtk-2.0" in r for r in roots),
-          "and the gtk-2.0 arm is among them",
-          "this is the arm frankD's strace showed actually opening")
+    # NOT `any("gtk-2.0" in r)`. That is what this row said until frankC
+    # flipped the fallback to gtk-3.0 (a409e19b5) and it went red three
+    # minutes after I committed it -- a guard asserting a CODE LINE'S SPELLING
+    # as a proxy for a behaviour, which is the exact family I had appended an
+    # instance to in the commit before this one. I warned frankC's consumers
+    # not to copy today's answer and then copied it myself, one file over.
+    # The BEHAVIOUR is: at least one fallback root is a package-bearing one,
+    # so the skip reason can name something installable. That survives a flip
+    # of which gtk, and still fails if the gtk arm disappears entirely or if
+    # DEV_PKG_BY_ROOT stops covering whatever the compiler now names.
+    named = [r for r in roots if tm._pkg_for(r)]
+    check(named,
+          "at least one fallback root maps to an installable package",
+          "%s -> %s" % (named, [tm._pkg_for(r) for r in named]) if named else
+          "NO root maps to a package: the reason line can no longer tell "
+          "anyone what to install, which is the actionable half of a skip")
     check(len(roots) >= 2,
           "MORE THAN ONE — the resolver falls through in order",
           "checking only the first is the false-skip bug this file exists for")
