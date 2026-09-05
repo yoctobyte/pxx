@@ -13295,3 +13295,55 @@ a sentence. The fix is not more gates; it is writing the claim with its
 population attached — *"inert across mixed-link, whose rows are all procedures"*
 — because a claim carrying its own population is one anybody can falsify, and a
 bare one is not.
+
+## 243 — THE CITED LINE NUMBERS STILL POINTED AT REAL CODE IN THE RIGHT FUNCTION, AND THE REFUSAL WAS GONE (frankS, 2026-09-05)
+
+Two instances from one session, and they are the same defect at two distances.
+This ticket's thesis is *refusals cite blockers that may have landed, and
+nothing checks the difference*. Both of these are that, and the second is a
+degenerate case the thesis does not yet cover.
+
+**Instance A — a refusal that had already been lifted, and reading CONFIRMED
+it.** `bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function` said xtensa
+rejects `function f(...): array of T` at `symtab.inc:12364`, with riscv32's
+sibling refusal at `:12476`. Both numbers had drifted — to 13691 and 13803 —
+and **both still landed inside the right function, on a real refusal, with the
+right error string.** Nothing errored. The guard I was pointed at exists; it is
+simply no longer reached for this case, because the dyn-array result is handled
+several lines above it as a single pointer-sized heap handle.
+
+So the ordinary defences all passed. The line number resolved. The function was
+the right one. The error text matched the ticket verbatim. **The only thing that
+separated the ticket from the tree was executing a three-line program**, which
+took under a minute and answered `len 5 sum 30` on x86-64, riscv32 and xtensa
+alike. This is the stale-line-number failure mode compounded: a drifted citation
+that lands on a *plausible* target is worse than one that lands nowhere, because
+the miss is what would have prompted a second look.
+
+**Instance B — the degenerate case: a position asserted as a refusal that was
+never measured at all.** `bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-
+path-and-open-nothing` stated that wasm32 "would implement" a ShortString
+SysOpen path. Measured 2026-09-05: **wasm32 cannot build the test at all**, for
+an unrelated reason (a raw syscall in `sysutils`), so it has no position on the
+question in either direction.
+
+This is worth separating from Instance A rather than filing beside it. **A
+refusal with a date is at least dated** — it names a blocker, and this ticket's
+whole programme is checking whether that blocker has landed. An unmeasured
+position asserted in the same voice has **no date and no measurement**, so there
+is nothing for a staleness check to re-run. It cannot go stale, because it was
+never fresh. Any automation built from this ticket will happily re-verify
+Instance A and will not see Instance B at all.
+
+**What that implies for the mechanism this ticket proposes.** Re-running cited
+blockers is necessary and not sufficient. The population it can serve is
+"claims that named something checkable"; the claims that need catching most are
+the ones that named nothing, and they are invisible to it **by construction** —
+the same shape as a guard drawn from the wrong population. If the eventual tool
+reports a clean sweep, that clean sweep is scoped to the dated claims, and
+saying so is the difference between a useful instrument and a reassuring one.
+
+**Cheapest available discriminator, both instances:** run the repro. Instance A
+needed three lines of Pascal; Instance B needed one compile per target. Neither
+needed the source read at all, and reading the source is what made Instance A
+look settled.
