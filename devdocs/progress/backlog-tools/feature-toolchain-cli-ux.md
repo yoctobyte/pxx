@@ -1,12 +1,22 @@
 ---
-prio: 30
+slug: feature-toolchain-cli-ux
+title: "Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)"
 track: T
+prio: 30
+type: feature
+status: backlog
+owner: ""
+blocked-by: [decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]
+summary: "FIVE OF THE SIX FLAGS ARE LANDED AND THE SIXTH IS A DECISION, NOT AN IMPLEMENTATION. `--version`, `--where`/`--config`, `--list-targets`, `--list-libraries` and `--doctor` all answer with no source file and exit 0, are covered by test-quick rows so gate.sh quick sees them, and are built to be unable to drift: `--where` calls the SAME routines a real compile calls (ResolveToolchainDirs / AddDefaultPasUnitDirs / AddDefaultCIncludeDirs) rather than re-deriving the search rule, and `--list-libraries` SCANS the resolved directories through PxxListDir rather than reciting an inventory. Config tiers 1, 2 and 3 are all in: CLI flags, then PXX_HOME/PXX_LIBPATH (all-or-nothing, so a typo shows as [MISSING] instead of half-applying), then pxx.cfg, then ExeDir defaults. ONLY `--selfcheck` IS LEFT, it answers `unknown option` (re-measured 2026-09-05 at HEAD), AND IT IS BLOCKED ON INTENT rather than on work: feature-release-packaging specifies check 1 as `pxx -> gen1`, `gen1 -> gen2`, `cmp gen1 gen2` -- a real fixedpoint STEP that requires RUNNING the freshly built binary -- while the compiler spawns no process (no PalVforkAndExec/PalFork anywhere under compiler/) and locates itself only through ExeDir. Every in-process substitute asserts something WEAKER under the same trusted name, and tools/selfcheck.sh already does the specified thing and already ships in the release tree, so `do nothing` is a live option. Filed as [[decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]] with four options and a recommendation; that ticket is still `status: new`, `owner: user`. IF THE ANSWER IS `USE THE SCRIPT`, THIS TICKET CLOSES ON THE ANSWER ALONE. User-facing docs for the five landed flags are a Track D job and are not filed here."
 ---
 
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
 
 - **Type:** feature (project infrastructure / user experience)
-- **Status:** backlog (steps 1-3 landed 2026-08-21; step 4 `--selfcheck` waits on `feature-release-packaging`)
+- **Status:** backlog, blocked on a Track U decision (steps 1-3 landed
+  2026-08-21; step 4 `--selfcheck` no longer waits on `feature-release-packaging`,
+  which is `done` — it waits on
+  [[decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]])
 - **Owner:** —
 - **Opened:** 2026-06-21 (user-tooling design discussion)
 - **Relation:** companion to `feature-release-packaging` — that ticket *produces &
@@ -208,3 +218,21 @@ Filed as
 [[decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]] with
 four options and a recommendation. **If that decision is "use the script", this
 ticket closes on the answer alone** — the other five flags are done.
+
+
+## 2026-09-05 (frankH) — re-measured, and the frontmatter was the defect
+
+Nothing has moved on the work: `--selfcheck` still answers `unknown option` at
+HEAD, and the decision it waits on is still `status: new`, `owner: user`, filed
+2026-09-02.
+
+What HAD moved is that this ticket said so **only in prose**. Its frontmatter was
+two lines — `prio` and `track` — with no `blocked-by`, no `status`, and **no
+`summary` at all**, so `ready --track T` offered it as unblocked work and the
+only part everyone reads did not exist. The next taker would have re-derived the
+same fork: five flags done, one blocked on intent, discoverable in about twenty
+minutes of reading.
+
+Frontmatter modernised and the blocking edge recorded where the tooling can see
+it, per the convention `progress.sh check` prints: prose stating a blocking
+relationship must also carry the frontmatter edge.
