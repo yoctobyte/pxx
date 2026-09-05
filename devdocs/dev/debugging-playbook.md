@@ -8877,6 +8877,46 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## THE RESTORE THAT RESTORES THE REVERT — `git checkout <sha> -- <file>` WRITES THE INDEX TOO
+
+Measured 2026-09-06 (frankwasm), and the two commands are **one token apart**.
+
+`git checkout <sha> -- <file>` updates the **index as well as the worktree**. So the
+restore this repo's guidance names — a bare `git checkout -- <file>` — re-checks-out
+**from the index**, which now holds the old content, and hands back the version you
+were reverting.
+
+```
+git checkout <old-sha> -- compiler/x.inc   # index AND worktree now hold OLD
+git checkout -- compiler/x.inc             # restores OLD out of the index   <-- wrong
+git checkout HEAD -- compiler/x.inc        # restores HEAD                   <-- right
+```
+
+**`git checkout HEAD -- <file>` is correct in both situations** and the bare form is
+correct only after a plain edit.
+
+### Why the population that follows the advice is the population that hits it
+
+*Guard the revert, not the edit* is the advice for exactly the situation that uses the
+sha form: **proving a fix by removing it.** So this fires during a positive control —
+when the tree is deliberately holding a reverted fix, and a wrong restore is least
+likely to be noticed because everything is *supposed* to be in an odd state.
+
+**And it misreads downstream as a compiler problem.** The next build produces a binary
+from old sources; the tell is a changed sha or a fixedpoint that no longer matches,
+which looks exactly like the documented *two valid fixedpoints* case. Its finder called
+its own correct alarm a **walked seed** when it was a **reverted source** — a wrong
+diagnosis of a right alarm, which is more expensive than no alarm.
+
+### The seed really does walk, though — and that part is not a bug
+
+The same session then ran the revert→rebuild→restore→rebuild control properly and the
+final binary came out `9059082fe30b` where the same sources had produced
+`b111a77751bd` from the other seed. **Both self-reproduce, and `gate.sh quick`'s
+`self-host fixedpoint` row PASSES**, so this is the documented two-valid-fixedpoints
+case and not a miscompile. **The positive-control discipline is what walks the seed**,
+and that is a known cost of doing it right — not a reason to skip it.
+
 ## A REFUSAL IS NOT SELF-DESCRIBING — THE TEXT NAMES THE POSITION, NEVER THE REASON
 
 Measured 2026-09-06 (frankA), and it nearly turned a broken probe into a published
