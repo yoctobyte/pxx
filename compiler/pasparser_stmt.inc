@@ -256,6 +256,15 @@ end;
   whole life. One cell per generator instance per variant argument, released
   with neither the instance nor the loop — a bounded leak, recorded on the
   ticket rather than hidden here. }
+{ @lvalue as an AST node (AN_ADDR keeps by-ref auto-deref semantics — an IsRef
+  sym yields the caller's address, which is what a copy source wants). }
+function GenMakeAddrOf(lv: Integer): Integer;
+begin
+  Result := AllocNode(AN_ADDR);
+  ASTLeft[Result] := lv;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 { AN_SLOTADDR node for sym i — the address of the local's OWN slot. }
 function GenMakeSlotAddr(i: Integer): Integer;
 begin
@@ -329,6 +338,24 @@ begin
   preSeq := GenMakeSeq(preSeq, GenMakeSeq(
               GenMakeAssign(GenMakeIdent(vt, tyVariant), argNode), -1));
   Result := GenMakeSlotAddr(vt);
+end;
+
+{ Does argument `k` of this generator need its ADDRESS taken?
+
+  A BY-REF parameter's instance slot persists the caller's ADDRESS — that is the
+  arm AssignStacklessSlots, SLSaveLocals and SLRestoreLocals all take for it. The
+  caller stored the argument the same way it stores every other one, which
+  evaluates it as a VALUE, so the two ends disagreed about what the word means.
+
+  It went unnoticed because it does not fire for the by-ref shape people write
+  most: a RECORD argument's bare ident already evaluates to its address, so
+  `const r: TR` and `r: TR` were right by construction. A scalar `var m: Int64`
+  evaluates to 40, which the step function then dereferenced.
+  bug-a-a-var-parameter-of-a-stackless-generator-stores-the-value-where-the-slot-expects-an-address }
+function PasGenArgNeedsAddr(gpi, k: Integer): Boolean;
+begin
+  Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
+            Procs[gpi].Params[k].IsRef;
 end;
 
 { Does argument `k` of this generator need the Pascal variant-temp treatment?
@@ -578,37 +605,43 @@ begin
     if nargs >= 1 then
     begin
       if PyGenArgNeedsCell(gpi, 1) then a0 := GenMakeVariantArgCell(a0, assignG)
-      else if PasGenArgNeedsTemp(gpi, 1) then a0 := GenMakeVariantArgTemp(a0, assignG);
+      else if PasGenArgNeedsTemp(gpi, 1) then a0 := GenMakeVariantArgTemp(a0, assignG)
+      else if PasGenArgNeedsAddr(gpi, 1) then a0 := GenMakeAddrOf(a0);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 1), a0), -1));
     end;
     if nargs >= 2 then
     begin
       if PyGenArgNeedsCell(gpi, 2) then a1 := GenMakeVariantArgCell(a1, assignG)
-      else if PasGenArgNeedsTemp(gpi, 2) then a1 := GenMakeVariantArgTemp(a1, assignG);
+      else if PasGenArgNeedsTemp(gpi, 2) then a1 := GenMakeVariantArgTemp(a1, assignG)
+      else if PasGenArgNeedsAddr(gpi, 2) then a1 := GenMakeAddrOf(a1);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 2), a1), -1));
     end;
     if nargs >= 3 then
     begin
       if PyGenArgNeedsCell(gpi, 3) then a2 := GenMakeVariantArgCell(a2, assignG)
-      else if PasGenArgNeedsTemp(gpi, 3) then a2 := GenMakeVariantArgTemp(a2, assignG);
+      else if PasGenArgNeedsTemp(gpi, 3) then a2 := GenMakeVariantArgTemp(a2, assignG)
+      else if PasGenArgNeedsAddr(gpi, 3) then a2 := GenMakeAddrOf(a2);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 3), a2), -1));
     end;
     if nargs >= 4 then
     begin
       if PyGenArgNeedsCell(gpi, 4) then a3 := GenMakeVariantArgCell(a3, assignG)
-      else if PasGenArgNeedsTemp(gpi, 4) then a3 := GenMakeVariantArgTemp(a3, assignG);
+      else if PasGenArgNeedsTemp(gpi, 4) then a3 := GenMakeVariantArgTemp(a3, assignG)
+      else if PasGenArgNeedsAddr(gpi, 4) then a3 := GenMakeAddrOf(a3);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 4), a3), -1));
     end;
     if nargs >= 5 then
     begin
       if PyGenArgNeedsCell(gpi, 5) then a4 := GenMakeVariantArgCell(a4, assignG)
-      else if PasGenArgNeedsTemp(gpi, 5) then a4 := GenMakeVariantArgTemp(a4, assignG);
+      else if PasGenArgNeedsTemp(gpi, 5) then a4 := GenMakeVariantArgTemp(a4, assignG)
+      else if PasGenArgNeedsAddr(gpi, 5) then a4 := GenMakeAddrOf(a4);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 5), a4), -1));
     end;
     if nargs >= 6 then
     begin
       if PyGenArgNeedsCell(gpi, 6) then a5 := GenMakeVariantArgCell(a5, assignG)
-      else if PasGenArgNeedsTemp(gpi, 6) then a5 := GenMakeVariantArgTemp(a5, assignG);
+      else if PasGenArgNeedsTemp(gpi, 6) then a5 := GenMakeVariantArgTemp(a5, assignG)
+      else if PasGenArgNeedsAddr(gpi, 6) then a5 := GenMakeAddrOf(a5);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 6), a5), -1));
     end;
 
@@ -1960,15 +1993,6 @@ begin
       if SLHasYield(node) then
         Error('stackless generator: yield only allowed at top level or inside for/while/if/case (not in this construct)');
   end;
-end;
-
-{ @lvalue as an AST node (AN_ADDR keeps by-ref auto-deref semantics — an IsRef
-  sym yields the caller's address, which is what a copy source wants). }
-function GenMakeAddrOf(lv: Integer): Integer;
-begin
-  Result := AllocNode(AN_ADDR);
-  ASTLeft[Result] := lv;
-  ASTTk[Result] := Ord(tyPointer);
 end;
 
 { Deref of the slot address as one machine word (raw slot READ, no by-ref

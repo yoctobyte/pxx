@@ -11995,6 +11995,15 @@ test-core: $(COMPILER)
 	# row 3 reads the first parameter for exactly that reason.
 	./$(COMPILER) test/test_stackless_gen_variant_param.pas $(TESTTMP)/test_slg_vparam26
 	tools/expect_same.sh test_slg_vparam26 "$$($(TESTTMP)/test_slg_vparam26)" "$$(printf '7 \n7 8 \n9 7 \n4 9 \n5 10 ')"
+	# A BY-REF parameter of a stackless generator. Its slot persists the CALLER'S
+	# ADDRESS, but the for-in caller evaluated the argument as a VALUE, so the step
+	# function dereferenced 40. Hidden because a RECORD argument's bare ident
+	# already evaluates to its address -- const/value records were right by
+	# construction and only a scalar `var` was wrong, so both kinds are asserted.
+	# Row 2 mutates: a `var` param must ALIAS the caller's variable, so an
+	# address-of-a-copy fix still yields 41 inside and leaves mm at 40 outside.
+	./$(COMPILER) test/test_stackless_gen_byref_param.pas $(TESTTMP)/test_slg_bparam26
+	tools/expect_same.sh test_slg_bparam26 "$$($(TESTTMP)/test_slg_bparam26)" "$$(printf '40 41 \n41 41\n11 22 \n11 22 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
 	tools/expect_same.sh test_scheduler26 "$$($(TESTTMP)/test_scheduler26)" "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_scheduler_exc26
