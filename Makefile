@@ -5115,6 +5115,13 @@ test-threads: $(COMPILER)
 	# match the byte-identical free routine), so it carries no per-target width.
 	./$(COMPILER) test/test_method_untyped_param_self_shift.pas $(TESTTMP)/test_method_untyped_param_self_shift_26
 	tools/expect_same.sh test_method_untyped_param_self_shift_26 "$$($(TESTTMP)/test_method_untyped_param_self_shift_26 | tail -1)" "METHUNTYPED OK"
+	# ...and the rest of that family, found by differencing the DECLARED per-param
+	# arrays against what the Self-shift loops carry rather than by grepping any
+	# one array's callers: a fixed-array param's length/LOW BOUND (a silent
+	# out-of-bounds write) and a `file of T` param's element width/kind (needs
+	# TWO file params of different widths to show at all). Relation-asserted.
+	./$(COMPILER) test/test_method_param_self_shift_family.pas $(TESTTMP)/test_method_param_self_shift_family_26
+	tools/expect_same.sh test_method_param_self_shift_family_26 "$$($(TESTTMP)/test_method_param_self_shift_family_26 | tail -1)" "SELFSHIFT OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"

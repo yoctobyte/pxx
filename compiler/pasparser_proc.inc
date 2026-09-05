@@ -1687,6 +1687,31 @@ begin
       pElemRowLen[i] := pElemRowLen[i-1];
       pElemRowLo[i] := pElemRowLo[i-1];
       pElemDynDepth[i] := pElemDynDepth[i-1];
+      { THE REST OF THE PER-PARAM FAMILY. Found by asking the CONCEPT -- "which
+        arrays are indexed by parameter slot?" -- rather than by grepping the
+        callers of any one of them, because a caller census can only return
+        sites that already reached the helper. Enumerating the declared
+        `array[0..MAX_PROC_PARAMS-1]` locals and differencing them against what
+        this loop shifts named four more, on top of `puntyped`:
+
+          pFixedLen / pFixedLo         a named fixed-array parameter's element
+            count and LOW BOUND. Measured, and it is a silent out-of-bounds
+            WRITE, not a diagnostic: for `W(n: Integer; var arr: array[1..3] of
+            Integer)` the method assigning arr[1..3] produced `0 10 20` with the
+            30 landing PAST THE END, where the byte-identical free routine and
+            fpc 3.2.2 both give `10 20 30`. The lo lands on the Integer slot and
+            the array slot reads an unset 0, so every index is off by lo.
+          ptypesFileRecSize / ptypesFileElemTk   a `file of T` parameter's
+            element width and kind, same shape.
+
+        Each of these was staged into a per-param array for the reason the
+        declarations give -- the allocation loop runs after every parameter is
+        parsed, so the LastType* globals describe the last one -- which is
+        exactly what makes the slot index load-bearing. }
+      pFixedLen[i] := pFixedLen[i-1];
+      pFixedLo[i] := pFixedLo[i-1];
+      ptypesFileRecSize[i] := ptypesFileRecSize[i-1];
+      ptypesFileElemTk[i] := ptypesFileElemTk[i-1];
       { The default-value arrays shift with the params. Leaving them unshifted
         wrote each default onto the PREVIOUS param's slot, so a method impl that
         repeats its defaults silently gave `M(a: Integer = 1; b: Integer = 2)`
@@ -1771,6 +1796,10 @@ begin
     pElemRowLen[0] := 0;
     pElemRowLo[0] := 0;
     pElemDynDepth[0] := 0;
+    pFixedLen[0] := 0;
+    pFixedLo[0] := 0;
+    ptypesFileRecSize[0] := 0;
+    ptypesFileElemTk[0] := 0;
     pdefault[0] := False;
     pdefaultval[0] := 0;
     pdefaultisstr[0] := False;
@@ -1834,6 +1863,22 @@ begin
       pElemRowLen[i] := pElemRowLen[i-1];
       pElemRowLo[i] := pElemRowLo[i-1];
       pElemDynDepth[i] := pElemDynDepth[i-1];
+      { ...the same family, and at this site also the DEFAULTS and ptypesStrCap,
+        which the twin loop above already shifts. The default arrays carry
+        their own bug reference there (bug-pascal-method-default-param-self-shift);
+        this is the sibling arm that fix did not reach. }
+      pFixedLen[i] := pFixedLen[i-1];
+      pFixedLo[i] := pFixedLo[i-1];
+      ptypesFileRecSize[i] := ptypesFileRecSize[i-1];
+      ptypesFileElemTk[i] := ptypesFileElemTk[i-1];
+      ptypesStrCap[i] := ptypesStrCap[i-1];
+      pdefault[i] := pdefault[i-1];
+      pdefaultval[i] := pdefaultval[i-1];
+      pdefaultisstr[i] := pdefaultisstr[i-1];
+      pdefaultisfloat[i] := pdefaultisfloat[i-1];
+      pdefaultisset[i] := pdefaultisset[i-1];
+      pdefaultsoff[i] := pdefaultsoff[i-1];
+      pdefaultslen[i] := pdefaultslen[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -1859,6 +1904,16 @@ begin
     pElemRowLen[0] := 0;
     pElemRowLo[0] := 0;
     pElemDynDepth[0] := 0;
+    pFixedLen[0] := 0;
+    pFixedLo[0] := 0;
+    ptypesFileRecSize[0] := 0;
+    ptypesFileElemTk[0] := 0;
+    ptypesStrCap[0] := 0;
+    pdefaultisstr[0] := False;
+    pdefaultisfloat[0] := False;
+    pdefaultisset[0] := False;
+    pdefaultsoff[0] := 0;
+    pdefaultslen[0] := 0;
     nparams := nparams + 1;
     retType := tyBoolean;
   end;
