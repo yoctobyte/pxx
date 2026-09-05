@@ -82,9 +82,41 @@ def world(tmp):
     return origin, a, b
 
 
-def run_sync(repo):
+# The fixture's own commit() passes `-c user.email=... -c user.name=...` per
+# invocation, so ITS commits always work. sync.sh, the code actually under
+# test, inherited nothing -- and a temp clone inherits nothing either. On a host
+# with a global identity that difference is invisible; on one without, the
+# fixture succeeds and the subject dies.
+#
+# MEASURED on seven, 2026-09-05: no ~/.gitconfig and no /etc/gitconfig, so this
+# devtest had NEVER passed there (`job_last_pass: None` -- "never measured
+# here", not "always broken"), while every real commit on the box worked because
+# the watcher clone carries a LOCAL identity.
+#
+# THE DEVTEST WAS CORRECT ABOUT WHAT IT ASSERTED AND BLIND TO A CONDITION IT
+# SILENTLY SUPPLIED TO ONE HALF OF ITSELF. Supplying it to BOTH halves is the
+# fix: the subject now runs under the same conditions as the fixture, and the
+# dependency stays visible rather than being hidden behind a box setting.
+SYNC_ENV = {"GIT_AUTHOR_NAME": "devtest", "GIT_AUTHOR_EMAIL": "t@pxx",
+            "GIT_COMMITTER_NAME": "devtest", "GIT_COMMITTER_EMAIL": "t@pxx"}
+
+
+def run_sync(repo, identity=True, homeless_dir=None):
+    e = dict(os.environ)
+    if identity:
+        e.update(SYNC_ENV)
+    else:
+        # Strip EVERY route to an identity -- env vars, ~/.gitconfig, the XDG
+        # path and /etc/gitconfig. seven's condition reproduced, not
+        # approximated.
+        for k in list(SYNC_ENV) + ["EMAIL"]:
+            e.pop(k, None)
+        e["HOME"] = homeless_dir
+        e["XDG_CONFIG_HOME"] = homeless_dir
+        e["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        e["GIT_CONFIG_NOSYSTEM"] = "1"
     r = subprocess.run(["bash", SYNC], cwd=repo, capture_output=True,
-                       text=True, timeout=120)
+                       text=True, timeout=120, env=e)
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
@@ -165,6 +197,62 @@ def main():
                   "both directions distinguished by content, not subject")
         finally:
             shutil.rmtree(tmp2, ignore_errors=True)
+
+        # ---------------------------------------------------------------
+        # THE GUARD THAT KEEPS THIS FROM STRANDING A TREE. Without an identity
+        # git dies INSIDE `rebase --continue`/`--amend` -- after the rebase has
+        # begun -- leaving .git/rebase-merge, a detached HEAD and staged
+        # changes, and sync.sh reporting "still mid-rebase after resolution",
+        # which is two layers above the cause. sync.sh now refuses UP FRONT.
+        #
+        # THIS ROW IS WHY THE FIXTURE FIX ABOVE IS NOT THE WHOLE ANSWER.
+        # Supplying the identity to the fixture makes the suite pass on every
+        # host -- and would equally have hidden the product defect. The
+        # dependency is real; a host without an identity must meet it as one
+        # legible line, not as a stranded tree.
+        print("\nthe identity precondition — refuse UP FRONT, do not strand "
+              "a rebase")
+        homeless = os.path.join(tmp, "nohome")
+        os.makedirs(homeless, exist_ok=True)
+        idroot = os.path.join(tmp, "idcheck")
+        os.makedirs(idroot, exist_ok=True)
+        _, a3, b3 = world(idroot)
+        # THE DIVERGENCE IS THE WHOLE FIXTURE. A trivial fast-forward needs no
+        # commit, so sync.sh never needs an identity and the rows below pass
+        # with the guard REMOVED -- measured, not supposed: rc=0 and no strand.
+        # Reproducing the real failure needs a rebase that has to COMMIT, which
+        # is the same shape as the fold scenario above.
+        commit(a3, "src/x.txt", "x\n", "fix(A): something to sync")
+        commit(a3, "gen/board.md", "BOARD v2\n", "docs(board): regenerate")
+        commit(b3, "gen/board.md", "BOARD v2\n", "docs(board): regen from b")
+        git(b3, "push", "-q", "origin", "master")
+        rc3, out3 = run_sync(a3, identity=False, homeless_dir=homeless)
+        check(rc3 != 0, "refuses without a usable git identity", "rc=%d" % rc3)
+        check("no usable git identity" in out3,
+              "and names the precondition, not a symptom",
+              [l for l in out3.splitlines() if "identity" in l][:1])
+        # THE LOAD-BEARING ONE: refusing only beats dying if nothing moved.
+        stranded = False
+        for probe in ("rebase-merge", "rebase-apply"):
+            d = subprocess.run(["git", "rev-parse", "--git-path", probe],
+                               cwd=a3, capture_output=True,
+                               text=True).stdout.strip()
+            if d and os.path.exists(os.path.join(a3, d)):
+                stranded = True
+        check(not stranded,
+              "and leaves NO rebase in progress — the point of refusing early",
+              "rebase-merge/rebase-apply absent")
+        head3 = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                               cwd=a3, capture_output=True,
+                               text=True).stdout.strip()
+        check(head3 != "HEAD", "and does not leave HEAD detached", head3)
+        # The control in the other direction: the SAME repo syncs once an
+        # identity exists, so the rows above are the precondition failing and
+        # not this fixture being broken.
+        rc4, _ = run_sync(a3, identity=True)
+        check(rc4 == 0,
+              "while the SAME repo syncs cleanly once an identity exists",
+              "rc=%d" % rc4)
 
         print()
         if fails:

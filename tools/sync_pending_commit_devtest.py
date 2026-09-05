@@ -21,6 +21,7 @@ sync.sh fills it in AFTER the push, when the sha is final.
 Everything happens in a throwaway bare repo + two clones under /tmp; the real
 repo is never touched. Run: python3 tools/sync_pending_commit_devtest.py
 """
+import os
 import pathlib
 import re
 import shutil
@@ -43,6 +44,31 @@ prio: 50
 ## Log
 - 2026-08-03 — filed.
 """
+
+
+# THE FIXTURE SUPPLIED AN IDENTITY TO ONE HALF OF ITSELF AND NOT THE OTHER.
+# `git()` below passes `-c user.name/-c user.email` per invocation, so the
+# fixture's OWN commits always work -- on any host, including one with no
+# ~/.gitconfig at all. `sync.sh` is a separate process and inherits none of
+# that, and a rebase COMMITS, so on a host without a global identity every
+# sync.sh call here died mid-rebase. The failure surfaced two layers up as
+# "still mid-rebase after resolution -- refusing to amend", which reads as a
+# fold-guard defect and is not one.
+#
+# So this test was passing on plexus and failing on seven for a reason that has
+# nothing to do with what it asserts: plexus has a ~/.gitconfig and seven has
+# neither ~/.gitconfig nor /etc/gitconfig. A fixture that silently depends on
+# ambient host config is not testing the thing it names -- it is testing the
+# box. Make the identity explicit and the test says the same thing everywhere.
+SYNC_ENV = {"GIT_AUTHOR_NAME": "devtest", "GIT_AUTHOR_EMAIL": "devtest@example",
+            "GIT_COMMITTER_NAME": "devtest",
+            "GIT_COMMITTER_EMAIL": "devtest@example"}
+
+
+def sync(dev):
+    """Run tools/sync.sh with an identity of its own. -> CompletedProcess"""
+    return subprocess.run(["tools/sync.sh"], cwd=dev, text=True,
+                          capture_output=True, env={**os.environ, **SYNC_ENV})
 
 
 def git(repo, *args, check=True):
@@ -111,7 +137,7 @@ def resolve_and_sync(dev, daemon, commit_arg):
 
     daemon_publishes(daemon, 1)          # origin moves -> sync must rebase
 
-    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    r = sync(dev)
     if r.returncode != 0:
         raise AssertionError(f"sync.sh failed: {r.stdout}{r.stderr}")
     landed = git(dev, "show", f"origin/master:devdocs/progress/done/{SLUG}.md").stdout
@@ -164,7 +190,7 @@ def case_placeholder_filled_in_any_bucket(tmp):
         f"devdocs/progress/done-followup/{SLUG}.md")
     git(dev, "commit", "-qm", f"fix(T): {SLUG}")
     daemon_publishes(daemon, 1)
-    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    r = sync(dev)
     assert r.returncode == 0, f"sync.sh failed: {r.stdout}{r.stderr}"
     landed = git(dev, "show",
                  f"origin/master:devdocs/progress/done-followup/{SLUG}.md").stdout
@@ -224,7 +250,7 @@ def case_generated_boards_autoresolve(tmp):
     git(dev, "add", "-A")
     git(dev, "commit", "-qm", f"fix(T): {SLUG}")
 
-    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    r = sync(dev)
     assert r.returncode == 0, f"sync.sh could not resolve the boards: {r.stdout}{r.stderr}"
     boards = git(dev, "ls-tree", "--name-only", "origin/master",
                  "devdocs/progress/").stdout.split()
@@ -330,7 +356,7 @@ def case_refill_cites_the_resolve_not_the_previous_fill(tmp):
     t.write_text(t.read_text() + "\n- 2026-08-19 — reopened, commit PENDING-COMMIT.\n")
     git(dev, "add", "-A"); git(dev, "commit", "-qm", "docs: a second citation")
     daemon_publishes(daemon, 2)   # a DIFFERENT publish: run 1 already landed
-    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    r = sync(dev)
     assert r.returncode == 0, f"sync.sh failed: {r.stdout}{r.stderr}"
     again = git(dev, "show", f"origin/master:devdocs/progress/done/{SLUG}.md").stdout
     assert PLACEHOLDER not in again, "second placeholder not filled"

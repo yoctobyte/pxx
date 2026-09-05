@@ -40,6 +40,40 @@ if [ "$BRANCH" = "HEAD" ]; then
     exit 1
 fi
 
+# A REBASE COMMITS, AND A COMMIT NEEDS AN IDENTITY. Checked here, before
+# anything is touched, because the expensive part of this failure is not the
+# refusal -- it is being left MID-REBASE.
+#
+# Without an identity git dies inside `rebase --continue` / `--amend`, i.e.
+# AFTER the rebase has started, leaving .git/rebase-merge behind, HEAD detached
+# and changes staged. sync.sh then reports "still mid-rebase after resolution --
+# refusing to amend", which is TWO LAYERS ABOVE the cause ("unable to
+# auto-detect email address"). Every lane runs this script; a host that cannot
+# commit should learn so in one line, not by having its tree stranded.
+#
+# MEASURED on seven, 2026-09-05: no ~/.gitconfig and no /etc/gitconfig, so
+# user.name/user.email are unset globally AND system-wide. Real work there was
+# unaffected because the watcher clone carries a LOCAL identity -- which is
+# exactly why this went unnoticed for as long as that file has not existed, and
+# why it surfaced only in temp clones that inherit nothing.
+#
+# `git var GIT_COMMITTER_IDENT` is the right probe: it fails not only when the
+# fields are unset but when the auto-detected address is unusable
+# (`seven@seven.(none)`), which is the actual condition git refuses on.
+if ! git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
+    echo "sync: no usable git identity -- refusing to START, because a rebase" >&2
+    echo "      that cannot commit strands the tree mid-rebase instead of" >&2
+    echo "      failing cleanly. Nothing has been touched." >&2
+    echo "" >&2
+    echo "      git config --global user.name  'Your Name'" >&2
+    echo "      git config --global user.email 'you@example.com'" >&2
+    echo "" >&2
+    echo "      (omit --global for this repo only, or set GIT_AUTHOR_NAME /" >&2
+    echo "      GIT_AUTHOR_EMAIL / GIT_COMMITTER_NAME / GIT_COMMITTER_EMAIL)" >&2
+    git var GIT_COMMITTER_IDENT >&2 2>&1 || true
+    exit 1
+fi
+
 # EVERY generated board file, not just BOARD.md. `board-md` also writes
 # BOARD-brief.md and BOARD-done.md (done/ alone was 190KB of BOARD.md, so the
 # archived tables were split out) — and the moment a second generated file

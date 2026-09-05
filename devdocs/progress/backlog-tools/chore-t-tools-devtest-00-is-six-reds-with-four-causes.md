@@ -364,3 +364,94 @@ fingerprinted. **`qemu-*` versions are captured nowhere** — and seven runs qem
 cause for "red on seven, green locally". That is a real gap, it is `tstate/`, and
 it is a separate ticket from this one; the fingerprint machinery to hang it on
 already exists and already has the guard above protecting it.
+
+---
+
+## Cause 1 FIXED — both reds, one answer, and the ticket's own reading of it was wrong — 2026-09-05, frankZ
+
+The section above says of the sync pair:
+
+> **The refusal is almost certainly right and the guards are almost certainly
+> stale** — but that is a judgement about whether the fixture's mid-rebase state
+> is one a caller should ever reach, and it belongs to whoever owns the fold
+> guard.
+
+**The refusal is right and the guards were not stale.** There was no judgement to
+route to anyone, and nothing about the fixture's mid-rebase state: the two tests
+were failing for a reason that has nothing to do with what either asserts.
+
+### The cause
+
+`sync.sh` was **stranding mid-rebase because it had no git identity**, and the
+fold refusal is what a stranded rebase looks like from one layer up.
+
+Neither test supplies one to `sync.sh`. Both supply one to **themselves**:
+
+```python
+["git", "-c", "user.name=devtest", "-c", "user.email=devtest@example", ...]
+```
+
+That is per-invocation, so it covers the fixture's own commits and **not the
+separate `sync.sh` process**, which inherits nothing from it. A rebase commits.
+So on a host with no ambient identity, `sync.sh` dies inside
+`rebase --continue`, leaving `.git/rebase-merge` behind — and `sync.sh` then
+reports `still mid-rebase after resolution — refusing to amend`, which is TWO
+LAYERS above `unable to auto-detect email address`.
+
+**seven has neither `~/.gitconfig` nor `/etc/gitconfig`** — measured. plexus has
+one. That is the whole of the host-specificity: **the test was passing on plexus
+because of the box, not because of the tree**, and a fixture that silently
+depends on ambient host config is testing the box.
+
+Note what this does to the leading hypothesis recorded above. The live-watcher
+theory does not cover these two either — that is now **two** of frankZ's four
+host-specific guards explained by something else (the governor literal was the
+first). The remaining two should not be assumed to share a cause with anything.
+
+### Two fixes, and the second one is the one that matters
+
+**1. The fixtures now hand `sync.sh` an identity of its own**, via env rather
+than `-c`, because env is what crosses a process boundary. Both files.
+
+**2. `sync.sh` refuses UP FRONT when it has no usable identity** — before it
+touches anything. This is the real repair and it is not test-only:
+
+> `sync: no usable git identity -- refusing to START, because a rebase that
+> cannot commit strands the tree mid-rebase instead of failing cleanly. Nothing
+> has been touched.`
+
+Every lane runs this script. A host that cannot commit should learn so in one
+line, not by having its tree stranded and then reading a fold-guard message that
+accuses the wrong thing. `git var GIT_COMMITTER_IDENT` is the probe, not a
+config lookup: it fails both when the fields are unset AND when the
+auto-detected address is unusable (`seven@seven.(none)`), which is the condition
+git actually refuses on.
+
+The fold refusal from `f81498db8` is untouched. Nothing was loosened.
+
+### Controls, both directions
+
+Measured, not reasoned — and the first one caught a dead row of my own.
+
+- **Guard removed from `sync.sh`, fixture unchanged:** 4 of 5 new rows go RED
+  (`rc=1` with no message, `rebase-merge` left behind, HEAD detached at `HEAD`,
+  and the clean-sync row fails too). With the guard: all green.
+- **That control initially showed `rc=0` and I had to fix the fixture, not the
+  guard.** The section-3 world had no divergence, so `sync.sh` fast-forwarded,
+  never needed to commit, and never needed an identity — three rows including
+  the one I had labelled *THE LOAD-BEARING ONE* were passing trivially and
+  **could not have failed.** The fixture now forces a real rebase by having both
+  clones write different content to `gen/board.md`. A guard that cannot fail
+  prints PASS, and mine did.
+- **Both tests run green under a synthetic seven** (`HOME` empty,
+  `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, every `GIT_*_NAME/EMAIL`
+  unset) **and under a normal plexus.** Before the fix, that same environment
+  reproduces seven's red here — which is what established the cause rather than
+  matching a message.
+
+`tools-devtest#00` should now be **3 red, one cause**: the three censuses of
+Cause 2, each of which needs a ruling and not a patch. No census was re-armed.
+
+**Not verified from here:** that seven's run agrees. This box is not that box,
+and the claim above is "the condition seven has, reproduced here, is fixed here".
+The confirming instrument is seven's next full tier.
