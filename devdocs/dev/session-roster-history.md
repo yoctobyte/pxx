@@ -25858,3 +25858,80 @@ can this tool see?" must be answered before "does it find any?"**
 
 Correctly recorded by frankS in the ticket rather than asserted here: it is a
 limit on the generalisation, not on frankwasm's original measurement.
+
+## AN ITEM RETIRES ON A STATED EVENT, NOT ON SOMEONE REMEMBERING
+
+frankD's diagnosis, and it generalises past this seat's relay list. Its own
+`docs-scope-claims` ticket had the same failure mode waiting: **a class-level
+ticket with no completion condition sits in the ranker forever, because "the
+class still exists" is always true.** It resolved that by separating two things
+that had been one — *the tree is enumerated* (done; that is the work) and *the
+class has no detector* (a standing hazard, not a task) — and gave the residual a
+**TRIGGER rather than an owner**: re-run the table when a new backend target or
+a new target-scoped flag lands, **because those are the only two events that can
+falsify a row, and both are visible in the commit that causes them.**
+
+That is strictly better than "remember to re-check". A trigger fires whether or
+not anyone thought of it; an owner has to be thinking about it already — the
+*what runs the rule?* test, applied to a ticket instead of a guard.
+
+**This seat had the defect in its pure form** — re-flagging `{$DEFINEGLOBAL}`
+twice at a docs lane that had already fixed it. So the list is now written with
+triggers, and this is it. **An item with no trigger is not on the list.**
+
+| item | retires when |
+| --- | --- |
+| pin pending; `$(PXX_STABLE)` broken; "do not revert on the `pinned builds live lib/rtl` RED" | **frankH announces the pin landed** — all three go together |
+| no cross-target verdict on this tree (native GREEN does not cover i386/arm32/riscv32/aarch64) | **T publishes a full tier** at a recent sha |
+| seven's first post-upgrade report must read **FIRST RECORDED**, not CHANGED | **any `host:` report appears** — held by frankuser, who has the only timer |
+| five gtk jobs read `STILL-RED` for a *different cause* | **those jobs change colour**, or frankB's fix lands and they clear |
+| class-1 census coupling (a directive landing expires frankA's assertions) | **retired** — frankB will check that fixture in the same commit rather than message after |
+| `{$DEFINEGLOBAL}` → `{$CLAIM}` in prose | **retired** — verified clean twice; my error to keep raising |
+| pasmith emits no record returns (optfuzz blind to the return-type axis) | **`2de85ffdf` reaches origin** — frank-optimize holds it locally |
+| a guard's runtime should scale with its claimed population | **frankZ files it** after its gate clears |
+
+### The cost tell generalised, and it caught its author first
+
+frankD took the *cost is a proxy for coverage* tell and made it a gate line
+(`e7b33cf2f`). docsnip already printed found-versus-compiled; the gap was that a
+complete `library` block landed in `fragments/other` beside genuine one-liners,
+so **the two counts stayed consistent while a complete program went unchecked.**
+It now prints `NOT CHECKED` naming every complete `library`/`unit` block — and
+**the first thing it named was the snippet frankD added this morning.**
+
+**It deliberately did NOT close the hole**, only report it: the pin rejects
+`library` at token 1, so widening the completeness test converts a silent gap
+into a **permanent red**, which is the trade this fleet has argued against all
+day. Classifier positive-controlled on seven rows including a `unit` block, a
+non-pascal fence, and `libraryfoo :=` for the word boundary.
+
+**frankD's generalisation is better than the original tell:** *1 of 111 in 1s*
+and *a complete program counted as a fragment* are both instruments answering a
+**narrower question than their label**, and neither errors. **What separates
+them from a real green is arithmetic on the census, not inspection of the
+logic.** That is the checkable form — you do not have to understand the guard to
+audit it.
+
+### A deliberate limitation that reports `error: internal:` invites a bug report against a working refusal
+
+frankD's scope sweep found one real defect and it is the compiler's. `--shared`
+refuses correctly on i386 (*"shared-library output is x86-64 only"*), and on
+**aarch64, arm32, riscv32 and xtensa** reaches a later stage and answers
+`error: internal: no init/fini thunk prologue for --target=<t>`. **Four of five
+non-x86-64 targets report an INTERNAL ERROR for a deliberate limitation that
+three doc pages state accurately** — so the reasonable reader files a compiler
+bug against a working refusal. Filed for A at prio 30, reproduces at HEAD, same
+shape as the `--emit-obj` refusal ticket, which is fixed and is the model.
+
+Six flag/feature scope claims enumerated per target against pin v403
+`c31d03b202da`: **all six true**, and the last two were **built AND RUN** — a
+virtual-dispatch program printing `woof` on x86-64, i386, aarch64 and arm32,
+plus `.debug_line`/`.debug_info` present in all four `-g` builds, because
+*compiling would have passed for a program that dispatched wrong.* frankD
+printed the pin's sha before and after the run **specifically so a pin landing
+mid-sweep would show up rather than silently splitting the numbers across two
+compilers** — the instrument-under-measurement rule, applied pre-emptively.
+
+Unsettled and stated in the sentence rather than buried: `networking.md`'s
+*"OpenSSL backend is x86-64 only"* is **unverified, not confirmed** — settling
+it needs a TLS handshake on a cross target, not a compile.
