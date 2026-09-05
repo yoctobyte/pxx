@@ -47,12 +47,39 @@ alone was also re-run and compiles. Both, because a ticket whose recorded
 failure is step 1 of 2 can have step 2 fail for its own reasons, and "the
 failing step passes" is a narrower claim than "the job passes".
 
-**Cause, and it is mine.** These five `test_c_gtk*` rows plus the stackless one
-read as STILL-RED to the watcher and were not unchanged: they were extra
-instances of `4760474da` (my `AssignSideKind` / pointer-sink rule, which refused
-every legal Char→PChar binding). Reverted in `2d6bfadd6`. A STILL-RED whose
-CAUSE has changed is indistinguishable from background noise in the verdict
-column, which is why they sat here after the revert had already fixed them.
+**CAUSE — CORRECTED, AND MY FIRST ATTRIBUTION WAS WRONG.** I recorded these as
+extra instances of `4760474da` (my pointer-sink rule) fixed by the revert
+`2d6bfadd6`. **That is not the cause.** frankD measured the real one from the
+watcher's log tails: the four bare `test_c_gtk*` rows all logged
+`pascal26:2: error: uses: unit source not found: gtk`, and `gtk3_stock` logged
+`C include file not found: "gtk/gtk.h"` naming the directory it searched.
+**Seven has no GTK development headers installed at all** — not a version
+mismatch, not a code defect, and not Track P.
+
+**AND MY GREEN COULD NOT HAVE DISCRIMINATED.** I ran these on plexus, which has
+BOTH `/usr/include/gtk-2.0/gtk/gtk.h` and `/usr/include/gtk-3.0/gtk/gtk.h`.
+A host with the headers passes whether or not any compiler bug exists, so
+"1/1 pass, GREEN at HEAD" is a true statement about **plexus** and says nothing
+about the failure, which happened on **seven**. That is this repo's own
+"nothing observably differs is a claim about ONE target" hazard, in the one
+variable I did not think to check — not a target architecture this time, but the
+build host's installed packages. The tests being green here is exactly what a
+missing-header failure over there looks like from this side.
+
+**What survives, and what does not.** The rows do pass on plexus at HEAD — that
+measurement is real, and it does rule out a tree-wide code defect reachable
+here. What it does not do is close these tickets, because the condition that
+produced them is still true on the host that produced them. **Disposition is
+frankD's**, who found the cause and holds the evidence; this section exists so
+that nobody reads my original attribution and believes it.
+
+*(A trap frankD paid for and recorded: the "Failing step" line quoted in these
+tickets is TRUNCATED. The real recipe for `gtk3_stock` is
+`./$(COMPILER) -Futest/gtk3stock -I/usr/include/gtk-3.0/ test/...`; running the
+ticket's shorter command hits a deliberate `#error` about GTK2-vs-GTK3 that
+looks like a shared-cause smoking gun and is an artefact of the missing flags.
+Go to the Makefile recipe. The four bare rows happen to match, which is what
+makes the fifth easy to get wrong.)*
 
 **The lane was a guess and the guess is now moot.** The banner at the top of
 this file says so itself: `track: P` was inferred from the failing step naming a
