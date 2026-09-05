@@ -221,3 +221,68 @@ Sharing a limit and hiding it is the opposite of the dialect-pass argument.
   such template into `undefined variable`, turning a silent wrong answer into a
   refusal — which is *better*, but is not the whole job and should be a
   deliberate choice rather than a surprise.
+
+## 2026-09-06 (frankZ) — independently reproduced, and the SHARD has a second row
+
+Reached this from the other end — `test-pascal-conformance#shard1/6` went red in
+the tier — and arrived at the same defect with the same repro shape before
+finding this ticket. **Everything above stands; nothing here corrects it.** The
+independent reproduction is worth one line only because it came from a different
+starting point and a different box, and agreed: a unit template's `Fill` calling
+its own `Helper` runs the PROGRAM's `Helper`, silently, exit 0.
+
+Also confirmed pre-existing by compiler rather than by pin — the shape compiles
+and misbinds at `b8e3b3010`, at `f4f5cfee0~1`, at `f4f5cfee0` and at master, so
+"identical on pin v403" is not a pin artefact.
+
+### What this ticket does not cover: the shard is TWO rows
+
+The disposition section above would move `tgeneric4.pp` to pass-by-rejection.
+**That alone does not green the shard.** Measured either side:
+
+| | pass | fail | skip |
+| --- | --- | --- | --- |
+| `b8e3b3010` | 63 | **0** | 24 |
+| master | 70 | **2** | 15 |
+
+    test-pascal-conformance: FAILURES: tgeneric4.pp(accepted-invalid)
+                                       tgenfunc14.pp(accepted-invalid)
+
+**`tgenfunc14.pp` is a different construct with a different question.** It is a
+unit declaring `generic procedure Test<T: class>` in the interface and repeating
+the constraint in the implementation; its own comment is *"constraints must not
+be repeated in the definition"*. That is a REDUNDANCY FPC forbids, not a wrong
+observable — accepting it produces no wrong answer and refuses no legal code, so
+unlike `tgeneric4` it looks like a genuine `wontfix:`/`known-incompat` under
+CLAUDE.md's *"us accepting what FPC rejects is not a defect"*. **Recommendation
+only — not ruled on here, and deliberately not classified by me**, because a
+row's classification is Track P's call and this ticket is the one that will be
+read when someone touches the shard.
+
+### The skip entries were burned CORRECTLY — do not go looking there
+
+Both rows were skip-listed and both entries were removed by
+`5d6c169d1 feat(P): conformance 347 -> 368 — 21 skip entries had outlived the
+gaps they describe`. That commit is **not** at fault and should not be revisited:
+the harness routes a `%FAIL` row that COMPILES to `bump_fail`/`stillgap`, never
+to "stale", so `--retry-skips` could not have recommended burning these. They
+were genuinely passing — correctly rejected — when the entries went. Checked
+because the retry summary's own wording (*"$stale now EXIT-CLEAN"*) reads as
+though it inverts on `%FAIL` rows; only that summary line is loose, the routing
+is right.
+
+The acceptance flipped for BOTH rows somewhere in `b8e3b3010..f4f5cfee0~1`, 192
+commits dense with legitimate generic-routine work. **Not pinned further on
+purpose**: the acceptance is an improvement nobody should revert, so naming the
+exact commit buys nothing, and the defect it exposed is older than the bracket.
+
+### The trap this row sets, stated because I nearly walked into it
+
+Every visible signal said "classify and move on": CLAUDE.md's *"us accepting
+what FPC rejects is not a defect"*, a matching `wontfix:` category in the
+harness, and the test's own comment blaming an FPC linker limitation
+(*"the assembler symbol is not global"*). **The discriminator was RUNNING the
+binary** — it prints `Program` and halts 1 where the test demands `Unit`, and
+none of that evidence required running anything. A `wontfix:` on `tgeneric4`
+without this ticket in place would have converted a silent wrong-code bug into a
+green row with a reason attached.
