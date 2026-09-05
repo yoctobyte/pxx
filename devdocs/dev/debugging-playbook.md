@@ -5401,6 +5401,67 @@ of the search that produced it; a POSITIVE one inherits the population of the ta
 it came from. Neither aperture nor population survives a summary unless somebody
 types it.
 
+## N CAUSES AND N SYMPTOMS IS A COINCIDENCE OF ARITY — the COUNTING supplies a correspondence that neither instrument measured
+
+Measured 2026-09-06, by this file's coordinator, on itself. **The composition
+failure a relay is specifically exposed to**, and it shipped as guidance before it
+was caught.
+
+**The inputs, both correct.** One session, working NATIVE only, named **two
+defects** in a stackless generator: an offset defect (argument index vs slot index)
+and a width defect (8 bytes written of a 16-byte Variant). Another session, holding
+**one source across two targets**, reported **two symptoms**: native yields **no
+iterations**, wasm32 prints **`got=0`**.
+
+**The relay mapped them one-to-one and sent it on.** Neither report claimed a
+correspondence. **The arities matched, and that was the whole of the argument.**
+
+> **Two defects and two symptoms is a coincidence of counting.**
+
+**Both halves were false.** Measured with four programs all yielding the CONSTANT 9,
+so nothing depends on reading a parameter:
+
+```
+c: Variant                ->  no iterations
+c: Variant; a: Integer    ->  no iterations
+a: Integer; c: Variant    ->  got=9   correct
+a: Integer                ->  got=9   correct
+```
+
+**Both symptoms occur on NATIVE, from one binary, decided by the parameter list and
+not by the target.** Zero iterations happens **exactly when the FIRST parameter is a
+Variant**. And the offset defect **does not touch the headline repro at all**: for
+`Gen(n: Variant)`, `storeoff=48` and `realoff=48` **agree**, because for the first
+parameter the argument index and the slot index coincide however you compute them.
+
+### Why it would have been expensive rather than merely wrong
+
+Acting on the mapping means **fixing a real defect, correctly, and watching the
+repro keep failing.** That reads as *"the diagnosis was incomplete"* — never as
+*"the correspondence was invented"* — so the next move is to look for a third
+defect rather than to re-examine the mapping. **A wrong map between correct facts
+is harder to detect than a wrong fact**, because every component survives checking.
+
+### The tell, and it is free
+
+**Ask which single instrument varied the axis the mapping depends on.** Here:
+
+- session A varied the **parameter list**, at one target
+- session B varied the **target**, at one parameter list
+- **nobody had varied one against the other** — and that cross is the entire content
+  of the claim
+
+> **A composition of two measurements is a THIRD measurement, and nobody has taken
+> it.** Two readings that each hold one axis fixed cannot, between them, say
+> anything about how the axes interact.
+
+**And a relay is where this is most likely to happen and least likely to be
+caught**, because the composer does not run experiments: the tidy mapping has
+nothing to collide with before it leaves, and it arrives in the confident register
+that routed information carries. **State a composition as a question to be measured,
+never as a finding** — *"does the symptom track the target or the parameter list?"*
+costs one program and settles it.
+
 ## THE RESIDUAL-SET FALLACY — a partition shows causes DIFFER, never what they are, and what is LEFT OVER is not a group
 
 Named 2026-09-05, on a live case, and not written down here before.
@@ -5505,6 +5566,32 @@ had connected to it, not because the family argument covers the swap.**
 > **A verdict and its reason go stale separately, and the verdict is the half
 > everyone copies.** The reason is the only part that says whether the verdict
 > survives the fix that is already filed.
+
+### A GREEN ROW WITH AN ARGUMENT ATTACHED IS CLOSED TWICE, AND THAT IS WORSE THAN A RED ROW
+
+Named 2026-09-06 (frankZ, relayed by frankS), from a near-miss on `tgeneric4`.
+**Three genuine, independent-looking signals all said classify it away** — and the
+discriminator was **running the binary**, which none of the three required.
+
+> **A `wontfix` there would have converted a silent wrong-code bug into a green row
+> WITH AN ARGUMENT ATTACHED, which is worse than a red row.**
+
+**A red row invites a re-measurement**; it is an open question and it stays visible.
+**A justified green is closed twice** — once by the verdict and once by the
+reasoning — and the reasoning is what stops the re-measurement, because the next
+reader who wonders finds their question already answered.
+
+That is the false-coverage asymmetry one register up: a bare wrong verdict can be
+noticed by anyone who re-runs the case, but **a wrong verdict with a good argument
+under it is defended by the argument.** The better the write-up, the longer it
+lasts.
+
+**So the bar for a `wontfix` or a `known-incompat` is higher than the bar for a
+fix**, not lower — and the discriminating measurement has to be one the
+classification's own reasoning did not already assume. Cf. *a precedent can be
+correct today and load-bearing for the wrong reason*: there the verdict survived
+and the reason did not; here the reason is what would have made a wrong verdict
+permanent.
 
 ### The guard, and it costs one question
 
