@@ -7,7 +7,7 @@ track: B
 type: feature
 status: working
 owner: frankH
-summary: "HTTPS WORKS, SYNC AND ASYNC, THROUGH TWO BACKENDS, AND THE TICKET HAD NO SUMMARY UNTIL 2026-09-05 -- a p53 ticket in working/ with no status, owner or summary in its frontmatter, so the one part everyone reads did not exist. Six slices landed 2026-06-25: lib/rtl/tls.pas ships the backend-neutral vtable and registry (fails CLEANLY with tlsError when no backend is registered, never crashes), http.pas routes https:// through it across ALL FOUR transports (blocking one-shot, async one-shot, keep-alive, async pool -- reuse keyed on host:port:SCHEME so an https connection is never handed to a plain request), then the OpenSSL backend, async handshake, certificate verification with a trust store, and server role via SSL_accept with OpenSSL<->OpenSSL interop. The NATIVE TLS 1.3 backend landed 2026-08-01: ed25519 + rsa_pss + ecdsa_p256, chain verify, kTLS-TX with a Pascal fallback; it is CLIENT ROLE ONLY and answers `native TLS 1.3: server role is not implemented` (tls13_native.pas:295) -- the OpenSSL backend has the server side, the native one does not. 2026-09-01, TWO findings worth more than the code: (a) the `blocked-by: [feature-tls13-from-scratch]` edge was FALSE, not stale -- that ticket is deliberately parked in rainy-day/ and `ready` keeps a ticket whose blockers are RESOLVED, so parked-not-resolved suppressed this p53 ticket from the Track B queue entirely while the native backend it was supposedly waiting for had already landed; (b) this ticket claimed async https `occupies a thread for the length of a handshake` and the truth was worse -- ASYNC HTTPS DID NOT WORK AT ALL. RecvN tested `if got <= 0`, swallowing PAL_NET_EAGAIN as EOF, so a would-block was reported as `no ServerHello (connection closed)` about a connection that was open and healthy; SendBytes had the twin defect and was quieter, ignoring its result so EAGAIN sent nothing and a short write truncated a record. Fixed, with the coroutine stack canary now checked at EVERY yield rather than only at completion (a silent SIGSEGV became `fatal: coroutine stack overflow`). NO STATE MACHINE was built and that is measured, not preferred: the scheduler is STACKFUL, scheduler.WaitIO ends in a real __pxxcoswitch. STILL OPEN, three things: a large STREAMED body over the reactor is untested (the devtest does one GET), the native backend refuses the server role, and the stack canary still cannot catch an overflow that faults before it can yield -- a guard page per stack would, at an mmap each. THE `make lib-test cannot run to completion for ANYONE` NOTE BELOW IS STALE as of 2026-09-05: crtl_reachability passes (148 headers, 66 modules) and the suite runs."
+summary: "HTTPS WORKS, SYNC AND ASYNC, THROUGH TWO BACKENDS, AND THE TICKET HAD NO SUMMARY UNTIL 2026-09-05 -- a p53 ticket in working/ with no status, owner or summary in its frontmatter, so the one part everyone reads did not exist. Six slices landed 2026-06-25: lib/rtl/tls.pas ships the backend-neutral vtable and registry (fails CLEANLY with tlsError when no backend is registered, never crashes), http.pas routes https:// through it across ALL FOUR transports (blocking one-shot, async one-shot, keep-alive, async pool -- reuse keyed on host:port:SCHEME so an https connection is never handed to a plain request), then the OpenSSL backend, async handshake, certificate verification with a trust store, and server role via SSL_accept with OpenSSL<->OpenSSL interop. The NATIVE TLS 1.3 backend landed 2026-08-01: ed25519 + rsa_pss + ecdsa_p256, chain verify, kTLS-TX with a Pascal fallback; it is CLIENT ROLE ONLY and answers `native TLS 1.3: server role is not implemented` (tls13_native.pas:295) -- the OpenSSL backend has the server side, the native one does not. 2026-09-01, TWO findings worth more than the code: (a) the `blocked-by: [feature-tls13-from-scratch]` edge was FALSE, not stale -- that ticket is deliberately parked in rainy-day/ and `ready` keeps a ticket whose blockers are RESOLVED, so parked-not-resolved suppressed this p53 ticket from the Track B queue entirely while the native backend it was supposedly waiting for had already landed; (b) this ticket claimed async https `occupies a thread for the length of a handshake` and the truth was worse -- ASYNC HTTPS DID NOT WORK AT ALL. RecvN tested `if got <= 0`, swallowing PAL_NET_EAGAIN as EOF, so a would-block was reported as `no ServerHello (connection closed)` about a connection that was open and healthy; SendBytes had the twin defect and was quieter, ignoring its result so EAGAIN sent nothing and a short write truncated a record. Fixed, with the coroutine stack canary now checked at EVERY yield rather than only at completion (a silent SIGSEGV became `fatal: coroutine stack overflow`). NO STATE MACHINE was built and that is measured, not preferred: the scheduler is STACKFUL, scheduler.WaitIO ends in a real __pxxcoswitch. STILL OPEN, TWO things after 2026-09-05: the native backend refuses the server role, and the stack canary still cannot catch an overflow that faults before it can yield -- a guard page per stack would, at an mmap each. THE STREAMED-BODY GAP IS CLOSED: a 2 MB body over https on BOTH paths, asserting LENGTH and a byte SUM derived from the served file each run, with a third row fetching a SMALL file under the big file's expectations to prove the comparison REJECTS -- a length check that is silently comparing nothing passes every positive row. The code was already right; both paths returned len=2000000 and the exact sum first run, so what was missing was a test that could fail, not a fix. THE `make lib-test cannot run to completion for ANYONE` NOTE BELOW IS STALE as of 2026-09-05: crtl_reachability passes (148 headers, 66 modules) and the suite runs."
 ---
 
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
@@ -632,3 +632,50 @@ exercised once and shallowly. The native backend is client-role only
 coroutine stack canary narrows the overflow window rather than closing it: it
 still cannot catch a fault that happens before the first yield, which is exactly
 the 64 KB TLS case.
+
+## 2026-09-05 (frankH) — the streamed body is covered now, and the code was already right
+
+The first of those three is closed. `test/devtest_https_native_stream.pas` plus
+three rows in `tools/tls_native_seam_devtest.sh` fetch a **2 MB** body over
+https on **both** paths and assert its LENGTH and a byte SUM.
+
+**The gap was in the testing, not in the code.** Both paths return
+`len=2000000` and the exact sum of the served file, first run, no fix needed.
+That is the honest result and it is still worth having: the row that existed
+fetched openssl's status page, which can complete without a single would-block,
+so it could not fail the way the handshake failed for months — a short read
+taken as end-of-stream. In the data path that same shape truncates a body, and a
+truncated body still parses, still says 200, and still looks like a success.
+
+**Both quantities, because neither subsumes the other.** Truncation moves the
+length; a dropped or reordered record in the middle keeps the length and moves
+the sum.
+
+**The expectation is derived from the served file on every run** (`wc -c` and an
+`od`/`awk` byte sum), not written down, so there is no constant to keep in step
+with a fixture. The body is built by repeating a file already in the tree, which
+is deterministic and varied and needs nothing a POSIX shell lacks.
+
+**And there is a control on the control.** The third row fetches a SMALL file
+with the big file's expectations and asserts the comparison REJECTS it. A
+length-and-sum check that is silently comparing nothing passes every positive
+row, and that is a guard which cannot fail. It rejects, so it is live.
+
+**Harness note worth keeping:** `openssl s_server -HTTP` answered nothing at all
+here — verified with `curl`, `code=000` — while `-WWW` served the full 2 MB
+(`code=200 size=2000000`). The existing rows use `-www`, which serves a status
+page rather than files, so this is a third mode and not a typo.
+
+**One thing I nearly shipped, recorded because the near-miss is the lesson.**
+The first draft routed the response through a local with a comment saying pxx
+refuses a function result as a `const record` argument and fpc accepts it. That
+was **false**. The original error was a cascade from `HttpRequest` not being
+exported from `http.pas` — only `HttpGet` and `HttpRequestAsync` are — and the
+`no overload of Measure matches` line was about the unresolvable inner call, not
+about the record. Probed both spellings against pxx and fpc before believing it;
+both compile. The comment and the local are gone. A source comment asserting a
+compiler defect that does not exist is worse than no comment, and I had already
+written the sentence that would have gone into a ticket.
+
+Still open: the native backend's server role, and the stack canary's
+before-first-yield window.

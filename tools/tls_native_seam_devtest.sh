@@ -155,8 +155,79 @@ else
   say "FAIL  async https client build"; tail -3 /tmp/pxx_https_async_build.log; fail=1
 fi
 
+# A LARGE body, both paths. The two rows above fetch openssl's status page --
+# a handshake plus a couple of application-data records, which can complete
+# without a single would-block. So they cannot fail the way the HANDSHAKE
+# failed for months: a short read taken as end-of-stream. In the data path that
+# same shape truncates a body instead of refusing a connection, and a truncated
+# body still parses, still says 200, and still looks like a success.
+#
+# THE EXPECTATION IS DERIVED FROM THE SERVED FILE, not written down. `wc -c` and
+# an od/awk byte sum are computed from big.bin on every run, so nobody has to
+# keep a constant in step with a fixture, and the body is built by repeating a
+# file already in the tree -- deterministic, varied bytes, no generator
+# dependency beyond what a POSIX shell has.
+#
+# LENGTH AND SUM BOTH, because neither subsumes the other: truncation moves the
+# length, and a dropped or reordered record in the middle keeps the length and
+# moves the sum.
+#
+# SYNC IS THE POSITIVE CONTROL FOR ASYNC. Same URL, same binary, one argv word
+# apart -- so async red with sync green implicates the reactor and exonerates
+# the server, the certificate and the body. That is the control that made the
+# 2026-09-01 handshake defect legible.
+#
+# AND THE LAST ROW IS THE CONTROL ON THE CONTROL: the same client fetches a
+# SMALL file and the harness asserts the comparison REJECTS it. A length-and-sum
+# check that is silently comparing nothing passes every positive row.
+SCLI=/tmp/pxx_devtest_https_native_stream
+if "$PXX_STABLE" -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/posix" \
+      "$ROOT/test/devtest_https_native_stream.pas" "$SCLI" >/tmp/pxx_https_stream_build.log 2>&1; then
+  SD=/tmp/pxx_seam_www
+  mkdir -p "$SD"
+  : > "$SD/big.bin"
+  while [ "$(wc -c < "$SD/big.bin")" -lt 2000000 ]; do
+    cat "$ROOT/compiler/pasparser_expr.inc" >> "$SD/big.bin"
+  done
+  printf 'small\n' > "$SD/small.bin"
+  explen=$(wc -c < "$SD/big.bin" | tr -d ' ')
+  expsum=$(od -An -v -tu1 "$SD/big.bin" | awk '{for(i=1;i<=NF;i++) s+=$i} END{print s+0}')
+
+  # s_server -WWW, not -HTTP: -HTTP answered nothing at all here, verified with
+  # curl (code=000) while -WWW served the full 2 MB (code=200 size=2000000).
+  ( cd "$SD" && exec openssl s_server -accept 28830 -cert "$D.rsa.leaf" \
+      -key "$D.rsa.key" -tls1_3 -WWW ) >/dev/null 2>&1 &
+  SRV_PID=$!
+  i=0; while [ $i -lt 50 ]; do
+    openssl s_client -connect "127.0.0.1:28830" -tls1_3 </dev/null >/dev/null 2>&1 && break
+    i=$((i+1)); sleep 0.1
+  done
+
+  check_stream() {
+    mode=$1; url=$2; want=$3
+    o=$(SSL_CERT_FILE="$D.rsa.ca" timeout 90 "$SCLI" "$url" "$mode" 2>&1)
+    gl=$(printf '%s\n' "$o" | sed -n 's/^len=//p')
+    gs=$(printf '%s\n' "$o" | sed -n 's/^sum=//p')
+    if [ "$gl" = "$explen" ] && [ "$gs" = "$expsum" ]; then r=match; else r=mismatch; fi
+    if [ "$r" = "$want" ]; then
+      say "OK    2 MB body over https ($mode, expected $want)"
+    else
+      say "FAIL  2 MB body over https ($mode): wanted $want, got $r"
+      say "      expected len=$explen sum=$expsum"
+      printf '%s\n' "$o" | sed 's/^/      /'
+      fail=1
+    fi
+  }
+  check_stream sync  "https://localhost:28830/big.bin"   match
+  check_stream async "https://localhost:28830/big.bin"   match
+  check_stream async "https://localhost:28830/small.bin" mismatch
+  kill "$SRV_PID" 2>/dev/null; SRV_PID=""
+else
+  say "FAIL  stream client build"; tail -3 /tmp/pxx_https_stream_build.log; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-  say "tls-native-seam-devtest OK (3 schemes, 4 refusals, https via http.pas, sync + async)"
+  say "tls-native-seam-devtest OK (3 schemes, 4 refusals, https via http.pas, sync + async, 2 MB body both paths)"
   exit 0
 fi
 say "tls-native-seam-devtest FAILED"
