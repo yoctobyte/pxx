@@ -45,13 +45,33 @@ error: unexpected token in a unit interface section: it starts no declaration
 It never looked at the type parameters. **It refused the whole syntax**, and a
 `%FAIL` row scores any refusal as a pass — so the row was green for a reason
 that has nothing to do with what the test is about. `71deb21d4` (2026-09-04,
-*"a `generic function` can be declared in a unit"*) added the syntax, and the
-row went red the moment the compiler became able to read the file.
+frankB, *"a `generic function` can be declared in a unit"*, closing
+`bug-p-a-generic-function-cannot-be-declared-in-a-unit`) added the syntax, and
+the row went red the moment the compiler became able to read the file. **So this
+ticket is the residue of that one**, and whoever takes it should read frankB's
+five-site note first — the declaration side is done and only the check is
+missing.
+
+Attribution established the way this repo says to: `%an` is `yoctobyte` on every
+commit here and discriminates nothing, so it came from the `Claude-Session`
+trailer (`session_019NLKYcGnZeZ3rWAJ6c8Yr2`) corroborated by the frankB
+checkout's reflog carrying the `commit` entry for that sha. I had it wrong once
+from `%an` before checking.
 
 **So this is not a regression and reverting anything would be wrong.** It is a
 capability gain that revealed a missing check, and the archive carries the
 accidental pass: `devdocs/progress/tstate/conformance.tsv` records `pass` for
 both rows as of 2026-09-02, measured by a compiler that could not parse them.
+
+**That archive cannot be annotated and should not be.** It is regenerated
+wholesale by Track T's `twatch.py` from the seven box (`tstate(seven): ... 550
+conf`), so a note added by hand is overwritten at the next publish — and the tsv
+is not wrong: it faithfully records what the harness said. The thing that turns
+a refusal-for-the-wrong-reason into a `pass` is `%FAIL` semantics itself, which
+scores ANY refusal as success and cannot distinguish "rejected for the stated
+reason" from "rejected because the parser stopped three tokens earlier". THIS
+TICKET is therefore the durable pointer: a future generics change that makes
+these two rows move will find it by grepping the row names.
 
 ## Is it even a defect? Yes, and the rule says so specifically
 
