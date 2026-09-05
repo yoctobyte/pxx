@@ -219,4 +219,4 @@ default`, an unrelated wall, and its skip reason says so. `terecs_u1` is a
 harness gap (a unit with no standalone-unit output) and is unaffected.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9af5a9021.
