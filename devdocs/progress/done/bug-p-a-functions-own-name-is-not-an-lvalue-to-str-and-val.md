@@ -147,4 +147,4 @@ are the two guards: a local named like the function still wins, and a following
 `(` is a recursive call and not an lvalue.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4ee5a2972.
