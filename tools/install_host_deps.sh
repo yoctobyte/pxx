@@ -1,0 +1,109 @@
+#!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
+# Install the DISTRO packages the test tiers need on a Debian/Ubuntu host.
+#
+# The missing member of the tools/install_*.sh family. The others each provision
+# one thing -- qemu, the esp32 target, external/, library_candidates/, the cross
+# sysroots -- and nothing owned the plain apt set, so it lived only in shell
+# history. That is why this file exists:
+#
+#   2026-09-05, seven's 24.04 -> 26.04 dist-upgrade REMOVED fpc, libgtk-3-dev
+#   and libgtk2.0-dev. fpc killed `make bootstrap` outright, which is loud. The
+#   gtk headers were quiet: the five test_c_gtk* jobs went red, tickets were
+#   auto-filed, and NOTHING IN THE TREE RECORDED THAT THE BUILD HOST'S PACKAGE
+#   SET WAS THE VARIABLE. Reproducing the box was archaeology through
+#   /var/log/apt/history.log. With this file it is one command.
+#
+# Usage:
+#   tools/install_host_deps.sh           install anything missing
+#   tools/install_host_deps.sh --check   report what is missing; exit 1 if any
+#
+# no-vendor-tracked: out-of-scope -- installs SYSTEM packages via apt-get.
+# Nothing is written into the working tree, so it cannot put third-party source
+# under a tracked path. Declared rather than inferred, exactly as
+# tools/install_qemu.sh does; tools/check_no_vendor_tracked.sh treats every
+# tools/install_*.sh as in-scope until it says otherwise.
+set -eu
+
+CHECK=0
+[ "${1:-}" = "--check" ] && CHECK=1
+
+# Each entry is "package  # what breaks without it". The comment is the point:
+# a bare list decays into cargo cult the first time someone wonders whether an
+# entry is still needed. Every one below was derived by MEASURING the tree --
+# the headers it #includes, the sonames it binds by name, the tools its recipes
+# probe with `command -v` -- not by copying a previous install line.
+DEPS='
+build-essential     # gcc/g++/make/libc6-dev: every C recipe and the C oracle
+fpc                 # THE BOOTSTRAP ORACLE. `make bootstrap` refuses without it
+binutils            # readelf/objcopy: 177 recipes parse readelf output
+clang               # test-emit-obj PIE-link arm; SKIPS SILENTLY if absent
+gdb                 # debug-info recipes (test-debug-g)
+ccache              # build cache; recipes assume it on the PATH
+
+libc6-dev           # -ldl -lm -lresolv -lcrypt, and every <sys/*.h>
+zlib1g-dev          # libz.so.1 -- the zlib corpus
+libssl-dev          # libssl.so.3 -- the TLS suite
+libffi-dev          # esp-idf host build
+python3-dev         # Python.h/pythread.h/structmember.h -- test_cpyext_*.npy
+libsqlite3-dev      # libsqlite3 -- test-sqlite-threads, test-sqlite-parity
+tcl-dev             # libtcl8.6.so.0 -- lib/pcl/tk.pas
+tk-dev              # libtk8.6.so.0  -- lib/pcl/tk.pas, the tkinter demo
+libgtk-3-dev        # gtk/gtk.h + libgtk-3.so.0 -- test_c_gtk*, gtk3_c.h census
+libgtk2.0-dev       # the gtk2 header surface
+
+xvfb                # 6 GUI jobs; testmgr treats xvfb as an exclusive resource
+xdotool             # gui_realwindow() real-window-size assertion; SKIPS SILENTLY
+wabt                # wasm-validate -- wasm32_gap_census invalid-ENCODING bucket
+csmith              # C fuzz generator (see idle_fuzz; kept installed, may be off)
+creduce             # reducer
+cvise               # reducer
+clang-format        # cvise/creduce reduction passes
+
+python3-flask       # tools/twatch_web.py, the watcher UI
+python3-markdown    # tools/requirements-docs.txt
+
+git curl wget unzip openssl   # fetchers/hashers used by tools/install_*.sh
+'
+
+# qemu is deliberately NOT in DEPS: tools/install_qemu.sh owns it, including the
+# 24.04->26.04 rename (qemu-user-static is a PURE VIRTUAL package on resolute,
+# so it must be resolved by Candidate:, not by existence). One owner per thing.
+
+have() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "ok installed"; }
+
+# True only when apt can ACTUALLY install this name here. `apt-cache policy`
+# prints `Candidate: (none)` for a name that survives as a transitional or
+# virtual stub -- `apt-cache show`, `apt-cache showpkg` and `dpkg-query` all
+# succeed on such a name while `apt-get install` fails. Same shape as
+# apt_has_candidate() in tools/install_esp32_target.sh, deliberately.
+installable() {
+  [ -n "$(apt-cache policy "$1" 2>/dev/null |
+          awk '/Candidate:/ && $2 != "(none)" {print $2}')" ]
+}
+
+missing='' ; unavailable=''
+for pkg in $(printf '%s\n' "$DEPS" | sed 's/#.*//' | tr -s ' \t' '\n' | grep -v '^$'); do
+  have "$pkg" && continue
+  if installable "$pkg"; then missing="$missing $pkg"
+  else unavailable="$unavailable $pkg"; fi
+done
+
+[ -n "$unavailable" ] && printf 'warn: no installation candidate on this release for:%s\n' "$unavailable" >&2
+
+if [ -z "$missing" ]; then
+  echo "host deps: all present"
+  [ -n "$unavailable" ] && exit 1
+  exit 0
+fi
+
+if [ "$CHECK" = 1 ]; then
+  printf 'host deps MISSING:%s\n' "$missing"
+  echo "run: tools/install_host_deps.sh"
+  exit 1
+fi
+
+printf 'host deps: installing:%s\n' "$missing"
+# shellcheck disable=SC2086
+sudo apt-get install -y $missing
+echo "host deps: done -- re-run with --check to confirm"
