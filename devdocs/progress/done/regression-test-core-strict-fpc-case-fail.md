@@ -67,4 +67,4 @@ am recording that rather than leaving the next reader to redo it.
 Note also that `test-core` stops at the FIRST failing recipe, so while this row
 is red every row after step 6 of 15 is UNVERIFIED rather than green. `make -k`
 is the way to see past it.
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8727b1907.
