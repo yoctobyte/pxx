@@ -91,13 +91,28 @@ def main():
     os.makedirs(work, exist_ok=True)
 
     total = whole = frag = 0
-    fails, skipped, wrong_pass = [], [], []
+    fails, skipped, wrong_pass, uncheckable = [], [], [], []
     for rel, ln, lang, body in blocks():
         total += 1
         t = body.strip()
         if lang not in ('pascal', 'pas') or not (
                 re.match(r'^program\s', t) and t.rstrip().endswith('end.')):
             frag += 1
+            # A BLOCK THAT LOOKS COMPLETE AND IS NOT COMPILED MUST BE COUNTED
+            # SEPARATELY, or this gate reports the same green whether it is
+            # correct or nonsense. The completeness test is `^program`, so a
+            # `library` or `unit` block -- both of which end with `end.` and
+            # are complete compilation units -- lands in `fragments/other`
+            # beside the genuine one-liners and is never compiled at all.
+            # There is nothing to fix in the test today: the pinned compiler
+            # rejects `library` at token 1 because the feature postdates it.
+            # So the aperture is REPORTED rather than closed, and the number
+            # is the tell -- a docs page can grow an unchecked complete
+            # program and this line is the only thing that says so.
+            # bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin
+            if (lang in ('pascal', 'pas') and t.rstrip().endswith('end.')
+                    and re.match(r'^(library|unit)\s', t)):
+                uncheckable.append((rel, ln, t.split(None, 1)[0]))
             continue
         whole += 1
         if COMPANION.search(body):
@@ -125,6 +140,13 @@ def main():
     print('  compiled or failed-as-documented: %d   BROKEN: %d   skipped: %d'
           % (whole - len(fails) - len(wrong_pass) - len(skipped),
              len(fails) + len(wrong_pass), len(skipped)))
+    if uncheckable:
+        print('  NOT CHECKED: %d complete `library`/`unit` block(s) -- this gate\n'
+              '               only compiles blocks starting with `program`, so these\n'
+              '               are neither compiled nor counted as failures:'
+              % len(uncheckable))
+        for rel, ln, kw in uncheckable:
+            print('     %s:%d  (%s)' % (rel, ln, kw))
     for rel, ln, flags, msg in fails:
         print('\n  BROKEN  %s:%d  %s\n      %s' % (rel, ln, flags, msg[:200]))
     for rel, ln, why in wrong_pass:

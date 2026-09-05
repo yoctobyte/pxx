@@ -4,8 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies."
-status: backlog
-owner: unassigned
+status: done
+owner: frankD
 ---
 
 # A doc can name a real flag and still be wrong — about its scope
@@ -81,3 +81,59 @@ is what this ticket exists to prevent.
 
 `docs/**` internally consistent; every claim run against `$(PXX_STABLE)` on
 every target in its stated scope. Compiler not rebuilt.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## 2026-09-05 — the sweep was executed; the docs are clean, and here is the aperture
+
+Ran the method this ticket describes across `docs/**`. **Every scope claim I
+could settle is correct.** Measured against pin v403, binary `c31d03b202da`,
+with the pin's sha256 printed before and after the run and unchanged, so the
+numbers are not split across a pin swap.
+
+**Candidate generator** (the ticket's own grep, plus `only on|on all |x86-64
+only`) produced 30 lines. Six were real flag-scope claims; the rest were prose
+matches like "read-only property", which is the generator behaving as designed.
+
+| claim | doc | verdict |
+| --- | --- | --- |
+| `--emit-obj` writes objects on x86-64, i386, riscv32, xtensa; aarch64 and arm32 have none | cli.md:125 | **true**, all six enumerated |
+| `--shared` is x86-64 only | cli.md:126, limits.md:39, objects.md:157 | **true**, all six enumerated |
+| `-S` is x86-64 only | cli.md:127 | **true**, all six enumerated |
+| `--fpc-float-errors` is x86-64 only | cli.md:176 | **true**, five enumerated |
+| classes/interfaces/generics on all four Linux targets | dive/index.md:116 | **true** — built *and ran* a virtual-dispatch program on x86-64, i386, aarch64, arm32; all four print `woof` |
+| `-g` DWARF on all four Linux targets | index.md:41, dive/index.md:120 | **true** — `.debug_line` and `.debug_info` present in all four objects |
+
+The `--emit-obj` row is the one this ticket was filed over, and it now enumerates
+correctly — including the refusal message, which used to name a target set
+excluding x86-64 and today says `--emit-obj: no object writer for --target=<t>`.
+
+**WHAT THIS SWEEP DID NOT SETTLE, stated in the sentence and not a paragraph
+below it:** `docs/library/networking.md:143` says the OpenSSL backend is x86-64
+only. Verifying that needs a TLS handshake on a cross target, not a compile, so
+it is **unverified rather than confirmed** — the one candidate I could not run a
+verdict on.
+
+**One real finding, and it is the compiler's, not the docs':**
+[[bug-a-shared-reports-an-internal-error-on-four-targets-where-i386-gets-a-clean-refusal]].
+`--shared` refuses correctly on i386 and reaches a later stage on aarch64,
+arm32, riscv32 and xtensa, where it answers `error: internal: no init/fini thunk
+prologue`. Four of five non-x86-64 targets tell the reader the compiler broke
+for a limitation the docs state accurately. Same shape as this ticket's own
+Track A sibling; reproduces at HEAD.
+
+## Why this is resolved rather than left open for the class
+
+The class still has no automated detector and that has not changed — a scope
+claim is only ever settled by enumerating the scope, and the enumeration is
+hand-curated per flag. What has changed is that **the current docs tree has been
+enumerated**, which is the deliverable; leaving it open would keep a ticket in
+the ranker for a standing hazard rather than a piece of work.
+
+**The residual has an owner and a trigger, which is what it needed.** Re-run
+this table when a new backend target lands or a new target-scoped flag is
+documented — those are the only two events that can falsify a row, and both are
+visible in the commit that causes them. The six rows above are the regression
+baseline: each is one command per target and the whole table is under a minute.
+
