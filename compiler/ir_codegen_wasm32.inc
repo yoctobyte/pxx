@@ -5955,7 +5955,24 @@ end;
   node leaves on the stack, and the answer a variant op leaves is an ADDRESS. }
 procedure WasmVariantAddr(node: Integer);
 begin
-  if IRKind[node] = IR_LOAD_SYM then WasmSlotAddr(IRA[node])
+  { AN IR_LOAD_SYM IS TWO DIFFERENT QUESTIONS AND THE OPCODE CANNOT TELL THEM
+    APART. A load of a VARIANT symbol is the variant itself, so its address is
+    the slot. A load of a POINTER symbol is an address the program computed,
+    so the address is the slot's VALUE and taking the slot writes the variant
+    over the pointer variable. Dispatching on the opcode alone silently chose
+    the first reading for both: `p^ := 42` through a `^Variant` left the
+    destination untouched and native answered 42 where wasm32 answered 0 --
+    and, with a live variant in the destination, wrote a payload where the tag
+    belongs, so the next read raised "variant holds an unknown tag".
+
+    A 16-byte RECORD through a pointer was always correct (it lowers to a block
+    copy and never arrives here), which is why the gap read as variant-specific
+    rather than as a pointer-store gap.
+
+    var/out variant PARAMETERS do not come through this arm and are unaffected
+    -- measured, not assumed, before this line was written. }
+  if (IRKind[node] = IR_LOAD_SYM) and (Syms[IRA[node]].TypeKind = tyVariant) then
+    WasmSlotAddr(IRA[node])
   else if IRKind[node] = IR_LOAD_MEM then WasmEmitValueAs(IRA[node], WT_I32,
                                              'variant operand address')
   else WasmEmitValueAs(node, WT_I32, 'variant operand');

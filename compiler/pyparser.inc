@@ -25143,11 +25143,16 @@ begin
   end;
 end;
 
-{ May `nm` become a FRAME CELL — one heap word both this frame and every
-  closure over it read and write? Only an unmanaged, at-most-word-sized scalar
-  qualifies: the cell is 8 raw bytes, so a 16-byte variant, a managed string, a
-  record, an array and a refcounted class instance are all left on the old
-  copy-per-closure path rather than half-fitted into it. }
+{ May `nm` become a FRAME CELL — one heap cell both this frame and every
+  closure over it read and write? The cell is SIXTEEN bytes (pycell_new), so a
+  variant fits whole and is the first kind accepted below; a managed string, a
+  record, an array and a refcounted class instance are still left on the old
+  copy-per-closure path rather than half-fitted into it.
+
+  This comment said "8 raw bytes, so a 16-byte variant is left on the old path"
+  while the line below has accepted tyVariant first for as long as the cell has
+  been 16 bytes. Read literally it describes a compiler that refuses the shape
+  this one is built around. }
 function PyCellPromotable(si: Integer): Boolean;
 var tk: TTypeKind;
 begin

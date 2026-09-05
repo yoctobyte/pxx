@@ -249,9 +249,10 @@ function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
   indirection through it, and binding it into a closure passes the ADDRESS, so
   the storage survives the frame. Leaked like the bound-fn object it feeds:
   nothing owns the cell once both the frame and the closures are gone, and the
-  shapes that reach here are few. Eight bytes whatever the value's width — the
+  shapes that reach here are few. SIXTEEN bytes whatever the value's width, as
+  the body says: a variant cell needs a whole {tag, payload} slot, and the
   store may be a 32-bit `mov %eax,(%rcx)` for an inferred int or a full word for
-  an Int64/Double, and over-allocating is free while under-allocating would
+  an Int64/Double. Over-allocating is free while under-allocating would
   scribble the next heap object. }
 function pycell_new: Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
