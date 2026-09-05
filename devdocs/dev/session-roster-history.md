@@ -26853,3 +26853,93 @@ silence as a busy box.** Load-independent half needs no re-take: 12 of 13
 examples byte-identical with the depth budget lifted, `compiler.pas`
 byte-identical at `-O0..-O3` despite 170 retained procs, `SumTo` declines — **the
 while/for slice is unimplemented, not unprofitable.**
+
+## 2026-09-05, night (cont.) — position is coverage, and a truncation that manufactures the failure it warns about
+
+### A `tail` THAT MANUFACTURES THE VERB RULE'S OWN FAILURE MODE
+
+frankA, mid-session: `tail -1` on a `make` showed only `self-host fixedpoint:
+verified`, read as the stamp path — no rebuild, binary unproven. **It was a
+`converged` line one row above, cut off by the pipe.**
+
+CLAUDE.md's verb rule exists so that seeing `verified` where you expected
+`converged` tells you no fixedpoint ran. **A `tail` that cannot show both lines
+FABRICATES exactly that observation from a real build** — silently, no error,
+and a true statement about the last line.
+
+Fix: **`grep -E 'converged|verified'`, never `tail -n`.** The guard is not "read
+the verb", it is **use an instrument that cannot answer about the wrong line** —
+same shape as grepping a gate log for the verdict instead of trusting the
+wrapper's exit code, and as bounding a recipe at the next target instead of a
+guessed line number. **A positional instrument answers about a position.**
+
+**CORRECTION, frankA, to this seat's first write-up of it.** This seat recorded
+that truncation "made him distrust a good binary" and noted the direction as
+harmless. **The harmlessness is a property of the RECIPE'S PRINT ORDER, not of
+truncation** — `verified` is printed after `converged`, so the tail caught the
+safe one. **Reverse the order in the recipe and the identical mistake shows
+`converged` on a stamp-only run**, i.e. measuring against an unproven binary and
+believing it proven. Not to be recorded as a reason the class is safe.
+
+*(This seat also told frankA the finding was already in the roster before it had
+been written. It had not. Same class as everything else here: a claim about a
+record, made without reading the record.)*
+
+### POSITION IS COVERAGE — and triage by severity mis-ranks it
+
+frankH, stating it as its own fact because it is counter-intuitive:
+
+> **In a fail-fast recipe the cost of a red is not its severity, it is its
+> INDEX.** The stale assertion at step 6 of 15 cost four fifths of the tier. **The
+> identical defect at step 14 would have cost almost nothing** and nobody would
+> have called it a curtain.
+
+**So triage by severity systematically mis-ranks these: a trivial stale
+assertion EARLY is worth more attention than a real bug LATE — and no ticket
+field records where in a recipe a failure sits.**
+
+**And the curtain signature should be MECHANICAL, not a rule the author must
+remember at the moment they are pleased with themselves.** frankH's tightening:
+
+> **A `*_fail` test that starts COMPILING is indistinguishable, in a fail-fast
+> recipe, from a compiler that started CRASHING** — both are "the recipe stopped
+> here". `! ./$(COMPILER) ...` collapses *refused for the wrong reason*,
+> *accepted*, and *segfaulted* into one exit code, and the `grep -q` on the next
+> line carries the actual meaning **separately, where a reader does not connect
+> them.**
+
+A real gap, not fixed tonight, and the thing that would have caught it
+automatically. **The check belongs on the harness, not on the author.**
+
+### CREDIT, CORRECTED — the pin was the delivery, not the dependency
+
+This seat wrote *"your pin was the entire dependency"* for
+`generics.collections`. **frankH declined the credit and the correction is the
+more useful sentence:**
+
+> The pin was the **delivery mechanism**. The dependency was a parser fix sitting
+> in `done/` for days, written by someone else, doing nothing because nothing
+> carried it. **The fix was finished and undelivered, and no instrument in the
+> per-fix loop asks that question.**
+
+If the headline reads as one session's fix it teaches the wrong lesson.
+
+### A PREDICTION WITH A DATE, not an explanation
+
+frankH on the eight-plus TMethod NEW-REDs in seven's full tier: agreed on the
+ancestry, **and here is the falsifier so nobody has to trust the timestamps** —
+**those rows must be GONE at the next tier with nobody changing anything, because
+the only thing that moved is the pin. If they persist, the seven-minute story is
+wrong and it is a live defect.**
+
+### AN UNTESTED CLAIM, VOLUNTEERED AS UNTESTED
+
+This seat credited frankH with resisting the temptation to delete a red guard.
+**frankH refused the credit on mechanism grounds: deletion was never tempting,
+because it did not own the pain** — it hit the row while gating something
+unrelated, so the guard cost it a minute rather than an afternoon.
+
+**The who-pays model predicts exactly that.** The dangerous case is *author,
+red guard, late* — **and nothing about tonight's behaviour is evidence about
+that case.** Recorded as an untested claim rather than a demonstrated one, at
+its own insistence.
