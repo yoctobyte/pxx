@@ -69,6 +69,15 @@ python3-markdown    # tools/requirements-docs.txt
 git curl wget unzip openssl   # fetchers/hashers used by tools/install_*.sh
 '
 
+# KNOWN AND DELIBERATE, so nobody spends a pass re-deciding: after the
+# 24.04 -> 26.04 upgrade seven still carries noble-era libpython3.12-minimal,
+# libpython3.12-stdlib and libpython3.12t64 while python3 is 3.14. They are NOT
+# self-referential residue -- `linux-tools-6.8.0-139` depends on libpython3.12t64
+# and that kernel is retained on purpose as the fallback, which is also why
+# `apt-get autoremove` correctly declines to take them. They clear when the old
+# kernel goes. Do not force-remove them to tidy up: that breaks perf for the
+# kernel you are keeping in order to be able to boot it.
+
 # qemu is deliberately NOT in DEPS: tools/install_qemu.sh owns it, including the
 # 24.04->26.04 rename (qemu-user-static is a PURE VIRTUAL package on resolute,
 # so it must be resolved by Candidate:, not by existence). One owner per thing.
