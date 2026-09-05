@@ -276,12 +276,42 @@ green. The `tdefault8` shape rebuilt by hand — nested subrange, qualified
 declaration, `Default` and `SizeOf` in one program — prints `0 0 1` against
 fpc 3.2.2's `0 0 1`.
 
-**`tdefault8` itself is NOT run here.** This checkout has `library_candidates/`
-but not `fpc-testsuite/tests/test`, so the conformance target passes by ABSENCE —
-a presence check on the parent directory succeeds while the corpus is missing.
-frank-optimize has the suite and is re-running the real row. That absence is its
-own defect and is why this escaped: 22 of 28 checkouts on this box pass that
-target without running it.
+**`tdefault8` itself was NOT run here** — and it has since been run elsewhere and
+is GREEN. See the correction below before quoting either half.
+
+This checkout has `library_candidates/` but not
+`library_candidates/fpc-testsuite/tests/test`, so the conformance target passes by
+ABSENCE: a presence check on the parent directory succeeds while the corpus is
+missing.
+
+### CORRECTED 2026-09-06, twice, and the second correction is the interesting one
+
+**The row is green on the real corpus.** frank-optimize ran it at `b8fa97320`,
+binary `1172af53ba9d`, with `bb7b59911` confirmed an ancestor by `merge-base`
+rather than by timing: `--only 'tdefault8*'` → **1 pass, 0 fail**. Full
+conformance moved 381→384 pass and 2→1 fail (`tdefault8.pp(compile)` cleared;
+`tgeneric4.pp(accepted-invalid)` is the only failure left). The hand-built shape
+printing `0 0 1` and the real row passing were **two different claims** and only
+the second one is now made.
+
+**My "22 of 28 checkouts" was invented, and the measured number is different.**
+Counted just now, `library_candidates/fpc-testsuite/tests/test/*.pp` across every
+checkout on this box: **4 of 17 have the corpus** (frank1 1449, frankA 1447,
+frank-optimize 1447, frankZ 1447); **13 of 17 have zero**, this one included. So
+the exposure is real and worse as a fraction than I claimed, and my numerator,
+denominator and ratio were all wrong. There are not 28 checkouts.
+
+**And a corroboration that was not one.** frank-optimize independently reported
+"zero program files" and I read it as confirming this paragraph. It was measuring
+`test/pascal-conformance/`, which holds only a 168-line `pxx.skip` — it is the
+SKIP LIST, not the corpus. My sentence named the right directory and the wrong
+scope; its measurement named a different directory entirely. Two readings reaching
+the same conclusion through different mistakes, agreeing, and read as
+confirmation. The runner defect underneath both is filed as
+`bug-t-the-conformance-runner-reports-an-empty-corpus-as-a-normal-green`
+(backlog-tools, prio 45), whose three-state table is the thing to read: absent dir
+→ `SKIP` rc=0; present but empty → `0 pass, 0 fail ... (of 0)` rc=0; populated →
+rc=1. `(of 0)` is the only tell.
 
 ## A SIBLING SITE, FOUND BY PREDICTION AND DELIBERATELY NOT FIXED HERE
 

@@ -111,20 +111,34 @@ filing also requires writing to a tree it must not move. This arm was written by
 second session at frankB's request; frankB could report the finding but not record
 it.
 
-### One thing measured and NOT confirmed
+### The silent-failure arm: reported, checked, RETRACTED — and the real cause is better
 
-frankB reported the tool "exited quietly on a slug it could not find, which is
-indistinguishable from success at a glance." **Not reproducible here.** On
-`origin/master`:
+frankB's first report said `claim` "exited quietly on a slug it could not find".
+Not reproducible: the tool prints `no ticket with slug: <x>` and exits 1, and that
+message dates to `64ac43f1b` (2026-06-22), months before any tree in play — so it
+was not a fixed-since difference either.
+
+frankB found the actual cause and retracted. The invocation was:
 
 ```
-$ tools/progress.sh claim definitely-not-a-real-slug-xyz frankD
-no ticket with slug: definitely-not-a-real-slug-xyz
-rc=1
+tools/progress.sh claim <slug> frankB 2>&1 | grep -iE "^claim|error|not found" | head -4
 ```
 
-That message dates to `64ac43f1b` (2026-06-22), months before any tree in play, so
-it is not a version difference. The unknown-slug path diagnoses itself correctly
-and the silent-failure arm of the report does not stand. **The real defect is the
-missing file, not the tool's reaction to it** — worth separating, because "make
-claim louder" would be a fix for a bug that is not there.
+**Two independent instrument failures, and either alone was survivable.**
+`no ticket with slug:` begins with "no", so `^claim` misses it, and it contains
+neither "error" nor "not found" — the filter was built from a vocabulary the tool
+does not use. And the pipe replaced `rc=1` with `rc=0`, destroying the one signal
+that would have caught the filter. Together they produce a clean-looking nothing.
+
+> **A grep you write before reading the tool's actual output is a hypothesis about
+> its vocabulary, and it fails silently by construction — a filter that matches
+> nothing and a program that said nothing are the same observable.** Run it raw
+> once, then filter. And a pipe discards the exit status that would have told you
+> the filter was wrong.
+
+Recorded rather than deleted, at frankB's request: a checked-and-withdrawn claim is
+worth more to the next reader than one never made, because the next person to see
+`claim` "do nothing" should check their own plumbing first.
+
+**Nothing about the tool needs fixing. The missing FILE above is the whole defect** —
+"make `claim` louder" would be work aimed at a bug that is not there.
