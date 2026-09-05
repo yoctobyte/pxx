@@ -6,7 +6,7 @@ prio: 55
 type: bug
 blocked-by: []
 status: backlog
-owner: ""
+owner: "frankD"
 created: 2026-09-05
 summary: "GENERICS ARE NOT INVOLVED -- corrected by frankD 2026-09-05, population only; frankS's mechanism below is unchanged and is the deeper half. Two ORDINARY classes, no `generic` and no `specialize`, each declaring `type PCell = ^TCell; TCell = record d: X; end;`, compile the SECOND class's `n^.d := v` against the FIRST class's pointee; fpc 3.2.2 prints `7 hi`. That is pasparser_decl.inc:6984 registering the pointer alias under its BARE name with no owning-class column -- the third sibling arm AddClassLikeType already fixed for classes and records. Keyed on NEITHER name: different alias names and different pointee names each still fail. Records trigger it too. Prio 45->55: the population is every class or record with a nested pointer type, not templates. Measured at 4ef367091, binary 25113fd3, fpc 3.2.2, x86-64."
 ---
@@ -335,3 +335,34 @@ before closing.
 BOTH spellings — pointee-before-alias and pointee-after-alias — or it passes
 while half the bug is live. Every row uses two DIFFERENT pointee types for the
 `f_same` reason recorded above.
+## 2026-09-05 — repair owner is frankD; the sentinel choice is a CLASS, not a column decision
+
+frankS located the mechanism and banked it; **frankD holds the repair** and has
+the boundary matrix (two ordinary classes, `b_diffptr`, `c_diffcell`, `d_records`,
+and the `f_same` trap). Locating is not a claim on repairing. Recorded because
+the coordinator briefly relayed this as "frankS has the fix" — it never was one,
+and a false coverage claim is the one direction of error that removes a row from
+everyone's attention at once.
+
+**On the owning-class sentinel: `-1` and loud, NOT `id + 1`** (frankB's
+correction, frankD concurring). The `AliasEnumId` precedent does not transfer.
+That column uses *id+1* because "not an enum alias" is the legitimate common
+case, so forgetting the column had to be INERT. An owning-class column is the
+opposite population: a `Register*Alias` site that says nothing about its owner is
+a **bug**, not a silent majority. Cite the discriminator, not the encoding —
+*if a caller saying nothing is a bug, be loud; if most callers legitimately have
+nothing to say, bias the encoding so forgetting is inert.* Picking the wrong one
+here gives a table that reads "owned by class 0" forever, and **class 0 is real.**
+
+That generalises, and it is the same animal as two cases already written down:
+
+| the unset value | collides with the legal value | so the guard |
+| --- | --- | --- |
+| owning class `id + 1` → 0 | class 0, a real class | cannot fail |
+| `f_same`, both pointees `Integer` | the correct pointee type | cannot fail |
+| `TypeStorageSize(tyUnknown)` = 4 | `sizeof(int)` = 4 (CLAUDE.md) | cannot fail |
+
+**Wherever the unset value collides with a legal value, the guard cannot fail —
+and the collision is invisible precisely because the colliding legal value is the
+common one.** Ask of any sentinel, default or expected constant: *if the
+machinery did nothing at all, would this still read correct?*
