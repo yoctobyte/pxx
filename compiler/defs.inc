@@ -6593,12 +6593,19 @@ end;
 function TargetDisplayName: AnsiString;
 { …and the SoC name when one is selected, since `--target=esp32c6` implies the
   ISA and the chip is the more useful half to hear back. Falls back to the ISA
-  spelling on a hosted target. }
+  spelling on a hosted target.
+
+  Result, not the bare own name, and the READ on the fallback test is the
+  load-bearing one -- `if TargetDisplayName = ''` is a recursive CALL to FPC and
+  a result-read to us, so the seed build and the self-host build disagree about
+  what this line MEANS. TWELVE LINES ABOVE, EmitObjTargetList carries the same
+  note for the same reason: that fix was written here, in this file, and did not
+  look down. Two instances, one screen apart, and only one was repaired. }
 begin
-  TargetDisplayName := '';
-  if SocExplicit then TargetDisplayName := SocName(TargetSoc);
-  if TargetDisplayName = '' then
-    TargetDisplayName := TargetArchName(TargetArch);
+  Result := '';
+  if SocExplicit then Result := SocName(TargetSoc);
+  if Result = '' then
+    Result := TargetArchName(TargetArch);
 end;
 
 function SocFromName(const nm: AnsiString): Integer;

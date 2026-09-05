@@ -183,7 +183,12 @@ var
 function WasmBodyReasonList: AnsiString;
 var i: Integer; r: AnsiString;
 begin
-  WasmBodyReasonList := WasmBrokenReason + Chr(10);
+  { Result, not the bare own name. The accumulate below READS this function's own
+    name, which pxx resolves to the result and FPC resolves to a recursive call --
+    so under the seed compiler this line is unbounded recursion, surviving only
+    because the path runs when a wasm body is already broken. Same repair as
+    EmitObjTargetList (defs.inc) and TargetDisplayName beside it. }
+  Result := WasmBrokenReason + Chr(10);
   if WasmBodyReasonCnt <= 1 then Exit;
   r := '';
   i := 2;   { skip the leading LF }
@@ -192,8 +197,7 @@ begin
     if WasmBodyReasons[i] = Chr(10) then
     begin
       if (r <> '') and (r <> WasmBrokenReason) then
-        WasmBodyReasonList := WasmBodyReasonList + '        and also — ' + r
-                              + Chr(10);
+        Result := Result + '        and also — ' + r + Chr(10);
       r := '';
     end
     else
