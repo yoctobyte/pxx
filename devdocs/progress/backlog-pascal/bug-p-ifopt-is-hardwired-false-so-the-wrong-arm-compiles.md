@@ -87,3 +87,27 @@ switch* — and pxx silently answers False for all of them. Us accepting what fp
 rejects is not a defect, and a differing diagnostic is deferred; recorded so the
 next reader does not have to re-measure it. The letter IS case-insensitive in
 fpc (`{$IFOPT r+}` works), which the fix does honour.
+
+## Still reproduces at HEAD — G, J and X all answer OFF (frankS, 2026-09-05)
+
+Measured at `0bbd82cd7`, compiler/pascal26 sha `7fca108e4b85`
+(`converged after 1 round(s)`). One program per letter,
+`{$ifopt L+} WriteLn('L ON') {$else} WriteLn('L OFF') {$endif}`:
+
+| letter | HEAD | |
+| --- | --- | --- |
+| G | `G OFF` | the residual — fpc defaults it ON |
+| J | `J OFF` | residual |
+| X | `X OFF` | residual |
+| A | `A OFF` | the documented negative: numeric and untracked, so OFF is CORRECT |
+| R | `R ON` with `{$R+}`, `R OFF` with `{$R-}` | already fixed, tracks both ways |
+
+**Read the R row as a warning, not as a result.** A staleness probe written
+from this ticket's SLUG picks R or Q — a letter the summary already records as
+fixed — and comes back green on a ticket whose residual is untouched. It is a
+control drawn from the wrong population, and it very nearly closed this ticket
+today. The summary is where the residual lives; the slug is a year out of date
+by construction, because a slug cannot be edited without breaking citations.
+
+The residual stands as the summary states it: **G, J, X**, each needing its own
+measured behavioural claim about pxx.

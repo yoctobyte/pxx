@@ -94,3 +94,24 @@ two.
 Track P's: `make compiler/pascal26` (the byte-identical self-host fixedpoint)
 plus both spellings above rejected with a message that names the real reason,
 plus a `{%FAIL}` conformance case if one fits.
+
+## Half fixed at HEAD — the wrong-value arm is gone, the wrong-REASON arm is not (frankS, 2026-09-05)
+
+At `0bbd82cd7` (sha `7fca108e4b85`), two claims, two answers:
+
+1. **`procedure P(const a: array of string = 'x')` no longer compiles clean.**
+   It is refused, with the reasoning in the diagnostic: *"a parameter of an
+   open-array or fixed-array type cannot have a default value: there is no array
+   literal to write there, so the value would be a scalar whose bytes the callee
+   reads as a length header."* So the misprinted length (435728179526) is
+   unreachable — nothing builds to run.
+2. **The array-constructor spelling still gives the wrong reason.**
+   `= ['x']` is refused with `a string parameter's default must be a string
+   literal` — the same wrong reason this ticket names, from the same
+   `Params[i].TypeKind`-without-`IsArray` read.
+
+So this is not a close. **Re-scope it to claim 2 and drop claim 1 from the
+summary**, which is the half a reader will otherwise re-measure. Whoever takes
+it: the fix is one predicate, and the wrong-value observable it used to guard is
+already gone, so the remaining value is diagnostic quality only — rank
+accordingly.

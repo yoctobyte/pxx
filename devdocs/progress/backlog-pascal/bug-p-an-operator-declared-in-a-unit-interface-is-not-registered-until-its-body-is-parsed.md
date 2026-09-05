@@ -98,3 +98,15 @@ toperator78 also fails at operator DECLARATIONS and for an unrelated reason:
 operand types that are not aggregates at all (`operator ** (left, right:
 LongInt)`, `operator and` over a set, `array of Char` operands), plus `**`
 having no lexer token. Do not merge the two.
+
+## The non-circular case works at HEAD — which the summary already says (frankS, 2026-09-05)
+
+At `0bbd82cd7` (sha `7fca108e4b85`) a unit declaring `operator +` in its
+interface, implementing it below, and used by a plain program prints the right
+answer. That is **not** evidence about this ticket: the summary states the
+failure needs a **circular implementation-`uses`**, and that *"both non-circular
+cases work"*.
+
+Recorded so the next staleness pass does not spend the minute again, and does
+not bank the green. The probe that would settle this ticket has to build the
+cycle; a straight `uses` cannot reach the condition.

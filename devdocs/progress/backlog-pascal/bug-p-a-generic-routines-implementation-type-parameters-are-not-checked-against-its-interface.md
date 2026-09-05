@@ -90,3 +90,32 @@ with the count asserted rather than the exit code: **the harness SKIPs and exits
 nothing unless the suite is installed
 (`tools/install_lib_candidates.sh fpc-testsuite`). Plus a positive control that
 the matching case still compiles — `<T>` in both halves must not start failing.
+
+## Reproduces at HEAD, and the scope question is the real one (frankS, 2026-09-05)
+
+Confirmed at `0bbd82cd7` (sha `7fca108e4b85`): a unit declaring
+`generic procedure Test<T>` and implementing `generic procedure Test<S>` is
+accepted, and `specialize Test<Integer>(1)` from an importer runs.
+
+**Not filed to `rejected/`, though it was on the way there.** The rule fits on
+its face — *"us accepting what FPC rejects is not a defect"*, and a type
+parameter renamed between interface and implementation is produced by a mistake
+and nothing else, so the positional binding pxx uses gives that source the
+meaning its author intended.
+
+What stops the rejection is this ticket's own summary: **tgenfunc17.pp and
+tgenfunc18.pp are two live FAILs in an otherwise 347/2 conformance run.**
+`rejected/` is not ranked, so rejecting this leaves two rows red permanently
+with nothing pointing at why — the next person to read that run files it again.
+
+Two answers and this is a fork, not a judgement call, so it goes to U rather
+than being settled here:
+
+- **`known-incompat/`** — the divergence is TRUE, reproducible, and CHOSEN; the
+  two conformance rows are then expected FAILs with a citation, not noise.
+- **Implement the check** — cheap, and it costs nothing at runtime, on the view
+  that a diagnostic which catches a certain mistake is worth having even where
+  FPC-parity is not the reason.
+
+The thing NOT to do is leave it at prio 30 in the ranker, where it is neither
+chosen nor scheduled.
