@@ -8850,6 +8850,62 @@ begin
   if (Strs[u].Text = 'pylib') or (Strs[u].Text = 'pyeval') then Result := -1;
 end;
 
+{ Is this element-width ord the WIDE one? 0 (not a managed string / not
+  recorded) and Ord(tyChar) both mean narrow, and they must keep meaning the
+  same thing here: 0 is the sentinel a carrier that forgot to store leaves
+  behind, so treating it as anything but narrow would turn a missed write into
+  a transcode. See ProcParamStrElemTk's note in defs.inc.
+
+  Lived in ir.inc until 2026-09-05; hoisted because overload matching asks it —
+  AnsiString, WideString and UnicodeString are ONE TTypeKind carrying a width,
+  so the kind alone cannot tell two of them apart in a signature. }
+function StrElemIsWide(elemTk: Integer): Boolean;
+begin
+  StrElemIsWide := (elemTk = Ord(tyWideChar));
+end;
+
+{ The managed-string ELEMENT WIDTH a parameter or field of kind `tk` should
+  record, read out of ParseTypeKind's return channel.
+
+  A WINDOW READ, and the only correct place to call it is immediately after the
+  ParseTypeKind that produced `tk` -- LastTypeStrElemTk describes the type that
+  call just returned and nothing else (defs.inc's window rule).
+
+  NORMALISED: tyUnknown means "ParseTypeKind said nothing", which for a
+  tyAnsiString is a byte string, so it comes back as Ord(tyChar) and never as 0.
+  That keeps 0 meaning exactly one thing -- not a managed string -- instead of
+  doing double duty as "narrow", which is the shape that let the pointer twin's
+  sentinel fail open.
+
+  One function rather than the two identical five-line copies it replaces
+  (ParseSubroutine's parameter loop and ParseTypeSection's two method-row
+  loops): the width is now part of an overload SIGNATURE, so a site that
+  captures it differently from another does not produce a wrong width -- it
+  produces a decl and an impl that no longer bind to each other. }
+function ParamStrElemOf(tk: TTypeKind): Integer;
+begin
+  if tk <> tyAnsiString then ParamStrElemOf := 0
+  else if LastTypeStrElemTk = tyWideChar then ParamStrElemOf := Ord(tyWideChar)
+  else ParamStrElemOf := Ord(tyChar);
+end;
+
+{ The POINTEE a typed-pointer parameter of kind `tk` should record, read out of
+  ParseTypeKind's return channel. The same WINDOW rule as ParamStrElemOf above:
+  valid only immediately after the ParseTypeKind that produced `tk`.
+
+  tyUnknown for anything that is not a pointer -- and also for an UNTYPED
+  `Pointer`, which is what ParseTypeKind leaves behind. The two readings share a
+  value on purpose: every consumer treats tyUnknown as "unconstrained", so a
+  path that forgets to record fails toward the permissive answer rather than
+  toward a phantom distinction. ProcParamPtrElemTk's note in defs.inc is about
+  what that costs when the recording is missing, and the answer there is to
+  record it, not to split the sentinel. }
+function ParamPtrElemOf(tk: TTypeKind): Integer;
+begin
+  if tk <> tyPointer then ParamPtrElemOf := Ord(tyUnknown)
+  else ParamPtrElemOf := Ord(LastTypePointerElemTk);
+end;
+
 function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
 var i, j: Integer; match: Boolean;
 begin
@@ -8941,7 +8997,7 @@ end;
   (bug-overload-resolution-record-identity). A rec id is only compared when
   both sides are known (<> REC_NONE), so registration paths that never stored
   ProcParamRecId keep matching as before. }
-function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
+function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const pstrelem: array of Integer; const pptrelem: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
 var i, j: Integer; match: Boolean;
 begin
   { Hash-chain walk (FIFO = registration order) instead of the full Procs scan
@@ -8985,6 +9041,41 @@ begin
           if ((ptypes[j] = tyRecord) or (ptypes[j] = tyClass)) and
              (j < MAX_PROC_PARAMS) and
              RecIdsDistinctNamed(precs[j], ProcParamRecId[i * MAX_PROC_PARAMS + j]) then
+            match := False;
+          { ...and the SAME argument one type family over: AnsiString,
+            WideString and UnicodeString are all tyAnsiString, distinguished
+            only by the element WIDTH in the parallel column. Comparing kinds
+            alone made them ONE signature, so `function f(s: ansistring)` and
+            `function f(s: widestring)` collided here, the second body was
+            written into the first's row (the caller warns "duplicate
+            definition ... the later body wins"), and every call to EITHER ran
+            the LAST one declared. A silent wrong value with a warning that
+            names the wrong defect: tover1 compiles, runs, and prints
+            "Failure!". Two classes only -- StrElemIsWide normalises the 0
+            sentinel and Ord(tyChar) together -- so this can split a row in
+            exactly one place and never on a carrier that forgot to store.
+            The record rule above is the precedent, one line up. }
+          if (ptypes[j] = tyAnsiString) and (j < MAX_PROC_PARAMS) and
+             (StrElemIsWide(pstrelem[j]) <>
+              StrElemIsWide(ProcParamStrElemTk[i * MAX_PROC_PARAMS + j])) then
+            match := False;
+          { ...and the THIRD instance of the one shape, on typed POINTERS:
+            PChar and PWideChar are both tyPointer, distinguished by the
+            pointee. This one is live in a DEFAULT build (the string twin above
+            needs -dPXX_WIDE_PAYLOAD before the two widths can differ at all),
+            and it is the arm tover1 exposes second: `f(p: pchar)` and
+            `f(p: pwidechar)` were one signature, so a call to either ran the
+            later body.
+            BOTH SIDES MUST POSITIVELY NAME A POINTEE. tyUnknown is the
+            untyped-`Pointer` sentinel AND what a registration path that never
+            recorded one leaves behind, so splitting on it would turn a missing
+            write into a phantom overload -- and ProcParamPtrElemTk's own note
+            in defs.inc is about exactly that failing open. With the guard, this
+            can only ever split a pair that each named a different pointee. }
+          if (ptypes[j] = tyPointer) and (j < MAX_PROC_PARAMS) and
+             (pptrelem[j] <> tyUnknown) and
+             (ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j] <> Ord(tyUnknown)) and
+             (Ord(pptrelem[j]) <> ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j]) then
             match := False;
         end;
         if match then
@@ -10416,8 +10507,8 @@ begin
                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
 end;
 
-function MatchParamExact(paramTk, argTk: TTypeKind): Boolean;
-{ Exact-match test for one argument. `Integer` and `LongInt` are the SAME type
+function MatchParamExact(i, j: Integer; argTk: TTypeKind): Boolean;
+{ Exact-match test for argument j against parameter j of candidate i. `Integer` and `LongInt` are the SAME type
   -- both 4-byte signed, and FPC declares one as the other's alias -- but they
   carry distinct kinds here (tyInteger / tyInt32), so a bare kind comparison
   discriminated on the SPELLING and no exact match was found.
@@ -10432,10 +10523,47 @@ function MatchParamExact(paramTk, argTk: TTypeKind): Boolean;
   A unit cannot legitimately declare both overloads (FPC rejects the pair as
   duplicate), so treating them as one cannot make a previously-unambiguous call
   ambiguous. }
+var paramTk: TTypeKind;
 begin
-  MatchParamExact := (paramTk = argTk) or
-                     ((paramTk = tyInteger) and (argTk = tyInt32)) or
-                     ((paramTk = tyInt32) and (argTk = tyInteger));
+  paramTk := Procs[i].Params[j].TypeKind;
+  Result := (paramTk = argTk) or
+            ((paramTk = tyInteger) and (argTk = tyInt32)) or
+            ((paramTk = tyInt32) and (argTk = tyInteger));
+  { ...and the OPPOSITE correction one type family over: two spellings that are
+    the same type must match here, and two TYPES that share a spelling must not.
+    AnsiString, WideString and UnicodeString are all tyAnsiString, so at kind
+    level every one of them exactly matches every other -- and the exact phase
+    takes the first candidate in the chain, which is declaration order. tover1
+    declares shortstring, widestring, ansistring, pchar in that order and asks
+    for each in turn; with the kinds alone, both string calls landed on the
+    widestring body.
+
+    EXACT PHASE ONLY, and that is the whole reason this lives here rather than
+    in MatchParamCompatible: passing a WideString to the only overload that
+    takes an AnsiString is a legal, real conversion, and FPC compiles it. What
+    FPC does NOT do is prefer it when a width-exact candidate exists. Blocking
+    it outright would refuse working code; ranking it below exact is the rule.
+
+    Takes (i, j) rather than the two kinds because the answer is no longer a
+    function of the kinds -- the same reason MatchParamCompatible and
+    MatchArgRecMismatch already take them.
+    bug-p-a-widestring-and-an-ansistring-parameter-are-one-overload }
+  if Result and MatchArgElemValid and (paramTk = tyAnsiString) and
+     (argTk = tyAnsiString) and (j >= 0) and (j < MAX_PROC_PARAMS) and
+     (StrElemIsWide(MatchArgStrElemTk[j]) <>
+      StrElemIsWide(ProcParamStrElemTk[i * MAX_PROC_PARAMS + j])) then
+    Result := False;
+  { ...and the pointer twin, same phase and same both-sides-must-name-a-pointee
+    rule the registration check uses: a PWideChar argument stops exactly
+    matching a PChar parameter, and an untyped `Pointer` on either side keeps
+    matching everything it matched before. Live in a default build.
+    bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
+  if Result and MatchArgElemValid and (paramTk = tyPointer) and
+     (argTk = tyPointer) and (j >= 0) and (j < MAX_PROC_PARAMS) and
+     (MatchArgPtrElemTk[j] <> tyUnknown) and
+     (ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j] <> Ord(tyUnknown)) and
+     (Ord(MatchArgPtrElemTk[j]) <> ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j]) then
+    Result := False;
 end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
@@ -10527,7 +10655,7 @@ begin
         match := True;
         for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
-          if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
+          if ((not MatchParamExact(i, j, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
@@ -10562,7 +10690,7 @@ begin
         match := True;
         for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
-          if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
+          if ((not MatchParamExact(i, j, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;

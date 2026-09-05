@@ -54,7 +54,7 @@ tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes
 tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)
 tforin24.pp	gap: enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
-tforin2.pp	gap: for-in over a CALL-result string container (getstring(s)) + string op-enumerator
+tforin2.pp	gap: for-in over a Classes.TStringList (its GetEnumerator), Track B. The STRING half now works: a call-result container and the `operator enumerator` for String both compile — the refusal moved from line 60 to line 75
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
 tforin8.pp	gap: IEnumerable/IEnumerator interfaces driving for-in
 tforin9.pp	gap: `enumerator MoveNext` / `enumerator Current` member DIRECTIVES on an interface declaring its own enumerator protocol. `operator Enumerator(AList: TMyList): IMyIterator` itself parses
@@ -78,10 +78,10 @@ tgenfunc23.pp	gap: generic procedure overload on T vs array of T + inline specia
 tgenfunc8.pp	gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 tobject1.pp	gap: object constructor `fail`, erroru/ExitCode RTL support
 toperator78.pp	gap: operator overloads whose operands are NOT aggregates (LongInt ** LongInt, `and` over a set, `array of Char` operands, Pointer + ShortString). pxx refuses a binary overload when neither operand is a record/class, deliberately -- see the arity branch in pasparser_call.inc -- and also has no `**` token
-tover1.pp	gap: overload resolution across shortstring/ansistring/widestring/pchar params
+tover1.pp	gap: `widestring` is an ALIAS of `ansistring` unless {$define PXX_WIDE_PAYLOAD}, so its two string overloads are one type declared twice. PASSES under that define (measured 2026-09-05) — the overload key itself now carries the element WIDTH. Retiring the gate is chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 tsetsize.pp	wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
 tstring10.pp	gap: punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed)
-tstring11.pp	gap: overload resolution RawByteString vs UnicodeString (char/array/pchar args)
+tstring11.pp	gap: an open `array of WideChar` / `array of AnsiChar` argument binding a UnicodeString/RawByteString parameter. The overload KEY is no longer the blocker — under {$define PXX_WIDE_PAYLOAD} the two Test1 candidates are distinct and the refusal moves to the open-array conversion at line 42; without it they are one type (same alias gate as tover1)
 tstring1.pp	gap: shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
 tstring3.pp	gap: typed-const array of short/ansistring initialized from char & resourcestring consts
 tstring4.pp	wontfix: reads ansistring refcount/length header words — FPC internal string layout
@@ -96,7 +96,6 @@ texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as 
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
 tforin12.pp	gap: initializing array-of-char elements from string literals in an array const
 tforin15.pp	gap: `Twice = type Integer` is not an operator OPERAND type -- the table keys on (typeKind, recId) and a distinct scalar alias has no identity in it, so `operator enumerator(a: Integer)` and `operator enumerator(a: Twice)` cannot be told apart. `operator enumerator` itself parses
-tforin16.pp	gap: for-in over a string constant
 tforin26.pp	gap: user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
 tforin27.pp	gap: user function named `Write` (builtin name shadowing) + for-in over dynamic array
 tgeneric10.pp	gap: objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization

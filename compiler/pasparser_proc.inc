@@ -998,22 +998,11 @@ begin
         if tk = tyInteger then ptypesEnum[i] := LastTypeEnumId
         else ptypesEnum[i] := -1;
         { ...and the same rule a third time for a managed string's ELEMENT
-          WIDTH. LastTypeStrElemTk is a RETURN CHANNEL from the ParseTypeKind
-          that just returned -- valid only in this window, never as storage
-          (defs.inc's window rule) -- and meaningful only when the type it
-          returned WAS a managed string.
-          NORMALISED on the way in, unlike SymStrElemTk's raw store: tyUnknown
-          means "ParseTypeKind said nothing", which for a tyAnsiString is a byte
-          string, so it is written as Ord(tyChar) rather than passed through as
-          0. That keeps 0 meaning exactly one thing here -- not a managed string
-          -- instead of doing double duty as "narrow" as well, which is the
-          shape that let the pointer twin's sentinel fail open. }
-        if tk = tyAnsiString then
-        begin
-          if LastTypeStrElemTk = tyWideChar then ptypesStrElemTk[i] := Ord(tyWideChar)
-          else ptypesStrElemTk[i] := Ord(tyChar);
-        end
-        else ptypesStrElemTk[i] := 0;
+          WIDTH -- the window read and the normalisation are both stated where
+          ParamStrElemOf is defined (symtab.inc), because ParseTypeSection's
+          method rows have to capture the same fact the same way now that the
+          width is part of an overload signature. }
+        ptypesStrElemTk[i] := ParamStrElemOf(tk);
         { ...and a FOURTH time for the frozen-string CAPACITY, for exactly the
           reason the three notes above give. LastTypeStrCap is a return channel
           from the ParseTypeKind that just returned; capturing it here is the
@@ -1497,7 +1486,7 @@ begin
       Next;
       Eat(tkSemicolon);
     end;
-    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
+    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     if sawVarargs then ProcVariadic[procIdx] := True;
@@ -1843,7 +1832,7 @@ begin
     end;
     if (not PreScanPass) or (methOwnerCi < 0) then
     begin
-      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
+      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
       if procIdx < 0 then
       begin
         if StrictOverload and (FindProc(name) >= 0) and not DialectIsPxx then
@@ -1983,7 +1972,7 @@ begin
   end;
 
   { Register or resolve }
-  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
+  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
   if procIdx < 0 then
   begin
     if StrictOverload and (FindProc(name) >= 0) then

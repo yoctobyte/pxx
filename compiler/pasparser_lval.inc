@@ -6471,13 +6471,14 @@ begin
     currArg := ASTRight[currArg];
   end;
 
-  { The five argument-match SIDE CHANNELS, filled once per argument through the
-    shared FillMatchArgChannelsAt (pasparser_call.inc). This function is the
-    single entry into MatchProcCall*, so refilling here keeps the channels
-    fresh; they stay valid across the retry matches below (same argument list).
+  { The argument-match SIDE CHANNELS, filled once per argument through the
+    shared FillMatchArgChannelsAt (pasparser_call.inc); defs.inc owns the set
+    and is where to count them. This function is the single entry into
+    MatchProcCall*, so refilling here keeps the channels fresh; they stay valid
+    across the retry matches below (same argument list).
 
-    Until 2026-09-05 this was FIVE separate walks of the same AN_ARG chain, one
-    per channel, each with its own `i < MAX_PROC_PARAMS` guard -- and the
+    Until 2026-09-05 this was one separate walk of the same AN_ARG chain per
+    channel, each with its own `i < MAX_PROC_PARAMS` guard -- and the
     knowledge of what each channel means lived HERE, in one caller, where the
     speculative overload probe could not reach it. Every fill turned out to be a
     pure function of (node, argTypes[i]), so the chain walking was incidental
@@ -6493,6 +6494,7 @@ begin
   MatchArgNilValid := True;
   MatchArgScalarValid := True;
   MatchArgArrayValid := True;
+  MatchArgElemValid := True;
 
   { FPC parity: an untyped integer LITERAL is typed by its VALUE — the smallest
     type that holds it — and overload resolution ranks against THAT. pxx types

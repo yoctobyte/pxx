@@ -2314,14 +2314,77 @@ begin
     end;
 end;
 
-procedure FillMatchArgChannelsAt(i, node: Integer; argTk: TTypeKind);
-{ Fill the five argument-match SIDE CHANNELS for ONE argument.
+{ A typed-pointer ARGUMENT's POINTEE, and tyUnknown whenever it is not certain.
 
-  MatchParamCompatible and MatchArgRecMismatch (symtab.inc) are not functions of
-  the two type kinds. They read MatchArgRec, MatchArgNil, MatchArgScalar,
-  MatchArgArray and MatchArgArrayElemTk, and every one of those five was added
-  because the kind pair alone gave a WRONG ANSWER -- the ticket citations below
-  name which defect each time. Until 2026-09-05 all five were filled by five
+  The same certainty discipline MatchArgScalar and MatchArgArray follow, and for
+  the same reason: tyUnknown doubles as the untyped-`Pointer` sentinel, so a
+  guess here does not merely rank an overload wrongly, it REFUSES a PWideChar
+  argument to the only overload that takes one. Exactly one shape is certain --
+  a named pointer variable of depth one -- and everything else stays
+  unconstrained. IsNodePChar's other three arms (cast, field, call result) are
+  deliberately out: each would need its own wide twin before it could answer
+  symmetrically, and a half-answer here is worse than no answer.
+
+  The signed/unsigned byte spellings normalise onto tyChar because a PChar
+  formal is written all three ways across the RTL and the C bindings.
+
+  ONE definition, three consumers: the argument-match channel below, and the two
+  METHOD overload rankers, which do not fill the channels (they parse their
+  arguments speculatively and rewind, so there is no AN_ARG chain to walk).
+  bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
+function NodePtrElemTkCertain(node: Integer; argTk: TTypeKind): TTypeKind;
+begin
+  Result := tyUnknown;
+  if (argTk <> tyPointer) or (node < 0) then Exit;
+  if (ASTKind[node] <> AN_IDENT) or (ASTIVal[node] < 0) or
+     (ASTIVal[node] >= SymCount) then Exit;
+  if (Syms[ASTIVal[node]].TypeKind <> tyPointer) or
+     (SymTR[ASTIVal[node]].PtrDepth <> 1) then Exit;
+  Result := IntToTypeKind(SymTR[ASTIVal[node]].PtrBaseTk);
+  if (Result = tyUInt8) or (Result = tyInt8) then Result := tyChar;
+end;
+
+{ Does argument `node` (of kind `argTk`) DISAGREE with parameter `pj` of
+  candidate `pi` about the part of the type the KIND does not carry -- a managed
+  string's element WIDTH, or a typed pointer's POINTEE?
+
+  "Disagree" needs both sides to say something: an untyped `Pointer` formal, or
+  a parameter from a path that never recorded a pointee, keeps matching whatever
+  it matched before. Used to break a rank-0 TIE in the two method rankers, the
+  same way the class-identity refinement beside it does -- and to rank 2 (merely
+  compatible), never 3, because passing a PWideChar to the only overload taking
+  a PChar is a real conversion FPC performs. What FPC does not do is PREFER it
+  when a candidate that matches exactly exists. }
+function OverloadArgElemMismatch(pi, pj, node: Integer; argTk: TTypeKind): Boolean;
+var pe, ae: Integer;
+begin
+  Result := False;
+  if (pj < 0) or (pj >= MAX_PROC_PARAMS) then Exit;
+  if (argTk = tyAnsiString) and (Procs[pi].Params[pj].TypeKind = tyAnsiString) then
+  begin
+    Result := StrElemIsWide(ASTStrElemTkOf(node)) <>
+              StrElemIsWide(ProcParamStrElemTk[pi * MAX_PROC_PARAMS + pj]);
+    Exit;
+  end;
+  if (argTk = tyPointer) and (Procs[pi].Params[pj].TypeKind = tyPointer) then
+  begin
+    pe := ProcParamPtrElemTk[pi * MAX_PROC_PARAMS + pj];
+    ae := Ord(NodePtrElemTkCertain(node, argTk));
+    Result := (pe <> Ord(tyUnknown)) and (ae <> Ord(tyUnknown)) and (pe <> ae);
+  end;
+end;
+
+procedure FillMatchArgChannelsAt(i, node: Integer; argTk: TTypeKind);
+{ Fill the argument-match SIDE CHANNELS for ONE argument. SEVEN of them since
+  2026-09-05 -- five, then MatchArgStrElemTk and MatchArgPtrElemTk -- so read
+  the list below rather than this sentence's number.
+
+  MatchParamCompatible, MatchParamExact and MatchArgRecMismatch (symtab.inc) are
+  not functions of the two type kinds. They read MatchArgRec, MatchArgNil,
+  MatchArgScalar, MatchArgArray, MatchArgArrayElemTk, MatchArgStrElemTk and
+  MatchArgPtrElemTk, and every one of them was added because the kind pair alone
+  gave a WRONG ANSWER -- the ticket citations below name which defect each
+  time. Until 2026-09-05 all five were filled by five
   separate walks of the AN_ARG chain inside MatchCallDelphiProcAddr, so the
   knowledge lived in one caller and no other caller could reach it.
 
@@ -2334,8 +2397,10 @@ procedure FillMatchArgChannelsAt(i, node: Integer; argTk: TTypeKind);
   per-argument entry point lets the probe call this exactly where it already
   holds the node and allocate nothing.
 
-  The caller sets the four *Valid flags after its loop. Note four, not five --
-  MatchArgArray and MatchArgArrayElemTk share MatchArgArrayValid (defs.inc).
+  The caller sets the *Valid flags after its loop, and there are FEWER of them
+  than there are channels: MatchArgArray/MatchArgArrayElemTk share
+  MatchArgArrayValid, and MatchArgStrElemTk/MatchArgPtrElemTk share
+  MatchArgElemValid (defs.inc). Count them there, not here.
 
   refactor-p-the-overload-probe-cannot-see-the-argument-match-channels }
 begin
@@ -2420,6 +2485,35 @@ begin
   if MatchArgArray[i] and (ASTKind[node] = AN_IDENT) and
      (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
     MatchArgArrayElemTk[i] := Syms[ASTIVal[node]].TypeKind;
+
+  { ...and the sixth: a managed string's ELEMENT WIDTH, which the kind channel
+    cannot carry because AnsiString, WideString and UnicodeString are all
+    tyAnsiString. Derived through ASTStrElemTkOf rather than stamped, for the
+    reason that function's own header gives -- ASTStrElemTk is a carrier with
+    few writers, so a PRODUCED wide string (`w1 + w2`, a wide-returning call)
+    would read narrow off the raw slot. NORMALISED to Ord(tyChar) so 0 keeps
+    meaning "not a managed string" here as it does everywhere else.
+    bug-p-a-widestring-and-an-ansistring-parameter-are-one-overload }
+  if argTk = tyAnsiString then
+  begin
+    if ASTStrElemTkOf(node) = Ord(tyWideChar) then
+      MatchArgStrElemTk[i] := Ord(tyWideChar)
+    else MatchArgStrElemTk[i] := Ord(tyChar);
+  end
+  else MatchArgStrElemTk[i] := 0;
+
+  { ...and the seventh: a typed pointer's POINTEE, so PChar and PWideChar stop
+    being one exact match. CERTAIN SHAPES ONLY, the discipline MatchArgScalar
+    and MatchArgArray already follow -- a named pointer variable of depth one,
+    and nothing else. IsNodePChar's other three arms (cast, field, call result)
+    deliberately stay out: each would need its own wide twin to be symmetric,
+    and a channel that answers narrow for a shape it cannot really see would
+    refuse a PWideChar argument to the only overload that takes one. tyUnknown
+    means "unconstrained", which is what every uncertain shape must stay.
+    The signed/unsigned byte spellings normalise onto tyChar because a PChar
+    formal is spelled all three ways across the RTL and the C bindings.
+    bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
+  MatchArgPtrElemTk[i] := NodePtrElemTkCertain(node, argTk);
 end;
 
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
@@ -2669,6 +2763,16 @@ begin
           else rank := 2;                     { ancestor up-cast: exact wins }
         end;
       end;
+      { ...and the ELEMENT-aware refinement, the same shape as the class one
+        above and for the same reason: two tyPointer params tie at rank 0, so
+        `m(p: PChar)` and `m(p: PWideChar)` were picked by declaration order and
+        a PWideChar argument ran the PChar body. Rank 2, not 3 -- the conversion
+        is real and must stay available when it is the only candidate; what it
+        must not do is beat an exact match. Covers the managed-string WIDTH
+        twin as well, which ties the same way once WideString is not an alias.
+        bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
+      if (rank = 0) and OverloadArgElemMismatch(pi, pj, argNode[j], argTk[j]) then
+        rank := 2;
       if rank >= 3 then ok := False;
       score := score + rank;
     end;
@@ -2761,6 +2865,7 @@ begin
     MatchArgNilValid := True;
     MatchArgScalarValid := True;
     MatchArgArrayValid := True;
+    MatchArgElemValid := True;
 
     ok := True;
     for j := 0 to nArgs - 1 do
@@ -2798,6 +2903,7 @@ begin
     MatchArgNilValid := False;
     MatchArgScalarValid := False;
     MatchArgArrayValid := False;
+    MatchArgElemValid := False;
     if not ok then
       Error('no overload of ' + name + ' matches these arguments');
     Result := FindUMethArity(ci, name, nExplicitArgs);
@@ -2885,6 +2991,7 @@ const MAX_OVL_CAND = 32;
 var
   cand: array[0..MAX_OVL_CAND-1] of Integer;
   argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  argNodeC: array[0..MAX_PROC_PARAMS-1] of Integer;   { the argument NODES, for the element-aware tie-break }
   nCand, nArgs, i, j, c, pi, want, curr, mbase, cnt, best: Integer;
   score, bestScore, rank, argSeq: Integer;
   ok: Boolean;
@@ -2898,6 +3005,11 @@ begin
   while (argSeq <> -1) and (nArgs < MAX_PROC_PARAMS) do
   begin
     argTk[nArgs] := IntToTypeKind(ASTTk[ASTLeft[argSeq]]);
+    { the NODE too, not only its kind: the element-aware tie-break below asks
+      about a managed string's width and a typed pointer's pointee, and neither
+      is on the kind. Kept here rather than re-walked, because this loop is the
+      one place the chain and the index line up. }
+    argNodeC[nArgs] := ASTLeft[argSeq];
     Inc(nArgs);
     argSeq := ASTRight[argSeq];
   end;
@@ -2949,6 +3061,11 @@ begin
     for j := 0 to nArgs - 1 do
     begin
       rank := OverloadArgRank(Procs[pi].Params[1 + j].TypeKind, argTk[j]);
+      { see the twin site in FindUMethOverloadAhead: two tyPointer (or two
+        tyAnsiString) parameters tie at rank 0, and the part that separates them
+        is not on the kind. }
+      if (rank = 0) and OverloadArgElemMismatch(pi, 1 + j, argNodeC[j], argTk[j]) then
+        rank := 2;
       if rank >= 3 then ok := False;
       score := score + rank;
     end;

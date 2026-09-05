@@ -2935,6 +2935,35 @@ var
     is built on it. tyUnknown when the argument is not an array. }
   MatchArgArrayElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   MatchArgArrayValid : Boolean;
+  { For a MANAGED-STRING argument (tyAnsiString), its ELEMENT WIDTH — Ord(tyChar)
+    or Ord(tyWideChar); 0 when the argument is not a managed string. The SIXTH
+    argument-match side channel, and it exists for exactly the reason the record
+    one does: AnsiString, WideString and UnicodeString are ONE TTypeKind, so the
+    type channel cannot tell an exact match from a transcoding one. Without it
+    `f(w: WideString)` and `f(s: AnsiString)` were the same signature — a call to
+    either ran whichever body was declared LAST, silently.
+    Read by MatchParamExact, so it narrows the EXACT phases only: a wide
+    argument still binds a narrow parameter through the compatible phases when
+    that is the only candidate, which is FPC's rule and the reason this is not a
+    hard compatibility guard. Filled by FillMatchArgChannelsAt beside the other
+    five. bug-p-a-widestring-and-an-ansistring-parameter-are-one-overload }
+  MatchArgStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;
+  { ...and the POINTER twin, the seventh channel: a typed-pointer argument's
+    POINTEE kind, tyUnknown when the argument's pointee is not certain. PChar
+    and PWideChar are both tyPointer, so the kind channel cannot tell an exact
+    match from a transcoding one there either — and unlike the string twin this
+    one is live in a DEFAULT build. Same certainty discipline as
+    MatchArgScalar/MatchArgArray: only shapes whose pointee is beyond doubt set
+    it, everything else stays tyUnknown and matches exactly as before, because
+    tyUnknown is also the untyped-`Pointer` sentinel and a channel that guessed
+    would refuse working code rather than merely rank it lower.
+    Read by MatchParamExact, so it narrows the EXACT phases only. }
+  MatchArgPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  { ONE validity flag for BOTH of the two channels above — they are filled and
+    invalidated together, and the name says "Elem" rather than "StrElem"
+    because a flag named for one of the two things it gates is the shape
+    "the name is not the thing" warns about. }
+  MatchArgElemValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   PasAsmModeNonIntel : Boolean;  { {$asmMode att|direct} is in force: tolerated until an actual asm block needs reading (feature-pascal-asmmode-directive-tolerance) }

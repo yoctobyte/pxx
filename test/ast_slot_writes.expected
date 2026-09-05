@@ -1053,6 +1053,8 @@ AN_REPEAT Right notCond
 AN_REPEAT Right postComma
 AN_RTTIOF Left objNode
 AN_SEQ Left CWrapStaticInitOnce(head)
+AN_SEQ Left GenMakeAssign(GenMakeIdent(tmpSym, tyAnsiString), CloneAST(destNode))
+AN_SEQ Left GenMakeAssign(destNode, GenMakeIdent(tmpSym, tyAnsiString))
 AN_SEQ Left asgN
 AN_SEQ Left asn
 AN_SEQ Left assignNode
@@ -1074,6 +1076,8 @@ AN_SEQ Left outerCall
 AN_SEQ Left prevStmt
 AN_SEQ Left stmt
 AN_SEQ Left stmtNode
+AN_SEQ Left strAssign
+AN_SEQ Left strLoop
 AN_SEQ Left wAssign
 AN_SEQ Right -1
 AN_SEQ Right AllocNode(AN_SEQ)

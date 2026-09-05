@@ -1,0 +1,10 @@
+ins short XYabcdef
+del short aef
+ins fixed abXYcdef
+del fixed cdef
+ins mgd   XYabcdef
+del mgd   aef
+copy short bcd
+setlen short abc
+ins past-end abcdefZ
+del past-end abcdef

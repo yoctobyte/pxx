@@ -1174,7 +1174,17 @@ begin
     `array of AnsiString` the var's TypeKind is the element base type
     (tyAnsiString), so the array check MUST win — otherwise it is mis-iterated
     char-by-char. }
-  isString := (not Syms[contSym].IsArray) and ((contTk = tyString) or (contTk = tyAnsiString));
+  { TypeIsAnyString, NOT `tyString or tyAnsiString`. The narrow spelling missed
+    tyShortString and tyFixedString, so `for ch in sh` over a `sh: ShortString`
+    was refused with "variable is not a string or array" while the identical
+    loop over a plain `string` compiled -- and two arms EARLIER IN THIS SAME
+    FUNCTION already asked TypeIsFrozenString, so the predicate was spelled two
+    ways in one routine and the narrow one is the one that decided. That
+    function's own header states the rule: a guard meaning "is this a string"
+    must not enumerate kinds, because the frozen-prefix work is what keeps
+    changing the set. Three copies here, all three now asking it.
+    bug-p-for-in-over-a-shortstring-variable-is-refused }
+  isString := (not Syms[contSym].IsArray) and TypeIsAnyString(contTk);
   { An open-array param keeps AllocParam's ArrLen=1000 placeholder — its real
     length lives at [data-8] like a dyn array's, so it must take the runtime
     Length bound, not a fake static one (`for r in a` over a 2-element open
@@ -1242,7 +1252,7 @@ begin
   isArr := UFldIsArray[fldIdx];
   staticLen := UFldArrLen[fldIdx];
   isStaticArr := isArr and (staticLen >= 0);
-  isString := (not isArr) and ((contTk = tyString) or (contTk = tyAnsiString));
+  isString := (not isArr) and TypeIsAnyString(contTk);   { see ParseForInVarAST's note }
 
   if isString then elemTk := Ord(tyChar)
   else if isArr then elemTk := UFldTk[fldIdx]
@@ -1481,7 +1491,7 @@ begin
   end;
 
   isStaticArr := isArr and (staticLen >= 0);
-  isString := (not isArr) and ((contTk = tyString) or (contTk = tyAnsiString));
+  isString := (not isArr) and TypeIsAnyString(contTk);   { see ParseForInVarAST's note }
   if isString then elemTk := Ord(tyChar);
 
   { Inline `for var x in obj.arr` / a qualified array/string source: backfill
@@ -2526,6 +2536,87 @@ begin
   end;
 end;
 
+{ `for c in <a string VALUE>` — materialise the string into a hidden local and
+  run the ordinary iterable-VARIABLE loop over it, which is the one place a
+  string's length and element load are lowered.
+
+  ONE implementation for what were two spellings and is now three. The literal
+  form (`for c in 'hello'`) got its own arm keyed on tkString and the variable
+  form was the original; a named string CONSTANT is a tkIdent and matched
+  NEITHER, so it fell through every bare-name arm to the general container
+  expression at the bottom, which knows about classes with GetEnumerator and
+  about arrays and nothing about strings. `const S = 'abc'; for ch in S` was
+  refused with "not a generator, enum type, or iterable variable" while
+  `v := 'abc'; for ch in v` in the same program compiled. The third spelling is
+  the tell the first two were special cases, per
+  devdocs/dev/normalise-dont-special-case.md.
+
+  The container is evaluated ONCE, into the temp — the same rule the
+  GetEnumerator path states, and it is what a function-call source needs.
+  Consumes the `do` and the body, because ParseForInVarAST does. }
+function BuildForInStringValueLoop(varIdx, srcNode: Integer): Integer;
+var strSym, strAssign, strLoop, seqTail: Integer;
+begin
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    Syms[varIdx].TypeKind := tyChar;
+    SymSyncTypeRef(varIdx);
+  end;
+  strSym := AllocVar('', tyAnsiString);
+  strAssign := GenMakeAssign(GenMakeIdent(strSym, tyAnsiString), srcNode);
+  strLoop := ParseForInVarAST(varIdx, strSym);
+  Result := AllocNode(AN_SEQ);
+  ASTLeft[Result] := strAssign;
+  seqTail := AllocNode(AN_SEQ);
+  ASTLeft[seqTail] := strLoop;
+  ASTRight[seqTail] := -1;
+  ASTRight[Result] := seqTail;
+end;
+
+{ `Insert(src, s, i)` / `Delete(s, i, n)` where `s` is a FROZEN string — a
+  ShortString or a `string[N]` — read-modify-written through a managed temp:
+
+      __t := s;  __pxxStrInsert(src, __t, i);  s := __t;
+
+  Both helpers take `var s: AnsiString`, so the intrinsic lowering was handing
+  them the ADDRESS of an inline-length-prefixed buffer and the callee read the
+  first eight bytes as a heap handle. `var T: ShortString; T := 'abcdef';
+  Insert('XY', T, 1)` SEGFAULTED — six lines, no out-of-range index anywhere,
+  and the same statement over a plain `string` in the same program is correct.
+  `Copy` and `SetLength` on the identical variable are fine, which is the tell:
+  they take the string BY VALUE (IRLowerCallArg converts) or have their own
+  lowering, and only the two `var`-parameter intrinsics reach the raw address.
+
+  The guard above this arm listed tyFixedString EXPLICITLY, so the frozen
+  destination was not an oversight in the type test — it was admitted and then
+  passed on unconverted. A guard that lets the value through to a crash is
+  worse than one that never mentioned it.
+
+  Both conversions already exist and are the ordinary ones: frozen -> managed on
+  the read, managed -> frozen (truncating to the declared capacity) on the store,
+  the same pair `s := 'literal'` and `a := s` use. The destination is CloneAST'd
+  for the read so a field or an element is evaluated on both sides rather than
+  being tied to one node — the write-back discipline the dynamic-array arms next
+  door already follow.
+
+  Harmless when the destination is already managed, and it is deliberately not
+  guarded on more than the kind: the round trip is a copy, so a node tagged
+  tyString that is really managed costs one copy and stays correct.
+  bug-p-insert-and-delete-on-a-shortstring-variable-segfault }
+function BuildFrozenStrVarArgRMW(destNode, tmpSym, callNode: Integer): Integer;
+var seqCall, seqStore: Integer;
+begin
+  Result := AllocNode(AN_SEQ);
+  ASTLeft[Result] := GenMakeAssign(GenMakeIdent(tmpSym, tyAnsiString), CloneAST(destNode));
+  seqCall := AllocNode(AN_SEQ);
+  ASTLeft[seqCall] := callNode;
+  seqStore := AllocNode(AN_SEQ);
+  ASTLeft[seqStore] := GenMakeAssign(destNode, GenMakeIdent(tmpSym, tyAnsiString));
+  ASTRight[seqStore] := -1;
+  ASTRight[seqCall] := seqStore;
+  ASTRight[Result] := seqCall;
+end;
+
 function ParseForStatementAST: Integer;
 var forcNode, forcRec, forcSym, forcAssign, forcLoop: Integer;   { for-in over a container EXPRESSION }
     forcElemCount, forcLowBound, forcFlatCount: Integer;   { ...and a `p^` pointee's extent }
@@ -2672,21 +2763,7 @@ begin
     if CurTok.Kind = tkString then
     begin
       ParseExpr;
-      forcNode := CurASTNode;
-      if Syms[varIdx].TypeKind = tyAuto then
-      begin
-        Syms[varIdx].TypeKind := tyChar;
-        SymSyncTypeRef(varIdx);
-      end;
-      forcSym := AllocVar('', tyAnsiString);
-      forcAssign := GenMakeAssign(GenMakeIdent(forcSym, tyAnsiString), forcNode);
-      forcLoop := ParseForInVarAST(varIdx, forcSym);
-      Result := AllocNode(AN_SEQ);
-      ASTLeft[Result] := forcAssign;
-      forcNode := AllocNode(AN_SEQ);
-      ASTLeft[forcNode] := forcLoop;
-      ASTRight[forcNode] := -1;
-      ASTRight[Result] := forcNode;
+      Result := BuildForInStringValueLoop(varIdx, CurASTNode);
       Exit;
     end;
     if CurTok.Kind <> tkIdent then Error('for-in: expected a generator, enum type, or iterable variable');
@@ -2814,6 +2891,22 @@ begin
        NodeIsFixedArrayCallResult(forcNode) then
     begin
       Result := ParseForInNodeAST(varIdx, forcNode);
+      Exit;
+    end;
+
+    { ...or a string VALUE that is not a bare variable and not a literal: a
+      named CONSTANT (`const S = 'abc'; for ch in S`), a concatenation, a
+      string-returning call. The two spellings that worked each had their own
+      arm; this is the one that catches every other way of writing the same
+      thing, and it shares their lowering rather than adding a fourth.
+      NodeDynDepth is asked first above, so an `array of AnsiString` — whose
+      element kind is also tyAnsiString — has already been taken by the
+      dyn-array arm and never reaches here.
+      bug-p-for-in-over-a-named-string-constant-is-refused }
+    if IntToTypeKind(ASTTk[forcNode]) in
+         [tyString, tyAnsiString, tyShortString, tyFixedString] then
+    begin
+      Result := BuildForInStringValueLoop(varIdx, forcNode);
       Exit;
     end;
 
@@ -5248,6 +5341,7 @@ var
   lfTmp, lfCall, lfAsn: Integer;   { LoadFile into a non-identifier destination — see its parse arm }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
+  frozenDest: Integer;   { Insert/Delete over a FROZEN string destination: the original lvalue, read-modify-written through a managed temp. -1 = the destination is already managed. See BuildFrozenStrVarArgRMW. }
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
@@ -6216,18 +6310,27 @@ begin
         end
         else
         begin
-        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
+        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyShortString, tyFixedString]) then
           Error('Delete: string or plain dynamic-array variable expected (dyn-array fields/elements not yet supported)');
         Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
         Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
         Expect(tkRParen, ')');
         i := FindProc('__pxxStrDelete');
         if i < 0 then Error('Delete: string helper unavailable (needs the builtin unit; not on ESP)');
+        { see BuildFrozenStrVarArgRMW: the helper takes `var s: AnsiString` }
+        frozenDest := -1;
+        if TypeIsFrozenString(IntToTypeKind(ASTTk[valNode])) then
+        begin
+          frozenDest := valNode;
+          valNode := GenMakeIdent(AllocVar('', tyAnsiString), tyAnsiString);
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
         lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode; ASTRight[argSeq] := lastArg;
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := stepsNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
+        if frozenDest >= 0 then
+          node := BuildFrozenStrVarArgRMW(frozenDest, ASTIVal[valNode], node);
         end;
       end
       else if CaseEqual(name, 'Insert') and SoftIntrinsicOpen('Insert', qUnit) and
@@ -6317,17 +6420,26 @@ begin
         end
         else
         begin
-        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
+        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyShortString, tyFixedString]) then
           Error('Insert: string or plain dynamic-array variable destination expected (dyn-array fields/elements not yet supported)');
         Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;        { index }
         Expect(tkRParen, ')');
         i := FindProc('__pxxStrInsert');
         if i < 0 then Error('Insert: string helper unavailable (needs the builtin unit; not on ESP)');
+        { see BuildFrozenStrVarArgRMW: the helper takes `var s: AnsiString` }
+        frozenDest := -1;
+        if TypeIsFrozenString(IntToTypeKind(ASTTk[valNode])) then
+        begin
+          frozenDest := valNode;
+          valNode := GenMakeIdent(AllocVar('', tyAnsiString), tyAnsiString);
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := valNode; ASTRight[argSeq] := lastArg;
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := opNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
+        if frozenDest >= 0 then
+          node := BuildFrozenStrVarArgRMW(frozenDest, ASTIVal[valNode], node);
         end;
       end
       else if CaseEqual(name, 'SetLength') and SoftIntrinsicOpen('SetLength', qUnit) and

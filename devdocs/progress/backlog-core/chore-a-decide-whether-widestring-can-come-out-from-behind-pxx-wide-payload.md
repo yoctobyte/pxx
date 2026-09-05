@@ -140,3 +140,40 @@ That makes `PWideChar` the first construct that is **flatly unavailable** in a
 default build rather than merely different in it, which is a change in kind for
 this decision: previously both settings were self-consistent and neither was a
 bug.
+
+## A THIRD consumer, and this one is a conformance row that PASSES under the define (frankA, 2026-09-05)
+
+The section above records `PWideChar` as "the first construct that is flatly
+unavailable in a default build rather than merely different in it". There are
+now two more, and they are a different kind of evidence again — not a construct
+we refuse, but **valid FPC programs pxx cannot express at all** in a default
+build:
+
+| row | default build | with the define |
+| --- | --- | --- |
+| `tover1.pp` | compiles, runs, prints **Failure!** | **passes** |
+| `tstring11.pp` | `no overload of Test1 matches` at line 42 | gets past the overload set; refused at an open-`array of WideChar` argument |
+
+`tover1` declares `test_string` for shortstring, widestring, ansistring and
+pchar. Without the define `widestring` IS `ansistring`, so two of those four are
+the same type declared twice — pxx warns "duplicate definition", writes the
+second body into the first's row, and the program self-reports Failure. There is
+no way to write that program correctly here while the alias stands, and FPC's
+own test suite is where it comes from.
+
+That is materially stronger than the earlier data points: the previous ones said
+the two settings *differ*, and this one says the default setting cannot
+represent a distinction the language has. **It is not an argument that the gate
+is wrong** — the blast-radius sweep this ticket asks for is still the thing that
+decides — but it belongs on the ledger, and rule 3 does not apply to it: this is
+not an ASCII-vs-non-ASCII question at all, it is a TYPE-IDENTITY question, and it
+would read the same on pure ASCII.
+
+**What is NOT part of this decision, and was fixed rather than deferred:** the
+overload KEY itself was blind to the width — `FindProcOverloadRec` compared
+TTypeKind and `tyAnsiString` covers all three managed spellings — so even under
+the define the two overloads collided. That is a defect in either setting and it
+is now fixed (`MatchParamExact` and the registration check both read
+`ProcParamStrElemTk`; `test_overload_widestring_and_ansistring_are_two_overloads`
+carries the define for exactly the reason this ticket exists). So when the sweep
+runs, the overload machinery is no longer a confounder.

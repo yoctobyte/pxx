@@ -728,6 +728,19 @@ begin
           normalise-dont-special-case. Width is unchanged (TypeSlotSize 31 = 2), so
           pointer arithmetic still steps by two bytes. }
         LastTypePointerElemTk := tyWideChar;
+        { DEPTH and ULTIMATE BASE too — the same three lines `pchar` two arms
+          down carries and this one did not, which is the dropped-field pattern
+          the builtin-pointer-name arm below already names. The symptom is not a
+          wrong `p^`: SymTR.PtrDepth stayed 0, so every predicate that asks "a
+          one-level pointer over WHAT" answered "unknown" for PWideChar and
+          "tyChar" for PChar — and "unknown" is the untyped-`Pointer` sentinel,
+          so overload matching could not tell the two apart at all and
+          `f(p: pchar)` / `f(p: pwidechar)` bound by declaration order. Three
+          sibling arms set these; this was the fourth.
+          bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
+        LastTypePointerDepth := 1;
+        LastTypePointerBaseTk := Ord(tyWideChar);
+        LastTypePointerBaseRec := REC_NONE;
         Result := tyPointer;
       end
       { The built-in pointer names — PInteger, PByte, PDouble, ...
@@ -4953,6 +4966,37 @@ var
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  { A managed-string PARAMETER's element width, Ord(tyChar) / Ord(tyWideChar),
+    0 = not a managed string. The declaration-side twin of ParseSubroutine's
+    ptypesStrElemTk, and it has to be captured HERE, in the window right after
+    ParseTypeKind, for the reason LastTypeRecId is read on the line above: the
+    return channel describes the type just parsed and nothing else. Without it
+    a method row declaring `WideString` registered at width 0, which reads as
+    NARROW -- so the DECL and its out-of-line IMPL disagreed on the signature
+    the moment overload matching started reading the width. }
+  mPStrElemTk: array[0..MAX_PROC_PARAMS-1] of Integer;
+  { A typed POINTER parameter's pointee kind — the same duplicate-signature
+    question one type family over, and it has to be captured HERE for the
+    reason mPStrElemTk above does.
+
+    ParseTypeSection recorded NO pointee for a method row until 2026-09-05, so
+    `procedure P(p: PChar)` and `procedure P(p: PWideChar)` on one class were
+    one DECL row (both said tyUnknown, the untyped-`Pointer` sentinel), and then
+    both out-of-line implementations bound to that single row and the second
+    body won. Free routines were fixed by the same day's registration rule and
+    methods were not, which is the half-fix
+    devdocs/dev/normalise-dont-special-case.md warns about: the arm nobody
+    exercised is the one that stays broken.
+
+    A CONSEQUENCE WORTH STATING because it is a behaviour change beyond the
+    duplicate check: MatchParamCompatible reads ProcParamPtrElemTk to refuse a
+    class ARGUMENT for a typed-pointer parameter (the narrowing behind
+    bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer, whose
+    symptom was GetPropInfo binding a PClassRTTI arm and segfaulting). That
+    guard has been inert for every method declared in a type section, because
+    the column it reads was never written. Writing it makes methods answer the
+    way free routines already do. }
+  mPPtrElemTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
   fldNOffs: array[0..MAX_PROC_PARAMS-1] of Integer;   { comma-separated field-name spans }
   fldNLens: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -5285,7 +5329,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPStrElemTk[i] := ParamStrElemOf(mTk); mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk)); mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -5329,8 +5373,8 @@ begin
           while EatIntfMethodDirective do ;
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           { The ROW's name, for the reason the class and record arms give: a
             NESTED interface is registered qualified when the bare name is
@@ -5374,6 +5418,14 @@ begin
               nothing downstream could tell two overloads of it apart. The
               class-method path has always recorded it. }
             if i < MAX_PROC_PARAMS then ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
+            { ...and the managed-string ELEMENT WIDTH, dropped by this path for
+              the same reason and with the same consequence one type family
+              over: AnsiString and WideString are one TTypeKind, so a decl that
+              records no width says NARROW, and its out-of-line implementation
+              (which does record one) no longer matches the row it belongs to. }
+            if i < MAX_PROC_PARAMS then ProcParamStrElemTk[mpi * MAX_PROC_PARAMS + i] := mPStrElemTk[i];
+            { ...and the pointee, for the reason mPPtrElemTk's declaration gives }
+            if i < MAX_PROC_PARAMS then ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(mPPtrElemTk[i]);
             if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
             if (i < MAX_PROC_PARAMS) and mPDefault[i] then
             begin
@@ -5950,6 +6002,8 @@ begin
                 begin
                   mPTypes[i] := mTk;
                   mPTypesRec[i] := LastTypeRecId;
+                  mPStrElemTk[i] := ParamStrElemOf(mTk);
+                  mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk));
                   mPArr[i] := mIsArr;
                   mPByRef[i] := mIsByRef;
                   mPConst[i] := mSawConst;
@@ -6009,6 +6063,8 @@ begin
                 mPNames[i] := mPNames[i-1];
                 mPTypes[i] := mPTypes[i-1];
                 mPTypesRec[i] := mPTypesRec[i-1];
+                mPStrElemTk[i] := mPStrElemTk[i-1];
+                mPPtrElemTk[i] := mPPtrElemTk[i-1];
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
                 mPConst[i] := mPConst[i-1];
@@ -6024,6 +6080,8 @@ begin
               if isClassMethod then mPTypes[0] := tyPointer
               else mPTypes[0] := tyClass;
               mPTypesRec[0] := REC_NONE;   { must agree with the impl side's Self }
+              mPStrElemTk[0] := 0;
+              mPPtrElemTk[0] := tyUnknown;
               mPArr[0]   := False;
               mPByRef[0] := False;
               mPConst[0] := False;
@@ -6059,15 +6117,23 @@ begin
               proc and each IMPL body clobbered the other's — fpjson's
               `Add(TJSONData(AnObject))` then re-dispatched to Add(TJSONObject) and
               recursed to stack overflow (bug-pascal-overload-impl-decl-signature-match). }
-            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPArr, mPByRef);
+            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPStrElemTk, mPPtrElemTk, mPArr, mPByRef);
             if mpi < 0 then
             begin
               mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
               Procs[mpi].BodyAddr := -1;
               for i := 0 to mNParams-1 do
+              begin
                 if (i < MAX_PROC_PARAMS) and
                    ((mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord)) then
                   ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
+                { see the twin site above: the width and the pointee are both
+                  part of the signature }
+                if i < MAX_PROC_PARAMS then
+                  ProcParamStrElemTk[mpi * MAX_PROC_PARAMS + i] := mPStrElemTk[i];
+                if i < MAX_PROC_PARAMS then
+                  ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(mPPtrElemTk[i]);
+              end;
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
               if mIsFunc and (mRetType = tyInteger) then ProcRetEnumId[mpi] := mRetEnumId;
               if mIsFunc and (mRetType = tyAnsiString) then

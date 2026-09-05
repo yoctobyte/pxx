@@ -1,0 +1,6 @@
+m pc 4
+m pw 5
+s a  2
+s w  3
+ctor pc 40
+ctor pw 50

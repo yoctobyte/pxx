@@ -13422,6 +13422,48 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mode_directive_typo_refused.pas $(TESTTMP)/test_mode_typo26 >/dev/null 2>&1; then \
 	  echo "FAIL: {$$MODE TOTALNONSENSE} compiled — a known directive with an unrecognised value"; exit 1; \
 	fi
+	# A PARAMETER'S ELEMENT IS PART OF ITS SIGNATURE. Two kinds carry more than
+	# one type: tyPointer (PChar vs PWideChar) and tyAnsiString (AnsiString vs
+	# WideString vs UnicodeString, which differ only in an element WIDTH). Both
+	# collapsed to one overload key, so the second declaration was called a
+	# duplicate, its body was written into the first one's row, and every call
+	# to either ran whichever was declared LAST — silently, with a warning that
+	# named the wrong defect. Both rows assert BOTH declaration orders, because
+	# "the last one wins" makes a single order pass half its rows by luck.
+	# The pointer row is live in a DEFAULT build; the string row needs
+	# {$define PXX_WIDE_PAYLOAD} (in the file) before the two widths can differ
+	# at all, and test_widestring_alias_gate pins the other direction.
+	./$(COMPILER) test/test_overload_pchar_and_pwidechar_are_two_overloads.pas $(TESTTMP)/test_ovlpchar26
+	tools/expect_same.sh test_ovlpchar26 "$$($(TESTTMP)/test_ovlpchar26)" "$$(cat test/test_overload_pchar_and_pwidechar_are_two_overloads.expected)"
+	./$(COMPILER) test/test_overload_widestring_and_ansistring_are_two_overloads.pas $(TESTTMP)/test_ovlwide26
+	tools/expect_same.sh test_ovlwide26 "$$($(TESTTMP)/test_ovlwide26)" "$$(cat test/test_overload_widestring_and_ansistring_are_two_overloads.expected)"
+	# ...and the METHOD half, which needed three fixes where the free-routine
+	# half needed two: the DECLARATION side recorded no pointee and no string
+	# width at all (so decl+impl collapsed before selection ever ran), and the
+	# method ranker and the CONSTRUCTOR ranker are two separate copies of the
+	# scoring loop — fixing only the first leaves TFoo.Create(pw) running the
+	# PChar body, which no method row would have shown.
+	./$(COMPILER) test/test_overload_method_element_aware.pas $(TESTTMP)/test_ovlmeth26
+	tools/expect_same.sh test_ovlmeth26 "$$($(TESTTMP)/test_ovlmeth26)" "$$(cat test/test_overload_method_element_aware.expected)"
+	# `for ch in <a string>` was implemented PER SPELLING: a bare variable had an
+	# arm, a literal had its own arm keyed on the tkString TOKEN, and a named
+	# CONSTANT — a tkIdent — matched neither, so it fell past every bare-name arm
+	# into the container-expression path, which knows about GetEnumerator and
+	# arrays and nothing about strings. Independently, `isString` enumerated
+	# kinds at three sites and so refused a ShortString or a `string[N]`
+	# container while two arms in the SAME function already asked
+	# TypeIsFrozenString. Nine rows, byte-compared against FPC 3.2.2.
+	./$(COMPILER) test/test_for_in_over_every_string_spelling.pas $(TESTTMP)/test_forinstr26
+	tools/expect_same.sh test_forinstr26 "$$($(TESTTMP)/test_forinstr26)" "$$(cat test/test_for_in_over_every_string_spelling.expected)"
+	# Insert/Delete lower to helpers taking `var s: AnsiString`, and the frozen
+	# destination was handed over as a raw address — so the callee read a
+	# ShortString's inline length prefix as a heap handle. `var T: ShortString;
+	# T := 'abcdef'; Insert('XY', T, 1)` SEGFAULTED, with no out-of-range index
+	# anywhere. The Copy and SetLength rows are the discriminating controls:
+	# they were always correct on the same variable, because they take it by
+	# value or have their own lowering. Byte-compared against FPC 3.2.2.
+	./$(COMPILER) test/test_insert_and_delete_on_a_frozen_string.pas $(TESTTMP)/test_insfrozen26
+	tools/expect_same.sh test_insfrozen26 "$$($(TESTTMP)/test_insfrozen26)" "$$(cat test/test_insert_and_delete_on_a_frozen_string.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

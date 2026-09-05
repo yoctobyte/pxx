@@ -2010,15 +2010,11 @@ begin
   end;
 end;
 
-{ Is this element-width ord the WIDE one? 0 (not a managed string / not
-  recorded) and Ord(tyChar) both mean narrow, and they must keep meaning the
-  same thing here: 0 is the sentinel a carrier that forgot to store leaves
-  behind, so treating it as anything but narrow would turn a missed write into
-  a transcode. See ProcParamStrElemTk's note in defs.inc. }
-function StrElemIsWide(elemTk: Integer): Boolean;
-begin
-  StrElemIsWide := (elemTk = Ord(tyWideChar));
-end;
+{ StrElemIsWide MOVED to symtab.inc 2026-09-05: overload matching asks it now
+  (a managed string's WIDTH is part of the signature, and symtab.inc is included
+  fifteen files before this one). One definition, not two -- the predicate
+  normalises 0 and Ord(tyChar) to the same answer and a second copy is exactly
+  the kind of fact that goes stale serially. }
 
 { ---- 7c: the element-width conversion on a managed-string VALUE ----
 

@@ -632,12 +632,15 @@ begin
   begin
     ParseArgExpr; rhs := CurASTNode;
     at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
-    { The five argument-match SIDE CHANNELS are globals filled by
-      MatchCallDelphiProcAddr for ITS argument list, and nothing ever clears
-      them -- the four Valid flags are set True in exactly one place in the
-      whole tree and set False in none. So the fold below, which is the only
-      caller of MatchProcCall* that does NOT fill them, reads whatever the last
-      call anywhere in the compilation left in slots 0 and 1.
+    { The argument-match SIDE CHANNELS are globals filled by
+      MatchCallDelphiProcAddr for ITS argument list, and until 2026-09-05
+      nothing ever cleared them -- every Valid flag was set True in one place
+      in the whole tree and set False in none. So the fold below, which is the
+      only caller of MatchProcCall* that does NOT fill them, read whatever the
+      last call anywhere in the compilation left in slots 0 and 1.
+      (Do not count the channels or the flags here: defs.inc owns the set, and
+      a count in a comment is read as a census. This list must gain a line
+      whenever defs.inc gains a flag -- the compiler will not tell you.)
 
       That is not hypothetical: measured 2026-09-05 on
       test_nilpy_min_max_variadic.npy, all ten reads here saw all four flags
@@ -658,6 +661,7 @@ begin
     MatchArgNilValid := False;
     MatchArgScalarValid := False;
     MatchArgArrayValid := False;
+    MatchArgElemValid := False;
     pi := MatchProcCall(mm, 2, at, False);
     if pi < 0 then
       Error('Nil Python: no 2-argument ' + mm + ' for these operand types');
