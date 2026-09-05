@@ -8,7 +8,7 @@ found: 2026-09-05
 found-by: frankwasm, filed by frank-coordinator
 owner: ""
 blocked-by: []
-summary: "`test-wasm32` exists (`a6d7bfc08`, 2026-09-02) and appears in NO tier: `grep -c wasm tools/testmgr.py` is 0, and `gate.sh` names wasm only in two comments. So wasm32 is sampled by nothing -- not the inner loop and not the watcher -- while being a real backend with a target number, a runner arm and 22 of 27 measured-green rows. The cost is not tidiness: frankD's wasm32 defect is a name scan that stops matching silently, producing a module that compiles `ok:`, links, and traps at run time on a host function it never imported, at byte-identical size to a program that never touches a file. A silent-wrong-answer class behind a green, in the one backend nothing samples. frankwasm landed two import-asserting rows in `test-quick` (no wasmtime needed) and stopped at enrollment because that is a Track T cost judgement, not its call -- and because the hook denies `make test*`, so it could not verify `test-wasm32` passes and declined to go around the guard. NEEDS someone who can run it."
+summary: "`test-wasm32` exists (`a6d7bfc08`, 2026-09-02) and appears in NO tier: `grep -c wasm tools/testmgr.py` is 0, and `gate.sh` names wasm only in two comments. So wasm32 is sampled by nothing -- not the inner loop and not the watcher -- while being a real backend with a target number, a runner arm and 22 of 27 measured-green rows. The cost is not tidiness: frankD's wasm32 defect is a name scan that stops matching silently, producing a module that compiles `ok:`, links, and traps at run time on a host function it never imported, at byte-identical size to a program that never touches a file. A silent-wrong-answer class behind a green, in the one backend nothing samples. frankwasm landed two import-asserting rows in `test-quick` (no wasmtime needed) and stopped at enrollment because that is a Track T cost judgement, not its call -- and because the hook denies `make test*`, so it could not verify `test-wasm32` passes and declined to go around the guard. VERIFIED 2026-09-05 by frankD: `test-wasm32` is GREEN -- 53 rows, exit 0, at 4ef367091 / binary 25113fd3. AND ENROLLING IT TODAY IS STILL WRONG, for a reason this ticket did not have: the harness CANNOT TELL A HOST GAP FROM A REGRESSION. `run_target.sh` signals a missing runtime well (distinct RUNNER-ABSENT text on both streams, exit 2), the Makefile rows discard that exit code through command substitution, `expect_same.sh` compares the RUNNER-ABSENT TEXT against expected output and reports MISMATCH exit 1, and `grep -n RUNNER-ABSENT tools/testmgr.py` returns NOTHING. So a missing runtime auto-files as a compiler regression -- not wasm32-specific, every qemu arm reaches `runner_absent` the same way. Enrolling in `full` today reproduces the six-regressions-in-one-run incident on seven BY CONSTRUCTION. The blocker is SKIP ACCOUNTING, a Track T design call, not wiring."
 ---
 
 # Enrol `test-wasm32` in a tier so something samples the backend
@@ -42,6 +42,52 @@ function it never imported — **at byte-for-byte the size of a program that nev
 touches a file.** Compile-only cannot see that. A size check cannot see that.
 This is the repo's own *"nothing observably differs is a claim about one target"*
 class, one level worse: the target that would show it is sampled by nothing.
+
+## THE ACTUAL BLOCKER, measured 2026-09-05 by frankD — the harness cannot tell a host gap from a regression
+
+**`test-wasm32` itself is fine.** frankD ran it: **53 rows green, exit 0, at
+`4ef367091`, binary `25113fd3`**, under `PXX_ALLOW_FULL_SUITE=1` — the repo's own
+documented speed-guardrail escape, read from the hook rather than taken on
+anyone's say-so. **So the verification this ticket was filed for is done.**
+
+**Enrolling it today would still be wrong**, and this is the part the ticket did
+not have:
+
+| layer | what it does |
+| --- | --- |
+| `tools/run_target.sh` | signals a missing runtime **deliberately and well** — distinct `RUNNER-ABSENT:` text on **both** stdout and stderr, **exit 2** |
+| the Makefile row | `tools/expect_same.sh name "$(tools/run_target.sh …)" "expected"` — **command substitution discards the exit code**; the row sees 0 |
+| `tools/expect_same.sh` | compares the `RUNNER-ABSENT:` **text** against the expected output → **MISMATCH, exit 1** — byte-for-byte the shape of a wrong answer from the compiler |
+| `tools/testmgr.py` | `grep -n 'RUNNER-ABSENT' tools/testmgr.py` → **nothing.** The consumer has no aperture for the signal at all |
+
+Simulated on plexus with `wasmtime` hidden: the row fails as a **content
+mismatch**, with the runner's own *"this is a host gap, not a result about
+wasm32"* sitting **in the diff, unread**.
+
+**This is not wasm32-specific.** Every qemu arm reaches `runner_absent` the same
+way, so **any box missing any runner auto-files its cross rows as compiler
+regressions.** It is exactly the 2026-09-04 incident recorded in
+`run_target.sh`'s own header — six rows, six separate tickets, four read as four
+separate defects in freshly added tests, all one missing binary. **Enrolling
+`test-wasm32` in `full` today reproduces that incident on seven by
+construction.**
+
+### Why the obvious repair is the wrong one
+
+Teaching `expect_same.sh` the prefix and printing `SKIP` is a few lines and
+**creates the exact hole `testmgr.py`'s own tier comments warn about twice**:
+`test-fgl` *"printed `SKIP (no fpcsrc)` and PASSED for its entire life without
+running once"*, and *"a silent skip is how this class of hole reappears"*. A SKIP
+is routed into the bin built to ignore it, by a reader doing the right thing with
+the word they were given.
+
+**What it needs is skip ACCOUNTING** — a Track T design call about how an unrun
+row is counted and surfaced, not a microfix. frankD deliberately did not do it
+from a Track P seat at session end.
+
+**So the order is: skip accounting first, enrollment second.** A taker who does
+the enrollment alone has not made wasm32 visible; they have made the next host
+gap look like a compiler regression, five more times.
 
 ## What is already done, and by whom
 
