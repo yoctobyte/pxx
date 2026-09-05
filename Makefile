@@ -9530,6 +9530,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dgen_arg_later26 "$$($(TESTTMP)/test_dgen_arg_later26 | tail -1)" "total ok 7 / 7"
 	./$(COMPILER) -Futest/delphi_generic_units test/test_delphi_generic_cross_unit.pas $(TESTTMP)/test_delphi_generic_cross_unit26
 	tools/expect_same.sh test_delphi_generic_cross_unit26 "$$($(TESTTMP)/test_delphi_generic_cross_unit26 | tail -1)" "total ok 4 / 4"
+	# A template declared in a unit's IMPLEMENTATION section is private to it.
+	# Positive: an INTERFACE template still crosses the boundary, and the unit's
+	# own use of its private template is untouched -- both must keep working, or
+	# the visibility rule has been applied to the six internal scans by mistake.
+	./$(COMPILER) -Futest/generic_visibility_units test/test_generic_impl_template_is_private_ok.pas $(TESTTMP)/test_gvis26
+	tools/expect_same.sh test_gvis26 "$$($(TESTTMP)/test_gvis26)" "42 5"
+	# Negative: naming the implementation-section template from an importer must
+	# be REFUSED. Before the fix this compiled, and which template it bound
+	# depended on the order of the uses clause. Grep the message so the row
+	# cannot pass on some unrelated refusal.
+	! ./$(COMPILER) -Futest/generic_visibility_units test/test_generic_impl_template_is_private_fail.pas $(TESTTMP)/test_gvisneg26 > $(TESTTMP)/test_gvis.log 2>&1
+	grep -q "generic template THidden not found" $(TESTTMP)/test_gvis.log
 	# the objfpc arm of the same defect: INLINE `specialize T<X>` in a non-binder
 	# position, cross-unit. The binder form always worked, which is what made this
 	# read as Delphi-only.

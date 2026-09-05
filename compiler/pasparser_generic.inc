@@ -386,6 +386,50 @@ end;
   (FlushPendingClassSpecializations puts them past `implementation`) and the
   luck runs out. One arm being accidentally correct is what kept this alive.
   bug-p-a-specialized-body-reports-errors-in-the-wrong-file }
+{ Is this template nameable from where we are parsing? The template table's
+  twin of the alias table's DeclVisibleSect call -- a template declared in a
+  unit's IMPLEMENTATION section is that unit's private business, exactly as a
+  specialization minted there is (IMPLTAB_SPEC).
+
+  ONE predicate rather than the test inlined at each lookup, deliberately: there
+  are eight loops over TemplateCount and only the two NAME-RESOLUTION ones may
+  filter. The rest are internal scans -- token-range lookup, the Delphi rewrite
+  passes, the emit-time walk over Specializations[] -- and filtering those would
+  break a legitimate cross-unit specialization, whose template is correctly not
+  visible at the point it is finally emitted. }
+function TemplateNameableHere(i: Integer): Boolean;
+begin
+  TemplateNameableHere :=
+    DeclVisibleSect(TemplateUnitIdx[i], TemplateDeclImpl[i], IMPLTAB_TEMPLATE, i);
+end;
+
+{ THE one name-resolution entry point for Templates[]. The visibility rule lives
+  HERE and nowhere else, so a new lookup gets it by construction instead of by
+  the author remembering.
+
+  This shape is deliberate and it is the lesson of
+  bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations,
+  measured the same day: ONE scope rule spelled at THREE sibling sites --
+  AddClassLikeType had it, RegisterPtrAlias did not, ResolvePendingPointerAliases
+  did not -- and the two that were silent agreed with each other perfectly, so
+  reading the copies against each other could never find the omission. A rule
+  spelled per call site fails by an ABSENT copy, not a divergent one. Putting the
+  predicate behind the accessor is what makes forgetting impossible rather than
+  merely unlikely.
+
+  nc < 0 means "any arity". Otherwise an exact arity match wins over the first
+  hit, because arity-overloaded template names are legal (`TD`, `TD<K>`,
+  `TD<K,V>` -- test_generic_name_overload.pas). }
+function FindNameableTemplate(const nm: AnsiString; nc: Integer): Integer;
+var i, hit: Integer;
+begin
+  hit := -1;
+  for i := 0 to TemplateCount - 1 do
+    if CaseEqual(Templates[i].Name, nm) and TemplateNameableHere(i) then
+      if (hit < 0) or ((nc >= 0) and (TemplateNParams[i] = nc)) then hit := i;
+  FindNameableTemplate := hit;
+end;
+
 function TemplateSrcKeyOfTok(t: Integer): Integer;
 var i: Integer;
 begin
@@ -2829,6 +2873,13 @@ begin
   end;
   TemplateNParams[TemplateCount] := np;
   TemplateIsDelphi[TemplateCount] := delphiForm;
+  { The one place a template is registered, so the one place these are set.
+    Spelling the rule per caller is how the pointer arm of the nested-type case
+    went missing three times over -- a rule spelled per caller fails by an
+    ABSENT copy, and absent copies do not show up in a diff of the copies that
+    are there. }
+  TemplateUnitIdx[TemplateCount] := CurrentUnitIdx;
+  TemplateDeclImpl[TemplateCount] := DeclInImplNow;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
   Templates[TemplateCount].TokCount := 0;
   { Where this template's tokens CAME from, captured now because it is the only
@@ -3630,10 +3681,7 @@ begin
     declaration is inserted right behind its own template, and so is parsed
     before the next arity is even captured; a nested prerequisite is emitted
     much further down the stream, where every arity is visible at once. }
-  ti := -1;
-  for i := 0 to TemplateCount - 1 do
-    if CaseEqual(Templates[i].Name, templateName) then
-      if (ti < 0) or (TemplateNParams[i] = nc) then ti := i;
+  ti := FindNameableTemplate(templateName, nc);
   if ti < 0 then Error('generic template ' + templateName + ' not found');
   if nc <> TemplateNParams[ti] then
     Error('specialize ' + templateName + ': wrong number of type arguments');
@@ -4111,9 +4159,7 @@ function IsGenericTemplateName(const name: AnsiString): Boolean;
   is registered under its own concrete name, so this never fires for one. }
 var i: Integer;
 begin
-  Result := False;
-  for i := 0 to TemplateCount - 1 do
-    if CaseEqual(Templates[i].Name, name) then begin Result := True; Exit; end;
+  Result := FindNameableTemplate(name, -1) >= 0;
 end;
 
 { Parses: generic function Max<T>(A, B: T): T; begin...end;

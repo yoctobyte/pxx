@@ -2457,6 +2457,15 @@ var
     collapses a group they could not — and each sweep must use its own
     template's spelling. bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
   TemplateIsDelphi   : array[0..MAX_TEMPLATES-1] of Boolean;
+  { UNIT IDENTITY for a template, the two columns Templates[] never had.
+    Templates[] is Name/TokStart/TokCount and nothing else, so a template
+    declared in a unit's IMPLEMENTATION section was reachable by name from every
+    importer -- the sibling of the specialization leak that IMPLTAB_SPEC already
+    fixes. Same two facts the alias table records (AliasUnitIdx/AliasDeclImpl),
+    read through the same DeclVisibleSect predicate.
+    bug-p-a-generic-template-declared-in-a-units-implementation-is-visible-to-its-importers }
+  TemplateUnitIdx    : array[0..MAX_TEMPLATES-1] of Integer;
+  TemplateDeclImpl   : array[0..MAX_TEMPLATES-1] of Boolean;
   { Nested generic prerequisites collected by ParseSpecialization for ONE
     deferral, plus the token buffer it emits them from. Global for the same
     reason the other parser side channels are: fill / consume / discard within
@@ -4315,6 +4324,10 @@ const
     so the p.implleak report names the right row.
     bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test }
   IMPLTAB_SPEC     = 9;
+  { The Templates[] table. Same shape as IMPLTAB_SPEC one level up: a template
+    minted in a unit's implementation section must not be nameable by importers.
+    bug-p-a-generic-template-declared-in-a-units-implementation-is-visible-to-its-importers }
+  IMPLTAB_TEMPLATE = 10;
 var
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;

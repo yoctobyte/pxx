@@ -3,7 +3,7 @@ slug: bug-p-a-generic-template-declared-in-a-units-implementation-is-visible-to-
 track: P
 prio: 35
 type: bug
-status: backlog
+status: done
 blocked-by: []
 created: 2026-09-04
 found-by: frankB
@@ -163,3 +163,75 @@ should be judged on.
 
 Rerating note: the *prio* probably should come down — nothing real is known to
 depend on this. The *fix* is still the right answer at whatever prio it lands.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## FIXED 2026-09-05 (frankS)
+
+`Templates[]` gained the two columns it lacked — `TemplateUnitIdx` and
+`TemplateDeclImpl`, stamped at the one registration site — plus
+`IMPLTAB_TEMPLATE = 10`, so template visibility now runs through the same
+`DeclVisibleSect` machinery as every other declaration table.
+
+**The predicate lives behind an accessor, not at the call sites, and that was
+the whole design question.** `FindNameableTemplate(name, arity)` is the single
+name-resolution entry point; both lookups (the `specialize` binder and
+`IsGenericTemplateName`) go through it, and a future lookup gets the rule by
+construction rather than by the author remembering. The six other loops over
+`TemplateCount` are internal scans — token-range lookup, the two Delphi rewrite
+passes, the emit-time walk over `Specializations[]` — which ask a different
+question and are deliberately unfiltered; filtering them would break a legitimate
+cross-unit specialization whose template is correctly not visible at the point it
+is finally emitted.
+
+That shape is owed to frankD, which objected that a rule spelled at two of eight
+sites is the *same* failure mode as the bug I had just diagnosed. It was right,
+and while I was making the change frankD found a **third** live sibling of that
+exact rule (`ResolvePendingPointerAliases`, `symtab.inc:16053`, banked in
+`2e3922d14`), which settled it.
+
+### frankD's rerating argument, and why the fix still lands
+
+frankD raised CLAUDE.md's *us accepting what FPC rejects is not a defect* against
+this ticket. Answered rather than waved away, because it was a good objection.
+
+**Half of it was right and is recorded above:** the harm that justified the
+sibling ticket does not reproduce here — no builtin re-typing path, and two units
+with same-named private templates each resolve their own correctly.
+
+**What defeats the rerating is that this was never bare acceptance.** frankD's
+own framing, which is sharper than mine was: *order-dependent binding is not a
+divergence from FPC at all — it is us having no answer.* The importer's `TPriv`
+bound to the later-registered unit, `q.Q := 9` printing `LEAKED Q=9` while
+`q.V := 9; q.W := 1` failed on `"W"`. CLAUDE.md says FPC's refusal is not a
+specification where the programmer made a presumed error; it does not follow that
+a uses-clause coin flip may take its place, and *prefer the answer that leaves
+the mistake visible* is the clause that governs.
+
+Re-measured after the fix: both leak spellings now refuse identically with
+`generic template TPriv not found`, and each unit's own use still prints `16 7`.
+The coin flip is gone rather than relabelled.
+
+### Verification
+
+- `make compiler/pascal26`: **converged after 1 round(s)**, sha256 `e0e0fb2ae4ed`,
+  at the commit this section lands in.
+- Four controls: impl template refused (`generic template THidden not found`);
+  interface template still crosses a unit → `42`; **the declaring unit's own use
+  of its private template still works → `5`**; program-local generic → `7 hi`.
+- `make test-core` green on the pre-refactor form of this change: `make rc=0`,
+  zero make-level failures, zero harness FAILs, 2049 `ok:` rows, and
+  `test_delphi_generic_cross_unit` among them — the negative control that matters.
+- `tools/gate.sh quick`: RED on **`pinned builds live lib/rtl` only**, 1 FAIL /
+  16 PASS. That red is the fleet-wide expected one (frankZ's `pyvar_is_inttag` /
+  `pyvar_is_objtag` export; the canary log names both symbols in `mimic_string`
+  and `mimic_urllib_request`), whose remedy is a pin and not a revert. Both FPC
+  seed canary rows PASS, and they only run at all because `compiler/**` was still
+  uncommitted when the gate ran.
+
+Regression cover: `test/test_generic_impl_template_is_private_{ok,fail}.pas` with
+`test/generic_visibility_units/ugvis.pas`, in `test-core`. The negative row greps
+for the specific message so it cannot pass on an unrelated refusal, and the
+positive row asserts `42 5` — the cross-unit case AND the declaring unit's own
+use — so applying the rule to the six internal scans by mistake would fail it.
