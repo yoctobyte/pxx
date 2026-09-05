@@ -3355,6 +3355,7 @@ end;
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym: Integer;
+    szTdI: Integer;   { walks an array typedef's inherent dims for a type-name operand }
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
     saRec: Integer;   { the general path's field-access base record, REC_NONE if none }
@@ -3425,6 +3426,27 @@ begin
     begin
       tk := ParseCDeclType;
       sz := CTypeSizeBytes(tk);
+      { AN ARRAY TYPEDEF'S NAME AS THE OPERAND carries its dims in the type, not
+        in the declarator, and this arm read only the element size:
+        `typedef double TA[4]` answered 8 against gcc's 32, `typedef char TC[4]`
+        answered 1 against 4, `typedef int TI[4]` answered 4 against 16.
+        Silent wrong value, rc=0, and `sizeof(v)` for a VARIABLE of the same
+        typedef was already right -- the dims were recorded and reached the
+        declarator paths, and only the type-name operand lost them.
+
+        THE double ROW ALONE CANNOT DIAGNOSE THIS. 8 is also
+        TypeSlotSize(tyUnknown), which is the signature of a DIFFERENT defect
+        (bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown), and the first
+        reading of this sent it to that walk. The char and int rows separate
+        them in one command: an unknown default answers 8 for all three, and the
+        observed 8/1/4 track the ELEMENT size exactly.
+        bug-c-sizeof-of-an-array-typedef-name-answers-the-element-size
+
+        Only when the name denotes the ARRAY itself: `sizeof(TA*)` is a pointer
+        and must stay 8. }
+      if (CTypePtrDepth = 0) and (CTypeTypedefNDims >= 1) then
+        for szTdI := 0 to CTypeTypedefNDims - 1 do
+          sz := sz * CTypeTypedefDims[szTdI];
       { Abstract array type-name `sizeof(int[N][M])`: ParseCDeclType stops at the
         '[', so multiply the element size by each extent here. Without this the
         extents were swallowed by the balanced-')' scan below and sizeof returned
@@ -5391,6 +5413,7 @@ begin
     CTypedefProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
+    CTypedefNDims[idx] := 0;
     CTypedefLongRank[idx] := newRank;
     Exit;
   end;
@@ -5411,6 +5434,7 @@ begin
   CTypedefProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
+  CTypedefNDims[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
@@ -5610,6 +5634,7 @@ var
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
   tdLongRank: Integer;   { long rank carried by a typedef-name base; see the CTypeLong assignment }
+  tdDimI: Integer;       { copies an array typedef's dims out of CTypedefDims into CTypeTypedefDims }
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
@@ -5641,6 +5666,7 @@ begin
   CTypeProcSig := -1;
   CTypePtrElemProcSig := -1;
   CTypeTypedefArrLen := -1;
+  CTypeTypedefNDims := 0;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
@@ -5718,7 +5744,10 @@ begin
               tdElemRec := CTypedefRec[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
-              CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length, else -1 }
+              CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length of the first dim, else -1 }
+              CTypeTypedefNDims := CTypedefNDims[tdIdx];  { and HOW MANY dims -- see the field's note in defs.inc }
+              for tdDimI := 0 to MAX_ARR_DIMS - 1 do
+                CTypeTypedefDims[tdDimI] := CTypedefDims[tdIdx * MAX_ARR_DIMS + tdDimI];
               tdLongRank := CTypedefLongRank[tdIdx];    { `long`/`long long` rank of the type this name denotes }
               sawBase := True; isTypedef := True;
               Next;
@@ -6268,6 +6297,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
+    tdDi: Integer;   { walks an array typedef's inherent dims }
     wcp, wnb, wsoff, wslen: Integer;
     curElemIdx, rangeHi, maxElemIdx, dk: Integer;
     strRowEnd, strLit, strK: Integer;    { a string literal filling a char ROW }
@@ -6609,9 +6639,20 @@ begin
         dimSpan[dimCount] := dimVal;
         Inc(dimCount);
       end;
-      { Array typedef inherent dim folds UNDER any declarator-applied dims:
-        `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init). }
-      if tdArrLen >= 1 then
+      { Array typedef inherent dims fold UNDER any declarator-applied dims:
+        `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init).
+        ALL of them, in order: this appended exactly one, so `typedef int T[2][3]'
+        laid out an int[2] and every T object was under-allocated and indexed
+        with the wrong row stride.
+        bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals }
+      if CTypeTypedefNDims >= 1 then
+        for tdDi := 0 to CTypeTypedefNDims - 1 do
+        begin
+          if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
+          dimSpan[dimCount] := CTypeTypedefDims[tdDi];
+          Inc(dimCount);
+        end
+      else if tdArrLen >= 1 then
       begin
         if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
         dimSpan[dimCount] := tdArrLen;
@@ -9887,6 +9928,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
+    gTdDi: Integer;  { walks an array typedef's inherent dims }
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
@@ -10257,9 +10299,22 @@ begin
        (not (((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)))) then
     begin
       wasArr := True;
-      if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := tdArrLen;
-      Inc(dimCount);
-      if dimCount = 1 then arrLen := tdArrLen;
+      { ALL the typedef's dims, same as the local path -- see its note. }
+      if CTypeTypedefNDims >= 1 then
+      begin
+        for gTdDi := 0 to CTypeTypedefNDims - 1 do
+        begin
+          if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := CTypeTypedefDims[gTdDi];
+          Inc(dimCount);
+        end;
+        if dimCount = 1 then arrLen := CTypeTypedefDims[0];
+      end
+      else
+      begin
+        if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := tdArrLen;
+        Inc(dimCount);
+        if dimCount = 1 then arrLen := tdArrLen;
+      end;
     end;
     if dimCount >= 2 then
     begin
@@ -15632,6 +15687,7 @@ procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
+    tdNDim, tdDimV: Integer;   { array typedef: how many dims and the one being read }
     ftRet, ftPType: TTypeKind; ftNParams, ftSig: Integer;
     ftPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -15871,10 +15927,34 @@ begin
     if (tk <> tyRecord) and (tk <> tyPointer) and (CurTok.Kind = tkLBrack) and
        (Tokens[TokPos].Kind <> tkRBrack) then
     begin
-      Next;                              { consume '[' }
+      { EVERY dimension, not just the first. This used to consume one `[N]` and
+        leave the rest to the `while CurTok.Kind <> tkSemicolon do Next` below,
+        whose job is to skip the tail of a declaration and which cannot tell a
+        dimension it should have modelled from punctuation it should discard.
+        The comment here said "a multi-dim typedef leaves it scalar (unchanged
+        behavior)", which was true of the code and false of the outcome: the
+        FIRST dim was still folded in, so `typedef int T2[2][3]' allocated 2
+        elements and indexed as if the type were `int[2]'. A local T2 between
+        two int locals overwrote the one before it and read v[0][1] back as
+        v[1][0]'s value -- silent, rc=0.
+        bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals }
       ci := FindCTypedef(nm);
-      if ci >= 0 then CTypedefArrLen[ci] := CEvalConstExpr;
-      if CurTok.Kind = tkRBrack then Next;
+      tdNDim := 0;
+      while (CurTok.Kind = tkLBrack) and (Tokens[TokPos].Kind <> tkRBrack) do
+      begin
+        Next;                            { consume '[' }
+        tdDimV := CEvalConstExpr;
+        CCheckArrayExtent(tdDimV);
+        if tdNDim >= MAX_ARR_DIMS then Error('too many dimensions in an array typedef');
+        if ci >= 0 then CTypedefDims[ci * MAX_ARR_DIMS + tdNDim] := tdDimV;
+        Inc(tdNDim);
+        if CurTok.Kind = tkRBrack then Next;
+      end;
+      if ci >= 0 then
+      begin
+        CTypedefNDims[ci] := tdNDim;
+        if tdNDim > 0 then CTypedefArrLen[ci] := CTypedefDims[ci * MAX_ARR_DIMS];
+      end;
     end;
   end;
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;

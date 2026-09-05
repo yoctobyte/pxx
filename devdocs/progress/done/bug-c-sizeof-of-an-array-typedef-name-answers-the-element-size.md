@@ -4,11 +4,11 @@ track: C
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankC
 owner: unassigned
-summary: "`sizeof` of an ARRAY TYPEDEF's NAME drops the inherent dimension and answers the ELEMENT size: `typedef double TA[4]` gives 8 against gcc's 32, `typedef char TC[4]` gives 1 against 4, `typedef int TI[4]` gives 4 against 16. A silent wrong value, rc=0. Specific to the TYPE NAME as operand — `sizeof(v)` for a VARIABLE of the same typedef answers 32 correctly, and `sizeof(gs)` for `TA gs[2]` answers 64, so the dimension is recorded and reaches declarators; only the type-name operand loses it. NOT the tyUnknown default described in bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown, and the double row alone cannot tell them apart — see below."
+summary: "FIXED 2026-09-05 (frankC). ParseCSizeof's type-name arm never consulted the typedef's recorded dimensions, so sizeof of an ARRAY TYPEDEF NAME answered the ELEMENT size (double 8 vs gcc 32, char 1 vs 4, int 4 vs 16) while sizeof of a VARIABLE of the same typedef was already correct. IT WAS THE VISIBLE EDGE OF SOMETHING WORSE: chasing it found that CTypedefArrLen held only the FIRST dimension, so multi-dim array typedefs were under-allocated and indexed with the wrong stride, corrupting neighbouring locals -- fixed in the same commit (bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals). The test keeps all THREE element widths deliberately: 8 is also TypeSlotSize(tyUnknown) and the double row alone cannot separate this from bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown, which is where the first reading sent it."
 ---
 
 # `sizeof` of an array typedef name answers the element size
@@ -63,3 +63,6 @@ Start from `ParseCSizeof`'s type-name arm and ask where a typedef's
 and `ParseCGlobalVarDecl` both read `CTypeTypedefArrLen`, and the type-name
 operand path appears not to. Assert all three element widths, not just one, for
 the reason above.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

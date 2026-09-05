@@ -10543,6 +10543,21 @@ test-core: $(COMPILER)
 	# REFUSES does so at the C entry stub -- without that second arm, a frontend
 	# broken for all cross targets would turn the whole check green.
 	# bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet
+	# AN ARRAY TYPEDEF CARRIES ALL ITS DIMENSIONS. Two defects at one recording
+	# site: `sizeof` of the TYPE NAME answered the element size, and a
+	# multi-dimensional typedef recorded only its first dim -- so a `T2 v` local
+	# was allocated for 2 elements instead of 6 and wrote through its end into
+	# the local declared before it. Row 10 is that overrun and it is NOT a size:
+	# sizeof can be corrected while the allocation stays wrong, and a size
+	# assertion cannot observe a buffer overrun.
+	# Diffed against gcc's own output -- no transcribed expected block, so a row
+	# added later needs no value re-derived and cannot pass by agreeing with a
+	# stale constant.
+	# bug-c-sizeof-of-an-array-typedef-name-answers-the-element-size
+	# bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals
+	./$(COMPILER) test/c_array_typedef_dims.c $(TESTTMP)/c_arrtypedims26
+	gcc -std=gnu99 -o $(TESTTMP)/c_arrtypedims_gcc test/c_array_typedef_dims.c
+	tools/expect_same.sh c_arrtypedims26 "$$($(TESTTMP)/c_arrtypedims26)" "$$($(TESTTMP)/c_arrtypedims_gcc)"
 	tools/c_va_arg_every_target.sh
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \

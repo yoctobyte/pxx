@@ -3566,7 +3566,9 @@ var
   CFnSigPNames : array[0..MAX_PROC_PARAMS-1] of AnsiString;
   CFnSigPRecIds : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypePtrElemProcSig : Integer; { POINTER-to-fn-ptr (`ft *`): sig of the pointee fn-pointer, so `(*pf)()`/`(**(ft*)x)()` can find the callee sig CTypeProcSig drops. -1 = pointee not a fn-ptr }
-  CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the last ParseCDeclType, else -1 }
+  CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the FIRST dim of the last ParseCDeclType, else -1 }
+  CTypeTypedefNDims : Integer; { how many dims that typedef has; 0 = not an array typedef }
+  CTypeTypedefDims : array[0..MAX_ARR_DIMS-1] of Integer; { its dims, outermost first -- `typedef int T[2][3]' gives 2 then 3 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
@@ -3672,7 +3674,9 @@ var
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
   CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
   CTypedefIsFnType : array[0..MAX_CTYPEDEF-1] of Boolean; { True for a function-TYPE typedef `typedef R N(args);` (vs a fn-POINTER typedef): a following `*` in a declarator DECAYS (pointer-to-function) rather than adding a level, so `N *p` is the callable, matching C function/pointer-to-function equivalence }
-  CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length N (single dim); -1 = not an array typedef }
+  CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length of the FIRST dim; -1 = not an array typedef. Read CTypedefNDims beside it -- this alone cannot tell `T[2]' from `T[2][3]', and answering as if it could is what corrupted neighbouring locals (bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals). }
+  CTypedefNDims : array[0..MAX_CTYPEDEF-1] of Integer; { how many dimensions the array typedef has; 0 = not an array typedef. The count is the discriminator: CTypedefArrLen was ONE integer and the parser dropped every dimension after the first SILENTLY, so `typedef int T[2][3]' allocated 2 elements and indexed with a 2-wide row. }
+  CTypedefDims : array[0..MAX_CTYPEDEF*MAX_ARR_DIMS-1] of Integer; { the dimensions themselves, flat: typedef i, dim d is at i*MAX_ARR_DIMS + d. Flat rather than 2-D because nothing else in this file is 2-D and the self-host subset is the thing that has to compile it. }
   CTypedefLongRank : array[0..MAX_CTYPEDEF-1] of Integer; { 0 = not a long-family base, 1 = `long`, 2 = `long long`. TTypeKind COLLAPSES these -- both are tyInt64 on a 64-bit target -- so the kind alone cannot tell `typedef long T` from `typedef long long T`, and gcc rejects that pair at BOTH widths. Same distinction SymCLongRank already keeps for _Generic. }
   CTypedefRedefArmed : Boolean; { set only while a C `typedef` STATEMENT is registering a name, so the conflicting-redefinition check fires for source typedefs and never for builtin/crtl registration. Consumed and cleared by AddCTypedefEx. }
   CTypedefPendingRank : Integer; { long rank for the row AddCTypedefEx is about to write; consumed and cleared with the flag above }

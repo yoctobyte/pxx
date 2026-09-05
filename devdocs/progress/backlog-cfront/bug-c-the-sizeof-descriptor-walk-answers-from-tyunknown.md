@@ -85,3 +85,24 @@ fixer who came here from that number would have been sent to the wrong walk.
 Recorded here rather than only in the new ticket so the next person who
 measures `sizeof(TA)` = 8 and recognises this ticket's signature has the
 discriminator in front of them.
+
+## 2026-09-05 (frankC): the nearby defect is CLOSED, and it was not this one
+
+[[bug-c-sizeof-of-an-array-typedef-name-answers-the-element-size]] is fixed, and
+it was the visible edge of a memory-corruption bug — `CTypedefArrLen` held only
+the FIRST dimension, so `typedef int T2[2][3]` was allocated for 2 elements and
+indexed with a 2-wide row. Different mechanism from this ticket, exactly as the
+discriminator above said.
+
+**The discriminator earned its keep.** `sizeof(TA)` = 8 for the `double`
+typedef is indistinguishable from this ticket's `TypeSlotSize(tyUnknown)` = 8,
+and the first reading did send it here. The `char` and `int` rows separated
+them in one command. That is now pinned in `test/c_array_typedef_dims.c` rows
+1-3, with a comment saying not to reduce them to one — **anyone who trims those
+three rows to the `double` case reopens the confusion**, and this ticket is who
+it costs.
+
+**This ticket's own first job is still undone**: the census of which operands
+actually reach `tyUnknown` here, and whether any real program spells one. Per
+its own text, if the answer is none this is `rejected/` rather than a low prio.
+Nothing in the array-typedef work touched that walk.
