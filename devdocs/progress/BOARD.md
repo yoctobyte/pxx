@@ -511,10 +511,11 @@ _none_
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 
-## backlog-web (7)
+## backlog-web (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-w-status-benchmarks-503s-while-every-sibling-page-serves | W | 40 | bug | `https://pxxc.org/status/benchmarks/` has answered 503 for hours while `/`, `/status/` and `/status/tests/` all serve 200 — so it is one deployed page, not the site. It was verified working on 2026-08-30 with its content marker `[fib sieve]` by task-d-verify-the-published-status-urls, which makes this a regression against a checked baseline rather than a link that was never right. `docs/reference/status.md:16` cites it correctly and DELEGATES its numbers to it, so a reader is told where the timings are and gets a 503. Docs deliberately unchanged: removing the link would turn Track D's gate green by deleting the only thing pointing at the outage. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | — |
@@ -1175,6 +1176,7 @@ _none_
 - [p 40] [T] bug-t-test-core-reports-only-its-first-red-so-a-tier-with-three-failures-reads-as-one
 - [p 40] [T] bug-t-the-shell-loop-rule-reads-prose-as-a-loop-and-teaches-the-reflex-that-defeats-it
 - [p 40] [T] bug-t-the-sort-comm-locale-desync-has-now-been-found-three-times-independently
+- [p 40] [W] bug-w-status-benchmarks-503s-while-every-sibling-page-serves
 - [p 40] [U] decide-a-what-a-set-costs-bits-bytes-bounds-and-what-file-of-t-writes-to-disk
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
 - [p 40] [U] decide-does-gate-before-you-commit-survive-when-its-only-justification-is-false
