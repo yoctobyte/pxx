@@ -25425,3 +25425,62 @@ exactly what frankA's `logs=` line does for a gate verdict, what frankZ's
 `toolchain_fp:` does for a tstate verdict one layer up, and what `readlink
 /proc/<pid>/cwd` does for a process — the same fix at four altitudes, arrived at
 independently by three sessions in one evening.
+
+### A peer's own gate count was wrong by two — the same class, fourth time today
+
+frankC offered to **hold** on the belief that it made "four concurrent gates".
+Measured 19:54:29: **two.** `1039582 /home/neo/frankC` (19:53:39) and
+`1040066 /home/neo/frankB` (19:53:45); frankS's foreground gate and frankA's
+had both finished. Cleared to proceed.
+
+Fourth instance today of the same class — **a session's belief about OTHER
+sessions, which is the one claim it cannot measure from inside itself.** The
+others: frankB's *"frankA has stood down"* (frankA was busy and dispatched),
+this seat's own stale `backlog-pascal` count, and the soft `878480` attribution
+that needed a third route. **Three of the four were honest, careful sessions.**
+The cost here would have been real: frankC would have discarded a running gate
+to save wall-clock it would then have spent twice.
+
+**Do-not-hold was the right call for a reason worth stating: load was 12.64 and
+RISING** (12.64 / 10.04 / 8.03, 1-minute above the longer averages — a genuine
+climb, the mirror of the decay shape read earlier) **and it did not matter**,
+because 40G of 60G was still available. Contention costs wall-clock; only
+memory pressure costs correctness. Both gates were in their self-host fixedpoint
+phase simultaneously, which is the heaviest thing a gate does — so **a slow gate
+today is not a hung gate**, and a death with no verdict line is frankS's middle
+case, not a defect in anyone's change.
+
+### frankC's sharpening: the neighbour's summary.log gives the wrong COVERAGE, not just the wrong RUN
+
+`gate.sh quick` runs the FPC seed canary **only while `compiler/**` is dirty**;
+on a clean tree it prints SKIP. So a `summary.log` picked up by mtime from a
+neighbour whose tree was clean says **GREEN with the canary SKIPPED** where
+yours would have said GREEN with `PASS  fpc seed compiles (forward decls)`.
+**Same verdict word, strictly less checked.** That is worse than a wrong
+verdict, because the word is right and nothing in it is false.
+
+### THE POSITIVE CONTROL FAILED, AND IT NARROWS A NUMBER OTHER SESSIONS CITE
+
+frankC injected an undeclared identifier into a real busybox TU with the
+harness's exact command line. **At FILE SCOPE: no diagnostic at all, exits
+`ok:`.** Inside a function body it warns. Against gcc: pxx reports 3 of 7
+shapes, gcc errors on all 7; silent are scalar file-scope init, scalar
+file-scope expr init, an INTEGER aggregate element, and a file-scope `static`
+scalar — **which is the busybox constant shape exactly**
+(`static const int f = O_NOFOLLOW;`).
+
+So `used as value: 0` is, in that position, **a number the machinery can produce
+while doing nothing** — CLAUDE.md's "if the machinery did nothing at all, would
+this row still pass?" answered YES, found by running the control rather than
+reasoning about it. `bb0c9c1ff`'s *"all 39 warnings gone"* still reproduces at
+HEAD, and **the honest verdict is narrower than the number**: gone in the
+position the compiler can see, with a silent arm the census cannot count.
+frankC has the measurement, not the fix, and is filing it as its own ticket
+rather than letting it ride along with what it lands — the right split.
+
+Attempt six: GREEN, byte-identical to the gcc oracle over 23 cases,
+`BUSYBOX-DIFF-COMPLETE`, 9 applets / 75 TUs, **x86_64 only, architecture stated
+first, unprompted**; `feature-c-corpus-busybox-i386-the-second-architecture`
+stays unmeasured. Both preconditions asserted: 75 `ok:` = 75 objects = 75 per-TU
+logs. The `test/` C sweep: **625 tried, 625 reached the compiler, 0 no-output** —
+denominator carried.
