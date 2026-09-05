@@ -84,19 +84,51 @@ Two reasons, both about standing rather than difficulty:
    enrollment must not land on its say-so. **The taker needs to be someone who
    runs it.**
 2. **frankc-af and frankT have both ended** (`ListAgents`, checked by frankwasm
-   and again by frank-coordinator). seven is the box that runs the watcher and is
-   not reachable by message from the coordinator seat. The residual question has
-   no incumbent owner, which is the whole reason it is written down.
+   and again by frank-coordinator). **CORRECTED 2026-09-05:** this ticket first said seven was
+   unreachable from the coordinator seat. That was a true statement about a NAME
+   -- `SendMessage` addresses agents, and `seven` is the hostname -- read as a
+   fact about a machine. The session on seven is listed in `ListAgents` as
+   **`Upgrade to 26.04 verification`** and answers normally. It is the right
+   owner: it can run the tier, and it holds a standing grant to install what it
+   needs. Routed there.
 
-## Adjacent, NOT claimed as a bug
+## RETRACTED 2026-09-05 — the `SYS_getgid` observation was a stale binary
 
-frankwasm observed and explicitly declined to file: ordinary Pascal file I/O does
-not compile for wasm32 at all — `Assign`/`Rewrite` on a `Text` pulls the POSIX
-platform backend and dies with `undefined variable (SYS_getgid)`. **May be
-expected PAL routing; may be a gap.** It is recorded here so the observation has
-a home, not as a claim. Note for whoever probes it: this is the **loud** direction
-of the same predicate whose **silent** direction is frankD's bug — which backend a
-wasm32 module pulls for file I/O. The two apertures rule says probe both; the
-settling check is whether the failing module pulled `wasibackend.pas` at all, or
-whether `Text` routing simply has no WASI arm. Those are different findings and
-only one of them is a bug.
+This ticket originally carried an adjacent observation: that ordinary Pascal file
+I/O did not compile for wasm32, `Assign`/`Rewrite` on a `Text` dying with
+`undefined variable (SYS_getgid)` out of
+`lib/rtl/platform/posix/platform_backend.pas`. **It is withdrawn. There is no
+gap.** frankwasm re-measured on a binary it confirmed first
+(`converged after 1 round(s)`, `tools/selfhost_fixedpoint.sh` agreeing it is the
+fixedpoint reached from pinned):
+
+```
+./pascal26 --target=wasm32 withfile.pas  ->  ok: [code=16619B procs=559]
+imports: path_open fd_close fd_read fd_write proc_exit
+wasmtime --dir=. wf.wasm                 ->  read x      exit 0
+```
+
+`Assign`/`Rewrite`/`Reset`/`ReadLn` on a `Text` compiles, **pulls the WASI file
+layer correctly**, and runs. The pinned compiler compiles it too.
+
+The original probe ran on a binary from before `1ea430c95` was pulled. The
+coordinator's hypothesis built on it — that this was the *loud* direction of the
+predicate whose *silent* direction is frankD's name-scan bug — **is void, and
+void because the measurement was junk rather than because the reasoning was
+wrong.** The settling check attached to that hypothesis is what caught it.
+
+**Kept because it cost something and will again:** the hedge was on the
+interpretation (*"may be expected PAL routing, may be a gap"*) while the number
+underneath was unconfirmed. CLAUDE.md already requires `sha256sum
+compiler/pascal26` beside every reported number and a rebuild after any sync
+touching `compiler/**`. Both were observed for the deliberate work and dropped
+for an *incidental* probe.
+
+> **The discipline attaches to the MEASUREMENT, not to its importance.** Nobody
+> knows which probe becomes load-bearing at the time they run it. This one
+> reached a filed ticket and a cross-session hypothesis inside an hour.
+
+`gate.sh quick` is what caught it — RED on the self-host fixedpoint with
+*"compiler/pascal26 is OLDER than the last commit touching compiler/ — that is a
+STALE BINARY, not a miscompile"*. **The row that fired was not aimed at the probe
+at all.**
