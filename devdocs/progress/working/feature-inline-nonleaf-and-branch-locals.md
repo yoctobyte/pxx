@@ -1,11 +1,12 @@
 ---
 prio: 40
+owner: frank-optimize
 ---
 
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** backlog — parked 2026-07-19 sweep; landed slices green, remaining scope below
+- **Status:** working
 - **Opened:** 2026-07-04 (follow-up split from [[feature-inline-routines]])
 - **Umbrella:** the `-O2`/`-O3` tier of [[feature-optimization-levels]]; the
   earlier inline slices (v1 pure-expr, 2a if-then-else Result, 2b straight-line
