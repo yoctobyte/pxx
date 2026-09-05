@@ -13927,6 +13927,17 @@ test-core: $(COMPILER)
 	# something.
 	./$(COMPILER) test/test_class_property_through_an_instance.pas $(TESTTMP)/test_clsprop_inst26
 	tools/expect_same.sh test_clsprop_inst26 "$$($(TESTTMP)/test_clsprop_inst26)" "$$(cat test/test_class_property_through_an_instance.expected)"
+	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
+	# parser, and only the RECORD one skipped a `packed` before `array`, so
+	# fcl-fpcunit's own spelling compiled as a record field and was
+	# `expected 'record' before 'array'` as a class field. Every packed row here
+	# has an UNPACKED twin, and both must agree on the value AND the size:
+	# `packed` on an array must change nothing, so a parser that accepted the
+	# word and then took a different layout path would compile every line and
+	# fail the pairs. The third declaring kind, a variant branch, is still
+	# refused and is deliberately not in this file.
+	./$(COMPILER) test/test_packed_array_field_in_a_record_and_a_class.pas $(TESTTMP)/test_pkarrfld26
+	tools/expect_same.sh test_pkarrfld26 "$$($(TESTTMP)/test_pkarrfld26)" "$$(cat test/test_packed_array_field_in_a_record_and_a_class.expected)"
 	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c

@@ -4493,14 +4493,16 @@ procedure ParseFieldDeclInto(ci: Integer; var curFieldOff, classAlign: Integer;
   compiles as a RECORD field and is `expected 'record' before 'array'` as a
   CLASS field and in a variant branch. fpc 3.2.2 takes all three.
 
-  inRecordBody gates the four arms that are record-only TODAY, so this commit is
-  a pure code move whose evidence is a byte-identical self-host. Three of the
-  four are record-only BY RIGHTS -- {$PACKRECORDS} and `packed record` say
-  nothing about a class, and a by-value field of the enclosing type is only
-  infinitely recursive when that type is a value type. The fourth, the
-  packed-array skip, is the measured divergence above and is NOT record-only by
-  rights; it is gated here only so the move and the fix are separate commits
-  with separate evidence.
+  inRecordBody now gates only the THREE arms that are record-only BY RIGHTS --
+  {$PACKRECORDS} and `packed record` say nothing about a class, and a by-value
+  field of the enclosing type is only infinitely recursive when that type is a
+  value type. The fourth arm, the packed-array skip, was gated for exactly one
+  commit so that the lift and the fix carried separate evidence; it is
+  unconditional now, which is what makes the three declaring kinds agree with
+  fpc and with each other. test_packed_array_field_on_every_kind.pas pins all
+  three, each against an UNPACKED twin, because `packed` on an array must change
+  nothing about the layout here -- a parser that accepted the word and then took
+  a different path would compile every line of that file and fail its pairs.
   refactor-p-the-field-declaration-parser-exists-twice }
 var
   arrLen, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
@@ -4540,7 +4542,7 @@ begin
     accepted and the array parsed exactly as an unpacked one. Without this the
     field type parser fell through to ParseTypeKind, whose tkPacked case assumes
     a record and demanded one. }
-  if inRecordBody and (CurTok.Kind = tkPacked) and (TokPos < TokCount) and
+  if (CurTok.Kind = tkPacked) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkArray) then
     Next;
   if CurTok.Kind = tkArray then
