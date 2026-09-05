@@ -632,6 +632,32 @@ begin
   begin
     ParseArgExpr; rhs := CurASTNode;
     at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
+    { The five argument-match SIDE CHANNELS are globals filled by
+      MatchCallDelphiProcAddr for ITS argument list, and nothing ever clears
+      them -- the four Valid flags are set True in exactly one place in the
+      whole tree and set False in none. So the fold below, which is the only
+      caller of MatchProcCall* that does NOT fill them, reads whatever the last
+      call anywhere in the compilation left in slots 0 and 1.
+
+      That is not hypothetical: measured 2026-09-05 on
+      test_nilpy_min_max_variadic.npy, all ten reads here saw all four flags
+      True with MatchArgScalar[0] and [1] carrying a leftover True. It changes
+      no answer TODAY only because this fold's candidate set is the 2-argument
+      min/max overloads, whose parameters are plain scalars -- there is no
+      array, record or class parameter for any channel to disqualify. That is
+      the candidate set's luck, not a property of the code, and the same shape
+      is what ProcMatchArgCount (symtab.inc) exists to stop one layer down:
+      "it does not crash, it answers".
+
+      Declaring them invalid is the state the defs.inc contract already
+      promises for a path that does not fill them: the matcher goes rec-blind
+      and behaves exactly as it did before the channels existed. Left False
+      afterwards on purpose -- every filling path sets them True itself.
+      refactor-p-the-overload-probe-cannot-see-the-argument-match-channels }
+    MatchArgRecValid := False;
+    MatchArgNilValid := False;
+    MatchArgScalarValid := False;
+    MatchArgArrayValid := False;
     pi := MatchProcCall(mm, 2, at, False);
     if pi < 0 then
       Error('Nil Python: no 2-argument ' + mm + ' for these operand types');

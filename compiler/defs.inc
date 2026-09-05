@@ -2835,9 +2835,31 @@ var
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }
   MatchExactOnly : Boolean;  { restrict MatchProcCall* to its EXACT phase and return -1 otherwise — the literal-typed probe in MatchCallDelphiProcAddr, which must not fall through to the compatible phases with a re-typed argument. }
   { Record identity of each call argument, for overload matching. Filled by
-    MatchCallDelphiProcAddr (the single entry into MatchProcCall*) from the
-    arg AST nodes; REC_NONE when unknown. Valid=False -> matcher ignores them
-    (rec-blind legacy behavior), so paths that never fill the array are safe. }
+    MatchCallDelphiProcAddr through FillMatchArgChannelsAt (pasparser_call.inc)
+    from the arg AST nodes; REC_NONE when unknown. Valid=False -> matcher
+    ignores them (rec-blind legacy behavior).
+
+    THE VALID FLAGS ARE NOT A PER-CALL LIFETIME, and this comment claimed they
+    were until 2026-09-05: they are set True in exactly ONE place in the tree
+    and set False in NONE, so after the first filled call they stay True for
+    the rest of the process. Until then the note here read "paths that never
+    fill the array are safe", which is true only of a path that runs before any
+    filled call and false of every path after one.
+
+    Filling is also not a single entry any more. MatchCallDelphiProcAddr is the
+    only filling caller of MatchProcCall*, but PyParseVariadicMinMax
+    (pyparser.inc) calls MatchProcCall directly without filling, and measured
+    live it read all four flags True with leftover slot data. It now declares
+    them invalid itself, which is what makes the sentence above true for it.
+    ANY new caller of MatchProcCall* must either fill the channels or clear
+    these four flags; there is no safe third option, because the previous
+    call's answer is still sitting in the arrays.
+
+    FillMatchArgChannelsAt writes slots 0..nArgs-1 only, so a slot above a
+    call's own arity is older still. The free path cannot reach one -- every
+    match loop runs to ProcMatchArgCount(i, nArgs)-1, which is capped at nArgs
+    for exactly this family of reasons -- but a caller that indexes past its
+    own argument count would be reading an arbitrarily old call. }
   MatchArgRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   MatchArgRecValid : Boolean;
   { Call arg j is the literal `nil`. Filled beside MatchArgRec, from the same
