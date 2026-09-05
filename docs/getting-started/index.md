@@ -23,10 +23,14 @@ Compile and run:
 
 ```sh
 $ ./pxx hello.pas hello
-ok: hello  [code=31425B  data=104B  bss=4217B  procs=42]
+ok: hello  [code=65304B  data=2840B  bss=43492B  procs=134]
 $ ./hello
 Hello, world!
 ```
+
+The four figures are what this build happened to produce; they move as the
+runtime does, so different numbers do not mean something is wrong. The line to
+check is `ok:` and the name of the file it wrote.
 
 PXX writes a complete Linux ELF executable directly — no `as`, no `ld`.
 

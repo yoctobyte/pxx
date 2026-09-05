@@ -427,7 +427,8 @@ ok: report  [code=1179172B  data=31684B  bss=8332B  procs=1036]
 
 **`(shim, subset)` is the important part.** A shim implements what PXX needs of
 that API, not the package. Treat an unexercised call as unimplemented until you
-have run it.
+have run it. The sizes on the `ok:` line are whatever that build happened to
+produce and move with the runtime; the `note:` line is the thing to read.
 
 ### `--no-shims`: turning the claim into a check
 
