@@ -27433,3 +27433,172 @@ mechanism from a completely different instrument.**
 And `test/my_gtk.h` is a red herring, killed **with a positive control**: the file
 compiles `ok` in a directory that does not contain it. Absence of the file is the
 only proof it was never consulted, and almost nobody builds that control.
+
+## 2026-09-06, dawn — a suite that printed OK having opened no windows
+
+### THE WORST INSTRUMENT OF THE NIGHT SAID "GUI SUITE OK"
+
+frankS (`20b11ae41`). `tools/gui_suite.sh` on a box without `xvfb-run` and
+`xdotool` printed **`GUI suite OK`** and exited 0 with **every real-window check
+skipped.**
+
+**This one is a different animal from the rest of the night's collection.** Every
+other instance was an instrument answering a DIFFERENT question — correct about a
+stale tree, another host, another compiler. This one **answered the question it
+was built for, with the word that means yes, having performed none of the
+observations.** And the real-window checks are not part of the suite; they are
+**the reason a GUI suite exists.** Not a degraded instrument — a stopped clock
+that is right by construction.
+
+Fixed to count and name dep-missing skips, verdict
+`INCONCLUSIVE — nothing failed, but N real-window check(s) did not run`, exit 2.
+
+> **`INCONCLUSIVE` is the verdict word the harness has been missing.** `PASS`
+> claims an observation, `SKIP` disclaims one, and neither can report a
+> **coverage hole as the finding**. frankH's *position is coverage* had no way to
+> print itself until now.
+
+**The judgement that makes the counter mean anything: "did not build" skips are
+deliberately NOT counted.** They are downstream of a FAIL already recorded, so
+counting them reports one defect twice and inflates the number **exactly on the
+runs where a build is already broken** — loudest when least informative. *The
+tool is absent* vs *something upstream already failed*.
+
+### SKIP IS DOING TWO JOBS AND ONLY ONE OF THEM IS SAFE
+
+frankS again (`7b98b8d94`), and the sharper of the two — found only because the
+first one taught it what to look for. `tools/tls13_handshake_devtest.sh` had
+three openssl invocations printing `SKIP: … failed` and **exit 0, the same word
+and the same exit code as the two genuine preconditions directly above them.**
+
+But those two are *the thing is not here*; these three are **the thing IS here
+and it failed** — an openssl built without ed25519, a full disk, a bad umask.
+And `>/dev/null 2>&1` discarded openssl's own reason, so **all three causes were
+one observation.** Identical to the discard found in `esp_run_bare.sh` hours
+earlier.
+
+> **A failure wearing a skip's clothes.** *Precondition absent* and *precondition
+> present and failing* are different findings and every script here spells both
+> with the same word and the same exit code.
+
+**Three corners now, not two.** A host condition wearing a **red** (gtk — cost
+eighteen tickets, eventually caught); one wearing a **green** (`clang`,
+`xdotool`, `wabt` — silent for the life of the harness); a **failure wearing a
+skip** (tls13 — three causes collapsed into one non-observation). **Only the
+first generates tickets.**
+
+Left alone as models rather than problems: `c_corpus_probe.sh` and
+`wasm32_gap_census.sh`, both already exiting 2 with the reasoning in the message.
+
+### A CONTROL THAT COULD NOT FAIL, BUILT TO TEST A GUARD THAT COULD NOT FAIL
+
+frankS's own four-state verdict control **printed OK for every scenario** — it
+sourced the verdict block alongside the helper, so the verdict ran at source time
+with the counter still zero.
+
+**What saved it is the whole lesson: it was read as "my code does not work", and
+looking found the HARNESS.** The failure was in the instrument and presented as a
+failure in the subject. Nothing else would have opened it.
+
+And frankS's background wrapper reported **exit 0 for a run that exited 1** —
+`... > log 2>&1; echo "rc=$?"` makes the compound's status the echo's. **Third
+trailing-command-eats-the-exit-code instance known tonight.** Caught by reading
+the log rather than the notification: *the habit, not the alertness* — the same
+sentence frankS used about the five false greens.
+
+**The gui suite is RED and the change neither causes nor fixes it** — 21 OK, 4
+FAIL, `eliah_ide`'s startup `EInOutError` under the `{$I+}` flip, which the
+script's own comments name as the regression the real-window assertion was added
+to catch. **Zero dep skips on this box, so the new branch correctly did not fire
+and the fail branch won — precedence VERIFIED rather than assumed**, on a run not
+designed to test it. A new verdict state that could preempt a real FAIL would be
+worse than the bug it fixes.
+
+### TWO STATIC METRICS, TWO NOTHINGS — AND THE SECOND REFUTES THE FIRST'S FIX
+
+frank-optimize (`bd7754dcb`): statement-level-call slice, fuzz-clean over **219
+programs, 0 diffs**, gate GREEN, and it changes **ZERO of 16** real programs.
+
+- depth>1 on the biggest **bound**: changed **1 of 13**.
+- statement-call on the biggest **reach**: changed **0 of 16**.
+
+**So *reach beats bound* — frank-optimize's own correction from an hour earlier —
+is also not predictive.** Two different wrong predictors is much stronger than
+one: it rules out **the metric class**, not the choice within it. Both count
+shapes a validator could admit; **neither counts what executes.**
+
+> **The tell is the `while` decline count RISING, 102 → 118.** Bodies stopped
+> dying at the call and started dying at a loop instead. **The admission axis is
+> moving work around rather than removing it** — a conservation result, which is
+> what saturation looks like from the inside.
+
+Conclusion banked in the ticket: nobody picks a third slice by a third static
+metric before someone measures **call-site frequency**. **Fourth stated refusal
+to build tonight, and the only one grounded in the refuser's own two negative
+results.** The fuzz-clean green matters precisely because it makes the slice
+*safe*, so the reason to drop it is **value, not risk** — separable, and the
+ticket says which.
+
+### INTERLEAVING CANCELS DRIFT, NOT DIFFERENTIAL SENSITIVITY
+
+frank-optimize, correcting this seat, and it is a **gap in this repo's guidance**
+rather than a misapplication of it. The guidance says min-of-N interleaved, never
+means, and stops.
+
+**That assumes contention is noise around a fixed ratio.** Here the two arms
+respond to load by different amounts — the call-heavy control loses more to cache
+and core pressure than the inlined arm — so **the ratio itself is a function of
+load.** Min-of-7 interleaved is what produced *both* 1.543x and 1.665x; it was
+already the method and it is not sufficient. **The only fix is an instrument that
+does not measure time.**
+
+**Measured, not recalled:** there is none on plexus.
+
+| instrument | state |
+| --- | --- |
+| `perf` | **denied, not dead** — `/proc/sys/kernel/perf_event_paranoid = 4`; the binary is fine (`dpkg -S` → `linux-perf`), `perf stat -e instructions:u` returns *No supported events found* |
+| `valgrind`/callgrind | not installed, **`Candidate: 1:3.26.0-0ubuntu1`** — installable |
+| qemu TCG plugins | genuinely absent; `qemu-x86_64 -plugin help` → `unknown option`, no `libinsn.so` |
+
+**The handbook's "perf is dead here" is true in effect and wrong about the
+mechanism, which is why nobody has asked for the fix** — it is one sysctl, not a
+rebuild. Both live routes are sudo; held for the owner batch rather than an
+interrupt.
+
+### A CORRECTION THAT INVERTED A RECOMMENDATION, NOT A FACT
+
+seven (`59552aaed`). It had reported the noble-era `libpython3.12*` packages as
+*"pure orphans, only depended on by each other"* — twice, to this seat and to its
+user. It had run `apt-cache rdepends --installed` on **one** member and
+generalised.
+
+```
+libpython3.12-minimal   <- only the other python3.12 libs
+libpython3.12-stdlib    <- only the other python3.12 libs
+libpython3.12t64        <- linux-tools-6.8.0-139     <-- the retained kernel
+```
+
+**Force-removing them breaks `perf` for the exact kernel kept so the box can
+still boot if 7.0.0-31 misbehaves.**
+
+> Every other correction tonight changed a CLAIM. **This one changed a
+> RECOMMENDATION from "safe whenever" to "do not do this"** — same packages, same
+> surface evidence, opposite action. Strictly worse, because a fact is checked by
+> whoever cites it and **a recommendation is executed by whoever reads it**, in a
+> document written so they need not re-derive it.
+
+**`apt-get autoremove` declining to take them was already in seven's report,
+unconnected.** Third time in one night the discriminator was sitting in the data
+with no reason to look at it — after the gtk `host:` line and failure depth.
+**When an automated tool refuses the tidy-up you were about to do by hand, it
+knows something you have not asked it.**
+
+And the shape is one seven had **articulated an hour earlier and then committed
+twice**: a claim one step stronger than the instrument could carry. `rdepends` on
+one member cannot speak for a set. **That is the argument for a mechanical check
+over a reminder, made by the person who had the rule and was wrong anyway** —
+the check has to fire whether or not the author currently believes they need it.
+
+Two lanes converged on one tool within the hour from opposite directions:
+frank-optimize needs `perf` enabled to decide whether code stays, and seven's
+correction protects the retained kernel's copy of it.
