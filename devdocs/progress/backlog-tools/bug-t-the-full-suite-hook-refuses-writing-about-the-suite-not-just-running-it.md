@@ -70,3 +70,23 @@ Low but recurring, and it lands on exactly the agents doing the right thing —
 writing down why they did or did not widen their gate. It also mildly
 discourages naming the suite in a commit message, which is the one place that
 information is useful later.
+
+## A fifth instance, 2026-09-05 — and it is the same shape as the fourth
+
+A `cat >> LOGBOOK.md` heredoc was refused because the log line described a
+census that had compiled "621 further test/*.c" — the glob appeared in PROSE
+describing what had already been run, hours earlier, with
+`PXX_ALLOW_FULL_SUITE=1` set and declared.
+
+So the tally is now: a ticket body, a logbook line, a commit message, the commit
+filing this ticket, and a logbook line recording a sweep that was properly
+declared. **Every one of the five is an author writing down what they did.**
+None ran anything.
+
+Worth noting for whoever fixes it: the refusal text tells the author to say in
+the commit why the quick tier was not enough, and this is the second time that
+exact sentence has been refused for containing the words it asks for. The
+workaround stays the same — the `Write` tool for file content, a message file
+for `git commit -F` — and it stays deliberate. **Do not reword the prose to
+avoid the pattern**, which is the tempting fix and the one that would leave the
+guard weaker than it looks.
