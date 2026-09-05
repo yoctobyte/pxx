@@ -293,8 +293,13 @@ if [ "${RETRY_SKIPS:-0}" = "1" ]; then
   # A DIFFERENT LABEL ON PURPOSE. This run attempted rows the suite has agreed
   # not to judge, so it is not a conformance result and must not be quotable as
   # one -- neither as a pass count nor as a regression.
-  echo "test-pascal-conformance-retry: $retried skip-listed row(s) re-attempted -- $stale now PASS (stale skip entries), $stillgap still failing (gap confirmed)"
-  [ -n "$stale_list" ] && echo "test-pascal-conformance-retry: STALE SKIP ENTRIES:$stale_list"
+  echo "test-pascal-conformance-retry: $retried skip-listed row(s) re-attempted -- $stale now EXIT-CLEAN (skip entry may be stale), $stillgap still failing (gap confirmed)"
+  [ -n "$stale_list" ] && echo "test-pascal-conformance-retry: EXIT-CLEAN, CONFIRM BEFORE BURNING:$stale_list"
+  echo "test-pascal-conformance-retry: EXIT-CLEAN IS NOT CORRECT. This harness compares the EXIT CODE, not the output, so a row"
+  echo "test-pascal-conformance-retry: that runs to completion printing WRONG VALUES lands in the list above. Measured 2026-09-05:"
+  echo "test-pascal-conformance-retry: 3 of 24 were exactly that (tarray2 printed a PChar as its pointer, tforin24 printed garbage"
+  echo "test-pascal-conformance-retry: for an enum name, tclass12a printed double where FPC prints 80-bit Extended) -- and all three"
+  echo "test-pascal-conformance-retry: already said so in their own skip reasons. Diff each row against fpc 3.2.2 before burning it."
   echo "test-pascal-conformance-retry: this is NOT the conformance verdict; run without --retry-skips for that."
   exit 0
 fi

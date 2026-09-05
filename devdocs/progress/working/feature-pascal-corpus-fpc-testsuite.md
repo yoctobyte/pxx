@@ -148,3 +148,93 @@ Also dated: the numbers in this file have now been superseded three times
 any of them.
 
 Nothing applied.
+
+
+---
+
+## 2026-09-05 (frankA) — 347 -> 368 by burning 21 stale skip entries, and the skip list is not what the pricing note says it is
+
+Re-claimed after the corpus install unblocked it. Working the **compile-gap**
+half deliberately: the 2026-07-11 owner call parks the burn-down as rainy-day,
+that call is about diagnostic parity, and a program that will not compile is not
+that.
+
+### The remaining scope is NOT mostly diagnostic parity
+
+The 2026-08-30 note recommends re-pricing 65 -> 15-25 on the ground that the
+remaining ~200-entry burn-down *"is compat-tagged conformance-diagnostic
+parity"*. **By the skip file's own taxonomy it is not.** Censused before
+touching anything, 167 rows:
+
+| tag | rows |
+| --- | --- |
+| `gap:` — a real unimplemented pxx feature | 150 |
+| `wontfix:` — probes FPC internals / deliberate divergence | 15 |
+| `accepts-invalid:` — a diagnostic we do not emit | 2 |
+
+**Two rows are the diagnostic kind.** The 150 are language features: generics
+and specialize forms, operator overloading, record management operators,
+old-style `object` types, subrange-of-enum, modeswitches. Re-pricing is a Track
+P/owner call and is not made here -- but it should be made against 150/15/2
+rather than against "diagnostic parity", which is what the recommendation
+currently rests on.
+
+### A skip reason is a dated claim, and 21 of them had expired
+
+The harness had no way to re-test an entry, so nothing ever did. Added
+`--retry-skips` (`1984e6ba9`) and ran it over all 167.
+
+**24 rows came back exit-clean** (excluding `tgenconstraint37`, which is
+frankB's and is left alone). Each was then diffed against fpc 3.2.2 rather than
+trusted:
+
+| | rows | disposition |
+| --- | --- | --- |
+| stdout AND exit code match fpc exactly | 17 | burned |
+| unit-shaped; both compilers compile clean | 3 | burned |
+| `tenum2` — a `%fail` row; both compilers reject at the SAME line | 1 | burned |
+| exit 0 with WRONG OUTPUT | 3 | kept |
+
+**Measured: 347 -> 368 pass, 167 -> 146 skip, 2 fail unchanged** (still
+`tgenfunc17`/`tgenfunc18`, the accidental-pass pair, unrelated). 368+2+146+34 =
+550 reconciles, and no new failure appeared.
+
+### The instrument has a false-positive mode, measured at 3 of 24
+
+This is the part worth carrying forward. **The harness compares the EXIT CODE,
+not the output**, so a row that runs to completion printing wrong values is
+"exit-clean". Three did:
+
+- `tarray2` — a `PChar` in a `TVarRec` printed as its POINTER (`4366520`)
+  instead of the string.
+- `tforin24` — an enum name printed as garbage bytes where FPC prints `Monday`.
+- `tclass12a` — double-width float where FPC prints 80-bit Extended.
+
+**All three already said so in their own skip reasons** -- `tforin24`'s reads
+*"exit 0 with wrong output -- keep skipped; re-confirmed 2026-07-15"*. So this
+is not three new findings; it is a differential CONFIRMING that three reasons
+are accurate and current, and catching that the new flag would have burned them.
+The flag's summary now says this in its own output, with the rate, so the next
+session does not have to rediscover it.
+
+### Two things a burn-down must not skip
+
+**Check `%FAIL` with the runner's own extractor, not a grep.** Mine said 0 of 25
+were must-reject rows; the runner said 1. The runner was right: `tenum2` spells
+it `{ %fail }` in lower case and the runner uppercases. Trusting my grep would
+have burned a must-reject row. It turned out safe anyway -- pxx refuses it at
+`e := tone`, exactly where fpc 3.2.2 refuses it with `Identifier not found
+"tone"` -- but that was luck, established afterwards.
+
+**A refuted lead is worth the two minutes.** `tenum2`'s refusal looked like a
+real gap (an enum member invisible through a two-unit type alias). Built the
+three-unit repro: **fpc refuses it identically**, so a type alias correctly does
+not re-export enum members. Nothing filed. Its skip reason (*"inc(enum) past
+range -- PXX's lax enum-as-ordinal model"*) misdescribes the row twice over --
+neither compiler reaches the `inc`.
+
+### What is left
+
+146 skips, 142 of which the retry run confirms still fail. That is the real
+burn-down surface and it is feature work, not diagnostics. `tgenconstraint37` is
+frankB's and is untouched.
