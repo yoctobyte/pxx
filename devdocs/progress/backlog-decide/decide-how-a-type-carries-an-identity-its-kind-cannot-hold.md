@@ -8,7 +8,7 @@ blocked-by: []
 status: open
 owner: ""
 created: 2026-09-05
-summary: "Two open bug families have ONE cause: a type whose LAYOUT is an existing kind but whose SEMANTICS are not. ByteBool/WordBool/LongBool are tyUInt8/tyUInt16/tyInteger so their C-ABI width is right, and nothing downstream can tell them from integers -- so `if a` and `if not a` BOTH fire (p55), WriteLn prints 1 for TRUE, and Ord answers 1 where fpc answers -1. Separately an alias to an enum, and a set's char element, drop their identity the same way (p40). The fork: (A) give the sized booleans distinct TTypeKinds, which touches defs.inc's kind numbering -- the ONE thing CLAUDE.md says to coordinate by message rather than edit; or (B) generalise the pattern an enum already uses (tyInteger PLUS an id) into a side channel carried through symbols, fields, params and the alias table, which closes BOTH families in one move. Recommendation: B. A costing of the Pascal-frontend arm is appended (frankB, 2026-09-05, compiler 47618f77c240) and DISPUTES the multiplier premise: the two families are independent, arm A has three in-tree precedents (tyBool8/tyUCS4Char/tyWideChar) that landed for +77..+144 and ~22 sites rather than the 565 feared, and tyWideChar is this same decision on a storable type taken the OTHER way because a node-level marker could not serve WriteLn. Then MEASURED against arm A: frankB narrowing an enum off tyInteger (324641046) detached the enum identity at seven sites guarded by `kind = tyInteger` and NOTHING failed, and frankB's `set of TCol` case shows a bare "is there an identity" channel would hand a bitset its element's member names, so B's channel must answer WHOSE identity it is. Choice still open with U."
+summary: "Two open bug families have ONE cause: a type whose LAYOUT is an existing kind but whose SEMANTICS are not. ByteBool/WordBool/LongBool are tyUInt8/tyUInt16/tyInteger so their C-ABI width is right, and nothing downstream can tell them from integers -- so `if a` and `if not a` BOTH fire (p55), WriteLn prints 1 for TRUE, and Ord answers 1 where fpc answers -1. Separately an alias to an enum, and a set's char element, drop their identity the same way (p40). The fork: (A) give the sized booleans distinct TTypeKinds, which touches defs.inc's kind numbering -- the ONE thing CLAUDE.md says to coordinate by message rather than edit; or (B) generalise the pattern an enum already uses (tyInteger PLUS an id) into a side channel carried through symbols, fields, params and the alias table, which closes BOTH families in one move. Recommendation: B. A costing of the Pascal-frontend arm is appended (frankB, 2026-09-05, compiler 47618f77c240) and DISPUTES the multiplier premise: the two families are independent, arm A has three in-tree precedents (tyBool8/tyUCS4Char/tyWideChar) that landed for +77..+144 and ~22 sites rather than the 565 feared, and tyWideChar is this same decision on a storable type taken the OTHER way because a node-level marker could not serve WriteLn. Then MEASURED against arm A: frankB narrowing an enum off tyInteger (324641046) detached the enum identity at seven sites guarded by `kind = tyInteger` and NOTHING failed, and frankB's `set of TCol` case shows a bare "is there an identity" channel would hand a bitset its element's member names, so B's channel must answer WHOSE identity it is. frankB then corrected the cost: the set case is NOT a freshness bug -- the channel is valid, current and about the wrong subject -- so arm B needs an IDENTITY obligation on every channel, not the window discipline the existing LastType* channels already have, and "one more of the same" underprices it. A third construct of the same shape has since landed (8a3a62258, {$H-}: BareStringKind returned tyShortString at every site while SizeOf answered 8, because a ShortString's CAPACITY has no carrier in the kind) -- fixed, so a precedent rather than a fourth family, and it makes this a PATTERN in the type system rather than two coincidences. Choice still open with U."
 ---
 
 # Decide: how does a type carry an identity its kind cannot hold?
@@ -327,3 +327,65 @@ than assumed: an alias to an enum still prints `1` where fpc prints `tue`, and
 `Low`/`High` of `set of 'c'..'k'` still answer `99 107` where fpc answers `c k`.
 Neither was touched by the packenum work, which is expected — those losses are
 at the alias/set registration boundary, not at the kind-guard sites.
+
+---
+
+## 2026-09-05, later still — the set case is not a FRESHNESS bug, and a third instance landed
+
+Two corrections/additions from frankB, both about this fork rather than about a
+ticket. Recorded here because they change what arm B costs, and the cost was the
+part this record was thinnest on.
+
+### The `set of TCol` hazard is not the hazard the existing channels guard
+
+The section above filed this under "window discipline". frankB's correction, and
+it is right:
+
+> *"The stale value there is not stale in the usual sense. Every existing
+> `LastType*` comment warns about a reader outside the window picking up what an
+> UNRELATED declaration left behind. This is not that. `set of TCol` fills
+> LastTypeEnumId correctly, for a real nested type, in the very declaration being
+> parsed — so the channel is valid, current, and about the wrong subject. No
+> window rule catches it, because nothing is out of window."*
+
+That is why the landed guard asks `tk = EnumStorageTypeKind(etid)` and not
+`etid >= 0`: **it is an identity test, not a freshness test.** Freshness
+discipline alone would not have saved it, and a reviewer who checked only that
+the channel was written inside the window would have passed the broken form.
+
+**So the honest cost note for arm B: the discipline it needs is NOT the
+discipline the existing channels already have.** "One more `LastType*` channel,
+same rules" understates the work by exactly this case. Whoever settles this fork
+should price B with an identity obligation on every channel, not a freshness one.
+
+### A third construct where the kind was right and the type was still wrong
+
+`{$H-}` / `{$LONGSTRINGS OFF}` landed at `8a3a62258` (verified on origin;
+touches `defs.inc`, `lexer.inc`, `paslexer.inc`, `pasparser_decl.inc`,
+`pasparser_expr.inc`, `util.inc`). frankB's report of the mechanism is the same
+shape as the enum-identity one and worth this ticket's attention:
+
+> *"I instrumented BareStringKind and watched it return tyShortString on every
+> call while SizeOf answered 8 — a ShortString's CAPACITY has no carrier in the
+> kind, so `string[N]` sets LastTypeStrCap from N, the `shortstring` NAME sets
+> 255, and a bare `string` under {$H-} is the third spelling of that same type
+> and had to set it too. Then SizeOf needed the identical missing fact a second
+> time, because TypeSlotSize takes a kind with no capacity."*
+
+**The kind was correct at every declaration site and the type was still wrong.**
+Two sites, one omission, because the kind and the capacity are one fact and
+neither half is sufficient alone.
+
+This is a PRECEDENT, not a fourth open family — it is fixed. It belongs here
+because it is a third independent construct whose semantics do not fit its
+`TTypeKind` (after the sized booleans and the enum/set identity), and because it
+was resolved the way arm B resolves things: a fact carried beside the kind,
+required at every spelling that can produce the type. **A third instance makes
+this a pattern in the type system rather than two coincidences**, which is an
+argument for settling the fork generally rather than per-family.
+
+Deliberately NOT filed from frankB's report, and noted so a later reader does not
+mistake the silence: `{$mode objfpc}` does not imply `{$H+}` in fpc (only
+`{$mode delphi}` does), so pxx's default bare string matches fpc in delphi mode
+only. frankB measured it, it is pre-existing, and it is the managed-string model
+this compiler chose — a chosen divergence, not this fork's business.
