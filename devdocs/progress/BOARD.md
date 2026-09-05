@@ -380,7 +380,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode | P | 60 | bug | ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. TWO POSITIONS, not one: `f := G;` AND `Use(G)` where the parameter is procedural both compile OUTSIDE `{$mode delphi}` and segfault at runtime (measured 2026-09-05, rc=139 each). FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix. | — |
+| bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode | P | 60 | bug | ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. TWO POSITIONS, not one: `f := G;` AND `Use(G)` where the parameter is procedural both compile OUTSIDE `{$mode delphi}` and segfault at runtime (measured 2026-09-05, rc=139 each). FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix. | refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-char-array-row-through-a-pointer-deref-loads-short | P | 40 | bug | The STORE half is correct — `q^[1] := 'XY'` over `^array[0..2, 0..5] of Char` writes `88 89 0 0 0 0` into row 1, byte-identical to fpc. The LOAD half truncates: `s := q^[1]` yields three characters, while `q^[0]` yields all six. The bytes that arrive are the row's own, so the ADDRESS is right and the length is not. Found while adding the AN_INDEX arm to ASTCharArrayCap; that arm EXCLUDES a deref base for exactly this reason, so the deref spelling still refuses rather than answering plausibly-wrong. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
@@ -417,7 +417,7 @@ _none_
 | feature-pascal-management-operators-nested-and-array | P | 35 | feature | Management operators do not reach an array element or a nested field | — |
 | refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array | P | 25 | refactor | NodeArrNDInfo returns False for a rank-1 array — every arm tests `>= 2`. Correct for its original caller (multi-subscript lowering, where rank 1 has no comma chain), but it makes the function unusable as the general 'what shape is this array' reader that three frontends now want. Not a Pascal defect: no Pascal program behaves wrong today. | — |
 | refactor-p-nodearrndinfo-yields-spans-but-not-the-element | P | 25 | refactor | NodeArrNDInfo fills NDInfoNDims/Lo/Span but not the element triple — size, record id, type kind — so every caller that needs to know what an element IS re-derives it from Syms[] or RecField*, with its own AN_IDENT/AN_FIELD pair. That re-derivation is where three C bugs lived. | — |
-| refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes | P | 55 | refactor | The overload probe now fills the five argument-match channels and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak. | — |
+| refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes | P | 55→60 | refactor | The overload probe now fills the five argument-match channels and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog-decide (43)
@@ -1021,6 +1021,7 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
+- [p 60] [P] refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes (unblocks 1)
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -1029,7 +1030,6 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [P] bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [U] decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park
 - [p 60] [U] decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision
@@ -1078,7 +1078,6 @@ _none_
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 55] [T] feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing
-- [p 55] [P] refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes
 - [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
@@ -1431,4 +1430,5 @@ _none_
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- **1** — refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes
 - **1** — regression-test-core-c-crtl-wait

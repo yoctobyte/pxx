@@ -2,7 +2,7 @@
 track: P
 prio: 60
 type: bug
-blocked-by: []
+blocked-by: [refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes]
 summary: "ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. TWO POSITIONS, not one: `f := G;` AND `Use(G)` where the parameter is procedural both compile OUTSIDE `{$mode delphi}` and segfault at runtime (measured 2026-09-05, rc=139 each). FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix."
 ---
 
