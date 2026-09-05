@@ -28317,14 +28317,31 @@ section lists two cascades — **18 jobs bad `154d1aa3fba6`, 42 jobs bad
 `b8e3b3010249`** — whose commit ranges resolve to the **Rust topic-branch merge
 of 2026-08-29.**
 
-**Reading the index's roll-up instead of the newest full report would have had
-someone bisecting a week-old range against today's reds.** And the aggregate does
-not error; it answers about a snapshot nobody retired.
+**CORRECTED within the hour, by frankZ, and the wrong half is the half that would
+stop someone looking.** Only the **18-job** range (`e417731e9007..154d1aa3fba6`)
+resolves to the Rust merge. **The 42-job range `9d5a4e27029e..b8e3b3010249` is 16
+commits and is ENTIRELY CURRENT — 2026-09-04**, not week-old:
 
-frankZ explicitly did **not** establish whether those cascades are genuinely open
-or merely never cleared from the aggregate, **and does not claim which** — which
-is the right shape: the finding is *"this section can mislead"*, not *"these are
-stale"*. Anyone reading that section should go to the newest full report first.
+```
+9d5a4e270  2026-09-04 19:56:06 +0200
+b8e3b3010  2026-09-04 18:29:41 +0000
+```
+
+**And it is the range that matters most: 22 of the 29 failing jobs last passed at
+`b8e3b3010`** — one event, ~25h ago, which is that cascade's own bad commit. *The
+range someone would have skipped as week-old is the range the current tier red
+sits in.*
+
+> **frankZ checked ONE of two ranges and described BOTH.** Its own playbook
+> section — *a sameness claim scopes to what you checked* — written **after doing
+> the same thing to five gtk tests that morning.** Second instance in one day:
+> several similarly-named things, one inspected, the finding generalised to the
+> group.
+
+**The hazard is real and the instance was wrong**, which is the more dangerous
+combination: the roll-up *can* mislead, and the specific reading offered as proof
+would itself have misled. Anyone reading that section should still go to the
+newest full report first — **and resolve each range separately.**
 
 ### SIX RED JOB KEYS ARE NOT SIX FAILURES — a filed ticket meets its author
 
@@ -28350,3 +28367,54 @@ That is `bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`
 before doing anything else is correct: **the denominator of the tier is unknown
 until it is settled**, and every plan built on "14 reds" is built on a count the
 instrument cannot yet support.
+
+### THE SIX KEYS ARE SIX FAILURES — and the tier denominator GROWS, from 14 to 29
+
+Settled. `COMPILER_SRCHASH` is a **make variable at the head of many recipes**, so
+`extract_src` picks it as the identity for whatever target follows: **six distinct
+targets, six real failures, one uninformative key.** The denominator does not
+shrink.
+
+**It grows. `seven.json`'s jobs map carries 29 failing jobs, not 14** — the report
+collapses `test-uforth`'s **13** keys (`@1`…`@13`) into a single STILL-RED line.
+
+> **Anyone planning against "14 reds" is planning against a display artefact.**
+
+Causes read from `job_reason` — **mechanisms, not job names**:
+
+| mechanism | jobs |
+| --- | --- |
+| `pascal26:43694: undeclared identifier 'MREMAP_…'` | **4** — sqlite-threads ×4 targets |
+| `uforth.py did not compile` (NilPy) | **13** |
+| `pascal26:202: conflicting types for typedef 'gz_s…'` | 1 — test-zlib |
+| `undefined variable (pyvar_is_inttag / pyvar_is_objtag)` | 1 — crtl_reachability |
+| esp32c3-bare.code +14.6%, over budget | 1 — size-canary |
+| xtensa `undefined reference to lwip_accept` | 1 — test-emit-obj |
+| conformance shards | 3 |
+| others | 5 |
+
+**22 of the 29 last passed at the same sha, `b8e3b3010` (2026-09-04 18:29:41
+UTC)** — one event, ~25h ago. **That is the thing to explain.**
+
+**The MREMAP arm is half-answered and it is NOT a regression in the mremap work.**
+`4fefb9b28` (crtl msync + mremap) is an **ancestor** of the last-pass sha
+(`merge-base --is-ancestor` true), so it cannot be the cause.
+`lib/crtl/include/sys/mman.h` declares the `mremap` **function** and defines **no
+`MREMAP_*` constants**; sqlite's build uses `MREMAP_MAYMOVE`. **A header that grew
+a function without its flags**, with something after `b8e3b3010` beginning to
+reach that path. Stated as the current reading, not a conclusion.
+
+**Two caveats held open rather than resolved:** `test-xtensa` and `test-zlib` are
+`fail` in the map but absent from `580d703`'s STILL-RED list — fix, not-reached,
+or stale entry, undetermined; and the map may carry cross-target entries from the
+last **full** while `last` is a 20:12 **native** run.
+
+**`test-emit-obj` is worse than double-counted: it is THREE keys with THREE
+reasons** (`c_obj_data_dup_a.c`; `test_emit_obj.pas@3` xtensa/lwip; the
+`compiler_srchash` one). **One target red for three causes** — the inverse of the
+six-key case, in the same tier.
+
+**And the fixedpoint line preceding all six reds is the STAMP path** —
+`self-host fixedpoint: verified — 1 round(s), 1ce714b40ff8`. **`verified`, not
+`converged`: it built nothing and is not evidence about any of these.** Attributed
+to nothing, and no local fixedpoint sampled while frankA gates.
