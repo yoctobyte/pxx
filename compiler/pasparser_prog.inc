@@ -1543,7 +1543,15 @@ begin
        (CaseEqual(GetTokenStr(i), 'assert') or
         CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
         CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
-        CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar')) and
+        CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar') or
+        { …and Prefetch, which is a System memory primitive of the same family:
+          FPC declares it in systemh.inc as an internproc and its own compiler
+          sources call it bare. Ours is a real (empty) procedure, so the unit has
+          to be present for the name to resolve at all -- a builtin that is
+          declared and never dragged in is `undefined variable`, which is what
+          this scan exists to prevent. Call-shaped, so a variable named
+          `prefetch` does not pull the unit in. }
+        CaseEqual(GetTokenStr(i), 'prefetch')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { FPC System surface living in builtin as plain Pascal: the PRNG

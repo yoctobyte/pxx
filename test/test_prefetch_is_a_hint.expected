@@ -1,0 +1,6 @@
+string   : hello
+empty    : []
+record   : 11 22
+array    : 33
+scalar   : 44
+through ^: 44

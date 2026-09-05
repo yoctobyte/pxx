@@ -91,6 +91,21 @@ function InterLockedCompareExchange64(var Target: Int64;
 {$ENDIF}
 {$endif}
 {$endif}
+{ A CACHE HINT and nothing else. FPC declares it
+  `procedure Prefetch(const mem);[internproc:fpc_in_prefetch_var]` in
+  systemh.inc, and FPC's own compiler sources call it -- `prefetch(AName[1])` at
+  cclasses.pas:1561 is the wall that put it here.
+
+  An empty body is a CORRECT implementation, not a stub: a prefetch has no
+  observable effect on any program, so a target that does not issue one computes
+  the same answers slightly slower. That is the one shape where "does nothing"
+  is the specification rather than a gap, which is why it needs no ticket and no
+  per-target arm. The untyped `const` parameter is what makes it accept any
+  lvalue, exactly as FPC's does, and it takes the ADDRESS rather than reading --
+  so `prefetch(s[1])` on an empty string is as well-defined here as it is there.
+
+  feature-pascal-corpus-expansion }
+procedure Prefetch(const mem);
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
@@ -1404,6 +1419,16 @@ begin
     Result := ' ' + Result;
 end;
 
+
+{ The body sits OUTSIDE the CPURISCV32/CPUXTENSA guard below, and deliberately:
+  the declaration is unguarded, and a declaration whose body compiles out is
+  bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out -- named in this
+  file's own header thirty lines up. A cache hint has nothing target-specific to
+  guard anyway. }
+procedure Prefetch(const mem);
+begin
+  { deliberately empty -- see the declaration }
+end;
 
 {$ifndef CPURISCV32}
 {$ifndef CPUXTENSA}

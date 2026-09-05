@@ -6671,6 +6671,17 @@ test-core: $(COMPILER)
 	@# a class field the same shape did not refuse at all, it read 0 for 42.
 	@$(TESTTMP)/test_fpta26 | diff -u test/test_forward_pointer_to_array_type.expected - \
 	  || { echo 'test_forward_pointer_to_array_type: FAIL - a forward pointer to an array type lost its element'; exit 1; }
+	./$(COMPILER) test/test_prefetch_is_a_hint.pas $(TESTTMP)/test_pfh26
+	@# .expected is fpc 3.2.2's own output. Prefetch is a CACHE HINT, so an empty
+	@# body is the specification rather than a stub and there is deliberately no
+	@# row asserting a cache line moved -- that is not observable in Pascal. What
+	@# IS asserted is that every lvalue shape FPC's own sources use compiles, and
+	@# that the program's answers are unchanged around the calls. The `empty
+	@# string` row is the one that matters: cclasses.pas calls prefetch(AName[1])
+	@# where AName may be empty, well-defined only because the untyped const
+	@# parameter takes the ADDRESS and never reads.
+	@$(TESTTMP)/test_pfh26 | diff -u test/test_prefetch_is_a_hint.expected - \
+	  || { echo 'test_prefetch_is_a_hint: FAIL - Prefetch is not a transparent hint'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --
