@@ -64,14 +64,35 @@ CONTROL_NAMES = ['zzznotadirectiveatall', 'pxxinventedcontrolname']
 
 
 def census(roots):
-    """name -> (occurrences, first path)."""
+    """name -> (occurrences, first path).  Aborts rather than measuring nothing.
+
+    A CORPUS THAT IS NOT ON DISK MEASURES CLEAN AND DOES NOT ERROR, and on this
+    box that is not hypothetical: `library_candidates/` is in .gitignore, so it
+    never arrives by pull.  Counted 2026-09-06 by frank-coordinator across the
+    checkouts here: 10 have it and 9 do not, live sessions on both sides, and
+    nothing about a checkout announces which side it is on.  The same sweep run
+    by two agents then returns two different answers and neither one errors.
+
+    So the file count is printed with the verdict -- a corpus-derived number
+    without its corpus root and size is not reportable -- and an absent root or
+    an empty walk is a hard stop.
+    bug-t-a-ticket-citing-a-corpus-file-is-only-reproducible-by-whoever-has-that-corpus
+    """
+    missing = [r for r in roots if not os.path.isdir(r)]
+    if missing:
+        sys.exit('corpus root(s) not on disk: %s\n'
+                 'This tool would otherwise walk nothing and print "clean".\n'
+                 'library_candidates/ is gitignored and never arrives by pull.'
+                 % ', '.join(missing))
     seen = collections.Counter()
     where = {}
+    files = 0
     for root in roots:
         for dirpath, _, filenames in os.walk(root):
             for fn in filenames:
                 if not fn.lower().endswith(SOURCE_EXT):
                     continue
+                files += 1
                 path = os.path.join(dirpath, fn)
                 try:
                     text = open(path, errors='replace').read()
@@ -81,7 +102,11 @@ def census(roots):
                     name = m.group(1).lower()
                     seen[name] += 1
                     where.setdefault(name, path)
-    return seen, where
+    if not seen:
+        sys.exit('walked %d source file(s) under %s and found NO directive at '
+                 'all.\nThat is a corpus this tool cannot say anything about, '
+                 'not a clean sweep.' % (files, ', '.join(roots)))
+    return seen, where, files
 
 
 def probe(name, workdir):
@@ -124,11 +149,14 @@ def main(argv):
 
         if argv and argv[0] == '--only':
             names = [n.lower() for n in argv[1:]]
+            if not names:
+                sys.exit('--only needs at least one directive name')
             counts, where = collections.Counter(), {}
         else:
-            counts, where = census(argv)
+            counts, where, files = census(argv)
             names = sorted(counts)
-            print('corpus: %d distinct directive names' % len(names))
+            print('corpus: %s -- %d source files, %d distinct directive names'
+                  % (', '.join(argv), files, len(names)))
 
         bad = []
         for name in names:

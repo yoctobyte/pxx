@@ -341,3 +341,27 @@ is "wait for a corpus" is a ticket nobody can pick up.
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 60666ec36.
+
+## Correction, 2026-09-06 — the corpus I swept is not in everyone's tree
+
+frank-coordinator counted what I could not see from one checkout:
+**`library_candidates/` is gitignored (line 36), so it never arrives by pull.
+Ten of the nineteen checkouts on this box have it and nine do not**, with live
+working sessions on both sides and nothing about a checkout announcing which
+side it is on.
+
+That makes the residual finding above worse than it was reported, in a way that
+matters more than the two directives. **The same sweep, run by two agents,
+returns two different answers and neither one errors** — the tree without the
+corpus walks a smaller population and prints `no false positive`. Null result,
+working tool, no diagnostic.
+
+`tools/directive_name_sweep.py` now refuses that condition rather than
+measuring it: an absent corpus root is a hard stop, so is a walk that finds no
+directive at all, and the FILE COUNT is printed beside every verdict, because a
+corpus-derived number without its corpus root and size is not reportable. Both
+stops verified by running them.
+
+Cross-referenced to
+[[bug-t-a-ticket-citing-a-corpus-file-is-only-reproducible-by-whoever-has-that-corpus]],
+which now carries the 10/19 count as its denominator.

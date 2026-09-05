@@ -1749,7 +1749,14 @@ const
     unit or FPC 3.3+ is still invisible", because /usr/share/fpcsrc holds
     compiler, rtl and packages -- and NOT the testsuite, which is the corpus
     that exists to spell edge cases. library_candidates/ has it: 2304 sources,
-    plus rtl-generics (Delphi-flavoured) and fpc-rtl. 90 directive names there,
+    plus rtl-generics (Delphi-flavoured) and fpc-rtl -- and that directory is
+    GITIGNORED, so it never arrives by pull: 10 of the 19 checkouts on this box
+    have it and 9 do not, live sessions on both sides, with nothing announcing
+    which side a checkout is on (counted by frank-coordinator, 2026-09-06). Run
+    the sweep in a tree that lacks it and it measures a smaller population and
+    reports clean, without erroring. tools/directive_name_sweep.py refuses an
+    absent or directive-free corpus root for that reason, and prints the file
+    count beside every verdict. 90 directive names there,
     NINE of which appear nowhere in fpcsrc, so nothing had ever asked about
     them. Same instrument, same discriminator, same positive control. Two more:
       checklowaddrloads  fpc accepts it silently; we warned
