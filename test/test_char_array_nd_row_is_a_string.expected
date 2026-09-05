@@ -4,4 +4,6 @@ store  named elem type: [hi]
 load   into a string  : [ghijkl]
 load   through a field: [MNOPQR]
 compare row to a lit  : TRUE
+load   through New    : [ghijkl]
+load   through @stack : [MNOPQR]
 CONTROL 3-D sub-array : [~]

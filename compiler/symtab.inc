@@ -3562,6 +3562,43 @@ begin
     Result := TypeSlotSize(tk);
 end;
 
+function ArrTypeByteSize(ai: Integer): Integer;
+{ Bytes ONE VALUE of the named array type `ai` occupies -- the whole array, not
+  an element. Dynamic array types answer the handle width, because a dyn array
+  IS a reference.
+
+  This was the inline tail of `SizeOf(TArrayTypeName)` in pasparser_expr.inc and
+  nothing else could reach it, so the two spellings of `New` over a pointer to
+  such a type both sized the block with TypeSlotSize(elementKind) instead: `New(p)`
+  for `P1D = ^array[0..17] of Char` allocated ONE BYTE, the allocator rounded it
+  to 16, and every write past `p^[15]` landed in the next block. Silent, exit 0,
+  and the corruption showed up as a neighbouring pointee's first bytes changing.
+  Measured against fpc, which gives 32/32/32 for the 1-D, 2-D and record cases
+  where pxx gave 16/16/32 -- the record arm was already right because RecSize
+  answers for it.
+  bug-p-new-of-a-pointer-to-an-array-type-allocates-the-element-size }
+var absElemTk: TTypeKind; absFlat, absDi: Integer;
+begin
+  if ArrTypeIsDyn[ai] then
+  begin
+    Result := TARGET_PTR_SIZE;
+    Exit;
+  end;
+  if ArrTypeNDims[ai] >= 2 then
+  begin
+    absFlat := 1;
+    for absDi := 0 to ArrTypeNDims[ai] - 1 do
+      absFlat := absFlat * ArrTypeDimSpan[ai * MAX_ARR_DIMS + absDi];
+  end
+  else
+    absFlat := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+  absElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+  if (absElemTk = tyRecord) and (ArrTypeElemRec[ai] >= 0) then
+    Result := RecSize(ArrTypeElemRec[ai]) * absFlat
+  else
+    Result := SizeOfSlot(absElemTk, ArrTypeElemStrCap[ai]) * absFlat;
+end;
+
 function TypeAlign(tk: TTypeKind): Integer;
 { STORAGE alignment for a standalone object of type tk -- a global in .bss, a
   frame slot, a const array baked into .data. Natural alignment on every

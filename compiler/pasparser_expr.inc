@@ -3900,26 +3900,11 @@ begin
               any other managed handle. }
             szAi := FindArrayType(name);
             if szAi >= 0 then
-            begin
-              if ArrTypeIsDyn[szAi] then
-                prevTok := TARGET_PTR_SIZE
-              else
-              begin
-                if ArrTypeNDims[szAi] >= 2 then
-                begin
-                  szFlatLen := 1;
-                  for szDi := 0 to ArrTypeNDims[szAi] - 1 do
-                    szFlatLen := szFlatLen * ArrTypeDimSpan[szAi * MAX_ARR_DIMS + szDi];
-                end
-                else
-                  szFlatLen := ArrTypeHi[szAi] - ArrTypeLo[szAi] + 1;
-                szElemTk := IntToTypeKind(ArrTypeElemTk[szAi]);
-                if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
-                  prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
-                else
-                  prevTok := SizeOfSlot(szElemTk, ArrTypeElemStrCap[szAi]) * szFlatLen;
-              end;
-            end
+              { ArrTypeByteSize (symtab.inc) is this rule, moved there when
+                New's two spellings turned out to need the same answer and had
+                been sizing the block off the ELEMENT kind. It carries the dyn,
+                multi-dim and record-element arms this branch used to hold. }
+              prevTok := ArrTypeByteSize(szAi)
             else
             begin
               { Named type alias (integer/pointer/set/enum/proc-type alias --
@@ -4557,7 +4542,15 @@ begin
         aliasIdx := FindTypeAlias(CurTok.SVal);
         Next;                                  { the pointer type name }
         Expect(tkRParen, ')');
-        i := TypeStorageSize(IntToTypeKind(AliasElemTk[aliasIdx]), AliasElemRec[aliasIdx]);
+        { The array-pointee arm the statement form carries, on this form's own
+          carrier: AliasElemTk is the ELEMENT kind for `P1D = ^T1D`, so without
+          this `New(P1D)` allocated one element and the caller overran the block.
+          The comment above says the size rule changes in both arms or neither
+          -- this is that. bug-p-new-of-a-pointer-to-an-array-type-allocates-the-element-size }
+        if AliasPtrElemArrAi[aliasIdx] >= 0 then
+          i := ArrTypeByteSize(AliasPtrElemArrAi[aliasIdx])
+        else
+          i := TypeStorageSize(IntToTypeKind(AliasElemTk[aliasIdx]), AliasElemRec[aliasIdx]);
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := i;
         ASTTk[exprNode] := Ord(tyInteger);

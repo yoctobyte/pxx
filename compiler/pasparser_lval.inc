@@ -6590,19 +6590,21 @@ begin
       not assumed. What was missing was only the ANSWER to this question, which
       is why both directions were broken at once and only one of them loudly.
 
-      A DEREF base is EXCLUDED, and deliberately, though NDRowSourceInfo walks
-      it: measured, `q^[1]` over `^array[0..2, 0..5] of Char` STORES correctly
-      (`88 89 0 0 0 0` in row 1, byte-identical to fpc) and LOADS three
-      characters instead of six, while `q^[0]` loads all six. The address is
-      right -- the bytes that do arrive are the row's own -- so the load side
-      has a second defect of its own, one row-index deep, that this predicate
-      does not reach. At HEAD both rows loaded ONE character, so admitting the
-      deref here would trade a wrong answer for a MORE PLAUSIBLE wrong answer,
-      which is the harder one to notice. Left refused until the load path is
-      measured; the exculpation has an owner.
+      A DEREF base was EXCLUDED for a day, and the exclusion was CORRECT ABOUT
+      SOMETHING ELSE. Measured then: `q^[1]` over `^array[0..2, 0..5] of Char`
+      stored correctly and loaded three characters instead of six, while
+      `q^[0]` loaded all six -- so the note said the load path had a second
+      defect one row-index deep and refused the arm rather than ship a more
+      plausible wrong answer. Instrumenting THIS predicate is what disproved
+      that: it already answered rowCnt=6 with the right address. The pointee
+      was CORRUPT. `New(q)` sized the block by the ELEMENT kind, so an 18-byte
+      array got one byte rounded to sixteen, and row 1 read `103 104 32 0 0 0`
+      -- three characters and a #0, which is exactly what a row-index-deep load
+      bug would look like. Fixed in ArrTypeByteSize (symtab.inc); the deref base
+      now loads all six and matches fpc byte for byte, so it is admitted.
       bug-p-a-char-array-row-of-a-2d-array-is-not-a-string
-      bug-p-a-char-array-row-through-a-pointer-deref-loads-short }
-    if (ASTLeft[node] < 0) or (ASTKind[ASTLeft[node]] = AN_DEREF) then Exit;
+      bug-p-new-of-a-pointer-to-an-array-type-allocates-the-element-size }
+    if ASTLeft[node] < 0 then Exit;
     if not NDRowSourceInfo(node, rowCnt, rowTk, rowRec) then Exit;
     if ASTNDRowSubs[node] <> NDInfoNDims - 1 then Exit;
     if rowTk <> tyChar then Exit;

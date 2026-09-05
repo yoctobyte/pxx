@@ -1,0 +1,5 @@
+1-D pointee survives  : [##################]
+2-D pointee survives  : [##################]
+record pointee (was ok): [##################]
+New as a function     : [ABCDEFGHIJKLMNOPQR]
+CONTROL scalar pointee: 1234

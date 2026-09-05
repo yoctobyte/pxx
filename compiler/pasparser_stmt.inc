@@ -6695,7 +6695,15 @@ begin
           ErrorRecover('New needs a pointer variable, not '
                        + TypeKindSpelling(IntToTypeKind(ASTTk[valNode])));
         end;
-        if Syms[idx].PtrElemTk = tyRecord then
+        { A POINTEE THAT IS A NAMED ARRAY TYPE IS SIZED BY THE WHOLE ARRAY, not
+          by its element. `PtrElemTk` for `P1D = ^array[0..17] of Char` is
+          tyChar, so this took ONE byte, the allocator rounded it to 16, and
+          every write past `p^[15]` overran into the next block -- silent,
+          exit 0. The row the pointee came from is on the symbol already.
+          bug-p-new-of-a-pointer-to-an-array-type-allocates-the-element-size }
+        if SymPtrElemArrAi[idx] >= 0 then
+          castPrevTok := ArrTypeByteSize(SymPtrElemArrAi[idx])
+        else if Syms[idx].PtrElemTk = tyRecord then
           castPrevTok := RecSize(Syms[idx].PtrElemRec)
         else
           castPrevTok := TypeSlotSize(Syms[idx].PtrElemTk);

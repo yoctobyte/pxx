@@ -6675,6 +6675,25 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_char_array_3d_row_not_a_string_fail.pas $(TESTTMP)/test_ca3d26 > $(TESTTMP)/test_ca3d.log 2>&1
 	@grep -q 'cannot assign ShortString to Char' $(TESTTMP)/test_ca3d.log \
 	  || { echo 'test_char_array_3d_row_not_a_string_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	@# ...and its SIBLING on the DEREF base, which that arm did not accept until
+	@# the New under-allocation was fixed. Widening a predicate to a new base
+	@# widens every guard inside it to that base too, and the 3-D guard had never
+	@# been exercised through a pointer.
+	! ./$(COMPILER) test/test_char_array_3d_row_through_a_deref_not_a_string_fail.pas $(TESTTMP)/test_ca3dp26 > $(TESTTMP)/test_ca3dp.log 2>&1
+	@grep -q 'cannot assign ShortString to Char' $(TESTTMP)/test_ca3dp.log \
+	  || { echo 'test_char_array_3d_row_through_a_deref_not_a_string_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	./$(COMPILER) test/test_new_of_a_pointer_to_an_array_type.pas $(TESTTMP)/test_newarr26
+	@# .expected is fpc 3.2.2's own output. New sized the block by the pointee's
+	@# ELEMENT kind, so `^array[0..17] of Char` got ONE byte (rounded to 16) and
+	@# writing the array overran into the next block -- silent, exit 0. The rows
+	@# do NOT assert allocator gaps: they assert that a SECOND pointee still
+	@# reads back what was written to it, which is the observable. The record
+	@# pointee row was green before the fix (RecSize already answered for it) and
+	@# is here to say why nothing caught this. Row 4 is `New` as a FUNCTION,
+	@# which sizes off the alias row rather than a symbol -- a second carrier the
+	@# source comment requires to change with the first.
+	@$(TESTTMP)/test_newarr26 | diff -u test/test_new_of_a_pointer_to_an_array_type.expected - \
+	  || { echo 'test_new_of_a_pointer_to_an_array_type: FAIL - New under-allocates an array pointee'; exit 1; }
 	./$(COMPILER) test/test_enum_type_alias_keeps_identity.pas $(TESTTMP)/test_etai26
 	@# .expected is fpc 3.2.2's own output. An enum is an integer KIND plus an id;
 	@# every alias carried the kind and dropped the id, so a variable declared

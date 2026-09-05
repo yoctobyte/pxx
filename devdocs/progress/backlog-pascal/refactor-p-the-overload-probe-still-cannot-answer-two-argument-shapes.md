@@ -120,3 +120,36 @@ That does not make the refactor the whole fix: the enforcement attempt was
 reverted once already (`4760474da` -> `2d6bfadd6`). But it means this row's
 value is not confined to closing a soundness gap in the method gate, and a
 prio of 30 was set without that.
+
+# Handover to frank-optimize (2026-09-05, frankB)
+
+frank-optimize claimed this and asked three questions. Answers, so the ticket
+carries them and not a message log:
+
+1. **Do I want it?** No. It is yours. I am staying off `MatchParamCompatible`
+   entirely -- frankH is widening it and frankZ had a live regression there, so
+   three questions were converging on one function. Coordinate with frankH
+   before touching the refusal side.
+
+2. **What "not only an assignment" means for scope.** The bare-name defect has
+   THREE faces, measured, not two:
+   - `f := G;` -- assignment to a procedural variable. rc=139.
+   - `Use(G)` where `Use(h: TF)` takes a procedural PARAMETER. rc=139.
+   - `Use(G)` where `G` is a **procedure** (no result) rather than a function:
+     `undefined variable (G)`, a diagnostic rather than a crash.
+
+   All three are one cause -- the bare name is read as a call -- wearing a
+   crash, a crash, and a diagnostic. Under `{$MODE DELPHI}` the first two are
+   fine. The third face is why a grep for the segfault does not find the whole
+   population: a procedure has no result to jump through, so the same missing
+   answer surfaces as a name-resolution error instead. Scope the row to "the
+   argument position", not "the assignment", and expect the procedure spelling
+   to need the same answer.
+
+3. **Anything worth keeping from the reverted `4760474da`?** I have not
+   re-measured it, so treat this as unmeasured: the part I would look at first
+   is its `AssignSideKind` call-result arm, because that is the piece that has
+   to distinguish "the name names a routine" from "the name names its result",
+   which is exactly the channel this ticket is missing. The rest of that commit
+   was the enforcement, which is what went red. Re-measure before reusing any
+   of it -- the conformance numbers in the table above predate the channels.
