@@ -159,27 +159,164 @@ stale_binary_hint() {
 # not yet a canary): in a scratch copy of the tree, adding one reference to an
 # absent builtin in lib/rtl/sysutils.pas reproduces the original error shape
 # and exit 1.
+# ONE FIXTURE WAS 1/111th OF THE POPULATION, AND THE SEAM MOVED OFF IT.
+# The control above is real -- injecting an absent builtin into sysutils.pas
+# does reproduce the error and exit 1 -- but injecting a fault into the one
+# file a guard reads cannot reveal that it reads only one file. Measured
+# 2026-09-05: `a623307bd` deleted the RTL's own TMethod in favour of the new
+# System.TMethod builtin, and against pin v403 (`ce63beeeb`, which predates it)
+# 20 of 111 lib/rtl units and the whole of lib/pcl fail with
+# `unknown type: TMethod` -- json, http, streams, re, subprocess, markdown,
+# base64, pathlib, configparser among them, none of which changed. This row
+# reported PASS in 1s. sysutils survives for a reason no one could have picked
+# on purpose: its only mention of TMethod is `PMethod = ^TMethod`, a forward
+# pointer reference, which never forces the type to resolve. The fixture was
+# PHYSICALLY UNABLE to observe the seam it was standing in.
+#
+# So sweep instead of sampling, and discover the list rather than keeping one:
+# compile every ROOT unit (one no other lib/rtl unit `uses`), which pulls in
+# every unit anything depends on. A unit added tomorrow is either a root or is
+# reached from one; nothing here goes stale by a file appearing.
+#
+# COST, measured as wired and not from the prototype: ~18s on a healthy tree
+# (53 roots, -P 8, uncontended) and ~39s when it is failing, against 1s before.
+# That is real, on a ~110s quick gate, and it buys the row an aperture instead
+# of a sample. Three cheaper shapes were measured and rejected: --emit-obj and
+# -O0 save nothing (~440ms/unit either way, and --emit-obj cannot emit a
+# program); a greedy set-cover over the roots removes NONE of them, because a
+# root appears in no closure but its own; and one program that `uses` all 53 at
+# once (5.5s, and it would need no attribution on the healthy path) fails
+# unconditionally today on the two mimic_* units below, so it would fall
+# through to the sweep every run and cost strictly more.
 pinned_rtl_canary() {
   local pin=stable_linux_amd64/default/pinned
-  local src=test/test_uses_sysutils.pas
-  local bin="$LOGDIR/pinned-rtl-canary.bin"
+  local pinabs; pinabs=$(readlink -f "$pin" 2>/dev/null)
+  local work="$LOGDIR/pinned-rtl"
+  local roots="$work/roots.txt" fails="$work/fails.txt"
   [ -x "$pin" ] || { say "gate: (no pinned binary at $pin)"; return 0; }
-  [ -f "$src" ] || { say "gate: (canary fixture $src is gone)"; return 0; }
-  "./$pin" "$src" "$bin" || {
-    echo "^^ the PINNED binary cannot COMPILE the tree's lib/rtl."
-    echo "   An 'undefined variable' naming a lib/rtl unit means a commit added"
-    echo "   a builtin and used it from lib/rtl without a pin: coherent, self-"
-    echo "   hosts, and breaks every \$(PXX_STABLE) build until someone pins."
-    echo "   The change is usually RIGHT and the remedy is a pin, not a revert."
+  [ -d lib/rtl ] || {
+    echo "^^ lib/rtl is not there at all. That is a broken tree, not a"
+    echo "   configuration, and it must not read as the same verdict as"
+    echo "   'no pinned binary'."
     return 1
   }
-  # ...and then RUN it. Near-zero, and it is a different question: the compile
+  mkdir -p "$work"
+
+  LC_ALL=C ls lib/rtl/*.pas | sed 's|.*/||; s|\.pas$||' | LC_ALL=C sort > "$work/all.txt"
+  for f in lib/rtl/*.pas; do
+    sed -n '/^ *uses/I,/;/p' "$f" | tr 'A-Z' 'a-z' | tr ',' '\n' |
+      sed 's/uses//; s/;//; s/[^a-z0-9_]//g' | grep -v '^$'
+  done | LC_ALL=C sort -u > "$work/used.txt"
+  LC_ALL=C comm -23 "$work/all.txt" "$work/used.txt" > "$roots"
+
+  # A sweep that discovered nothing passes every unit it never compiled, and
+  # says PASS in less time than before -- which reads as the tree being fine.
+  # 54 roots today; 20 is far below any real tree and far above a `uses`
+  # parser that has broken. Assert it, and BRANCH on it.
+  local n; n=$(wc -l < "$roots")
+  if [ "$n" -lt 20 ]; then
+    echo "^^ the pinned-RTL sweep discovered only $n root units (expected >= 20)."
+    echo "   This is the DISCOVERY breaking, not lib/rtl shrinking. A sweep with"
+    echo "   no inputs cannot fail, and it reports PASS on all 111 units."
+    return 1
+  fi
+
+  # Positive control, and it is about THIS invocation, not about the tree: a
+  # probe naming a type no compiler has must be REJECTED. If it compiles, the
+  # command below is not reaching a compiler and every unit passes vacuously.
+  printf 'program probe;\nvar x: __pxx_gate_absent_type;\nbegin end.\n' > "$work/control.pas"
+  if "$pinabs" "$work/control.pas" "$work/control.bin" >/dev/null 2>&1; then
+    echo "^^ the canary's own control COMPILED a program naming a type that does"
+    echo "   not exist. The invocation is not compiling anything, so the sweep"
+    echo "   below would report PASS without building a single unit."
+    return 1
+  fi
+
+  # The probe must NOT be named after the unit it tests: a file called
+  # `strutils.pas` is read AS the unit strutils (`expected 'unit' before
+  # 'program'`) and shadows the real one on the search path. All 54 rows
+  # failed identically that way while this was being written.
+  # --threadsafe so the units that genuinely require it (palthread*, cthreads)
+  # compile in the mode they are really built in, rather than being excluded --
+  # an exclusion list is the part that silently stops covering anything.
+  cat > "$work/one.sh" <<'ONE'
+#!/bin/sh
+u=$1; work=$2; pin=$3
+printf 'program probe;\nuses %s;\nbegin end.\n' "$u" > "$work/probe_$u.pas"
+out=$("$pin" --threadsafe -Fulib/rtl "$work/probe_$u.pas" "$work/probe_$u.bin" 2>&1) ||
+  echo "$u :: $(echo "$out" | grep -m1 -i error | cut -c1-100)"
+ONE
+  chmod +x "$work/one.sh"
+  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$pinabs" < "$roots" |
+    LC_ALL=C sort > "$fails"
+
+  # A unit that fails under BOTH compilers is not this seam and never was: it
+  # is ordinary breakage, or a unit no Pascal program can `uses` standalone at
+  # all. Two are exactly that today -- mimic_string and mimic_urllib_request
+  # reach NilPy frontend builtins (`pyvar_is_objtag`) and fail identically
+  # against a compiler built from this very tree. Absolute failure would pin
+  # this row RED forever, after a pin fixes the thing it is watching, and a
+  # gate that cannot pass is not a gate. So ask the question the row actually
+  # means: does the PIN fail where HEAD succeeds. That needs no exclusion list
+  # (the part that rots), it costs nothing on a healthy tree because only
+  # already-failing units are retried, and it sorts the two classes for
+  # whoever reads the log instead of merging them.
+  if [ -s "$fails" ]; then
+    local seam="$work/seam.txt" both="$work/both.txt"
+    : > "$seam"; : > "$both"
+    while IFS= read -r line; do
+      local u="${line%% ::*}"
+      if [ -x compiler/pascal26 ] &&
+         ./compiler/pascal26 --threadsafe -Fulib/rtl \
+             "$work/probe_$u.pas" "$work/head_$u.bin" >/dev/null 2>&1; then
+        echo "$line" >> "$seam"
+      elif [ -x compiler/pascal26 ]; then
+        echo "$line" >> "$both"
+      else
+        # No freshly built compiler to compare against: cannot tell the two
+        # apart, so report every failure as the seam rather than none.
+        echo "$line" >> "$seam"
+      fi
+    done < "$fails"
+
+    if [ -s "$both" ]; then
+      echo "note: $(wc -l < "$both") unit(s) fail under the PIN and under compiler/pascal26 alike."
+      sed 's/^/     /' "$both"
+      echo "   Not the frozen-builtin seam: a compiler built at this tree fails on"
+      echo "   them too (not always the same error). Owner is whoever owns that"
+      echo "   unit, not this row."
+    fi
+
+    if [ -s "$seam" ]; then
+      echo "^^ the PINNED binary cannot COMPILE $(wc -l < "$seam") of $n root units that a"
+      echo "   compiler built from THIS TREE compiles cleanly:"
+      sed 's/^/     /' "$seam"
+      echo "   An 'unknown type' or 'undefined variable' naming a lib/rtl unit means"
+      echo "   a commit added a builtin and used it from lib/rtl without a pin:"
+      echo "   coherent, self-hosts, and breaks every \$(PXX_STABLE) build until"
+      echo "   someone pins. The change is usually RIGHT and the remedy is a pin,"
+      echo "   not a revert."
+      return 1
+    fi
+  fi
+
+  # ...and then RUN one. Near-zero, and it is a different question: the compile
   # answers "does the frozen builtin still satisfy lib/rtl's references", the
   # run answers "does the result work". A pinned RTL that compiles and then
   # dies is just as broken for Track B, and nothing else in the dev loop asks.
   # Reported apart from the compile so triage stays sharp -- a failure here is
   # NOT the frozen-builtin seam.
-  "$bin" >/dev/null 2>&1 || {
+  local src=test/test_uses_sysutils.pas
+  if [ ! -f "$src" ]; then
+    echo "^^ the canary's run fixture $src is gone. It is TRACKED, so absence is"
+    echo "   a broken tree, not a configuration -- see the SKIP note below."
+    return 1
+  fi
+  "$pinabs" "$src" "$work/run.bin" >/dev/null 2>&1 || {
+    echo "^^ the pinned binary failed on the run fixture $src itself."
+    return 1
+  }
+  "$work/run.bin" >/dev/null 2>&1 || {
     echo "^^ the pinned binary COMPILED lib/rtl but the result did not run."
     echo "   That is not the frozen-builtin seam; it is an ordinary runtime"
     echo "   fault in the pinned RTL. Same impact on Track B, different owner."
