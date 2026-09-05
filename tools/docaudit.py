@@ -6,6 +6,11 @@
     tools/docaudit.py cites        only the citation check (hard findings)
     tools/docaudit.py slugs        ticket slugs cited by NAME that exist nowhere
     tools/docaudit.py limits       only the stated-limit scan (advisory)
+    tools/docaudit.py anchors      markdown `#heading` links that resolve to no
+                               heading (defaults to docs/**, not devdocs).
+                               --selftest plants two faults and asserts both
+                               are reported. NOT part of `all` -- see the note
+                               above scan_anchors()
     tools/docaudit.py --dir docs   audit a different tree (e.g. Track D's docs/**)
     tools/docaudit.py targets [--all] compiler/ir.inc ...
                                DERIVED, not matched: for each comment naming
@@ -95,6 +100,7 @@ help. That needs a per-claim command, chosen by whoever knows what the sentence
 means. Do not read a clean `targets` run as coverage of the class.
 """
 import os
+import unicodedata
 import re
 import subprocess
 import sys
@@ -523,6 +529,126 @@ def check_slugs(docdir, skip):
     return len(set(missing))
 
 
+
+# --------------------------------------------------------------------------
+# anchors -- intra-doc heading links, the one citation form `cites` cannot see
+#
+# `cites` checks that a cited FILE exists and that a cited LINE is inside it.
+# A markdown link with a `#fragment` passes both of those while pointing at no
+# heading at all, and it fails SILENTLY: the reader lands at the top of the
+# right page and never learns they were sent somewhere specific.
+#
+# THE SLUG RULE IS NOT OBVIOUS AND GUESSING IT IS THE WHOLE BUG. This
+# reimplements Python-Markdown's `toc` slugify, which is what the site
+# generator uses: NFKD to ascii (so an em dash VANISHES rather than becoming a
+# hyphen), strip everything but word chars, whitespace and hyphen, lowercase,
+# then collapse runs of hyphen-or-space to ONE hyphen. Two traps follow from
+# the last step and both have been written into docs/ by hand:
+#   "A -- B"      -> "a-b",  not "a--b"  (an em dash contributes nothing)
+#   "package: -Fu" -> "...package-fu", not "...package--fu"
+# Anyone hand-writing an anchor doubles the hyphen, because the source text
+# looks like it has two separators. It resolves to one.
+#
+# NOT part of `all`: measured 2026-09-05, devdocs/progress has 96 of 125
+# internal links bad and devdocs/dev 12 of 21, because ticket and handbook
+# prose links freely to paths that are correct relative to the repo root
+# rather than to the citing file. docs/** is at 0 of 224. Folding this into
+# `all` would make the default run permanently red for two trees it was never
+# written for, which is how a real finding gets read as noise.
+# --------------------------------------------------------------------------
+
+MD_LINK = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
+
+
+def heading_slug(text):
+    """Python-Markdown `toc` slugify. See the note above -- do not 'simplify'."""
+    t = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    t = re.sub(r'[^\w\s-]', '', t).strip().lower()
+    return re.sub(r'[-\s]+', '-', t)
+
+
+def _md_files(root):
+    for dirpath, _dirs, files in os.walk(root):
+        for fn in sorted(files):
+            if fn.endswith('.md'):
+                yield os.path.join(dirpath, fn)
+
+
+def _anchor_table(root):
+    table = {}
+    for path in _md_files(root):
+        found = set()
+        for line in open(path, errors='replace'):
+            m = re.match(r'^#{1,6}\s+(.*?)\s*$', line)
+            if m:
+                found.add(heading_slug(m.group(1)))
+        table[os.path.normpath(path)] = found
+    return table
+
+
+def _resolve(target):
+    """A link to a DIRECTORY means that directory's index.md.
+
+    Without this the check reports `../install/#foo` as a dead file and is
+    correct about a path nobody wrote -- an instrument answering a different
+    question. It produced two false findings on its first run.
+    """
+    target = os.path.normpath(target)
+    if os.path.isdir(target):
+        return os.path.normpath(os.path.join(target, 'index.md'))
+    return target
+
+
+def scan_anchors(root, extra=None):
+    """Return (links_checked, [(file, url, why)]). `extra` appends text to the
+    first file scanned and exists only for --selftest."""
+    table = _anchor_table(root)
+    bad, n = [], 0
+    files = list(_md_files(root))
+    for path in files:
+        text = open(path, errors='replace').read()
+        if extra and path == files[0]:
+            text += extra
+        for m in MD_LINK.finditer(text):
+            url = m.group(1)
+            if not url or url.startswith(('http://', 'https://', 'mailto:')):
+                continue
+            n += 1
+            rel = os.path.relpath(path, ROOT)
+            filepart, _, frag = url.partition('#')
+            target = _resolve(os.path.join(os.path.dirname(path), filepart)) \
+                if filepart else os.path.normpath(path)
+            if filepart and not os.path.exists(target):
+                bad.append((rel, url, 'no such file'))
+                continue
+            if frag and frag not in table.get(target, set()):
+                bad.append((rel, url, 'no heading with that slug'))
+    return n, bad
+
+
+def check_anchors(root, selftest=False):
+    n, bad = scan_anchors(root)
+    print("docaudit anchors: %s -- %d internal link(s)" % (os.path.relpath(root, ROOT), n))
+    for rel, url, why in bad:
+        print("   %-40s %s\n       %s" % (rel, url, why))
+    print("   %d broken" % len(bad))
+
+    if selftest:
+        # A GUARD THAT CANNOT FAIL IS NOT A GUARD. Two planted faults, one of
+        # each class, and both must be reported -- a zero census over a clean
+        # tree is otherwise indistinguishable from a scanner that found no
+        # links at all.
+        planted = ('\n[a](#definitely-not-a-heading-anywhere)\n'
+                   '[b](./definitely-not-a-file-anywhere.md)\n')
+        n2, bad2 = scan_anchors(root, extra=planted)
+        caught = len(bad2) - len(bad)
+        print("   selftest: %d planted fault(s) of 2 reported -- instrument is %s"
+              % (caught, 'LIVE' if caught == 2 else 'BROKEN'))
+        if caught != 2:
+            return 1
+    return 1 if bad else 0
+
+
 def main():
     argv = sys.argv[1:]
     docdir = os.path.join(ROOT, 'devdocs/dev')
@@ -543,6 +669,15 @@ def main():
         if len(argv) < 2:
             sys.exit("docaudit comments: name at least one source file")
         sys.exit(check_comments(argv[1:]))
+
+    if what == 'anchors':
+        # Defaults to docs/** rather than devdocs/dev: this check is about the
+        # PUBLISHED site's intra-page links, and the devdocs trees are noisy by
+        # construction (see the note above scan_anchors). `--dir` still works.
+        root = docdir if '--dir' in sys.argv[1:] else os.path.join(ROOT, 'docs')
+        if not os.path.isdir(root):
+            sys.exit("docaudit anchors: no such directory: %s" % root)
+        sys.exit(check_anchors(root, selftest='--selftest' in argv))
 
     if not os.path.isdir(docdir):
         sys.exit("docaudit: no such directory: %s" % docdir)

@@ -9,6 +9,10 @@ PXX implements a traditional Object Pascal type system: ordinals, real numbers,
 strings, enumerations, records, and arrays. Every example on this page compiles
 and runs on the pinned compiler.
 
+This page is the tour. For exact sizes, array strides, record offsets and what
+a `file of T` writes — and which of those you may rely on — see the
+[representation contract](../reference/representation.md).
+
 ## Ordinal types
 
 Integers and the types built on them (`Byte`, `Char`, `Boolean`, enumerations).
@@ -76,6 +80,12 @@ It is one of the few places PXX deliberately parts company with FPC — see
 `string` is a managed, reference-counted, length-prefixed type — it grows
 automatically and frees itself. `Length`, `Copy`, `Pos`, `IntToStr`, and `+`
 concatenation all work on it. This is the default.
+
+`SizeOf(string)` is the pointer width, because the variable is a handle rather
+than the characters. A capacity-bounded `string[N]` is inline and fixed-width
+instead — `N+1` bytes for `N` up to 255, matching FPC exactly. The
+[representation contract](../reference/representation.md#strings) has both,
+including what happens above 255.
 
 There is also an older **frozen** string ABI: a fixed-capacity inline buffer
 instead of a heap allocation, with no reference counting. Select it by
@@ -203,7 +213,10 @@ end;
 
 ## Sets
 
-Sets in PXX represent a collection of values of the same ordinal type (such as bytes, characters, or enumerations). A set is backed internally by a 32-byte bitset, supporting up to 256 elements.
+Sets in PXX represent a collection of values of the same ordinal type (such as bytes, characters, or enumerations). A set is backed internally by a 32-byte bitset, supporting up to 256 elements. The width is 32 bytes whatever the
+declared bounds — see [sets in the representation
+contract](../reference/representation.md#sets) for the bit layout and how it
+lines up with FPC's narrower sets.
 
 ### Set Operations
 
