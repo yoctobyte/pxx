@@ -43,6 +43,20 @@ begin
     PackRecordsVal would have been plausible and wrong. }
 {$A8}
   {$IFOPT A+} Say('A8    : A+ yes'); {$ELSE} Say('A8    : A+ no'); {$ENDIF}
+  { Z is A's counter-example and the reason neither letter predicts the other:
+    both are NUMERIC switches, A is dead and Z is LIVE. $IFOPT Z+ means "the
+    enum minimum size is 4", so it is on by default and OFF once packing is
+    asked for. Measured against fpc 3.2.2 across every spelling, 2026-09-05.
+    Both signs on both settings, so a hardwired answer cannot pass. }
+{$Z1}
+  {$IFOPT Z+} Say('Z1    : Z+ yes'); {$ELSE} Say('Z1    : Z+ no'); {$ENDIF}
+  {$IFOPT Z-} Say('Z1    : Z- yes'); {$ELSE} Say('Z1    : Z- NO'); {$ENDIF}
+{$Z4}
+  {$IFOPT Z+} Say('Z4    : Z+ yes'); {$ELSE} Say('Z4    : Z+ NO'); {$ENDIF}
+  {$IFOPT Z-} Say('Z4    : Z- yes'); {$ELSE} Say('Z4    : Z- no'); {$ENDIF}
+  { the long spelling reaches the same state }
+{$PACKENUM 2}
+  {$IFOPT Z+} Say('PE2   : Z+ yes'); {$ELSE} Say('PE2   : Z+ no'); {$ENDIF}
   { Lower case, which fpc accepts. }
 {$R+}
   {$IFOPT r+} Say('lower : r+ yes'); {$ELSE} Say('lower : r+ NO'); {$ENDIF}

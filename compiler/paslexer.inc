@@ -1807,15 +1807,32 @@ function PasIfOptState(const letter: AnsiString; var isOn: Boolean): Boolean;
   however $A8 was set. Modelling it from PackRecordsVal would have been
   plausible, self-consistent and wrong, and only the probe says so.
 
-  The letters fpc defaults ON that we do not hold -- G, J, X and Z -- still
-  answer False, which is wrong for a compiler that HAS extended syntax. Each
-  needs its own claim about pxx rather than a lookup in fpc's table, so they are
+  Z JOINED THE HELD SET on 2026-09-05, when $PACKENUM was implemented and there
+  was finally a variable to answer from. It is the counter-example to A above,
+  and only a probe separates them -- both are NUMERIC switches, and A is dead
+  while Z is live. Measured, fpc 3.2.2, one probe per spelling:
+
+    (nothing) ON    $Z1 OFF   $Z2 OFF   $Z4 ON   $Z+ ON   $Z- OFF
+    $PACKENUM 1 OFF                     $PACKENUM 4 ON
+
+  so $IFOPT Z+ is exactly "the enum minimum size is 4", i.e. the default width.
+  Reasoning by analogy from A would have left it False forever; reasoning by
+  analogy from "numeric switches are tracked" would have made A wrong. Neither
+  letter predicts the other and the table is the only authority.
+
+  The letters fpc defaults ON that we still do not hold -- G, J and X -- answer
+  False, which is wrong for a compiler that HAS extended syntax. Each needs its
+  own claim about pxx rather than a lookup in fpc's table, so they are
   bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles, not this. }
 begin
   Result := True;
   if CaseEqual(letter, 'r') then isOn := RChecksVal
   else if CaseEqual(letter, 'q') then isOn := QChecksVal
   else if CaseEqual(letter, 'i') then isOn := IChecksVal
+  { Z is the enum minimum size: ON means 4, the default. See the table above --
+    this is a MEASURED mapping, not the obvious reading of a numeric switch, and
+    A one letter away is the same shape with the opposite answer. }
+  else if CaseEqual(letter, 'z') then isOn := (PackEnumVal = 4)
   { $C+ is ASSERTIONS, and ours defaults ON where fpc's defaults off -- a
     decision recorded at AssertionsVal's declaration in defs.inc, because
     matching fpc would turn every existing pxx assertion into dead code

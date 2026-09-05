@@ -3,7 +3,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-summary: "{$IFOPT X+} evaluates to False for EVERY letter -- `cond := False { compiler option switches are not modelled }` in ProcessPasDirective -- so the wrong arm of a conditional compiles, silently, with no diagnostic. The comment is stale: pxx models R, Q, I and C and holds their state in the same procedure; those four are FIXED. What stays open is the letters pxx has no variable for but whose BEHAVIOUR is fixed -- measured against fpc 3.2.2, its IFOPT defaults ON for I, G, J, X and Z, and pxx answers False for all five, so a `{$IFOPT X+}` guarding extended-syntax code takes the else arm on a compiler that HAS extended syntax. Each remaining letter needs its own measured behavioural claim, which is why they are not in the same fix."
+summary: "{$IFOPT X+} answered False for EVERY letter -- so the wrong arm of a conditional compiles, silently, with no diagnostic. R, Q, I and C were fixed first; Z was fixed 2026-09-05 when {$PACKENUM} gave it a variable to answer from ({$IFOPT Z+} is exactly "the enum minimum size is 4", measured across every spelling). WHAT REMAINS is G, J and X: fpc defaults them ON, pxx answers False, so a {$IFOPT X+} guarding extended-syntax code takes the else arm on a compiler that HAS extended syntax. Each remaining letter needs its own measured behavioural claim about pxx -- not a lookup in fpc's table -- which is why they are not one fix. A stays the useful negative: it is numeric and untracked, while Z is numeric and tracked, so neither letter predicts the other."
 ---
 
 # {$IFOPT X+} is hardwired False, so the wrong arm compiles
@@ -45,7 +45,18 @@ default, one for whether an explicit `{$L+}` moves it:
 
 | | default ON | default OFF | not tracked by fpc at all |
 |---|---|---|---|
-| letters | I G J X Z | R Q C B D H M P S T V | A L O |
+| letters | I G J X ~~Z~~ | R Q C B D H M P S T V | A L O |
+
+**Z was closed 2026-09-05** — `{$PACKENUM}` landed and gave the letter a
+variable, so `{$IFOPT Z+}` now answers `PackEnumVal = 4`. Measured across every
+spelling against fpc 3.2.2, both signs, with the dead `A` beside it as the
+control: `(none)` ON, `$Z1` OFF, `$Z2` OFF, `$Z4` ON, `$Z+` ON, `$Z-` OFF,
+`$PACKENUM 1` OFF, `$PACKENUM 4` ON. **A and Z are both NUMERIC switches and
+only a probe separates them** — A is dead and Z is live — so the analogy that
+would have settled either one settles neither. Rows are in
+`test_ifopt_tracks_the_switch_it_names`, whose `.expected` is fpc's own output.
+
+**G, J and X remain**, and they are the ones the table above was really about.
 
 `A` not being tracked is the useful negative: it is a NUMERIC switch, so
 `{$IFOPT A+}` is false however `{$A8}` was set. Modelling it from

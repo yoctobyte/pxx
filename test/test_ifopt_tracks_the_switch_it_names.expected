@@ -9,4 +9,9 @@ I off : I- yes
 C on  : C+ yes
 C off : C+ no
 A8    : A+ no
+Z1    : Z+ no
+Z1    : Z- yes
+Z4    : Z+ yes
+Z4    : Z- no
+PE2   : Z+ no
 lower : r+ yes
