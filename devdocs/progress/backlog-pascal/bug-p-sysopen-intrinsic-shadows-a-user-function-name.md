@@ -56,3 +56,16 @@ standalone program and first tried to declare these three as shims. The actual
 resolution was better — the intrinsics are callable from a standalone program
 *without* declaring them, which is what let the self-test exercise
 `compiler/wasmenc.inc` without including it into `compiler.pas`.
+
+## 2026-09-05 (frankB) — this is the CALL side of a DECLARATION defect
+
+Measured: the call never happens. `procedure Write;` / `procedure SysOpen;` is
+refused at the DECLARATION with `expected name`, so the user name cannot exist
+to be shadowed, and the call-site framing above is downstream of that.
+
+Root cause and the whole cluster — nine spellings, one mechanism, with the
+blast radius enumerated — is
+[[bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names]].
+**Work that one, not this one**: a fix aimed at the call site is aimed at the
+wrong half, and fixing only the declaration would leave a routine that is
+declared and then silently never called, which is worse than today's refusal.
