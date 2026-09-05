@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-09-05
-summary: "`generic TBox<_T>` declaring `type PCell = ^TCell; TCell = record d: _T; end;` and specialized twice compiles the second specialization\'s `n^.d := v` against the FIRST one\'s element type: `cannot assign AnsiString to Integer`, and the message flips direction if the specializations are declared the other way round. The nested RECORD is specialized correctly; only the POINTER\'s pointee is shared. Pre-existing on pin v403, fpc 3.2.2 accepts both orders."
+summary: "MECHANISM LOCATED 2026-09-05 (frankS), at ea4187d4d: the nested RECORD across two specializations WORKS (prints `7 hi`) and only the POINTER to it fails, with the error following declaration order — the first specialization's `PCell` wins and the second reuses it. Cause is pasparser_decl.inc:6984, the tkCaret arm, calling RegisterPtrAlias with the BARE name and never consulting ParsingClassBodyCi, while AddClassLikeType (pasparser_class.inc:350) qualifies the name and calls AddNestedType for a class or record in the same position. Class was fixed, then record; the POINTER arm is the third sibling of that double case and is still flat. HOISTING DOES NOT FIX IT — measured, forcing the pointee to hoist changes nothing, because the collision is on PCell and not on TCell. The fix is an owning-class column on the alias table plus scope-aware lookup; sentinel must be -1 since class 0 is real. Not a one-liner and not attempted: a core registry every type reference reads."
 ---
 
 # Repro
@@ -96,3 +96,72 @@ They are the two-row shape noted in [[feature-pascal-corpus-fpc-testsuite]].
 Both orders of the repro compiling and printing `7 hi`, v2 and v3 unchanged,
 plus tgeneric6/tgeneric8 diffed against fpc OUTPUT rather than scored on an exit
 code, plus `make test` and the self-host fixedpoint.
+
+## Mechanism located — the POINTER arm of a double case already fixed twice (frankS, 2026-09-05)
+
+Measured at `ea4187d4d`, compiler/pascal26 sha `25113fd329a9`
+(`converged after 1 round(s)`). Four probes, and they discriminate:
+
+| probe | result |
+| --- | --- |
+| nested RECORD, two specializations | **BUILDS**, prints `7 hi` |
+| POINTER to that nested record, two specializations | `cannot assign AnsiString to Integer` |
+| same, declaration order swapped | `cannot assign Integer to AnsiString` — **the error follows the order** |
+| ONE specialization only (control) | **BUILDS**, prints `hi` |
+
+The order-flip is the signature: **the first specialization's `PCell` wins and
+the second reuses it.**
+
+### Where
+
+`pasparser_decl.inc:6984`, the `tkCaret` arm of the type-declaration loop:
+
+```pascal
+RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
+```
+
+`tnOff/tnLen` is the **bare** name, and `RegisterPtrAlias` (`symtab.inc:246`)
+never consults `ParsingClassBodyCi`. Compare `AddClassLikeType`
+(`pasparser_class.inc:350`), which for a class or record inside a class body
+registers under the QUALIFIED name when the bare one is taken and calls
+`AddNestedType(ParsingClassBodyCi, tname, Result)` so a bare reference from
+inside the owner's own body still resolves. **A pointer alias gets neither.**
+
+That function's own comment records this being fixed once already: *"ONE
+function, because the class branch had this and the RECORD branch did not ...
+the exact sibling case normalise-dont-special-case is about."* Class was fixed,
+then record. **The pointer arm is the third sibling and it is still flat.**
+
+**Why reading the fixed arms cannot find it** (frankB's rule, and it is exactly
+this shape): a rule spelled per caller fails by a MISSING copy, not a divergent
+one. The class and record paths agree with each other perfectly — they are the
+same function — so diffing them reveals nothing. The instrument is the callee's
+contract, not a comparison of the callers.
+
+### The route that looks obvious and does NOT work
+
+**Hoisting does not fix this, measured.** `pasparser_generic.inc:131` already
+mints per-specialization names (`TDict$Integer$LongInt$TPair`) and its trigger is
+*used as a generic argument*. Making `TCell` a generic argument so it hoists
+changes nothing — the same `cannot assign AnsiString to Integer`. Recorded as a
+negative result because a reader would start there, as I did: the pointer alias
+collides whether or not its pointee is hoisted, because the collision is on
+`PCell`, not on `TCell`.
+
+### The fix, and why it is not a one-liner
+
+The alias table has `AliasUnitIdx` and `AliasDeclImpl` and **no owning-class
+column**. The fix is that column plus a scope-aware lookup — the alias-table twin
+of `AddNestedType`. Two hazards for whoever takes it:
+
+- **Class index 0 is a real class**, so the sentinel must be `-1` and an
+  unwritten row must be loud, never silently "owned by class 0". frankB stored
+  `AliasEnumId` as *id + 1* for exactly this reason after an unwritten row read
+  as *enum 0*.
+- **Every `Register*Alias` that bumps `AliasCount` must set the new column**, and
+  a missing copy is invisible for the reason above. Prefer one choke point over
+  N assignments.
+
+Not attempted here: this is a core registry every type reference reads, so it is
+the destabilising kind that lands incrementally, not at the end of a session.
+The diagnosis is the deliverable.
