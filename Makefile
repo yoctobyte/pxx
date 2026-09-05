@@ -6602,6 +6602,31 @@ test-core: $(COMPILER)
 	  || { echo 'test_typed_const_named_undeclared_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
 	@grep -q 'expected a string or char literal' $(TESTTMP)/test_tcnw.log \
 	  || { echo 'test_typed_const_named_wrongkind_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	./$(COMPILER) test/test_char_array_string_init.pas $(TESTTMP)/test_cascii26
+	@# .expected is fpc 3.2.2's own output, byte for byte -- and the pad bytes are
+	@# #0, not spaces: a terminal renders `[AB\0\0]` exactly like `[AB  ]`, so the
+	@# first oracle read here was wrong until `cat -A` separated them. diff -u on
+	@# the raw bytes is what catches it, which is why this is a diff and not a grep.
+	@# Three CONTROL rows passed before the fix and must keep passing: the two
+	@# single-char element lists (1-D and 2-D), which have always worked, and
+	@# `named T sizeof`, which answered 12 for a 9-byte object at HEAD -- the const
+	@# path was the one declaration path that never merged a named array element's
+	@# dimensions, and there is no row to fill if the compiler does not know the
+	@# row is three chars wide.
+	@$(TESTTMP)/test_cascii26 | diff -u test/test_char_array_string_init.expected - \
+	  || { echo 'test_char_array_string_init: FAIL - a string literal initialising an array of Char'; exit 1; }
+	@# The two NEGATIVE controls, `!` steps whose ERROR TEXT is grepped: a step
+	@# asserting only "it failed" passes when the fix makes it fail for a new and
+	@# worse reason. The N-D row is the load-bearing one -- widening the shorthand
+	@# from 1-D to any char array passes every positive row above, because
+	@# 'abcdef' fills a 2x3 store row-major with the same characters, and the
+	@# DIAGNOSTIC is the only observable that differs.
+	! ./$(COMPILER) test/test_char_array_literal_too_long_fail.pas $(TESTTMP)/test_catl26 > $(TESTTMP)/test_catl.log 2>&1
+	! ./$(COMPILER) test/test_char_array_literal_nd_bare_fail.pas $(TESTTMP)/test_canb26 > $(TESTTMP)/test_canb.log 2>&1
+	@grep -q 'string length is larger than array of char length' $(TESTTMP)/test_catl.log \
+	  || { echo 'test_char_array_literal_too_long_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	@grep -q "expected '('" $(TESTTMP)/test_canb.log \
+	  || { echo 'test_char_array_literal_nd_bare_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --

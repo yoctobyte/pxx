@@ -4419,6 +4419,16 @@ var
   VDNdDimLo      : array[0..MAX_ARR_DIMS-1] of Integer;
   VDNdDimSpan    : array[0..MAX_ARR_DIMS-1] of Integer;
 
+  { Scratch for ArrTypeDimList: a named FIXED array type's dimensions in
+    NORMALISED form -- N entries for an N-D type, one entry for a 1-D one -- so
+    the declaration paths that merge a named array type into an enclosing
+    dimension list never repeat the `NDims >= 2` branch. Global rather than a
+    var parameter because the three callers each keep their own dim list in a
+    differently-named local array, and read this one straight after the call. }
+  ArrDimListCnt  : Integer;
+  ArrDimListLo   : array[0..MAX_ARR_DIMS-1] of Integer;
+  ArrDimListSpan : array[0..MAX_ARR_DIMS-1] of Integer;
+
   KeyStrs  : array[0..MAX_KEYS-1] of AnsiString;
   KeyCount : Integer;
   { The IDENTITY each compiled unit is deduped on, which is not always its name.

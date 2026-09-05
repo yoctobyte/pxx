@@ -1301,6 +1301,39 @@ end;
   parsing — which is what every caller already did, since the alloc immediately
   follows. The VD* descriptor is a global for the same reason and with the same
   rule: fill it, consume it, do not nest. }
+{ A named FIXED array type's dimensions, normalised into ArrDimList* --
+  ArrTypeNDims entries for an N-D type, ONE entry synthesised from ArrTypeLo/Hi
+  for a 1-D one. `array[0..2] of TG` (TG = `array[0..3] of T`) has to lay out
+  exactly like `array[0..2,0..3] of T`; ParseTypeKind cannot do it, because
+  array-type aliases live in the ArrType table and not the scalar alias table,
+  so it resolves TG to its bare base scalar and the element stride collapses.
+
+  Three declaration paths merge a named array type into an enclosing dimension
+  list -- var, type, const -- and this branch had a copy in each of the first
+  two and was simply ABSENT from the third, which is why
+  `const a: array[1..3] of T` reported SizeOf 12 for a 9-byte object, with no
+  diagnostic and a wrong-sized store. A missing copy is what the fourth site
+  looks like when the rule is spelled out per caller rather than named once. }
+procedure ArrTypeDimList(ai: Integer);
+var d: Integer;
+begin
+  if ArrTypeNDims[ai] >= 2 then
+  begin
+    ArrDimListCnt := ArrTypeNDims[ai];
+    for d := 0 to ArrDimListCnt - 1 do
+    begin
+      ArrDimListLo[d]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + d];
+      ArrDimListSpan[d] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + d];
+    end;
+  end
+  else
+  begin
+    ArrDimListCnt     := 1;
+    ArrDimListLo[0]   := ArrTypeLo[ai];
+    ArrDimListSpan[0] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+  end;
+end;
+
 procedure ParseDeclTypeDesc;
 var ai, di, dLo, dHi, flatLen: Integer;
     moreDims, elemResolved: Boolean;
@@ -1493,21 +1526,12 @@ begin
             `array[0..2,0..3] of T` — merge TG's dims into the outer list, like
             the anonymous-nested form. Without this ParseTypeKind drops TG's
             dimension and the element stride collapses to the base type's size. }
-          if ArrTypeNDims[ai] >= 2 then
-          begin
-            for di := 0 to ArrTypeNDims[ai] - 1 do
-            begin
-              if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-              VDNdDimLo[VDNdCnt]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
-              VDNdDimSpan[VDNdCnt] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
-              Inc(VDNdCnt);
-            end;
-          end
-          else
+          ArrTypeDimList(ai);
+          for di := 0 to ArrDimListCnt - 1 do
           begin
             if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-            VDNdDimLo[VDNdCnt]   := ArrTypeLo[ai];
-            VDNdDimSpan[VDNdCnt] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            VDNdDimLo[VDNdCnt]   := ArrDimListLo[di];
+            VDNdDimSpan[VDNdCnt] := ArrDimListSpan[di];
             Inc(VDNdCnt);
           end;
           VDIsArrND := True;
@@ -1957,12 +1981,72 @@ begin
   end;
 end;
 
+{ One ORDINAL element of a flat array store, routed to whichever pending-init
+  table this section is filling. The two tables are the same six columns under
+  two names, and every caller that appends to one has to know which. }
+procedure AppendOrdElemInit(symIdx, elem: Integer; v: Int64; etk: TTypeKind;
+                            localInit: Boolean);
+begin
+  if localInit then
+  begin
+    if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+    LocalInitSym[LocalInitCount]  := symIdx;
+    LocalInitElem[LocalInitCount] := elem;
+    LocalInitFOff[LocalInitCount] := -1;
+    LocalInitKind[LocalInitCount] := 0;
+    LocalInitVal[LocalInitCount]  := v;
+    LocalInitTk[LocalInitCount]   := Ord(etk);
+    Inc(LocalInitCount);
+  end
+  else
+  begin
+    EnsurePendingInitCapacity(PendingInitCount);
+    PendingInitSym[PendingInitCount]  := symIdx;
+    PendingInitElem[PendingInitCount] := elem;
+    PendingInitFOff[PendingInitCount] := -1;
+    PendingInitKind[PendingInitCount] := 0;
+    PendingInitVal[PendingInitCount]  := v;
+    PendingInitTk[PendingInitCount]   := Ord(etk);
+    Inc(PendingInitCount);
+  end;
+end;
+
+{ A string literal standing in for the element list of an `array[..] of Char`:
+  `const c: array[1..4] of Char = 'ABCD'`, and one ROW of a multi-dimensional
+  char array inside a parenthesised list, `('abc', 'def')`. Ordinary Pascal, and
+  the shape `tarray3` and `tforin12` are written in.
+
+  ZERO-PADDED on the right when the literal is shorter, refused when it is
+  longer -- both edges measured against fpc 3.2.2, which is the language's rule
+  here and not a parity chase: a char array is a fixed-width field, so a short
+  literal has a defined remainder and a long one has nowhere to go. The pad is
+  #0 and not a space, and that is worth stating because a terminal renders the
+  two identically: `[AB  ]` on screen was `[AB\0\0]` in the bytes, and only
+  `cat -A` on the oracle's output separated them.
+
+  Emitted as `want` ordinary CHAR element inits rather than as a Kind=1 string
+  span, because the destination is not a string: the flat store holds one Char
+  per element and the emitter's string-literal path would assign a managed
+  string to element zero. }
+procedure SpreadCharLiteral(symIdx, firstElem, want, sOff, sLen: Integer;
+                            localInit: Boolean);
+var k: Integer; ch: Int64;
+begin
+  if sLen > want then Error('string length is larger than array of char length');
+  for k := 0 to want - 1 do
+  begin
+    if k < sLen then ch := Ord(TokChars[sOff + k]) else ch := 0;
+    AppendOrdElemInit(symIdx, firstElem + k, ch, tyChar, localInit);
+  end;
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
     initElem: Integer; initVal: Int64;
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
     initDepth, scOff, scLen: Integer;
+    vNDims, vRowSpan: Integer;   { the declared array's dimension count and INNERMOST span, for a char-array row literal }
     declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
     grpIdx: array[0..MAX_DECL_NAMES-1] of Integer;  { the previous declaration group's symbols }
     grpN: Integer;                                   { ...and how many; 0 before the first }
@@ -2261,6 +2345,12 @@ begin
 	        Continue;
 	      end;
 	      if isDyn then Error('dynamic array initializer not supported');
+	      { How many dimensions the flat store really has -- SymArrNDims is 0 for a
+	        1-D array and >= 2 otherwise -- read here because BOTH initialiser
+	        shapes below need it: the parenthesised loop to tell a char ROW from a
+	        single Char, and the bare-literal arm to refuse an N-D array. }
+	      vNDims := SymArrNDims[idx];
+	      if vNDims < 2 then vNDims := 1;
 	      if CurTok.Kind = tkLParen then
 	      begin
 	        { …or a RECORD var: `var R: TRec = (n: 7; s: 'seven')`. FPC treats a
@@ -2305,6 +2395,22 @@ begin
 	            ParseRecordInitializerInto(idx, Syms[idx].ElemRecName, arrLo + initElem, False);
 	            Eat(tkComma);
 	            Inc(initElem);
+	          end
+	          else if (elemTk = tyChar) and (vNDims >= 2) and (initDepth < vNDims) and
+	                  (CurTok.Kind = tkString) then
+	          begin
+	            { One ROW of a multi-dimensional char array written as a literal --
+	              `var a: array[1..3] of T = ('asd', 'sdf', 'ddf')`, T = array[1..3]
+	              of Char. The const twin carries the reasoning; the guard is the
+	              DEPTH, because at a depth below the last dimension the element at
+	              this position is itself an array. }
+	            vRowSpan := SymArrDimSpan[idx * MAX_ARR_DIMS + vNDims - 1];
+	            if initElem + vRowSpan > (arrHi - arrLo + 1) then
+	              Error('too many array initializer elements');
+	            if not TakeStrInitSpan(scOff, scLen) then
+	              Error('array constant: expected a string or char literal');
+	            SpreadCharLiteral(idx, arrLo + initElem, vRowSpan, scOff, scLen, False);
+	            initElem := initElem + vRowSpan;
 	          end
 	          else if CurTok.Kind = tkLParen then begin Next; Inc(initDepth); end
 	          else if CurTok.Kind = tkRParen then begin Next; Dec(initDepth); end
@@ -2366,6 +2472,21 @@ begin
 	      end
 	      else
 	      begin
+	        { `var c: array[1..4] of Char = 'ABCD'` -- the same literal shorthand the
+	          const spelling takes, and the same 1-D-only rule; FPC accepts a var
+	          initialiser wherever it accepts the typed const. This site answered
+	          `array initializer must be parenthesised` and its sibling one routine
+	          away answered `expected '(' before ...`: two diagnostics, one missing
+	          rule, which is what a double case looks like from the outside.
+	          bug-p-a-char-array-typed-constant-cannot-be-initialised-from-a-string-literal }
+	        if isArr and (elemTk = tyChar) and (vNDims = 1) and
+	           TakeStrInitSpan(scOff, scLen) then
+	        begin
+	          SpreadCharLiteral(idx, arrLo, arrHi - arrLo + 1, scOff, scLen, False);
+	          SkipHintDirectives;
+	          Eat(tkSemicolon);
+	          Continue;
+	        end;
 	        if isArr then Error('array initializer must be parenthesised');
 	        EnsurePendingInitCapacity(PendingInitCount);
 	        if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
@@ -2894,20 +3015,12 @@ begin
         if cAi >= 0 then
         begin
           Next;   { consume the named array type }
-          cnNDims := ArrTypeNDims[cAi];
-          if cnNDims >= 2 then
+          ArrTypeDimList(cAi);
+          cnNDims := ArrDimListCnt;
+          for cDi := 0 to cnNDims - 1 do
           begin
-            for cDi := 0 to cnNDims - 1 do
-            begin
-              cnDimLo[cDi]   := ArrTypeDimLo[cAi * MAX_ARR_DIMS + cDi];
-              cnDimSpan[cDi] := ArrTypeDimSpan[cAi * MAX_ARR_DIMS + cDi];
-            end;
-          end
-          else
-          begin
-            cnNDims := 1;
-            cnDimLo[0]   := ArrTypeLo[cAi];
-            cnDimSpan[0] := ArrTypeHi[cAi] - ArrTypeLo[cAi] + 1;
+            cnDimLo[cDi]   := ArrDimListLo[cDi];
+            cnDimSpan[cDi] := ArrDimListSpan[cDi];
           end;
           cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
           LastTypeRecId := ArrTypeElemRec[cAi];
@@ -2929,7 +3042,36 @@ begin
         until not Eat(tkComma);
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
-        cElemTk := ParseTypeKind;
+        { ...including a named FIXED array as the ELEMENT
+          (`const a: array[1..3] of T`, T = `array[1..3] of Char`), which merges
+          T's dimensions onto this list exactly as the var and type paths do.
+          This site went straight to ParseTypeKind, so T resolved to its bare
+          base scalar: the const declared 3 elements of the base type's size
+          instead of 9 chars -- SizeOf answered 12 against FPC's 9, with no
+          diagnostic, and the store was both wrong-sized and wrong-strided. }
+        cAi := -1;
+        if CurTok.Kind = tkIdent then
+        begin
+          cAi := FindArrayType(CurTok.SVal);
+          if (cAi >= 0) and ArrTypeIsDyn[cAi] then cAi := -1;
+        end;
+        if cAi >= 0 then
+        begin
+          ArrTypeDimList(cAi);
+          for cDi := 0 to ArrDimListCnt - 1 do
+          begin
+            if cnNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+            cnDimLo[cnNDims]   := ArrDimListLo[cDi];
+            cnDimSpan[cnNDims] := ArrDimListSpan[cDi];
+            Inc(cnNDims);
+          end;
+          cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
+          LastTypeRecId := ArrTypeElemRec[cAi];
+          LoadPointeeFromArrType(cAi);
+          Next;   { consume the named array type }
+        end
+        else
+          cElemTk := ParseTypeKind;
         end;
         if cnNDims = 1 then
         begin
@@ -2965,8 +3107,23 @@ begin
         { Nested-paren initializer flattened in row-major encounter order. A 1-D
           array is one paren level; an N-D one nests one level per dimension, but
           the flat store fills in order regardless of nesting depth. }
-        Expect(tkLParen, '(');
         cFirstPI := PendingInitCount;
+        { `const c: array[1..4] of Char = 'ABCD'` -- a string literal standing in
+          for the whole element list. ONE-DIMENSIONAL only, deliberately: FPC
+          refuses the bare literal for an N-D array (`Syntax error, "(" expected`)
+          and so do we, for free, by falling through to the Expect below. A named
+          untyped string const is accepted on the same footing as the literal,
+          via TakeStrInitSpan -- the two are one span by then.
+          bug-p-a-char-array-typed-constant-cannot-be-initialised-from-a-string-literal }
+        if (cElemTk = tyChar) and (cnNDims = 1) and (CurTok.Kind <> tkLParen) and
+           TakeStrInitSpan(scOff, scLen) then
+        begin
+          SpreadCharLiteral(cIdx, cLo, cFlatLen, scOff, scLen, isLocalConst);
+          cElem := cFlatLen;
+        end
+        else
+        begin
+        Expect(tkLParen, '(');
         cDepth := 1; cElem := 0;
         while cDepth > 0 do
         begin
@@ -2990,6 +3147,28 @@ begin
             ParseRecordInitializerInto(cIdx, Syms[cIdx].ElemRecName, cLo + cElem, isLocalConst);
             Eat(tkComma);
             Inc(cElem);
+          end
+          else if (cElemTk = tyChar) and (cnNDims >= 2) and (cDepth < cnNDims) and
+                  (CurTok.Kind = tkString) then
+          begin
+            { One ROW of a multi-dimensional char array written as a literal:
+              `const c: array[1..2,1..3] of Char = ('abc', 'def')`, and the same
+              thing spelled `array[1..2] of T` with `T = array[1..3] of Char`,
+              which flattens to exactly this. The guard is the DEPTH, not the
+              token: at a depth below the last dimension the element at this
+              position is itself an array, so a literal fills a row; at the
+              innermost depth it is a single Char and the ordinal path below is
+              right. Without it the literal was counted as ONE element against
+              an array whose elements are arrays, and the diagnostic named the
+              COUNT -- which was correct -- while the question was the element
+              TYPE. }
+            if cElem + cnDimSpan[cnNDims - 1] > cFlatLen then
+              Error('too many array constant elements');
+            if not TakeStrInitSpan(scOff, scLen) then
+              Error('array constant: expected a string or char literal');
+            SpreadCharLiteral(cIdx, cLo + cElem, cnDimSpan[cnNDims - 1],
+                              scOff, scLen, isLocalConst);
+            cElem := cElem + cnDimSpan[cnNDims - 1];
           end
           else if CurTok.Kind = tkLParen then begin Next; Inc(cDepth); end
           else if CurTok.Kind = tkRParen then begin Next; Dec(cDepth); end
@@ -3172,6 +3351,7 @@ begin
             end;
             Inc(cElem);
           end;
+        end;
         end;
         if cElem <> cFlatLen then Error('wrong number of array constant elements');
         { The whole extent is now recorded as one pending store per element. If
@@ -7204,21 +7384,12 @@ begin
           else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
           begin
             aElemStrCap := ArrTypeElemStrCap[fAi];
-            if ArrTypeNDims[fAi] >= 2 then
-            begin
-              for tdi := 0 to ArrTypeNDims[fAi] - 1 do
-              begin
-                if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-                tdDimLo[tdCnt]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
-                tdDimSpan[tdCnt] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
-                Inc(tdCnt);
-              end;
-            end
-            else
+            ArrTypeDimList(fAi);
+            for tdi := 0 to ArrDimListCnt - 1 do
             begin
               if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-              tdDimLo[tdCnt]   := ArrTypeLo[fAi];
-              tdDimSpan[tdCnt] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+              tdDimLo[tdCnt]   := ArrDimListLo[tdi];
+              tdDimSpan[tdCnt] := ArrDimListSpan[tdi];
               Inc(tdCnt);
             end;
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
