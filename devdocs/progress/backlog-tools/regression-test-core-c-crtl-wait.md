@@ -94,3 +94,6 @@ are: fingerprint the toolchain (T, the umbrella ticket), upgrade seven's
 emulators (root on seven -> **the owner**), or skip it as a host capability the
 way `test-core#1058` is skipped for RDRAND — noting that RDRAND skips a JOB and
 this is one ROW inside one, which is the part wanting T's judgement.
+
+## Log
+- 2026-09-05 — the seven watcher saw `test-core#src:test/c_crtl_wait.c` GREEN at 7867c5481c01 (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
