@@ -442,6 +442,64 @@ begin
   end;
 end;
 
+procedure PxxLibAddUnitAlias(const mpath, arg: AnsiString; lineNo: Integer);
+{ `unitalias System.Classes=classes`. See the design note in defs.inc.
+
+  The dotted spelling is stored lowercased because that is the form ParseUsesUnit
+  compares (`lo`); the TARGET keeps the manifest author's spelling, since it is
+  handed on to a case-insensitive file lookup and to the unit-name check, and
+  echoing back what they wrote makes a typo legible in a diagnostic. }
+var i, eq: Integer; lhs, rhs: AnsiString;
+begin
+  eq := 0;
+  for i := 1 to Length(arg) do
+    if (arg[i] = '=') and (eq = 0) then eq := i;
+  if (eq < 2) or (eq >= Length(arg)) then
+  begin
+    WriteLn(mpath, ':', lineNo,
+            ': warning: `unitalias` wants `Dotted.Name=unit` — ignored');
+    Exit;
+  end;
+  lhs := LowerCase(Copy(arg, 1, eq - 1));
+  rhs := Copy(arg, eq + 1, Length(arg) - eq);
+  while (Length(lhs) > 0) and (lhs[Length(lhs)] = ' ') do lhs := Copy(lhs, 1, Length(lhs) - 1);
+  while (Length(rhs) > 0) and (rhs[1] = ' ') do rhs := Copy(rhs, 2, Length(rhs) - 1);
+  if (Length(lhs) = 0) or (Length(rhs) = 0) then Exit;
+  { Already registered by an earlier read of this same manifest — PxxLibApply
+    runs once per unit, so this is the common case, not an error. }
+  for i := 0 to PxxUnitAliasCount - 1 do
+    if (PxxUnitAliasMan[i] = mpath) and (PxxUnitAliasFrom[i] = lhs) then Exit;
+  if PxxUnitAliasCount >= MAX_UNIT_ALIAS then
+  begin
+    WriteLn(mpath, ':', lineNo,
+            ': warning: too many `unitalias` rows — ignored');
+    Exit;
+  end;
+  PxxUnitAliasMan[PxxUnitAliasCount] := mpath;
+  PxxUnitAliasFrom[PxxUnitAliasCount] := lhs;
+  PxxUnitAliasTo[PxxUnitAliasCount] := rhs;
+  Inc(PxxUnitAliasCount);
+end;
+
+function PxxUnitAliasFor(const dir, lo: AnsiString): AnsiString;
+{ The alias for `lo` declared by the nearest manifest above `dir`, or '' when
+  there is none. Asks PxxLibFindManifest, which is cached, so the miss — every
+  RTL unit, every user unit — costs one string compare per registered row and
+  usually zero rows. }
+var man: AnsiString; i: Integer;
+begin
+  PxxUnitAliasFor := '';
+  if PxxUnitAliasCount = 0 then Exit;
+  man := PxxLibFindManifest(dir);
+  if Length(man) = 0 then Exit;
+  for i := 0 to PxxUnitAliasCount - 1 do
+    if (PxxUnitAliasMan[i] = man) and (PxxUnitAliasFrom[i] = lo) then
+    begin
+      PxxUnitAliasFor := PxxUnitAliasTo[i];
+      Exit;
+    end;
+end;
+
 procedure PxxLibApplyLine(const mpath, line: AnsiString; lineNo: Integer);
 { `directive argument`, '#' or ';' comments to end of line. Same shape as
   PxxCfgApplyLine, and deliberately NOT shared with it: that one appends a '/'
@@ -480,6 +538,8 @@ begin
     { PasUndefine refuses to undefine PXX, which is what stops a manifest from
       making a library believe it is being compiled by something else. }
     PasUndefine(arg)
+  else if word_ = 'unitalias' then
+    PxxLibAddUnitAlias(mpath, arg, lineNo)
   else if word_ = 'mode' then
   begin
     { Exactly what {$mode} does in source, and for the same reason NestedComments
@@ -491,7 +551,7 @@ begin
   end
   else
     WriteLn(mpath, ':', lineNo, ': warning: unknown directive `', word_,
-            '` — this pxx knows define/undef/mode');
+            '` — this pxx knows define/undef/mode/unitalias');
 end;
 
 procedure PxxLibApply(const dir: AnsiString);

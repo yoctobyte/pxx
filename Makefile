@@ -11473,9 +11473,29 @@ test-core: $(COMPILER)
 	# The manifest also carries an unknown directive on purpose: it must warn and
 	# let the compile continue, because a manifest is read by a binary its author
 	# did not build. feature-dynamic-include-paths-config
-	./$(COMPILER) -dPROGDEF -Futest/libmanifest/inner -Futest/libmanifest_sibling test/test_libmanifest.pas $(TESTTMP)/test_libmanifest26 >$(TESTTMP)/test_libmanifest.warn 2>&1
+	./$(COMPILER) -dPROGDEF -Futest/libmanifest/inner -Futest/libmanifest -Futest/libmanifest_sibling test/test_libmanifest.pas $(TESTTMP)/test_libmanifest26 >$(TESTTMP)/test_libmanifest.warn 2>&1
 	grep -q "unknown directive .notadirective" $(TESTTMP)/test_libmanifest.warn
-	tools/expect_same.sh test_libmanifest26 "$$($(TESTTMP)/test_libmanifest26)" "$$(printf 'lib: manifest no-progdef delphi-ok\nsib: NO-manifest progdef\nprog: NO-manifest progdef')"
+	tools/expect_same.sh test_libmanifest26 "$$($(TESTTMP)/test_libmanifest26)" "$$(printf 'lib: manifest no-progdef delphi-ok alias-ok\nsib: NO-manifest progdef\nprog: NO-manifest progdef')"
+	# `alias-ok` is the manifest's fourth directive: `unitalias Scoped.Alias=
+	# libmanifest_alias`, Delphi's dotted unit-scope spelling. The library unit
+	# writes `uses Scoped.Alias` one directory BELOW the manifest, so this row
+	# also covers the nearest-ANCESTOR walk for aliases and not only for defines.
+	#
+	# TWO NEGATIVE ROWS, and they fail for DIFFERENT reasons on purpose. The
+	# first says the alias is SCOPED: the identical `uses Scoped.Alias` from a
+	# program in test/, outside the manifest tree, must not resolve -- otherwise
+	# one vendored library's alias would reach every other compilation while
+	# every positive row still passed. The second says the alias is a TABLE and
+	# not "strip any dotted prefix": a file INSIDE the tree, which does see the
+	# manifest, asks for a dotted name the manifest has no row for and must
+	# still fail. A prefix strip would resolve it to `nosuchrow` and bind
+	# whatever the search path held -- a wrong unit rather than a diagnostic,
+	# which is the failure shape this feature is written to avoid.
+	# feature-p-resolve-delphi-dotted-unit-scope-names
+	! ./$(COMPILER) -Futest/libmanifest test/refuse/unitalias_out_of_scope.pas $(TESTTMP)/unitalias_oos26 > $(TESTTMP)/unitalias_oos.log 2>&1
+	grep -q "unit source not found: scoped.alias" $(TESTTMP)/unitalias_oos.log
+	! ./$(COMPILER) -Futest/libmanifest test/libmanifest/unitalias_no_row.pas $(TESTTMP)/unitalias_norow26 > $(TESTTMP)/unitalias_norow.log 2>&1
+	grep -q "unit source not found: scoped.nosuchrow" $(TESTTMP)/unitalias_norow.log
 	# `.member` on an ARRAY ELEMENT whose type is not a record. The fall-through
 	# built a field access at offset 0 and read the element's own bytes:
 	# a[0].NoSuchMember COMPILED and printed a pointer as an integer, and

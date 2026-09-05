@@ -3973,6 +3973,7 @@ var
   pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
   savedNestedComments, savedDelphiMode, savedUnitImplCU: Boolean;
+  unitAlias: AnsiString;   { pxxlib.cfg `unitalias` answer for a dotted name }
   unitNeedsText: Boolean;
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
@@ -3995,6 +3996,22 @@ begin
     cName := GetFileBaseName(name)
   else
     cName := name;
+  { Delphi dotted unit-scope names: `uses System.Classes` is `classes` when the
+    importing unit's pxxlib.cfg says so. Applied HERE, before anything records
+    an identity, so `System.Classes` and `Classes` dedupe as ONE compiled unit
+    rather than two — which they are. A dotted name with no alias falls straight
+    through to the existing chain and still fails with its own spelling in the
+    message, so nothing about a plain misspelling changes.
+    feature-p-resolve-delphi-dotted-unit-scope-names }
+  if not isPath then
+  begin
+    unitAlias := PxxUnitAliasFor(CurUnitDir, lo);
+    if Length(unitAlias) > 0 then
+    begin
+      lo := LowerCase(unitAlias);
+      cName := unitAlias;
+    end;
+  end;
   { sysutils/baseunix/unix: FPC RTL units that PXX programs historically `uses`
     purely to satisfy FPC source while relying on builtins. Load a real
     lib/rtl/<name> source if one exists (the canonical home for the conversion

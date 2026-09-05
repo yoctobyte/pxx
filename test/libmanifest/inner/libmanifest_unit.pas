@@ -5,6 +5,13 @@ interface
 function LibSees: AnsiString;
 implementation
 
+{ Delphi dotted unit-scope name. There is no unit called `Scoped.Alias`; the
+  manifest ONE DIRECTORY UP maps it to libmanifest_alias, so this line also
+  proves the alias walk is nearest-ANCESTOR rather than same-directory-only.
+  The program that uses this unit cannot spell it this way — asserted in
+  test/refuse/unitalias_out_of_scope.pas. }
+uses Scoped.Alias;
+
 type TIntFn = function(x: Integer): Integer;
 
 function Double_(x: Integer): Integer;
@@ -37,5 +44,6 @@ begin
 {$endif}
   if ModeDelphiWorks = 42 then Result := Result + ' delphi-ok'
   else Result := Result + ' DELPHI-BAD';
+  Result := Result + ' ' + AliasSees;
 end;
 end.

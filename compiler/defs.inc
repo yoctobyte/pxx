@@ -231,6 +231,7 @@ const
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
   MAX_PXXLIB_CACHE   = 64;   { directories remembered by the pxxlib.cfg walk }
+  MAX_UNIT_ALIAS     = 64;   { `unitalias` rows across all pxxlib.cfg manifests }
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
   MAX_DIRENT         = 4096;  { entries one PxxListDir scan reports; lib/rtl is 109 }
   { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
@@ -6369,6 +6370,35 @@ var
   PxxLibCacheDir  : array[0..MAX_PXXLIB_CACHE-1] of AnsiString;
   PxxLibCacheMan  : array[0..MAX_PXXLIB_CACHE-1] of AnsiString;  { '' = no manifest above it }
   PxxLibCacheCount: Integer;
+
+{ ===== `unitalias` — Delphi dotted unit-scope names ==========================
+
+  `uses System.Classes` names the unit our tree calls `classes`. Delphi resolves
+  the dotted spelling through unit SCOPE NAMES; fpc 3.2.2 does not (measured:
+  `Can't find unit System.SysUtils`, and neither -Ua nor -FN helps), so this is
+  reach into the Delphi half of the real-world corpus rather than FPC parity.
+
+  A row is `unitalias System.Classes=classes` in a pxxlib.cfg, and it is
+  DELIBERATELY AN EXPLICIT TABLE rather than "strip any dotted prefix". Stripping
+  would silently merge two units a Delphi program keeps apart, and the symptom
+  would be a wrong unit rather than a diagnostic — the failure shape this repo
+  is least able to see. The table also documents, per corpus target, exactly
+  which mappings that target needed.
+
+  SCOPED BY THE MANIFEST THAT DECLARED IT, not globally: a row is honoured only
+  while resolving a `uses` written in a unit whose own nearest manifest is that
+  same file. That is the same rule the define/undef/mode directives already
+  follow — the scope follows the unit being compiled — and it needs no unwind,
+  because the manifest path is stored alongside the row instead of the table
+  being saved and restored per unit. Two vendored libraries can therefore map
+  the same dotted name to different units without seeing each other's answer.
+
+  A row is registered once. PxxLibApply runs per unit, so the same manifest is
+  re-read many times and a duplicate row is a no-op rather than a leak. }
+  PxxUnitAliasMan  : array[0..MAX_UNIT_ALIAS-1] of AnsiString;  { manifest that declared it }
+  PxxUnitAliasFrom : array[0..MAX_UNIT_ALIAS-1] of AnsiString;  { lowercased dotted spelling }
+  PxxUnitAliasTo   : array[0..MAX_UNIT_ALIAS-1] of AnsiString;  { the unit name to resolve }
+  PxxUnitAliasCount: Integer;
 
 { PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
   source drifts from the real probes, and a drifted list is worse than none.
