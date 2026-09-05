@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: "frank-optimize"
 created: 2026-09-05
-summary: "The overload probe now fills the seven argument-match channels (five, then MatchArgStrElemTk and MatchArgPtrElemTk on 2026-09-05 -- read FillMatchArgChannelsAt's list, not any number written down) and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak."
+summary: "ROW 2's CITATION IS FALSE AND THE 7/7 -> 0/7 IT EXPLAINED IS NOW UNEXPLAINED, OWNER NONE. `inherited Sort(ItemPtrCompare)` is not in fgl -- real fgl.pp is {$mode objfpc} and writes `@ItemPtrCompare` at all three sites (1051/1172/1297), both real shapes compile and match the oracle, and FPC refuses the bare spelling in objfpc anyway. The construct underneath WAS real and was a different bug -- the name never resolved on the method path, one cell of five, fixed in 8389db919 -- so row 2 is closed as a blocker but tyPointer-against-a-procedural-parameter is untested for a widened gate. Row 1 (generic type parameter, tyUnknown at the declaration) stands. AND THIS TICKET'"'"'S GATE CANNOT FAIL ON THIS BOX: test/pascal-conformance/ has zero .pas files, library_candidates/ is empty, and the harness prints SKIP and exits 0 -- on precisely the axis (seven conformance programs, tgeneric9) the widening broke last time. fgl 7/7 and quick are the axis that did NOT break and are not a substitute."
 ---
 
 # The residual from the channel refactor
@@ -266,3 +266,40 @@ running the OLD binary on an input that should have broken it showed the path
 is intercepted by a builtin and never executes under a self-hosted pxx. Before
 claiming any of these eight arms is covered, make the current compiler FAIL on
 it first.
+
+
+## The gate cannot fail — stated in CLAUDE.md's own words, at frankB's suggestion
+
+**"A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS PASS."** That is this
+ticket's Gate section today, exactly:
+
+- `test/pascal-conformance/` contains `pxx.skip` (166 lines) and **zero `.pas`
+  files**.
+- `library_candidates/` is **empty**; `/usr/share/fpcsrc/3.2.2/tests/` does not
+  exist. The suite is fetched (`tools/install_lib_candidates.sh`), not vendored.
+- `tools/run_pascal_conformance.sh` prints SKIP and **exits 0** when the suite
+  is absent.
+
+So the conformance half of the gate returns success without having run, on the
+one axis the widening is known to have broken — the parent attributed row 1 to
+*seven conformance programs and tgeneric9*. Anyone reading a green here would
+be reading a guard that cannot come out false.
+
+**fgl 7/7 and `testmgr --tier quick` are NOT a substitute and must not be
+reported as one.** They are the axis that did not break last time. Quoting two
+greens taken where the failure was never going to appear is corroboration only
+as wide as the layer it was taken at.
+
+**If the widening is landed, it must be landed saying which axis is unmeasured**
+and that the number required is unobtainable on this box — not by reporting the
+two greens that are obtainable.
+
+## Unowned residual: what actually took the fgl rung 7/7 -> 0/7
+
+Row 2 was the stated explanation and row 2 does not exist in fgl. So the
+regression the parent measured under a naive `TypesCompatible` gate is
+**unexplained, not explained**, and nothing currently owns finding out. It may
+be row 1, it may be a shape nobody has named, and it may be stale — the number
+predates the channels and predates `5dbd56a3c`. Whoever attempts the widening
+inherits this question and should expect the rung to move for a reason not
+written down anywhere.
