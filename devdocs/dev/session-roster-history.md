@@ -25935,3 +25935,87 @@ compilers** — the instrument-under-measurement rule, applied pre-emptively.
 Unsettled and stated in the sentence rather than buried: `networking.md`'s
 *"OpenSSL backend is x86-64 only"* is **unverified, not confirmed** — settling
 it needs a TLS handshake on a cross target, not a compile.
+
+## CLAUDE.md ITSELF WENT STALE, AND THIS SEAT RELAYED THE STALE RULE ALL EVENING
+
+CLAUDE.md: *"GATE BEFORE YOU COMMIT, NOT AFTER. `gate.sh quick`'s FPC seed
+canary only runs while `compiler/**` has UNCOMMITTED changes; on a clean tree it
+prints `SKIP` and you get no FPC coverage at all."*
+
+**`tools/gate.sh` has not behaved that way for some time.** The canary arms
+against the **merge-base**, not against HEAD:
+
+```
+seed_base=$(git merge-base origin/master HEAD)
+if   ! git diff --quiet "$seed_base" -- compiler/          # committed-but-unpushed ARMS
+elif [ -z "$seed_green" ] || ! git cat-file -e ...         # no green seed recorded ARMS
+elif ! git diff --quiet "$seed_green" HEAD -- compiler/    # compiler/ moved since ARMS
+```
+
+Its own comment: *"ARMED AGAINST THE MERGE-BASE, not against HEAD."* And an
+adjacent check states the verdict in the source, unprompted: **"CLAUDE.md's rule
+that quick's canary only fires on an UNCOMMITTED tree is a footgun worth not
+copying."** The divergence is deliberate and documented **in the code**; the rule
+did not follow the fix.
+
+**How it surfaced is the whole point: nobody went looking.** frankS predicted
+its clean-tree gate would SKIP the canary and therefore hedged its own green as
+narrower than it looked. It then observed `PASS FPC seed canary (concurrent)`
+with **0 SKIPs**, and — instead of quietly dropping the caveat — reported that
+its own prediction had failed **in the optimistic direction**, explicitly
+refusing to assert which of the two explanations was true. This seat then read
+the source. **Two instruments failing differently: a live observation and a
+source read.** Neither settles it alone — the source could be a version not
+running, the observation could have another cause.
+
+(frankS's run armed on the third branch: a clean tree, but it had just pulled
+the revert plus three other `compiler/`-touching commits, so `compiler/` had
+moved past its last green seed.)
+
+**This seat's error, and it is the largest of the evening.** I relayed *"gate
+before you commit or you get no FPC coverage"* several times, from CLAUDE.md,
+without ever checking it against the code — the same defect I had been
+correcting in others all night, committed against the one document nobody
+re-derives.
+
+**It is a FALSE CONSTRAINT, not a false safety**, which is why it survived: it
+makes people gate *more* carefully than needed, so nothing breaks and nothing
+complains. The costs are quiet — fleet-wide sequencing friction, and it made
+frankS publish a pessimistic caveat about a real green and then retract it.
+
+**The general form, and CLAUDE.md is both the warner and the subject: a stale
+imperative is obeyed by tooling while false in the world.** The file every
+session loads at startup, cannot re-derive, and is told takes precedence over
+every other document, is **structurally the worst place for a stale rule** —
+correctness there is enforced by nothing, and its authority converts an
+out-of-date sentence into fleet behaviour.
+
+**Not edited by this seat, deliberately.** Its precedence rule makes an edit
+consequential for every lane, and the coordinator rewriting the rules file on
+its own reading — however well measured — is not a call this seat should make.
+Routed to frankuser with both options named: correct the sentence to describe
+merge-base arming, or **delete the "gate before you commit" instruction
+entirely**, since the canary was its whole justification. The second is a
+behaviour change for every lane and belongs to frankuser or the owner.
+
+### An environment can invert a ticket's ADVICE while its finding stands
+
+`bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it` (p45): central
+claim intact — `test-esp-bare` and `test-esp-softfloat` are in **zero** tiers
+and no script, only `test-xtensa` is enrolled. Its **design advice** rests on a
+count taken on a box **without** `~/.espressif`: *"enrolling this target gates 2
+real rows and prints 24 skips, so maybe split the 2 hosted rows out."*
+
+**This box has both Espressif qemu-system builds** (`esp_develop_9.2.2_20250817`,
+xtensa and riscv32), so the target gates **27** assertions here, and
+`test-esp-softfloat` another **24**. **Fifty-one assertions across two targets
+that no gate or sweep has ever executed, on the one machine that can execute
+them.** Splitting out "the 2 unconditional rows" solves a problem this box does
+not have.
+
+**A finding travels; a recommendation derived from a local count does not** —
+and the two sit in the same ticket in the same voice. frankS is running
+`test-esp-bare` now, apparently for the first time ever, with the guardrail
+lifted autonomously (a target in no tier is exactly that case) and deliberately
+**not** concurrent with its gate, because `ESP_RUN_TIMEOUT=8` under contention
+produces timeouts wearing the shape of codegen defects.
