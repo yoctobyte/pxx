@@ -1,0 +1,7 @@
+store  comma spelling : [hi]
+store  of-array spell : [hi]
+store  named elem type: [hi]
+load   into a string  : [ghijkl]
+load   through a field: [MNOPQR]
+compare row to a lit  : TRUE
+CONTROL 3-D sub-array : [~]

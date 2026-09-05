@@ -6359,10 +6359,18 @@ function ASTCharArrayCap(node: Integer): Integer;
   re-deriving the layout here -- IsNodeArray is the sibling predicate and asks
   exactly these three, for exactly this reason (its own header names
   `cannot assign ShortString to Char` as one of the four faces of one wrong
-  answer). Multi-dimensional stays -1 in every shape: `array[0..2] of
-  array[0..15] of Char` is not a flat string and the row extent is not the
-  capacity. bug-p-a-char-array-is-not-a-string-in-any-direction }
-var sym, rec, ec, lo, flat: Integer; fld: AnsiString;
+  answer).
+
+  FOUR shapes now. A multi-dimensional array is still not a flat string in the
+  IDENT, FIELD and DEREF arms -- the WHOLE array is not one -- but a PARTIAL
+  index of it names a row, and a row of Char is. That fourth arm is below and it
+  is the one that had a silent face: the store direction refused loudly
+  (`cannot assign ShortString to Char`) while the LOAD direction quietly read
+  one character, so `s := a[0]` gave `x` where fpc gives `xyz!`, exit 0.
+  bug-p-a-char-array-is-not-a-string-in-any-direction
+  bug-p-a-char-array-row-of-a-2d-array-is-not-a-string }
+var sym, rec, ec, lo, flat, rowCnt, rowRec: Integer; fld: AnsiString;
+    rowTk: TTypeKind;
 begin
   Result := -1;
   if (node < 0) or (node >= ASTNodeCount) then Exit;
@@ -6405,6 +6413,53 @@ begin
     if flat <= 0 then Exit;
     if ec <> flat then Exit;               { multi-dimensional pointee }
     Result := flat;
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    { A PARTIAL N-D subscript -- `a[0]` on `array[0..2, 0..15] of Char`, and the
+      `array[0..2] of array[0..15] of Char` spelling, which flattens to the same
+      store. It names a whole ROW, and a row of Char IS a string.
+
+      The FOURTH shape, and the one the parent fix deliberately left out because
+      the extent is not a single recorded number the way Syms[].ArrLen,
+      RecFieldArrLen and DerefPtrArrayInfo's flatCount are. It is not derived
+      here either: NDRowSourceInfo already answers `how many elements does this
+      partial index name, and of what` -- it is the reader ASTNDRowSubs exists
+      for, and it walks IDENT, FIELD and DEREF bases, so this arm inherits all
+      three without a fifth copy of the layout.
+
+      EXACTLY ONE DIMENSION MUST REMAIN. `a[0]` on a 3-D array names a 2-D
+      sub-array, and fpc refuses a string there (`got "Constant String" expected
+      "Array[0..1] Of Array[0..3] Of Char"`); NDRowSourceInfo would happily
+      return the PRODUCT of the trailing dims, which is a plausible number and
+      the wrong one -- a capacity that spans rows is a buffer write past the row
+      in the store direction, which is the risk the parent fix refused to guess
+      at. The subscript count is what separates them.
+
+      Addressing needed nothing for a VARIABLE or a FIELD base:
+      BuildPartialNDRowIndex already scales the leading subscript to the row's
+      first-element flat index, so `@a[1]` was the row base at HEAD -- measured,
+      not assumed. What was missing was only the ANSWER to this question, which
+      is why both directions were broken at once and only one of them loudly.
+
+      A DEREF base is EXCLUDED, and deliberately, though NDRowSourceInfo walks
+      it: measured, `q^[1]` over `^array[0..2, 0..5] of Char` STORES correctly
+      (`88 89 0 0 0 0` in row 1, byte-identical to fpc) and LOADS three
+      characters instead of six, while `q^[0]` loads all six. The address is
+      right -- the bytes that do arrive are the row's own -- so the load side
+      has a second defect of its own, one row-index deep, that this predicate
+      does not reach. At HEAD both rows loaded ONE character, so admitting the
+      deref here would trade a wrong answer for a MORE PLAUSIBLE wrong answer,
+      which is the harder one to notice. Left refused until the load path is
+      measured; the exculpation has an owner.
+      bug-p-a-char-array-row-of-a-2d-array-is-not-a-string
+      bug-p-a-char-array-row-through-a-pointer-deref-loads-short }
+    if (ASTLeft[node] < 0) or (ASTKind[ASTLeft[node]] = AN_DEREF) then Exit;
+    if not NDRowSourceInfo(node, rowCnt, rowTk, rowRec) then Exit;
+    if ASTNDRowSubs[node] <> NDInfoNDims - 1 then Exit;
+    if rowTk <> tyChar then Exit;
+    if rowCnt <= 0 then Exit;
+    Result := rowCnt;
   end;
 end;
 

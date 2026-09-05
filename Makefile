@@ -6627,6 +6627,23 @@ test-core: $(COMPILER)
 	  || { echo 'test_char_array_literal_too_long_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
 	@grep -q "expected '('" $(TESTTMP)/test_canb.log \
 	  || { echo 'test_char_array_literal_nd_bare_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	./$(COMPILER) test/test_char_array_nd_row_is_a_string.pas $(TESTTMP)/test_candrow26
+	@# .expected is fpc 3.2.2's own output. BOTH DIRECTIONS: the store half was
+	@# the reported bug (`cannot assign ShortString to Char`), the LOAD half was
+	@# unreported and worse -- `s := a[0]` compiled, exited 0 and assigned ONE
+	@# character where fpc assigns the row. The three spellings of the same store
+	@# (comma, of-array, named element type) are there because they flatten
+	@# identically, so a fix keyed on any one of them would leave the other two.
+	@$(TESTTMP)/test_candrow26 | diff -u test/test_char_array_nd_row_is_a_string.expected - \
+	  || { echo 'test_char_array_nd_row_is_a_string: FAIL - a row of an N-D Char array is not a string'; exit 1; }
+	@# The NEGATIVE control: `a[0]` on a 3-D array is a 2-D SUB-array, not a row,
+	@# and NDRowSourceInfo would return the product of the trailing dims for it --
+	@# a plausible number, and a capacity that spans rows is a write past the row.
+	@# Every positive row above is 2-D, where one subscript IS all-but-one, so
+	@# dropping the subscript-count test breaks nothing but this file.
+	! ./$(COMPILER) test/test_char_array_3d_row_not_a_string_fail.pas $(TESTTMP)/test_ca3d26 > $(TESTTMP)/test_ca3d.log 2>&1
+	@grep -q 'cannot assign ShortString to Char' $(TESTTMP)/test_ca3d.log \
+	  || { echo 'test_char_array_3d_row_not_a_string_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --
