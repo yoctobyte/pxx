@@ -599,7 +599,18 @@ function PXXDynInsArrFill(destData: Pointer; srcData: Pointer; insData: Pointer;
                           index: NativeInt; elemSize: NativeInt): Pointer;
 procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
 procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: NativeInt; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
+{$ifndef PXX_ESP}
+{ GUARDED TO MATCH THE BODY, which lives inside the {$ifndef PXX_ESP} block
+  opened further down -- an unconditional declaration here left it unresolved
+  on the ESP profile and NO PROGRAM DECLARING A CLASS would build for
+  --esp-profile=bare, on either chip:
+    pascal26:2: error: unresolved forward: PXXClassFinalize
+  This is the exact failure the comment above PXXRecordZeroManaged warns about
+  ("Forward only where the BODY exists"). Moving the forward into the interface
+  re-introduced it, because the interface list is not inside the guard. Every
+  CALLER is already guarded, so nothing under PXX_ESP loses a symbol it uses. }
 procedure PXXClassFinalize(inst: Pointer);
+{$endif}
 
 implementation
 

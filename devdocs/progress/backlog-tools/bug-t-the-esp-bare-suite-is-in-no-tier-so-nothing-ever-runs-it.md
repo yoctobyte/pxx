@@ -7,7 +7,7 @@ blocked-by: []
 status: backlog
 found: 2026-08-30
 found-by: frankS
-summary: "test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script — grep across tools/ finds one xtensa/esp job total, test-xtensa. So the ESP bare-metal suite is written, correct, and never executed by any gate or sweep. Found because the one executed windowed row landed there, in a target nothing runs."
+summary: "test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script -- only test-xtensa is enrolled. Re-verified 2026-09-05, and the suite was then EXECUTED for the first time: it immediately caught bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare, a profile-wide compiler defect present indefinitely. The assertion count in the original body is WRONG (see the 2026-09-05 note): 27 sites in test-esp-bare and 2 in test-esp-softfloat, and on a box WITH the Espressif qemu builds NONE of them skip -- so the '92% skip, maybe split the 2 hosted rows out' advice is a property of the measuring box, not of the target. Post-fix clean run: rc=0, 26 distinct assertions all ok, 0 skipped. Enrolment is still Track T's, in tools/testmgr.py, untouched here."
 ---
 
 # The ESP bare-metal suite is enrolled nowhere
@@ -67,3 +67,69 @@ they are, rather than enrolling a target that is 92% skip.
 this is filed rather than fixed — T owns the tool. The *reason to care* is Track
 S's: ESP is S's campaign and this is S's suite going unrun. The Makefile side of
 any split would be S's to write.
+
+## 2026-09-05 (frankS) — the suite was RUN, and the assertion count above is wrong
+
+**The enrolment claim still holds**, re-verified: `test-esp-bare` and
+`test-esp-softfloat` appear in zero testmgr tiers and no script; only
+`test-xtensa` is enrolled (`tools/testmgr.py:249`).
+
+**The assertion count does not hold, and the design advice built on it does
+not either.** This ticket says *"26 assertions, 24 of those behind `not
+installed` guards, only 2 unconditional"*, and recommends possibly splitting
+the 2 hosted rows out rather than enrolling a target that is *"92% skip"*.
+
+That count was taken on a box **without** `~/.espressif`. Corrected, by
+bounding each recipe at the next target rather than by a line range:
+
+| | assertion sites |
+| --- | --- |
+| `test-esp-bare` (25955–26168) | **27** — 25 guarded `diff … exit 1`, plus 2 `expect_same` |
+| `test-esp-softfloat` (26169–26186) | **2** |
+| total | **29** |
+
+**On a box WITH the Espressif qemu builds, none of them skip.** So the "92%
+skip" figure is a property of the measuring box, not of the target, and
+splitting out "the 2 unconditional rows" would solve a problem such a box does
+not have. The honest form of the recommendation is: **enrolment value depends
+on whether the runner has `~/.espressif`, and that is a fact about the runner,
+not about the suite.**
+
+*(An intermediate count of "24 in test-esp-softfloat", relayed by this author
+earlier the same evening, was wrong: the line range used ran past the target's
+end into `qemu-env-check`. The number above is bounded at the next target and
+is the one to use.)*
+
+## It was executed for the first time, and it caught a real defect immediately
+
+`PXX_ALLOW_FULL_SUITE=1 make -k test-esp-bare test-esp-softfloat` on plexus
+(both Espressif qemu builds present, `esp_develop_9.2.2_20250817`).
+
+**First run, compiler `fe1e9c37d322`:** 1 MISMATCH — `esp32c3 exception`,
+oracle 12 lines, device output empty. That was **not** a device fault and not
+chip-specific; it was
+`bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare` —
+**no program declaring a `class` could build for `--esp-profile=bare` at all,
+on either chip.** A five-line program reproduces it.
+
+**After that fix, clean run:** `rc=0`, **26 distinct assertion outcomes all ok**
+(28 lines; the 2 softfloat rows execute under both targets), **0 MISMATCH,
+0 skipped, 0 build failures.**
+
+So the answer to *"what would enrolment actually buy"* is now measured rather
+than estimated: on a box with the toolchains it buys 26 real cross-checked
+assertions against the x86-64 oracle, and the first time anyone ran them they
+found a profile-wide compiler defect that had been present indefinitely.
+
+**Method note, since this ticket is about invisibility.** Two runs during this
+work were **discarded** because `tools/esp_run_bare.sh` was edited while they
+were executing — `/bin/sh` reads a script incrementally. Established by
+timestamps (script 20:22:43; both logs still being written at 20:22:47 and
+20:22:48), not by feel. The tell was a row count no clean run produces (`ok=3`
+where the clean run had 16). The defect above does not rest on either discarded
+run: it was confirmed by a by-hand compile, a five-line repro on both chips, and
+the same program building under `--platform=posix`.
+
+**Still Track T's to enrol** — `tools/testmgr.py` is T's file and this seat has
+not touched it. What changed is that the enrolment question now has a measured
+answer behind it instead of an estimate.

@@ -43,8 +43,23 @@ esac
 [ -n "$QEMU" ] || { echo "esp_run_bare: Espressif qemu for $CHIP not found" >&2; exit 2; }
 
 ELF="$(mktemp).elf"
+# Capture the build rather than discarding it. pascal26 writes DIAGNOSTICS TO
+# STDOUT, so the previous `>/dev/null` destroyed the reason for every failed
+# build -- and because this script's whole output contract is "the bytes the
+# program wrote to UART", a build failure and a program that ran and printed
+# nothing produced the IDENTICAL observation: empty stdout, nonzero rc.
+#
+# That is not hypothetical. test-esp-bare's esp32c3 exception row was read as a
+# device-side fault and survived a repro at ESP_RUN_TIMEOUT=40 and a second chip
+# before a by-hand compile showed `unresolved forward: PXXClassFinalize` -- a
+# build error the runner had been swallowing all along. On success this still
+# prints nothing, so the UART contract is unchanged.
 # shellcheck disable=SC2086
-"$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" "$ELF" >/dev/null
+if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" "$ELF" >"$ELF.buildlog" 2>&1; then
+  echo "esp_run_bare: $CHIP build FAILED for $PAS" >&2
+  cat "$ELF.buildlog" >&2
+  exit 1
+fi
 
 SER="$(mktemp)"
 timeout -s KILL "$TIMEOUT" "$QEMU" -M "$CHIP" -kernel "$ELF" \
