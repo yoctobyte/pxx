@@ -136,7 +136,7 @@ itself.
 
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 36ee694fa.
 
 ## 2026-09-05, later — pin v404 closed both halves, and one aperture stays open by design
 
