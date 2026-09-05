@@ -1019,6 +1019,98 @@ begin
   WasmBodyB(WOP_END);
 end;
 
+{ REOPEN a slot whose body a previous CompileAST call already sealed, so the
+  next chunk APPENDS instead of replacing it. Returns True when it resumed.
+
+  WHY THIS EXISTS. A wasm function is one contiguous byte range, but the
+  frontend builds some procedure bodies in SEVERAL CompileAST calls: the
+  managed-`out`-parameter clear (`s := ''`, ClearManagedOutParam) is emitted as
+  its own call BEFORE the declared body. Every register backend appends,
+  because a body there is a range in one growing code buffer and a second call
+  simply keeps writing. This backend sealed per call, so the last write won and
+  the clear vanished — silently, and the module still VALIDATED. `out s: string`
+  returned the caller its own previous value.
+
+  The top-level program body solves the same problem the other way (one slot
+  per chunk, `main` synthesised as sequential calls). That does NOT transfer to
+  a procedure: a chunk function cannot see the proc's params or its frame.
+
+  WHAT MAKES CONCATENATION CORRECT, and it is worth stating because it is not
+  obvious: every chunk is $sp-BALANCED. It opens with
+  `global.get $sp; i32.const N; i32.sub; local.set $fp; local.get $fp;
+  global.set $sp` and closes by adding N back. So chunk k+1 re-derives $fp from
+  a restored $sp and lands on the SAME frame address — frame slots written by
+  an earlier chunk are still there. Verified by emitting both chunks of an
+  `out`-param proc and reading them.
+
+  LOCALS ARE NOT SHARED AND MUST NOT BE. The resumed chunk re-runs the
+  emitter's prologue and asks for its own `$fp`, `$pc` and temporaries. Because
+  WFLoc/WFVar are restored rather than reset, WasmAddLocal hands those fresh
+  indices ABOVE the existing ones (and uniquifies the names, so the .wat gets
+  `$fp` and `$fp_14`). Two locals holding the same address is not waste worth
+  removing: sharing them would make chunk boundaries load-bearing.
+
+  What is NOT restorable and so is handled here: the trailing WOP_END, which
+  must come off before more code follows, and this body's call relocations,
+  which WasmBodyEnd already rebased into the pool at offsets the body is about
+  to move away from. They are pulled back to WFB-relative and REMOVED from the
+  pool table — the one table where a stale entry is not merely garbage, because
+  it patches a `call` operand by absolute position.
+
+  The old pool bytes are simply orphaned. That is safe: every slot records its
+  own ofs/len and the pools are append-only, so nothing else points into the
+  vacated range. }
+function WasmBodyResume(slot: Integer): Boolean;
+var i, j, ofs, len, keep: Integer;
+begin
+  WasmBodyResume := False;
+  if (slot < 0) or (slot >= WasmFuncCount) then Exit;
+  if WasmFuncCodeLen[slot] <= 0 then Exit;
+
+  ofs := WasmFuncCodeOfs[slot];
+  len := WasmFuncCodeLen[slot];
+
+  { drop the body terminator; more code is about to follow it }
+  keep := len;
+  if (keep > 0) and (WasmCodePool[ofs + keep - 1] = WOP_END) then Dec(keep);
+  if keep > MAX_WASM_BODY then WasmFail('wasm: function body too large');
+  for i := 0 to keep - 1 do WFB[i] := WasmCodePool[ofs + i];
+  WFBLen := keep;
+
+  WFLocLen := WasmFuncNLoc[slot];
+  for i := 0 to WFLocLen - 1 do WFLoc[i] := WasmLocalPool[WasmFuncLocOfs[slot] + i];
+  WFVarLen := WasmFuncNVar[slot];
+  for i := 0 to WFVarLen - 1 do WFVar[i] := WasmVarNames[WasmFuncVarOfs[slot] + i];
+
+  WFTLen := 0;
+  WFIndent := 4;
+  WFTPut(WasmFuncText[slot]);
+
+  { Pull this body's relocations back out of the pool, compacting the rest. }
+  WFCallLen := 0;
+  j := 0;
+  for i := 0 to WasmCallRelLen - 1 do
+    if (WasmCallRelPos[i] >= ofs) and (WasmCallRelPos[i] < ofs + len) then
+    begin
+      if WFCallLen > High(WFCallPos) then WasmFail('wasm: too many calls in one body');
+      WFCallPos[WFCallLen] := WasmCallRelPos[i] - ofs;
+      WFCallSlot[WFCallLen] := WasmCallRelSlot[i];
+      Inc(WFCallLen);
+    end
+    else
+    begin
+      WasmCallRelPos[j] := WasmCallRelPos[i];
+      WasmCallRelSlot[j] := WasmCallRelSlot[i];
+      Inc(j);
+    end;
+  WasmCallRelLen := j;
+
+  { So WasmBodyEnd seals this as a first write rather than counting a rewrite:
+    after a resume there is exactly one body, and it is this one. }
+  WasmFuncCodeLen[slot] := 0;
+  WasmBodyResume := True;
+end;
+
 { Seal the scratch body into the code pool for a function slot. }
 procedure WasmBodyEnd(slot: Integer);
 var i: Integer;

@@ -4,10 +4,10 @@ title: "wasm32 emits a separate function per CompileAST call, so a proc built in
 track: A
 prio: 70
 type: bug
-status: backlog
+status: working
 created: 2026-09-04
 found-by: frankA (while taking the wasm32 C entry stub)
-owner: ""
+owner: frankwasm
 blocked-by: []
 summary: "MEASURED 2026-09-04, WRONG ANSWER ON A RUNNING PROGRAM, and it is live in Pascal today. A frontend builds one proc body with MORE THAN ONE CompileAST call -- an `out` parameter's finalize, a default-value assign, a generator step, then the user's statements. On every register target those append into one byte range and ARE one function. On wasm32 each CompileAST runs a full WasmBodyBegin/WasmBodyEnd cycle against the SAME slot, so the last one OVERWRITES the earlier ones and their code is gone. `procedure Fill(out s: string)` prints [XY] on native, i386, arm32, aarch64 and riscv32 and [KEEPXY] on wasm32 -- the out-parameter clear is dropped and no diagnostic is produced. With THREE calls the same mechanism refuses outright (`duplicate export`), so the bug has a silent arm and a loud one and the silent one is the common case. It is also what blocks bug-c-no-c-program-entry-stub-for-wasm32: C's `main` is built in three calls (pending global inits, deferred aggregate inits, body)."
 ---

@@ -6900,6 +6900,7 @@ var
   rtk: TTypeKind;
   nRes, mvHelper: Integer;
   nm: AnsiString;
+  resumed: Boolean;
 begin
   WasmBeginModuleOnce;
 
@@ -6950,15 +6951,27 @@ begin
   end;
 
   { Open the body session BEFORE naming params or adding locals: they now
-    accumulate in the per-body buffers that WasmBodyBegin resets. }
-  WasmBodyBegin;
+    accumulate in the per-body buffers that WasmBodyBegin resets.
+
+    A proc's body can arrive in SEVERAL CompileAST calls — the managed-`out`
+    parameter clear is emitted as its own call before the declared body — so
+    ask to RESUME first and only start fresh when there is nothing to resume.
+    Sealing per call made the last write win and silently dropped the clear;
+    see WasmBodyResume for why concatenating the chunks is correct. }
+  resumed := WasmBodyResume(WasmCurSlot);
+  if not resumed then WasmBodyBegin;
   WasmExcTopLocal := -1;
   for i := 0 to 3 do WasmCRLocal[i] := -1;
   WasmCurNRes := nRes;
   if nRes = 1 then WasmCurResVt := resVt;
 
-  for i := 0 to nParams - 1 do
-    WasmAddParamName(Procs[CurProc].Params[i].Name);
+  { On a resume the param names are already in the restored name buffer. Adding
+    them again would not merely duplicate: an index is a POSITION in that
+    buffer, so every local this chunk allocates would be numbered nParams too
+    high and address the wrong slot. }
+  if not resumed then
+    for i := 0 to nParams - 1 do
+      WasmAddParamName(Procs[CurProc].Params[i].Name);
   { The trailing hidden-destination parameter. It is named and counted here so
     that local indices line up: every local added below sits above it, and a
     body that forgot it would silently address the dest as its first local. }
@@ -6967,8 +6980,15 @@ begin
      and ABIRetViaHiddenDestProc(CurProc) and (nParams < 32) then
   begin
     WasmRetDestLocal := nParams;
-    WasmAddParamName('$retdest');
+    if not resumed then WasmAddParamName('$retdest');
   end;
+
+  { A function chunk ends by PUSHING its result, and the chunks are now one
+    body, so the previous chunk's push is still on the operand stack. Drop it:
+    this chunk pushes its own at the end, and two values at `end` is a
+    validation error, not a wrong answer. }
+  if resumed and (nRes = 1) then WasmOp($1A, 'drop');
+
   WasmLocalFp := WasmAddLocal(WT_I32, 'fp');
 
   { Pass one: cut the body into basic blocks and map every label to one. It
