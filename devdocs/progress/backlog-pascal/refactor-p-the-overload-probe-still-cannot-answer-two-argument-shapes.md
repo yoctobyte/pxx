@@ -2,7 +2,7 @@
 slug: refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes
 title: "Two argument shapes no side channel answers, so the method gate still abstains where the free path decides"
 track: P
-prio: 30
+prio: 55
 type: refactor
 blocked-by: []
 status: backlog
@@ -93,3 +93,30 @@ reverted `4760474da`). One shape, showing up here as a missing overload channel
 and there as a crash. If they share a cause, the refactor is not a tidy-up — it
 is the crash's fix, and this ticket's prio is wrong by a lot. Handed to frankB,
 which clusters by construct.
+
+
+# The second row is not only a gate-completeness question
+
+Measured 2026-09-05 (frankB). The `inherited Sort(ItemPtrCompare)` row -- *"a
+bare routine name as a procedural value types as neither a pointer nor the
+signature"* -- is the same missing answer as
+[[bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode]],
+which is at prio 60 and SEGFAULTS:
+
+```pascal
+type TF = function: Integer;
+function G: Integer; begin G := 7; end;
+procedure Use(h: TF); begin writeln(h()); end;
+begin Use(G); end.      { default mode: compiles, SIGSEGV rc=139 }
+```
+
+Outside `{$mode delphi}` the bare name is read as a CALL, so the Integer result
+binds the procedural parameter and the callee jumps through 7. In Delphi mode
+both the assignment and the argument spelling work, so the machinery to bind a
+name to its address exists -- what is missing on the other side of the flag is
+the ANSWER this ticket is asking for, and its second consumer is the refusal.
+
+That does not make the refactor the whole fix: the enforcement attempt was
+reverted once already (`4760474da` -> `2d6bfadd6`). But it means this row's
+value is not confined to closing a soundness gap in the method gate, and a
+prio of 30 was set without that.

@@ -3,7 +3,7 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-summary: "ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. `f := G;` where `f` is a procedural variable and `G` a function compiles OUTSIDE `{$mode delphi}` and segfaults at runtime. FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix."
+summary: "ATTEMPTED AND REVERTED 2026-09-05 (4760474da -> 2d6bfadd6); the DIAGNOSIS below is sound and the ENFORCEMENT was not -- read `The attempt that failed` before retrying. TWO POSITIONS, not one: `f := G;` AND `Use(G)` where the parameter is procedural both compile OUTSIDE `{$mode delphi}` and segfault at runtime (measured 2026-09-05, rc=139 each). FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix."
 ---
 
 # A bare function name assigned to a procedural variable segfaults outside Delphi mode
@@ -147,3 +147,37 @@ which I accept, is that they do not share an ANSWER: each permits a different
 pointee set, so a shared helper would take that set as a parameter and share the
 `if` while sharing none of the thinking. Unify when the pointee question has one
 answer; this revert is evidence we do not have it yet for the procedural case.
+
+
+# The argument position segfaults too, and it is the p30 refactor's shape
+
+Measured 2026-09-05 (frankB), following a cross-link frankS recorded and
+frank-coordinator handed on. The ticket reported the ASSIGNMENT. The same bare
+name in an ARGUMENT is the same defect:
+
+| spelling | default mode | `{$MODE DELPHI}` |
+| --- | --- | --- |
+| `f := G` | compiles, **SIGSEGV rc=139** | prints 7 |
+| `Use(G)`, `Use(h: TF)` | compiles, **SIGSEGV rc=139** | prints 7 |
+| `Use(G)` where G is a PROCEDURE | `undefined variable (G)` | prints G |
+| `f := @G` / `Use(@G)` | prints 7 | prints 7 |
+
+fpc rejects both bare forms in objfpc (`Got "LongInt"`, and `Got "untyped"` for
+the procedure), and accepts both in Delphi mode. So the third row is the same
+mechanism wearing a different face: a bare FUNCTION name read as a call is a
+value (an Integer, stored into a pointer slot and jumped through), and a bare
+PROCEDURE name read as a call is not a value at all, so name resolution reports
+it as undefined.
+
+**This is the shape
+[[refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes]] names
+as its second unanswerable argument** -- *"a bare routine name used as a
+procedural value types as neither a pointer nor the signature"*. It is one
+missing answer with two consumers: the overload gate cannot run the full check
+without it, and the default-mode arm cannot REFUSE without it, because refusing
+requires knowing the name is a routine reference rather than a call.
+
+The refactor is therefore **necessary and not sufficient** for this bug. It
+supplies the fact; the enforcement is still the part that failed in
+`4760474da`, and `The attempt that failed` above is still the thing to read
+first.
