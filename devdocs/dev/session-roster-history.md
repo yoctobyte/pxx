@@ -25592,3 +25592,202 @@ out of it that neither the author nor this seat had seen. **Relaying a detail
 whose significance you cannot see is not noise** — the receiver has a different
 model, and here it was the only one positioned to notice that two independent
 things had been booked into the same event.
+
+## THE PIN ARC — 2026-09-05 evening, and what the seat actually did
+
+Sequence, for anyone reconstructing it: `$(PXX_STABLE)` found broken → pin
+authorised by the owner and assigned to frankH (*"yes. pin. just, don't do it
+yourself, let another frank do it"*) → gates held fleet-wide → seven's native
+tier came back with **8 NEW-REDs** quick never saw → pin **paused**, not
+cancelled → frankB reverted → **hold released on the REVERT, not on the pin**
+→ frankH re-grades on the post-revert tree, then pins.
+
+**The owner did not have to re-decide, and frankuser's reasoning is the keeper:
+both harms point the same way.** An old pin blocks Track B now; a bad pin
+blocks everyone later. So the answer stays *pin* — **just not that tree.** A
+changed grade changes the tree, not the decision.
+
+**Releasing the hold on the revert rather than the pin was frankuser's
+correction to this seat and it was right.** Holding through the revert AND the
+pin is a longer freeze than the pin needs: the ~35s window is the pin itself.
+Lanes gate normally in between; they simply cannot treat `$(PXX_STABLE)` as
+fixed until frankH announces. **A hold should be scoped to the thing that
+actually serialises**, and this seat had scoped it to the whole episode.
+
+### The outage was 24 units, not 20 — and the raw 28 was TWO causes as one
+
+Broadcast to seven lanes as "20 of 111". frankD re-measured rather than
+relaying — compiling `program t; uses <U>; begin end.` for each of the 111
+`lib/rtl` units against the pin — and got **83 pass, 24 fail on `unknown type:
+TMethod`, and 4 fail for something else entirely**: `palparallel`,
+`palpthread`, `palthread`, `palthreadobj` answer *"`__pxxclone` (thread
+creation) requires `--threads`"*, **fail identically at HEAD**, and are a
+**correct refusal that will not expire with the pin**.
+
+**"28 fail under the pin" is true and records two causes as one blast radius** —
+which would have produced a *"the pin didn't fix everything"* report tomorrow.
+`sysutils`, `math` and `classes` are fine while `classes_lite` is affected,
+which is an easy misread in the other direction.
+
+**This seat's error, plainly: I broadcast a number I had from a peer and had not
+measured.** Right in substance, wrong in scope, sent to seven lanes. The lane
+that caught it did so because a docs session needs the exact `uses` list and an
+approximate one sends someone to "fix" a snippet that is fine. **A relayed count
+acquires the relayer's authority and none of the relayer's evidence.**
+
+### The pinned-RTL canary: judgment given, and the TELL is the actionable half
+
+frankH asked this seat to judge whether its guard failure earns a playbook
+entry. **It does, and it is not a restatement.** The handbook already has *a
+control from the wrong population certifies the broken instrument*, and the
+roster has *a positive control proves LIVE, says nothing about COVERAGE*.
+frankH's case satisfies both and fails anyway: sysutils **is** a `lib/rtl` unit,
+so the control was drawn from the **right** population, and the guard **could**
+fail, proven by injection.
+
+**What defeated it is a third property: injecting a fault into the one file a
+guard reads cannot reveal that it reads only one file.** A liveness control
+measures the guard's REACTION; nothing about it measures its REACH.
+
+frankH's sentence is the entry: *a guard that CAN fail, aimed at 1/111th of its
+population, prints PASS exactly like one that cannot.*
+
+**The tell this seat added, which frankH called the better half: COST IS A PROXY
+FOR COVERAGE. The row claimed 111 units and finished in 1 SECOND.** That is
+checkable without knowing anything about the bug, which is the property that
+makes it a habit rather than a hindsight. Worth pairing with the rule, because
+otherwise "how would I have caught this" has no answer.
+
+**And the sampled file was not merely unrepresentative — it was IMMUNE BY A
+LANGUAGE RULE.** sysutils survives because its only mention is `PMethod =
+^TMethod`, a forward pointer reference that never forces the type to resolve.
+Worse than a random sample of one.
+
+**frankB dated the seam 90 minutes earlier**, in a diagnostic nobody had aimed
+at the question: at ~18:30 it tried to use the pin as a control on the
+rtl-generics corpus and got `in: .../lib/rtl/typinfo.pas / near: addr : Pointer
+; m : >>> TMethod`. It wrote *"the PIN IS NOT A CONTROL HERE"* and moved on —
+correct and sufficient for its purpose. **So the finding existed in a log before
+it existed in anyone's head, while the guard built for that seam printed PASS in
+1s.** The shape worth naming: *a conclusion that is true, sufficient for your
+purpose, and closes a door.*
+
+### Attribution: three signals, and the NEGATIVE result read as an instrument tell
+
+`4760474da` needed an author, urgently. Method and result:
+
+- trailer `Claude-Session: …019NLKYcGnZeZ3rWAJ6c8Yr2`;
+- `git -C ~/frankB reflog | grep '^4760474da commit'` — one hit;
+- **cross-check on the id:** five commits carry that URL, **four resolve to
+  frankB's tree and one — a docs commit — does not.**
+
+**That one non-resolution was read as the known failure mode of the instrument,
+not as a contradiction** (the handbook says the eighth sha not resolving is the
+instrument telling you it has a failure mode). Plus a fourth, softer signal: the
+subject list (`{$H-}`, named set-of-subrange, `{$IFOPT Z+}`, the of-object
+anchor) is unmistakably that lane's.
+
+**And the author turned out to be IDLE, which beat the trade-off that was
+asked for.** frankuser asked which lane to rob — frankA on class-property or
+frankB on the P queue. The right answer was **neither**: frankB had just
+reported a clean tree and was holding for the pin. **Ask who owns it before
+asking whom to take it from.**
+
+frankB then confirmed it by **direct reproduction in ~90 seconds** rather than
+from the range, which is a better instrument than any of the four:
+`(pType = tyPointer) and (aType <> tyPointer)` with `TypeIsOrdinal` including
+`tyChar`, so every legal Char-into-PChar binding went with the procedural case.
+Thirteen rows, one class, one rule.
+
+### THE SIXTH FAMILY MEMBER IS THE SHARPEST, AND IT IS A LABEL, NOT AN INSTRUMENT
+
+Five gtk jobs read **`STILL-RED`** and are **not unchanged**: they moved from
+`uses: unit source not found: gtk` — a missing package since restored on seven —
+to the **same Pointer regression**. Same job key, same colour, **different
+cause**.
+
+The other five members of today's table were an instrument answering about a
+different **process or moment** (`tail`'s exit code; a neighbouring
+`summary.log`; a decayed load average; daemon-vs-clone; two clocks). **This one
+is a LABEL that is correct about the colour and silently wrong about the cause.**
+It survives every freshness check because **nothing about it is stale**, and the
+reader's habitual filter — *which reds are new* — **correctly** excludes them
+from a list they now belong on.
+
+frankZ's phrasing, which is the one to keep: **`STILL-RED` compares verdicts;
+the question is almost always about causes.** Diff the failure text, not the
+status. frankB confirms the warning was load-bearing: it would have diffed those
+five as unchanged.
+
+**What the six have in common, now that the set is large enough to say:
+every one is a TRUE statement, and in every one the SUBJECT DRIFTED between the
+question and the answer.** None is caught by "is it fresh" or "did it error".
+The only check that catches the class is **naming the subject in the answer** —
+which is why `logs=<pid>`, `code : STALE`, `toolchain_fp:` and `PIPESTATUS[0]`
+are one fix wearing four costumes.
+
+### A CHAINED JOB IS NOT A QUEUED JOB — and for those sessions, HOLD == KILL
+
+frankZ honoured the gate hold by **killing its job**, losing a `tools-devtest`
+run: its verify command was `pull; make; tools-devtest; gate.sh quick` in one
+sequential shell. Nothing had started, so *"I have not started my gate yet"* was
+**true and useless** — the decision had already been handed to a shell that
+would not be asked again, and `TaskStop` on the whole job was the only lever.
+
+**frankZ's generalisation is wider than chaining and is the version to use:**
+the property is that *the decision had already been delegated to something that
+will not consult the session again.* A `&&` chain does that; so does a `make`
+target that gates at the end, a `trap ... EXIT`, a watch loop, and anything
+handed to a daemon. **The question that catches all of them: "is there anything
+running for you right now that will start something else without asking you
+first?"** — and *"I would have to look"* is itself the useful answer.
+
+**Operational consequence, and it belongs to whoever issues the hold: for a
+session in that state, "hold" and "kill" are the same instruction, and the
+session may not know it until asked.** So **ask before issuing a hold, not
+after.** frankZ paid a devtest run to discover this. Its re-run is deliberately
+unchained: `tools-devtest` as a job that ends, gate as a separate invocation, so
+a hold in between costs nothing.
+
+### "WRITING THE LESSON DOWN DOES NOT INSTALL IT" — frankB on itself
+
+frankB read `gate.sh quick` GREEN as coverage it never had. Quick does not run
+those rows, and **the self-host fixedpoint cannot see the shape at all, because
+`compiler.pas` never binds a Char to a PChar.** frankB had written up that exact
+error **twice the same day** about other sessions' figures — the corpus rung,
+and its own four gates' scope — and then made it with its own green **about
+forty minutes after stating the rule.**
+
+This is the strongest corroboration yet of the section above on *what runs the
+rule?*: knowledge is not a guard. frankB's own words: *writing the lesson down
+does not install it.*
+
+**And its recovery is the model for a reopened ticket:** back to
+`backlog-pascal` rather than left in `done/`, keeping the original diagnosis
+(which was sound), adding why the enforcement was wrong and why the gate could
+not see it, and **listing the eight tests any retry must run BY NAME before
+believing itself.** A ticket that carries its own acceptance list is the only
+kind that cannot be re-closed on a green that never covered it.
+
+### Two open findings with no collision, recorded so they are not lost
+
+- **frank-optimize:** `pasmith` returns only integer kinds from every function
+  it generates, so **no program optfuzz can emit contains a record return.** A
+  first working -O3 splice segfaulted where -O0/-O2 were correct, and the
+  directed matrix — written before the feature — caught what the fuzzer
+  structurally could not. **Widens its earlier ticket from "no float code" to
+  the whole return-type axis.** Nobody else is on `pasmith`.
+- **frankD:** `docsnip.py`'s completeness test is `re.match(r'^program\s', ...)`,
+  so a `library` block is classified as a fragment and **never compiled** — the
+  same green whether it is correct or nonsense. An aperture hole that survives
+  every pin, and the cost tell may apply: report snippets **compiled** against
+  snippets **found**.
+
+### This seat re-flagged a CLOSED item twice, and a list without retirement rots
+
+frankD had to verify `{$DEFINEGLOBAL}` was clean in `docs/**` **twice**, both
+times at this seat's prompting, having already fixed it the day before. Its
+objection is correct and structural: **a closed item that keeps arriving costs a
+check each time and crowds out the open ones.** A relay list needs a retirement
+mechanism or it degrades into re-flagging whatever the relayer happens to
+remember. Dropped.
