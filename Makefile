@@ -13477,6 +13477,20 @@ test-core: $(COMPILER)
 	# three constructs outright.
 	./$(COMPILER) test/test_directive_value_space_matches_fpc.pas $(TESTTMP)/test_dvspace26
 	tools/expect_same.sh test_dvspace26 "$$($(TESTTMP)/test_dvspace26)" "$$(cat test/test_directive_value_space_matches_fpc.expected)"
+	# {$IFOPT X+} answered False for EVERY letter -- `cond := False { compiler
+	# option switches are not modelled }` -- while the four variables it needed
+	# were assigned a hundred lines further down the SAME procedure. IFOPT is a
+	# CONDITIONAL, so the wrong ARM compiled, silently. Every row sets the
+	# switch explicitly and asks BOTH signs: {$IFOPT R+} on its own, the form
+	# 113 of the 139 uses in fpc's own sources take, was ALREADY RIGHT, because
+	# fpc's R defaults off and "always False" agrees with "off" -- a row asking
+	# only the default-matching sign cannot tell tracking from hardwired. The A8
+	# row is the measured negative: A is numeric, so fpc's {$IFOPT A+} stays
+	# false however {$A8} was set, and reading it out of PackRecordsVal would
+	# have been plausible and wrong. Byte-compared against FPC 3.2.2; pin v403
+	# gets 7 of the 12 rows wrong.
+	./$(COMPILER) test/test_ifopt_tracks_the_switch_it_names.pas $(TESTTMP)/test_ifopt26
+	tools/expect_same.sh test_ifopt26 "$$($(TESTTMP)/test_ifopt26)" "$$(cat test/test_ifopt_tracks_the_switch_it_names.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

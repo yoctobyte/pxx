@@ -1756,8 +1756,72 @@ begin
   text := PasStripQuotes(Copy(text, i, n - i + 1));
 end;
 
+function PasIfOptState(const letter: AnsiString; var isOn: Boolean): Boolean;
+{ $IFOPT X+ asks whether compiler switch X is currently on; $IFOPT X- asks
+  whether it is off. Result says whether THIS compiler models the letter at all
+  -- a letter we do not hold state for has no honest answer and the caller
+  branches off, which is what the whole directive used to do.
+
+  NO DIRECTIVE BELOW IS WRITTEN IN ITS BRACED FORM, AND THAT IS LOAD-BEARING.
+  Pin v403 treats a braced directive inside a { } COMMENT as a live directive
+  during include expansion, so a comment mentioning three of them refuses the
+  whole compiler with `unterminated conditional directive`. HEAD does not --
+  measured on the identical source with the code change reverted, so it is the
+  prose, not the code. make compiler/pascal26 stays GREEN throughout, because it
+  seeds from the previous LOCAL binary; only gate.sh quick, which seeds from the
+  PIN, sees it, and it reports "seed could not compile the compiler", which
+  points nowhere near a comment. fpc says the same thing more gently, as
+  `Comment level 2 found`. Spell them bare until the pin moves past this.
+
+  IFOPT IS A CONDITIONAL, so getting it wrong compiles the OTHER ARM. There is
+  no diagnostic and nothing downstream can tell a chosen branch from a written
+  one -- the same class as the MacPas conditionals, and worse than a mis-set
+  switch. The line this replaces read
+
+    cond := False, with a comment saying compiler option switches are not
+    modelled so the branch is off
+
+  and that comment was already stale when it was written: all four variables
+  below are assigned about a hundred lines further down the SAME procedure.
+
+  R/Q/I/C are the four we hold. Measured against fpc 3.2.2 on x86-64,
+  2026-09-05, one probe for the default and one for whether an explicit $L+
+  moves it, over 19 letters:
+
+    default ON   I G J X Z          not tracked by fpc at all   A L O
+    default OFF  R Q C B D H M P S T V
+
+  $IFOPT R+ -- 113 of the 139 uses in fpc's own sources -- WAS ALREADY RIGHT,
+  because fpc R defaults off and "always False" agrees with "off". The form the
+  corpus is made of is exactly the one a broken implementation gets right, which
+  is why this lasted; the discriminating case is $R+ followed by $IFOPT R+, TRUE
+  in fpc and False here.
+
+  A is the useful negative: it is a NUMERIC switch, so fpc $IFOPT A+ stays false
+  however $A8 was set. Modelling it from PackRecordsVal would have been
+  plausible, self-consistent and wrong, and only the probe says so.
+
+  The letters fpc defaults ON that we do not hold -- G, J, X and Z -- still
+  answer False, which is wrong for a compiler that HAS extended syntax. Each
+  needs its own claim about pxx rather than a lookup in fpc's table, so they are
+  bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles, not this. }
+begin
+  Result := True;
+  if CaseEqual(letter, 'r') then isOn := RChecksVal
+  else if CaseEqual(letter, 'q') then isOn := QChecksVal
+  else if CaseEqual(letter, 'i') then isOn := IChecksVal
+  { $C+ is ASSERTIONS, and ours defaults ON where fpc's defaults off -- a
+    decision recorded at AssertionsVal's declaration in defs.inc, because
+    matching fpc would turn every existing pxx assertion into dead code
+    silently. So $IFOPT C+ answers TRUE here and FALSE there BY DESIGN: this
+    reports our own state truthfully, and agreeing with fpc would mean lying
+    about it. (Bare spelling: see the header.) }
+  else if CaseEqual(letter, 'c') then isOn := AssertionsVal
+  else begin isOn := False; Result := False; end;
+end;
+
 procedure ProcessPasDirective;
-var command, name, fname, messageText: AnsiString; parent, cond: Boolean;
+var command, name, fname, messageText: AnsiString; parent, cond, optOn: Boolean;
     idx, msgSev: Integer; dsign, asign: Char;
 begin
   Inc(SrcPos); { dollar sign }
@@ -1860,7 +1924,14 @@ begin
     if PasCondCount >= MAX_PAS_CONDS then ErrorAt(SrcLine, 'conditional directive nesting overflow');
     parent := PasDirectiveActive;
     if CaseEqual(command, 'ifopt') then
-      cond := False { compiler option switches are not modelled; branch off }
+    begin
+      { dsign is the +/- the source wrote, picked up above; ReadPasDirectiveWord
+        stops at it, so `name` is the bare letter. A missing sign reads as '+',
+        which fpc diagnoses instead -- see the ticket. }
+      if not PasIfOptState(name, optOn) then cond := False
+      else if dsign = '-' then cond := not optOn
+      else cond := optOn;
+    end
     else if not CaseEqual(command, 'if') then
     begin
       cond := PasDefineExists(name);

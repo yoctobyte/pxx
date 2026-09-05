@@ -1,0 +1,12 @@
+R on  : R+ yes
+R on  : R- no
+R off : R+ no
+R off : R- yes
+Q on  : Q+ yes
+Q off : Q+ no
+I on  : I+ yes
+I off : I- yes
+C on  : C+ yes
+C off : C+ no
+A8    : A+ no
+lower : r+ yes
