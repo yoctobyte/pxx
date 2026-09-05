@@ -4,7 +4,7 @@ title: "`x in [...]` has a 64-bit domain with constant elements and a 0..255 dom
 summary: "ParseSetMembershipAST picks a compare chain when every element is constant and a 256-bit mask when any element is a variable. After 831919a7d the first has a full Int64 domain and the second still has 0..255, so `q in [300]` is TRUE and `q in [r]` with r=300 is FALSE — same construct, no diagnostic either way. FPC warns here and pxx says nothing; the recommendation is to diagnose, not to widen."
 track: P
 type: bug
-prio: 25
+prio: 35
 status: backlog
 found: 2026-09-05
 found-by: frankO (the check bug-p-set-membership-item-constant-truncated-to-32-bits asked for by name)
@@ -69,6 +69,26 @@ Open question for whoever takes it, and the reason this is not a one-liner:
 whether the diagnostic should also fire for a *variable* element that happens
 to be out of range at runtime (FPC does not — its warning is
 "while evaluating constants"), or whether that stays a silent FALSE.
+
+## Prio: 25 -> 35, and deliberately not higher
+
+Raised because the reachable row is `r = 300`, not 2^32: a set with a variable
+element is ordinary code (the parser's own comment cites fcl-json scanning with
+`FTokenStr^ in [#0, C]`), and the arm is chosen by whether an element is
+spelled as a literal, so this bites on a REFACTOR — replacing a literal with a
+constant-valued variable silently changes the answer.
+
+**Not higher, and the reason is worth keeping so nobody re-inflates it:** FPC
+answers `q in [r]` with r = 300 FALSE as well, so a program written against FPC
+sees no divergence and no real-world Pascal is relying on the TRUE. What pxx
+adds is an internal inconsistency plus a missing diagnostic, and CLAUDE.md
+ranks a differing diagnostic as deferred. So the harm is real but it is
+refactor-time surprise, not a wrong answer that ships. 35 is a wrong answer
+from code that compiles; it is not a 55.
+
+The coordinator independently suggested ranking this up and agreed with the
+reachability argument. Recording that it was raised on the measurement rather
+than on the endorsement — the endorsement is not the evidence.
 
 ## Repro
 

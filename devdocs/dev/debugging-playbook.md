@@ -824,6 +824,55 @@ copies. It is equally true of the READER, and the reader is the half nobody
 audits: a carrier that is never printed cannot be noticed to be missing.
 
 
+
+### A REFERENCE COMPILER IS ONE OF THESE, and it is the hardest to see because it looks like a specification
+
+**Measured 2026-09-05 (frankO), and it nearly closed a real bug as `rejected/`.**
+`x in [consts]` truncated every set element to 32 bits, so `1 in [4294967297]`
+answered TRUE. The natural triage is to ask FPC. FPC says:
+
+```
+fpc 3.2.2:  1 in [4294967297]  ->  TRUE
+            300 in [300]       ->  FALSE
+pxx:        300 in [300]       ->  TRUE     (already, before any fix)
+```
+
+Read as a specification, row one says pxx agrees with FPC and there is no bug,
+and row two says pxx is the one that is wrong. **Both readings are backwards.**
+FPC's set is a 0..255 byte set, so its answers are true statements about a byte
+set; pxx's constant arm lowers to a compare chain and has no domain limit at
+all. The oracle answered "what does FPC do here" perfectly, and it was asked
+"what should pxx do here" — two different questions with two different right
+answers, and only the second one was the question.
+
+**The tell is not that the oracle is wrong. It is that the two systems'
+representations differ at the point being probed** — and that is exactly where
+you reach for an oracle, so the failure is concentrated where the instrument
+feels most necessary. CLAUDE.md already names the resolution ("ask what the
+source MEANT, not what FPC returned"); this is what it looks like when the
+oracle is the thing that stops you asking.
+
+**Two practical consequences.**
+
+- **A `rejected/` built on an oracle row is the expensive direction.** A
+  wrongly-ranked ticket gets re-encountered; a wrongly-rejected one does not.
+  Before rejecting on a parity argument, establish that the two implementations
+  represent the thing the same way — here, one grep at the domain boundary
+  (`300 in [300]`) settled it and it was not run first.
+- **A "same answer" row is not corroboration either.** pxx and FPC agree on
+  `1 in [4294967297]` and agree for *opposite* reasons — pxx truncates a 64-bit
+  element, FPC masks into a byte set. Agreement between two systems that
+  disagree about the representation is a coincidence, not a check. See
+  "two readings that fail the same way are one reading"; this is the version
+  where they fail *differently* and agree anyway.
+
+Companion case the same day, from the other direction: frankZ's
+`bytearray.extend((13, 10))`, where a contemporaneous comment naming the
+failing call verbatim was real evidence the looseness was *designed for* and no
+evidence at all that it was *correct*. **A design-intent citation and a
+soundness argument are different claims.** So is an oracle row and a
+specification.
+
 ## An instrument can be ANTI-CORRELATED with the truth of the question
 
 The section above collects instruments that answer about something else. This is

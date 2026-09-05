@@ -96,3 +96,36 @@ FAIL I_MIXED_WIDTH_SET: got FALSE want TRUE
 
 aarch64 prints `SETIN64 OK`. That the three 32-bit targets fail the SAME five
 rows identically is the evidence they share one mechanism rather than three.
+
+**MEASURED UNDER AN EMULATOR, NOT ON HARDWARE, and the distinction is not
+pedantry here** — a cross red seen under qemu and one seen on a real chip are
+different claims, and only the first is available on this box. All four runners
+are `qemu 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2)`, host kernel `7.0.0-30`.
+The failure is a wrong constant in emitted code rather than anything the
+emulator interprets differently, so emulation is very unlikely to be the
+cause — but nobody has run it on hardware and this ticket does not claim
+otherwise. (`regression-test-core-c-crtl-wait` is the standing example on this
+repo of a cross red that WAS the emulator: seven's qemu 8.2.2 against plexus's
+10.2.1, same compiler bytes, opposite answers.)
+
+## Blast radius is bounded to SPECIAL_IN — checked, not assumed
+
+The obvious worry, raised by frankZ: `cmp rcx, imm32` sign-extending is a fact
+about x86-64 comparisons in general, not about sets, so if the general
+comparison lowering shared the defect this ticket would be much larger than
+its title. It does not. Measured at `831919a7d` **and** against the pre-fix
+pin, both `CMPWIDE OK`:
+
+```pascal
+q := 4294967297;
+if q =  4294967297 ... if q <> 4294967296 ... if q > 4294967296
+if q >= 4294967297 ... if q <  4294967300 ... if q <= 4294967297
+case q of 4294967297: ...        { also correct }
+```
+
+All ten rows right on both compilers, so the general path already materialises
+a wide immediate properly and only the hand-emitted SPECIAL_IN walk bypassed
+it. The same probe is worth re-running on the 32-bit targets before writing
+their fix: if plain `if q = 4294967297` is already correct there, whatever it
+uses is the machinery the item loop should be reusing rather than a new
+two-word compare written from scratch.

@@ -176,3 +176,18 @@ Positive control asserted: against the pre-fix pin it reports `SETIN64 FAILED 5`
 
 ## Log
 - 2026-09-05 — resolved, commit 831919a7d.
+
+### Blast radius, checked after the fact rather than assumed
+
+`cmp rcx, imm32` sign-extending is a property of x86-64 comparisons, not of
+sets, so the reasonable follow-up question is whether every wide-constant
+comparison was wrong and this ticket undersold itself. **It did not.** A plain
+`if q = 4294967297`, the five other relational operators, and `case q of
+4294967297` are all correct at `831919a7d` AND against the pre-fix pin — the
+general lowering already materialises a wide immediate into a register. Only
+the hand-emitted SPECIAL_IN walk emitted a bare `48 81 F9` and so inherited the
+encoding limit. Bounding this cost one probe and is recorded because the
+negative result is what keeps the residual ticket honestly sized.
+
+Cross measurements in this ticket and its residual were taken under
+`qemu 10.2.1`, host kernel `7.0.0-30`. Not hardware.
