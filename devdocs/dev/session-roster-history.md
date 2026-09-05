@@ -28841,3 +28841,41 @@ declarable — all five `sys*`, all four `arg*`/`param*` — and
 edit:** a `.npy` binding its own `paramstr`/`paramcount` (3 and 8), an ordinary
 `.npy`, Pascal `ParamCount`/`ParamStr`, and `System.SysOpen`/`SysClose` on
 `/dev/null`. **Four probes, four surfaces the self-host cannot see.**
+
+### THREE WAYS A BISECT RETURNS A PLAUSIBLE WRONG SHA
+
+frankZ, before starting one over 145 commits. **All three produce a sha somebody
+then hands to a lane owner.**
+
+1. **`git bisect` NEVER TESTS ITS ENDPOINTS.** Hand it a bad *good* and it returns
+   a first-bad-commit that is simply wrong, with no error. Here the good endpoint
+   came from **seven's report, not the local box** — a different host, different
+   packages, and as of tonight a different gtk resolver. **The script probes GOOD
+   first and aborts saying *"the window is wrong, not the bisect"*.**
+2. **A build printing no `converged after` line exits 125 (skip), not 0** —
+   otherwise a **stamp-path no-op is scored as good while testing the PREVIOUS
+   commit's binary.** The stale-binary trap wearing a verdict's shape.
+3. **Only the literal `no overload of extend` scores BAD.** In a 145-commit range
+   some other breakage is near-certain, and scoring it returns a sha for someone
+   else's bug.
+
+**And the instrument that would have hidden (2) was in frankZ's own script:** its
+probe did `tail -1` of the build log, **which shows only the `verified` line — a
+stamp no-op and a real build are identical at the last line.** Same `tail -1`
+truncation frankA hit this morning in a different script, where the recipe's
+**print order** decides what survives.
+
+**`cf7101dfa` eliminated — it fails on BOTH sides**, and the elimination is sound
+because both builds printed `converged after N round(s)` with **different
+fixedpoint shas** (`108f95a7f278` vs `03fdfb503b9b`), not because the error
+strings matched. **The top suspect of two sessions, killed by building either
+side rather than reading the diff — the mechanism story fitted it well, which is
+exactly when a diff read confirms.** Window narrows from the other end to
+`b8e3b3010249..6fc8146c4`, 145 commits.
+
+**A BISECT IS A DETACHED HEAD FOR ITS WHOLE RUN**, so seven's
+`bug-t-a-commit-made-in-the-watcher-clone-during-a-gate-is-unreachable-from-any-ref`
+applies to it directly — frankZ reached the right precaution independently
+(*"not editing repo files while a detached checkout is in flight"*) without
+knowing the ticket existed. **And the escape must not be `git checkout master`**:
+that moves the tree under the running bisect.
