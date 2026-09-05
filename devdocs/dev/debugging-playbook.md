@@ -8423,6 +8423,20 @@ cost one run and one `pkill` on the night it was found. **A probe whose right an
 collides with its own presence is the guard-that-cannot-fail shape, arriving through
 `ps`.**
 
+**And on a shared box, `pgrep -x make` answers about the BOX, not about your job**
+(frankD, the night it was written, catching it while reading its own sentinel). A make
+was still running when the sentinel appeared — the exact shape that would mean the run
+had not finished — and it belonged to two other sessions in other checkouts. **The
+process half of the pair needs a cwd or a pid check to be a fact about you:**
+
+```
+for p in $(pgrep -x make); do echo "$p $(readlink /proc/$p/cwd)"; done
+```
+
+**The sentinel half needs no such repair**, and that is a second reason to prefer it:
+your own command line writes it into your own log, so it is unambiguously yours.
+Anything read off the process table is a fact about the machine until you narrow it.
+
 ### And the grep that answers 3 on a run with nothing wrong
 
 Two sessions, two harnesses, the same false positives within an hour:

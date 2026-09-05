@@ -2,6 +2,7 @@
 prio: 70
 track: P
 owner: frankD
+status: working
 ---
 
 > **Track P by measurement 2026-09-06, not by the auto-guess and not by the job's
