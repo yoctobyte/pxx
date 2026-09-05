@@ -1,0 +1,7 @@
+enum const  : 0 2 
+enum value  : 0 2 
+enum var    : 0 2 
+char const  : ac
+byte const  : 1 3 
+2nd of 3    : 7 xz 1 2 
+local named : 0 2 

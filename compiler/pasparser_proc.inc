@@ -519,6 +519,19 @@ var
   ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
+  { The REST of a set parameter's element identity, staged in the same window and
+    for the same reason as ptypesStrCap below. ptypesSetEnum alone was captured
+    for the CALLER's benefit (it lands in ProcParamSetEnumId, an argument-check
+    column) and nothing ever stamped the parameter's own SYMBOL -- so inside the
+    body a set parameter had SymSetEnumId = -1 and SymSetElemTk = 0, which is
+    exactly `no element kind recorded`, and `for x in p` refused with
+    `set iteration supports set of <enum>, set of Char or an ordinal set
+    constructor` for all three element kinds. The metadata was there; the reader
+    inside the body reads a DIFFERENT column, and that one was never written.
+    bug-p-a-set-parameter-loses-its-element-kind-so-for-in-refuses-it }
+  ptypesSetElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { set param: element TTypeKind ordinal; 0 = not a set }
+  ptypesSetElemLo : array[0..MAX_PROC_PARAMS-1] of Int64;    { …and the element subrange bounds, Hi < Lo = none }
+  ptypesSetElemHi : array[0..MAX_PROC_PARAMS-1] of Int64;
   ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
   ptypesStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { managed-string param: the ELEMENT width, Ord(tyChar) or Ord(tyWideChar); 0 = not a managed string. Staged here and persisted to ProcParamStrElemTk, for the reason ptypesSetEnum's twin gives: a caller cannot read it back off the param symbol. }
   ptypesStrCap : array[0..MAX_PROC_PARAMS-1] of Integer;  { frozen-string param: the declared capacity N of a `string[N]`, or of an open array's ELEMENT; 0 = not a frozen string. The FOURTH member of the return-channel family above, and the one that was missing: AllocParam read LastTypeStrCap itself, in the ALLOCATION loop, which runs after every parameter's type has been parsed -- so a `string[N]` param got whatever capacity the LAST parameter's type left behind. bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
@@ -789,6 +802,8 @@ begin
   { A local array is stack garbage until written, and the Self/capture insertion
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetElemTk[i] := 0;
+  for i := 0 to MAX_PROC_PARAMS - 1 do begin ptypesSetElemLo[i] := 0; ptypesSetElemHi[i] := -1; end;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesStrElemTk[i] := 0;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
@@ -993,6 +1008,22 @@ begin
           set — it is not cleared for other kinds. }
         if tk = tySet then ptypesSetEnum[i] := LastTypeSetEnumId
         else ptypesSetEnum[i] := -1;
+        { …and the element KIND and BOUNDS under the same guard, because a
+          `set of Char` and a `set of 1..9` carry no enum id and are just as
+          much sets. Capturing only the enum arm is what left two of the three
+          element kinds unrepresented on the parameter symbol. }
+        if tk = tySet then
+        begin
+          ptypesSetElemTk[i] := LastTypeSetElemTk;
+          ptypesSetElemLo[i] := LastTypeSetElemLo;
+          ptypesSetElemHi[i] := LastTypeSetElemHi;
+        end
+        else
+        begin
+          ptypesSetElemTk[i] := 0;
+          ptypesSetElemLo[i] := 0;
+          ptypesSetElemHi[i] := -1;
+        end;
         { ...and the same rule for a plain enum param: LastTypeEnumId is only
           meaningful when the type just parsed WAS one. }
         if tk = tyInteger then ptypesEnum[i] := LastTypeEnumId
@@ -1606,6 +1637,9 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
+      ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
+      ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
       ptypesEnum[i] := ptypesEnum[i-1];
       ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesStrCap[i] := ptypesStrCap[i-1];   { shifts like every other per-param column -- pconst's note above is about the one time this was forgotten }
@@ -1748,6 +1782,9 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
+      ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
+      ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
       ptypesEnum[i] := ptypesEnum[i-1];
       ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
@@ -2235,6 +2272,20 @@ begin
     begin
       SymFileRecSize[idx] := ptypesFileRecSize[i];
       SymFileElemTk[idx] := ptypesFileElemTk[i];
+    end;
+    { A set param is a set-typed value inside the body — the same stamp the
+      var-decl site makes (pasparser_decl.inc, the `VDTk = tySet` arm), so
+      `for x in p` can find the element range there too. ptypesSetEnum was
+      already captured but only ever went to ProcParamSetEnumId, which the
+      CALLER reads to check arguments; nothing wrote the parameter's own symbol,
+      and the for-in reader reads the symbol. All four columns, because
+      `set of Char` and `set of 1..9` carry no enum id. }
+    if ptypesSetElemTk[i] <> 0 then
+    begin
+      SymSetEnumId[idx] := ptypesSetEnum[i];
+      SymSetElemTk[idx] := ptypesSetElemTk[i];
+      SymSetElemLo[idx] := ptypesSetElemLo[i];
+      SymSetElemHi[idx] := ptypesSetElemHi[i];
     end;
     { An enum param is an enum-typed value inside the body — the same stamp the
       var-decl sites make, so WriteLn(p) prints the member name there too. }

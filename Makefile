@@ -6530,6 +6530,23 @@ test-core: $(COMPILER)
 	@# belongs to decide-how-a-type-carries-an-identity-its-kind-cannot-hold.
 	@$(TESTTMP)/test_setelembounds26 | diff -u test/test_set_elem_bounds.expected - \
 	  || { echo 'test_set_elem_bounds: FAIL - a set element subrange lost its bounds'; exit 1; }
+	./$(COMPILER) test/test_set_param_for_in.pas $(TESTTMP)/test_setparamforin26
+	@# .expected is fpc 3.2.2's own output, byte for byte, for every row.
+	@# The `local named` row is the CONTROL and it passed before the fix: a set
+	@# LOCAL always carried its element identity, so a test declaring only locals
+	@# would be green either way and is not evidence. `2nd of 3` is the window
+	@# control -- the four columns are staged per-parameter during the parse, and
+	@# reading them at allocation time instead would describe the LAST parameter.
+	@$(TESTTMP)/test_setparamforin26 | diff -u test/test_set_param_for_in.expected - \
+	  || { echo 'test_set_param_for_in: FAIL - a set parameter lost its element kind'; exit 1; }
+	./$(COMPILER) test/test_set_param_for_in_anon.pas $(TESTTMP)/test_setparamforinanon26
+	@# NO FPC ORACLE, deliberately, and that is why it is a separate file: fpc
+	@# refuses an anonymous set type in a parameter list ("Type identifier
+	@# expected"), so this .expected is ours by construction. It pins that the
+	@# element-identity capture is guarded on the KIND (`if tk = tySet`) and not
+	@# on a named type -- narrow that guard and this row is what says so.
+	@$(TESTTMP)/test_setparamforinanon26 | diff -u test/test_set_param_for_in_anon.expected - \
+	  || { echo 'test_set_param_for_in_anon: FAIL - an anonymous set parameter lost its element kind'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --
