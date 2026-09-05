@@ -65,3 +65,30 @@ Whoever takes it wants a POSITIVE CONTROL from the real population: the
 `for f in $(grep -rl TMethod test/*.pas)` compile sweep that was correctly
 denied that same session must still be denied. A narrowed guard that stops
 catching the thing it was written for is worse than the noise.
+
+## 2026-09-05 — third instance, and it is a DIFFERENT RULE with the same defect
+
+Rule 3 (the shell-loop rule) was the original subject. The same failure lives in
+the `make test*` rule, and it fired on a `git commit` whose MESSAGE named a make
+target while describing one:
+
+    REFUSED: a full regression suite.
+
+Nothing was run. The heredoc wrote a ticket and a commit message; the matched
+text was prose about a target, in the past tense, inside quotes.
+
+**So this is not one rule needing an anchor — it is the file's matching STRATEGY
+applied to text that is not a command.** Rule 2c already recognises the class
+and was fixed for it ("reading about the rule, not running it"). Rule 3 and the
+`make test*` rule both still read prose as invocation, and the population that
+trips them is *precisely the sessions writing tickets about testing*, i.e. the
+ones most likely to reach for the escape reflexively.
+
+Three instances today, one session, two distinct rules. Each time the escape was
+used and justified rather than the command rephrased — which is the behaviour
+the file asks for and also the behaviour that erodes it, since a guard whose
+escape becomes habitual is a guard nobody consults.
+
+**The fix stays what this ticket already proposed** — anchor at a command
+position, as rule 2c does — and now applies to more than rule 3. A positive
+control must keep a genuine full-suite invocation denied.
