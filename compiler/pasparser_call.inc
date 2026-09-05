@@ -2197,6 +2197,114 @@ begin
     end;
 end;
 
+procedure FillMatchArgChannelsAt(i, node: Integer; argTk: TTypeKind);
+{ Fill the five argument-match SIDE CHANNELS for ONE argument.
+
+  MatchParamCompatible and MatchArgRecMismatch (symtab.inc) are not functions of
+  the two type kinds. They read MatchArgRec, MatchArgNil, MatchArgScalar,
+  MatchArgArray and MatchArgArrayElemTk, and every one of those five was added
+  because the kind pair alone gave a WRONG ANSWER -- the ticket citations below
+  name which defect each time. Until 2026-09-05 all five were filled by five
+  separate walks of the AN_ARG chain inside MatchCallDelphiProcAddr, so the
+  knowledge lived in one caller and no other caller could reach it.
+
+  PER-ARGUMENT, not per-chain, and that is deliberate. Every fill turned out to
+  be a pure function of (node, argTk) -- none reads a neighbour, none needs the
+  chain -- so the chain walking was incidental. Taking a chain would force the
+  speculative overload probe in FindUMethOverloadAhead (below) to BUILD one from
+  nodes it has already parsed, and that probe REWINDS its token stream: the
+  tokens come back, but AN_ARG nodes allocated into the arena would not. A
+  per-argument entry point lets the probe call this exactly where it already
+  holds the node and allocate nothing.
+
+  The caller sets the four *Valid flags after its loop. Note four, not five --
+  MatchArgArray and MatchArgArrayElemTk share MatchArgArrayValid (defs.inc).
+
+  refactor-p-the-overload-probe-cannot-see-the-argument-match-channels }
+begin
+  if i >= MAX_PROC_PARAMS then Exit;
+
+  { Record identity, for rec-aware overload phases.
+    An AN_METHODREF argument is reported as tyRecord (it fills a method-pointer
+    param) but ResolveNodeRec would yield the OBJECT's class, not the
+    method-pointer record -- leave the record identity unconstrained so it binds
+    to the `of object` param (its {Code,Data} pair is built at IR lowering).
+    tyClass added with bug-a-overload-resolution-ignores-class-identity: without
+    the argument's class id the matcher stays blind and binds an unrelated class
+    to any class-typed parameter.
+    bug-overload-resolution-record-identity }
+  if ASTKind[node] = AN_METHODREF then MatchArgRec[i] := REC_NONE
+  else if (argTk = tyRecord) or (argTk = tyClass) then
+    MatchArgRec[i] := ResolveNodeRec(node)
+  else MatchArgRec[i] := REC_NONE;
+
+  { ...and which arguments are the literal `nil`. Its own channel rather than
+    folded into MatchArgRec because it answers a different question -- not
+    "which record is this" but "may this bind a nil-able parameter of ANY of the
+    nil-able kinds".
+    bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+  MatchArgNil[i] := IsNilLiteralNode(node);
+
+  { ...and whether the argument is DEFINITELY a scalar value, which disqualifies
+    an ARRAY parameter. argTk cannot answer that: a fixed-array parameter and a
+    fixed-array argument both present their ELEMENT kind, so an
+    `array[0..2] of Integer` overload looked exactly like an `Integer` one and
+    won by declaration order -- `Sum(n)` then read three elements off a 4-byte
+    variable and segfaulted. Only shapes whose scalar-ness is CERTAIN are
+    marked; anything else stays False and matches as before.
+    bug-a-an-integer-argument-binds-a-fixed-array-overload }
+  MatchArgScalar[i] :=
+    ((TypeIsOrdinal(argTk) or TypeIsFloat(argTk)) and
+     (argTk <> tyChar) and (argTk <> tyPointer)) and
+    (((ASTKind[node] = AN_INT_LIT) or (ASTKind[node] = AN_FLOAT_LIT) or
+      (ASTKind[node] = AN_BINOP)) or
+     ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+      (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
+     ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+      (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
+      not ProcRetIsDynArray[ASTIVal[node]]));
+
+  { ...and the STRING twin of the same blindness. `array of AnsiString` presents
+    tyAnsiString exactly as a plain `AnsiString` parameter does, so `P('hello')`
+    bound whichever was DECLARED FIRST and the callee then read a dyn-array
+    header off a string handle: `P(const v: array of AnsiString)` before
+    `P(const v: AnsiString)` printed `arr 5` instead of `str hello`. Silent
+    wrong dispatch, no diagnostic.
+    A string LITERAL is its own node shape (AN_STR_LIT) and has to be listed;
+    the rest reuse the shapes above unchanged, including AN_BINOP so a
+    concatenation counts. Char stays out for the same reason it is out above:
+    char<->string conversions are legitimate and ranked, not blocked.
+    bug-p-a-string-argument-binds-an-array-of-string-overload }
+  if (argTk = tyAnsiString) or (argTk = tyString) or
+     (argTk = tyShortString) or (argTk = tyFixedString) then
+    MatchArgScalar[i] :=
+      (ASTKind[node] = AN_STR_LIT) or (ASTKind[node] = AN_BINOP) or
+      ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+       (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
+      ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+       (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
+       not ProcRetIsDynArray[ASTIVal[node]]);
+
+  { ...and the mirror channel: which arguments are DEFINITELY an array, which
+    disqualifies a SCALAR parameter. NOT the negation of MatchArgScalar --
+    everything uncertain must stay False in BOTH, or an argument shape neither
+    channel recognises would be blocked from every candidate at once.
+    Same certainty discipline: a named array symbol, or a call to a routine
+    whose RESULT is a fixed or dynamic array. Nothing else.
+    bug-p-an-array-argument-binds-a-scalar-overload }
+  MatchArgArray[i] :=
+    ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+     (ASTIVal[node] < SymCount) and
+     (Syms[ASTIVal[node]].IsArray or (SymDynDepth[ASTIVal[node]] > 0))) or
+    ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+     ((ProcRetFixedArrBytes[ASTIVal[node]] > 0) or
+      ProcRetIsDynArray[ASTIVal[node]]));
+  MatchArgArrayElemTk[i] := tyUnknown;
+  if MatchArgArray[i] and (ASTKind[node] = AN_IDENT) and
+     (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
+    MatchArgArrayElemTk[i] := Syms[ASTIVal[node]].TypeKind;
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 

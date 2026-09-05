@@ -187,3 +187,61 @@ establish "what was green before" carries the accidental pass too.
 0**, so a green is indistinguishable from no run. That is the same shape as the
 `%FAIL`-passes-on-refusal above — two ways this one harness returns a pass for
 something that never happened.
+
+---
+
+## 2026-09-05 (frankA) — step 1 of 2: the channels are extracted, and the helper is PER-ARGUMENT rather than per-chain
+
+The body proposes *"a helper that takes an `AN_ARG` chain and fills the five
+channels, then have the probe build a chain from the nodes it already parses."*
+**Built per-ARGUMENT instead, and the reason is about the probe rather than
+about tidiness.**
+
+Reading the five fills before moving them: **every one is a pure function of
+`(node, argTypes[i])`.** None reads a neighbour, none reads the chain, none
+needs `nArgs`. The chain walking was incidental — five separate
+`for i := 0 to nArgs-1` walks of the same list, one per channel.
+
+So a chain-shaped helper would force `FindUMethOverloadAhead` to BUILD a chain
+from nodes it has already parsed — and **that probe rewinds its token stream**.
+`TokPos := savedCurIdx` puts the tokens back; it does not put back `AN_ARG`
+nodes allocated into the arena. A per-argument entry point lets the probe call
+the filler exactly where it already holds `CurASTNode` and allocate nothing.
+
+`FillMatchArgChannelsAt(i, node: Integer; argTk: TTypeKind)` lives in
+`pasparser_call.inc`, which is included BEFORE `pasparser_lval.inc`, so it is
+visible to the probe (same file) and to the free path (later file). The four
+`*Valid` flags stay with the caller, which is where the "single entry into
+`MatchProcCall*`, so the channels stay fresh across the retry matches" contract
+lives — that contract is the caller's, not the filler's.
+
+`MatchCallDelphiProcAddr` goes from 118 lines of fill to 22.
+
+### What was verified, and what each check cannot see
+
+1. **Static identity of all five channel expressions.** Comments stripped,
+   `argTypes[i]`/`argTk` and `ASTLeft[currArg]`/`node` normalised to one
+   spelling, then each `MatchArgX[i] := ...;` compared. All five identical.
+   Controlled twice: the greps are non-empty (152/42/832/316/93 chars — two
+   EMPTY greps also compare equal, which is the vacuous pass this check
+   invites), and perturbing one operand in a copy reports CHANGED.
+2. **Byte-identity of what the compiler EMITS**, old binary vs new, over the test/ corpus.
+   This is the check that matters, because static identity of the moved text
+   says nothing about the loop that now drives it.
+3. `make compiler/pascal26` converged; conformance and fgl against the TRUE
+   baseline recorded above (347/2 and 7/7, not the 346/0 in the Gate section).
+
+**What none of them can see** is a channel the free path never fills in this
+corpus — byte-identity scopes to the producers the corpus reaches. The four rows
+in the body's table are the acceptance test for that, and they belong to step 2.
+
+### Step 2, deliberately NOT taken in the same change
+
+Having the probe call the filler is the capability change, and it has a hazard
+worth naming first: **the channels are GLOBALS.** The contract in
+`MatchCallDelphiProcAddr` is "fill at the single entry, then match, then
+retry-match against the same argument list". The probe runs during ARGUMENT
+PARSING, i.e. before that entry is reached with a parsed chain — which is why it
+looks safe — but "looks safe" is the wrong standard for a globals-lifetime
+question. Establish that no free-path fill can be live across a probe before
+wiring it, then gate on the four rows in the body's table plus both baselines.

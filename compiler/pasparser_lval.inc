@@ -6471,123 +6471,27 @@ begin
     currArg := ASTRight[currArg];
   end;
 
-  { Record identity of each argument, for rec-aware overload phases
-    (bug-overload-resolution-record-identity). This function is the single
-    entry into MatchProcCall*, so refilling here keeps the side channel fresh;
-    it stays valid across the retry matches below (same argument list). }
+  { The five argument-match SIDE CHANNELS, filled once per argument through the
+    shared FillMatchArgChannelsAt (pasparser_call.inc). This function is the
+    single entry into MatchProcCall*, so refilling here keeps the channels
+    fresh; they stay valid across the retry matches below (same argument list).
+
+    Until 2026-09-05 this was FIVE separate walks of the same AN_ARG chain, one
+    per channel, each with its own `i < MAX_PROC_PARAMS` guard -- and the
+    knowledge of what each channel means lived HERE, in one caller, where the
+    speculative overload probe could not reach it. Every fill turned out to be a
+    pure function of (node, argTypes[i]), so the chain walking was incidental
+    and the extraction is one loop instead of five.
+    refactor-p-the-overload-probe-cannot-see-the-argument-match-channels }
   currArg := argsHead;
   for i := 0 to nArgs-1 do
   begin
-    if i < MAX_PROC_PARAMS then
-    begin
-      { An AN_METHODREF argument is reported as tyRecord (it fills a method-pointer
-        param) but ResolveNodeRec would yield the OBJECT's class, not the
-        method-pointer record — leave the record identity unconstrained so it binds
-        to the `of object` param (its {Code,Data} pair is built at IR lowering). }
-      if ASTKind[ASTLeft[currArg]] = AN_METHODREF then MatchArgRec[i] := REC_NONE
-      else if (argTypes[i] = tyRecord) or (argTypes[i] = tyClass) then
-        { tyClass added with bug-a-overload-resolution-ignores-class-identity:
-          without the argument's class id the matcher stays blind and binds an
-          unrelated class to any class-typed parameter. }
-        MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
-      else MatchArgRec[i] := REC_NONE;
-    end;
+    FillMatchArgChannelsAt(i, ASTLeft[currArg], argTypes[i]);
     currArg := ASTRight[currArg];
   end;
   MatchArgRecValid := True;
-
-  { ...and, beside it, which arguments are the literal `nil`. Same single entry
-    point, same freshness guarantee across the retry matches below. Kept as its
-    own channel rather than folded into MatchArgRec because it answers a
-    different question -- not "which record is this" but "may this bind a
-    nil-able parameter of ANY of the nil-able kinds".
-    bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
-  currArg := argsHead;
-  for i := 0 to nArgs-1 do
-  begin
-    if i < MAX_PROC_PARAMS then
-      MatchArgNil[i] := IsNilLiteralNode(ASTLeft[currArg]);
-    currArg := ASTRight[currArg];
-  end;
   MatchArgNilValid := True;
-
-  { ...and, beside it, whether the argument is DEFINITELY a scalar value, which
-    disqualifies an ARRAY parameter. argTypes cannot answer that: a fixed-array
-    parameter and a fixed-array argument both present their ELEMENT kind, so an
-    `array[0..2] of Integer` overload looked exactly like an `Integer` one and
-    won by declaration order — `Sum(n)` then read three elements off a 4-byte
-    variable and segfaulted. Only shapes whose scalar-ness is certain are
-    marked; anything else stays False and matches as before.
-    bug-a-an-integer-argument-binds-a-fixed-array-overload }
-  currArg := argsHead;
-  for i := 0 to nArgs-1 do
-  begin
-    if i < MAX_PROC_PARAMS then
-    begin
-      node := ASTLeft[currArg];
-      MatchArgScalar[i] :=
-        ((TypeIsOrdinal(argTypes[i]) or TypeIsFloat(argTypes[i])) and
-         (argTypes[i] <> tyChar) and (argTypes[i] <> tyPointer)) and
-        (((ASTKind[node] = AN_INT_LIT) or (ASTKind[node] = AN_FLOAT_LIT) or
-          (ASTKind[node] = AN_BINOP)) or
-         ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-          (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
-         ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
-          (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
-          not ProcRetIsDynArray[ASTIVal[node]]));
-      { ...and the STRING twin of the same blindness. `array of AnsiString`
-        presents tyAnsiString exactly as a plain `AnsiString` parameter does, so
-        `P('hello')` bound whichever was DECLARED FIRST and the callee then read
-        a dyn-array header off a string handle: `P(const v: array of AnsiString)`
-        before `P(const v: AnsiString)` printed `arr 5` instead of `str hello`.
-        Silent wrong dispatch, no diagnostic -- the same failure the ordinal arm
-        above was added for, one kind later.
-        A string LITERAL is its own node shape (AN_STR_LIT) and has to be listed;
-        the rest reuse the shapes above unchanged, including AN_BINOP so a
-        concatenation counts. Char stays out for the same reason it is out
-        above: char<->string conversions are legitimate and ranked, not blocked.
-        bug-p-a-string-argument-binds-an-array-of-string-overload }
-      if (argTypes[i] = tyAnsiString) or (argTypes[i] = tyString) or
-         (argTypes[i] = tyShortString) or (argTypes[i] = tyFixedString) then
-        MatchArgScalar[i] :=
-          (ASTKind[node] = AN_STR_LIT) or (ASTKind[node] = AN_BINOP) or
-          ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-           (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
-          ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
-           (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
-           not ProcRetIsDynArray[ASTIVal[node]]);
-    end;
-    currArg := ASTRight[currArg];
-  end;
   MatchArgScalarValid := True;
-
-  { ...and the mirror channel: which arguments are DEFINITELY an array, which
-    disqualifies a SCALAR parameter. Not the negation of MatchArgScalar --
-    everything uncertain must stay False in BOTH, or an argument shape neither
-    channel recognises would be blocked from every candidate at once.
-    Same certainty discipline: a named array symbol, or a call to a routine
-    whose RESULT is a fixed or dynamic array. Nothing else.
-    bug-p-an-array-argument-binds-a-scalar-overload }
-  currArg := argsHead;
-  for i := 0 to nArgs-1 do
-  begin
-    if i < MAX_PROC_PARAMS then
-    begin
-      node := ASTLeft[currArg];
-      MatchArgArray[i] :=
-        ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-         (ASTIVal[node] < SymCount) and
-         (Syms[ASTIVal[node]].IsArray or (SymDynDepth[ASTIVal[node]] > 0))) or
-        ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
-         ((ProcRetFixedArrBytes[ASTIVal[node]] > 0) or
-          ProcRetIsDynArray[ASTIVal[node]]));
-      MatchArgArrayElemTk[i] := tyUnknown;
-      if MatchArgArray[i] and (ASTKind[node] = AN_IDENT) and
-         (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
-        MatchArgArrayElemTk[i] := Syms[ASTIVal[node]].TypeKind;
-    end;
-    currArg := ASTRight[currArg];
-  end;
   MatchArgArrayValid := True;
 
   { FPC parity: an untyped integer LITERAL is typed by its VALUE — the smallest
