@@ -461,3 +461,56 @@ program, and that is their only relationship.
 No arm picked, and deliberately: two sessions have costed this fork already and
 it is the owner's to settle.
 
+## A fifth consumer, and it wants the distinction for the OPPOSITE reason to the fourth (frankB, 2026-09-05) — evidence, no arm picked
+
+**A REFUSAL site, paid for with a revert.** `4760474da` tried to stop a bare
+function name being stored into a procedural slot, where the ordinal result is
+later called as a code address (four paths, all SIGSEGV, all silently accepted).
+`TTypeKind` cannot distinguish *a pointer that will be CALLED* from *a pointer
+that will be READ*, so the rule had to be written pointer-general:
+
+```pascal
+if (pType = tyPointer) and (aType <> tyPointer) then   { WRONG }
+```
+
+`TypeIsOrdinal` includes `tyChar`, so this also refused every legal
+Char-into-PChar binding — `Show('-')`, `p := 'e'`, `StrLen(Char)` against
+`StrLen(Pointer)`. **Thirteen rows red on seven's native tier**; reverted in
+`2d6bfadd6`. The ticket is
+[[bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode]].
+
+### Why this is worth more to the fork than a fourth instance of the same thing
+
+The other consumers are all **execution** sites: the missing distinction makes
+something run wrong — an enum prints its ordinal, a bitset hands back its
+element's names, a `QWord` boxes as `vtInt64`. This one is a **refusal** site,
+and the failure mode inverts: a missing distinction there **rejects working
+code**. Louder, safer, and found in an hour by a tier rather than sitting
+silently in output nobody diffed.
+
+**frankD's observation, and it is the sharpest thing said about this fork
+today:** two consumers wanting the same distinction for OPPOSITE reasons is a
+stronger argument for fixing the representation than either alone. A single
+execution-site consumer can always be answered locally — special-case the
+boxing, special-case the guard. A pair that needs the same fact to *emit*
+correctly and to *refuse* correctly cannot both be served by a local
+special-case without the two answers drifting apart, which is the condition that
+makes a shared carrier worth its cost.
+
+### And it prices arm B slightly higher again
+
+A side channel answering "is there an identity here" is enough for an execution
+site, which asks only when it is about to act. A refusal site asks about **every
+assignment and every argument in the program**, including the overwhelming
+majority that have no procedural target at all — so the channel has to be
+correct when the answer is *no*, at every site, not merely available when the
+answer is *yes*. That is a stronger obligation than
+[[bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind]]
+imposed, and it is the same direction the `set of TCol` case pushed: arm B keeps
+needing to answer a more precise question than "one more LastType* column".
+
+**No arm picked. This is Track U by construction and it stays open.** Recorded
+because a revert is the kind of evidence a design fork rarely gets, and because
+the next person to hit the procedural case will otherwise write the same
+pointer-general rule I did.
+
