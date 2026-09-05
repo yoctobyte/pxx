@@ -151,3 +151,69 @@ The three remaining walls are all RTL/preprocessor gaps rather than parser gaps
 (`TFPCHeapStatus`, `TSystemCodePage`, and a `{$if}` comparing non-integer
 operands), so the next holder is looking at Track B or the directive evaluator,
 not at `pasparser_*`.
+
+## RETRACTION, 2026-09-05 — two of this ticket's findings were artefacts of MY invocation
+
+**`--mimic-fpc-compiler` exists and I was hand-rolling a worse version of it.**
+`defs.inc:2943` documents it precisely: *"Its sources are not standalone: every
+unit does `{$i fpcdefs.inc}`, whose branches are dead without the build-time CPU
+define ... One define is the whole profile — fpcdefs.inc derives the rest."*
+That is exactly the `PInt` failure I diagnosed and patched around with
+`-dx86_64`. My workaround set ONE of the defines the profile sets; the flag sets
+the profile. **The correct invocation is:**
+
+```
+pxx --mimic-fpc-compiler -Fu<C> -Fi<C> -Fu<C>/x86_64 -Fi<C>/x86_64 driver.pas
+```
+
+Two findings recorded above do not survive it:
+
+**1. The `cfileutl` conditional-directive wall IS NOT A DEFECT.** I wrote that it
+*"is a separate defect that has never had a ticket"*. It is
+`{$if FPC_FULLVERSION < 20701}` at `cfileutl.pas:155`, and `FPC_FULLVERSION` is
+defined — as 30202, in `paslexer.inc:954` — **by the profile my invocation was
+not applying.** Under the flag, `cfileutl` does not stop there at all. There is
+no ticket to file and there never was.
+
+What that episode DID produce is real and is fixed in the same commit as this
+retraction: the diagnostic said `comparison requires integer operands`, which is
+true about the value stack and useless about the program, because an identifier
+with no value pushes as a BOOLEAN and so a missing define presents as a type
+mix. It now names the symbol. **The bug was in the message, not in the
+evaluator, and the message is what sent me into the evaluator.**
+
+**2. THE `cmsgs` CORRECTION WAS ITSELF WRONG, AND THE ORIGINAL TABLE WAS
+RIGHT.** I wrote that the old march table's `cmsgs -> TMessage = object` row
+*"was never a measurement of what it has since been cited for"*, on the strength
+of `cmsgs` stopping at `unknown type: TSystemCodePage`. Under the correct
+invocation, with `TSystemCodePage` added, `cmsgs` stops at **`cmsgs.pas:59`, an
+object type cannot have a constructor** — `TMessage = object` with
+`constructor Init`, exactly as the original table said. **The citation in
+[[decide-old-style-object-types]] stands.** I relayed the retracted version to
+two peers before measuring it under the right flag; both have been told.
+
+The general lesson is the one this ticket already carries about `-dx86_64`,
+turned on its author: **a corpus result is a statement about an INVOCATION.** I
+found the first setup gap, patched it by hand, and then read every subsequent
+wall as a property of the compiler — including one that contradicted a standing
+citation. A hand-rolled substitute for a flag is a configuration nobody else
+runs, so every number it produces is unshared.
+
+## The march, re-measured under `--mimic-fpc-compiler` — ONE compiler, ONE run
+
+**Compiler `108f95a7f278`** (self-host fixedpoint, `rounds 1`, srchash
+`edbd7f597bca`), at master `3b60635ec` plus the `TSystemCodePage` and `{$if}`
+diagnostic changes in this commit. Three different compiler shas appeared in
+this ticket's earlier reports as the work advanced; **every row of the table
+below is from a single run of that one binary**, so nothing here is stitched
+together from different trees.
+
+| unit | verdict |
+| --- | --- |
+| `cutils`, `globtype`, `constexp`, `version`, **`cstreams`** | **OK — compile** |
+| `cclasses`, `comphook`, `finput`, `cfileutl` | `cclasses.pas:676 unknown type: TFPCHeapStatus` |
+| `cmsgs` | `cmsgs.pas:59 an object type cannot have a constructor` — DECIDED, not a gap |
+
+So there is exactly **ONE** open wall on this corpus, not three, and `cmsgs` is
+behind a decision rather than behind work. See
+[[feature-b-getfpcheapstatus-needs-always-on-heap-accounting]].

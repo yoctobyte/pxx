@@ -6605,6 +6605,10 @@ test-core: $(COMPILER)
 	@# whether or not the mapping does anything. Every row is fpc 3.2.2's output.
 	./$(COMPILER) test/test_filemode.pas $(TESTTMP)/test_filemode26
 	tools/expect_same.sh test_filemode26 "$$($(TESTTMP)/test_filemode26 | tail -1)" "total ok 5 / 5"
+	@# A {$if} comparison against a valueless symbol must NAME it. Grepped on the
+	@# MESSAGE: the file fails either way, so an exit check passes on the old wording.
+	! ./$(COMPILER) test/test_cond_compare_names_symbol_fail.pas $(TESTTMP)/test_condname26 > $(TESTTMP)/test_condname.log 2>&1
+	grep -q "THIS_SYMBOL_IS_NOT_DEFINED. has no integer value here" $(TESTTMP)/test_condname.log
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
 	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1

@@ -1137,6 +1137,14 @@ var
   PasCondValKind: array[0..63] of Integer;
   PasCondInt: array[0..63] of Int64;
   PasCondOps: array[0..63] of Char;
+  { The SOURCE SPELLING of a slot pushed from an identifier, '' for a literal or
+    a computed slot. Carried only so a failed comparison can NAME the operand:
+    `{$if FPC_FULLVERSION < 20701}` where FPC_FULLVERSION has no value reported
+    `comparison requires integer operands`, which describes the value stack and
+    not the program -- an undefined symbol pushes as a BOOLEAN (does it exist?),
+    so the type mix is the SYMPTOM and the missing define is the cause. Cost is
+    one string store per operand, in the conditional evaluator only. }
+  PasCondValName: array[0..63] of AnsiString;
   PasCondValueCount, PasCondOpCount: Integer;
   PasCondExprText: AnsiString;
   PasCondExprPos: Integer;
@@ -1165,7 +1173,17 @@ begin
   if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
   PasCondValKind[PasCondValueCount] := 0;
   PasCondValues[PasCondValueCount] := b;
+  PasCondValName[PasCondValueCount] := '';
   Inc(PasCondValueCount);
+end;
+
+{ As PasCondPushBool, plus the identifier this slot came FROM. Separate entry
+  point rather than a defaulted parameter so every existing caller keeps pushing
+  an anonymous slot and only the identifier arm names one. }
+procedure PasCondPushBoolNamed(b: Boolean; const nm: AnsiString);
+begin
+  PasCondPushBool(b);
+  PasCondValName[PasCondValueCount - 1] := nm;
 end;
 
 procedure PasCondPushInt(v: Int64);
@@ -1173,6 +1191,7 @@ begin
   if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
   PasCondValKind[PasCondValueCount] := 1;
   PasCondInt[PasCondValueCount] := v;
+  PasCondValName[PasCondValueCount] := '';
   Inc(PasCondValueCount);
 end;
 
@@ -1319,7 +1338,26 @@ begin
     Dec(PasCondValueCount);
     if (PasCondValKind[PasCondValueCount] <> 1) or
        (PasCondValKind[PasCondValueCount - 1] <> 1) then
-      Error('conditional directive: comparison requires integer operands');
+    begin
+      { NAME THE OPERAND. The old message said only "comparison requires integer
+        operands", which is true about the value stack and useless about the
+        program: an identifier with no VALUE pushes as a boolean (`is it
+        defined?`), so a plain missing define presents as a type mix. Measured
+        2026-09-05 on FPC's cfileutl.pas -- `{$if FPC_FULLVERSION < 20701}` under
+        an invocation that had not applied the FPC define profile. The message
+        sent the reader into the expression evaluator; the cause was one absent
+        define, and the fix was a compiler FLAG. }
+      if PasCondValName[PasCondValueCount] <> '' then
+        Error('conditional directive: `' + PasCondValName[PasCondValueCount] +
+              '` has no integer value here, so it cannot be compared' +
+              ' (an undefined symbol, or one defined without a value)')
+      else if PasCondValName[PasCondValueCount - 1] <> '' then
+        Error('conditional directive: `' + PasCondValName[PasCondValueCount - 1] +
+              '` has no integer value here, so it cannot be compared' +
+              ' (an undefined symbol, or one defined without a value)')
+      else
+        Error('conditional directive: comparison requires integer operands');
+    end;
     ri := PasCondInt[PasCondValueCount];
     li := PasCondInt[PasCondValueCount - 1];
     if op = '=' then res := li = ri
@@ -1470,7 +1508,7 @@ begin
         else if PasDefineLookupValue(word, intval) then
           PasCondPushInt(intval)
         else
-          PasCondPushBool(PasDefineExists(word));
+          PasCondPushBoolNamed(PasDefineExists(word), word);
         expectValue := False;
         while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
           PasCondApplyOp;

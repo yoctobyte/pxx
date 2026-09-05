@@ -6922,7 +6922,17 @@ begin
   else if CaseEqual(nm, 'shortint') or CaseEqual(nm, 'int8') then Result := tyInt8
   else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'uint8') then Result := tyUInt8
   else if CaseEqual(nm, 'smallint') or CaseEqual(nm, 'int16') then Result := tyInt16
-  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
+  { FPC's System.TSystemCodePage is `Word` -- a code-page NUMBER (1252, 65001,
+    CP_NONE = $FFFF), never a character. It rides in this table rather than in an
+    RTL unit because FPC's System is IMPLICIT: cmsgs.pas uses it with nothing but
+    `uses globtype`, so a unit declaration could not be reached from there.
+    Added to OrdinalNameToTk below as well, so a CAST `TSystemCodePage(x)` and a
+    DECLARATION `x: TSystemCodePage` agree -- the two tables are duplicates that
+    have drifted before (sizeint/sizeuint were in one and not the other), and
+    unifying them is refactor-a-the-const-cast-width-table-is-the-third-copy's
+    job, not this row's. }
+  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') or
+          CaseEqual(nm, 'tsystemcodepage') then Result := tyUInt16
   else if CaseEqual(nm, 'longint') or CaseEqual(nm, 'int32') then Result := tyInt32
   else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or
           CaseEqual(nm, 'uint32') or CaseEqual(nm, 'dword') then Result := tyUInt32
@@ -7055,7 +7065,8 @@ begin
   if CaseEqual(nm, 'shortint') or CaseEqual(nm, 'int8') then Result := tyInt8
   else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'uint8') then Result := tyUInt8
   else if CaseEqual(nm, 'smallint') or CaseEqual(nm, 'int16') then Result := tyInt16
-  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
+  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') or
+          CaseEqual(nm, 'tsystemcodepage') then Result := tyUInt16
   else if CaseEqual(nm, 'longint') or CaseEqual(nm, 'int32') then Result := tyInt32
   else if CaseEqual(nm, 'integer') then Result := tyInteger
   else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'uint32')
