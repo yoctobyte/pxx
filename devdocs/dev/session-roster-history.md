@@ -27125,3 +27125,158 @@ GTK2-vs-GTK3 hypothesis. Wrong condition:** `life` and `pcl/extctrls` fail on
 plexus (wrong headers resolved), the regressions fail on seven (**no headers at
 all**). **Two different conditions that both mention `gtk.h`** — same error text,
 different cause, which is the trap at its most convincing.
+
+## 2026-09-06, small hours — a base rate at last, and three refusals to build
+
+### ONE PROBE IN NINE WAS ITSELF MAKING A STALE CLAIM
+
+frankS, closing the Track P staleness pass: **five false greens on its own
+instruments in one evening** — three from probing the slug instead of the
+summary, one from a probe drawn from the wrong population, one that reproduced
+for the wrong reason. **All caught, none banked.**
+
+> **On a pass whose whole purpose is detecting stale claims, roughly one probe in
+> nine was itself making one.**
+
+**This is the first BASE RATE anyone has produced.** The fleet has spent a full
+day collecting instances of instruments answering the wrong question and had no
+denominator. One in nine says the failure is **not exotic, not a lapse, and not
+something a more careful session avoids — it is the expected yield of running
+probes at all.** Which means the defence must be structural (a second
+instrument, a stated control) rather than attentional. frankS caught all five by
+having a habit, not by being alert.
+
+**The fourth is a new mechanism and its one-line form is the best statement of
+the whole class:** a `--strict-visibility` probe put the class in the same file
+as the access; all three columns accepted, reading cleanly as *the flag is
+inert*. **FPC's `private` is UNIT-scoped, not class-scoped**, so a same-file
+access is legal under FPC too — the probe was incapable of an answer.
+
+> **A flag that refuses nothing and a probe that asks nothing print the same
+> thing.**
+
+Only the cross-unit spelling separates them; there the default accepts and both
+flags refuse. **The working control is on the ticket so the next taker does not
+rebuild the wrong one.**
+
+### THREE SESSIONS DECLINED TO BUILD, ALL THREE RIGHT
+
+- **frankZ** held the `HOST_LIBS` skip path: *"a skip path built for a condition
+  I cannot demonstrate is a guard aimed at a population I have not measured."*
+  Honest state: **mechanism gap confirmed in `testmgr`, population unconfirmed.**
+- **frankS** declined a size row into `test-esp-bare`: that suite is in **zero
+  tiers**, so the guard *"would be exactly as unwatched as the number it
+  guards."* **Enrolment first, or a third layer of never-executed.**
+- **frankB** filed rather than fixed the hard-keyword-intrinsic cluster after
+  enumerating the consumers: a **range test** over five adjacent `defs.inc` enum
+  members (making the token-numbering coordination mandatory rather than
+  advisory), **`pyparser.inc`'s own copies — where the self-host fixedpoint
+  proves NOTHING because `compiler.pas` is Pascal** — and two live owners in the
+  affected files.
+
+**All three refusals are better than the code would have been.** And "closing
+counts, filing does not" does **not** override them: that rule is against filing
+INSTEAD of fixing, not against filing when the fix is five files, a token-order
+dependency, a second frontend and two live owners.
+
+### THE SPLIT IS THE EVIDENCE — 9 of 37, not "intrinsics"
+
+frankB took frankS's `sysopen`/`Read` reading and **measured the breadth rather
+than accepting it**: 37 intrinsic spellings tried, **exactly nine fail.**
+
+**If the cause were "it is an intrinsic", `Str` and `Length` would fail too.**
+It is precisely the spellings the lexer maps to a **dedicated token kind** — a
+construct, not a label.
+
+**And it disproves the framing both existing tickets carry:** they are written
+about the CALL being eaten by the intrinsic, and **the call never happens** — the
+declaration is refused first, so the name cannot exist to be shadowed. Two
+tickets describing a downstream symptom of something that occurs earlier; the
+residual-migration shape again.
+
+### EACH FIX MADE THE NEXT BUG LIKELIER BY MAKING THE COPY LOOK MAINTAINED
+
+frankH, third instance of one cause in `feature-writeln-as-library`: `Str(s:5,t)`
+on a STRING printed **`4357408` — the heap address rendered as digits**; `Str(c:3,t)`
+gave a Char's ordinal. fpc refuses the first and ICEs on the second, so nothing
+depended on either. **The oracle found it, not the author** — putting `Str`
+beside `write` on one value is what made it visible.
+
+> `Str` carried a hand-written copy of `write`'s dispatch table and was short a
+> case every time anyone looked — **and each earlier fix added one more arm to
+> the copy. Three tickets, one cause, and the first two fixes each made the third
+> likelier by making the copy look maintained.**
+
+**A maintenance signal inverting: every repair made the artefact more convincing
+and the underlying defect no less likely.** The microfixes are what SUPPRESS the
+mechanism count, because a table with recent commits reads as owned. Fixed by
+deleting the copy — `Str` calls `TextStrArg`, which *is* write's table — so the
+next type added to `write` reaches `Str` for free.
+
+**Second instance the same hour of RECENT ACTIVITY READING AS COMPLETENESS:**
+frankH declined the elided spelling because the `isNilPy` carve is **partly
+landed — four commits name its slug**, which is *"exactly the shape that makes a
+partial carve read as a finished one."* Same as frankC's half-applied model
+landing in the right neighbourhood.
+
+**And it refused the ticket's own design** — a new `vtFormatted` tag — because
+`TextStrArg` already does the job and **vendored FPC code doing `case VType of`
+would meet an unknown tag 19 and fall through its `else`.** A new tag does not
+fail loudly in foreign code. Caught by enumerating consumers, not by reasoning
+about the design.
+
+### THE GTK BATCH: BOTH MEASUREMENTS WERE RIGHT AND THE UPGRADE SITS BETWEEN THEM
+
+| | |
+|---|---|
+| tested tree the tickets were filed from, gtk failures in the log tails | **17:54:19Z** |
+| tickets auto-filed | **17:58:16Z** — 34s BEFORE `4760474da` existed, so frankB's attribution was impossible, not merely unsupported |
+| seven's first **post-dist-upgrade** report | **18:20:49Z** |
+| all five gtk tests **passing** (`job_last_pass` → `2a4cd0bcf664`) | **19:15:54Z** |
+
+**Unverified hypothesis: the dist-upgrade pulled the dev packages in as
+dependencies**, clearing a condition present since 08-21 twenty-two minutes after
+the last batch was filed. The check is on seven (`apt` history), and the owner
+has granted that box standing permission to install what it needs.
+
+**frankZ's own correction is the durable half:** it had told this seat *"I have
+found no per-job timestamp"* after checking one field. `seven.json` carries
+**`job_last_pass`**, 4493 entries, keyed by the **sha of each job's last pass** —
+better than a timestamp because it dates a pass to a **tree**.
+
+> The correct sentence was *"the `jobs` map has no recency; I have not checked
+> whether the state carries it elsewhere"* — **a claim about where I looked, not
+> about what exists.**
+
+**A presence claim scopes to what you checked, and so does an absence claim —
+but only the presence claim FEELS like it needs scoping.** *"I found X"* invites
+*"where?"*; *"there is no X"* sounds complete, and is not.
+
+**Still open and now the live question:** the error strings are `unit source not
+found: gtk` (**Pascal unit** resolution) and `C include file not found:
+"gtk/gtk.h"` (**C preprocessor**) — **neither is what `test_c_gtk*.pas` reports.**
+So the five tests named in the batch may not be the five things that failed, and
+**eighteen tickets across four batches is what happens when the name in the
+ticket and the thing that broke are not the same object.** Fifth scale tonight.
+
+### A TERMINAL FOLDER'S AXIS IS "IS THE REPORT RIGHT", NOT "DOES ANYTHING POINT HERE"
+
+frankS, filing the U fork (`056563d59`) after telling this seat it was "routed to
+U" while it was still only a note — **a claim about work that had not happened,
+caught while auditing others for exactly that, and it had already travelled.**
+
+> **The four terminal folders are cut on *is the report right*, while what a red
+> test row needs is *does anything still point at this*.**
+
+`rejected/` is the right home for a wrong REPORT and the wrong home for a correct
+MEASUREMENT that explains a live red — it is loaded but **unranked**, so
+rejecting `tgenfunc17/18`'s explanation leaves two red rows with nothing pointing
+at why, and the next reader files it again.
+
+### FILED, NOT EDITED
+
+`a7a3f634b` — `decide-the-one-target-rule-should-name-the-build-host-not-only-the-architecture`,
+p45. Proposed CLAUDE.md text banked as a ticket rather than applied, at
+frankuser's instruction and this seat's own boundary. **Three sessions declined
+to edit CLAUDE.md on a peer's ask on 2026-09-05 and were right each time; this
+seat was the asking peer in two of them.**
