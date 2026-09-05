@@ -342,3 +342,33 @@ has to be read by NAME every time.
 
 Gate: quick GREEN, fgl 7/7, self-host converged. Every row moved from gap to
 pass was diffed against fpc 3.2.2 output, not scored on its exit code.
+
+### Mechanism 2 — a pointer to a nested type keeps the FIRST specialization's pointee
+
+The two-row shape behind mechanism 1 (`tgeneric6`, `tgeneric8`, both saying
+`cannot assign AnsiString to Integer`) reduced to a 15-line repro and is filed as
+[[bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations]].
+
+**Order-dependent**, which is what named it: swap the two `specialize` lines and
+the message swaps direction. The pointee is whatever the first specialization
+made it — a value read from a shared slot, not from the type.
+
+**Three-way control, because the trigger is a CONJUNCTION and either half alone
+passes:**
+
+| probe | shape | result |
+| --- | --- | --- |
+| pointer to nested type, TWO specializations | | refused |
+| pointer to nested type, ONE specialization | | correct |
+| nested record used DIRECTLY, two specializations | | correct |
+
+So the nested record IS specialized per instantiation; only the pointer's
+pointee is shared. My first probe used the record directly and PASSED — the
+minimal case is not the defect, and stopping there would have recorded "cannot
+reproduce".
+
+Not fixed here. The nested-type hoisting machinery in `pasparser_generic.inc` is
+a different path and its own comment says it fires only when a nested type is
+used as a GENERIC ARGUMENT, which a pointee is not. That is deeper than a
+cluster pass should microfix, so the diagnosis is banked with the controls
+rather than half-applied.
