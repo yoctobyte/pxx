@@ -5234,25 +5234,49 @@ begin
 end;
 
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
-var f, n, i: Integer;
+var f, n, i, used: Integer;
 begin
-  { Staging buffer is the global LoadFileBuf (8 MB) — an 8 MB stack local here
-    overflows a default 8 MB stack (FPC cold-bootstrap segfaulted in this
-    prologue). Single-use, never re-entered, so a shared global is safe. }
+  { Staging buffer is the global LoadFileBuf — global rather than a stack local
+    because an 8 MB frame here overflowed a default 8 MB stack (FPC
+    cold-bootstrap segfaulted in this prologue). Single-use, never re-entered,
+    so a shared global is safe.
+
+    THIS BODY RUNS ONLY UNDER THE FPC SEED. `LoadFile` is intercepted in
+    pasparser_stmt.inc as a builtin (PXXStrLoadFile), so a self-hosted pxx never
+    calls it -- which is why the pinned compiler loads a 30 MB unit correctly
+    through what looks like an 8 MB buffer. Do not read a fix here as changing
+    anything a released compiler does; it changes the cold-bootstrap one.
+
+    LOOPS TO EOF. It used to do ONE sysread of STRING_CAP bytes and keep
+    whatever came back, so on the seed path a file over 8 MB compiled as its
+    first 8 MB with no diagnostic. A truncated source is the worst shape this
+    could have: it usually still parses. The loop ends on n <= 0, so EOF and
+    error are both terminal and a read error yields the bytes already taken --
+    same as before for that case, and nothing here could distinguish them.
+    feature-dynamic-compiler-tables }
   LoadPath := path;
   SetLength(dst, 0);
   f := sysopen(LoadPath, 0);
-  if f >= 0 then
+  if f < 0 then Exit;
+  if LoadFileCap = 0 then
   begin
-    n := sysread(f, LoadFileBuf, STRING_CAP);
-    if n < 0 then n := 0;
-    sysclose(f);
-    SetLength(dst, n);
-    for i := 0 to n - 1 do
-      dst[i + 1] := Chr(LoadFileBuf[i]);
-  end
-  else
-    SetLength(dst, 0);
+    LoadFileCap := 262144;
+    SetLength(LoadFileBuf, LoadFileCap);
+  end;
+  used := 0;
+  repeat
+    if used = LoadFileCap then
+    begin
+      LoadFileCap := LoadFileCap * 2;
+      SetLength(LoadFileBuf, LoadFileCap);
+    end;
+    n := sysread(f, LoadFileBuf[used], LoadFileCap - used);
+    if n > 0 then used := used + n;
+  until n <= 0;
+  sysclose(f);
+  SetLength(dst, used);
+  for i := 0 to used - 1 do
+    dst[i + 1] := Chr(LoadFileBuf[i]);
 end;
 
 procedure LoadFileCI(const path: AnsiString; var dst: AnsiString);

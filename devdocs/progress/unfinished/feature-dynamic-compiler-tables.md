@@ -1,6 +1,13 @@
 ---
+slug: feature-dynamic-compiler-tables
+title: "Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)"
 prio: 45  # auto
 track: A
+type: feature
+status: unfinished
+owner: ""
+blocked-by: []
+summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, no agent holds it. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code. STILL FIXED: Data (MAX_DATA, 2 MB), Strs (MAX_STRS), CPrepChars (MAX_CPREP_CHARS, 8 MB), TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. Parked for want of an agent, not for want of a bridge."
 ---
 
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
@@ -342,3 +349,55 @@ code that assumed it (the `IRVerify` out-of-bounds write is the worked
 example). That instruction is the ticket's real value and it is intact.
 
 **Re-priced: unchanged.** Parked for want of an agent, not for want of a bridge.
+
+
+## 2026-09-05 (frankH) — LoadFileBuf converted, and the interesting part is WHO runs it
+
+`LoadFileBuf` was `array[0..STRING_CAP-1] of Byte` — **8 MB of BSS in every
+compiler this repo ships**. It is now `array of Byte`, grown by `LoadFile`, with
+`LoadFileCap` never shrinking across loads. Measured on the self-host build:
+**bss 106842604 -> 98454060**, exactly the 8 MB.
+
+**The claim I nearly shipped, and what measuring it actually found.** I wrote,
+first, that this removed a silent truncation: one `sysread` of at most
+`STRING_CAP` means a file over 8 MB is read short. Then I tested it — a 30 MB
+unit through the PINNED compiler, expecting a truncation error — and it
+**compiled and ran correctly**. That is impossible if `LoadFile` were the reader.
+
+It is not. **`LoadFile` is intercepted in the parser as a builtin**
+(`pasparser_stmt.inc`, backed by `PXXStrLoadFile`), so a self-hosted pxx never
+executes the Pascal body at all. The 8 MB array was BSS that path allocates and
+never touches. **The body is live only under the FPC-seeded cold-bootstrap
+compiler**, where `sysread` is `fpRead` and nothing intercepts the call.
+
+**So the correctness half is real, narrow, and now has a before/after control.**
+Two FPC seeds built from the same tree, one with the change stashed:
+
+| | 30 MB unit | small unit |
+| --- | --- | --- |
+| seed WITHOUT the change | `pascal26:88305: error: unterminated comment` | works |
+| seed WITH the change | compiles, prints 777 | works |
+
+Line 88305 is where the 8 MB cut lands. **The genuinely SILENT case is not
+source at all — it is `{$R}`**: `resources_emit.inc` calls `LoadFile` to embed a
+file's bytes, so a resource over 8 MB was embedded SHORT with no diagnostic, the
+build succeeding and the blob simply wrong. A truncated Pascal *source* usually
+errors, but about whatever the cut leaves dangling, which misnames the fault.
+
+**It also stopped borrowing `STRING_CAP`.** That constant is the TOKEN CHAR
+POOL's capacity and carries ~40 overflow checks; it was also sizing this
+unrelated read buffer, so a bump for one silently moved the other. Following
+this ticket's own method — grep the `MAX_` name and read every hit — is what
+surfaced that: of the ~40 `STRING_CAP` hits, exactly one was about this buffer.
+
+**Method note for the next family.** The grep this ticket prescribes found the
+shared constant, but it would NOT have found the builtin interception, because
+nothing in `elfwriter.inc` or `defs.inc` says the body is dead in self-host. The
+question that found that was *"what would this be if it were false"* — run the
+old binary on an oversized input and see whether it actually breaks. **Add that
+to the method: before claiming a fixed table costs correctness, make the current
+compiler fail on it.** A table can be pure BSS waste and no ceiling at all, and
+those two justify very different amounts of risk.
+
+Still fixed after this: `Data`, `Strs`, `CPrepChars`, `TokChars`,
+`LabelFixupPos`/`LabelFixupTarget`, `UCls*`, and `Procs` deliberately.

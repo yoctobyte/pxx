@@ -5284,11 +5284,32 @@ var
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;
-  { File-read staging buffer for LoadFile. Global (BSS) rather than an 8 MB stack
-    local: an 8 MB frame overflows a default 8 MB process stack (the FPC-seeded
+  { File-read staging buffer for LoadFile. Global rather than a stack local: an
+    8 MB frame overflowed a default 8 MB process stack (the FPC-seeded
     cold-bootstrap binary segfaulted in LoadFile's prologue). Single-use and never
-    re-entered (include loads are sequential), so a shared global is safe here. }
-  LoadFileBuf : array[0..STRING_CAP-1] of Byte;
+    re-entered (include loads are sequential), so a shared global is safe here.
+
+    DYNAMIC since 2026-09-05: 8 MB of BSS in EVERY self-hosted compiler for a
+    buffer that self-hosted compiler never touches. `LoadFile` is intercepted in
+    the parser as a builtin (pasparser_stmt.inc, backed by PXXStrLoadFile), so
+    the Pascal body below is reached ONLY by the FPC-seeded bootstrap binary —
+    measured, not read off the source: the pinned compiler loads a 30 MB unit
+    correctly through an 8 MB buffer and a single 8 MB `sysread`, which is only
+    possible because it never runs that code.
+
+    On the seed path the fixed size was also a real ceiling. One `sysread` of at
+    most STRING_CAP meant a file over 8 MB was read short and compiled as its
+    first 8 MB with no diagnostic, and a truncated source usually still parses.
+    LoadFile now loops to EOF and grows this. Narrow — the seed compiler is the
+    cold-bootstrap one — but silent, and sqlite's amalgamation is already the
+    same order of magnitude.
+
+    It also stopped borrowing STRING_CAP, which is the TOKEN CHAR POOL's
+    capacity and has ~40 overflow checks against it. One constant was sizing two
+    unrelated things, so a bump for one silently moved the other.
+    feature-dynamic-compiler-tables }
+  LoadFileBuf : array of Byte;
+  LoadFileCap : Integer;   { never shrinks across loads, like TokCapacity }
   { Token stream — parallel arrays, DYNAMIC (grown by EnsureTokCapacity, called after
     every Inc(TokCount) append + once at startup). Indexed by token id; the parser only
     READS by index (no raw @Tokens[i] held across a grow — audited), so realloc is safe.
