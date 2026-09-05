@@ -3,10 +3,10 @@ track: P
 prio: 45
 type: refactor
 blocked-by: []
-status: backlog
+status: done
 owner: ""
 created: 2026-08-26
-summary: "The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share."
+summary: "DONE 2026-09-05 (794fb60c5 extract, 5dbd56a3c wire). The five channel fills are now FillMatchArgChannelsAt in pasparser_call.inc, and the probe fills them and refuses on MatchArgRecMismatch — the free path's own predicate — instead of a kinds-only substitute. That closed a silent wrong value: `d.One(ia)` with an array argument and an Integer parameter printed the array's ADDRESS while the identical free call was refused. The full TypesCompatible widening was NOT done and is not unblocked by the channels: two of the four rows in the table below (a generic type parameter is tyUnknown; a routine name as a procedural value) have no channel that answers them — see the residual ticket."
 ---
 
 # The overload probe cannot see the argument-match channels
@@ -330,3 +330,6 @@ the shared *refusal* predicate is what the channels buy; the full compatibility
 check is not unblocked by this step and should not be attempted as if it were.
 
 The flags are cleared again on the way out, for the reason half 2 gives.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

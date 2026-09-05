@@ -399,7 +399,7 @@ _none_
 | refactor-p-nodearrndinfo-yields-spans-but-not-the-element | P | 25 | refactor | NodeArrNDInfo fills NDInfoNDims/Lo/Span but not the element triple — size, record id, type kind — so every caller that needs to know what an element IS re-derives it from Syms[] or RecField*, with its own AN_IDENT/AN_FIELD pair. That re-derivation is where three C bugs lived. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 55 | refactor | THREE copies, not two, and the uncounted one had two SILENT defects (both fixed 2026-09-05; the lift is still open). `ParseRecordFields` (pasparser_decl.inc, now ~3840) and the class-body field arm inside `ParseTypeSection` (now ~6150) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
-| refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
+| refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes | P | 30 | refactor | The overload probe now fills the five argument-match channels and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by FIVE hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, two in pasparser_stmt.inc for cast targets) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask — ONE suffix parser instead of five — with no defect backlog attached, so rank it as a pure refactor. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
@@ -874,9 +874,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3298)
+## done (3299)
 
-3298 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3299 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1101,7 +1101,6 @@ _none_
 - [p 45] [A] refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths [parked — re-claim, do not duplicate]
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
-- [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
@@ -1240,6 +1239,7 @@ _none_
 - [p 30] [A] refactor-a-the-for-in-exception-runtime-trigger-is-the-whole-token-shape
 - [p 30] [A] refactor-a-the-frozen-string-store-body-is-written-twice-in-three-backends
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
+- [p 30] [P] refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes
 - [p 25] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
 - [p 25] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm (unblocks 1)
 - [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile (unblocks 1)

@@ -65,3 +65,26 @@ either one passes on a hook that is still broken. Note the existing rows are
 `deny`-heavy for a good reason (an over-widened guardrail fails silently), so
 the new row is the other direction and needs saying explicitly: this is a guard
 that says NO where it should say nothing.
+
+---
+
+## 2026-09-05 (frankA) — second instance, and the shape is the same
+
+Writing a TICKET this time, not a commit message: a heredoc creating
+`refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes.md`. The
+body's Gate section names the corpus by its glob, in prose, as part of telling
+the next reader what to run. The hook refused the whole command, so the file was
+never created and the shell reported nothing but the refusal.
+
+**Both instances are documentation describing a sweep rather than running one**,
+which is worth stating plainly because it narrows the fix: the pattern the hook
+matches is not "a loop over the corpus", it is "the corpus glob appears anywhere
+in the command text, including inside a quoted heredoc body". The `for` in
+`for every nil` and `for the two rows` is ordinary English.
+
+The cost is not the retry. It is that the refusal is ALL-OR-NOTHING on the whole
+command, so a heredoc that also creates files, or a `&&` chain, loses everything
+after it — and the natural fix is to reword the documentation until the guard
+stops noticing, which makes the docs worse and teaches the next session to hide
+from the guard instead of reporting it. That is the failure mode worth designing
+against, more than the false positive itself.
