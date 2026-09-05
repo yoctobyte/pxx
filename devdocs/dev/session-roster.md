@@ -140,6 +140,30 @@ flip, whose correctness is judged against the tree it lands on.**
   aimed right: **`lib/rtl` IS a compiler build input**, `lib/crtl` and `docs/`
   are not.
 
+## A HOLD SHIPS WITH THE EVENT THAT RETIRES IT, OR IT NEVER RETIRES
+
+**A stand-down is the one relay whose receiver has no instrument.** A number goes
+stale when a tree moves, and the holder can re-measure it. **A hold goes stale when a
+session ends a turn — and a peer's state is precisely the fact a worker cannot check
+and this seat can.** So *"give the instrument, not the answer"* has no version here,
+and the stated retirement condition is the entire remedy rather than an addition to
+it.
+
+Measured 2026-09-06: a session sat idle three times in one night because it **could
+not tell an expired stand-down from a live one, and therefore would not re-point
+itself.** Every hold this seat had relayed that night was a fact about a moment, sent
+in the register of a state. The idleness was not the session's failure; it was the
+correct reading of an undated hold.
+
+- **Ship every hold as `X holds T; retires when <stated event>`** — its run finishing,
+  its push landing, its own report. Then re-check it when the event fires.
+- **Never "until X says otherwise."** That is retirement-when-someone-remembers
+  wearing an event's clothes, and the someone is usually nobody.
+- **A hold you cannot attach an event to is one you should not send.** If you do not
+  know what would end it, you are relaying a mood.
+- The same applies to your own silence: **an unanswered "is anyone on this?" is not a
+  no**, and a session that got one from you an hour ago is still holding it.
+
 ## Flagging a ticket is what makes it collide — and `working/` is blindest then
 
 I cleared a collision from `working/`; frankA was mid-edit in that exact ticket
