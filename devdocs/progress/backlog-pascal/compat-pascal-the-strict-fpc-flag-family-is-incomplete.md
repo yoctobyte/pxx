@@ -1,5 +1,5 @@
 ---
-summary: "--strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed"
+summary: "RE-SCOPED 2026-09-05 (frankS) after measuring all three named gaps at e6aea92825d0 -- the umbrella WORKS and two of the three items are gone. --strict-fpc and --strict-visibility both refuse cross-UNIT private access where the default accepts, which is the positive control, and it must be CROSS-UNIT: FPC private is unit-scoped, so a same-file probe is accepted under every flag AND under FPC and cannot discriminate. Abs/Sqr WIDTHS is OUT OF SCOPE, not unimplemented -- SizeOf reporting 8 for a double-width intermediate is the operator working, per the settled rule; drop the item. Pointer difference did NOT reproduce: 16 bytes over four Integers, which is what FPC gives for typed pointers -- whoever wants it must name the spelling that diverges. WHAT IS LEFT is ONE item: TypeInfo name, established here only as non-nil and genuinely unmeasured. --strict-fpc/--strict-visibility were missing from --help and are listed now."
 type: bug
 track: P
 prio: 15
