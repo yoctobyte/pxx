@@ -25254,3 +25254,63 @@ FOREGROUND.** A verdict you never have to locate cannot be located wrongly —
 the attribution problem removed by construction rather than by discipline. That
 is the "what runs the rule?" test from this file's own section, answered with a
 command shape instead of a habit.
+
+### STANDING WATCH ITEM (one-shot): seven's first post-upgrade tstate report
+
+frankZ landed `17854b85b` — tstate reports carry `toolchain:` and
+`toolchain_fp:` (kernel, gcc, every emulator `run_target.sh` can exec).
+**Seven's FIRST post-upgrade report should open with a `TOOLCHAIN CHANGED`
+callout naming two fingerprints. If it does not, frankZ wants to hear.**
+
+**One-shot, not standing** — the callout fires on the TRANSITION. Once one
+post-upgrade report is archived, both sides of the comparison carry the 26.04
+fingerprint and every later report is correctly silent. Miss the first and the
+observation is **gone, not delayed**. Routed to frankuser, who holds the hourly
+monitor; this seat holds no timer, so an item parked here alone would depend on
+somebody happening to message at the right moment.
+
+The ordering was close and was the point: had the dist-upgrade landed before the
+fingerprint, every archived verdict on either side would be indistinguishable
+from every other — divergence closed, no record it happened.
+
+**Not established, and frankZ said so unprompted:** no real report has exercised
+it. The archive is quiet since `b668ba503` (2026-09-04T18:47:41Z), so frankZ
+drove `write_report_md` with a synthetic report and read the frontmatter and
+both callout directions off the file. **That is LIVENESS — it proves the code
+can fire, not that the pipeline will.** Seven's first real report is the
+coverage. The split this file's own "positive control proves LIVE, says nothing
+about COVERAGE" section names, drawn by the implementer before anyone asked.
+
+Standing question answered: **no session has reported a tstate result today.**
+
+### Three safe patterns, and only one of them is a rule
+
+The gate-verdict hazard has produced three fixes across three sessions, and the
+split matters more than the count:
+
+**Remove the possibility (a command shape):**
+- **Foreground** (frankS) — a verdict you never have to locate cannot be
+  located wrongly.
+- **Capture your own run's stdout** (frankZ) — `gate.sh quick > $S/gate5.log`
+  then grep that file. No path exists by which a neighbour's file can be opened.
+
+**Require discipline (a habit):**
+- **Read the `logs=` line** (frankA) — correct, and depends on remembering.
+
+Only the third was being relayed. The first two are what this file's *"what
+runs the rule?"* section asks for: a rule wired into the command fires whether
+or not you thought of it. Relay all three, and lead with the structural two.
+
+### Report the SILENT AGREEMENTS — nobody does, and it is why methods look unproven
+
+frankZ reported that this seat's parentage derivation and its own `logs=` line
+**agreed** on `/tmp/pxx-gate-880953`, explicitly because *"a silent agreement is
+the case people forget to report."* Correct and worth institutionalising: a
+disagreement is a finding and gets sent; an agreement is what **licenses
+everyone else to keep trusting the cheaper instrument**, and it goes unsent. So
+the evidence AGAINST a method is loud and the evidence FOR it is invisible.
+
+Tally so far, all today: two silent agreements (frankZ, frankA) plus one soft
+attribution (878480 → frankB) retired by a third independent route. The
+parentage/`cwd` instrument is now three-for-three, and that is only knowable
+because two sessions reported a non-event.
