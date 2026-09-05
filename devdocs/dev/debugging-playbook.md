@@ -7925,10 +7925,28 @@ saw.**
 
 ## A SLUG IS FROZEN AT FILING AND THE TICKET KEEPS BEING WORKED — the residual lives in the SUMMARY
 
-Measured 2026-09-05 (frankS), sweeping 46 Track P tickets at `0bbd82cd7` under a
-one-minute-per-ticket budget. **Three probes written from the slug came back
-green on tickets whose live half was untouched, and all three briefly closed a
-ticket that still reproduces.** A fourth reproduced for the wrong reason.
+**Lead with the base rate, because that is the part nobody had.** Measured
+2026-09-05 (frankS), sweeping 46 Track P tickets at `0bbd82cd7` under a
+one-minute-per-ticket budget: **roughly one probe in nine was itself making a
+stale claim.** Five false greens on a pass whose entire purpose was detecting
+stale claims — all five caught, none banked.
+
+This file is full of *instances* of an instrument answering the wrong question.
+This is the first entry with a **denominator**, and the denominator changes what
+you do about it. One in nine says the failure is not exotic, not a lapse, and
+not something a more careful session avoids: **it is the expected yield of
+running probes at all.** So the defence has to be structural — a second
+instrument, a stated control, a written-down question the probe must be able to
+answer NO to — and not attentional. The five here were caught by habit, not by
+alertness, which is the only reason all five were caught.
+
+The five, by mechanism: **three from probing the SLUG instead of the summary**
+(below), **one from a probe drawn from the wrong population** (below), and **one
+that reproduced for the wrong reason** — an inline `function: array of Integer`
+refusing at the DECLARATION for being an anonymous array type, on a ticket whose
+whole claim is that declarations parse and CALLS refuse. Same ticket, plausible
+error, wrong half; it would have sent the next reader into a part of
+`ParseProcTypeSignature` where there is nothing wrong.
 
 **Why the slug cannot be trusted and cannot be fixed.** A slug is the citation
 key: `blocked-by:` edges, commit messages, other tickets' bodies and `resolve`
@@ -7971,6 +7989,38 @@ it came back clean, on a ticket somebody has clearly worked hard. Treat an
 *easy* green on a well-worked ticket as the signal to read the summary, not as
 the result. A ticket nobody has touched since filing is the only one whose slug
 still describes it.
+
+### The fourth mechanism: a probe that cannot ask the question looks exactly like a flag that does not work
+
+Same sweep, `compat-pascal-the-strict-fpc-flag-family-is-incomplete`. The
+question was whether `--strict-visibility` does anything. The first probe put
+the class in the SAME FILE as the access:
+
+```pascal
+type TC = class private secret: Integer; end;
+begin c := TC.Create; c.secret := 7; WriteLn(c.secret); end.
+```
+
+Default, `--strict-visibility` and `--strict-fpc` **all three accepted it**, and
+that reads cleanly as *the flag is inert*. It is not. **FPC's `private` is
+UNIT-scoped, not class-scoped**, so a same-file access is legal under FPC too —
+the row cannot discriminate, and no setting of the flag could have changed it.
+Moving `TC` into its own unit separates them at once: the default accepts, both
+flags refuse with `cannot access private member "secret" of TC from here`.
+
+> **A flag that refuses nothing and a probe that asks nothing print the same
+> thing.**
+
+That is general, and it is the compact form of this file's "A GUARD THAT CANNOT
+FAIL IS NOT A GUARD" rule seen from the other end — the guard here was fine and
+the *question* could not fail. It applies to every gate row, every census and
+every A/B: before reading a null result as "the mechanism is inert", check that
+your input is one the mechanism was ever supposed to act on.
+
+**Put the working control on the ticket, not just the finding.** The corrected
+cross-unit probe is on that ticket now, so the next taker does not rebuild the
+wrong one. A finding alone decays into "someone once measured this"; a control
+is re-runnable.
 
 **Same animal, different surface** (frankB, the same night): six regression rows
 closed GREEN on a host that has `/usr/include/gtk-2.0` and `/usr/include/gtk-3.0`
