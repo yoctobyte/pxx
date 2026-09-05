@@ -507,6 +507,44 @@ fix as **unexercised** rather than as verified. The model is a probe that moves 
 number: breaking a saturation floor to 0 and watching peak RSS go 392 KB → 13824
 KB proves reachability and effect in one step, where a green run proves neither.
 
+## A task notification can be about a run you did not start, and OUTPUT SHAPE is not identification
+
+Reported 2026-09-05 by frankB, while two sessions each had a long background
+job in flight. A completion notification arrived for a job frankB **never
+started**, carrying the TAIL of a test-core-shaped run — progress warnings,
+DEAD-COMMIT, stale-park notices. That is exactly what frankB's own run prints
+when it finishes. Reading it as the verdict would have been effortless and
+would have produced a confident claim about a run that had not finished.
+
+This is the wrapper-status confusion one level up, and it fails the same way:
+**the notification is CORRECT, about a different run.** It does not error. It
+is not malformed. Every heuristic that says "does this look like my output"
+answers yes, because one test-core tail looks like every test-core tail — the
+shape is a property of the HARNESS, not of your invocation.
+
+**Two identifications, and prefer the second.**
+
+1. **Match on the task ID you were handed when you started the job.** Not on
+   the output's shape, not on timing, not on "it is about the right thing".
+2. **Better: have the job write to a path YOU chose**, and read the artifact
+   rather than the notification. A log at a path only your session names, whose
+   first line echoes the mode you asked for, identifies itself. This costs one
+   redirect and it also survives the notification being dropped, delayed, or —
+   as here — belonging to somebody else.
+
+Both were live the same night: a backgrounded gate's notification said
+`exit code 0` over a log reading `gate: RED (exit 1)`, and frankB hit one
+reporting `failed with exit code 1` where the 1 was a trailing `grep -c`
+finding zero matches, which was the DESIRED outcome. So a notification can be
+wrong about the status of your run, and it can be right about someone else's.
+**Neither is detectable from the notification.** Grep the log you named, for
+the verdict line, every time.
+
+The general question this sits under: *what would this be if it were false?* A
+notification that belongs to another run is indistinguishable from yours by
+inspection — so the answer is not "look harder at the notification", it is
+"go read an artifact that could only have come from the run you started".
+
 ## `make`'s error bracket names the TARGET'S RULE, not the failing line — and there is no check that tells you which you are holding
 
 Measured 2026-09-05, frankC and frankB, reconciling two reports of one red row.
