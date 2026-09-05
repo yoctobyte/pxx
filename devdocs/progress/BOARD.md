@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (23)
+## working (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -34,7 +34,6 @@ _none_
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | FOUR now, down from five (8627d25ce): the TWO in pasparser_stmt.inc were character-for-character identical apart from the `^` arm and are one routine, ParseCastTargetSuffix -- the difference between them collapsed to one boolean because it is a fact about the CAST (a record-name cast knows its own pointee and carries no alias row; a pointer-alias cast has the whole triple and must ask ResolveDerefShape). The `^ / .field / [i]` suffix chain is parsed by FOUR hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, one shared cast-target walk in pasparser_stmt.inc) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask -- ONE suffix parser instead of four -- with no defect backlog attached, so rank it as a pure refactor. THE REMAINING THREE ARE NOT THE SAME MERGE the statement pair was: the expr record-cast twin hand-builds its own AN_INDEX arm where the statement side delegates `[` to ParseClassRecordSelectors, so unifying those asks whether that arm is RIGHT, not whether a body can be lifted. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be. | — |
-| regression-test-core-test-record-nested-type-section | P | 70 | regression | regression: test-core#src:test/test_record_nested_type_section.pas at 6e00f29b0d93 in step 1/2, `./compiler/pascal26 test/test_record_nested_type_section.pas /tmp/test_rnts26` (auto-filed by twatch) | — |
 
 ## unfinished (22)
 
@@ -908,9 +907,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3374)
+## done (3375)
 
-3374 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3375 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (78)
 

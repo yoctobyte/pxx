@@ -1,7 +1,7 @@
 ---
 prio: 70
 track: P
-status: working
+status: done
 owner: frankD
 ---
 
@@ -354,3 +354,4 @@ So the rc is a verdict only on a run WITHOUT `-i`, and there it is binary:
 `MAKE_EXIT=0` means every recipe line ran and passed; `MAKE_EXIT=2` means the
 recipe stopped at the first failure and everything after it is UNMEASURED, not
 green. There is no partial reading between those two.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
