@@ -14644,7 +14644,7 @@ test-core: $(COMPILER)
 	# them to silence a failure is itself a failure. A zero census is
 	# meaningless until the probe is proven live -- CLAUDE.md's own rule, and
 	# this row is that proof at run time rather than in a comment.
-	tools/expect_same.sh test_directive_inert.population "$$(grep -oE '[{]\$$[a-z_0-9]+' test/test_pascal_directive_inert_list_is_complete.pas | wc -l)" "107"
+	tools/expect_same.sh test_directive_inert.population "$$(grep -oE '[{]\$$[a-z_0-9]+' test/test_pascal_directive_inert_list_is_complete.pas | wc -l)" "109"
 	# The same arm across pxx's TWO WALKS of every source (ExpandIncludes, then
 	# the lexer). THE COUNT IS THE ASSERTION: a terminal arm added to
 	# elfwriter.inc's evaluator would not change any message, only DOUBLE how

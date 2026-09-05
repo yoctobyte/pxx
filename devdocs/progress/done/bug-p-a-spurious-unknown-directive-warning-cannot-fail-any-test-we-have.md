@@ -3,8 +3,8 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "PRIO CONFIRMED AT 35 BY THE 2026-09-05 CENSUS AUDIT -- its demand line is not a corpus (valid code stops compiling under -Werror), unlike its sibling, which was parked. The unknown-directive warning (2026-09-04) classifies against a hand-curated list of ~101 names. A name missing from it makes valid code warn — under -Werror, fail — and NO INSTRUMENT WE HAVE CAN SEE THAT: a spurious warning exits 0, so a PASS/FAIL corpus sweep records it as PASS. Two real false positives have already been found and fixed by hand ({$A n}, 153d59777) or filed ({$setc} family, p40). Needs a stderr-counting guard, not a compile sweep. A SECOND AXIS is recorded here and HAS NOW BEEN SWEPT (2026-09-05): a KNOWN directive carrying an unrecognised VALUE is invisible to this warning, which keys on the directive NAME. Censusing fpc 3.2.2's own sources for directive VALUES rather than names returned two real members on the first pass -- {$ALIGN ON}/{$ALIGN OFF} and {$ASMMODE gas}/{$STANDARD} -- both fixed. THE VALUE AXIS IS CLOSED FOR THE NAMES THIS COMPILER DISPATCHES ON. THE NAME AXIS HAS NOW BEEN SWEPT TOO (2026-09-05, frankA), against the population the tree census structurally cannot see: fpc 3.2.2's OWN 9197 sources rather than ours, every candidate RUN through both compilers, and the verdict keyed on whether fpc recognises the NAME (`Illegal compiler directive` = fpc does not know it either = our warning is right) rather than on exit code. SEVEN false positives found and fixed -- asmcpu copyright hugecode hugepointerarithmeticnormalization hugepointercomparisonnormalization minstacksize screenname -- all names fpc knows and deliberately ignores on this target, so valid FPC code warned and under -Werror failed. Guarded by the fixture's TOTAL row, which emits 13 on the pre-change compiler and 6 after. STILL OPEN: residual 2 (nothing can see a name LEAVING the inert list), and residual 1 narrowed rather than closed -- a name used only by Delphi, a vendor unit or FPC 3.3+ is still invisible."
-status: working
+summary: "FIXED, and the instrument is committed as `tools/directive_name_sweep.py`. A spurious `unknown compiler directive` exits 0, so every PASS/FAIL harness here scores it as PASS, and under -Werror it stops valid code compiling. Both axes are now swept and both residuals answered. VALUE axis (a known name with an unrecognised value, invisible to a name census): closed for the names this compiler dispatches on -- $ALIGN ON/OFF and $ASMMODE gas/standard fixed. NAME axis, swept three times, each population finding what its predecessor structurally could not see: this tree (2166 sources) clean; fpc 3.2.2's own compiler/rtl/packages, SEVEN false positives; FPC's TESTSUITE plus rtl-generics via library_candidates/ (2501 sources, 9 names that appear nowhere in fpcsrc), TWO more -- checklowaddrloads and targetswitch, both accepted silently by fpc. Residual 2 (nothing can see a name LEAVING the inert list) closed by frankD's 109-name fixture with a population row. Residual 1 is narrowed to Delphi-only, vendor and FPC 3.3+ sources, for which no corpus exists on this box -- the sweep tool takes a corpus directory and asserts its own control, so that run is one command whenever such a corpus arrives."
+status: done
 owner: frankA
 ---
 
@@ -271,3 +271,73 @@ stopped being inert.
 only by Delphi, a vendor unit or FPC 3.3+ is still invisible, because no corpus
 here contains it. That one is bounded by frankA's sweep against fpc's own 9197
 sources and cannot be closed by a fixture.
+
+## THE NAME AXIS, THIRD RUN — the corpus the second run could not see, 2026-09-05 (frankA)
+
+The fpcsrc sweep above stated its own residual: *"a name used only by Delphi, by
+a vendor unit, or by FPC 3.3+ is still invisible."* One member of that set was
+**already on this box and was not Delphi at all**: `/usr/share/fpcsrc/3.2.2`
+holds `compiler`, `rtl` and `packages` and **not `tests`**, and a testsuite is
+precisely the corpus that exists to spell edge cases. `library_candidates/` has
+it — 2304 testsuite sources, plus `rtl-generics` (Delphi-flavoured) and
+`fpc-rtl`.
+
+90 distinct directive names there. **Nine appear nowhere in fpcsrc**, so nothing
+had ever asked about them: `bitpacking checklowaddrloads mmx output_format
+saturation targetswitch unitpath z z1`. Same instrument, same discriminator
+(what fpc says about the NAME, never the exit code), same asserted positive
+control.
+
+**Two false positives, both from those nine:**
+
+| directive | fpc 3.2.2 | real use |
+| --- | --- | --- |
+| `checklowaddrloads` | accepts silently; a bare probe errors on the VALUE, which is recognition | `tests/test/texception10.pp:4`, `{$CHECKLOWADDRLOADS+}` |
+| `targetswitch` | accepts silently, value and all | `tests/test/jvm/tlowercaseproc.pp:6`, `{$targetswitch lowercaseprocstart}` |
+
+Both class 0, and **both by the sibling reading rather than a fresh argument**:
+`CHECKLOWADDRLOADS` is `CHECKPOINTER`'s sibling — a target-specific runtime
+check whose absence is strictly more permissive — and `TARGETSWITCH` is
+`MODESWITCH`'s, a knob for target behaviours pxx has no targets for. Each
+sibling was already on the list. That is **twice now** that grep-for-the-sibling
+would have beaten a census to the finding (`minstacksize`/`maxstacksize` was the
+first).
+
+Guarded in both fixtures, and the population row moves 107 → 109. The two real
+sources still do not compile, for reasons that have nothing to do with this —
+`texception10.pp` hits an `expected ':=' before ';'` and `tlowercaseproc.pp` is
+a standalone unit — and saying so is the point: **the directive warning is the
+part that was wrong, and it is the part that is fixed.**
+
+## The instrument is committed: `tools/directive_name_sweep.py`
+
+Rebuilt from this ticket's description twice now, which is one time too many.
+It takes corpus directories (or `--only <name>`), runs every candidate through
+both compilers, and keys the verdict on fpc's message rather than its exit code.
+
+**Both control paths are asserted, not described.**
+
+- *Detection:* two invented names must warn under BOTH compilers, checked
+  FIRST, and the run **aborts** rather than reporting clean if they do not — a
+  probe that never reaches the classifier reads exactly like a corpus with
+  nothing wrong in it.
+- *Reporting:* `PXX=` points it at another compiler. Against
+  `stable_linux_amd64/default/pinned`, which predates today's fix, it reports
+  `checklowaddrloads` and `targetswitch` and **not** `checkpointer` — so the
+  finding path is known to fire, and known to discriminate.
+
+## Resolved (2026-09-05, frankA)
+
+Everything this ticket asked for exists: the stderr-counting guard (frankD,
+2166 sources, clean, with the four fixtures as its live control), the value-axis
+sweep, three name-axis sweeps over three populations, the 109-name completeness
+fixture that closes residual 2, and now the instrument itself.
+
+**Residual 1 is not closed and cannot be closed here** — no Delphi-only, vendor
+or FPC 3.3+ corpus exists on this box. What changed is that it is no longer a
+standing piece of work: it is one command against a directory that does not yet
+exist. Resolving rather than parking, because a ticket whose only remaining step
+is "wait for a corpus" is a ticket nobody can pick up.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -36,7 +36,8 @@ begin
   {$u+}{$v+}{$w+}{$x+}{$y+}
 
   { the named directives }
-  {$apptype}{$asmcpu}{$checkpointer}{$codealign}{$codepage}{$coperators}
+  {$apptype}{$asmcpu}{$checklowaddrloads}{$checkpointer}{$codealign}
+  {$codepage}{$coperators}
   {$copyright}{$debuginfo}{$description}{$endregion}{$excessprecision}
   {$extendedsyntax}{$externalsym}{$fputype}{$goto}{$hints}{$hppemit}
   {$hugecode}{$hugepointerarithmeticnormalization}
@@ -51,7 +52,8 @@ begin
   {$region}{$resource}{$rtti}{$safefpuexceptions}{$saturation}
   {$screenname}{$setpeflags}{$setpeoptflags}{$setpeosversion}
   {$setpesubsysversion}{$setpeuserversion}{$smartlink}{$stackframes}
-  {$static}{$stringchecks}{$syscalls}{$threading}{$threadname}
+  {$static}{$stringchecks}{$syscalls}{$targetswitch}{$threading}
+  {$threadname}
   {$typedaddress}{$typeinfo}{$unitpath}{$varpropsetter}{$varstringchecks}
   {$version}{$wait}{$warn}{$warnings}{$weakpackageunit}{$writeableconst}
   {$zerobasedstrings}

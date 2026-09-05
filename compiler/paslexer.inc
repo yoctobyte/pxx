@@ -1743,13 +1743,36 @@ const
     RESTRICTS the assembler's instruction set, so ignoring it is strictly more
     permissive -- the same reading that puts $X- here. $MINSTACKSIZE is the
     sibling of $MAXSTACKSIZE, which was already listed; the pair is the
-    grep-for-the-sibling case this repo keeps meeting. }
+    grep-for-the-sibling case this repo keeps meeting.
+    THE SAME SWEEP, RUN AGAIN ON THE POPULATION IT COULD NOT SEE, 2026-09-05.
+    That run's own stated residual was "a name used only by Delphi, a vendor
+    unit or FPC 3.3+ is still invisible", because /usr/share/fpcsrc holds
+    compiler, rtl and packages -- and NOT the testsuite, which is the corpus
+    that exists to spell edge cases. library_candidates/ has it: 2304 sources,
+    plus rtl-generics (Delphi-flavoured) and fpc-rtl. 90 directive names there,
+    NINE of which appear nowhere in fpcsrc, so nothing had ever asked about
+    them. Same instrument, same discriminator, same positive control. Two more:
+      checklowaddrloads  fpc accepts it silently; we warned
+                         (tests/test/texception10.pp, spelled with a +)
+      targetswitch       fpc accepts it silently; we warned
+                         (tests/test/jvm/tlowercaseproc.pp)
+    Both class 0, and both by the sibling reading rather than by a fresh
+    argument: CHECKLOWADDRLOADS is CHECKPOINTER's sibling -- a target-specific
+    runtime check whose absence is strictly more permissive -- and TARGETSWITCH
+    is MODESWITCH's, a knob for target behaviours pxx has no targets for. Each
+    sibling was already on this list, which is twice now that grep-for-the-
+    sibling would have beaten a census to the finding.
+
+    A residual survives this too, NARROWER and not gone: no corpus on this box
+    contains Delphi-only or FPC 3.3+ sources. What changed is that the residual
+    is no longer "and FPC's own testsuite", which was reachable all along. }
   { Space-delimited and searched WITH both delimiters, so 'h' cannot match
     'hints'. Lowercase; the caller folds case. }
   PAS_INERT_DIRECTIVES =
     ' i q include ' +
     ' d e f g j l m n o p s t u v w x y ' +
-    ' apptype asmcpu checkpointer codealign codepage coperators copyright ' +
+    ' apptype asmcpu checklowaddrloads checkpointer codealign codepage ' +
+    ' coperators copyright ' +
     ' debuginfo description ' +
     ' excessprecision extendedsyntax externalsym fputype goto hints hppemit ' +
     ' hugecode hugepointerarithmeticnormalization ' +
@@ -1764,8 +1787,10 @@ const
     ' saturation screenname setpeflags setpeoptflags setpeosversion ' +
     ' setpesubsysversion ' +
     ' setpeuserversion smartlink stackframes static stringchecks syscalls ' +
-    ' threadname threading typedaddress typeinfo unitpath varpropsetter ' +
-    ' varstringchecks version wait warn warnings weakpackageunit writeableconst ' +
+    ' targetswitch threadname threading typedaddress typeinfo unitpath ' +
+    ' varpropsetter ' +
+    ' varstringchecks version wait warn warnings weakpackageunit ' +
+    ' writeableconst ' +
     ' zerobasedstrings ';
   { Recognised, unimplemented, and CONSEQUENTIAL: every one of these changes a
     record layout, an enum width or a calling convention, so swallowing it

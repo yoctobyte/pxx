@@ -32,6 +32,11 @@ program test_pascal_directive_unknown_warns;
 {$hugepointercomparisonnormalization on}
 {$minstacksize 16384}{$screenname test}
 
+{ The same sweep re-run on the corpus it could not see -- FPC's own TESTSUITE,
+  which is not under /usr/share/fpcsrc and is where edge-case spellings live.
+  Both are here with a real value, as their two real uses spell them. }
+{$checklowaddrloads+}{$targetswitch lowercaseprocstart}
+
 { Class 2 -- pxx does not know the name at all. The first is one letter off
   from a directive that changes record layout, which is the whole reason this
   arm exists. }
