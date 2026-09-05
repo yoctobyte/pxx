@@ -4,7 +4,7 @@ title: "wasm32 emits a separate function per CompileAST call, so a proc built in
 track: A
 prio: 70
 type: bug
-status: working
+status: done
 created: 2026-09-04
 found-by: frankA (while taking the wasm32 C entry stub)
 owner: frankwasm
@@ -189,3 +189,76 @@ possibly separate until someone reads it.
 
 Context: NilPy modules only started reaching the wasm32 backend at bce31c210
 (the wasi PAL), so this population is newly observable rather than newly broken.
+
+---
+
+## RESOLVED 2026-09-05 (frankwasm) — the body model was rebuilt, not refused
+
+The ticket framed the choice as **a refusal, or a rebuild of the body model**,
+and made it depend on how much of the corpus does it. Both halves measured:
+
+**Census.** 200 sampled Pascal programs from the test corpus, 160 of which
+compiled for wasm32: **zero** slot rewrites, with the repro as a positive
+control confirming the census can fire. Rare in the corpus — but
+`out s: string` is ordinary Pascal, and a refusal would make valid source
+uncompilable. Rebuild.
+
+**The load-bearing analysis, and it is the one thing here worth reading.** The
+top-level chunk mechanism this ticket points at (`ir_codegen_wasm32.inc:557`)
+argues its own correctness from *"a chunk balances its own $sp"*. My first read
+was that this does NOT transfer to a proc, whose chunks share a frame, locals
+and params — so the trick could not be copied and the rebuild would need a
+prologue split. **That was wrong, and emitting the discarded chunk is what
+showed it.** Chunk 1 of `Fill(out s: string)` is the `out` clear, and it opens
+`global.get $sp; i32.const 16; i32.sub; local.set $fp; local.get $fp;
+global.set $sp` and closes by adding 16 back. So chunk k+1 re-derives `$fp`
+from a **restored** `$sp` and lands on the **same frame address** — an earlier
+chunk's frame writes are still there, and plain concatenation is correct. The
+$sp-balance argument transfers exactly; it is the *sequential-call* form that
+does not, because a chunk function cannot see the proc's params.
+
+`WasmBodyResume` (wasmenc.inc) therefore reopens the sealed slot, drops its
+trailing WOP_END, restores locals/names/text, and pulls the body's call
+relocations back out of the pool — the one table where a stale entry is not
+merely orphaned, because it patches a `call` operand by absolute position.
+
+Things that are NOT obvious, and are commented at the site:
+  - **Locals are not shared, deliberately.** The resumed chunk asks for its own
+    `$fp` and temporaries and gets fresh indices above the restored ones.
+    Sharing them would make chunk boundaries load-bearing.
+  - **Params must NOT be re-named.** An index is a POSITION in the name buffer,
+    so re-adding them numbers every subsequent local `nParams` too high.
+  - A **function**'s earlier chunk leaves its result on the operand stack; the
+    resume drops it. Two values at `end` is a validation error, not a wrong
+    answer.
+
+**The loud arm was a second defect, and the test found it.** `duplicate export`
+was the export being registered once per CHUNK, not once per proc. Not relaxed
+— that refusal is the guard that catches a body lowered more than once and it
+was doing its job; the fix is to stop asking. `TwoOut(out a; out b)` — three
+chunks — now compiles and matches native.
+
+**The counter stays, reframed as an invariant.** The mechanism that made the
+loss silent is still here: sealing a slot overwrites it with no diagnostic. A
+future path reaching `WasmBodyEnd` on a live slot without resuming loses code
+exactly as before, and this is the only thing that would say so.
+`check_outparam.sh` asserts it reads zero.
+
+**Evidence** (binary `ca571451b5d1`):
+  - both repros match native and validate; the 6-routine slice diffs clean
+  - **78 corpus modules byte-identical pre/post**, and the only two that differ
+    are the two known-affected repros — the comparison's positive control
+  - `check_outparam.sh` **REJECTS the pre-fix compiler** (run, not reasoned)
+  - `gate.sh quick` GREEN
+
+**"Then what?" — the residual, owned rather than left implied.** This ticket's
+summary says it blocks `bug-c-no-c-program-entry-stub-for-wasm32`. That blocker
+is now gone, but the C ticket is NOT thereby fixed: a C program for wasm32 still
+stops at an explicit `C program entry stub not implemented for this target yet`,
+which is its own missing work in Track C, not this mechanism. Measured, not
+assumed.
+
+Landed: `e0035f9ac` (resume), `8dafca722` (export once per proc + the test).
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

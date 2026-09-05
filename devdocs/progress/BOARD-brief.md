@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:35 backlog-pascal:34 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3361 rejected:78`
+`working:22 unfinished:23 blocked:8 backlog:6 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:35 backlog-pascal:34 backlog-decide:45 backlog-libs:18 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3362 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -83,7 +83,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-wasm32-emits-a-separate-function-per-compileast-call-so-a-proc-built-in-two-calls-loses-a-body (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
@@ -101,5 +100,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
+- `[p 65] [P]` feature-pascal-corpus-generics
 
 _361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
