@@ -29060,6 +29060,17 @@ pick an arm of the Track U fork to unblock the ByteBool bug (settling a design
 decision inside a bug ticket is how that family gets wider rather than later),
 and it flagged that `1 in [4294967297]` may belong in `rejected/` rather than
 compat — a set element of 2^32+1 is outside any set's domain, so CLAUDE.md's
-*ask what the source MEANT* test applies and the defensible fix is a diagnostic,
-not FPC's value. **This seat named that row as worth taking without applying that
-test first.** A prio should not carry a Track U call by default.
+*ask what the source MEANT* test applies. **This seat named that row as worth
+taking without applying that test first.**
+
+**WITHDRAWN the same night, by frank-optimize, and the withdrawal is the
+finding.** It had read only the frontmatter. **FPC IS NOT THE ORACLE HERE:**
+fpc 3.2.2 answers `1 in [4294967297]` **TRUE** and answers `300 in [300]`
+**FALSE**, because its set is a 0..255 byte set — while **pxx already answered
+300 correctly before any fix**, since its constant arm lowers to a compare chain
+rather than a set and therefore has a deliberately wider domain. **Neither of
+FPC's answers was a specification.** Fixed rather than rejected: `831919a7d`,
+*a set element wider than 32 bits was truncated at TWO points on one path*, five
+targets. So a **rejected/ suggestion built on an unread body** would have closed
+a real double-truncation bug — the mirror of ranking one up wrongly, and the
+more expensive direction, because `rejected/` is terminal.
