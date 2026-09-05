@@ -7460,6 +7460,57 @@ begin
   Result := AliasCount - 1;
 end;
 
+function EnsureRecPtrAlias(recId: Integer): Integer;
+{ The alias row a RECORD-NAME reinterpret cast needs, minted on demand.
+
+  `TRec(ptr)` is a pxx extension meaning `PRec(ptr)` without a declared `PRec`,
+  and its own comment says it "mirrors the pointer-alias path". It did not, for
+  `[i]`: the cast node was stamped `ASTIVal := 0` to mean "plain reinterpret, no
+  adapter", and ir.inc reads that field as an ALIAS INDEX --
+
+      aliasIdx := ASTIVal[baseNode];
+      if aliasIdx < 0 then ... else elemSize := TypeStorageSize(...AliasElemTk[aliasIdx]...)
+
+  -- so 0 is not "no alias", it is ALIAS ROW ZERO: whatever type the program
+  happened to declare first. A default that is also a real answer cannot mean
+  "not applicable", which is the same trap the PChar adapter fallback carries a
+  paragraph about one file over.
+
+  Measured before the fix, `t: array[0..2] of TRec` with a[0..2].a = 10/11/12:
+
+      PRec(raw)[0..2].a   10 11 12     correct
+      TRec(raw)[0..2].a   10  0  0     element 0 right BY COINCIDENCE
+
+  and as a target it is worse than wrong, it is quiet: `TRec(raw)[1].a := 71`
+  left `t[1].a` at 11 and then READ BACK 71, because the read goes to the same
+  wrong address. An assertion comparing a write to its own read-back cannot
+  fail on that. Two IR sites read the field this way (the IR_INDEX stride and
+  the pointee-record resolution), so this is fixed by giving the node a REAL
+  row rather than by teaching either site about record casts.
+
+  The minted row is named `^`, one character, which no identifier can spell --
+  so FindTypeAlias can never return it for a source name. Deduped on (that
+  name, this record), so a program that spells the cast a thousand times mints
+  one row. }
+var noff, i: Integer;
+begin
+  Result := -1;
+  if recId <= REC_NONE then Exit;
+  for i := 0 to AliasCount - 1 do
+    if (AliasNLen[i] = 1) and (TokChars[AliasNOff[i]] = '^') and
+       (AliasElemRec[i] = recId) and (AliasElemTk[i] = Ord(tyRecord)) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+  noff := TokCharLen;
+  TokChars[TokCharLen] := '^';
+  Inc(TokCharLen);
+  RegisterPtrAlias(noff, 1, Ord(tyRecord), recId, 0, 0);
+  Result := AliasCount - 1;
+end;
+
 function EnsureBuiltinPtrAlias(const nm: AnsiString): Integer;
 var elemTk: TTypeKind; noff, i: Integer;
 begin

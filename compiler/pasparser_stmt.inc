@@ -7676,7 +7676,11 @@ begin
               Expect(tkRParen, ')');
               indexNode := AllocNode(AN_PTR_CAST);
               ASTLeft[indexNode] := CurASTNode;
-              ASTIVal[indexNode] := 0;
+              { 0 is alias row ZERO to ir.inc, not "no alias" -- the same field
+                the pointer-alias arm below fills with a real index. Mint one.
+                See EnsureRecPtrAlias. }
+              ASTIVal[indexNode] := EnsureRecPtrAlias(castRec);
+              if ASTIVal[indexNode] < 0 then ASTIVal[indexNode] := 0;
               ASTTk[indexNode]   := Ord(tyPointer);
               valNode := indexNode;
               if CurTok.Kind = tkDot then

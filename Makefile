@@ -14160,6 +14160,18 @@ test-core: $(COMPILER)
 	# pointer variable, so a chain that is wrong for everyone cannot pass.
 	./$(COMPILER) test/test_call_result_suffix_after_a_field.pas $(TESTTMP)/test_callsuffix26
 	tools/expect_same.sh test_callsuffix26 "$$($(TESTTMP)/test_callsuffix26)" "$$(cat test/test_call_result_suffix_after_a_field.expected)"
+	# `TRec(ptr)` is `PRec(ptr)` without a declared PRec, and its own arm says it
+	# mirrors the alias path. For `[i]` it did not: the cast node's ASTIVal was
+	# stamped 0 for "plain reinterpret", and ir.inc reads that field as an ALIAS
+	# INDEX -- so 0 was alias row ZERO and the stride came from whatever type the
+	# program declared first. Element 0 was right by coincidence. NO FPC ORACLE
+	# (fpc refuses both spellings), so the assertion is INTERNAL CONSISTENCY:
+	# every row is the alias and the record-name spelling of one access, and the
+	# store rows read back through `t` rather than through the cast that wrote
+	# them -- the read went to the same wrong address, so a store-vs-read-back
+	# row cannot fail on this. 8 rows differ on pin v403.
+	./$(COMPILER) test/test_record_name_cast_strides_by_its_record.pas $(TESTTMP)/test_recncast26
+	tools/expect_same.sh test_recncast26 "$$($(TESTTMP)/test_recncast26)" "$$(cat test/test_record_name_cast_strides_by_its_record.expected)"
 	# DIAGNOSTIC LOCATION, both asserted on the MESSAGE and not the exit code:
 	# each file was always refused, and the whole defect was where the refusal
 	# pointed, so an exit-code row passes on the bug.

@@ -6724,7 +6724,13 @@ begin
         Expect(tkRParen, ')');
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := 0;          { plain pointer reinterpret (no char +8 adapter) }
+        { plain pointer reinterpret -- no char +8 adapter -- but the field is
+          read by ir.inc as an ALIAS INDEX, and 0 is alias row ZERO there,
+          not "no alias". Mint the row that says what this cast points at,
+          so TRec(p)[i] strides by a TRec the way PRec(p)[i] already does.
+          See EnsureRecPtrAlias. }
+        ASTIVal[node] := EnsureRecPtrAlias(baseRec);
+        if ASTIVal[node] < 0 then ASTIVal[node] := 0;
         ASTTk[node]   := Ord(tyPointer);
         tk := tyPointer; recName := baseRec;
         { A VALUE typecast of a RECORD is an in-place reinterpret in FPC, and it
