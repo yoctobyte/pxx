@@ -6693,6 +6693,72 @@ answers none of them, and the caller restores the same default when it declines"
 is a claim about the CODE, and it survives the reachability number moving
 underneath it. Prefer the warrant that a larger population cannot overturn.
 
+## DO NOT LET THE INSTRUMENT LEAVE WITH YOUR COMMIT — the other direction of "do not touch the instrument while it is measuring"
+
+Measured 2026-09-05, frankD, self-reported within a minute of doing it.
+
+A debug probe was **deliberately** live in the working tree —
+`WriteLn('PROBE-ABOVE')` and `PROBE-BELOW` either side of a dispatch in
+`compiler/pasparser_expr.inc`, exactly as designed, with the measuring binary
+already built from it. Then a **ticket-only** commit was made with `git add -A`.
+
+**The sweep swept the compiler edit in**, and the commit message talked entirely
+about tickets — **so the diff was unexplained as well as unwanted**, which is the
+half that costs somebody time. Reverted in `7f8f97ec6`.
+
+**The author had the instrument rule and applied the wrong half of it.** It had
+held off every compiler edit while the sweep ran, refused to re-gate off a probed
+tree, and said so explicitly an hour earlier. **Two failure directions, and only
+one was guarded:**
+
+| direction | rule | guarded? |
+| --- | --- | --- |
+| the tree moves under the instrument | *do not touch the instrument while it is measuring* | yes, carefully |
+| **the instrument moves out into the tree** | **this one** | **no — nobody had written it** |
+
+> **`git add -A` while an experiment is live in the working tree is the
+> mechanism. Stage by path.**
+
+### Why this one is nastier than it sounds, and why it is still cheap
+
+A probe that escapes is **pure output with no decision change**, so **nothing
+miscompiles and no answer is wrong.** It is noise in build output — which means
+it does not trip a single existing guard, and the symptom (`PROBE-ABOVE` printed
+261 times per NilPy compile) is **bizarre and completely unattributable if you
+meet it cold.** No gate reddens. No test fails. The commit that introduced it
+says *tickets*.
+
+**And the cheap containment is a measurement, not a broadcast.** The exposure was
+computed rather than estimated:
+
+- origin window `2e3922d14` → `7f8f97ec6` = **58 seconds**, not the ~4 minutes it
+  felt like;
+- `grep -c 'PROBE-ABOVE\|PROBE-BELOW' compiler/pasparser_expr.inc` across **all
+  eleven checkouts → 0 everywhere**;
+- `strings compiler/pascal26 | grep -c PROBE-ABOVE` across the same → **1, and it
+  is the author's own measuring binary, which is supposed to have it.**
+
+**Nobody was affected, and finding that out cost one loop instead of eight
+wake-ups.** When a peer reports an escaped artefact, *measure the blast radius
+before announcing it* — the checkouts are on the same disk and the question is
+`grep`-shaped.
+
+### The self-report is the reusable part
+
+The author checked, rather than assumed, two things the escape did **not** touch:
+
+- **the measurement is intact** — the sweep runs against a binary built before
+  any of this, the probe is still in *that* binary on purpose, and
+  `git log --since --name-only` over the window shows `compiler/**` changes and
+  **no NilPy corpus file moved**, so it is a fixed binary reading a fixed corpus;
+- **no gate verdict was published off the probed tree.**
+
+And it scoped its own conclusion: the source tree moved under it (six
+`compiler/**` commits from four sessions), **so the finding is scoped to the tree
+the binary was built from and will be re-verified before anything is deleted.**
+That is the *verified, not believed* rule applied to a deletion the author wants
+to make.
+
 ## A probe needs a control for DELIVERY, not only for behaviour
 
 Named 2026-09-01 (frankB and frankT, from opposite ends of the same hour). It is
