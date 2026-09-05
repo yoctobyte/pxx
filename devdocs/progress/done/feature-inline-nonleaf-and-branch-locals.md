@@ -1,6 +1,10 @@
 ---
+track: A
 prio: 40
+type: feature
+status: done
 owner: frank-optimize
+summary: "CLOSED ON VALUE, NOT DIFFICULTY. Measured 2026-09-05 with FPC -pg + gprof (perf is denied here; compiler.pas is FPC-bootstrappable): the inliner ALREADY covers functions taking 13.0% of executed calls, everything it still declines on statement kind totals 1.12%, and 118 of 156 declined functions are called ZERO times in a real compile. The inline admission axis is SATURATED -- do not reopen this to re-measure a speedup, the binding number is the 1.12%. Landed here: depth>1 non-leaf (75d7d3dcc, -O3) and statement-level calls (bd7754dcb, -O3, changed 0 of 16 real programs). while/for bodies remain UNIMPLEMENTED BY DECISION. Three static metrics failed to predict value (bound: 1 program of 13; reach: 0 of 16); the axis is static-vs-executed, so a fourth static metric will fail the same way."
 ---
 
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
