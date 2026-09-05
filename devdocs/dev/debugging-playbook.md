@@ -7859,3 +7859,66 @@ opposite.** Everything the pin newly carries changes behaviour for every
 `$(PXX_STABLE)` consumer at once, including fixes that alter output a test was
 asserting. A red in the hours after a pin should be checked against the pin's
 own manifest before it is treated as new breakage.
+
+## A FAIL-FAST TIER CANNOT SAY HOW FAR IT GOT — so a stale fixture at step 6 is a CURTAIN, not a red
+
+`make test-core` is ONE recipe. It stops at the first failing line, and the
+output of a run that dies at step 6 of 15 is shaped exactly like one that dies at
+step 14: a named failure and a stopped make. **Nothing in it says "and the
+following fourteen hundred assertions did not run."** The natural reading is
+*one known red, the rest is behind it* — and *behind it* silently becomes
+*fine*.
+
+Measured 2026-09-05. `test_record_class_var_fail` asserted a refusal that
+`a11b2b18f` had deliberately lifted hours earlier (it implemented `class var` in
+a named top-level record, which fpc accepts under advancedrecords). One stale
+fixture, at step 6:
+
+| | executed assertion rows | log lines |
+| --- | --- | --- |
+| with the stale fixture | **302** | 3,783 |
+| with it fixed | **1,804** | 15,253 |
+
+**Every session running `test-core` in that window saw one named failure and
+16% of the tier**, and had no way to tell that from a tier with one failure in
+it. The author could not see it either: from inside the session that caused it,
+the local gate was green and correct about the sixth it reached.
+
+**THE COST OF A RED IN A FAIL-FAST RECIPE IS ITS INDEX, NOT ITS SEVERITY.** The
+identical stale fixture at step 14 would have cost almost nothing. This inverts
+ordinary triage — a trivial expired assertion early outranks a real bug late —
+and **no ticket field records where in a recipe a failure sits**, so the
+information needed to rank it correctly has nowhere to go. That is a gap in the
+schema, not in anyone's diligence.
+
+**The signature, which needs no one to remember anything.** Whenever a refusal
+is narrowed or lifted, the test asserting the old refusal becomes a false
+assertion sitting at whatever index it happens to occupy. And it is
+*undiagnosable from the recipe*: `! ./$(COMPILER) x_fail.pas` collapses *refused
+for the wrong reason*, *accepted*, and *the compiler segfaulted* into one exit
+code, with the `grep -q` on the next line carrying the real meaning separately,
+where a reader does not connect them. **A negative row cannot say which way it
+flipped** — `bug-t-a-negative-test-row-cannot-say-which-way-it-flipped`.
+
+**The instrument: `tools/tier_coverage.sh RUN.log [REFERENCE.log]`.** Counts the
+assertion rows a run actually executed (make echoes each command before running
+it), says whether the recipe stopped early and at which assertion, and against a
+reference log from a run known to have reached the end, reports the fraction —
+warning below 90% that *the rest did not fail, it did not run*. Reference figure
+for calibration: a complete `test-core` at `8727b1907` executed **1,804**
+assertion rows and **2,052** compiles.
+
+**`make -n` is NOT the denominator**, and it was tried. It is an upper bound: it
+prints both arms of shell conditionals and every prerequisite as though nothing
+were up to date, so a complete green run scores 1,629 against its 1,734 and a
+reader meets a 94% that means nothing is wrong. 43 of that gap were checked by
+name — gcc-oracle rows inside `if` blocks, file targets already satisfied. **A
+denominator that cannot be reached on a healthy tree is the same animal as a
+gate that cannot pass**, so the tool compares runs instead.
+
+**The half that is still unsolved is DISCOVERABILITY.** A session meeting a
+stopped tier has no reason to know this tool exists, and the failure itself
+cannot mention it — the recipe has already exited. Wiring it into the tier's
+own failure path needs a wrapper around a Track T target and is not done. Until
+then: **when a tier stops, run the tool before you believe the shape of what you
+saw.**
