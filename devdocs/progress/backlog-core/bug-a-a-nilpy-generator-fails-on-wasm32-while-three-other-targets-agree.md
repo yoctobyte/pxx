@@ -169,3 +169,72 @@ than assumed, because it would explain the Pascal/NilPy split directly.
 iterations **on native**, so it is an all-targets bug with a six-line Pascal
 repro. It resembles this one and has a different signature (this one is correct
 on native), which is exactly why it is its own ticket.
+
+---
+
+## 2026-09-06 (frankwasm, later) — narrowed to ONE step, with the probe
+
+Re-measured at `0f6b627d7` (frankS's Variant-parameter fix), compiler
+`c8dc944237a5`. **Still broken, unchanged**, and that is informative rather
+than disappointing: it separates this row from the Variant one for good.
+
+| repro | native | wasm32 |
+| --- | --- | --- |
+| `def g(n): yield n` | 7 | **None** |
+| `def g(n): i=0; while i<n: yield i; i=i+1` | 6 | **Unhandled exception** |
+| `def g(n): for i in range(n): yield i` | 6 | **0** |
+| `def g(s): yield s` | hi | **None** |
+
+frankS predicted this: NilPy Variant params are already `IsRef`, so they take
+the by-ref arm and never reach the new predicate. Confirmed by measurement, not
+taken on trust.
+
+### The parameter has NO instance slot at all
+
+`PXXDBG=a.slslot` on `def g(n): yield n`:
+
+```
+caller: proc=g nargs=1 instsize=72 paramcount=2
+  arg1: storeoff=48 paramsym=… symgenslot=-1 realoff=40 tk=22
+```
+
+**`symgenslot=-1`, and there are no `assign:` lines whatsoever** —
+`AssignStacklessSlots` gives this generator no persistent slots, because the
+parameter is CELL-PROMOTED and the loop's `if SymCellPtr[i] >= 0 then Continue;`
+skips it by design (*"its storage is the heap cell, and every read and write
+already spells itself `cell^`"*).
+
+So the for-in desugar stores the cell pointer at `SL_OFF_SLOTS + 8*(k-1)` = 48
+by ARGUMENT INDEX, into a slot nothing reads. `realoff=40` is the probe
+computing `48 + 8*(-1)`, i.e. an address BELOW `SL_OFF_SLOTS` — the instrument
+reporting a nonsense offset honestly rather than a plausible wrong one.
+
+**That table is byte-identical on native and wasm32**, and native works. Third
+time in this neighbourhood that every compile-time quantity agrees while the
+behaviour diverges, so the slot machinery is exonerated here the same way it
+was for the Variant bug.
+
+### The step that is actually missing
+
+```python
+def g(n):
+    n = 5
+    yield n
+```
+
+**`5` on BOTH targets.** So the cell storage, the resume, the yield and the
+whole state machine are fine on wasm32 once the cell holds a value. What is
+missing is only the **initialisation of the cell from the ARGUMENT** —
+`GenMakeVariantArgCell`'s `pycell_new` followed by `cell^ := arg`, or the
+delivery of that pointer to where the body's `cell^` reads it.
+
+That is the one step to instrument next, and it is a runtime question on
+wasm32, not a layout one. Everything either side of it is measured working.
+
+### What this retires
+
+The earlier section's "look at `AssignStacklessSlots`'s multi-word arms" is
+**wrong** and should not be followed: this parameter never reaches any of those
+arms. The `SymCellPtr` line it flagged as *"unmeasured, and it should be the
+first thing checked"* was the right instinct, and the answer is yes — it is
+cell-promoted, and that is why it has no slot.
