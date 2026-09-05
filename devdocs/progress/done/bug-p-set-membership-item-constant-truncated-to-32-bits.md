@@ -4,9 +4,10 @@ title: "A set-membership item constant is truncated to 32 bits, silently, on eve
 track: P
 type: bug
 prio: 25
-status: backlog
+status: done
 found: 2026-08-28
 found-by: frankwasm (measured on five targets while implementing the wasm32 `in` arm)
+summary: "FIXED on the 64-bit targets in 831919a7d. `loVal, hiVal` in ParseSetMembershipAST were Integer between an Int64 source and an Int64 sink, AND every backend re-narrowed with an Integer() cast, so both halves had to be widened; x86-64 additionally could not encode the immediate (`cmp rcx, imm32` sign-extends), which is why the boundary sat at exactly 2^31. Recommendation (1), widen, was taken. Two residuals split out and owned: the 32-bit backends and the runtime/mask arm."
 ---
 
 > **DANGLING SHAS BY DESIGN.** The commit shas in this ticket live on branch
@@ -117,3 +118,61 @@ run natively, arm32/aarch64 under `qemu-arm`/`qemu-aarch64`, wasm32 under node.
 A wasm-vs-native differential test **cannot catch this one**, because the defect
 is upstream of every backend and both sides of the diff are wrong identically.
 It needs an absolute expectation.
+
+
+---
+
+## Resolved on the 64-bit targets — 2026-09-05, frankO, `831919a7d`
+
+**Recommendation (1) was taken**, and the diagnosis above was right about the
+`var` line and incomplete about the rest. Three things worth carrying:
+
+**There were TWO narrowings, not one.** Widening `loVal, hiVal` alone does not
+move a single row. Every backend re-narrowed with an explicit
+`Integer(IRIVal[...])` in its SPECIAL_IN walk, so the value was 64-bit at every
+point it was *stored* and 32-bit at both points it was *passed*. Run as a
+control rather than argued: with the backend widened and the parser left
+narrow, rows A/B/C are still wrong.
+
+**x86-64 needed more than deleting a cast.** `cmp rcx, imm32` (`48 81 F9`)
+sign-extends a 32-bit immediate, so the instruction cannot hold 2^31 at all —
+the measured boundary was exactly 2147483647 in / 2147483648 out, which is the
+immediate's range and not a property of sets. New `CmpRcxImm` in `emit.inc`
+keeps the imm32 form and otherwise does `push rdx / movabs rdx / cmp rcx,rdx /
+pop rdx`; push-pop because POP leaves EFLAGS alone, so it needs no liveness
+argument about the surrounding expression.
+
+**FPC is not the oracle here, and checking it changed the framing.** fpc 3.2.2
+answers `1 in [4294967297]` **TRUE** and `300 in [300]` **FALSE** — its set is
+a 0..255 byte set. So the "correct" column had to come from what the source
+meant, not from parity; this ticket's own note that `q in [300]` and
+`q in [70000]` already worked is what establishes pxx's domain is wider by
+design.
+
+### One claim in the body above is now false
+
+> `riscv32` and `xtensa` refuse `in` outright and are unaffected.
+
+riscv32 does **not** refuse it — it compiles and runs `x in [consts]` under
+`qemu-riscv32` and fails the same rows as i386 and arm32. xtensa cannot be run
+on this host and remains unmeasured. Left in place above rather than edited,
+since below-the-summary history is append-only.
+
+### Residuals, both owned
+
+- `backlog-core/bug-a-set-membership-32-bit-backends-truncate-the-set-constant`
+  — i386/arm32/riscv32 all print `SETIN64 FAILED 5`, identical row for row.
+  Different mechanism: they compare the low word plus a fits-in-int32 flag,
+  the shape `done/bug-a-set-membership-truncates-the-test-value-on-32-bit-backends`
+  installed for the test VALUE.
+- `backlog-pascal/bug-p-the-two-arms-of-in-disagree-about-their-own-domain-silently`
+  — the runtime/mask arm this ticket asked to be checked separately. It was
+  right that one fix would not cover both. The finding is not the 2^32 rows
+  (FPC diagnoses those as out-of-domain, so matching its value is not a goal)
+  but `q in [r]` with `r = 300` answering FALSE while `q in [300]` answers TRUE.
+
+Regression test `test/test_set_in_64bit_const.pas`, wired at `Makefile:5110`.
+Positive control asserted: against the pre-fix pin it reports `SETIN64 FAILED 5`.
+
+## Log
+- 2026-09-05 — resolved, commit 831919a7d.
