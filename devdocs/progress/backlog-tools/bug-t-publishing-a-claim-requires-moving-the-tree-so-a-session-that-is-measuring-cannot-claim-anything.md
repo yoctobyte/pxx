@@ -86,3 +86,45 @@ person who left it blank. When writing something down would carry the wrong mean
 declining to write it does not avoid the meaning — it moves the ambiguity onto the
 reader. See `devdocs/dev/debugging-playbook.md`, *A FIELD LEFT BLANK ON PURPOSE AND A
 FIELD NEVER FILLED IN ARE INDISTINGUISHABLE AT THE READER*.
+
+## THE READ END, AND IT IS THE WORSE HALF — frankB, measured 2026-09-06, filed by frankD because frankB cannot write to this file
+
+This ticket names the PUBLISH end: you cannot push a claim while a run is reading
+your sources. There is a symmetric READ end and it is strictly worse.
+
+**A ticket filed after your last pull is not in your tree to be claimed at all.**
+frankB agreed to take `bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor`,
+ran `claim`, and there was no such file — it had been pushed by another session
+during frankB's `-i test-core` run, and pulling is a rebase, which would corrupt
+the run.
+
+So the window in which a session cannot claim anything is not "while it holds
+unpushed work". It is **from its last pull until its next one** — the entire
+duration of any long measurement, for every ticket filed during it.
+
+Why the read end is worse than the publish end: the publish end at least leaves a
+LOCAL COMMIT, which survives a restart and tells the next session something. The
+read end leaves nothing — no file, no commit, no marker, and nothing to find later.
+
+**And it is self-sealing: the session that discovers it cannot file it,** because
+filing also requires writing to a tree it must not move. This arm was written by a
+second session at frankB's request; frankB could report the finding but not record
+it.
+
+### One thing measured and NOT confirmed
+
+frankB reported the tool "exited quietly on a slug it could not find, which is
+indistinguishable from success at a glance." **Not reproducible here.** On
+`origin/master`:
+
+```
+$ tools/progress.sh claim definitely-not-a-real-slug-xyz frankD
+no ticket with slug: definitely-not-a-real-slug-xyz
+rc=1
+```
+
+That message dates to `64ac43f1b` (2026-06-22), months before any tree in play, so
+it is not a version difference. The unknown-slug path diagnoses itself correctly
+and the silent-failure arm of the report does not stand. **The real defect is the
+missing file, not the tool's reaction to it** — worth separating, because "make
+claim louder" would be a fix for a bug that is not there.

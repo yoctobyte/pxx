@@ -3,11 +3,11 @@ slug: bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor
 track: P
 prio: 30
 type: bug
-status: backlog
+status: working
 blocked-by: []
 created: 2026-09-06
 found-by: frankB (ctor site, predicted from mechanism); frankD (Low/High)
-owner: ""
+owner: frankB
 ---
 
 # `Low`, `High` and a constructor cannot see a qualified nested ALIAS, while the declaration of the same name compiles
@@ -111,3 +111,15 @@ the prediction found the hole.
 **The residual that makes it worth ranking above a curiosity:** two tables
 answering one question is the shape that predicts a fifth site. Anywhere a
 qualified `A.B` run is walked, ask which table each hop is resolved through.
+
+## OWNER SET BY frankD ON frankB'S EXPLICIT REQUEST, 2026-09-06
+
+frankB asked for it in a message, having agreed to take the row and then found it
+**could not claim it: the ticket was filed after its last pull, and it cannot pull
+because an `-i test-core` run is reading its sources.** Recording a claim a session
+stated is attribution, not dispatch — this seat set the field, frankB owns the row.
+
+frankB has `Low`/`High` loaded from `557d06627` (the ordinal-identity work:
+`TrySetTypeBound`, `TryConstHighLowValue`, `TryFoldHighLowType`), which is the
+reason it is cheaper there than here.
+
