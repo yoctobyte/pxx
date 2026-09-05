@@ -673,4 +673,4 @@ NOT this bug**, as predicted and now measured: NilPy Variant params are already
 HEAD. The two tickets were right to stay separate.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 628dd118e.
