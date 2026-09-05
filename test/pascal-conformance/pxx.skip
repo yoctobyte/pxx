@@ -121,7 +121,7 @@ tsealed6.pp	decided: old-style TP `object` types are not implemented (decide-old
 tstring2.pp	gap: RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
 tstring5.pp	gap: RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
-terecs_u1.pp	gap: advanced records in units — nested type/const/var/class var sections, static class methods
+terecs_u1.pp	gap: harness — this file is a UNIT and the runner has no standalone-unit output; its class var section compiles since 2026-09-05, and terecs3 is the program that uses it
 tgenfunc15.pp	gap: generic array type templates + generic method overloads with array-of-T params
 toperator2.pp	gap: same as toperator1 -- toperator2 and toperator3 use each other from their implementation sections, and the interface-declared operator is not in the table yet. bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
 toperator3.pp	gap: same as toperator1 -- the operator of a unit whose implementation is still being parsed is not visible. bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
@@ -135,8 +135,8 @@ terecs10.pp	gap: default indexed property on a record (advanced records)
 terecs14.pp	gap: `**` has no lexer token -- `class operator TFoo.**` lexes as two `*`, so the DECLARATION does not parse (pascal26: expected ':' before 'TFoo'). Everything else in the row -- the Delphi names, `><`, unary + and -, `:=`, In -- compiles now; adding the token is lexer.inc numbering and coordinates with Track A
 terecs15.pp	gap: record constructors with overloads (advanced records)
 terecs20.pp	gap: `class threadvar` inside a record + threading RTL
-terecs3.pp	gap: advanced-record features from a unit — class var/const/nested type, static class methods
-terecs8.pp	gap: `class var` in a record referencing its own type + class property
+terecs3.pp	gap: a class PROPERTY backed by a class var (bug-p-a-class-property-cannot-be-backed-by-a-class-var). The `class var` section itself compiles since 2026-09-05; this is now the FIRST remaining wall, measured, not the old summary
+terecs8.pp	gap: a class PROPERTY backed by a class var (bug-p-a-class-property-cannot-be-backed-by-a-class-var). The `class var` half landed 2026-09-05, including a record class var of its OWN type
 tforin6.pp	gap: `operator enumerator` for a class, returning an `object`-type enumerator
 tforin7.pp	gap: `enumerator MoveNext` / `enumerator Current` method+property directives
 tgeneric105.pp	gap: %FAIL diagnostic — impl type params must match interface decl (TTest<S> vs <T>)
@@ -156,10 +156,10 @@ tmoperator2.pp	gap: record Initialize/Finalize management operators with managed
 tmoperator3.pp	gap: record management operators Initialize/Finalize lifecycle
 tmoperator4.pp	gap: management operators across multiple record types
 tmoperator5.pp	gap: management operators Initialize/Finalize invocation order
-tmoperator7.pp	gap: management operators inside object/dynarray of records + class var
+tmoperator7.pp	gap: management operators (Initialize/Finalize) inside object/dynarray of records — the `class var` half landed 2026-09-05 and the row now stops at `undefined variable (InitializeCount)`, which is the management-operator cluster, not this one
 tmoperator8.pp	gap: management operators AddRef/Copy/Initialize/Finalize on records
 tmoperator9.pp	gap: record management operators Initialize/Finalize called for locals
-tobject6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Nested type/class var/const sections and a class property on top of the base feature.
+tobject6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Its `class var` section compiles since 2026-09-05; the row now stops on a class PROPERTY backed by one (bug-p-a-class-property-cannot-be-backed-by-a-class-var), still behind the object decision either way.
 tobject7.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Private nested type, typed const and static class property on top of the base feature.
 toperator91.pp	gap: the duplicate-conversion check keys on the result type KIND, so String[80], String[90] and ShortString are one result type and the second Explicit/Implicit declaration is refused. FPC treats the capacities as distinct -- same tk inconsistency toperator93 exposed at the use site
 toperator94.pp	gap: same duplicate-conversion coarseness as toperator91, objfpc `class operator :=` spelling

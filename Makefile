@@ -13656,6 +13656,25 @@ test-core: $(COMPILER)
 	# Byte-compared against FPC 3.2.2; pin v403 cannot compile the file.
 	./$(COMPILER) test/test_subrange_bounds_may_be_named.pas $(TESTTMP)/test_subnamed26
 	tools/expect_same.sh test_subnamed26 "$$($(TESTTMP)/test_subnamed26)" "$$(cat test/test_subrange_bounds_may_be_named.expected)"
+	# `class var` in a RECORD, and the two contexts that must STAY refused.
+	# The compile is not the assertion — a per-instance field would compile every
+	# line and print different numbers, so writing through `a` and reading
+	# through `b` is the row that tells a class var from a field. `class var` is
+	# a SECTION header, so the file also asserts that a declaration after it is
+	# shared while one declared before it is not; the first draft put its
+	# per-instance control after the section and asserted a true value with a
+	# false explanation. Byte-compared against fpc 3.2.2.
+	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
+	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
+	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
+	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
+	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
+	# those two, which is why the arm splits instead of disappearing. FPC refuses
+	# both and accepts the named case.
+	! ./$(COMPILER) test/test_class_var_local_record_refused.pas $(TESTTMP)/test_cvlocal26 > $(TESTTMP)/test_cvlocal.log 2>&1
+	grep -q "class var is not allowed in a record type declared inside a routine" $(TESTTMP)/test_cvlocal.log
+	! ./$(COMPILER) test/test_class_var_anon_record_refused.pas $(TESTTMP)/test_cvanon26 > $(TESTTMP)/test_cvanon.log 2>&1
+	grep -q "class var is not allowed in an anonymous record type" $(TESTTMP)/test_cvanon.log
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

@@ -4166,6 +4166,54 @@ begin
   UMthPub[UMthCount - 1] := 0;
 end;
 
+procedure ParseClassVarSection(ci: Integer);
+{ `class var x[, y]: T;` -- ONE shared global slot per type, not per instance,
+  addressed as TType.x (or obj.x). Registered in the ClassVar table keyed by
+  `ci`; the storage is an anonymous global, allocated through the same
+  ParseDeclTypeDesc + AllocFromDeclTypeDesc path a `var` section uses, so a
+  class var takes every type a global can.
+
+  ONE COPY, TWO CALLERS -- the class/object body in ParseTypeSection and the
+  RECORD body in ParseRecordFields. It was the class body's only, and the record
+  body carried a flat refusal whose comment said pxx had "no shared-storage
+  model for record class vars". That was not a limitation of the storage: the
+  registry is keyed by a type index a record already has, and the allocation
+  never looked at whether the owner was a class. The comment described the
+  absence of a caller, and read as the absence of a mechanism.
+
+  Enters with CurTok on `class` and the next token `var`. }
+var
+  nFldNames, fni, i: Integer;
+  cvNOffs: array[0..15] of Integer;
+  cvNLens: array[0..15] of Integer;
+begin
+  Next; Next;   { consume 'class' 'var' }
+  while (CurTok.Kind = tkIdent) and (not IsClassMemberStartWord(CurTok.SVal)) do
+  begin
+    nFldNames := 0;
+    repeat
+      if CurTok.Kind <> tkIdent then Error('expected class var name');
+      cvNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+      cvNLens[nFldNames] := Tokens[TokPos-1].SLen;
+      Inc(nFldNames); Next;
+    until not Eat(tkComma);
+    Expect(tkColon, ':');
+    ParseDeclTypeDesc;
+    for fni := 0 to nFldNames - 1 do
+    begin
+      if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
+      i := AllocFromDeclTypeDesc('');
+      ClassVarCi[ClassVarCount]   := ci;
+      ClassVarNOff[ClassVarCount] := cvNOffs[fni];
+      ClassVarNLen[ClassVarCount] := cvNLens[fni];
+      ClassVarSym[ClassVarCount]  := i;
+      ClassVarPyOvr[ClassVarCount] := False;   { a Pascal/ClassVar-annotated slot never needs the NilPy per-instance override }
+      Inc(ClassVarCount);
+    end;
+    Eat(tkSemicolon);
+  end;
+end;
+
 procedure ParseRecordFields(ci: Integer; isPackedRecord, isObjectType: Boolean);
 var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
@@ -4190,15 +4238,39 @@ begin
   ParsingClassBodyCi := ci;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
-    { `class var` inside a RECORD: no shared-storage model for record class
-      vars in pxx (class-body class vars have one, see ParseTypeSection).
-      FPC additionally forbids the local-type and anonymous-record contexts
-      (terecs12c/terecs13c) — reject all three loudly instead of silently
-      skipping the section (the old fall-through made TRec.X fail later with
-      a misleading 'class method not found'). }
+    { `class var` inside a RECORD. Accepted for a NAMED record at unit scope
+      through the same ParseClassVarSection the class body uses; still refused
+      in the two contexts FPC refuses, and those are not a courtesy — terecs12c
+      (record in a LOCAL type section) and terecs13c (ANONYMOUS record) are
+      `%FAIL` tests that are NOT skip-listed, so they pass today BY REFUSAL.
+      Lifting the rejection wholesale would fix five conformance rows and break
+      those two, which is why the arm splits rather than disappearing.
+
+      Measured 2026-09-05: fpc 3.2.2 accepts the named case under
+      $modeswitch advancedrecords (implied by mode delphi) and rejects both of
+      these. Probing it WITHOUT the modeswitch makes fpc reject all three, which
+      reads as fpc agreeing with the old refusal -- the bare-mode answer is a
+      different question from the one the corpus asks.
+
+      A record has no per-instance metaclass, so the discriminators are the
+      record's own identity, not its contents: an anonymous record has no name
+      to qualify the access with (UClsNLen = 0), and a local type has no global
+      storage the slot could live in (CurProc >= 0). }
     if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkVar) then
-      Error('class var is not allowed in a record type');
+    begin
+      if UClsNLen[ci] = 0 then
+        Error('class var is not allowed in an anonymous record type -- ' +
+              'it has no type name to qualify the access with')
+      else if CurProc >= 0 then
+        Error('class var is not allowed in a record type declared inside a ' +
+              'routine -- its storage is global and the type is not')
+      else
+      begin
+        ParseClassVarSection(ci);
+        continue;
+      end;
+    end;
 
     { `const` section inside a record — same treatment as in a class body, and
       that now means SCOPED to the record, not global.
@@ -6013,40 +6085,21 @@ begin
 
           { class var x[, y]: T; — one shared GLOBAL slot per class (not per
             instance), addressed as TClass.x or obj.x. Registered in the ClassVar
-            table; storage is an anonymous global var (CurProc < 0 here). }
+            table; storage is an anonymous global var (CurProc < 0 here).
+
+            THE BODY MOVED TO ParseClassVarSection so the RECORD body can call
+            the same one. It used to live here, and the record arm carried a
+            refusal saying pxx had no shared-storage model for record class
+            vars — which was true only in the sense that nothing called this.
+            The SAME type parser + allocator the `var` section uses is what
+            makes a class var take every type a global can: arrays (inline and
+            named, fixed and dynamic, N-D), sets, pointers, enums, proc types.
+            It used to be `ParseTypeKind + AllocVar`, which reserved a SCALAR
+            slot for an array type — indexing worked, Length() silently answered
+            garbage, and an inline `array[...] of T` did not parse at all. }
           if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkVar) then
           begin
-            Next; Next;   { consume 'class' 'var' }
-            while (CurTok.Kind = tkIdent) and (not IsClassMemberStartWord(CurTok.SVal)) do
-            begin
-              nFldNames := 0;
-              repeat
-                if CurTok.Kind <> tkIdent then Error('expected class var name');
-                fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
-                fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-                Inc(nFldNames); Next;
-              until not Eat(tkComma);
-              Expect(tkColon, ':');
-              { The SAME type parser + allocator the `var` section uses, so a class
-                var takes every type a global can: arrays (inline and named, fixed
-                and dynamic, N-D), sets, pointers, enums, proc types. It used to be
-                `ParseTypeKind + AllocVar`, which reserved a SCALAR slot for an
-                array type — indexing worked, Length() silently answered garbage,
-                and an inline `array[...] of T` did not parse at all. }
-              ParseDeclTypeDesc;
-              for fni := 0 to nFldNames - 1 do
-              begin
-                if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
-                i := AllocFromDeclTypeDesc('');
-                ClassVarCi[ClassVarCount]   := ci;
-                ClassVarNOff[ClassVarCount] := fldNOffs[fni];
-                ClassVarNLen[ClassVarCount] := fldNLens[fni];
-                ClassVarSym[ClassVarCount]  := i;
-                ClassVarPyOvr[ClassVarCount] := False;   { a Pascal/ClassVar-annotated slot never needs the NilPy per-instance override }
-                Inc(ClassVarCount);
-              end;
-              Eat(tkSemicolon);
-            end;
+            ParseClassVarSection(ci);
             continue;
           end;
 
