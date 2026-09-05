@@ -8971,6 +8971,29 @@ begin
           movsxd and sign-extend-truncate the 64-bit handle — a corrupted pointer
           whose first refcount/deref segfaults. Force a full pointer-width load. }
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyPointer))
+      else if NodeIsInterface(node) then
+        { INTERFACE-VALUED read (`ptr := o.I`, `p^` on a ^IFoo): exactly the arm
+          above, one type along. An interface value IS a single instance
+          pointer — FPC's ABI, and `IRIntfInstanceWord` a few hundred lines up
+          already lowers one as `IR_LOAD_MEM ... Ord(tyPointer)` for identity
+          comparison. But ASTTk spells an interface `tyRecord` like every other
+          record, so without this the node says "record" and each backend has
+          to guess what a record-typed load means.
+
+          THE TWO ANSWERS ARE BOTH RIGHT, FOR DIFFERENT THINGS, which is why
+          leaving it to the backend does not work. For a real aggregate a
+          value IS its address, so yielding the address is correct. For an
+          interface the field HOLDS the pointer, so the value is what the load
+          reads. Same type kind, opposite lowering.
+
+          wasm32 refused it outright (`load through a pointer of type record`)
+          and was the only target to say anything; the tempting local fix there
+          — widen the arm to `or (tk = tyRecord)` — compiles, self-hosts, and
+          silently yields `@o.I` where `o.I` was wanted, both being i32.
+          Normalising here instead means no backend has to carry the
+          distinction and none can get it wrong separately.
+          bug-a-wasm32-refuses-a-load-of-an-interface-valued-record-field }
+        Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyPointer))
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;

@@ -3,9 +3,9 @@ slug: bug-a-wasm32-refuses-a-load-of-an-interface-valued-record-field
 track: A
 prio: 35
 type: bug
-status: open
+status: working
 blocked-by: []
-owner: unassigned
+owner: frankwasm
 created: 2026-09-04
 found-by: frankA (wasm32 gap census, last codegen instance)
 summary: "`ptr := o.I`, where o is a record with an interface-typed field, refuses on wasm32 as `load through a pointer of type record` -- an interface is spelled tyRecord and WasmEmitLoadMem only has an arm for a frozen string. Isolated to a 12-line repro. THE OBVIOUS FIX IS WRONG AND I TRIED IT: widening that arm to `or (tk = tyRecord)` makes a record-typed load yield its ADDRESS, which is right for a real aggregate and SILENTLY WRONG for an interface, whose field holds a pointer that must be LOADED. Measured: with the widening in, the refusal moves to `value of type record in assignment to ptr` on the same statement, i.e. the address was produced where the value was wanted. The discriminator is `UClsIsInterface`, not the type kind."
