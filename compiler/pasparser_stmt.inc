@@ -256,6 +256,14 @@ end;
   whole life. One cell per generator instance per variant argument, released
   with neither the instance nor the loop — a bounded leak, recorded on the
   ticket rather than hidden here. }
+{ AN_SLOTADDR node for sym i — the address of the local's OWN slot. }
+function GenMakeSlotAddr(i: Integer): Integer;
+begin
+  Result := AllocNode(AN_SLOTADDR);
+  ASTIVal[Result] := i;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 { Does argument `k` of this generator need a heap cell to carry it?
 
   ONLY a Nil Python VARIANT parameter. The test that shipped first was
@@ -295,6 +303,61 @@ begin
   preSeq := GenMakeSeq(preSeq, GenMakeSeq(
               GenMakeAssign(derefNode, argNode), -1));
   Result := GenMakeIdent(ps, tyPointer);
+end;
+
+{ A PASCAL VARIANT ARGUMENT: give it a home that outlives the loop, and pass its
+  ADDRESS.
+
+  This is the same shape as GenMakeVariantArgCell above, with the heap cell
+  replaced by an ordinary local — and the reason is the sentence in
+  PyGenArgNeedsCell's own comment: `a Pascal var argument already has a
+  caller-side address that outlives the loop, which is exactly what a Python
+  temporary does not`. A temp allocated HERE is a local of the function
+  containing the for-in, so it outlives the whole loop for free, needs no
+  pycell_new (a unit a Pascal program has no reason to have in scope), and is
+  released by the ordinary scope-exit path rather than leaking like the cell
+  does.
+
+  Why an ADDRESS at all: a Variant value parameter is passed BY REFERENCE — its
+  frame slot holds a pointer to the 16 bytes, not the bytes. Measured on a plain
+  non-generator function, which spills exactly one word and calls through it. So
+  the slot must carry what the callee's ABI expects to find there. }
+function GenMakeVariantArgTemp(argNode: Integer; var preSeq: Integer): Integer;
+var vt: Integer;
+begin
+  vt := AllocVar('', tyVariant);
+  preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+              GenMakeAssign(GenMakeIdent(vt, tyVariant), argNode), -1));
+  Result := GenMakeSlotAddr(vt);
+end;
+
+{ Does argument `k` of this generator need the Pascal variant-temp treatment?
+  The complement of PyGenArgNeedsCell: a VARIANT parameter that is NOT already
+  spelled by-ref and is not NilPy's (which has its own cell). }
+function PasGenArgNeedsTemp(gpi, k: Integer): Boolean;
+begin
+  Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
+            (not Procs[gpi].Params[k].IsRef) and
+            (Procs[gpi].Params[k].TypeKind = tyVariant);
+end;
+
+{ The INSTANCE OFFSET of generator argument `k` (1-based).
+
+  Slots are assigned by AssignStacklessSlots in sym order, and a multi-word
+  parameter (a record, a promotable int) takes more than one — so the ARGUMENT
+  index and the SLOT index diverge as soon as any earlier parameter is wider
+  than a machine word. The six stores below used to spell SL_OFF_SLOTS + 8*(k-1)
+  literally, which agrees with the generator's own SL_OFF_SLOTS + 8*SymGenSlot[]
+  only while every parameter is one word. Ask the slot map instead; it is the
+  same map the generator reads. }
+function GenArgSlotOff(gpi, k: Integer): Integer;
+var ps: Integer;
+begin
+  Result := SL_OFF_SLOTS + 8 * (k - 1);
+  if k >= Procs[gpi].ParamCount then Exit;
+  ps := Procs[gpi].Params[k].SymIdx;
+  if (ps >= 0) and (SymGenSlot[ps] >= 0) then
+    Result := SL_OFF_SLOTS + 8 * SymGenSlot[ps];
 end;
 
 { Concatenate two AN_SEQ statement chains, keeping `a` first (-1 = empty).
@@ -514,33 +577,39 @@ begin
     end;
     if nargs >= 1 then
     begin
-      if PyGenArgNeedsCell(gpi, 1) then a0 := GenMakeVariantArgCell(a0, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 0, a0), -1));
+      if PyGenArgNeedsCell(gpi, 1) then a0 := GenMakeVariantArgCell(a0, assignG)
+      else if PasGenArgNeedsTemp(gpi, 1) then a0 := GenMakeVariantArgTemp(a0, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 1), a0), -1));
     end;
     if nargs >= 2 then
     begin
-      if PyGenArgNeedsCell(gpi, 2) then a1 := GenMakeVariantArgCell(a1, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 8, a1), -1));
+      if PyGenArgNeedsCell(gpi, 2) then a1 := GenMakeVariantArgCell(a1, assignG)
+      else if PasGenArgNeedsTemp(gpi, 2) then a1 := GenMakeVariantArgTemp(a1, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 2), a1), -1));
     end;
     if nargs >= 3 then
     begin
-      if PyGenArgNeedsCell(gpi, 3) then a2 := GenMakeVariantArgCell(a2, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 16, a2), -1));
+      if PyGenArgNeedsCell(gpi, 3) then a2 := GenMakeVariantArgCell(a2, assignG)
+      else if PasGenArgNeedsTemp(gpi, 3) then a2 := GenMakeVariantArgTemp(a2, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 3), a2), -1));
     end;
     if nargs >= 4 then
     begin
-      if PyGenArgNeedsCell(gpi, 4) then a3 := GenMakeVariantArgCell(a3, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 24, a3), -1));
+      if PyGenArgNeedsCell(gpi, 4) then a3 := GenMakeVariantArgCell(a3, assignG)
+      else if PasGenArgNeedsTemp(gpi, 4) then a3 := GenMakeVariantArgTemp(a3, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 4), a3), -1));
     end;
     if nargs >= 5 then
     begin
-      if PyGenArgNeedsCell(gpi, 5) then a4 := GenMakeVariantArgCell(a4, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 32, a4), -1));
+      if PyGenArgNeedsCell(gpi, 5) then a4 := GenMakeVariantArgCell(a4, assignG)
+      else if PasGenArgNeedsTemp(gpi, 5) then a4 := GenMakeVariantArgTemp(a4, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 5), a4), -1));
     end;
     if nargs >= 6 then
     begin
-      if PyGenArgNeedsCell(gpi, 6) then a5 := GenMakeVariantArgCell(a5, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 40, a5), -1));
+      if PyGenArgNeedsCell(gpi, 6) then a5 := GenMakeVariantArgCell(a5, assignG)
+      else if PasGenArgNeedsTemp(gpi, 6) then a5 := GenMakeVariantArgTemp(a5, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 6), a5), -1));
     end;
 
     { advance = a direct call to the step function with the instance pointer.
@@ -1893,14 +1962,6 @@ begin
   end;
 end;
 
-{ AN_SLOTADDR node for sym i — the address of the local's OWN slot. }
-function GenMakeSlotAddr(i: Integer): Integer;
-begin
-  Result := AllocNode(AN_SLOTADDR);
-  ASTIVal[Result] := i;
-  ASTTk[Result] := Ord(tyPointer);
-end;
-
 { @lvalue as an AST node (AN_ADDR keeps by-ref auto-deref semantics — an IsRef
   sym yields the caller's address, which is what a copy source wants). }
 function GenMakeAddrOf(lv: Integer): Integer;
@@ -1921,6 +1982,32 @@ begin
   ASTTk[Result] := Ord(tyPointer);
 end;
 
+{ Is sym `i` a VARIANT VALUE PARAMETER — one whose frame slot holds a POINTER to
+  the 16 bytes rather than the bytes themselves?
+
+  A Variant value parameter is passed BY REFERENCE and NEITHER `Syms[].IsRef`
+  NOR `Params[].IsRef` records it: those fields carry the var/const SPELLING,
+  and this is a plain value parameter that the ABI nevertheless passes as an
+  address. Measured on a plain non-generator function: it spills exactly one
+  word and calls through it, and the 16 bytes live at the address that word
+  holds.
+
+  Without this, such a param fell to the tyVariant arm below, which blob-copies
+  SIXTEEN bytes into a slot that is EIGHT — running over the neighbouring frame
+  slot. When the Variant was the FIRST declared parameter that neighbour was the
+  hidden `self`, so the step function zeroed its own instance pointer and then
+  dereferenced it (SIGSEGV); when it was not first, the neighbour was another
+  parameter, silently clobbered to 0.
+  bug-a-a-stackless-generator-with-a-variant-parameter-yields-nothing-on-native-and-a-wrong-value-on-wasm32
+
+  NilPy's variant params are already `IsRef` (pyparser sets it explicitly) and
+  carry a heap cell, so they take the by-ref arm and never reach this test. }
+function SLVariantByRefParam(i: Integer): Boolean;
+begin
+  Result := (Syms[i].Kind = skParam) and (Syms[i].TypeKind = tyVariant) and
+            (not Syms[i].IsRef);
+end;
+
 { Build a sequence of SlSet(self, slotOff, localValue) for every persistent slot
   allocated so far — called at each yield to checkpoint live locals. A by-ref
   param saves its POINTER WORD via the raw slot read; a record local blob-copies
@@ -1932,10 +2019,12 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      if Syms[i].IsRef or (Syms[i].TypeKind = tyString) or
+      if Syms[i].IsRef or SLVariantByRefParam(i) or
+         (Syms[i].TypeKind = tyString) or
          (Syms[i].TypeKind = tyAnsiString) then
-        { by-ref param: the caller ADDRESS. Managed string: the handle. Either
-          way ONE raw word, moved without touching a reference count. }
+        { by-ref param: the caller ADDRESS. Managed string: the handle. A
+          Variant VALUE param: also an address, though nothing marks it IsRef.
+          Either way ONE raw word, moved without touching a reference count. }
         stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
                              GenMakeSlotWord(i))
       else if Syms[i].TypeKind = tyVariant then
@@ -1978,7 +2067,8 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      if Syms[i].IsRef or (Syms[i].TypeKind = tyString) or
+      if Syms[i].IsRef or SLVariantByRefParam(i) or
+         (Syms[i].TypeKind = tyString) or
          (Syms[i].TypeKind = tyAnsiString) then
         stmt := GenMakeAssign(GenMakeSlotWord(i),
                               GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]))
@@ -2454,6 +2544,17 @@ begin
       WriteLn('a.slslot assign: sym=', Syms[i].Name, ' kind=', Ord(Syms[i].Kind),
               ' tk=', Ord(tk), ' slot=', CurGenSlotNext,
               ' off=', SL_OFF_SLOTS + 8 * CurGenSlotNext);
+    if SLVariantByRefParam(i) then
+    begin
+      { A VARIANT VALUE PARAMETER is an address, not a value — see
+        SLVariantByRefParam. ONE pointer word, exactly like the by-ref arm
+        above, which is where this would have gone had anything marked it
+        IsRef. The 16 bytes it points at are the caller-side temp the for-in
+        desugar materialises (GenMakeVariantArgTemp), which outlives the loop. }
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext);
+      Continue;
+    end;
     if tk = tyVariant then
     begin
       { A VARIANT is a 16-byte {tag, payload} pair, so it gets a two-word slot

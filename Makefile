@@ -11985,6 +11985,16 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_for_bounds26 | diff -u test/test_for_bounds_before_control_var.expected -
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_stackless_gen26
 	tools/expect_same.sh test_stackless_gen26 "$$($(TESTTMP)/test_stackless_gen26)" "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 \n0:10:300 0:10:301 2:30:302 2:30:303 53:40:7 ')"
+	# A VARIANT PARAMETER of a stackless generator. It is passed BY REFERENCE
+	# (the frame slot holds a pointer to the 16 bytes) and nothing marks it
+	# IsRef, so the slot pass blob-copied SIXTEEN bytes into an EIGHT-byte slot
+	# and ran over the neighbour. Variant FIRST clobbered the hidden `self` and
+	# the step function dereferenced its own null instance -- a SIGSEGV that read
+	# from outside as `the generator yielded nothing`. Variant SECOND clobbered
+	# the previous parameter to 0, which a body yielding a CONSTANT cannot see:
+	# row 3 reads the first parameter for exactly that reason.
+	./$(COMPILER) test/test_stackless_gen_variant_param.pas $(TESTTMP)/test_slg_vparam26
+	tools/expect_same.sh test_slg_vparam26 "$$($(TESTTMP)/test_slg_vparam26)" "$$(printf '7 \n7 8 \n9 7 \n4 9 \n5 10 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
 	tools/expect_same.sh test_scheduler26 "$$($(TESTTMP)/test_scheduler26)" "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_scheduler_exc26
