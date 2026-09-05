@@ -3628,8 +3628,40 @@ function ParseVarRecLiteralAST: Integer;
 { `[ e0, e1, ... ]` in an `array of const` argument position. Each element is a
   full expression; the element's static type picks its TVarRec tag at lowering
   time. Yields an AN_VARREC_ARRAY whose Left is the AN_ARG element chain; tagged
-  tyRecord so overload matching sees it as the open-array-of-record argument. }
-var node, argNode, lastArg: Integer; done: Boolean;
+  tyRecord so overload matching sees it as the open-array-of-record argument.
+
+  An element may carry `: width [ : decimals ]`, as the write STATEMENT's
+  arguments may — `Log(['x=', x:8:2])`. This is phase 2 of
+  feature-writeln-as-library, bracket spelling.
+
+  IT IS AN EXTENSION, NOT PARITY, and the ticket's justification for it was
+  wrong: it said "it is where FPC parses width/precision too", conflating the
+  write statement with this context. Measured 2026-09-05 — fpc 3.2.2 -Mdelphi
+  refuses `Log(['x=', x:8:2])` with `Syntax error, "]" expected but ":" found`,
+  and pxx refused it identically before this. What is true is the other half of
+  that sentence: the `:` is unambiguous here, since nothing else may follow an
+  element expression inside the brackets. The extension earns its keep by
+  closing the gap between the builtin `writeln(x:8:2)` and a library one, which
+  is the whole point of the feature.
+
+  NO vtFormatted TAG, WHICH IS A DELIBERATE DEPARTURE FROM THE TICKET'S DESIGN.
+  It specified a new element tag carrying value, type, width and precision, with
+  the library reader doing the formatting. But TextStrArg already exists and
+  already does exactly this job for the write statement's variable-width path —
+  strings padded, Boolean as TRUE/FALSE, floats via StrFloat with decimals,
+  signed and unsigned integers, Char as its character — through the same builtin
+  formatters `Str(...)` lowers to. Formatting here yields an ordinary string
+  node, so the element boxes as a managed string and EVERY existing TVarRec
+  consumer reads it unchanged: sysutils.Format's FmtArg*, lib/rtl/libwriteln.pas
+  (phase 3), and any vendored FPC code doing `case VType of`, which would meet
+  an unknown tag 19 and fall through its else. A new tag would have been a
+  second implementation of a formatter we already have, and the second path is
+  the one that stays broken — normalise-dont-special-case.md.
+
+  What the tag would have bought is a consumer's ability to re-format from the
+  raw value. No consumer does that, and if one ever needs to it can be added
+  then, against a real caller rather than a predicted one. }
+var node, argNode, lastArg, exprNode, widthVal, decVal: Integer; done: Boolean;
 begin
   node := MakeVarRecArrayFromArgs(-1);
   lastArg := -1;
@@ -3640,8 +3672,26 @@ begin
     while not done do
     begin
       ParseExpr;
+      exprNode := CurASTNode;
+      if CurTok.Kind = tkColon then
+      begin
+        Next;
+        ParseExpr; widthVal := CurASTNode;
+        decVal := -1;
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          ParseExpr; decVal := CurASTNode;
+        end;
+        { Unconditionally, literal width or not. The write statement keeps a
+          separate literal path because its CODEGEN reads the raw numbers off
+          the arg node; an array-of-const element has no such consumer, so one
+          path covers both and there is no second spelling to drift. }
+        exprNode := TextStrArg(exprNode, widthVal, decVal,
+                               'a formatted array-of-const element');
+      end;
       argNode := AllocNode(AN_ARG);
-      ASTLeft[argNode] := CurASTNode;
+      ASTLeft[argNode] := exprNode;
       ASTRight[argNode] := -1;
       if lastArg = -1 then ASTLeft[node] := argNode
       else ASTRight[lastArg] := argNode;

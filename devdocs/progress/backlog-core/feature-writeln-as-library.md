@@ -3,7 +3,7 @@ prio: 40
 track: A
 type: feature
 status: backlog
-summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. PHASE 3 COMPLETE 2026-09-05 (65b62b148): lib/rtl/libwriteln.pas renders every type byte-identically to the builtin, asserted as PAIRS so a divergence names the type; all formatting is in Pascal and only 'emit bytes to a descriptor' stays in the compiler. Phase 3 was only worth doing once phase 1 landed -- this ticket's own 2026-07-20 note calling it 'a strictly worse writeln nobody would call' was true then and stale from 2026-09-01. THREE known holes, all in the BOXING and so unreachable from a vector reader: a QWord >= 2^63 renders signed (filed), the sized booleans render 1/0 (filed, and appended as a fourth consumer to decide-how-a-type-carries-an-identity-its-kind-cannot-hold), and a Single renders as a Double -- that last is NOT a defect, fpc has no vtSingle either, and its parity row is asserted as DIFFERENT so it goes red if one ever appears. Phase 2 (`expr:w:p` via a vtFormatted tag) is UNTOUCHED and unclaimed: its bracket spelling is contained in ParseVarRecLiteralAST, but its elided spelling has to loosen the shared argument loops, so it needs coordinating with whoever holds the Pascal frontend. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
+summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. PHASE 3 COMPLETE 2026-09-05 (65b62b148): lib/rtl/libwriteln.pas renders every type byte-identically to the builtin, asserted as PAIRS so a divergence names the type; all formatting is in Pascal and only 'emit bytes to a descriptor' stays in the compiler. Phase 3 was only worth doing once phase 1 landed -- this ticket's own 2026-07-20 note calling it 'a strictly worse writeln nobody would call' was true then and stale from 2026-09-01. THREE known holes, all in the BOXING and so unreachable from a vector reader: a QWord >= 2^63 renders signed (filed), the sized booleans render 1/0 (filed, and appended as a fourth consumer to decide-how-a-type-carries-an-identity-its-kind-cannot-hold), and a Single renders as a Double -- that last is NOT a defect, fpc has no vtSingle either, and its parity row is asserted as DIFFERENT so it goes red if one ever appears. PHASE 2 BRACKET SPELLING COMPLETE 2026-09-05: `Log(['x=', x:8:2])` parses and renders byte-identically to the builtin for float w:p, integer, Int64, QWord, Boolean, string, Char, variable width and narrow width. AND IT NEEDED NO vtFormatted TAG, which is a deliberate departure from this ticket's design -- `TextStrArg` already formats exactly these types for the write statement's variable-width path, through the same builtin formatters `Str(...)` lowers to, so a formatted element renders to an ordinary string node and boxes as a managed string. Every existing TVarRec consumer therefore reads it unchanged (sysutils.Format's FmtArg*, libwriteln, and vendored FPC code doing `case VType of`, which would have met an unknown tag 19 and fallen through its else). A new tag would have been a second copy of a formatter we already have. NOTE THE JUSTIFICATION IN THE DESIGN BELOW IS WRONG: it says `:w:p` here is 'where FPC parses width/precision too', conflating the write STATEMENT with an array-of-const literal -- measured, fpc 3.2.2 refuses `Log(['x=', x:8:2])` with `Syntax error, "]" expected but ":" found`. This is an EXTENSION, and what it earns is the gap between the builtin `writeln(x:8:2)` and a library one. PHASE 2 ELIDED SPELLING STILL NOT DONE and still blocked for the reason recorded below: it needs the shared argument loops loosened, and frankA's `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` is `status: working` with 25 `isNilPy` references left in `pasparser_expr.inc`, five of them in those very loops (1227, 1272, 1302, 1382, 1385) -- checked with frankA 2026-09-05 rather than assumed from the four commits whose subjects name that slug. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
 ---
 
 # write/writeln as a library function (via `array of const` + variadic sugar)
@@ -66,6 +66,73 @@ its file descriptor instead of stdout. Phase it:
 - First: stdout / stderr (a `TextFile`-typed first arg resolving to fd 1/2).
 - Later: real file I/O — `TextFile`, `AssignFile`/`Reset`/`Rewrite`/`CloseFile`,
   buffering. This is where the current builtin is genuinely incomplete.
+
+## 2026-09-05 (frankH) — phase 2 bracket half landed, and the tag it specified was not needed
+
+**What landed.** `ParseVarRecLiteralAST` now accepts `: width [ : decimals ]`
+after an element expression, and formats it through `TextStrArg`. Parity against
+the builtin, asserted as pairs in `test_varrec_format_bracket.pas`: float `w:p`,
+float `0:p`, integer, integer width 0, Int64, QWord at the top of its range,
+Boolean, string (padded), Char, a VARIABLE width, and a width narrower than the
+value. `fails=0`.
+
+**Why no `vtFormatted`.** The design above specifies a new element tag carrying
+value, type, width and precision, with the library reader formatting it. That
+would have been a second implementation of something that already exists:
+`TextStrArg` formats exactly these types for the write statement's
+variable-width path — strings padded via `StrStrW`, Boolean as `TRUE`/`FALSE`,
+floats via `StrFloat` with decimals, signed and unsigned integers, Char as its
+character — using the same builtin formatters `Str(...)` lowers to. Formatting
+at the parse site yields a string node, so the element boxes as an ordinary
+managed string.
+
+That matters beyond tidiness. A new tag 19 would be invisible to every existing
+`TVarRec` consumer: `sysutils.Format`'s `FmtArg*`, `lib/rtl/libwriteln.pas`, and
+any vendored FPC code doing `case VType of`, which would fall through its `else`.
+FPC has no such tag and never will. What the tag would have bought is a
+consumer's ability to re-format from the raw value — no consumer does that, and
+one can be added against a real caller rather than a predicted one.
+
+**A correction to this ticket's own justification.** The design says the `:` is
+where *"FPC parses width/precision too"*. That conflates two contexts. FPC parses
+`x:8:2` in the **write statement**; inside an `array of const` **literal** it
+refuses — measured 2026-09-05, `fpc 3.2.2 -Mdelphi` on `Log(['x=', x:8:2])`
+gives `Syntax error, "]" expected but ":" found`, and pxx gave the same
+diagnostic before this change. The other half of the sentence stands: the `:` is
+unambiguous there, since nothing else may follow an element expression inside
+the brackets. **This is an extension, and its justification is closing the gap
+between the builtin `writeln(x:8:2)` and a library one**, which is what the
+whole feature is for.
+
+**frankB's condition, met.** The sign-off required that the loosening carry a
+control that the parser still REJECTS what it rejected before, asserted and
+branched on — and frankA added that the control must be drawn from a population
+the change could actually reach. Four shapes, each a Makefile row that branches:
+a stray `:` in a plain non-variadic call (`Foo(1:8, 2)`), an array index
+(`a[i:2]`), a set constructor (`[1:2]`), and a third colon (`1:2:3:4`). Plus
+three that must still COMPILE — a set literal, an array index, and a plain
+unformatted `array of const` — because a loosening whose only evidence is that
+the new syntax works cannot tell you what else it started accepting.
+
+**A third instance of this ticket's recurring bug, found by the test's oracle.**
+Writing the parity test meant rendering the same value two ways, which put
+`Str(s:5, t)` beside `write(s:5)` — and `Str` on a STRING produced `4357408`,
+the string's heap address rendered as digits, while `Str(c:3, t)` on a Char
+produced `122`, its ordinal. `fpc 3.2.2` refuses the first (`Illegal
+expression`) and ICEs on the second, so nothing depended on either answer. This
+is the same defect as `bug-p-str-of-a-qword-formats-it-signed` and
+`bug-p-str-of-a-boolean-formats-it-as-a-digit`: **`Str` carried a hand-written
+copy of `write`'s dispatch table and was short a case every time anyone looked.**
+Each previous fix added one more arm to the copy. This one deletes the copy —
+`Str` now calls `TextStrArg`, which *is* write's table — so the next type added
+to `write` reaches `Str` for free. The one thing `Str` does not take from
+`write` is the float default: no width means FPC's scientific form, computed
+before the call, which is why it is not simply `TextStrArg(expr, -1, -1)`.
+
+**What is left.** The ELIDED spelling, `Log('x=', x:8:2)`, which needs the shared
+argument loops loosened and is blocked on frankA's carve — measured, not assumed:
+five `isNilPy` references remain in those loops. frankB's condition carries over
+to it and frankA has said it will hold the same line if it lands there first.
 
 ## Constraints / gotchas
 

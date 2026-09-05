@@ -3231,8 +3231,21 @@ end;
 { Convert one write value into a string-valued node for TextWrite. Strings pass
   through; integers go via StrInt(x, width), floats via StrFloat(x, width, dec) —
   the same builtin formatters the console Str(...) lowering uses. widthNode /
-  decNode are AST expression nodes (-1 = default width 0 / decimals -1). }
-function TextStrArg(exprNode, widthNode, decNode: Integer): Integer;
+  decNode are AST expression nodes (-1 = default width 0 / decimals -1).
+
+  `ctx` names the construct for diagnostics, because this is no longer only
+  write(Text): ParseVarRecLiteralAST formats `[ x:8:2 ]` elements through here
+  too, and a caller of THAT meeting `write(Text): unsupported argument type`
+  would be told about a construct it did not write. The formatters themselves
+  are in compiler/builtin/builtin.pas and are always loaded, so the old "add
+  `uses textfile;` deps" hint was misleading from either call site and is gone.
+
+  Every arm returns a STRING node, which is the whole reason phase 2 of
+  feature-writeln-as-library needs no vtFormatted tag: an `array of const`
+  element formatted here boxes as an ordinary managed string and every existing
+  TVarRec consumer — sysutils.Format's FmtArg*, lib/rtl/libwriteln.pas, and any
+  vendored FPC code doing `case VType of` — reads it with no change. }
+function TextStrArg(exprNode, widthNode, decNode: Integer; const ctx: AnsiString): Integer;
 var tk: TTypeKind; pi: Integer;
 begin
   tk := IntToTypeKind(ASTTk[exprNode]);
@@ -3245,7 +3258,7 @@ begin
       needs no conversion; it still needs PADDING.
       bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
     pi := FindProc('StrStrW');
-    if pi < 0 then Error('write(Text): StrStrW not loaded');
+    if pi < 0 then Error(ctx + ': StrStrW not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
@@ -3255,14 +3268,14 @@ begin
       would give it. The stdout literal-width path has always branched to text
       (IRLowerBoolWrite); this one fell into the ordinal arm below. }
     pi := FindProc('StrBool');
-    if pi < 0 then Error('write(Text): StrBool not loaded');
+    if pi < 0 then Error(ctx + ': StrBool not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
   else if TypeIsFloat(tk) then
   begin
     pi := FindProc('StrFloat');
-    if pi < 0 then Error('write(Text): StrFloat not loaded (add `uses textfile;` deps)');
+    if pi < 0 then Error(ctx + ': StrFloat not loaded');
     if decNode < 0 then decNode := GenMakeIntLit(-1);
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, decNode, -1, -1, -1);
@@ -3278,7 +3291,7 @@ begin
       way, so there is nothing left for a width test to add. }
     if not TypeSigned(tk) then pi := FindProc('StrQWord')
     else pi := FindProc('StrInt');
-    if pi < 0 then Error('write(Text): StrInt not loaded');
+    if pi < 0 then Error(ctx + ': StrInt not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
@@ -3290,13 +3303,13 @@ begin
       literal IS a Char in Pascal — did not compile while `write(f, 'ab')` did.
       stdout has always accepted both. bug-p-writeln-text-rejects-char }
     pi := FindProc('StrChar');
-    if pi < 0 then Error('write(Text): StrChar not loaded');
+    if pi < 0 then Error(ctx + ': StrChar not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
   else
   begin
-    Error('write(Text): unsupported argument type (string/Char/integer/float only)');
+    Error(ctx + ': unsupported argument type (string/Char/integer/float only)');
     Result := exprNode;
   end;
 end;
@@ -3331,7 +3344,7 @@ begin
         ParseExpr; decw := CurASTNode;
       end;
     end;
-    sNode := TextStrArg(exprNode, width, decw);
+    sNode := TextStrArg(exprNode, width, decw, 'write(Text)');
     callNode := GenMakeCall6(procWrite, tyUnknown, GenMakeIdent(fileSym, tyRecord),
                              sNode, -1, -1, -1, -1);
     newSeq := GenMakeSeq(callNode, -1);
@@ -3743,7 +3756,8 @@ begin
                 (IntToTypeKind(ASTTk[exprNode]) = tyAnsiString)) then
           Error('write: a variable field width needs a string, Char, Boolean, '
                 + 'integer or float value');
-        ASTLeft[argNode] := TextStrArg(exprNode, widthVal, decimalsVal);
+        ASTLeft[argNode] := TextStrArg(exprNode, widthVal, decimalsVal,
+                                       'write');
         ASTIVal[argNode] := 0;
         ASTSOffset[argNode] := -1;
       end;
@@ -6668,6 +6682,126 @@ begin
         opNode := AllocNode(AN_CALL);
         ASTIVal[opNode] := -Ord(tkGetMem);
         ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
+      else if CaseEqual(name, 'Dispose') and SoftIntrinsicOpen('Dispose', qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Dispose(p): return the block to the free list (= FreeMem(p)).
+          Guarded like New above. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; valNode := CurASTNode;
+        Expect(tkRParen, ')');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkFreeMem);
+        ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
+      end
+      else if CaseEqual(name, 'ReallocMem') and SoftIntrinsicOpen('ReallocMem', qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { ReallocMem(p, newsize): resize the block p points at, preserving
+          min(oldsize, newsize) bytes, and store the new pointer back into p.
+          Old size comes from the block's header; old block is freed. Modelled
+          as p := <realloc>(p, newsize) (special id -103). p must be a simple
+          pointer variable. Guarded like New above. }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);   { assign target }
+        Expect(tkComma, ',');
+        ParseExpr;                                      { new size -> CurASTNode }
+        Expect(tkRParen, ')');
+
+        if idx >= 0 then
+        begin
+          exprNode := AllocNode(AN_IDENT);              { old pointer value }
+          ASTIVal[exprNode] := idx; ASTTk[exprNode] := Ord(tyPointer);
+        end
+        else
+          { field/complex lvalue (ReallocMem(FList, ...) in a method): reuse the
+            resolved lvalue node as the read — AN_IDENT(-1) was a load_sym(-1)
+            IR verify error. Double-lowering the node is pure address math. }
+          exprNode := valNode;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := CurASTNode;        { new size }
+
+        opNode := AllocNode(AN_CALL);
+        ASTIVal[opNode] := -103;
+        ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
+      else if CaseEqual(name, 'Str') and SoftIntrinsicOpen('Str', qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Str(x[:w[:d]], s): format integer x into string s, right-justified to
+          width w. Width/decimals are ordinary integer EXPRESSIONS (FPC-legal,
+          e.g. Str(z.im:len:dec, s) in rtl-extra ucomplex; decimals ignored
+          for integer Str). Rewritten to s := StrInt(x, w),
+          which lives in the auto-included builtin unit.
+          Guarded like Insert/Delete above: a user proc named `Str` shadows
+          this, and a plain statement head not immediately followed by `(`
+          (assignment `str := ...`, a proc-var call `str.field`, etc.) is not
+          the intrinsic -- a variable named `str`/`Str` (a very natural name
+          for a string) otherwise broke even on plain assignment, since this
+          branch previously always committed to the Str(..) parse shape
+          unconditionally. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;        { value }
+        stepsNode := -1;                           { width expr node; -1 = default (0) }
+        decNode := -1;                             { decimals expr node; -1 = none (natural for float) }
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          ParseExpr; stepsNode := CurASTNode;      { width: any integer expression }
+          if CurTok.Kind = tkColon then
+          begin
+            Next;
+            ParseExpr; decNode := CurASTNode;      { decimals: any integer expression }
+          end;
+        end;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Str: expected destination string variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
+        Expect(tkRParen, ')');
+
+        { THE DISPATCH IS write's, NOT A COPY OF IT. Str used to carry its own
+          hand-written table and it was short a case every time anyone looked:
+          `Str(q, s)` on a QWord >= 2^63 gave `-1`
+          (bug-p-str-of-a-qword-formats-it-signed), `Str(b, s)` on a Boolean gave
+          `1`/`0` while `writeln(b)` a line away said TRUE
+          (bug-p-str-of-a-boolean-formats-it-as-a-digit), and each fix added one
+          more arm to the copy. Measured 2026-09-05, the third instance and the
+          one that says stop: `Str(s:5, t)` on a STRING compiled and produced
+          `4357408` -- the string's heap ADDRESS rendered as digits -- and
+          `Str(c:3, t)` on a Char produced `122`, its ordinal. fpc 3.2.2 refuses
+          the first (`Illegal expression`) and ICEs on the second, so nothing was
+          relying on either, and a pointer printed as a number is the maximally
+          invisible wrong answer.
+
+          TextStrArg IS write's table: strings padded via StrStrW, Char as its
+          character, Boolean TRUE/FALSE, unsigned via StrQWord, float via
+          StrFloat. Calling it deletes the second copy instead of growing it --
+          normalise-dont-special-case.md -- so the next type added to write
+          reaches Str for free, which is the failure mode all three of these
+          shared.
+
+          The one thing that does NOT come from write is the float default:
+          Str with no width passes -1 to select FPC's scientific form
+          (` d.ddd...E+eee`), where write's default is 0 (fixed/natural). That is
+          computed here, before the call, and is the reason this is not simply
+          TextStrArg(exprNode, -1, -1). }
+        strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
+        if stepsNode < 0 then
+        begin
+          if strIsFloat and (decNode < 0) then stepsNode := GenMakeIntLit(-1)
+          else stepsNode := GenMakeIntLit(0);
+        end;
+        opNode := TextStrArg(exprNode, stepsNode, decNode, 'Str');
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end

@@ -11923,6 +11923,46 @@ test-core: $(COMPILER)
 	# nothing to fix; the row is here to go RED if a vtSingle ever appears.
 	./$(COMPILER) test/test_libwriteln_parity.pas $(TESTTMP)/test_libwln26
 	tools/expect_same.sh test_libwln26 "$$($(TESTTMP)/test_libwln26)" "$$(cat test/test_libwriteln_parity.expected)"
+	# PHASE 2 of feature-writeln-as-library, BRACKET spelling: `[ x:8:2 ]` inside
+	# an array of const literal, asserted as PAIRS against the builtin so a
+	# divergence names the type. It is an EXTENSION, not parity -- fpc 3.2.2
+	# refuses `Log(['x=', x:8:2])` with `Syntax error, "]" expected but ":"
+	# found`, measured, and the ticket's claim that "it is where FPC parses
+	# width/precision too" conflated the write STATEMENT with this context. What
+	# it buys is the gap between the builtin `writeln(x:8:2)` and a library one.
+	#
+	# There is NO vtFormatted tag, which the ticket had specified: a formatted
+	# element renders through TextStrArg -- write's own table -- so it boxes as
+	# an ordinary managed string and every existing TVarRec consumer reads it
+	# unchanged, including vendored FPC code doing `case VType of` that would
+	# meet an unknown tag and fall through its else.
+	./$(COMPILER) test/test_varrec_format_bracket.pas $(TESTTMP)/test_vfb26
+	tools/expect_same.sh test_vfb26 "$$($(TESTTMP)/test_vfb26)" "$$(printf 'fails=0\nVARREC FORMAT BRACKET OK')"
+	# ...and the REJECTION control, which is the half that says what else the
+	# loosening started accepting. Four shapes that must STILL error, each drawn
+	# from a population the change could plausibly have reached -- a plain
+	# non-variadic call, an array index, a set constructor, and a third colon --
+	# because a loosening's failure mode is quietly accepting a superset.
+	! ./$(COMPILER) test/test_varrec_format_rejects_fail.pas $(TESTTMP)/test_vfr26 > $(TESTTMP)/test_vfr.log 2>&1
+	grep -q "expected comma or close parenthesis" $(TESTTMP)/test_vfr.log
+	printf 'program r;\nvar a: array[0..3] of Integer; i: Integer;\nbegin i := 0; a[i:2] := 1; end.\n' > $(TESTTMP)/vfr_idx.pas
+	! ./$(COMPILER) $(TESTTMP)/vfr_idx.pas $(TESTTMP)/vfr_idx26 > $(TESTTMP)/vfr_idx.log 2>&1
+	grep -q "expected ']' before ':'" $(TESTTMP)/vfr_idx.log
+	printf 'program r;\nvar s: set of 0..7;\nbegin s := [1:2]; end.\n' > $(TESTTMP)/vfr_set.pas
+	! ./$(COMPILER) $(TESTTMP)/vfr_set.pas $(TESTTMP)/vfr_set26 > $(TESTTMP)/vfr_set.log 2>&1
+	grep -q "expected ']' before ':'" $(TESTTMP)/vfr_set.log
+	printf 'program r;\nbegin writeln(1:2:3:4); end.\n' > $(TESTTMP)/vfr_third.pas
+	! ./$(COMPILER) $(TESTTMP)/vfr_third.pas $(TESTTMP)/vfr_third26 > $(TESTTMP)/vfr_third.log 2>&1
+	grep -q "expected ')' before ':'" $(TESTTMP)/vfr_third.log
+	# Str and write must render one value ONE way. Str carried a hand-written
+	# copy of write's dispatch and was short a case every time anyone looked:
+	# QWord >= 2^63 gave -1, a Boolean gave 1, and -- the third instance, which
+	# is why the copy is now gone rather than grown -- a STRING gave its heap
+	# ADDRESS as digits and a Char gave its ordinal. fpc refuses Str on a string
+	# and ICEs on a Char, so nothing depended on either. Str now calls
+	# TextStrArg, so this row really asserts that only one table is left.
+	./$(COMPILER) test/test_str_dispatch_matches_write.pas $(TESTTMP)/test_sdmw26
+	tools/expect_same.sh test_sdmw26 "$$($(TESTTMP)/test_sdmw26)" "$$(printf 'fails=0\nSTR DISPATCH OK')"
 	./$(COMPILER) test/test_shortstring_in_array_of_const.pas $(TESTTMP)/test_ssvarrec26
 	tools/expect_same.sh test_ssvarrec26 "$$($(TESTTMP)/test_ssvarrec26)" "$$(printf 'plain=short\nstale=ab\ns5=five5\nempty=[]\nlit=literal\nkonst=konstant\nmixed=mid|7|tail\nbuiltin=short\nSHORTSTRING VARREC OK')"
 	# ...and it must not leak: the fix parks each ShortString element in an

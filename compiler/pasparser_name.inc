@@ -565,6 +565,9 @@ function NodeEnumIdOf(node: Integer): Integer; forward;
 function EnumStorageTypeKind(etid: Integer): TTypeKind; forward;
 function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean; forward;
 function ParseVarRecLiteralAST: Integer; forward;
+{ pasparser_stmt.inc, but ParseVarRecLiteralAST (in _lval.inc, included two
+  files earlier) formats `[ x:8:2 ]` elements through it. }
+function TextStrArg(exprNode, widthNode, decNode: Integer; const ctx: AnsiString): Integer; forward;
 function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer; forward;
 function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
