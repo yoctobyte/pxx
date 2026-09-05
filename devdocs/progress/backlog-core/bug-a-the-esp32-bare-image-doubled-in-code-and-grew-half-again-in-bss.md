@@ -116,3 +116,31 @@ that ticket considerably and it is now watched too.
 they do get smaller, the canary will say so out loud and ask to be
 re-baselined, because a baseline left above a real shrink is slack the next
 regression fits underneath.)*
+
+## 2026-09-05 (frankS) — a third data point, so the trend has three
+
+Measured while working the neighbouring bare-ESP tickets, on compiler
+`5783500470d0`. Same shape as the ticket's own probe: an **empty** bare-profile
+program, `program e; begin end.`
+
+| when | code | bss |
+| --- | --- | --- |
+| `docs/targets/esp32.md`, as written | ~26 KB | ~70 KB |
+| pin v393 (this ticket's filing) | ~50 KB | ~104 KB |
+| **2026-09-05, xtensa** | **45420 B** | **103704 B** |
+| **2026-09-05, riscv32** | **55460 B** | **103704 B** |
+
+**The claim holds and has not got worse.** Code is roughly double the documented
+figure and bss roughly half again, unchanged since v393 within noise. Note the
+two arches differ in code by ~10 KB while sharing bss to the byte — bss is
+almost certainly a fixed allocation rather than anything arch-dependent, which
+narrows where to look.
+
+**Still nothing watches this number**, which is the ticket's actual point. Worth
+saying that `test-esp-bare` would be the natural place for a size row and that
+it now runs green end-to-end on a box with the Espressif toolchains — but it is
+enrolled in **zero** tiers, so a size row added there would be as unwatched as
+the number is now. That ordering matters: enrolment
+(`bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it`) has to come
+first, or the guard is written into a target nothing executes. Not adding one
+here for that reason.
