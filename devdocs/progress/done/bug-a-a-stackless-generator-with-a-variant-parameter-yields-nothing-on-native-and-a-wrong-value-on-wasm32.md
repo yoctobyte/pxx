@@ -3,9 +3,9 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: working
+status: done
 found-by: frankwasm (while reducing bug-a-a-nilpy-generator-fails-on-wasm32)
-summary: "FIXED ON NATIVE (0f6b627d7), WASM32 CONFIRMATION OUTSTANDING. A `generator; stackless;` routine with a VARIANT PARAMETER segfaulted on native x86-64 (not `zero iterations` -- that was an inference from absent output) and gave one wrong iteration on wasm32. Root cause: a Variant value parameter is passed BY REFERENCE, so its frame slot holds a POINTER to the 16 bytes, but nothing marks it IsRef -- so the slot pass blob-copied SIXTEEN bytes into an EIGHT-byte slot and overran the ADJACENT frame slot. Variant FIRST clobbered the hidden `self`, so the step function dereferenced its own null instance; Variant SECOND clobbered the previous parameter to 0. ONE out-of-bounds write, adjacency choosing the symptom. The fix gives it one pointer word at all three sites and has the caller materialise the argument into a local of the enclosing function and store its ADDRESS. Verified on native against the pinned compiler across seven programs; STAYS OPEN until frankwasm re-measures wasm32, because the wasm32 victim was never identified and a green native column is not evidence about it."
+summary: "FIXED (0f6b627d7), confirmed on BOTH targets. A `generator; stackless;` routine with a VARIANT PARAMETER segfaulted on native x86-64 (not `zero iterations` -- that was an inference from absent output) and gave one wrong iteration on wasm32. Root cause: a Variant value parameter is passed BY REFERENCE, so its frame slot holds a POINTER to the 16 bytes, but nothing marks it IsRef -- so the slot pass blob-copied SIXTEEN bytes into an EIGHT-byte slot and overran the ADJACENT frame slot. Variant FIRST clobbered the hidden `self`, so the step function dereferenced its own null instance; Variant SECOND clobbered the previous parameter to 0. ONE out-of-bounds write, adjacency choosing the symptom and choosing it differently per target, which is why every compile-time quantity measured identical on both. The fix gives it one pointer word at all three sites and has the caller materialise the argument into a local of the enclosing function and store its ADDRESS."
 owner: frankS
 ---
 
@@ -641,3 +641,36 @@ Neither is caused by this fix — both fail identically on the pinned compiler.
 - `bug-a-a-string-literal-passed-to-a-stackless-generator-is-stored-without-being-materialised`
   — `Length` reads `1073741824` (2^30, a literal's refcount sentinel). An
   AnsiString VARIABLE works, which is the boundary that keeps it narrow.
+
+## 2026-09-06 (frankwasm) — wasm32 confirms; the ticket closes
+
+Measured at `0f6b627d7` (confirmed an ancestor of origin/master), compiler
+`c8dc944237a5`:
+
+| parameters | body yields | pinned native | HEAD native | HEAD wasm32 |
+| --- | --- | --- | --- | --- |
+| `c: Variant` | const 9 | `rc=139` SEGV | `got=9` | `got=9` rc=0 |
+| `a: Integer; c: Variant` | `a` | `got=0` | `got=9` | `got=9` rc=0 |
+| `a: Integer; c: Variant` | const 9 | `got=9` | `got=9` | `got=9` rc=0 |
+
+Row 3 is the one that closes it. It was correct on native both before and after,
+and WRONG on wasm32 before — so it is the only row that could distinguish "the
+same stray write landing on a different victim" from "a second, target-specific
+site". It comes back green, so **the wasm32 victim was the same write, and there
+is no second site.** frankwasm's earlier inference that the wasm32 victim sat on
+the value/return path is retired; it was reasoning from the uniformity of the
+wasm32 symptom, and the uniformity had one cause.
+
+The pinned column reproduces identically on frankwasm's box, segfault included,
+so the control is the same control.
+
+The original wasm32 repro (`Gen(n: Variant): Variant` yielding `n`) is `got=7`
+on both targets, against nothing on native and `got=0` on wasm32 before.
+
+**`bug-a-a-nilpy-generator-fails-on-wasm32-while-three-other-targets-agree` is
+NOT this bug**, as predicted and now measured: NilPy Variant params are already
+`IsRef` and take the by-ref arm, and all four of its repros are unchanged at
+HEAD. The two tickets were right to stay separate.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -3,7 +3,7 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found-by: frankS (boundary-testing the Variant-parameter fix)
 summary: "A `generator; stackless;` routine with a `var` parameter SEGFAULTS. The for-in caller stores the argument's VALUE into the instance slot, but the slot is the by-ref arm's and the step function reads it back as the caller's ADDRESS and dereferences it. Measured: `SlSet(off=48, val=0x28)` for `mm = 40`, then a deref of 40. PRE-EXISTING -- identical on the pinned compiler, so it is not from the Variant-parameter fix (0f6b627d7); it is the SIBLING of that defect in a different arm, and the same shape: the two ends disagree about whether the slot holds a value or an address."
 owner: ""
@@ -86,3 +86,43 @@ the neighbourhood.
 - That `GenMakeAddrOf` at the six store sites is sufficient. Not attempted.
 - Which by-ref parameter shapes reach the for-in generator path at all. Only
   `var m: Int64` was measured.
+
+## 2026-09-06 (frankS) — FIXED, `ddc7e0fa5`
+
+`PasGenArgNeedsAddr` makes the caller take the ADDRESS for every by-ref
+parameter, so the word it stores is the word the slot arm already documented
+itself as persisting.
+
+**Uniform, not a scalar special case, and the reason is the thing that hid this
+bug.** A RECORD argument's bare ident already evaluates to its address, which is
+why `const r: TR` and `r: TR` were right by construction and only a scalar `var`
+was wrong. Records now go through `AN_ADDR` and come out at the same address
+they already had — measured, both record rows unchanged, no double-addressing.
+Special-casing scalars would have left the caller and the callee reasoning about
+representation by different rules, which is the coupling that produced this.
+
+| shape | pinned | HEAD |
+| --- | --- | --- |
+| `var m: Int64`, read | `rc=139` | `40 41` |
+| `var m: Int64`, mutated | `rc=139` | `41 41` |
+| `const r: TR` | `11 22` | `11 22` (unchanged) |
+| `r: TR` by value | `11 22` | `11 22` (unchanged) |
+
+**The mutating row is the one a copy cannot satisfy.** A `var` parameter must
+ALIAS the caller's variable, so an "address of a materialised temp" fix — which
+is exactly what the Variant sibling correctly does, because a VALUE parameter
+wants a copy — would still yield 41 from inside the generator and leave `mm` at
+40 outside. A read-only assertion cannot tell the two fixes apart, so the test
+mutates and checks the caller's variable afterwards.
+
+frankwasm measured the same defect on wasm32 independently before the fix:
+native SEGV against wasm32 `got=0`, `const` clean on both. That is the same
+two-target signature the Variant bug had and it has the same explanation — the
+bad address lands on something that faults on one target and not the other.
+
+`test/test_stackless_gen_byref_param.pas` is wired into `test-core`; it fails on
+the pinned compiler and passes at HEAD. `test_stackless_gen` byte-identical, the
+Variant test unchanged, three NilPy generator tests still pass.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
