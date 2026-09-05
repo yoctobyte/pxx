@@ -4659,6 +4659,34 @@ service is the subject: `systemctl is-active` is a true statement about now that
 implies nothing about the next boot, and the two questions are asked with almost
 the same word.
 
+**AND THE SEVENTH MEMBER POINTS THE OTHER WAY: A GUARD CAN BE LOUDLY WRONG
+WHILE RED, WHICH IS MORE DANGEROUS PER INSTANCE THAN BEING QUIETLY WRONG WHILE
+GREEN.** Measured 2026-09-05: `tools/gate_pinned_rtl_canary_devtest.py`
+asserted the literal string `"$bin"`; `b6212f43f` rewrote the canary's sweep and
+renamed the artifact to `"$work/run.bin"`. The canary still compiled AND ran.
+The guard reported that the run step had been **deleted**, in the loudest terms
+it had, and blocked `make tools-devtest` for every lane.
+
+The six instruments above are all the quiet kind — correct-sounding, green, and
+about the wrong subject. This one is the same defect with the polarity
+reversed, and the asymmetry is worth naming because it runs against intuition:
+
+**a green liar survives because nobody looks; a red liar is under active
+pressure from every lane it blocks, and the cheapest way to make it stop is to
+DELETE IT.** Easier to notice, harder to survive correctly. A guard that cries
+wolf gets removed by someone in a hurry who is, that day, right that it is
+lying — and the population it was protecting goes unwatched with nobody
+recording that it ever was.
+
+So when a guard goes red and the defect is not there, **the fix is to make it
+ask the behavioural question, never to delete it and never to match a second
+string.** Here: collect the artifacts the function COMPILES, assert one of them
+is EXECUTED at command position — and keep both controls in the file, drawn
+from the live script rather than a fixture. Strip the run: red. Rename the
+artifact: green. A guard rewritten after a false alarm needs the negative
+control most of all, because the false alarm is the failure mode it just
+demonstrated.
+
 **A STILL-RED IS A STATEMENT ABOUT THE COLOUR AND NOT ABOUT THE CAUSE**, and it
 is the member that survives every check you would think to run. Measured
 2026-09-05: five gtk jobs carried `STILL-RED` across two runs and were **not
