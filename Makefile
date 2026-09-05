@@ -6504,6 +6504,14 @@ test-core: $(COMPILER)
 	@# belongs to decide-how-a-type-carries-an-identity-its-kind-cannot-hold.
 	@$(TESTTMP)/test_setelembounds26 | diff -u test/test_set_elem_bounds.expected - \
 	  || { echo 'test_set_elem_bounds: FAIL - a set element subrange lost its bounds'; exit 1; }
+	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
+	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
+	@# controls (an UNCONSTRAINED later template, and no later template at all --
+	@# both always worked). Arm 5 is the control for the fix's own risk: a real
+	@# anonymous `record ... end` field whose body must STILL be counted, aimed
+	@# at the tempting wrong fix of not counting tkRecord at all.
+	@$(TESTTMP)/test_dgen_constraint26 | diff -u test/test_delphi_generic_constraint_anchor.expected - \
+	  || { echo 'test_delphi_generic_constraint_anchor: FAIL - a constraint counted as a type body again'; exit 1; }
 	./$(COMPILER) -Futest test/test_delphi_generic_of_object_anchor.pas $(TESTTMP)/test_dgen_ofobj26
 	@# .expected is fpc 3.2.2's own output. Arm 2 is the negative control (the
 	@# same declaration WITHOUT `of object`, which never broke) and arm 3 is the

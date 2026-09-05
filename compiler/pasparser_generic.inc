@@ -1411,15 +1411,68 @@ end;
   independent sessions with byte-identical figures, six days stale.
   bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor
   bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template }
+{ The closing `>` of a `< ... >` generic parameter list or argument group that
+  starts at the tkLt at k, or -1 when this `<` does not start one.
+
+  DGenDeclAnchor needs it because a generic PARAMETER LIST is not a type body
+  and nothing inside it may feed the body-depth count. `TBox<T: class>` and
+  `TRec<T: record>` both put a real tkClass / tkRecord token in the walk's path,
+  one that opens nothing and has no `end`; each one crossed left the depth
+  permanently high, with the same consequences `of object` had -- the walk ran
+  past the section it exists to stop at and anchored the minted alias inside a
+  routine body. `<T: constructor>` did not, only because `constructor` reaches a
+  different arm; the three constraint spellings are one concept and are now
+  handled as one.
+
+  Skipping the whole group rather than special-casing each keyword also covers
+  the argument form (`TBox<TArg>`), where the same reasoning applies for the
+  same reason.
+
+  Deliberately CONSERVATIVE about what it will call a group: preceded by an
+  identifier, and containing nothing but identifiers, `,` `:` `.` and the two
+  constraint keywords that are token kinds, with nesting counted so
+  `TBox<TBox<T>>` closes correctly. Anything else -- notably a real `<`
+  comparison -- returns -1 and the walk treats the token exactly as before. A
+  guard that widened here would silently swallow declarations. }
+function DGenAngleGroupEnd(k, limit: Integer): Integer;
+var j, ad: Integer;
+begin
+  DGenAngleGroupEnd := -1;
+  if (k <= 0) or (k >= limit) then Exit;
+  if Tokens[k].Kind <> tkLt then Exit;
+  if Tokens[k - 1].Kind <> tkIdent then Exit;
+  ad := 0;
+  j := k;
+  while j < limit do
+  begin
+    if Tokens[j].Kind = tkLt then Inc(ad)
+    else if Tokens[j].Kind = tkGt then
+    begin
+      Dec(ad);
+      if ad = 0 then
+      begin
+        DGenAngleGroupEnd := j;
+        Exit;
+      end;
+    end
+    else if not ((Tokens[j].Kind = tkIdent) or (Tokens[j].Kind = tkComma) or
+                 (Tokens[j].Kind = tkColon) or (Tokens[j].Kind = tkDot) or
+                 (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkRecord)) then Exit;
+    Inc(j);
+  end;
+end;
+
 function DGenDeclAnchor(fromIdx, useIdx: Integer): Integer;
-var k, depth, paren: Integer;
+var k, depth, paren, angEnd: Integer;
 begin
   DGenDeclAnchor := fromIdx;
   depth := 0; paren := 0;
   k := fromIdx;
   while k < useIdx do
   begin
-    if Tokens[k].Kind = tkLParen then Inc(paren)
+    angEnd := DGenAngleGroupEnd(k, useIdx);
+    if angEnd > k then k := angEnd   { the Inc(k) below steps past the `>` }
+    else if Tokens[k].Kind = tkLParen then Inc(paren)
     else if Tokens[k].Kind = tkRParen then Dec(paren)
     else if (Tokens[k].Kind = tkRecord) or
             (DGenIdentIs(k, 'object') and ((k = 0) or (Tokens[k-1].Kind <> tkOf))) or
