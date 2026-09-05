@@ -507,6 +507,49 @@ fix as **unexercised** rather than as verified. The model is a probe that moves 
 number: breaking a saturation floor to 0 and watching peak RSS go 392 KB → 13824
 KB proves reachability and effect in one step, where a green run proves neither.
 
+## `make`'s error bracket names the TARGET'S RULE, not the failing line — and there is no check that tells you which you are holding
+
+Measured 2026-09-05, frankC and frankB, reconciling two reports of one red row.
+`make` printed:
+
+```
+make: *** [Makefile:11159: test-core] Error 1
+```
+
+and the assertion that actually failed sits at **Makefile:11598**. Both numbers
+are correct. `11598` is a location in the file; `11159` is what `make` chose to
+print about a failing target, and it names the TARGET'S RULE. Two agents quoted
+them at each other as though one had to be stale.
+
+**The reason this is worth its own section rather than filing under stale line
+numbers:** the sha version of the same confusion has a discriminator sitting
+right there — `git merge-base --is-ancestor <sha> origin/master`, once per sha,
+ends it. This one has NO such move. Nothing you can run on `11159` reports that
+it is a rule and not a row: open the file and there IS a line 11159, it is
+inside the same recipe, and it looks exactly like the kind of line an assertion
+would live on. The instrument does not error and the wrong reading is not
+falsifiable from the number alone. On top of that the Makefile grew several
+hundred lines the same night, so "re-derive it" is not available either — and a
+DRIFT story actively misleads here, because drift implies re-deriving would
+converge and these two would never converge. They are not two attempts at one
+fact.
+
+**So cite the recipe by NAME, not by line.** This repo already learned it once:
+`b5a3f68bf` replaced three `Makefile:<n>` citations in CLAUDE.md with recipe
+names after one had drifted 142 lines within a day, to `fi; \` — a real line
+that explains nothing. The same applies to quoting `make`'s own output back to
+a peer: say *which assertion* failed (`assert_no_leak[test_ssvarrec26]`), not
+which line number make printed.
+
+**The general form, and it is the keeper from that night.** Both of the
+session's citation disputes resolved the same way, one in shas and one in line
+numbers: two TRUE citations of DIFFERENT events, not two attempts at one fact.
+The reflex worth having is *"what is each of these a citation OF"* before
+*"which of us is wrong"* — it is free, and it ends the class. `1cac1742a` was
+where a row ARRIVED and `1c274a83b` was where it was FIXED; `11598` was where a
+row LIVES and `11159` was what make said about a target. In both cases the
+hunt for a wrong number was the wasted motion.
+
 ## The instrument answered, correctly, about something else
 
 **The dominant failure of 2026-08-30 — fourteen measured instances, from at
