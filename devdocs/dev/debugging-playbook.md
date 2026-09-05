@@ -3840,6 +3840,36 @@ both.** Same verb, opposite blast radius; the write-up is in
 **Commit first, then control against `<sha>~1`** — it costs nothing and the old
 tree stops being something you hold uncommitted.
 
+### The sharpest case: YOUR OWN COMMIT can be what makes a comment false, in a file you did not open
+
+Measured 2026-09-06 (frankD), fixing the qualified-nested-alias regression. The
+first fix published the owner inside `ParseTypeKind` and left `Default(TTest.TRange)`
+broken, because **`Default()` and `SizeOf()` strip the `TOwner.` qualifier
+themselves** before handing the bare member name on.
+
+Their comment said the strip was safe because *"pxx registers those flat, so the
+qualifier only disambiguates the parse"*.
+
+> **That was TRUE when it was written, and the commit made it false — from another
+> file, without touching it.**
+
+This is the comment-rot rule with the arrow reversed. The usual case is a comment
+that decayed while nobody watched. Here the author of the change is the agent of the
+decay, and **nothing in the edit's own diff names the file that just became wrong**;
+the only link is a shared assumption that neither file states as a dependency.
+
+**So after changing how a name is RESOLVED, grep for the places that pre-process the
+name before resolution** — qualifier strippers, case folders, prefix removers,
+alias expanders. Each is a caller that decided the resolver's contract did not
+apply to it, and each carries a comment explaining why, which your change may have
+just invalidated.
+
+**And update such a comment rather than deleting it.** frankD kept it and amended
+it, because the sentence now records **what changed** — a deleted comment leaves no
+trace that the assumption ever held, and the next reader cannot tell a rule that
+was never true from one that stopped being true.
+
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
@@ -6191,6 +6221,54 @@ Two things to take from it:
   minutes' work once the `.wat` could be produced and the WAT/binary pair could
   be compared. Decoding the binary by hand first was the slow path, and it is
   the one you take when the fast path does not exist yet.
+
+## A DIFFERENTIAL THAT COMPARES THE INSTRUMENT'S OWN SCRATCH PATH REPORTS A CATASTROPHE WITH TOTAL CONFIDENCE
+
+Measured 2026-09-06 (frankD), building a before/after differential over **229 NilPy
+programs** for a carve-out deletion.
+
+**It reported 228 of 229 DIFFER.** Alarming, unambiguous, and wrong: the compiler
+**echoes its output path in the `ok:` line**, and the runs had been captured to
+`before/` and `after/`. **The harness was diffing directory names.** The byte counts
+were identical throughout. Normalised, it is **0 of 229**.
+
+> **The comparison inputs contained the instrument's own configuration**, so the
+> only thing guaranteed to differ between the two arms was the thing that names the
+> two arms.
+
+**This is the loudest failure mode in the family and therefore the least dangerous
+in isolation** — nobody ships a 228/229 regression without looking. The danger is
+what it does to the NEXT reading, which is the actual finding:
+
+### A harness that has just proved it can produce FALSE differs has not proved it can produce TRUE ones
+
+frankD's own conclusion, and it is the part worth copying:
+
+> **"I still owe it a positive control before I trust the zero — deleting a live arm
+> and requiring it to differ — because a harness that has just proved it can produce
+> false DIFFERS has not yet proved it can produce true ones."**
+
+**Fixing an instrument restores confidence in ONE direction only.** The normalisation
+that removed the path noise is also a normalisation that could remove real
+differences, and *the same edit* did both jobs. `0 of 229` from a just-repaired
+differential is exactly the null result a broken instrument prints — see *a broken
+instrument almost always reports the null result*.
+
+**So the repair and the re-arming are two steps, not one.** After correcting a
+comparison harness: **delete a live arm, require the row to differ, and only then
+believe the zero.**
+
+### The general form
+
+**Before trusting any differential, ask what varies between the arms BESIDES the
+change under test** — output paths, temp directory names, timestamps, PIDs, a run
+counter, the host name, an absolute `$PWD` baked into a log line. Each of those
+turns a comparison into a comparison of run identity.
+
+**And the tell is the RATE.** A near-total DIFFER rate is not evidence of a
+catastrophic regression; it is the signature of an axis that varies per run. A
+`~100%` hit rate is as suspicious as `0%` — cf. *a check that flags everything is as
+empty as one that never fires*.
 
 ## A comparison with no floor: two totally-failed runs diff clean
 
