@@ -76,7 +76,7 @@ tgeneric97.pp	wontfix: expects FPC's internal specialized ClassName 'ttest<syste
 tgenfunc10.pp	gap: inline `specialize` expression inside generic function body
 tgenfunc23.pp	gap: generic procedure overload on T vs array of T + inline specialize call
 tgenfunc8.pp	gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
-tobject1.pp	gap: object constructor `fail`, erroru/ExitCode RTL support
+tobject1.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Double-blocked: also wants System.ErrorAddr via the suite's erroru.pp (Track B), so it stays skipped even if the decision flips.
 toperator78.pp	gap: operator overloads whose operands are NOT aggregates (LongInt ** LongInt, `and` over a set, `array of Char` operands, Pointer + ShortString). pxx refuses a binary overload when neither operand is a record/class, deliberately -- see the arity branch in pasparser_call.inc -- and also has no `**` token
 tover1.pp	gap: `widestring` is an ALIAS of `ansistring` unless {$define PXX_WIDE_PAYLOAD}, so its two string overloads are one type declared twice. PASSES under that define (measured 2026-09-05) — the overload key itself now carries the element WIDTH. Retiring the gate is chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 tsetsize.pp	wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
@@ -108,17 +108,17 @@ tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
-tobject2.pp	gap: old-style `object` types with virtual methods, constructor/destructor
+tobject2.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as one of its three acceptance tests, with virtual methods and constructor/destructor.
 toperator1.pp	gap: an operator declared in a unit INTERFACE is not registered until its implementation BODY is parsed, so a circular implementation-`uses` compiles the second unit while the first one's operator is still pending. Cross-unit operators themselves WORK (controls in the ticket). bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed
 toperator6.pp	gap: COMPILES AND RUNS, and exits 2 -- a silent wrong answer, not a refusal, so do not read this row's skip as a parse gap. `value := high(int64)+100` must select the QWord `operator :=` overload and selects the Int64 one. Constant typing plus conversion-overload ranking
 tover3.pp	wontfix: dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 tover4.pp	gap: 80-bit extended/cextended float type and overload resolution across single/double/extended
-tprocvar1.pp	gap: old-style `object` types with constructor/virtual methods (same gap as tobject2.pp / tsealed6.pp). Its procvar content passes now — the previous reason named three gaps (method pointers, @Class.Method, typed-const procvars) and a fourth found chasing it (anonymous procedural types); all are fixed, and unskipping shows `object constructor init` is what is left.
+tprocvar1.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as an acceptance test (same gap as tobject2.pp / tsealed6.pp). Its procvar content passes now — the previous reason named three gaps (method pointers, @Class.Method, typed-const procvars) and a fourth found chasing it (anonymous procedural types); all are fixed, and unskipping shows `object constructor init` is what is left.
 tprocvar2.pp	gap: typed const procvar initialized with bare proc name (TP mode), procvar via move()
 tprocvar3.pp	gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)
 trange5.pp	gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
-tsealed6.pp	gap: `object abstract` / `object sealed` modifiers in object declarations
+tsealed6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as an acceptance test; wants `object abstract` / `object sealed` on top of the base feature.
 tstring2.pp	gap: RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
 tstring5.pp	gap: RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
 tcase2.pp	gap: subrange-of-enum type (workdays = mon..fri) and case over it
@@ -161,8 +161,8 @@ tmoperator5.pp	gap: management operators Initialize/Finalize invocation order
 tmoperator7.pp	gap: management operators inside object/dynarray of records + class var
 tmoperator8.pp	gap: management operators AddRef/Copy/Initialize/Finalize on records
 tmoperator9.pp	gap: record management operators Initialize/Finalize called for locals
-tobject6.pp	gap: `object` type with nested type/class var/const sections and class property
-tobject7.pp	gap: `object` with private nested type, typed const and static class property
+tobject6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Nested type/class var/const sections and a class property on top of the base feature.
+tobject7.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Private nested type, typed const and static class property on top of the base feature.
 toperator91.pp	gap: the duplicate-conversion check keys on the result type KIND, so String[80], String[90] and ShortString are one result type and the second Explicit/Implicit declaration is refused. FPC treats the capacities as distinct -- same tk inconsistency toperator93 exposed at the use site
 toperator94.pp	gap: same duplicate-conversion coarseness as toperator91, objfpc `class operator :=` spelling
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
