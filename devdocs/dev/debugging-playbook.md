@@ -5489,6 +5489,57 @@ number into its own file afterwards.** A written rule fires only when someone
 chooses to consult it, which is precisely the moment they believe they need not.
 
 
+## A CITATION'S PARTS FAIL INDEPENDENTLY — a source read refutes a SPELLING, and only EXECUTION refutes a LOCATION
+
+Measured 2026-09-06 (frank-optimize), on its own published inference, killed by
+itself in about ninety minutes.
+
+**The sequence.** A regression row cited `inherited Sort(ItemPtrCompare)` at a line
+in `fgl.pp`. Reading real fgl showed the spelling is wrong — fgl writes
+`@ItemPtrCompare` at all three sites under objfpc, and FPC refuses the bare
+spelling anyway. **From that, the conclusion was written onto the ticket:
+*"whatever took the fgl rung from 7/7 to 0/7, it was not this line."*** Then the
+widening was actually run: it fails at **`fgl.pp:1051` and `:1172`** — those exact
+lines.
+
+> **The row named the right LOCATION and mis-transcribed the SPELLING. Reading the
+> source told them the spelling was wrong; only running it told them the line was
+> right.**
+
+### The failure is an OVER-CORRECTION, and it is the citation family's second face
+
+The first face is a citation that resolves to nothing — **the reader who checks it
+concludes the cause was imaginary.** This is the same mechanism with a *partially*
+wrong citation: **one falsified component gets generalised to the whole
+reference.** Two people were wrong about the same word and **neither error touched
+the location**, yet the word was used to discard the line.
+
+**A citation is several independent claims wearing one syntax** — a file, a line,
+a spelling, a mechanism — **and refuting one says nothing about the others.**
+Falsify them separately or not at all.
+
+### The instrument rule that falls out
+
+| the claim | what can refute it |
+| --- | --- |
+| this is what the source SAYS | reading the source |
+| this is WHERE it happens | **running it** — nothing else |
+
+**Reading is the wrong instrument for a location claim**, and it is the instrument
+everyone reaches for, because it is free and it produces a confident answer.
+frank-optimize noted the same discriminator had already settled a riscv32 case that
+night: **both times the false claim was refuted by execution and not by reading.**
+
+**Discrimination control, since a small diff is what a blind instrument prints
+too:** the widening moved the Pascal corpus 1578/286 → 1576/288 and the fgl rung
+7/7 → 3/7, and **the same census against the pinned compiler differs from HEAD on
+48 rows.** The census demonstrably sees differences, so those 4 are 4 real rows and
+not a stuck instrument. Two of the three regressions are one shape — the corpus row
+that also broke is literally named `methodptr-param-arg-and-call` — and the
+underlying gap is a missing channel: an `@`-taken address reaching a parameter
+typed `... OF OBJECT`, where the argument types `tyPointer` and `TypesCompatible`
+says no, **correct about kinds and wrong about the program.**
+
 ## FAILURE DEPTH IS EVIDENCE ABOUT WHAT WAS PRESENT — a later line number proves the earlier dependency resolved
 
 The instrument that separated those four batches, and it costs nothing:

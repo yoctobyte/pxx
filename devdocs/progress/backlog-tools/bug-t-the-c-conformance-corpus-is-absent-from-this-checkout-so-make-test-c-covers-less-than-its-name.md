@@ -57,3 +57,55 @@ in a row rather than to none. Both now branch on the suite directory
 above, which count what ran and go RED on a partial run; the difference is that a
 missing gitignored corpus must not be a RED for everyone, so this one reports
 honestly instead of failing.
+
+## THE PASCAL SIBLING, MEASURED 2026-09-06 — same corpus root, same gitignore, wider spread
+
+Found by looking for this ticket's sibling rather than by a census, which is the
+cheaper search once a name exists.
+
+`tools/run_pascal_conformance.sh:34` reads its corpus from
+`$ROOT/library_candidates/fpc-testsuite/tests/test` — **the same gitignored root**
+(`.gitignore:36`) as the C suite. Line 95:
+
+```sh
+if [ ! -d "$SUITE" ]; then
+  echo "$LABEL: SKIP — no suite at $SUITE (run tools/install_lib_candidates.sh fpc-testsuite)"
+  exit 0
+fi
+```
+
+**The message is honest and names its own remedy** — this is the good version of
+the RUNNER-ABSENT shape, not the silent one. **The residual is `exit 0`**, which
+is only safe while something counts skips and something expects the count.
+
+### The spread across 28 trees under `/home/neo`
+
+| | trees |
+| --- | --- |
+| **can run it** — `fpc-testsuite/tests/test` present, 1447–1449 `.pp` | **6**: frank1, frankA, frank-optimize, frankZ, pxx, trackt-watch |
+| **have `library_candidates/` but NOT the fpc suite** | **5**: frankB, frankC, frankD, frankS, frankwasm |
+| **no `library_candidates/` at all** | **17** |
+
+**The middle group is the trap.** Those five have the parent directory, so a
+presence check written against `library_candidates/` passes and the corpus still
+is not there — the same one-level-too-shallow error as checking a mount point
+instead of a file.
+
+### And the reassurance, stated deliberately so this is not read as an alarm
+
+**`frankZ` and `trackt-watch` both have it.** So the tier and the three
+`test-pascal-conformance` job lines worked on 2026-09-05/06 ran against a real
+1447-program population. **Nothing green on that date is green by vacuum.** As
+this ticket's own first version proves, the expensive error here is claiming a
+coverage hole that is not there.
+
+### One more thing that reads as an absence and is not
+
+`test/pascal-conformance/` in the repo contains exactly one file, `pxx.skip` (168
+lines), and **zero programs — by design.** It is the skip list; the corpus is the
+gitignored root above. `test/c-conformance/` likewise holds five `pxx.skip*`
+files and no `.c`. **A curated 168-line skip list sitting alone in a directory
+reads as a populated suite that is mostly passing**, and one session did read the
+empty directory as its missing population on 2026-09-06 while holding 1447
+programs elsewhere on disk. Worth a line in each directory saying where the
+corpus actually lives.
