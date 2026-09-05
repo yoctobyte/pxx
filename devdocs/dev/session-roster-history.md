@@ -25142,3 +25142,60 @@ which is the configuration that OOM-killed two runs last night. Told frankZ.
 Told frankC that its sweep's *timings* are unusable today while its *pass/fail*
 content is fine, and that a contention death drops a file out of a count
 silently — **report the denominator**.
+
+### LOAD AVERAGE LAGS, AND IT LIES HIGH EXACTLY WHEN A WINDOW OPENS
+
+frank-optimize asked for the build picture before taking dd-kernel timings.
+Re-measured 19:41:27, two minutes after the previous count, and **the picture
+had inverted**: zero live gates (all three finished between 19:39 and 19:41,
+frankA's GREEN), leaving only frankC's serial sweep over the C files under the
+test directory, and frankZ's `make tools-devtest`, which outlived frankZ's own
+gate.
+
+**`uptime` said 9.30 / 8.24 / 6.02 — the 1-minute figure ABOVE the 5- and
+15-minute ones.** That shape is the signature of a spike that has just **ended**
+and not yet decayed: the three gates exited inside the 1-minute window and are
+still fully weighted in it. Read literally, 9.30 says the box is slammed; the
+process table says two serial builds. **Both are true statements; only one is
+about the next five minutes.**
+
+So for any session stating an agent count beside a published number: **take the
+count from the process table, never from load average.** Load answers "what has
+the box been doing", and a benchmark's question is "what is it doing NOW".
+The failure is silent and self-flattering in the other direction too — a load
+average that has not yet RISEN certifies a quiet box just as four builds start.
+
+Method note relayed and worth keeping: **interleaved min-of-N A/B survives a
+co-tenant because both arms eat the same interference, so the RATIO is
+preserved; the absolute seconds are not transferable** (this box: 403s idle vs
+791s with one co-tenant, same tier same day). Publish the ratio, not the arm
+times as a characterisation of the machine.
+
+Also from frank-optimize, a hazard worth the line: it killed one of its own
+optfuzz runs because **`pkill -f optfuzz.sh` matched its own shell**. The
+pattern was correct and the population included the searcher. Same family as
+CLAUDE.md's rule against `rm` with a variable or glob — when you are inside the
+search space, a literal PID beats a pattern.
+
+### The full-suite hook fires on PROSE, and this seat tripped it writing the above
+
+Committing the section above was **REFUSED by `.claude/hooks/no-full-suite.sh`**
+— because the text quoted frankC's sweep using a glob over the test directory.
+No test ran; the command was `cat >> a markdown file` plus `git commit`. The
+hook matched a literal string inside a heredoc.
+
+**The escape was available and taking it would have been wrong.**
+`PXX_ALLOW_FULL_SUITE=1` is liftable autonomously, but lifting it here would
+have written "I needed the full suite" into a commit that runs no tests — a
+false statement in the record, to satisfy a guard that had misfired. **Reworded
+the prose instead**, which is not the forbidden move: CLAUDE.md's rule is
+against rephrasing a guarded COMMAND so the sweep runs anyway, and there was no
+sweep here to preserve.
+
+Recording it because the population is anyone who DOCUMENTS a sweep — a
+write-up, a ticket, a playbook section, this file. **The guard is aimed at
+commands and reads text**, so the sessions most likely to trip it are the ones
+writing up the hazard rather than causing it, and the tempting fix (lift the
+flag) silently corrupts the commit record it is written into. Track T owns the
+hook; noted rather than filed, since a hook that is over-eager in this direction
+is far cheaper than one that misses a real sweep.
