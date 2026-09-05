@@ -442,6 +442,31 @@ procedure MovRdiImm(v: Int64); begin EmitB($48); EmitB($BF); EmitI64(v); end;
 procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;
 procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 
+{ `cmp rcx, <const>` for an ARBITRARY Int64. x86-64 has no CMP r/m64, imm64 --
+  the `48 81 F9` form takes an imm32 that is SIGN-EXTENDED to 64 bits -- so a
+  set element outside int32 silently compared against its sign-extended low 32
+  bits: `q in [4294967297]` was TRUE for q = 1. The boundary measured exactly at
+  2^31 (2147483647 in, 2147483648 out), which is the immediate's range, not any
+  property of sets.
+
+  The wide arm pushes and pops rdx so this needs no liveness argument about the
+  surrounding expression -- POP does not modify EFLAGS, so the conditional jump
+  that follows the compare still reads the compare's own flags. Two bytes, and
+  only on the path that could not be encoded anyway.
+  bug-p-set-membership-item-constant-truncated-to-32-bits }
+procedure CmpRcxImm(v: Int64);
+begin
+  if (v >= -2147483648) and (v <= 2147483647) then
+    begin EmitB($48); EmitB($81); EmitB($F9); EmitI32(v); end   { cmp rcx, imm32 }
+  else
+  begin
+    EmitB($52);                                                 { push rdx      }
+    MovRdxImm(v);                                               { movabs rdx,i64}
+    EmitB($48); EmitB($39); EmitB($D1);                         { cmp rcx, rdx  }
+    EmitB($5A);                                                 { pop rdx       }
+  end;
+end;
+
 { The ONE place the x86-64 kernel-entry instruction is emitted, which is what
   lets --rtl-libc convert all 43 sites without touching a single caller: every
   caller has already set up the RAW convention (rax = nr, then rdi/rsi/rdx/r10/

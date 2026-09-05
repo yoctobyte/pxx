@@ -6653,6 +6653,12 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     size: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
+    { SPECIAL_IN's element bounds. Int64 and SEPARATE from lo/elemSize above on
+      purpose: those two are this routine's shared Integer scratch (elemSize is
+      a real element size at three other sites), so widening them would reach
+      far past the set path. Set elements are values, not sizes.
+      bug-p-set-membership-item-constant-truncated-to-32-bits }
+    setLo, setHi: Int64;
     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
@@ -11222,11 +11228,16 @@ begin
               itemNode := IRA[argNode];
               if IRKind[itemNode] = IR_BLOCK then
               begin
-                lo := Integer(IRIVal[IRA[itemNode]]);
-                elemSize := Integer(IRIVal[IRB[itemNode]]);
-                EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo);
+                { lo..hi of a range, read at FULL width. These used to be the
+                  routine's Integer scratch `lo`/`elemSize` behind an explicit
+                  Integer() cast -- and `elemSize` held a range's high bound,
+                  not a size, which is why nothing about the name suggested a
+                  64-bit value belonged in it. }
+                setLo := IRIVal[IRA[itemNode]];
+                setHi := IRIVal[IRB[itemNode]];
+                CmpRcxImm(setLo);
                 EmitB($0F); EmitB($8C); nextJmp := CodeLen; EmitI32(0);
-                EmitB($48); EmitB($81); EmitB($F9); EmitI32(elemSize);
+                CmpRcxImm(setHi);
                 EmitB($0F); EmitB($8E);
                 if trueCount >= 128 then Error('set expression too large');
                 trueJumps[trueCount] := CodeLen; Inc(trueCount);
@@ -11235,8 +11246,8 @@ begin
               end
               else
               begin
-                lo := Integer(IRIVal[itemNode]);
-                EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo);
+                setLo := IRIVal[itemNode];
+                CmpRcxImm(setLo);
                 EmitB($0F); EmitB($84);
                 if trueCount >= 128 then Error('set expression too large');
                 trueJumps[trueCount] := CodeLen; Inc(trueCount);

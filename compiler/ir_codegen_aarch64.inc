@@ -2001,6 +2001,12 @@ var
                         this arm used to reuse as a code offset }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2, p3: Integer;
+  { SPECIAL_IN's element bounds, at full width. lo/hi above are this routine's
+    Integer scratch; aarch64 is a 64-bit target and EmitLoadImmA64 already takes
+    an Int64, so the only thing narrowing a set element here was the explicit
+    Integer() cast on the way in.
+    bug-p-set-membership-item-constant-truncated-to-32-bits }
+  setLo, setHi: Int64;
   pNilPos, pDonePos: Integer;
   srcFrozenTkA64: TTypeKind;  { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
   memFrozenTkA64: TTypeKind;  { frozen kind of a store-through-a-pointer DESTINATION }
@@ -3530,12 +3536,12 @@ begin
               itemNode := IRA[argNode];
               if IRKind[itemNode] = IR_BLOCK then
               begin
-                lo := Integer(IRIVal[IRA[itemNode]]);
-                hi := Integer(IRIVal[IRB[itemNode]]);
-                EmitLoadImmA64(2, lo);
+                setLo := IRIVal[IRA[itemNode]];
+                setHi := IRIVal[IRB[itemNode]];
+                EmitLoadImmA64(2, setLo);
                 EmitI32($EB02003F);           { cmp x1, x2 }
                 p1 := CodeLen; EmitI32($5400000B); { b.lt skip }
-                EmitLoadImmA64(2, hi);
+                EmitLoadImmA64(2, setHi);
                 EmitI32($EB02003F);           { cmp x1, x2 }
                 p2 := CodeLen; EmitI32($5400000C); { b.gt skip }
                 EmitLoadImmA64(4, 1);
@@ -3544,8 +3550,8 @@ begin
               end
               else
               begin
-                lo := Integer(IRIVal[itemNode]);
-                EmitLoadImmA64(2, lo);
+                setLo := IRIVal[itemNode];
+                EmitLoadImmA64(2, setLo);
                 EmitI32($EB02003F);           { cmp x1, x2 }
                 EmitSetccA64(Ord(tkEq));      { x0 = equal ? 1 : 0 }
                 EmitI32($AA000084);           { orr x4, x4, x0 }

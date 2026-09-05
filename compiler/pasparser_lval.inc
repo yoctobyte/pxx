@@ -3575,7 +3575,15 @@ begin
 end;
 
 function ParseSetMembershipAST(leftExpr: Integer): Integer;
-var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
+var node, argNode, lastArg, itemNode: Integer; done: Boolean;
+    { Int64, NOT Integer: ParseSetConst returns Int64 and ASTIVal is Int64, so
+      declaring these Integer put a 32-bit funnel between a 64-bit source and a
+      64-bit sink -- `1 in [4294967297]` answered TRUE on all five targets that
+      support `in`, silently, because the item's low 32 bits are 1. They are
+      VALUES; the identifiers beside them on the old line are AST node indices,
+      which is how the narrowing went unnoticed.
+      bug-p-set-membership-item-constant-truncated-to-32-bits }
+    loVal, hiVal: Int64;
 begin
   { `x in [#0, C]` where C is a VARIABLE (fcl-json's scanner scans a string with
     `FTokenStr^ in [#0, C]`, C being the active quote character). The constant-only path

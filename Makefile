@@ -5104,6 +5104,11 @@ test-threads: $(COMPILER)
 	# targets). Only meaningful cross; x86-64 passed even when broken.
 	./$(COMPILER) test/test_const64.pas $(TESTTMP)/test_const64_26
 	tools/expect_same.sh test_const64_26 "$$($(TESTTMP)/test_const64_26 | tail -1)" "CONST64 OK"
+	# 64-bit SET ELEMENTS in `x in [consts]` (SPECIAL_IN read every element
+	# through an Integer() cast, and x86-64's `cmp rcx, imm32` could not encode
+	# one anyway). Unlike test_const64 this one DOES fail on x86-64 when broken.
+	./$(COMPILER) test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26
+	tools/expect_same.sh test_set_in_64bit_const_26 "$$($(TESTTMP)/test_set_in_64bit_const_26 | tail -1)" "SETIN64 OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"
