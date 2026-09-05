@@ -1,8 +1,8 @@
 ---
 prio: 70
 track: P
-owner: frankD
 status: working
+owner: frankD
 ---
 
 > **Track P by measurement 2026-09-06, not by the auto-guess and not by the job's
@@ -182,5 +182,175 @@ frankD's. If the holder changes, that is for the two sessions to settle directly
 **This row is a STOP**, so the tier a fixer would normally verify against is
 **degraded by the row being fixed**: `Makefile:13117`, with the recipe running 5309
 to 18649, leaves **5532 of 13340 lines (41.5%) unmeasured** on any run that reaches
-it. Waiting for a clean serial tier before landing is close to circular. `make -k`,
-or the reproductions plus `gate.sh quick`, is the honest evidence available.
+it. Waiting for a clean serial tier before landing is close to circular.
+
+> **CORRECTED AFTER THE FACT, and the original advice here said `make -k`.** It
+> does not help: `test-core` is a SINGLE target, and `-k` continues across
+> TARGETS, not across recipe lines, so a failing line ends the recipe with or
+> without the flag — measured identical stop line, `rc=2` and length, both ways.
+> `-i` is the flag that ignores a failing LINE, and it exits 0 by construction,
+> so on an `-i` run the rc is not a verdict at all. This was landed from a `-k`
+> run that returned `MAKE_EXIT=0`, which IS a whole-recipe verdict precisely
+> because there was no `-i` and nothing aborted.
+
+---
+
+# 2026-09-06, frankD: mine, and it is THREE sites rather than one
+
+Confirmed as fallout from `c01eb17a8` (my own). frankB's diagnosis is correct
+and is the one that mattered; the first triage naming `FindNestedType` pointed
+at the path that still WORKS, which is exactly why the adjacent line passes and
+why the symptom reads as record-specific.
+
+## The defect
+
+`AliasVisibleHere` admitted three cases: owner unset, `ParsingClassBodyCi`
+(inside the class body) and `MethImplOwnerCi` (inside an out-of-line method
+body). A class's declarations are reachable from a **third** range of source
+that nobody wrote an arm for — a QUALIFIED name outside the owner entirely:
+
+```pascal
+var a: TOuter.TAlias;
+```
+
+Nested classes and records were unaffected, and the reason is worth stating
+because it is the whole shape of the bug: that path **rewrites** the name to the
+qualified one `FindNestedType` returns, so it never consults the alias table at
+all. An alias has no such rewrite — the qualifier is stripped and the bare name
+looked up — so the single spelling that names its owner explicitly became the
+single spelling that could not see it.
+
+`c01eb17a8` gave every alias row an owner while giving only the inside-the-body
+spellings a matching lookup. Three arms where there should have been four.
+
+## Not record-specific, and not one site
+
+| probe | HEAD before fix | pin | fixed |
+| --- | --- | --- | --- |
+| `TR = record type TAlias = Integer` → `var a: TR.TAlias` | refused | ok | ok |
+| the same in a **class** | refused | ok | ok |
+| nested **record** `var s: TR.TSub` | ok | ok | ok |
+| `Default(TTest.TRange)`, nested subrange (tdefault8) | refused | ok | ok |
+| `SizeOf(TTest.TRange)` | refused | ok | ok |
+
+The last two are a **second site** and survived the first fix. `Default()` and
+`SizeOf()` in `pasparser_expr.inc` strip the `TOwner.` qualifier THEMSELVES
+before handing the bare member name to `ParseTypeKind`, so publishing the owner
+inside `ParseTypeKind` repaired the declaration and left those two broken. Their
+own comment explained why the strip was safe —
+
+> pxx registers those flat, so the qualifier only disambiguates the parse
+
+— which was true when written and was **falsified by a change in another file**.
+Amended rather than deleted: a deleted comment leaves the next reader unable to
+tell a rule that was never true from one that stopped being true.
+
+**The rule this generalises to:** after changing how a name is RESOLVED, grep for
+the callers that PRE-PROCESS the name before resolution — qualifier strippers,
+case folders, alias expanders. Each one decided the resolver's contract did not
+apply to it, and each is invisible from the resolver.
+
+A nested SUBRANGE is a fourth sibling of the `AddClassLikeType` family
+(class, record, pointer, subrange) — frank-optimize's reading, and it is what
+found the second site.
+
+## The fix
+
+`QualTypeOwnerCi`, a third scope global beside `ParsingClassBodyCi` and
+`MethImplOwnerCi`, reset by `ResetDeclScopeSentinels` with them, and a fourth arm
+in `AliasVisibleHere`.
+
+**Saved and restored around `ParseTypeKind` rather than cleared on entry.** It
+must survive INTO the call, because `Default()`/`SizeOf()` set it before calling;
+it must not survive OUT, because it WIDENS alias visibility and a leftover value
+would let a later unqualified lookup see a class's private alias. The
+save/restore also makes it correct under the recursion `ParseTypeKind` does for
+element types. `ParseTypeKind` is now a thin wrapper over `ParseTypeKindInner`
+whose only job is that pair.
+
+## Verified
+
+Every one of the fourteen nested-pointer-alias probes from the causing ticket
+still passes, so the original fix is intact. `test_record_nested_type_section`
+green. The `tdefault8` shape rebuilt by hand — nested subrange, qualified
+declaration, `Default` and `SizeOf` in one program — prints `0 0 1` against
+fpc 3.2.2's `0 0 1`.
+
+**`tdefault8` itself is NOT run here.** This checkout has `library_candidates/`
+but not `fpc-testsuite/tests/test`, so the conformance target passes by ABSENCE —
+a presence check on the parent directory succeeds while the corpus is missing.
+frank-optimize has the suite and is re-running the real row. That absence is its
+own defect and is why this escaped: 22 of 28 checkouts on this box pass that
+target without running it.
+
+## A SIBLING SITE, FOUND BY PREDICTION AND DELIBERATELY NOT FIXED HERE
+
+frankB, auditing the qualifier-strip sites while reviewing this fix, predicted an
+un-audited fourth one from the mechanism rather than from a grep. There is one:
+`pasparser_expr.inc:7830`, the `TOuter.TInner.Create` walk.
+
+It is **not** a missing copy of this ticket's rule — its arm is gated on
+`FindNestedType(...) >= 0`, which an alias never satisfies, so a `QualTypeOwnerCi`
+there would be a copy that cannot fire. But the gate has its own hole, and the
+Aug 29 pin refuses it identically, so it is **pre-existing and out of scope**:
+
+`bug-p-a-constructor-called-through-a-qualified-nested-alias-is-not-found`.
+
+Recorded here because a reader meeting "qualified nested type refused" next to
+this fix will otherwise assume this fix caused it.
+
+## THE FILTER THIS RUN NEEDED, kept because it will be needed again
+
+`test-core` contains dozens of tests whose SUBJECT is a failure, so their
+filenames contain `fail`/`mismatch`, and make echoes every recipe line. A
+case-insensitive grep for `fail|error|mismatch` returns ~20 hits on a completely
+clean run. Two patterns, both required:
+
+```
+grep -c  'expect_same: MISMATCH' <log>              # the labelled assertions
+grep -cE '^make(\[[0-9]+\])?: \*\*\* ' <log>          # the 2,461 bare `test` assertions, which print NOTHING
+grep -cE '^make(\[[0-9]+\])?: \[.*\] Error .*\(ignored\)$' <log>   # the same, on an `-i` run
+```
+
+**ANCHOR THE SECOND AND THIRD AT COLUMN 0.** An unanchored `\*\*\*.*Error` happens
+to be clean on this recipe today — zero `***` sequences in its 13328 lines — but
+that is a property of the current comment text, not of the pattern: **282 lines
+of the recipe contain the word "error"**, and one comment writing `*** Error`
+retires the filter silently. The anchored form is safe by CONSTRUCTION, and the
+reason generalises past make (frankB): **`make:` at column 0 is something a
+comment line cannot produce, because `#` is always first.** The discriminator is
+the line's ORIGIN, not its wording.
+
+The same trap caught an unanchored `ignored`: 4 hits on an in-flight `-i` log,
+all four comment prose (*"each ignored the section"*, a slug containing
+`scopedenums-ignored`, *"hint directives … ignored"*). Count 4, answer 0.
+
+Both greps were positive-controlled (a real `expect_same` mismatch; a throwaway
+Makefile with a silent `test "a" = "b"`) rather than trusted for returning zero.
+
+**And `-k` DOES NOT buy coverage here — do not reach for it as this ticket's
+author first did.** `test-core` is a SINGLE target whose recipe is **13328 lines**
+(`Makefile:5309`..`18637`, measured at `bb28cd97c`), and `-k` continues across
+TARGETS, not across recipe lines.
+
+Getting that size the right way round matters, because the wrong way round makes
+the problem look smaller: the row is at `Makefile:13117`, so a STOP there leaves
+**5520 lines — 41.4% of the recipe — unmeasured.** ~5300 is the size of the DARK
+REGION, not of the recipe. A 5300-line recipe losing its tail sounds like a
+fragment; a 13328-line recipe losing 41% of itself is most of a tier.
+
+These line numbers drift by tens per day (this row has been cited as 13117 and
+13130, the target as 5309 and 5316 — all correct when measured). Re-derive
+rather than quote. A
+failing line therefore ends the whole recipe with or without the flag. Measured
+(frankB, confirmed here with a one-target Makefile): identical stop line,
+identical `rc=2`, identical length, flag and no flag.
+
+The flag that ignores a failing recipe LINE is `-i` — and it exits **0 by
+construction**, so on an `-i` run the rc carries no information at all and the
+verdict is the `(ignored)` markers plus the two greps above.
+
+So the rc is a verdict only on a run WITHOUT `-i`, and there it is binary:
+`MAKE_EXIT=0` means every recipe line ran and passed; `MAKE_EXIT=2` means the
+recipe stopped at the first failure and everything after it is UNMEASURED, not
+green. There is no partial reading between those two.

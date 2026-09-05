@@ -6266,6 +6266,16 @@ var
     through the owner in both. Saved/restored across ParseProcDecl, including
     its three early exits. }
   MethImplOwnerCi : Integer;
+  { The THIRD range of source a nested declaration is reachable from: a
+    QUALIFIED name written outside the owner entirely -- `var a: TOuter.TAlias`.
+    Set to the owner's ci while ParseTypeKind resolves the member of a
+    `TClass.TMember` spelling, -1 otherwise. Nested CLASSES and RECORDS never
+    needed it because that path rewrites the name to the qualified one
+    FindNestedType returns; an ALIAS has no such rewrite -- the qualifier is
+    stripped and the bare name looked up -- so without this the owner-scoped
+    row is invisible to the one spelling that names its owner explicitly.
+    regression-test-core-test-record-nested-type-section }
+  QualTypeOwnerCi : Integer;
 
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;

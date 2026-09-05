@@ -738,6 +738,14 @@ begin
            (Tokens[TokPos + 1].Kind = tkIdent) then
         begin
           dfNestCi := ScanNestedTypeRun(CurTok.SVal, dfNestName, dfHops);
+          { The stripped qualifier names the owner, and since aliases became
+            owner-scoped the bare member name is no longer findable without it.
+            The comment above -- "pxx registers those flat, so the qualifier
+            only disambiguates the parse" -- was true until then and is what
+            made a nested SUBRANGE (tdefault8) stop resolving.
+            regression-test-core-test-record-nested-type-section }
+          if dfNestCi >= 0 then QualTypeOwnerCi := dfNestCi
+          else QualTypeOwnerCi := NestedOwnerCi(CurTok.SVal);
           if dfHops = 0 then dfHops := 1;   { bare-name strip, one qualifier }
           for dfI := 1 to dfHops do
           begin
@@ -3812,6 +3820,9 @@ begin
            (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
         begin
           szNestCi := ScanNestedTypeRun(name, szNestName, szHops);
+          { same as Default()'s strip above, same reason }
+          if szNestCi >= 0 then QualTypeOwnerCi := szNestCi
+          else QualTypeOwnerCi := NestedOwnerCi(name);
           if szHops = 0 then szHops := 1;   { bare-name strip, one qualifier }
           for szI := 1 to szHops do
           begin

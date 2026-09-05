@@ -257,7 +257,8 @@ function AliasVisibleHere(a: Integer): Boolean;
 begin
   AliasVisibleHere := (AliasOwnerCi[a] < 0) or
                       (AliasOwnerCi[a] = ParsingClassBodyCi) or
-                      (AliasOwnerCi[a] = MethImplOwnerCi);
+                      (AliasOwnerCi[a] = MethImplOwnerCi) or
+                      (AliasOwnerCi[a] = QualTypeOwnerCi);
 end;
 
 function FindTypeAlias(const name: AnsiString): Integer;
@@ -8547,6 +8548,7 @@ begin
   ParsingClassConstCi := -1;
   ParsingClassBodyCi  := -1;
   MethImplOwnerCi     := -1;
+  QualTypeOwnerCi     := -1;
 end;
 
 procedure ProcHashReset;

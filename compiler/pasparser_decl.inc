@@ -414,7 +414,30 @@ begin
     Result := SubrangeStorageTk(LastTypeSubLo, LastTypeSubHi);
 end;
 
+{ ParseTypeKind proper is ParseTypeKindInner; this wrapper exists only to
+  save and restore QualTypeOwnerCi.
+
+  The global has to survive INTO the inner call, because two callers strip a
+  `TOwner.` qualifier themselves before handing the bare member name over --
+  Default() and SizeOf(), both in pasparser_expr.inc -- so the inner function
+  cannot simply clear it on entry or their owner would be lost. It equally must
+  not survive OUT: it widens alias visibility, so a value left behind would let
+  a later unqualified lookup see some class's private alias. Save, let the inner
+  body set it if it consumes a qualifier of its own, restore on the way out --
+  which also makes it correct under the recursion the inner body does for
+  `file of T` and element types.
+  regression-test-core-test-record-nested-type-section }
+function ParseTypeKindInner: TTypeKind; forward;
+
 function ParseTypeKind: TTypeKind;
+var savedQTO: Integer;
+begin
+  savedQTO := QualTypeOwnerCi;
+  ParseTypeKind := ParseTypeKindInner;
+  QualTypeOwnerCi := savedQTO;
+end;
+
+function ParseTypeKindInner: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
     nestCi: Integer;              { the BARE `TInner` lookup, inside TOuter's own body }
@@ -742,6 +765,13 @@ begin
          (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
       begin
         qtOuter := FindUClass(lo);
+        { The member may be an ALIAS rather than a nested class or record -- a
+          subrange, a scalar alias, a pointer alias. Those keep their bare name
+          and are found through the alias table below, which is owner-scoped, so
+          it has to be told which owner was just named. Nested classes/records
+          need nothing here: FindNestedType rewrites `lo` to the qualified name.
+          regression-test-core-test-record-nested-type-section }
+        QualTypeOwnerCi := qtOuter;
         Next;                 { past the class name — CurTok is now '.' }
         Next;                 { past '.'            — CurTok is now the nested type name }
         lo := CurTok.SVal;
@@ -768,6 +798,7 @@ begin
               (FindNestedType(qtNested, GetTokenStr(TokPos + 1)) >= 0) do
         begin
           qtOuter := qtNested;
+          QualTypeOwnerCi := qtOuter;   { deeper qualifier: the owner moves with it }
           Next;               { past the nested type name — CurTok is now '.' }
           Next;               { past '.' — CurTok is the next nested type name }
           lo := CurTok.SVal;
