@@ -4605,6 +4605,47 @@ and say plainly that nobody should start there.** The same applies to a plausibl
 fix you tried that did not help. An unrecorded dead end is a trap that resets
 itself.
 
+### And here is the base rate, measured, which is the argument the section was missing
+
+frankS, 2026-09-06, banking the stackless-generator Variant bug: **four negative
+results, each one costing a probe.** Not a multi-word parameter (record and
+AnsiString parameters both leave the others intact); not an ABI mismatch
+(`SlSet(g, 64, v)` with a Variant works standalone); not a conversion temp (a
+Variant VARIABLE argument fails identically to a literal); not value-dependent.
+
+> **"I had a plausible mechanism for three of those four, and each was wrong when
+> measured."**
+
+**That is the number this section always needed.** A recorded negative result is
+not a courtesy to the next reader — **the next reader will arrive with the SAME
+plausible mechanism**, because plausibility is a property of the symptom and the
+symptom is what they will have. Three in four means the dead end is the *expected*
+outcome of a good hypothesis here, not an unlucky one.
+
+**So write down the mechanism you believed, not only the result.** *"Not an ABI
+mismatch"* saves a probe; *"not an ABI mismatch — `SlSet` with a Variant works
+standalone"* saves the probe AND tells the next reader which of their own
+hypotheses just died. Cf. `root-cause-over-microfix.md`'s *nine times in ten the
+real fix is deeper*: same base rate, seen from the hypothesis side rather than the
+fix side.
+
+### When two defects produce ONE symptom, the probe is the deliverable
+
+The same session shipped `PXXDBG=a.slslot` (`devdocs/dev/debug-switches.md`)
+**because the two defects it found are indistinguishable from the program's
+output** — both produce *"wrong or missing values"*.
+
+It prints the layout **from both ends of the one rule that has two spellings**:
+`storeoff` (`SL_OFF_SLOTS + 8*(k-1)`, the ARGUMENT index, from the for-in desugar)
+beside `realoff` (`SL_OFF_SLOTS + 8*SymGenSlot[]`, the SYMBOL's slot, from
+`AssignStacklessSlots`). **`storeoff <> realoff` is the bug**, and it can only
+occur once a parameter is wider than one word — which is exactly why nothing in the
+tree had exercised it: **the two spellings agree on every input anyone had
+written.**
+
+**A probe that separates two same-symptom causes is worth more than either fix**,
+and it is the artefact that survives after both are closed.
+
 **And record the option you measured and DECLINED, with its number.** Track T
 priced a skip cache for pin-built jobs -- provably unchanged verdicts, genuine
 repeated work, the predicate already written -- at **~3% of the matrix**, and
