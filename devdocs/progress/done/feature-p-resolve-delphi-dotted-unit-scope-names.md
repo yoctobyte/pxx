@@ -69,7 +69,7 @@ pxx does not have at all — see [[feature-embed-dwscript-rtti]] for that
 measurement.
 
 
-## LANDED 2026-09-05 (frankH)
+## LANDED 2026-09-05 (frankH) — `731463e70`
 
 `unitalias <Dotted.Name>=<unit>` in a `pxxlib.cfg`. Registration and lookup in
 `paslexer.inc` beside the manifest's other directives; the table in `defs.inc`;
