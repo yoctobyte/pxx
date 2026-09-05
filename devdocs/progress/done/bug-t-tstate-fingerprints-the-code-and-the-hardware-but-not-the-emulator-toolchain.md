@@ -119,7 +119,7 @@ archive does not SAY which one it measured, so a true statement about a 2024
 emulator is read as a statement about the compiler.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 17854b85b.
 
 ## Resolved 2026-09-05 by frankZ — route 1, landed before the upgrade lands
 
