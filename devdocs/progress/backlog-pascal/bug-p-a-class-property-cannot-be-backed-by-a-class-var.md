@@ -1,15 +1,15 @@
 ---
 slug: bug-p-a-class-property-cannot-be-backed-by-a-class-var
-title: "A class property cannot be backed by a class var — the accessor resolver and the lvalue path both only know fields and methods"
+title: "A class property can only be backed by a static METHOD — never by a class var, on a class or a record"
 track: P
-prio: 45
+prio: 50
 type: bug
 status: backlog
 found: 2026-09-05
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "`class property V: T read FV write FV` where FV is a `class var` is refused: `record property accessor is neither a field nor a method: FV` (pasparser_decl.inc:3857/3875). Adding FindClassVar to those two arms is NOT the fix and was measured as insufficient -- with the parse arm widened the declaration is accepted and then BOTH accesses fail at use, because pasparser_lval.inc:1073 only knows a METHOD-backed class property write (`if UPropWriteMLen[cpPri] <= 0 then Error('class property is read-only')`) and the read side has no field-backed arm either. So this is a lvalue/expression-path gap wearing a parser diagnostic. fpc 3.2.2 accepts it and prints 41/7/7 for a probe where the property is written through one instance and read through another. THREE conformance rows stop here as their FIRST error -- terecs3, terecs8, tobject6 -- after the `class var` half landed 2026-09-05; tobject6 is behind the old-style-object decision regardless. Sharing storage is not the issue: the ClassVar slot is an ordinary anonymous global and `TR.FVal` works today; only the property indirection is missing."
+summary: "`class property V: T read FV write FV` where FV is a `class var` is refused on BOTH type kinds, and the two spellings fail with different messages from different places, which is why it read as one narrow bug. On a RECORD the declaration is refused at parse time: `record property accessor is neither a field nor a method: FV` (pasparser_decl.inc:3857/3875). On a CLASS the declaration parses and the USE fails: `class property accessor not found: FV` (pasparser_lval.inc:1084). The cause is one thing: the class-property access path at pasparser_lval.inc:1063-1084 reads ONLY the METHOD accessor slots (UPropRead/WriteMOff/MLen) and then FindUMeth, so a class property can be backed by a static method and by nothing else. Adding FindClassVar to the record parse arms was MEASURED as insufficient -- the declaration then parses and both accesses still fail at use. fpc 3.2.2 accepts both spellings; a probe writing through one instance and reading through another prints 41/7/7. FOUR conformance rows stop here as their first error: terecs3, terecs8, tobject6 (records) and tstatic2 (a CLASS, found by subtraction from the undefined-variable wall). tobject6 is behind the old-style-object decision regardless. Storage is not the issue: the ClassVar slot is an ordinary anonymous global and `TC.FV` resolves today; only the property indirection is missing."
 ---
 
 # A class property cannot be backed by a class var
@@ -66,3 +66,39 @@ can be taught to try the ClassVar registry when the field lookup misses, rather
 than adding a third accessor kind — a third kind means every consumer of the
 four Upro slots grows an arm, which is the shape this repo calls a second path
 that stays broken.
+
+
+## 2026-09-05, later — it is not record-only, and the title was a hypothesis
+
+The first version of this ticket said "record property accessor" because a
+record was where I met it. Measured within the hour, on a CLASS:
+
+    type
+      TC = class
+      private
+        class var FV: Integer;
+      public
+        class property V: Integer read FV write FV;
+      end;
+    begin
+      TC.V := 9; WriteLn(TC.V);   { fpc 3.2.2: 9 }
+    end.
+
+    pascal26:11: error: class property accessor not found: FV
+
+**A different message, from a different file, at a different phase** — the
+record spelling is refused while PARSING the declaration, the class spelling
+parses and fails at the USE. That is exactly why it looked like two problems and
+is one: `pasparser_lval.inc:1063-1084` builds the accessor name from
+`UPropReadMOff/MLen` or `UPropWriteMOff/MLen` — the METHOD slots — and then calls
+`FindUMeth`. There is no field-backed arm on either side, so **a class property
+can be backed by a static method and by nothing else**, whatever declares it.
+
+`tstatic2` joins the row list from that: it is a class with
+`class property SomethingStatic: Integer read FSomethingStatic write SetSomethingStatic`,
+and the unqualified read inside the static method is the property, not the class
+var. It surfaced as `undefined variable (SomethingStatic)` in the
+undefined-variable wall, which is why it was not obviously this bug.
+
+**Fix the lvalue path, not the parse arms.** The record-side parse refusal is
+the surface; widening it alone produces a declaration that cannot be used.

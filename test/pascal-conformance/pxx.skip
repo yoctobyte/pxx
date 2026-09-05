@@ -164,6 +164,6 @@ tobject7.pp	decided: old-style TP `object` types are not implemented (decide-old
 toperator91.pp	gap: the duplicate-conversion check keys on the result type KIND, so String[80], String[90] and ShortString are one result type and the second Explicit/Implicit declaration is refused. FPC treats the capacities as distinct -- same tk inconsistency toperator93 exposed at the use site
 toperator94.pp	gap: same duplicate-conversion coarseness as toperator91, objfpc `class operator :=` spelling
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
-tstatic2.pp	gap: class var with static class property and inherited access
+tstatic2.pp	gap: a class PROPERTY backed by a class var rather than a getter method (bug-p-a-class-property-cannot-be-backed-by-a-class-var) -- measured 2026-09-05: the class spelling parses and fails at the USE, `class property accessor not found: FSomethingStatic`, which is why it surfaced as `undefined variable (SomethingStatic)` and not as a property error
 tclass12b.pp	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced
 tclass11b.pp	accepts-invalid: access control unenforced by project policy — strict private NESTED TYPE reached from a descendant; see bug-pascal-member-visibility-unenforced. (Until 2026-08-25 this test "passed" for the wrong reason — pxx refused it at `TSomeClass.Test;`, a virtual class method as a statement, which was itself a bug: bug-p-a-virtual-class-method-cannot-be-called-as-a-statement.)
