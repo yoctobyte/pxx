@@ -4,6 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "BOTH HALVES NOW LAND AT -O3. Float half ec95c2beb (2.72x microbench, 1.18x math unit). Record half here: record-returning leaves inline via a new InlineRecResultOk predicate, a straight-line record-body validator with PER-FIELD definite assignment, and a Result temp carrying its rec id. DELIVERED 1.54x on the dd kernels on an unloaded box (min-of-7 interleaved wall clock), 1.67x under fleet load by two independent instruments; hand-inlined bound 3.0-3.3x, so the compiler captures 50-60% of the available win and the remainder is the record temp the splice still materialises. -O0/-O1/-O2/-O3 ALL byte-identical on compiler.pas -- the feature is inert on the compiler's own source, so the self-host fixedpoint proves nothing about it. The first working version SEGFAULTED at -O3 (splice returned IR_LOAD_SYM of a record where an aggregate call yields IR_LEA of its hidden destination), caught by a directed matrix, which optfuzz structurally cannot provide: pasmith returns only integer kinds (a4c89e31d). Branching record bodies, whole-record assigns and non-leaf dd kernels all still decline."
+status: done
 ---
 
 # Inline float-returning and record-returning leaf functions
@@ -364,3 +365,6 @@ construction. It cannot reach a record return.
 **No promotion requested.** PROOF is Track T's full tier; there is no full tier
 at this tree and pin v404 was itself graded `reds`. Both halves stay at `-O3` as
 measured promise.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
