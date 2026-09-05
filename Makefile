@@ -13673,6 +13673,16 @@ test-core: $(COMPILER)
 	# shared while one declared before it is not; the first draft put its
 	# per-instance control after the section and asserted a true value with a
 	# false explanation. Byte-compared against fpc 3.2.2.
+	# A class property backed by a CLASS VAR rather than a static getter, on
+	# BOTH declaring kinds — the two spellings failed differently (a record was
+	# refused at the declaration, a class parsed and failed at the use), so a
+	# test covering one kind would pass while the other stayed broken. Writing
+	# through the type and reading back after a second write is what shows one
+	# slot behind the property; an instance-field-backed property would compile
+	# every line. The INSTANCE-qualified spelling `a.V := 7` is still
+	# unsupported at a third site and is deliberately not here.
+	./$(COMPILER) test/test_class_property_backed_by_a_class_var.pas $(TESTTMP)/test_clsprop_cv26
+	tools/expect_same.sh test_clsprop_cv26 "$$($(TESTTMP)/test_clsprop_cv26)" "$$(cat test/test_class_property_backed_by_a_class_var.expected)"
 	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c

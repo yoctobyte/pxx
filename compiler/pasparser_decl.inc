@@ -3848,13 +3848,15 @@ begin
         rFOff := Tokens[TokPos-1].SOffset;
         rFLen := Tokens[TokPos-1].SLen;
       end
-      else if FindUMeth(ci, CurTok.SVal) >= 0 then
+      else if (FindUMeth(ci, CurTok.SVal) >= 0) or
+              (FindClassVar(ci, CurTok.SVal) >= 0) then
       begin
         rMOff := Tokens[TokPos-1].SOffset;
         rMLen := Tokens[TokPos-1].SLen;
       end
       else
-        Error('record property accessor is neither a field nor a method: ' + CurTok.SVal);
+        Error('record property accessor is neither a field, a method nor a ' +
+              'class var: ' + CurTok.SVal);
       Next;
     end
     else
@@ -3866,13 +3868,15 @@ begin
         wFOff := Tokens[TokPos-1].SOffset;
         wFLen := Tokens[TokPos-1].SLen;
       end
-      else if FindUMeth(ci, CurTok.SVal) >= 0 then
+      else if (FindUMeth(ci, CurTok.SVal) >= 0) or
+              (FindClassVar(ci, CurTok.SVal) >= 0) then
       begin
         wMOff := Tokens[TokPos-1].SOffset;
         wMLen := Tokens[TokPos-1].SLen;
       end
       else
-        Error('record property accessor is neither a field nor a method: ' + CurTok.SVal);
+        Error('record property accessor is neither a field, a method nor a ' +
+              'class var: ' + CurTok.SVal);
       Next;
     end;
   end;

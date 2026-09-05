@@ -1081,6 +1081,33 @@ begin
                   AppendChar(cpName, TokChars[UPropReadMOff[cpPri] + i]);
               end;
               cpMmi := FindUMeth(ci, cpName);
+
+              { A CLASS VAR is a legal accessor, and it was the only kind this
+                path could not reach. `class property V: T read FV write FV`
+                over `class var FV: T` is what fpc calls a static class
+                property; the declaration parsers put any accessor that is not
+                an instance FIELD into the method slot, so the name arrives here
+                and FindUMeth answered -1 with `accessor not found` -- a
+                diagnostic naming the lookup that failed rather than the one
+                that was missing.
+
+                Re-enter on the backing global exactly as the class-VAR arm
+                below does, rather than growing a third accessor kind through
+                the four UProp slots and every consumer of them. That also
+                means read and write both work from one line: the re-entered
+                path is an lvalue, and it parses the suffixes, so
+                `TC.V[0]` on a class-var ARRAY behaves like `TC.FV[0]` already
+                does. bug-p-a-class-property-cannot-be-backed-by-a-class-var }
+              if cpMmi < 0 then
+              begin
+                fldIdx := FindClassVar(ci, cpName);
+                if fldIdx >= 0 then
+                begin
+                  Result := ParseLValueAST(fldIdx, qualNameTok);
+                  Exit;
+                end;
+              end;
+
               if cpMmi < 0 then Error('class property accessor not found: ' + cpName);
               cpMpi := UMthProc_[cpMmi];
 
