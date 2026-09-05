@@ -1932,6 +1932,24 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
     # dist-upgrade on 2026-09-05 is the first one this can see.
     prev = ((st or {}).get("toolchain") or {}).get("fp")
     now_fp = fp_of_toolchain(toolchain)
+    if now_fp and not prev:
+        # NO CALLOUT AND AN UNCHANGED TOOLCHAIN ARE THE SAME SILENCE, and on
+        # 2026-09-05 the silent case is the live one: the field landed at
+        # 17854b85b and NEITHER host had published through it, so seven's first
+        # post-upgrade report has nothing to diff against and cannot announce
+        # the very transition it was written for. A watch reading "no callout"
+        # would score that as a render bug or a dead watcher -- two causes were
+        # named for it, and this is a third that looks identical to both.
+        # So the first report on a host SAYS it is the first.
+        lines += ["> **TOOLCHAIN FIRST RECORDED on this host** (`%s`). There is "
+                  "no previous fingerprint on this box to compare against, so "
+                  "the absence of a CHANGED callout above means *no baseline "
+                  "existed*, not *nothing changed*. This report establishes it; "
+                  "the next run on this host can announce a change. To read a "
+                  "transition that happened BEFORE this line existed, compare "
+                  "the `toolchain:` line against a version recorded elsewhere "
+                  "-- it is spelled out in full for exactly that reason."
+                  % now_fp, ""]
     if prev and now_fp and prev != now_fp:
         lines += ["> **TOOLCHAIN CHANGED on this host since its previous run** "
                   "(`%s` -> `%s`). Every cross-target row here was measured by "
@@ -2456,6 +2474,57 @@ def cross_currency_block(fulls, now=None):
     return out
 
 
+
+def toolchain_block(hosts, toolchains):
+    """The WHAT-RAN-IT half of "which host's map do I read". -> [str]
+
+    Sibling of cross_currency_block and deliberately a SEPARATE function rather
+    than more rows inside it: twatch_cross_currency_devtest asserts that
+    block's shape by counting the `| ` rows it emits, and appending a second
+    table there turned two rows into four. Changing a function so its own guard
+    has to be loosened is the same move as widening a guard's window to fit its
+    subject, in the other direction.
+
+    A verdict measured on an older emulator is a TRUE statement about that
+    emulator, and until 2026-09-05 nothing in this index said which one -- so
+    it read as a statement about the compiler. Measured 2026-09-04: seven ran
+    qemu 8.2.2 where plexus ran 10.2.1, and one riscv32 row was red on one and
+    green on the other from byte-identical compiler bytes.
+
+    A host with no entry is NOT rendered as agreeing with the others. It has
+    simply not published a run since the field existed, which is a different
+    statement from "same toolchain", and the cell says so in words rather than
+    leaving a blank for a reader to fill in optimistically.
+    """
+    rows = [(h, (toolchains or {}).get(h)) for h in hosts]
+    if not rows:
+        return []
+    # A top-level section, not a `###` under cross-currency: that block
+    # returns [] when no host has a DATED full tier, and a subheading whose
+    # parent did not render is an orphan that reads as belonging to whatever
+    # came before it.
+    out = ["## ...and which TOOLCHAIN measured it", "",
+           "| host | toolchain | fp |",
+           "|------|-----------|-----|"]
+    for h, tc in rows:
+        if not tc:
+            out.append("| %s | _not published since this field existed_ | — |"
+                       % h)
+            continue
+        out.append("| %s | %s | `%s` |"
+                   % (h, toolchain_line({k: v for k, v in tc.items()
+                                         if k != "fp"}), tc.get("fp") or ""))
+    out += ["",
+            "Two hosts with different fingerprints did not measure the same "
+            "thing, and a job that disagrees between them may be disagreeing "
+            "about the EMULATOR rather than about the tree. Check this before "
+            "filing a cross-target red against the compiler: "
+            "`bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-"
+            "emulator-toolchain` is the incident that cost an afternoon for "
+            "want of this row.", ""]
+    return out
+
+
 def probe_line(probe):
     """The calibration ratios, for the report header. -> str
 
@@ -2491,6 +2560,7 @@ def regen_index(clone):
     tdir = os.path.join(clone.path, TSTATE_REL)
     rows, regs, held = [], [], []
     fulls = []
+    toolchains = {}
     for fn in sorted(os.listdir(tdir)):
         if not fn.endswith(".json"):
             continue
@@ -2503,6 +2573,7 @@ def regen_index(clone):
         quiet = host_quiet_secs(st)
         if lf.get("date") and not st.get("retired_at"):
             fulls.append((st["host"], lf))
+            toolchains[st["host"]] = st.get("toolchain")
         if st.get("retired_at"):
             # Retired: one row for the record, and NOTHING in the regression or
             # held sections — it holds no entries and can never clear any.
@@ -2554,6 +2625,7 @@ def regen_index(clone):
            "| host | last tested | date | verdict | wall | full through |",
            "|------|-------------|------|---------|------|--------------|"] + rows + [""]
     out += cross_currency_block(fulls)
+    out += toolchain_block([h for h, _ in fulls], toolchains)
     out.append("## Open regressions")
     out += regs if regs else ["- none"]
     out.append("")

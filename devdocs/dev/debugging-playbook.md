@@ -4584,6 +4584,106 @@ one: the instrument was fine and the *plumbing around it* answered a different
 question. It belongs with them because the tell is identical — a result that
 looks clean, arrived at through a layer nobody was examining.
 
+### The generalisation: the status was about a DIFFERENT PROCESS, and the remedy is that the instrument NAMES what it measured
+
+Measured 2026-09-05, twice in one day, by two sessions who did not know they had
+hit the same thing:
+
+- `tools/twatch.py --status | tail` printed `DOWN` and `echo $?` returned **0**.
+  The text was the tool's, the number was `tail`'s.
+- Three `gate.sh quick` runs were live on this box at once, each writing
+  `summary.log` into its own `/tmp/pxx-gate-<pid>`. Reading "the newest
+  `summary.log`" returns a **real verdict from a real gate**, on a tree that may
+  not be yours. `LOGDIR` is PID-named, so newest-mtime is not even an ordering
+  on your own runs.
+
+**Neither status is wrong.** `tail` really did exit 0. That gate really was
+GREEN. Both are correct statements about a process nobody asked about, and both
+arrive in the exact shape of an answer to the question that WAS asked. This is
+the parent class ("The instrument answered, correctly, about something else")
+narrowed to its most expensive member: **not a stale value, not a wrong
+aperture — a right answer with the wrong subject**, which no freshness check and
+no error check can see, because there is no staleness and no error.
+
+**The tell is that the question names a subject and the answer does not.** "Is
+the watcher down" is about one process; `$?` after a pipeline is about whichever
+process the shell ran last. "Did MY gate pass" is about one PID; a glob is about
+whichever finished last.
+
+**So the remedy is not more discipline in the reader — it is that the instrument
+NAMES what it measured**, and the reader matches the name:
+
+- `gate.sh` prints `gate: mode=<mode>  logs=/tmp/pxx-gate-<pid>` on its own
+  stdout. Read `summary.log` from THAT path, never by glob, never by mtime. If
+  you cannot say which logdir a verdict came from, you have no verdict.
+- A tstate report carries `toolchain_fp:` (added the same day, `17854b85b`), so
+  a cross-target red says which emulator produced it instead of implying the
+  compiler. Same fix, one layer up: the verdict names its subject.
+- For an exit status, capture it where it is produced — `rc=$?` immediately, or
+  `PIPESTATUS[0]` — rather than reading it downstream of a convenience.
+
+**And the strongest version of the remedy removes the discipline entirely:**
+capture the instrument's OWN stdout in the same command that runs it, so there
+is no second artefact to mis-select. A rule you must remember to follow is a
+rule you will eventually not follow; a shape with only one candidate answer has
+nothing to select wrongly.
+
+**Four more members, all measured on 2026-09-05, and the third is the one that
+will cost you a day.** They look unrelated. The question and the subject of the
+answer are mismatched in every one:
+
+| you asked about | the answer was about |
+| --- | --- |
+| the tool's exit status | `tail`'s, because a pipe was appended |
+| *my* gate's verdict | whichever gate finished last, via a PID-named logdir |
+| the code the DAEMON is running | the code in the CLONE |
+| will the service come back | it is `active` **right now** |
+| is this job still failing for the reason I know | it is still failing |
+
+**LANDED IS NOT LIVE.** A watcher daemon on seven was executing `twatch.py` at
+`065bb7eaf0d5` while the file on disk was `7327e547732c` — the process had
+started before the fetch, and a long-running process holds the code it opened.
+**`git merge-base --is-ancestor <sha> origin/master` answered `true` the entire
+time, and it was correct**: the clone did contain the commit. Every check anyone
+habitually runs — `merge-base`, `git log`, `ls-tree`, reading the file — answers
+about the clone. Only `./trackt status`'s `code :` row, which reports what the
+*process* loaded, said `STALE`.
+
+This is the same trap as a stale `compiler/pascal26` with a clean `git status`,
+one level up: there, the tree says nothing about the binary; here, the tree says
+nothing about the process. **A fetch changes what a future process will load and
+nothing about one already running.**
+
+`active` but `disabled` is the cheapest member and worth checking whenever a
+service is the subject: `systemctl is-active` is a true statement about now that
+implies nothing about the next boot, and the two questions are asked with almost
+the same word.
+
+**A STILL-RED IS A STATEMENT ABOUT THE COLOUR AND NOT ABOUT THE CAUSE**, and it
+is the member that survives every check you would think to run. Measured
+2026-09-05: five gtk jobs carried `STILL-RED` across two runs and were **not
+unchanged** — they had moved from `unit source not found: gtk` to a Pointer
+regression. Same job key, same colour, different defect. Nothing about the label
+is stale, nothing about it errors, and a reader tracking "which reds are new"
+correctly excludes them — from a list they now belong on. **`STILL-RED` compares
+verdicts; the question is almost always about causes.** Diff the failure text,
+not the status, before deciding a red is the one you already know.
+
+**AND TWO CLOCKS ARE TWO SUBJECTS.** Measured the same day, by this section's
+own author: a commit message claimed a change had landed *before* a machine's
+dist-upgrade, "on purpose". The reasoning was repo time — the commit landed
+today, the upgrade was announced for today. The box's `/var/log/dist-upgrade/
+main.log` had the upgrade finishing at 17:30 UTC and the commit was 17:45:34.
+**Fifteen minutes late, and the ordering was the entire argument for doing that
+work first.** The repo's clock is the one everybody has, which is exactly why it
+gets substituted for the one the claim is actually about.
+
+The aggravating detail generalises past the incident: the standing instruction
+was *do not ssh to that box while it upgrades*. **Being told not to measure
+something is not a licence to assert it instead** — under that constraint the
+honest sentence is "I do not know whether this beat the upgrade", which costs
+one clause. An unmeasurable claim is not thereby a free one.
+
 ## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
 
 `perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
