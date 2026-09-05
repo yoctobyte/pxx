@@ -165,3 +165,35 @@ value is in the input existing where the probe runs, not in where it came from.
 
 **The campaign's numbers stand as reported:** `ready --track P` 53 → 39, and no
 closure in it is reopened by this ticket.
+
+## MEASURED 2026-09-06 — the denominator, and a live case where it changed an answer
+
+The argument above was made without a count. Here is one.
+
+`library_candidates/` is in `.gitignore` (line 36), so **it never arrives by
+pull.** Counted across the checkouts on this box:
+
+| | checkouts |
+| --- | --- |
+| **have** `library_candidates/` | **10** — frank1, frankA, frankB, frankC, frankD, frankS, frankwasm, frankZ, pxx, trackt-watch |
+| **lack** it | **9** — frank2, frankH, frank-optimize, frank-rust, frank-user, frank-subcoord, frank-coordinator, frank-coord-core, frank-coord-front |
+
+**Live working sessions are on both sides of that line**, and nothing about a
+checkout announces which side it is on.
+
+**So the same sweep, run by two agents, returns two different answers and neither
+errors.** The one run without the corpus silently measures a smaller population
+and reports a clean result — the null-result shape, from a tool that is working.
+
+**The live case (frankA, 2026-09-06).** A directive sweep over
+`/usr/share/fpcsrc/3.2.2` closed with a stated residual: *"a name used only by
+Delphi, a vendor unit or FPC 3.3+ is still invisible."* The real gap was that
+`fpcsrc/3.2.2` holds `compiler`, `packages` and `rtl` and **no `tests`** — and
+FPC's testsuite was already on the box at
+`library_candidates/fpc-testsuite`. Re-running there found **9 more names** and
+**2 more false positives**.
+
+**Both halves of this ticket fire in that one story:** the corpus was present for
+the agent that eventually looked, absent from nine other checkouts, and named in
+a residual rather than enumerated. **The instrument to state beside any
+corpus-derived count is which corpus root was on disk** — `ls` it, and say so.

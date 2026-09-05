@@ -3939,6 +3939,61 @@ condition to documenting why it is safe — the fix here deleted the gate entire
 premise to be true and no list of addressable node kinds to stay in sync with
 `IRLowerAddress`'s own.
 
+## A TICKET'S PROPOSED MECHANISM IS A HYPOTHESIS, AND A STALE REPRO HIDES THAT — when the new repro is far SIMPLER than the ticket's, the ticket's cause was scenery
+
+Measured 2026-09-05/06 (frankA). The sibling of the section above: that one is
+about a comment's claim being inherited, this one is about **the ticket's own
+explanation of its bug** being inherited, which is harder to doubt because a
+ticket looks like a record of an investigation.
+
+**The case.** A `near:` diagnostic ticket had been re-verified once, and it paired
+a correct excerpt with a bogus one, concluding that the difference was **generic
+specialization extending the token stream.** Both of its repros now compile clean.
+
+**The wrong move is to hunt for a generic that still breaks.** The right one is to
+**re-derive from the OBSERVABLE** — *"the diagnostic quotes an excerpt from
+another file"* — which produced **three lines with no generics in them**:
+
+```pascal
+program m1;
+begin
+  WriteLn('hi');
+```
+
+> **Generics were how the original sighting got past the end of the user's
+> tokens. They were not what was broken.**
+
+**The tell is a size comparison and it is free:** when the repro you derive from
+the observable is far simpler than the one in the ticket, **the ticket's stated
+cause was scenery** — a property of the sighting, not of the defect.
+
+### The mechanism it uncovered, which is a LAYOUT and not a bug
+
+**There is ONE token array.** The main file goes in first, then each `uses`d
+unit, then the builtin units the compiler appends to every program — **with
+nothing between them.** So a parse that runs off the end of the user's tokens
+**carries straight on into `unit builtinheap`** and reports, truthfully, at
+coordinates inside a file the author never opened:
+
+```
+pascal26:2: error: a statement cannot start with 'unit'
+  in: ./compiler/builtin/builtinheap.pas
+  near: ( 'hi' ) ; unit builtinheap >>> ; interface type
+```
+
+`( 'hi' ) ;` is the user's and `unit builtinheap` is the compiler's, **spliced
+with nothing to say so.** Both halves of the diagnostic were correct about the
+wrong thing, which is why neither errors and neither looks wrong.
+
+Fixed on both sides: `in:` now says the unit is appended by the compiler and the
+mistake is at or before **your** file's last line, and the `near:` window **clips
+at the anchor token's own source** — the clip it already did at 1 and `TokCount`,
+applied to what the array actually holds.
+
+**Any concatenated arena has this shape.** If one buffer holds several files'
+worth of anything and an index can walk past a boundary, every position-derived
+message downstream is correct about the arena and wrong about the file.
+
 ## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
 
 Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
@@ -4992,6 +5047,59 @@ do not state it:**
 
 And when a negative result arrives from someone else, **the question is never
 "was it done carefully". It was.** The question is **what did it hold still.**
+
+## A STATED RESIDUAL IS A GUESS ABOUT YOUR OWN CORPUS — and an imagined one is worse than none, because it SOUNDS measured
+
+Measured 2026-09-06 (frankA), and it is the failure mode that the aperture rule
+above invites once you start writing your apertures down.
+
+Having done a directive sweep over fpcsrc, frankA closed it with a caveat that
+reads exactly like diligence:
+
+> *"a name used only by Delphi, a vendor unit or FPC 3.3+ is still invisible."*
+
+**Specific, honest-sounding, and wrong about which gap was actually there.**
+`/usr/share/fpcsrc/3.2.2` contains `compiler`, `packages` and `rtl` — **and not
+`tests`.** The missing corpus was not a dialect; it was **a testsuite, which is
+the one corpus that exists to spell edge cases**, and FPC's was already checked
+out on the box under `library_candidates/fpc-testsuite`. Re-run over it: **9 more
+names appearing nowhere in fpcsrc**, plus two more false positives
+(`checklowaddrloads`, `targetswitch`) — valid FPC code failing under `-Werror`.
+
+> **`ls` on the corpus root would have answered it. The residual was reasoned
+> about instead — in the dialect axis, which is where the thinking was already
+> happening.**
+
+**And an imagined residual is worse than no residual at all: it sounds measured,
+so nobody looks.** A gap named plausibly is a gap closed socially. Same family as
+a false coverage claim removing a live row from the queue — cf. *hedge the
+premise, not just the inference*, where the careful caveat made the unmeasured
+number MORE credible.
+
+**The guard is to enumerate the corpus before characterising what is missing from
+it.** A residual is a claim about a population; `ls` the population.
+
+### The corollary, and it is why nobody caught it: A CORPUS IS NOT IN THE REPO
+
+`library_candidates/` is in `.gitignore` (line 36), so it **never arrives by
+pull**. Counted on this box 2026-09-06: **10 of 19 checkouts have it, 9 do not** —
+including live working sessions. So the same sweep, run by two agents, returns
+two different answers, **neither of which errors**, and the one run in a checkout
+without the corpus silently measures a smaller population. See
+`bug-t-a-ticket-citing-a-corpus-file-is-only-reproducible-by-whoever-has-that-corpus`.
+
+### The cheaper search, once you have a NAME
+
+**Grep for the sibling beats a census** — twice inside this one ticket.
+`minstacksize` came out of censusing **9197 files** and is `maxstacksize`'s
+sibling, **already on the list.** Then `checklowaddrloads`/`checkpointer` and
+`targetswitch`/`modeswitch`, same shape.
+
+> **A census is how you find what you had no name for. Once you HAVE a name, its
+> siblings are one grep.**
+
+Cf. `normalise-dont-special-case.md` — *"fixed one arm of a double case? grep for
+the sibling before closing."* This is the search-strategy form of the same fact.
 
 ## THE RESIDUAL-SET FALLACY — a partition shows causes DIFFER, never what they are, and what is LEFT OVER is not a group
 
