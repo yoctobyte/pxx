@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`tools/docsnip.py` compiles docs/** snippets against the PINNED compiler, and three of them now fail with `unknown type: TMethod` — inside lib/rtl, not inside the snippet. `a623307bd` made TMethod a builtin and deleted the RTL duplicates, so the pin's compiler cannot build the current RTL at all. Nothing is wrong with the three documents; Track D's only gate is red for every session until the next pin. Second aperture hole found 2026-09-05: the completeness test is `^program`, so a `library` snippet is invisible to the gate entirely — and the pin rejects `library` at token 1 anyway."
+status: done
+owner: frankD
 ---
 
 # The docs snippet gate cannot pass: the pin predates `TMethod` becoming a builtin
@@ -131,4 +133,52 @@ is `ce63beeeb`, and both `31f8b11bf` (TMethod as a builtin) and `a623307bd`
 and the instrument is not — verify it with `compiler/pascal26` at HEAD instead,
 and say in the commit that you used HEAD and why, so the claim expires by
 itself.
+
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## 2026-09-05, later — pin v404 closed both halves, and one aperture stays open by design
+
+`8844c8c42`, binary `fe1e9c37d322`, tree `5b5fdb0b3`. Both problems this ticket
+recorded are gone, and they went for different reasons.
+
+**The TMethod half: fixed by the pin, as predicted.** `docsnip.py` now reports
+**BROKEN: 0** where it reported 3 all day. The 24 units are unblocked. Nothing
+in `docs/**` was edited to achieve that, which was the point of recording it
+rather than "fixing" the three documents.
+
+**The aperture half: `library` is now checkable, so it is checked.**
+`7763e1df6` (the `library`/`exports` feature) *is* an ancestor of the pin tree —
+confirmed with `merge-base --is-ancestor`, and confirmed again by compiling the
+snippet: pin v404 accepts `library` where v403 answered `expected 'begin' before
+'library'` at token 1. So widening the completeness test no longer converts a
+silent gap into a permanent red, which was the only reason not to. It is
+`^(program|library)` now, and `docs/reference/objects.md:105` moved from
+`NOT CHECKED` into the compiled population: 40→41 complete programs, 34→35
+compiled.
+
+**`unit` stays reported and that is not a deferral.** A bare unit cannot be
+compiled at all — pxx answers *"this file is a unit, not a program — compile a
+program that uses it"*, which is correct. Checking one would mean generating a
+host program around it, which is exactly the inventing this tool's own docstring
+refuses to do. So the count is the tell, permanently, and the line names the file
+and line of anything that appears.
+
+**Zero census, so the probe was proven live rather than assumed.** With the
+`library` block promoted there are no `unit` blocks left in `docs/**` and the
+`NOT CHECKED` line disappears entirely — indistinguishable from a detector that
+stopped working. Controlled twice: seven classifier rows including `unitfoo :=`
+for the word boundary and a non-pascal fence, and end-to-end by planting a real
+`unit` block in `docs/reference/limits.md`, confirming it was reported with the
+right file and line, and removing it (`git diff` empty afterwards).
+
+**Also re-verified rather than assumed: the six scope-claim rows from
+[[bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep]]
+were measured against v403 and are byte-identical under v404.** frank-coordinator
+asked whether a pin fires that ticket's re-run trigger. It does not by the letter
+— a pin is neither a new backend nor a new target-scoped flag — but the rows had
+been measured *with* v403, and a new pin is a new instrument. Re-running the
+table cost under a minute and settles it instead of arguing it, which is cheaper
+than the question. The `--shared` internal-error defect reproduces under v404 too.
 

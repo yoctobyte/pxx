@@ -533,12 +533,11 @@ _none_
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 
-## backlog-docs (2)
+## backlog-docs (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
-| bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin | D | 45 | bug | `tools/docsnip.py` compiles docs/** snippets against the PINNED compiler, and three of them now fail with `unknown type: TMethod` — inside lib/rtl, not inside the snippet. `a623307bd` made TMethod a builtin and deleted the RTL duplicates, so the pin's compiler cannot build the current RTL at all. Nothing is wrong with the three documents; Track D's only gate is red for every session until the next pin. Second aperture hole found 2026-09-05: the completeness test is `^program`, so a `library` snippet is invisible to the gate entirely — and the pin rejects `library` at token 1 anyway. | — |
 
 ## backlog-esp (2)
 
@@ -903,9 +902,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3323)
+## done (3324)
 
-3323 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3324 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1110,7 +1109,6 @@ _none_
 - [p 45] [B] bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall
 - [p 45] [C] bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias
 - [p 45] [D] bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary
-- [p 45] [D] bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Compile every complete program snippet in docs/** against the PINNED compiler.
+"""Compile every complete program or library snippet in docs/** against the PINNED compiler.
 
     tools/docsnip.py            # summary + failures
     tools/docsnip.py -v         # also list what was skipped, and why
@@ -96,22 +96,30 @@ def main():
         total += 1
         t = body.strip()
         if lang not in ('pascal', 'pas') or not (
-                re.match(r'^program\s', t) and t.rstrip().endswith('end.')):
+                re.match(r'^(program|library)\s', t) and t.rstrip().endswith('end.')):
             frag += 1
             # A BLOCK THAT LOOKS COMPLETE AND IS NOT COMPILED MUST BE COUNTED
             # SEPARATELY, or this gate reports the same green whether it is
-            # correct or nonsense. The completeness test is `^program`, so a
-            # `library` or `unit` block -- both of which end with `end.` and
-            # are complete compilation units -- lands in `fragments/other`
-            # beside the genuine one-liners and is never compiled at all.
-            # There is nothing to fix in the test today: the pinned compiler
-            # rejects `library` at token 1 because the feature postdates it.
-            # So the aperture is REPORTED rather than closed, and the number
-            # is the tell -- a docs page can grow an unchecked complete
-            # program and this line is the only thing that says so.
+            # correct or nonsense. A `unit` block ends with `end.` and is a
+            # complete compilation unit, so without this it lands in
+            # `fragments/other` beside the genuine one-liners and nothing says
+            # it went unchecked.
+            #
+            # `unit` CANNOT be fixed by widening the test above, and that is a
+            # property of the language rather than of this tool: pxx refuses a
+            # bare unit with "this file is a unit, not a program -- compile a
+            # program that uses it", which is correct. Checking one would mean
+            # generating a host program around it, i.e. inventing the code the
+            # docstring at the top of this file says not to invent. So the
+            # aperture is REPORTED, and the count is the tell.
+            #
+            # `library` USED to be here for a different reason -- the pin
+            # rejected it at token 1 because the feature postdated the pin --
+            # and pin v404 (fe1e9c37d322, 2026-09-05) compiles it, so it moved
+            # up into the compiled population where it belongs.
             # bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin
             if (lang in ('pascal', 'pas') and t.rstrip().endswith('end.')
-                    and re.match(r'^(library|unit)\s', t)):
+                    and re.match(r'^unit\s', t)):
                 uncheckable.append((rel, ln, t.split(None, 1)[0]))
             continue
         whole += 1
@@ -141,9 +149,9 @@ def main():
           % (whole - len(fails) - len(wrong_pass) - len(skipped),
              len(fails) + len(wrong_pass), len(skipped)))
     if uncheckable:
-        print('  NOT CHECKED: %d complete `library`/`unit` block(s) -- this gate\n'
-              '               only compiles blocks starting with `program`, so these\n'
-              '               are neither compiled nor counted as failures:'
+        print('  NOT CHECKED: %d complete `unit` block(s) -- a bare unit cannot be\n'
+              '               compiled on its own, so these are neither compiled nor\n'
+              '               counted as failures:'
               % len(uncheckable))
         for rel, ln, kw in uncheckable:
             print('     %s:%d  (%s)' % (rel, ln, kw))
