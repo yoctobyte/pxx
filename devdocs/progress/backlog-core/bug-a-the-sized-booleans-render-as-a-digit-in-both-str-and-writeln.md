@@ -5,7 +5,7 @@ type: bug
 status: backlog
 owner: ""
 created: 2026-09-04
-blocked-by: []
+blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 summary: "`WordBool`, `LongBool` and `ByteBool` print as `1`/`0` from BOTH `writeln` and `Str`, where FPC (and our own `Boolean`) give TRUE/FALSE. Not the same defect as bug-p-str-of-a-boolean-formats-it-as-a-digit, which was one missing dispatch arm and is fixed: these three have no boolean-ness to dispatch ON. They are deliberately represented as integers of their own width (pasparser_lval.inc:6921 -- mapping them to tyBoolean would silently resize every struct that contains one), so both renderers correctly see an integer. The fix needs a way to carry `is a boolean` ALONGSIDE a width, which is a representation change, not a table row."
 ---
 

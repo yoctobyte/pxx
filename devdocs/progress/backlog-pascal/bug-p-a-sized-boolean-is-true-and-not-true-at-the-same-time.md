@@ -2,7 +2,7 @@
 track: P
 prio: 55
 type: bug
-blocked-by: []
+blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 summary: "`var a: ByteBool; a := True;` makes BOTH `if a` and `if not a` fire -- a program takes both branches, silently, no diagnostic. `not` on a sized boolean is an INTEGER complement: not 1 = 254, nonzero, true. It is right for False only by accident (not 0 = 255, also true, which is the wanted answer). WordBool and LongBool identical; plain Boolean is correct. Cause: ByteBool/WordBool/LongBool are mapped to tyUInt8/tyUInt16/tyInteger to keep their C-ABI WIDTH -- deliberate and documented -- so nothing downstream can tell them from integers. Same cause drops their display (WriteLn prints 1, fpc prints TRUE) and their Ord (1 here, -1 in fpc, all-bits-set being the C convention). QWordBool does not exist at all. Pre-existing on pin v403. Fixing it needs a way to say \"integer kind, boolean semantics\", which is a defs.inc design fork, not a local patch."
 ---
 
