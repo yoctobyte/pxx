@@ -1,0 +1,8 @@
+align-on = A+   ok
+align-off = A-  ok
+align-4 = A4    ok
+on <> off       ok
+on = align-4    ok
+off < on        ok
+on < pack-8     ok
+asmmode values accepted with no asm block

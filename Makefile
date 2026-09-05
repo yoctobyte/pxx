@@ -13464,6 +13464,19 @@ test-core: $(COMPILER)
 	# value or have their own lowering. Byte-compared against FPC 3.2.2.
 	./$(COMPILER) test/test_insert_and_delete_on_a_frozen_string.pas $(TESTTMP)/test_insfrozen26
 	tools/expect_same.sh test_insfrozen26 "$$($(TESTTMP)/test_insfrozen26)" "$$(cat test/test_insert_and_delete_on_a_frozen_string.expected)"
+	# The unknown-DIRECTIVE census keys on the directive NAME, so a directive
+	# pxx KNOWS carrying a value it does not is structurally invisible to it.
+	# Censusing fpc 3.2.2's own sources for VALUES instead found two:
+	# {$ALIGN ON}/{$ALIGN OFF} (5 uses) shared an arm with {$PACKRECORDS} and
+	# so inherited ITS value space -- and fpc refuses ON/OFF on that spelling,
+	# so the two directives are one setting with two value spaces; and
+	# {$ASMMODE gas} (17 uses) plus standard were refused while `direct`, which
+	# fpc does NOT accept, was in the list as "the FPC set". Every row asserts
+	# a RELATION between two spellings, never a byte count, so it carries no
+	# per-target width. Byte-compared against FPC 3.2.2; pin v403 refuses all
+	# three constructs outright.
+	./$(COMPILER) test/test_directive_value_space_matches_fpc.pas $(TESTTMP)/test_dvspace26
+	tools/expect_same.sh test_dvspace26 "$$($(TESTTMP)/test_dvspace26)" "$$(cat test/test_directive_value_space_matches_fpc.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

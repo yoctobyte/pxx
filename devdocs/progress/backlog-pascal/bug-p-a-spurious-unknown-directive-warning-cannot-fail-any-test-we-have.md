@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "PRIO CONFIRMED AT 35 BY THE 2026-09-05 CENSUS AUDIT -- its demand line is not a corpus (valid code stops compiling under -Werror), unlike its sibling, which was parked. The unknown-directive warning (2026-09-04) classifies against a hand-curated list of ~101 names. A name missing from it makes valid code warn — under -Werror, fail — and NO INSTRUMENT WE HAVE CAN SEE THAT: a spurious warning exits 0, so a PASS/FAIL corpus sweep records it as PASS. Two real false positives have already been found and fixed by hand ({$A n}, 153d59777) or filed ({$setc} family, p40). Needs a stderr-counting guard, not a compile sweep. A SECOND AXIS is now recorded here too: a KNOWN directive carrying an unrecognised VALUE is invisible to this warning, which keys on the directive name -- `{$MODE TOTALNONSENSE}` was silent until 2026-09-05."
+summary: "PRIO CONFIRMED AT 35 BY THE 2026-09-05 CENSUS AUDIT -- its demand line is not a corpus (valid code stops compiling under -Werror), unlike its sibling, which was parked. The unknown-directive warning (2026-09-04) classifies against a hand-curated list of ~101 names. A name missing from it makes valid code warn — under -Werror, fail — and NO INSTRUMENT WE HAVE CAN SEE THAT: a spurious warning exits 0, so a PASS/FAIL corpus sweep records it as PASS. Two real false positives have already been found and fixed by hand ({$A n}, 153d59777) or filed ({$setc} family, p40). Needs a stderr-counting guard, not a compile sweep. A SECOND AXIS is recorded here and HAS NOW BEEN SWEPT (2026-09-05): a KNOWN directive carrying an unrecognised VALUE is invisible to this warning, which keys on the directive NAME. Censusing fpc 3.2.2's own sources for directive VALUES rather than names returned two real members on the first pass -- {$ALIGN ON}/{$ALIGN OFF} and {$ASMMODE gas}/{$STANDARD} -- both fixed. THE VALUE AXIS IS THEREFORE CLOSED FOR THE 46 NAMES THIS COMPILER DISPATCHES ON AND THE NAME AXIS IS NOT: the stderr-counting instrument this ticket asks for is still the open work."
 ---
 
 # A spurious unknown-directive warning cannot fail any test we have
@@ -30,6 +30,40 @@ found two real members, so this is not hypothetical:
   [[bug-p-macpas-conditional-directives-are-ignored-so-both-arms-compile]] (p40),
   because ignoring a conditional is a different and worse thing than ignoring a
   switch.
+
+## The value axis, swept 2026-09-05 — and what made it a separate axis
+
+The name census and the value census are **not the same instrument narrowed**:
+this warning fires on `command`, so for the ~46 names the dispatch knows, ANY
+value reaches an arm and whatever that arm does is final. `{$ALIGN POWER}` and
+`{$ALIGN ON}` were indistinguishable to every sweep in the tree.
+
+Method: walk `/usr/share/fpcsrc` (9197 sources, 129 distinct directive names)
+for `{$NAME ARG}`, group the ARGs by NAME, keep the names pxx dispatches on,
+then compile one probe per (name, value) under **both** compilers and compare
+the verdicts. Two members, both real code fpc accepts:
+
+- **`{$ALIGN ON}` / `{$ALIGN OFF}`** (5 uses) — `align` and `packrecords` share
+  one arm, so `align` inherited `packrecords`' value space. They are one
+  SETTING with two VALUE SPACES: fpc refuses `{$PACKRECORDS ON}` with *Illegal
+  record alignment specifier*, so widening both would have been wrong in the
+  other direction. Measured `{$ALIGN ON}` = `{$A+}` = 4 and `{$ALIGN OFF}` =
+  `{$A-}` = 1, not the default 8.
+- **`{$ASMMODE gas}` (17 uses) and `{$ASMMODE standard}`** — and the arm's
+  error message asserted a census that was wrong in BOTH directions: it named
+  `direct` as part of "the FPC set" and fpc 3.2.2 refuses it. Sweeping 16
+  candidate values gives fpc's actual set as `intel default att gas standard`.
+  Which syntax each selects was measured by assembling `movl $42, %eax` and
+  `mov eax, 42` under each rather than inferred from the name.
+
+Both fixed, with `test_directive_value_space_matches_fpc.pas` asserting
+RELATIONS between spellings so it carries no per-target width. Pin v403 refuses
+all three constructs.
+
+What the sweep does NOT cover, and why the name axis above is still open: it
+can only ask about names the dispatch already has. A directive fpc knows and
+pxx does not still reaches the terminal arm and warns, and that warning is
+still invisible to every PASS/FAIL instrument here.
 
 ## The instrument this wants
 

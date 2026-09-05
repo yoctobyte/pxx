@@ -1758,7 +1758,7 @@ end;
 
 procedure ProcessPasDirective;
 var command, name, fname, messageText: AnsiString; parent, cond: Boolean;
-    idx, msgSev: Integer; dsign: Char;
+    idx, msgSev: Integer; dsign, asign: Char;
 begin
   Inc(SrcPos); { dollar sign }
   ReadPasDirectiveWord(command);
@@ -2130,7 +2130,35 @@ begin
     end
     else if CaseEqual(command, 'packrecords') or CaseEqual(command, 'align') then
     begin
-      if CaseEqual(name, 'normal') or CaseEqual(name, 'default') then PackRecordsVal := 8
+      { {$ALIGN} and {$PACKRECORDS} are the same SETTING but NOT the same VALUE
+        SPACE, and this arm carried only PACKRECORDS'. Measured against fpc
+        3.2.2 on `record a: Byte; b: Int64; c: Byte end` -- sizeof and both
+        offsets -- 2026-09-05:
+
+          {$ALIGN ON}   16 4 12  = {$A+}     {$PACKRECORDS ON}   Error: Illegal
+          {$ALIGN OFF}  10 1  9  = {$A-}     {$PACKRECORDS OFF}  Error: Illegal
+
+        So ON/OFF belong to the ALIGN spelling ALONE -- widening both would
+        accept what fpc refuses on the one that is a pure number -- and they are
+        the {$A+}/{$A-} pair, 4 and 1, NOT the default 8. Read out of
+        PasAlignSwitchVal rather than re-typed, so the two copies of that
+        measured mapping cannot drift apart.
+
+        Found by censusing fpc 3.2.2's own sources for directive VALUES, the way
+        the {$A8} gap above was found by censusing NAMES: {$ALIGN ON}/{$ALIGN
+        OFF} are 5 uses there, and a directive pxx KNOWS carrying a value it
+        does not is structurally invisible to a name-keyed census. }
+      if CaseEqual(command, 'align') and
+         (CaseEqual(name, 'on') or CaseEqual(name, 'off')) then
+      begin
+        { A LOCAL sign, not dsign: dsign holds the +/- the SOURCE wrote, and
+          {$ALIGN ON} wrote neither. }
+        if CaseEqual(name, 'on') then asign := '+' else asign := '-';
+        if not PasAlignSwitchVal('a', asign, idx) then
+          ErrorAt(SrcLine, 'internal: {$A' + asign + '} has no mapping');
+        PackRecordsVal := idx;
+      end
+      else if CaseEqual(name, 'normal') or CaseEqual(name, 'default') then PackRecordsVal := 8
       else if CaseEqual(name, '1') then PackRecordsVal := 1
       else if CaseEqual(name, '2') then PackRecordsVal := 2
       else if CaseEqual(name, '4') then PackRecordsVal := 4
@@ -2156,7 +2184,10 @@ begin
         Accepting it as a synonym for the default would read the same today and
         be wrong the day a 16-aligned type appears; 16 stays correct then.
         feature-p-packrecords-c-directive }
-      else ErrorAt(SrcLine, 'invalid packrecords value: ' + name);
+      { Name the directive that was actually written: the two spellings share an
+        arm and 'invalid packrecords value' on a line that says {$ALIGN} sends
+        the reader to the wrong half of it. }
+      else ErrorAt(SrcLine, 'invalid ' + command + ' value: ' + name);
     end
     else if PasAlignSwitchVal(command, dsign, idx) then
       { {$A1}/{$A8}/{$A+}/{$A-} -- the same setting as {$PACKRECORDS}, under its
@@ -2384,13 +2415,31 @@ begin
         Checked in the LEXER rather than the parser because the mode is
         per-file and the directive takes effect at the point it is scanned --
         a parser-time global would hold whichever file was lexed last. }
+      { The accept-list below is MEASURED, not read off the documentation, and
+        the two disagree in both directions. Sweeping 16 candidate values
+        through fpc 3.2.2 on x86-64, 2026-09-05, the set it accepts is exactly
+
+          intel  default  att  gas  standard
+
+        and `direct` is NOT in it (`Illegal assembler style specified
+        "DIRECT"`), which is what the message here used to assert. Which SYNTAX
+        each selects was measured the same way rather than inferred from the
+        name, by assembling `movl $42, %eax` and `mov eax, 42` under each: gas
+        and standard both take AT&T and both refuse Intel, so they belong beside
+        att. `gas` is 17 uses in fpc's own sources; `standard` is 0, and is here
+        because the question asked was "what does fpc accept", not "what did the
+        corpus happen to contain".
+
+        `direct` stays accepted: us taking what fpc refuses is not a defect. The
+        message no longer claims it is fpc's. }
       if CaseEqual(name, 'intel') or CaseEqual(name, 'default') then
       begin PasAsmModeNonIntel := False; PasAsmModeName := name; end
-      else if CaseEqual(name, 'att') or CaseEqual(name, 'direct') then
+      else if CaseEqual(name, 'att') or CaseEqual(name, 'gas') or
+              CaseEqual(name, 'standard') or CaseEqual(name, 'direct') then
       begin PasAsmModeNonIntel := True; PasAsmModeName := name; end
       else
-        ErrorAt(SrcLine, 'unknown {$asmMode} value (intel, default, att and direct are the '
-              + 'FPC set): ' + name);
+        ErrorAt(SrcLine, 'unknown {$asmMode} value (fpc 3.2.2 takes intel, default, '
+              + 'att, gas and standard; pxx also takes direct): ' + name);
     end
     { THE TERMINAL ARM. Without it this chain silently discarded every directive
       outside its ~40 names -- no warning, no note, exit 0 -- so a misspelling
