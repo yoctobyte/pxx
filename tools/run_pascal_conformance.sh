@@ -56,6 +56,7 @@ while [ $# -gt 0 ]; do
     --shard)   SHARD_I="${2%%/*}"; SHARD_N="${2##*/}"; shift ;;
     --shard=*) v="${1#--shard=}"; SHARD_I="${v%%/*}"; SHARD_N="${v##*/}" ;;
     --all)     ALL=1 ;;
+    --retry-skips) RETRY_SKIPS=1 ;;   # re-attempt the skip list; see the summary note below
     --only)    ONLY="$2"; shift ;;
     --only=*)  ONLY="${1#--only=}" ;;
     --report)  REPORT="$2"; shift ;;   # per-test TSV: status name category tag reason
@@ -138,6 +139,25 @@ cat_of() {
   done
   printf 'other'
 }
+# Counter routing. Under --retry-skips a row that was skip-listed is being
+# attempted on purpose, so its outcome belongs in the retry tally and NOT in the
+# conformance verdict: a pass means the skip entry is STALE (burn it), a fail
+# means the gap is still there (expected, not a regression).
+bump_pass() {
+  if [ "${retrying:-0}" = "1" ]; then
+    stale=$((stale+1)); stale_list="$stale_list $name"
+  else
+    pass=$((pass+1))
+  fi
+}
+bump_fail() {  # bump_fail TAG
+  if [ "${retrying:-0}" = "1" ]; then
+    stillgap=$((stillgap+1))
+  else
+    fail=$((fail+1)); failed="$failed $1"
+  fi
+}
+
 emit() {  # emit STATUS NAME REASON
   [ -n "$REPORT" ] || return 0
   _st="$1"; _nm="$2"; _rs="$3"; _tag="-"
@@ -156,6 +176,7 @@ if [ -n "$REPORT" ]; then
 fi
 
 pass=0; fail=0; skip=0; auto=0; failed=""; idx=-1
+retried=0; stale=0; stillgap=0; stale_list=""; retrying=0   # --retry-skips tallies (set -u is on)
 
 for name in $(list_tests); do
   src="$SUITE/$name"
@@ -194,11 +215,29 @@ EOF
   if [ -f "$SKIPLIST" ]; then
     reason="$(awk -v n="$name" '$1==n { $1=""; sub(/^[ \t]+/,""); print; exit }' "$SKIPLIST")"
   fi
+  # --retry-skips: attempt the skipped rows instead of trusting the file.
+  # A SKIP REASON IS A DATED CLAIM, not a property of the compiler. Entries are
+  # written when a row is first triaged and nothing re-reads them, so an entry
+  # outlives the gap it describes -- one reason line in pxx.skip says so in its
+  # own text ("all are fixed, and unskipping shows `object constructor init` is
+  # what is left"). Burning down a skip list has no instrument without this.
+  #
+  # Retried rows are counted SEPARATELY and the label changes, because the
+  # normal pass/fail counters are the conformance verdict and a retry run is not
+  # one: it deliberately attempts rows the suite has agreed not to judge, so its
+  # failures are expected and its passes are the finding. Mixing them would let
+  # a retry run be quoted as "347 pass" or as a regression, and neither is true.
+  retrying=0
   if [ -n "$reason" ]; then
-    skip=$((skip+1))
-    emit skip "$name" "$reason"
-    echo "SKIP $name — $reason"
-    continue
+    if [ "${RETRY_SKIPS:-0}" = "1" ]; then
+      retrying=1
+      retried=$((retried+1))
+    else
+      skip=$((skip+1))
+      emit skip "$name" "$reason"
+      echo "SKIP $name — $reason"
+      continue
+    fi
   fi
 
   # ---- compile ----
@@ -219,9 +258,9 @@ EOF
 
   if [ "$expect_fail" = "1" ]; then
     if [ "$compile_ok" != "0" ]; then
-      pass=$((pass+1)); emit pass "$name" ""
+      bump_pass; emit pass "$name" ""
     else
-      fail=$((fail+1)); failed="$failed $name(accepted-invalid)"
+      bump_fail "$name(accepted-invalid)"
       emit fail "$name" "accepted-invalid: %FAIL test compiled"
       echo "FAIL $name — %FAIL test compiled (must be rejected)"
     fi
@@ -229,27 +268,36 @@ EOF
   fi
 
   if [ "$compile_ok" != "0" ]; then
-    fail=$((fail+1)); failed="$failed $name(compile)"
+    bump_fail "$name(compile)"
     emit fail "$name" "compile error"
     echo "FAIL $name — compile error:"
     sed -n '1,4p' "$WORK/cc.log" | sed 's/^/    /'
     continue
   fi
-  [ "$norun" = "1" ] && { pass=$((pass+1)); emit pass "$name" ""; continue; }
+  [ "$norun" = "1" ] && { bump_pass; emit pass "$name" ""; continue; }
 
   # ---- run ----
   ( cd "$WORK" && timeout "$TIMEOUT_S" "$bin" ) > "$WORK/out.txt" 2>&1
   rc=$?
   if [ "$rc" != "$want_rc" ]; then
-    fail=$((fail+1)); failed="$failed $name(exit=$rc)"
+    bump_fail "$name(exit=$rc)"
     emit fail "$name" "runtime: exit code $rc (want $want_rc)"
     echo "FAIL $name — exit code $rc (want $want_rc)"
     sed -n '1,4p' "$WORK/out.txt" | sed 's/^/    /'
     continue
   fi
-  pass=$((pass+1)); emit pass "$name" ""
+  bump_pass; emit pass "$name" ""
 done
 
+if [ "${RETRY_SKIPS:-0}" = "1" ]; then
+  # A DIFFERENT LABEL ON PURPOSE. This run attempted rows the suite has agreed
+  # not to judge, so it is not a conformance result and must not be quotable as
+  # one -- neither as a pass count nor as a regression.
+  echo "test-pascal-conformance-retry: $retried skip-listed row(s) re-attempted -- $stale now PASS (stale skip entries), $stillgap still failing (gap confirmed)"
+  [ -n "$stale_list" ] && echo "test-pascal-conformance-retry: STALE SKIP ENTRIES:$stale_list"
+  echo "test-pascal-conformance-retry: this is NOT the conformance verdict; run without --retry-skips for that."
+  exit 0
+fi
 echo "$LABEL: $pass pass, $fail fail, $skip skip, $auto auto-gated (of $((pass+fail+skip+auto)))"
 if [ "$fail" != "0" ]; then
   echo "$LABEL: FAILURES:$failed"
