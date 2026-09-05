@@ -119,3 +119,39 @@ than being settled here:
 
 The thing NOT to do is leave it at prio 30 in the ranker, where it is neither
 chosen nor scheduled.
+
+## 2026-09-05 (frankS) — there is a standing ruling on this exact family
+
+frankD offered this row as a **rerating** candidate rather than a fix, on the
+CLAUDE.md rule that us accepting what FPC rejects is not a defect. The
+conformance suite has already decided the neighbouring cases, and the entries sit
+two lines from where these would go in `test/pascal-conformance/pxx.skip`:
+
+```
+tgeneric20.pp  wontfix: dialect-pass — generic method impl without <T> marker —
+               PXX's generics surface deliberately accepts the stripped form
+               (3d71edcf); not a bug
+tgeneric30.pp  wontfix: dialect-pass — mode-delphi generic method impl without
+               <T> — PXX's Delphi-generics rewriter deliberately accepts the
+               bare name (3d71edcf); not a bug
+```
+
+Both say the same thing: **the implementation side of a generic routine is not
+required to echo the interface's type-parameter spelling.** `<T>` declared and
+`<S>` implemented is that rule with a rename instead of an omission, so the
+default disposition is `wontfix: dialect-pass` — which also makes the 347/2 run
+read true, because a `dialect-pass` row is excluded from the adjusted pass rate
+instead of sitting red forever.
+
+**One measurement is owed before that is written down.** The suite's taxonomy has
+a second bucket, `gap: accepts-invalid` (a real missing diagnostic), and the
+discriminator is whether the acceptance can mislead rather than merely be lax.
+Renaming one parameter cannot. **Swapping two can**: `generic procedure Test<T,S>`
+declared against `generic procedure Test<S,T>` implemented reads as a deliberate
+mapping and is positional, so a reader is told something false by their own
+source. If pxx accepts THAT silently it is `accepts-invalid`, not `dialect-pass`,
+and the fix is a diagnostic rather than a rerating.
+
+Not yet measured: the pin cannot answer it (it refuses `generic procedure`
+outright — the same accidental-%FAIL trap this ticket already documents), so it
+needs a HEAD build. Do the swap probe first; the disposition follows from it.

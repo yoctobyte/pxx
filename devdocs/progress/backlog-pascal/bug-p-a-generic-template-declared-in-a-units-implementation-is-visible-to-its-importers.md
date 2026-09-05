@@ -124,3 +124,42 @@ Not folded into
 that one was a same-day regression on the SEAM between two visibility checks and
 is fixed. This one is older than both and is about a table that has no
 visibility channel at all.
+
+## 2026-09-05 (frankS) — what the leak actually costs, measured against the pin
+
+frankD raised the right objection: this is "pxx accepts what FPC rejects", which
+CLAUDE.md ranks **not a defect**, so it may deserve rerating rather than fixing.
+Two measurements, and they do not both go frankD's way.
+
+**The harm that justified the sibling ticket does NOT reproduce here.**
+`bug-p-a-units-implementation-section-is-visible-to-its-importers` (done, frankD)
+was worth fixing because a leaked private *alias* could re-type a builtin —
+`FindTypeAlias` runs ahead of the builtin name chain. Templates have no such
+path. Two units each declaring a private `TPriv<T>` with *different fields*
+(`ua`: `V,W`; `ub`: `Q`) each resolve their own correctly under the pin, printing
+`16 7`, matching FPC exactly. **No own-unit capture. I looked for it.**
+
+**The residual is order-dependent type identity, and it is a wrong observable,
+not an acceptance difference.** An importer that names the leaked `TPriv` gets
+**ub's** — the later-registered unit's — and `ua`'s is unreachable:
+
+| program (`uses ua, ub`) | pxx at the pin | FPC 3.2.2 |
+| --- | --- | --- |
+| `q.Q := 9` | compiles, prints `LEAKED Q=9` | `Identifier not found "TPriv"` |
+| `q.V := 9; q.W := 1` | `"W": no such member on this record/class` | same refusal |
+
+The two rows discriminate: the name binds to one specific unit's template and the
+other's fields are gone. So `TPriv` in the importer means a different record type
+depending on the **order of the uses clause** — silently, with no diagnostic.
+
+**Why that still argues for the fix, on CLAUDE.md's own terms and not on parity.**
+A program naming another unit's private template has made a presumed error, so
+FPC's answer is not a specification here. But the same section says: absent real
+source that wants the behaviour, **prefer the answer that leaves the mistake
+visible.** Accepting it hides the mistake behind a uses-clause coin flip;
+refusing it (`generic template THidden not found`) leaves it visible. That is a
+weaker and more honest claim than "this is a bug", and it is the one this ticket
+should be judged on.
+
+Rerating note: the *prio* probably should come down — nothing real is known to
+depend on this. The *fix* is still the right answer at whatever prio it lands.
