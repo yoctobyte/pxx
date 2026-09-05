@@ -42,6 +42,11 @@ Its own comment: *"ARMED AGAINST THE MERGE-BASE, not against HEAD."* An adjacent
 check names the divergence as deliberate: *"CLAUDE.md's rule that quick's canary
 only fires on an UNCOMMITTED tree is a footgun worth not copying."*
 
+**Three independent observations, and the first two are predictions that
+FAILED.** frankS and frankA each predicted a SKIP on a clean tree and each
+reported the prediction failing rather than quietly dropping the caveat — which
+is the only reason this surfaced at all.
+
 **Two sources, failing differently.** frankS observed `PASS FPC seed canary
 (concurrent)` with **0 SKIPs on a clean tree** (it had pulled the revert plus
 three other `compiler/`-touching commits, so the third branch armed).
@@ -55,7 +60,23 @@ and nobody complains. Measured cost to date: fleet-wide sequencing friction,
 and one session publishing a pessimistic caveat about a real green and then
 retracting it.
 
-**Do not rank this as a near-miss.** No defect reached anyone through it.
+**Do not rank this as a near-miss.** No defect reached anyone through it, and
+no lane has been measured to under-gate because of it.
+
+**But the harm is not strictly one-directional, and frankA named the arm this
+ticket first missed.** Two sessions (frankS, frankA) independently predicted
+their clean-tree gate would SKIP the canary and hedged their own greens as
+narrower than they were — **the optimistic direction, and harmless.** The same
+belief read the other way is not: *a session that believes the canary is dead on
+a clean tree may gate after committing and think it got no FPC coverage when it
+did — or skip a gate it has concluded is worthless.* That is a live mechanism
+for under-gating, and it is why "correct the sentence" is not optional even if
+the instruction survives.
+
+**No instance of that arm has been observed.** Both sessions checked their
+compiler commits had `compiler/**` genuinely uncommitted, so the canary was live
+for the reason each stated even though the reason was not the whole rule. Rank
+the ticket on the friction, but do not record the hazard as one-sided.
 
 ## Options
 
