@@ -7,7 +7,7 @@ status: open
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
-summary: "pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler — an arm32 build of src/sys/statfs.c compiled cleanly and called syscall number 0. Fixing it also requires filling the crtl gaps it is currently papering over (locale.h has no LC_COLLATE/LC_CTYPE/LC_MONETARY/LC_TIME, which the lua build hits today)."
+summary: "pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler. THE CENSUS THIS TICKET ASKED FOR IS DONE (2026-09-05, compiler 9048792b2dc3): 10 warnings total across conformance 220, lua, the sqlite amalgamation and 625 test/*.c, and ALL TEN are deliberate test fixtures — ZERO real gaps. THE PREREQUISITE NAMED HERE IS ALSO DONE: locale.h now defines all six LC_* categories and the lua build is clean. So the remaining work is not the corpus, it is about five fixtures that exist to exercise the leniency, plus preserving the deliberate `__`-prefix carve-out. NOT re-measured at HEAD: busybox — five attempts recorded below, each failing differently."
 ---
 
 # An undeclared identifier is a warning as a value and an error as a call
@@ -174,3 +174,148 @@ this ticket's summary — fill the crtl gaps first — has a corollary worth
 stating: **the gaps are filled by writing headers, and the verification of those
 headers is itself subject to the bug.** Every crtl header landed while this is
 open needs a value-level oracle, not a compiles-cleanly check.
+
+# THE CENSUS THIS TICKET ASKS FOR, RUN 2026-09-05 (frankC), compiler `9048792b2dc3`
+
+The ticket says twice, correctly, that the census is the first task and that
+nobody knows the size of the job. It is now measured for everything except
+busybox, which a peer had already censused (see below).
+
+**Total `used as value` warnings: 10. Real gaps found: ZERO.**
+
+Instrument: every compile below keeps stderr, which is the whole point — the
+ticket's second census is about the 161 Makefile rows that discard it. Script
+kept at the session scratchpad; it is six `pascal26` invocations and a
+`grep -o | sort | uniq -c`.
+
+| corpus | compiles | `used as value` |
+| --- | --- | --- |
+| c-testsuite conformance | 220 programs, 220 pass | 0 |
+| lua 5.4 core (`test/lua/runner.c`) | builds | **0** |
+| sqlite amalgamation (one 9MB TU) | builds | 0 |
+| `test/c_crtl_uapi_*.c` | 4 | 0 |
+| every other `test/*.c` | 621 | 10 |
+
+559 `ok:` lines in the captured log, so the instrument compiled what it claims
+to have compiled rather than failing quietly.
+
+## All ten are deliberate fixtures, named
+
+```
+      2 offset
+      1 undeclared_cmp
+      1 pxx_no_such_type_t
+      1 UNMODELLED_MACRO_D
+      1 UNMODELLED_MACRO_C
+      1 UNMODELLED_MACRO_B
+      1 UNMODELLED_MACRO_A
+      1 SELF_REF_MACRO
+      1 FORCED_BY_MINUS_INCLUDE
+```
+
+`pxx_no_such_type_t` and both `offset` lines are ONE fixture:
+`test/c_ir_unsupported_reports_the_real_line.c` writes
+`pxx_no_such_type_t offset = 0;`, so the undeclared TYPE makes `offset`
+undeclared too. That file's header says it chose a name "crtl will never grow"
+precisely because its previous fixture (`loff_t`) got fixed underneath it.
+
+`SELF_REF_MACRO` is `test/macro_soup_lib.c`'s `#define SELF_REF_MACRO
+SELF_REF_MACRO + 1`, whose stated purpose is "should not cause compiler
+crash/infinite loop" — about not hanging, not about accepting.
+
+## THE PREREQUISITE THIS TICKET NAMES IS DONE, AND NOT BY ME
+
+The summary says the fix "also requires filling the crtl gaps it is currently
+papering over (locale.h has no LC_COLLATE/LC_CTYPE/LC_MONETARY/LC_TIME, which
+the lua build hits today)". **`lib/crtl/include/locale.h` now defines all six
+categories** with glibc's numbers, and its own header comment documents exactly
+this ticket's complaint as the reason. The lua runner builds with **zero**
+`used as value` warnings. That blocker is retired.
+
+## What this census does NOT cover, stated so nobody reads it as total
+
+- **busybox. I TRIED TO RE-MEASURE IT AT HEAD AND FAILED; the number below is
+  still franks-ab's, taken at pin v403 with a different compiler.** Their census
+  found 18 constants across 11 TUs and the gaps were filled in `bb0c9c1ff`,
+  which reports all 39 warnings gone. That claim is NOT re-verified at
+  `9048792b2dc3`. Five attempts, each failing differently, recorded so the next
+  person does not repeat them:
+    1. unity build, 10 applets — gcc oracle refused: `sv.c:520: lvalue required
+       as unary '&' operand`. The script builds the ORACLE first and exits, so
+       pxx never ran.
+    2. unity build without `sv` — gcc refused again, and this one is a genuine
+       unity hazard rather than a bad applet: `traceroute.c`'s
+       `#define port (G.port)` collides with a `port` PARAMETER in
+       `udhcp/socket.c`. Those two applets cannot share a translation unit.
+    3. `--separate`, 10 applets — GREEN, 67 objects, byte-identical to the gcc
+       oracle over 45 cases. A real run. But the summary log is ten lines and
+       holds no compiler output, so grepping it for `used as value` counted a
+       file that never contained any.
+    4. `--separate --keep` (per-TU logs land in `$WORK/tu/*.log` and survive
+       only with `--keep`) — killed by the OOM killer.
+    5. the same, narrowed to `arping traceroute cat` — killed again. 42 GB were
+       free when measured a minute earlier, so this is transient contention
+       from peers building, not a standing shortage. Stopped there rather than
+       keep hammering a shared box.
+  **The instrument for attempt 6 is `--separate --keep`, then
+  `grep -c 'used as value' "$WORK/build_x86_64.log"` with
+  `grep -c 'ok:'` beside it** — and pick an applet set that does not put
+  traceroute and udhcp in one TU.
+- cjson, quickjs, zlib, duktape, fgl, uforth, chess-perft: **not present** in
+  `library_candidates/` on this box, so they were not compiled and not counted.
+- **Cross targets.** Every number above is native x86-64. The census counts
+  DIAGNOSTICS, which are emitted by the frontend before any backend runs, so a
+  cross target cannot produce a warning this run did not — but that is an
+  argument, not a measurement, and it is written here as one.
+
+## What this means for the fix
+
+The blast radius is now known and it is small: promoting the warning to an error
+breaks roughly five test fixtures that exist to exercise the leniency, and
+nothing else in the corpora available here.
+
+**And gcc agrees on the fixtures.** Measured:
+
+```c
+#define SELF_REF_MACRO SELF_REF_MACRO + 1
+int main(void) { int d = SELF_REF_MACRO; return d; }
+```
+```
+gcc -std=gnu99: error: 'SELF_REF_MACRO' undeclared (first use in this function)
+```
+
+So the leniency's own stated justification in `cparser.inc` — "a best-effort
+leniency for tokens a self-referential / unmodelled macro leaves behind" — is
+not a behaviour gcc supports for the non-reserved case. The `__`-prefixed
+carve-out beside it is a different matter and must survive any flip: that one
+covers predefined-but-unmodelled `__LINE__`/`__FILE__`/`__func__`-family names
+and is deliberately silent.
+
+**The remaining work is therefore the fixtures, not the corpus** — each of the
+five needs to say what it is really testing (that the compiler does not hang;
+that IR_UNSUPPORTED names the right line) in a way that survives the identifier
+becoming an error.
+
+## THE BUSYBOX RE-MEASUREMENT REPORTED ZERO BEFORE IT RAN, AND THAT IS THE LESSON
+
+The first busybox census run printed `used as value: 0` across what looked like
+68 translation units. It had compiled **nothing**. `busybox_diff.sh` builds the
+gcc ORACLE first and exits if that fails, and gcc refused the unity build:
+
+```
+./runit/sv.c:520:35: error: lvalue required as unary '&' operand
+busybox-diff: gcc could NOT build the unity -- no oracle, so no result
+```
+
+The script said so plainly, in its own log, and the grep for `used as value`
+still answered `0` — a true statement about a file containing no pxx output at
+all. The discriminator was counting `ok:` lines, pxx's own per-object success
+marker: **0**.
+
+This is "a broken instrument almost always reports the NULL result" landing on
+the census whose entire purpose is to count a null result. The applet list was
+the fault (`sv` in a unity build), not the compiler, and the re-run drops it.
+
+**Any future run of this census must assert that the subject compiled before
+trusting a zero** — `grep -c 'ok:'` beside `grep -c 'used as value'`, and the
+first number is the precondition for the second meaning anything.
