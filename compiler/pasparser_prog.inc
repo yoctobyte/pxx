@@ -1036,13 +1036,34 @@ begin
   { wasm32: the sys* file intrinsics have no instruction to lower to on this
     target and reach WASI through compiler/builtin/wasibackend.pas instead --
     pulled here, on demand, so that a wasm module which never touches a file
-    does not import the preopen functions. See the injection site below. The
-    five are contiguous in the token enum (defs.inc:1444). }
+    does not import the preopen functions. See the injection site below.
+
+    A NAME scan, like the LoadFile one below it. This used to be a RANGE test
+    over the token enum -- `Kind >= tkSysOpen` and `<= tkSysFchmod` -- which
+    depended on the five staying adjacent AND on the lexer still emitting those
+    kinds. It stopped doing the second the moment the five became soft keywords
+    (bug-p-sysopen-intrinsic-shadows-a-user-function-name): every token is
+    tkIdent now, the range matches nothing, and the failure is SILENT -- a wasm
+    module that calls SysOpen simply never imports the preopens and traps at
+    run time on a host function that was never declared. Nothing in the quick
+    tier compiles for wasm32, so this is exactly the shape the fixedpoint
+    cannot see.
+
+    Over-pulling is the safe direction and is what the LoadFile arm already
+    accepts: a user routine named SysClose, followed by `(`, pulls a unit the
+    module does not need. The alternative -- resolving the shadow here -- means
+    a symbol table that does not exist yet at token-scan time. }
   if TargetArch = TARGET_WASM32 then
   begin
     for i := 0 to TokCount - 1 do
     begin
-      if (Tokens[i].Kind >= tkSysOpen) and (Tokens[i].Kind <= tkSysFchmod) then
+      if (Tokens[i].Kind = tkIdent) and
+         (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
+         (((Tokens[i].SLen = 7) and (CaseEqual(GetTokenStr(i), 'SysOpen') or
+                                     CaseEqual(GetTokenStr(i), 'SysRead'))) or
+          ((Tokens[i].SLen = 8) and (CaseEqual(GetTokenStr(i), 'SysWrite') or
+                                     CaseEqual(GetTokenStr(i), 'SysClose'))) or
+          ((Tokens[i].SLen = 9) and CaseEqual(GetTokenStr(i), 'SysFchmod'))) then
       begin needsWasiFile := True; Break; end;
       { LoadFile is a builtin spelled as an identifier, not a token, so it needs
         the `math`-style name scan. Require the '(' for the same reason `math`

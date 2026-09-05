@@ -28,9 +28,13 @@
   text, so name capture is unchanged. }
 function IsMemberNameTok: Boolean;
 begin
+  { ParamCount/ParamStr are no longer here: they lex as tkIdent since
+    bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names,
+    so the first arm already covers the FPC-custapp member-name case this list
+    was widened for -- and covers it in every OTHER name position too, which a
+    per-site token list could never do. }
   IsMemberNameTok := (CurTok.Kind = tkIdent) or (CurTok.Kind = tkRead) or
-    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln) or
-    (CurTok.Kind = tkArgCount) or (CurTok.Kind = tkArgStr);   { ParamCount/ParamStr as member names (FPC custapp) }
+    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln);
 end;
 
 { Predefined routines are not reserved words. In declaration-name position they
@@ -54,7 +58,7 @@ end;
 function IsMethodNameKind(k: TTokenKind): Boolean;
 begin
   IsMethodNameKind := k in [tkIdent, tkRead, tkwrite, tkReadln, tkwriteln,
-                            tkArgCount, tkArgStr, tkDefault,
+                            tkDefault,
                             tkInteger_T, tkBoolean_T, tkChar_T, tkString_T,
                             tkReal_T, tkLongWord_T, tkSingle_T, tkDouble_T,
                             tkExtended_T];
@@ -101,13 +105,11 @@ begin
     IsDeclNameTok := True;
     Exit;
   end;
-  case CurTok.Kind of
-    tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
-    tkArgCount, tkArgStr:
-      IsDeclNameTok := True;
-  else
-    IsDeclNameTok := False;
-  end;
+  { The five sys* spellings used to need their own arm here. They lex as
+    tkIdent since bug-p-sysopen-intrinsic-shadows-a-user-function-name, so
+    IsMemberNameTok above already admits them -- in every name position, not
+    just the parameter lists this predicate happens to guard. }
+  IsDeclNameTok := False;
 end;
 
 { Resolve a (possibly dotted) unit qualifier at the front of a reference:

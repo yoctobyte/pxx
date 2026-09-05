@@ -5577,71 +5577,9 @@ begin
       ASTLeft[node] := valNode;
     end;
 
-    tkSyswrite:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
-      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-      valNode := ParseLValueAST(argIdx, identTokIdx);
-      if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
-      Expect(tkComma, ',');
 
-      ASTRight[argSeq] := AllocNode(AN_ARG);
-      ASTLeft[ASTRight[argSeq]] := valNode;
 
-      ParseExpr;
-      ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
-      ASTLeft[ASTRight[ASTRight[argSeq]]] := CurASTNode;
-      Expect(tkRParen, ')');
 
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := -Ord(tkSyswrite);
-      ASTLeft[node] := argSeq;
-    end;
-
-    tkSysClose:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr; Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := -Ord(tkSysClose);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      ASTLeft[node] := argSeq;
-    end;
-
-    tkSysFchmod:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
-      ParseExpr;
-      ASTRight[argSeq] := AllocNode(AN_ARG);
-      ASTLeft[ASTRight[argSeq]] := CurASTNode;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := -Ord(tkSysFchmod);
-      ASTLeft[node] := argSeq;
-    end;
-
-    tkArgStr:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
-      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-      valNode := ParseLValueAST(argIdx, identTokIdx);
-      if (argIdx < 0) or
-         (not (TypeIsFrozenString(Syms[argIdx].TypeKind) or
-               (Syms[argIdx].TypeKind = tyAnsiString))) then Error('ArgStr: not a string var');
-      Expect(tkRParen, ')');
-
-      ASTRight[argSeq] := AllocNode(AN_ARG);
-      ASTLeft[ASTRight[argSeq]] := valNode;
-
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := -Ord(tkArgStr);
-      ASTLeft[node] := argSeq;
-    end;
 
     tkIf:     begin Next; node := ParseIfStatementAST;    end;
     tkWhile:  begin Next; node := ParseWhileStatementAST; end;
@@ -6179,6 +6117,91 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := opNode;
         end;
+      end
+      else if CaseEqual(name, 'SysWrite') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
+        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(argIdx, identTokIdx);
+        if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
+        Expect(tkComma, ',');
+
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := valNode;
+
+        ParseExpr;
+        ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[ASTRight[argSeq]]] := CurASTNode;
+        Expect(tkRParen, ')');
+
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkSyswrite);
+        ASTLeft[node] := argSeq;
+      end
+      else if CaseEqual(name, 'SysClose') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkSysClose);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+      end
+      else if CaseEqual(name, 'SysFchmod') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
+        ParseExpr;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := CurASTNode;
+        Expect(tkRParen, ')');
+
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkSysFchmod);
+        ASTLeft[node] := argSeq;
+      end
+      else if (CaseEqual(name, 'ParamStr') or CaseEqual(name, 'ArgStr')) and
+              SoftIntrinsicOpen(name, qUnit) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { The 2-arg STATEMENT form ArgStr(i, dest) -- the expression form
+          ParamStr(i) is in ParseFactorCore. Soft keyword since
+          bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names:
+          it lexed as tkArgStr, so the spelling could not be a name at all. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
+        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(argIdx, identTokIdx);
+        if (argIdx < 0) or
+           (not (TypeIsFrozenString(Syms[argIdx].TypeKind) or
+                 (Syms[argIdx].TypeKind = tyAnsiString))) then Error('ArgStr: not a string var');
+        Expect(tkRParen, ')');
+
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := valNode;
+
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkArgStr);
+        ASTLeft[node] := argSeq;
       end
       else if CaseEqual(name, 'FreeMem') and SoftIntrinsicOpenSym(name, qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then

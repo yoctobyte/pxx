@@ -2,12 +2,13 @@
 prio: 55
 track: P
 summary: "ONE CAUSE, NINE SPELLINGS, and it is not the one either existing ticket describes. `Read`, `Write`, `ReadLn`, `WriteLn`, `SysOpen`, `SysRead`, `SysWrite`, `SysClose`, `SysFchmod`, `ArgCount`/`ParamCount`, `ArgStr`/`ParamStr` are HARD keywords: the lexer maps each spelling to a dedicated token, so `procedure Write;` fails at the DECLARATION with `expected name` and the name is unusable anywhere. Every other intrinsic (Str, Val, New, Length, SetLength, Reset, Rewrite, Halt, Inc, Ord, Chr, Round, Copy, Insert, Delete, Move, GetMem...) declares fine -- measured across 37 spellings, exactly these fail -- which is what proves the mechanism is the dedicated token and not intrinsic-ness. fpc ACCEPTS all of them as user names. THE FIX SHAPE IS ALREADY IN-TREE AND DOCUMENTED: ord/chr/low/high/length were converted to SOFT keywords under bug-hard-keyword-intrinsics-block-identifier-use -- they lex as tkIdent, the parser dispatches on the NAME, and the tk enum members survive only as -Ord(tkXxx) call ids. The shadow infrastructure exists too: SoftIntrinsicOpen/SoftIntrinsicOpenSym (symtab.inc) with the `System.X` escape hatch. DO NOT START THIS WITHOUT READING THE BLAST RADIUS SECTION -- five files, a token-ORDER dependency, and a second frontend, which is why it is filed rather than done."
+owner: frankD
 ---
 
 # Nine intrinsic spellings are hard keywords, so none can be a user name
 
 - **Type:** bug — Track P (Pascal frontend); the lexer half is shared with A
-- **Status:** backlog, unclaimed
+- **Status:** working
 - **Found:** 2026-09-05 (frankB), from frankS's reading during the P staleness pass
 
 ## What was measured
@@ -116,3 +117,67 @@ variadic form, and no overlap with frankH. Doing those alone would close
 `ParamStr`/`ParamCount` shadowing, leaving the four write/read spellings to ride
 with writeln-as-library. The `pasparser_prog.inc` range test still has to be
 handled either way.
+
+## DONE 2026-09-05 (frankD) — the seven separable spellings, and three corrections to this ticket
+
+`SysOpen`, `SysRead`, `SysWrite`, `SysClose`, `SysFchmod`, `ArgCount`/`ParamCount`
+and `ArgStr`/`ParamStr` are soft keywords. All seven declare as routine,
+parameter, local, field and method names; the intrinsics are unchanged when
+unshadowed; a user routine or in-scope symbol shadows them and `System.X`
+reaches the intrinsic anyway. `test/test_soft_keyword_sysargs.pas`, 20 rows,
+wired at `Makefile:7994`; it refuses on pin v404 at the first declaration, which
+is its positive control. Gate GREEN with the FPC seed canary running.
+
+**Read/Write/ReadLn/WriteLn are NOT done** and stay with `feature-writeln-as-library`
+phase 2 (frankH) exactly as the split above proposed. They are the negative
+control in the probe: still `expected name`, deliberately.
+
+### Correction 1 — the blast radius did not include the codegens, and does not include NilPy
+
+The five files list reads as if the token kinds were consumed widely. They are
+not: **every codegen site keys on `-Ord(tkXxx)` as an intrinsic CALL id, never on
+a token kind**, so `ir_codegen*.inc`, `ir.inc` and `wasmenc.inc` needed zero
+edits across all seven targets. Only the parser and the lexer key on kind.
+
+**And `pyparser.inc`'s five arms are DEAD CODE, not a second copy to keep in
+sync.** NilPy's lexer cannot produce those kinds. Proven two ways: statically —
+`pylexer.inc` has exactly one variable-kind emit site, `k := PyKeyword(s)`, and
+`PyKeyword`'s table yields only tkIdent/tkIf/tkIn/tkOr/tkFunction/tkAnd/tkNot/
+tkTry/tkElse/tkTrue/tkNil/tkWhile/tkFalse/tkBreak/tkClass/tkRaise/tkExit/
+tkExcept/tkUses/tkFinally, every other `PyEmitToken` call passing a literal `tk`
+from a set containing none of ours; and dynamically — a NilPy program declaring
+`paramstr` and `paramcount` compiles and binds the user's names. **Left in
+place**: deleting another frontend's code from a P ticket is the wrong lane.
+Track N should remove `pyparser.inc:44020, 44040, 44063, 44086, 44107`.
+
+### Correction 2 — `pasparser_prog.inc` was the real hazard, and it fails SILENTLY
+
+The ticket flagged the range test for its ORDER dependency. The order was never
+the problem: **the test stops matching anything at all** the moment the kinds
+stop being emitted, and nothing says so. Measured by reverting just that hunk
+against the finished lexer: a wasm32 program calling `SysOpen` compiled `ok:` and
+produced **0 WASI file symbols in 71,461 bytes** — byte-for-byte the size of a
+program that never touches a file — so the module would have trapped at run time
+on a host function that was never imported. With the name scan it is 8 symbols
+and 81,752 bytes. Nothing in the quick tier compiles for wasm32; the fixedpoint
+cannot see it. Now a name scan on the `LoadFile` model directly below it.
+
+### Correction 3 — the hard-keyword-ness was already inconsistent
+
+The lexer matched only two casings per spelling (`sysopen` and `SysOpen`), so
+`SYSOPEN` and `Sysopen` already lexed as identifiers and already declared fine.
+The refusal was case-dependent, which no ticket mentioned.
+
+### Not fixed, noted: `SysOpen`/`SysRead` have no STATEMENT form
+
+`SysRead(fd, buf, 4);` as a statement is refused — before this change too (pin
+v404: `a statement cannot start with 'SysRead'`; now: `undefined variable
+(SysRead)`, which is the truthful answer for an unbound soft name). `SysWrite`,
+`SysClose` and `SysFchmod` have statement arms and `SysOpen`/`SysRead` do not.
+Pre-existing asymmetry, out of scope here, and a separate three-line fix.
+
+### Also found, filed elsewhere
+
+`bug-b-copy-cannot-compile-at-all-on-the-frozen-string-path` — any use of `Copy`
+refuses under `-uPXX_MANAGED_STRING`. Nothing to do with this change; the pin
+fails identically.

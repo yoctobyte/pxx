@@ -1943,147 +1943,6 @@ begin
         end;
       end;
     end;
-    tkSysOpen:
-    begin
-      Next; Expect(tkLParen, '(');
-      if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or ((not TypeIsFrozenString(Syms[idx].TypeKind)) and
-                       (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
-      Expect(tkComma, ',');
-
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-      ParseExpr;
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode;
-      ASTRight[argSeq] := argSeq2;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkSysRead:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
-      Expect(tkComma, ',');
-
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
-      ASTRight[argSeq] := argSeq2;
-      ParseExpr;
-      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
-      ASTRight[argSeq2] := argSeq3;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkSyswrite:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
-      Expect(tkComma, ',');
-
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
-      ASTRight[argSeq] := argSeq2;
-      ParseExpr;
-      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
-      ASTRight[argSeq2] := argSeq3;
-      Expect(tkRParen, ')');
-
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
-    tkArgCount:
-    begin
-      Next;
-      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount);
-      { ParamCount is an Integer, and the node has to SAY so. Left unset it
-        defaulted to tyUnknown, and anything that materialises the value into a
-        hidden temp copied that: `for i := 0 to ParamCount do` gave the loop
-        LIMIT temp no type. x86-64 and the other backends do not inspect it and
-        happened to work; i386 checks every symbol it touches, so it refused —
-        which is why `uses pylib` could not be built for i386 AT ALL (pylib's
-        pysys_argv is exactly this loop), taking base64, http and
-        examples/net/httpdemo.pas with it, and every NilPy program besides.
-        The tkArgStr arm below never had the bug because it allocates its
-        destination temp explicitly typed. Hoisting the limit into a variable,
-        or using a USER function as the limit, both worked — that pair is what
-        localised it here rather than to the for-loop lowering.
-        bug-a-paramcount-node-has-no-type-so-i386-refuses-any-pylib-user }
-      ASTTk[node] := Ord(tyInteger);
-      CurASTNode := node;
-    end;
-    tkArgStr:
-    begin
-      { Inline ParamStr(i): the 2-arg ArgStr(i, var) codegen needs a destination
-        string. Synthesize a hidden frozen-string temp, copy argv[i] into it
-        (EmitArgvToString — a frozen buffer write, no managed release, so the temp
-        needs no nil-init), and yield the temp. Lets ParamStr(i) be used directly
-        in any expression (comparison, argument), not only as an assignment RHS.
-        The temp is tyString (frozen) even under managed strings, matching the
-        `String` keyword temp above. }
-      Next; Expect(tkLParen, '(');
-      ParseExpr;                            { index expression }
-      Expect(tkRParen, ')');
-      op := AllocVar('', tyString);
-      { 2-arg ArgStr call: arg0 = index, arg1 = the temp (lvalue) }
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      identNode := AllocNode(AN_IDENT);
-      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := identNode;
-      ASTRight[argSeq] := argSeq2;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
-      ASTLeft[node] := argSeq;
-      { AN_STR_FROM_CHAR: Left = the ArgStr side-effect, Right = read the temp. }
-      left := AllocNode(AN_STR_FROM_CHAR);
-      ASTLeft[left] := node;
-      identNode := AllocNode(AN_IDENT);
-      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-      ASTRight[left] := identNode;
-      ASTTk[left] := Ord(Syms[op].TypeKind);
-      { `ParamStr(i)[1]` — the SUBSCRIPT this arm used to leave in the token
-        stream. Every other string value already indexes: a literal has its own
-        loop above, a user function and `Copy` go through the call-result path,
-        and all three end at GenMakeStringValueIndex, which is what this calls.
-        NOT a sixth hand-rolled `[` walker — refactor-p-three-hand-rolled-postfix-loops
-        counts five already, and the helper is where the temp and the
-        side-effect ordering are decided once.
-
-        The old behaviour was not a parse error, which is why it survived:
-        returning here with `[` pending left it to whatever came next, and in
-        ASSIGNMENT-STATEMENT position that was ParseStatementAST's catch-all
-        `else`, which skipped to the `;` in silence. So `cc := ParamStr(0)[1]`
-        stored the low byte of the string POINTER — a different wrong character
-        on every run — while `WriteLn(ParamStr(0)[1])` refused loudly, because
-        an argument list has no catch-all. One defect, two faces, and the loud
-        face is the one that got filed.
-        bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses }
-      if (CurTok.Kind = tkLBrack) and NodeIsIndexableStringValue(left) then
-      begin
-        left := GenMakeStringValueIndex(left);
-        CurASTNode := left;
-        LastExprTk := tyChar;
-      end
-      else
-        CurASTNode := left;
-    end;
     tkIdent:
     begin
       name := CurTok.SVal;
@@ -5493,6 +5352,192 @@ begin
         Exit;
       end;
 
+
+      if CaseEqual(name, 'SysOpen') and SoftIntrinsicOpenSym(name, qUnit) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx, TokPos - 2);
+        if (idx < 0) or ((not TypeIsFrozenString(Syms[idx].TypeKind)) and
+                         (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
+        Expect(tkComma, ',');
+
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ParseExpr;
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode;
+        ASTRight[argSeq] := argSeq2;
+        Expect(tkRParen, ')');
+
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        Exit;
+      end;
+
+      if CaseEqual(name, 'SysRead') and SoftIntrinsicOpenSym(name, qUnit) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx, TokPos - 2);
+        if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
+        Expect(tkComma, ',');
+
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
+        ASTRight[argSeq] := argSeq2;
+        ParseExpr;
+        argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
+        ASTRight[argSeq2] := argSeq3;
+        Expect(tkRParen, ')');
+
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        Exit;
+      end;
+
+      if CaseEqual(name, 'SysWrite') and SoftIntrinsicOpenSym(name, qUnit) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Soft-keyword intrinsic: the spelling lexes as a plain ident and is
+          dispatched here on the NAME, so `function SysRead...` and a variable
+          called SysClose are legal. A user routine or an in-scope symbol
+          shadows it; `System.X` reaches the intrinsic anyway.
+          bug-p-sysopen-intrinsic-shadows-a-user-function-name }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx, TokPos - 2);
+        if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
+        Expect(tkComma, ',');
+
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
+        ASTRight[argSeq] := argSeq2;
+        ParseExpr;
+        argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
+        ASTRight[argSeq2] := argSeq3;
+        Expect(tkRParen, ')');
+
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        Exit;
+      end;
+
+      { ParamCount / ParamStr (and the pxx spellings ArgCount / ArgStr): soft-
+        keyword intrinsics. They used to lex as tkArgCount/tkArgStr, which made
+        the SPELLING unusable as a name anywhere -- `procedure ParamStr;` failed
+        at the declaration with `expected name`, and FPC's own custapp declares
+        methods called exactly that. Now they are plain idents dispatched on the
+        name, with a user routine or an in-scope symbol shadowing them and
+        `System.ParamStr` as the escape hatch, like every other soft intrinsic.
+
+        NO '(' REQUIREMENT ON ParamCount, unlike Ord/Chr/Length below: FPC's
+        ParamCount is routinely written bare (`for i := 1 to ParamCount do`), so
+        the lookahead that disambiguates the others would break the common
+        spelling. The shadow test alone carries it -- which is correct, because a
+        bare name that is NOT shadowed can only be the intrinsic.
+        bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names }
+      if (CaseEqual(name, 'ParamCount') or CaseEqual(name, 'ArgCount')) and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) then
+      begin
+        Next;
+        if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount);
+        { ParamCount is an Integer, and the node has to SAY so. Left unset it
+          defaulted to tyUnknown, and anything that materialises the value into a
+          hidden temp copied that: `for i := 0 to ParamCount do` gave the loop
+          LIMIT temp no type. x86-64 and the other backends do not inspect it and
+          happened to work; i386 checks every symbol it touches, so it refused —
+          which is why `uses pylib` could not be built for i386 AT ALL (pylib's
+          pysys_argv is exactly this loop), taking base64, http and
+          examples/net/httpdemo.pas with it, and every NilPy program besides.
+          The tkArgStr arm below never had the bug because it allocates its
+          destination temp explicitly typed. Hoisting the limit into a variable,
+          or using a USER function as the limit, both worked — that pair is what
+          localised it here rather than to the for-loop lowering.
+          bug-a-paramcount-node-has-no-type-so-i386-refuses-any-pylib-user }
+        ASTTk[node] := Ord(tyInteger);
+        CurASTNode := node;
+        Exit;
+      end;
+
+      if (CaseEqual(name, 'ParamStr') or CaseEqual(name, 'ArgStr')) and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Inline ParamStr(i): the 2-arg ArgStr(i, var) codegen needs a destination
+          string. Synthesize a hidden frozen-string temp, copy argv[i] into it
+          (EmitArgvToString — a frozen buffer write, no managed release, so the temp
+          needs no nil-init), and yield the temp. Lets ParamStr(i) be used directly
+          in any expression (comparison, argument), not only as an assignment RHS.
+          The temp is tyString (frozen) even under managed strings, matching the
+          `String` keyword temp above. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;                            { index expression }
+        Expect(tkRParen, ')');
+        op := AllocVar('', tyString);
+        { 2-arg ArgStr call: arg0 = index, arg1 = the temp (lvalue) }
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        identNode := AllocNode(AN_IDENT);
+        ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := identNode;
+        ASTRight[argSeq] := argSeq2;
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
+        ASTLeft[node] := argSeq;
+        { AN_STR_FROM_CHAR: Left = the ArgStr side-effect, Right = read the temp. }
+        left := AllocNode(AN_STR_FROM_CHAR);
+        ASTLeft[left] := node;
+        identNode := AllocNode(AN_IDENT);
+        ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+        ASTRight[left] := identNode;
+        ASTTk[left] := Ord(Syms[op].TypeKind);
+        { `ParamStr(i)[1]` — the SUBSCRIPT this arm used to leave in the token
+          stream. Every other string value already indexes: a literal has its own
+          loop above, a user function and `Copy` go through the call-result path,
+          and all three end at GenMakeStringValueIndex, which is what this calls.
+          NOT a sixth hand-rolled `[` walker — refactor-p-three-hand-rolled-postfix-loops
+          counts five already, and the helper is where the temp and the
+          side-effect ordering are decided once.
+
+          The old behaviour was not a parse error, which is why it survived:
+          returning here with `[` pending left it to whatever came next, and in
+          ASSIGNMENT-STATEMENT position that was ParseStatementAST's catch-all
+          `else`, which skipped to the `;` in silence. So `cc := ParamStr(0)[1]`
+          stored the low byte of the string POINTER — a different wrong character
+          on every run — while `WriteLn(ParamStr(0)[1])` refused loudly, because
+          an argument list has no catch-all. One defect, two faces, and the loud
+          face is the one that got filed.
+          bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses }
+        if (CurTok.Kind = tkLBrack) and NodeIsIndexableStringValue(left) then
+        begin
+          left := GenMakeStringValueIndex(left);
+          CurASTNode := left;
+          LastExprTk := tyChar;
+        end
+        else
+          CurASTNode := left;
+        Exit;
+      end;
 
       { Ord(x)/Chr(x): soft-keyword intrinsics (same recipe as Length below —
         plain idents, name dispatch, user proc / in-scope symbol shadows,

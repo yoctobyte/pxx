@@ -8033,6 +8033,9 @@ test-core: $(COMPILER)
 	# all 13 former hard-keyword intrinsics are soft keywords: declarable as identifiers, intrinsics/statements unaffected when unshadowed
 	./$(COMPILER) test/test_soft_keyword_length.pas $(TESTTMP)/test_soft_keyword_length26
 	tools/expect_same.sh test_soft_keyword_length26 "$$($(TESTTMP)/test_soft_keyword_length26 | tail -1)" "total ok 19 / 19"
+	# ...and the last seven: SysOpen/SysRead/SysWrite/SysClose/SysFchmod and ArgCount/ArgStr (ParamCount/ParamStr)
+	./$(COMPILER) test/test_soft_keyword_sysargs.pas $(TESTTMP)/test_soft_keyword_sysargs26
+	tools/expect_same.sh test_soft_keyword_sysargs26 "$$($(TESTTMP)/test_soft_keyword_sysargs26 | tail -1)" "total ok 20 / 20"
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas $(TESTTMP)/test_signal_handlers26
 	tools/expect_same.sh test_signal_handlers26 "$$($(TESTTMP)/test_signal_handlers26; echo "exit=$$?")" "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"

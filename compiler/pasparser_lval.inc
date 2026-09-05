@@ -4133,7 +4133,9 @@ begin
         si := InternStr(CurTok.SVal); Next;
         EmitStrAssignLiteral(idx, Strs[si].Offset, Strs[si].Len);
       end
-      else if CurTok.Kind = tkArgStr then
+      else if (CurTok.Kind = tkIdent) and
+              (CaseEqual(CurTok.SVal, 'ParamStr') or CaseEqual(CurTok.SVal, 'ArgStr')) and
+              SoftIntrinsicOpen(CurTok.SVal, -1) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
@@ -4196,7 +4198,9 @@ begin
         EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
         EmitB($F3); EmitB($A4);
       end
-      else if CurTok.Kind = tkArgStr then
+      else if (CurTok.Kind = tkIdent) and
+              (CaseEqual(CurTok.SVal, 'ParamStr') or CaseEqual(CurTok.SVal, 'ArgStr')) and
+              SoftIntrinsicOpen(CurTok.SVal, -1) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
