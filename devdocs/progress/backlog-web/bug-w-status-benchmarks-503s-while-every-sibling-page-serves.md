@@ -67,6 +67,18 @@ like generation or infra than a repo change. frank-coordinator independently
 reproduced the four rows above and escalated to the owner the same evening,
 since nobody was on W that night.
 
+## What this is evidence FOR, beyond itself
+
+`ce89ff14b` deliberately traded "a number goes stale (visible, self-correcting)"
+for "a URL fails (invisible from this repo)", and
+[[task-d-verify-the-published-status-urls-docs-now-delegates-all-numbers-to]]
+recorded that the residual had never once occurred. **This is the first time it
+has**, six days into the new regime — so the rate is one in six days rather than
+an unknown, and `doclinks.py` caught it, which is the mitigation the trade
+assumed rather than merely hoped for. Both facts are written into that ticket
+too, because that is where someone revisiting the decision will look. The trade
+stands, and now for a measured reason.
+
 **If this is still red with no movement, say so again rather than absorbing it.**
 A standing red everyone has learned to expect is how a real outage becomes
 wallpaper — and this one is invisible from inside the checkout by construction.

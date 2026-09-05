@@ -193,3 +193,45 @@ spin-out reads the way it does.
 
 ## Log
 - 2026-08-30 — resolved, commit 3496da031.
+
+## 2026-09-05 — the accepted risk fired, for the first time, six days in
+
+**This ticket's central trade has now been tested by events.** `ce89ff14b`
+removed the figures from `status.md` and priced the exchange explicitly:
+
+| | before | after |
+| --- | --- | --- |
+| failure | a number goes stale | a URL fails |
+| visibility | visible, self-correcting | **invisible from this repo** |
+
+It was the better trade and still is. The residual — the right-hand column — had
+never once occurred when this ticket was resolved. On 2026-09-05 it did:
+`https://pxxc.org/benchmarks` — precisely, `/status/benchmarks/` — began
+answering **503** while `/`, `/status/` and `/status/tests/` all served 200.
+Filed as [[bug-w-status-benchmarks-503s-while-every-sibling-page-serves]].
+
+**The baseline above is what made it diagnosable, and that is the reusable
+part.** This ticket did not merely record that the URL resolved; it recorded the
+**content marker** — `ok https://pxxc.org/status/benchmarks/ [fib sieve]` — so
+six days later the claim available was not "a page is down" but *"a page that
+served the real per-`-O` timings on 2026-08-30 now 503s"*. The first is
+unbounded: was it ever up, is the URL right, did the docs invent it. The second
+has a bounded window and two named suspects, the generator or the deploy, and
+the marker is what rules out "served a shell". **A verification record is worth
+recording even when it is green, because green is the baseline a later red is
+measured against.**
+
+**Two data points for whoever revisits the trade**, which is the whole reason to
+write this here rather than leave it in the newer ticket:
+
+1. It fired **once in six days** of the new regime. That is a real rate, not a
+   theoretical exposure, and it is the number this decision was made without.
+2. **`doclinks.py` caught it** — the mitigation this ticket built is the reason
+   the failure was visible at all, which is the assumption the trade rested on
+   and is now evidence rather than intent.
+
+So the trade stands, and it stands for a better reason than when it was made.
+The checker remains deliberately un-gated (network, ~8 round trips, weekly
+value); the offline-SKIP rule is what kept it in the tree long enough to be the
+thing that noticed.
+
