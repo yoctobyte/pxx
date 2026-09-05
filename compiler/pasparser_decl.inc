@@ -202,6 +202,81 @@ begin
          or CaseEqual(nm, 'pwidechar');
 end;
 
+{ A SUBRANGE'S BOUNDS DO NOT HAVE TO BE LITERALS, and until 2026-09-05 this
+  compiler required them to be. Both of the type-level subrange arms keyed on a
+  TOKEN KIND -- tkInteger, tkMinus, tkString -- so a bound that was a NAME never
+  reached them: it fell through to the tkIdent arm, which asks "is this a type",
+  finds a constant, and reports `unknown type: sat`. Seven spellings, one rule,
+  all seven accepted by fpc 3.2.2 and all seven refused here:
+
+    type T = sat..sun          var v: sat..sun        record f: sat..sun; end
+    set of sat..sun            function g: TW         a parameter of that type
+    type T = Lo..Hi (named integer consts)            type T = False..True
+
+  The failing bounds are enum members, named ordinal constants and True/False --
+  i.e. every CONSTANT that is not spelled as a literal. The cluster label said
+  "enums/subranges" and enums are only the most visible victim; the mechanism is
+  the token test.
+
+  The ARRAY INDEX parser never had the bug (`array[sat..sun]` always worked)
+  because it goes straight to ConstEvalOrdBound with no literal guard, and that
+  is the shape copied here: ConstEvalOrdBound already folds a named bound AND
+  publishes what it was, through CEOrdTk (tyChar / tyBoolean / an unsigned kind)
+  and CEEnumId (the enum type id when the value is a member). Nothing new had to
+  be able to evaluate anything; the two arms simply never asked.
+
+  The discriminator is the `..` two tokens on -- the same peek the array-index
+  parser uses to tell `array[TEnum]` from `array[lo..hi]`. Deliberately narrow:
+  a BARE identifier immediately followed by `..`, not a qualified `TEnum.member`
+  and not an expression bound like `Lo+1..Hi`, because those are not among the
+  shapes measured to matter and widening the guess is how a wrong type gets
+  stamped on a right value -- the rule the char-literal peek beside it states. }
+function SubrangeStartsHere: Boolean;
+begin
+  Result := (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or
+            (CurTok.Kind = tkString);
+  if Result then Exit;
+  { True and False are NOT tkIdent -- the lexer gives them tkTrue/tkFalse of
+    their own -- so a guard written only for identifiers misses `False..True`,
+    which is why that spelling outlived the first version of this fix by one
+    measurement. The `..` peek is required for them too, not because a bare
+    `True` could name a type but because the guard should have one rule. }
+  Result := ((CurTok.Kind = tkIdent) or (CurTok.Kind = tkTrue) or
+             (CurTok.Kind = tkFalse)) and
+            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDotDot);
+end;
+
+function ParseSubrangeTail: TTypeKind;
+{ Consumes `lo .. hi` and answers the type the subrange is STORED in, with the
+  bounds left in LastTypeSubLo/Hi and LastTypeIsSub set. The single body behind
+  every subrange spelling -- the two arms it replaces each carried their own
+  copy and each carried a comment saying the other must be kept in step, which
+  is the shape normalise-dont-special-case is about. }
+var tkLo: TTypeKind; eidLo: Integer;
+begin
+  LastTypeSubLo := ConstEvalOrdBound;
+  tkLo := CEOrdTk; eidLo := CEEnumId;
+  Expect(tkDotDot, '..');
+  LastTypeSubHi := ConstEvalOrdBound;
+  LastTypeIsSub := True;
+  if eidLo >= 0 then
+  begin
+    { An ENUM subrange carries the enum IDENTITY, not just a width: `case d of
+      mon:` resolves its members through it, and it is the pair an enum-valued
+      expression already carries (tyInteger PLUS an id) -- the same convention
+      the array-index arm records in LastArrIdxEnumId. }
+    LastTypeEnumId := eidLo;
+    Result := tyInteger;
+  end
+  else if tkLo = tyChar then Result := tyChar
+  else if tkLo = tyBoolean then Result := tyBoolean
+  else
+    { …and STORE it in the narrowest ordinal that spans it. A char subrange
+      keeps tyChar: its storage is already one byte and its VALUES must stay
+      chars. See SubrangeStorageTk. }
+    Result := SubrangeStorageTk(LastTypeSubLo, LastTypeSubHi);
+end;
+
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -233,6 +308,17 @@ begin
   LastTypeFileElemTk := 0;
   LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
   LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
+  { A subrange whose bounds are NAMED rather than spelled as literals. Checked
+    before the case because `case CurTok.Kind of` cannot dispatch on the
+    two-token lookahead that separates `sat..sun` from a plain type name; see
+    SubrangeStartsHere for the seven spellings and why the peek is narrow. }
+  if ((CurTok.Kind = tkIdent) or (CurTok.Kind = tkTrue) or
+      (CurTok.Kind = tkFalse)) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDotDot) then
+  begin
+    Result := ParseSubrangeTail;
+    Exit;
+  end;
   case CurTok.Kind of
     tkLParen:
     begin
@@ -254,25 +340,12 @@ begin
     tkInteger, tkMinus, tkString:
     begin
       { ANONYMOUS ordinal subrange -- `var n: 1..5;`, `array[0..2] of 1..5`,
-        `record f: 'a'..'z'; end`. Modelled exactly like the NAMED form in
-        ParseTypeSection: an alias to the base ordinal (tyChar for a
-        char-literal bound, else tyInteger) with the bounds RETAINED, so {$R+}
-        checks stores against them and Low/High answer the subrange rather
-        than the base type. The named path's own comment claimed this was
-        "the same treatment as an inline `var x: lo..hi` subrange" -- it was
-        aspirational, there was no inline form. }
-      if CurTok.Kind = tkString then Result := tyChar else Result := tyInteger;
-      LastTypeSubLo := ConstEvalOrdBound;      { low bound }
-      Expect(tkDotDot, '..');
-      LastTypeSubHi := ConstEvalOrdBound;      { high bound }
-      LastTypeIsSub := True;
-      { …and STORE it in the narrowest ordinal that spans it. A char subrange
-        keeps tyChar: its storage is already one byte and its VALUES must stay
-        chars. See SubrangeStorageTk, and keep this arm and the named-alias one
-        in ParseTypeSection in step -- they are the two spellings of one
-        construct and fixing one alone is how the other stays broken. }
-      if Result <> tyChar then
-        Result := SubrangeStorageTk(LastTypeSubLo, LastTypeSubHi);
+        `record f: 'a'..'z'; end`. The bounds are RETAINED, so {$R+} checks
+        stores against them and Low/High answer the subrange rather than the
+        base type. Body shared with the named-bound entry above ParseTypeKind:
+        this arm and the ParseTypeSection one each used to carry their own copy
+        plus a comment telling the reader to keep the other in step. }
+      Result := ParseSubrangeTail;
       Exit;
     end;
     tkRecord, tkPacked:
@@ -7040,26 +7113,21 @@ begin
           RegisterProcTypeAlias(tnOff, tnLen, mpi);
         EatProcTypeCallConv(mpi);
       end
-      else if (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or (CurTok.Kind = tkString) then
-      begin
-        { Named ordinal subrange type: `T = lo..hi` (1..10, 'a'..'z'). Modelled as
-          an alias to the base ordinal (tyChar for a char-literal bound, else
-          tyInteger) — same treatment as an inline `var x: lo..hi` subrange (the
-          bounds are not retained). }
-        if CurTok.Kind = tkString then fTk := tyChar else fTk := tyInteger;
-        subLoVal := ConstEvalOrdBound;     { low bound }
-        Expect(tkDotDot, '..');
-        subHiVal := ConstEvalOrdBound;     { high bound }
-        { The narrowest ordinal spanning the range -- the sibling of the inline
-          arm in ParseTypeKind, and the two must move together. }
-        if fTk <> tyChar then fTk := SubrangeStorageTk(subLoVal, subHiVal);
-        RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
-        { RETAIN the bounds ({$R+} checks stores against them —
-          feature-pascal-range-checks-r-plus; they used to be dropped). }
-        AliasIsSub[AliasCount - 1] := True;
-        AliasSubLo[AliasCount - 1] := subLoVal;
-        AliasSubHi[AliasCount - 1] := subHiVal;
-      end
+      { A NAMED SUBRANGE TYPE (`T = 1..10`, `T = 'a'..'z'`, `T = sat..sun`) HAS NO
+        ARM OF ITS OWN ANY MORE. It reaches the general alias branch below,
+        whose ParseTypeKind handles every subrange spelling, and
+        RegisterGeneralAlias carries the bounds out of LastTypeIsSub the same
+        way it already carries a string capacity and a file element width.
+
+        The arm deleted here was a third copy of "parse lo..hi" -- one in
+        ParseTypeKind, one in ParseSetElemSpec, one here, plus the array-index
+        parser -- and both it and ParseTypeKind's carried a comment instructing
+        the reader to keep the other in step. They had already drifted: this one
+        was guarded on a literal token, so `T = sat..sun` fell past it into the
+        general branch, which did not retain bounds, and Low/High of a named
+        enum subrange answered INT_MIN/INT_MAX while `T = 1..10` beside it
+        answered 1 and 10. Removing the copy is what makes the instruction
+        unnecessary rather than merely obeyed. }
       else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
               TokAfterHintsIsSemicolon(TokPos) then
       begin

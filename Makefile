@@ -13491,6 +13491,20 @@ test-core: $(COMPILER)
 	# gets 7 of the 12 rows wrong.
 	./$(COMPILER) test/test_ifopt_tracks_the_switch_it_names.pas $(TESTTMP)/test_ifopt26
 	tools/expect_same.sh test_ifopt26 "$$($(TESTTMP)/test_ifopt26)" "$$(cat test/test_ifopt_tracks_the_switch_it_names.expected)"
+	# A subrange's bounds do not have to be LITERALS. Both type-level subrange
+	# arms keyed on a TOKEN KIND (tkInteger/tkMinus/tkString), so a bound that
+	# was a NAME fell through to the "is this a type name" arm and came back as
+	# `unknown type: sat`. Seven spellings, one rule, all accepted by fpc: named
+	# type, var, record field, set-of, function result, parameter, and named
+	# integer consts / True..False. The LITERAL rows are regression controls --
+	# they worked before and must keep their exact storage, since the fix routes
+	# them through the shared body; a test of the new shape alone could not tell
+	# "named bounds work" from "named bounds work and 1..10 quietly became four
+	# bytes". The `bounds` row is the second control: Low/High of a named enum
+	# subrange answered INT_MIN/INT_MAX while 1..10 beside it answered 1 and 10.
+	# Byte-compared against FPC 3.2.2; pin v403 cannot compile the file.
+	./$(COMPILER) test/test_subrange_bounds_may_be_named.pas $(TESTTMP)/test_subnamed26
+	tools/expect_same.sh test_subnamed26 "$$($(TESTTMP)/test_subnamed26)" "$$(cat test/test_subrange_bounds_may_be_named.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

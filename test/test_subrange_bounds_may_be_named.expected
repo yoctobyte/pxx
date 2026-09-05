@@ -1,0 +1,13 @@
+int    5 1
+char   q 1
+enum   5
+const  5 1
+bool   TRUE 1
+set-e  TRUE FALSE
+set-c  TRUE FALSE
+field  6
+inline 5 sat
+result 6
+case tue
+case other
+bounds 1 10 5 6

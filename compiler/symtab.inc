@@ -340,6 +340,25 @@ begin
     AliasStrCap[AliasCount] := LastTypeStrCap
   else
     AliasStrCap[AliasCount] := 0;
+  { …and a SUBRANGE alias keeps its BOUNDS, same window and same reason. Until
+    2026-09-05 only ParseTypeSection's own literal-guarded subrange arm set
+    these, so `type T = 1..10` retained its bounds and `type T = sat..sun` --
+    which reaches the GENERAL alias branch, because the literal guard does not
+    match a named bound -- silently did not. The symptom is Low/High: 1 and 10
+    for the first, INT_MIN and INT_MAX for the second, from the same source
+    file. ParseTypeKind has just run for the right-hand side, so LastTypeIsSub
+    and its bounds are live here exactly as LastTypeStrCap is below. }
+  AliasIsSub[AliasCount] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    AliasSubLo[AliasCount] := LastTypeSubLo;
+    AliasSubHi[AliasCount] := LastTypeSubHi;
+  end
+  else
+  begin
+    AliasSubLo[AliasCount] := 0;
+    AliasSubHi[AliasCount] := 0;
+  end;
   { …and a FILE alias keeps its element width, same window and same reason:
     `type TIntFile = file of Integer` is where a file type is nearly always
     spelled, and the variable declared through it is far away.

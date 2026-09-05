@@ -50,9 +50,9 @@ tclass9.pp	gap: `class var` / `var` sections in class, class property with stati
 tclassinfo1.pp	wontfix: TObject.ClassInfo = TypeInfo(TObject) — FPC RTTI/typeinfo internals
 tdefault1.pp	wontfix: needs FPC `variants` unit as shipped (Default() over Variant types)
 tdefault5.pp	gap: Default() on record/object containing TextFile field (delphi mode)
-tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
+tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax, and `uses typinfo`. The subrange-of-enum half is FIXED (2026-09-05) -- the wall moved from `unknown type: first` to `undefined variable (TRange1)`, i.e. from parsing the type to USING its name.
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes
-tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)
+tforin1.pp	gap: for-in over a subrange/enum TYPE NAME rather than a variable -- `for x in IntRange do`. The subrange TYPE now parses (2026-09-05); the wall moved to `undefined variable (IntRange)`, which is the for-in-over-a-type form, not the subrange.
 tforin24.pp	gap: enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
 tforin2.pp	gap: for-in over a Classes.TStringList (its GetEnumerator), Track B. The STRING half now works: a call-result container and the `operator enumerator` for String both compile — the refusal moved from line 60 to line 75
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
@@ -90,7 +90,6 @@ tarray6.pp	gap: local var-section initializers (`var S: AnsiString = 'abcd'`) + 
 tclass13a.pp	gap: nested `type` sections inside classes (nested class overriding parent's)
 tclass13d.pp	gap: `const` section inside a class (class constants / typed class consts)
 tclass3.pp	gap: bare `inherited;` forwarding the caller's arguments to the ancestor constructor
-tenum1.pp	gap: subrange type over an enum (`weekend = sat..sun`) not parsed
 tenum6.pp	gap: `Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool ('FALSE')
 texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
@@ -121,7 +120,6 @@ trange5.pp	gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} ra
 tsealed6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as an acceptance test; wants `object abstract` / `object sealed` on top of the base feature.
 tstring2.pp	gap: RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
 tstring5.pp	gap: RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
-tcase2.pp	gap: subrange-of-enum type (workdays = mon..fri) and case over it
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	gap: advanced records in units — nested type/const/var/class var sections, static class methods
 tgenfunc15.pp	gap: generic array type templates + generic method overloads with array-of-T params
