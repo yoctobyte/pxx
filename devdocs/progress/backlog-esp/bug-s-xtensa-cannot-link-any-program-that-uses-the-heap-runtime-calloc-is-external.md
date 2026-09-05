@@ -1,6 +1,8 @@
 ---
 prio: 45
 track: S
+blocked-by: ["feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image"]
+summary: "MEASURED WRONG AS TITLED, 2026-09-05. xtensa links AND RUNS heap programs: GetMem/FreeMem prints `heap ok` under --platform=posix and under --esp-profile=bare, and a full try/raise/except with sysutils prints `caught boom / done`, byte-identical to the riscv32 control, all verified under qemu-xtensa rather than from link output. What refuses is the DEFAULT profile, deliberately: compiler.pas:311 derives xtensa to PLATFORM_ESP ('xtensa has no hosted leg'), where externals are the IDF link's job and the error says so at length. The real blocker behind the configurations that do work is the CALL0/CALL8 forward-call wall -- see blocked-by."
 ---
 
 # xtensa links no program that reaches the heap runtime: `calloc` is external
@@ -81,3 +83,28 @@ Raise it the moment an ESP umbrella actually attempts something that raises.
 Find what actually pulls `calloc` — do not assume. Build the same program for
 riscv32 and xtensa and diff the external-symbol sets; the riscv32 path is the
 working oracle sitting right beside the broken one.
+
+## Re-measured 2026-09-05 (frankS): the title is not what happens
+
+Run under `qemu-xtensa`, not inferred from a successful link:
+
+| configuration | result |
+| --- | --- |
+| `--target=xtensa` (default = ESP) | refuses: externals not supported, first one `calloc` |
+| `--target=xtensa --platform=posix` | links, **runs**, prints `heap ok` |
+| `--target=xtensa --esp-profile=bare` | links, **runs** |
+| exceptions, posix + `--xtensa-long-calls` | prints `caught boom / done` — identical to riscv32 |
+
+The default derivation is deliberate (`compiler.pas:311`): xtensa goes to
+`PLATFORM_ESP` because it has no hosted leg by default, and on that platform
+externals are meant to be resolved by the IDF link rather than by this writer.
+The error message already explains that and names both escapes.
+
+So the residual question is not "why can't xtensa link the heap" — it can. It is
+whether the default profile should be ESP when a hosted xtensa image is what the
+cross suite actually runs under qemu. That is a Track U shape if anyone wants it
+settled; it is not this bug.
+
+Note the exceptions row needed `--xtensa-long-calls`, which is
+[[feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image]] and is now
+the `blocked-by`.

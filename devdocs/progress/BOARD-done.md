@@ -1871,6 +1871,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-rust-whole-array-borrow-as-a-slice-argument-segfaults | R | 35 | bug | `f(&arr)` — borrowing a whole array as a `&[T]` argument — compiles and segfaults | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | A+S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
+| bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | FIXED, verified 2026-09-05. ir_codegen_xtensa.inc:4580 has a real IR_SET_SIGNAL arm ('riscv32's arm is the model; the register pair is xtensa's'). Verified by running, not by grepping: test_cross_signal_runtime_predicate answers `signals yes` on xtensa, and test_signal_altstack compiles and passes under qemu-xtensa with the Makefile's own flags -- `recursing / code=2 / handler-off-faulting-stack=TRUE / exit=0`. The arm landed with other work and the ticket was never closed. | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | 50 | bug | bug: SetLength rejects an indexed array element as target | — |

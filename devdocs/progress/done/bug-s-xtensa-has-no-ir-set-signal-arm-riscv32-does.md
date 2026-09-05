@@ -4,8 +4,8 @@ track: A+S
 prio: 35
 type: bug
 blocked-by: []
-status: backlog
-summary: "`ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it."
+status: done
+summary: "FIXED, verified 2026-09-05. ir_codegen_xtensa.inc:4580 has a real IR_SET_SIGNAL arm ('riscv32's arm is the model; the register pair is xtensa's'). Verified by running, not by grepping: test_cross_signal_runtime_predicate answers `signals yes` on xtensa, and test_signal_altstack compiles and passes under qemu-xtensa with the Makefile's own flags -- `recursing / code=2 / handler-off-faulting-stack=TRUE / exit=0`. The arm landed with other work and the ticket was never closed."
 owner: unassigned
 ---
 
@@ -50,3 +50,27 @@ here, noted so they are not rediscovered: `IR_IMTADDR`, `IR_IO_LOCK`,
 
 Found by [[feature-s-the-xtensa-row-of-the-posix-syscall-table]] — the program
 could not reach codegen before the syscall table existed.
+
+## Verified fixed 2026-09-05 (frankS)
+
+Checked by running on the target, not by counting greps — a `grep -c` of
+`IR_SET_SIGNAL` returns 1 for every backend including the ones that only mention
+it in a comment, so the count could not have told a real arm from a refusal.
+
+- `ir_codegen_xtensa.inc:4580` — a real `IR_SET_SIGNAL` case, comment reads
+  *"riscv32's arm is the model; the register pair is xtensa's"*.
+- `test_cross_signal_runtime_predicate` on `--target=xtensa --platform=posix`
+  prints `signals yes`.
+- `test_signal_altstack` under `qemu-xtensa` with the Makefile's own flags
+  (`--xtensa-soft-mulhigh -Fulib/rtl`) prints
+  `recursing / code=2 / handler-off-faulting-stack=TRUE`, exit 0 — the row
+  Makefile:22150 already asserts.
+
+Worth recording how nearly this went the other way: my first run omitted
+`--xtensa-soft-mulhigh` and the test died with `uncaught target signal 4
+(Illegal instruction)`. A probe misconfiguration wearing the exact shape of a
+codegen bug on the one target where a missing multiply-high instruction is
+plausible. The Makefile row carries that flag; my hand-run did not.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

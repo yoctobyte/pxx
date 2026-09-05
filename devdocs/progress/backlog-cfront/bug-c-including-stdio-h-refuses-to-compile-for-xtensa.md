@@ -4,11 +4,11 @@ track: C+S
 prio: 45
 type: bug
 status: new
-blocked-by: []
+blocked-by: ["feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image"]
 owner: ""
 created: 2026-09-01
 found-by: frankA (incidentally, while fixing @external on i386)
-summary: "`#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64."
+summary: "STATED SYMPTOM IS UNREACHABLE AT HEAD, re-measured 2026-09-05. The `__pxx_read is a pxx-internal runtime symbol` refusal still exists (symtab.inc:13982) but nothing reaches it from this file in any profile. `#include <stdio.h>` plus a `main` now fails two OTHER ways: under the default and bare profiles the C entry stub refuses outright ('hosted linux only -- no argc on the stack and no kernel to take the exit_group'), which is a deliberate guard; under --platform=posix it hits the CALL0/CALL8 +-512 KiB forward-call wall and compiles cleanly with --xtensa-long-calls. Both are true statements and neither is the one this ticket was filed on. The posix half is the blocked-by; the entry-stub half is a separate design question about C main on the ESP profile."
 ---
 
 # `#include <stdio.h>` does not compile for xtensa
@@ -46,3 +46,24 @@ missing `uses`, and this ticket is S-flavoured rather than C-flavoured.
 which shares the "became an external" shape but is about a `static` defined in a
 `.h` and reproduces on x86-64. This one is target-conditional, which that one is
 not.
+
+## Re-measured 2026-09-05 (frankS)
+
+`#include <stdio.h>` + `int main(void){return 0;}`, one file, every profile:
+
+| configuration | result |
+| --- | --- |
+| x86-64 (control) | compiles, `code=311064B` |
+| `--target=xtensa` (default) | C entry stub refuses: hosted linux only |
+| `--target=xtensa --esp-profile=bare` | same entry-stub refusal |
+| `--target=xtensa --platform=posix` | CALL0/CALL8 wall at `__pxx_run_finalizers` |
+| ...`--platform=posix --xtensa-long-calls` | **compiles**, `code=647020B` |
+
+The original error does not appear in any of them. It was reduced away by
+`e6fd258d8` and its neighbours rather than by anything aimed at this ticket,
+which is why the ticket never moved.
+
+**Do not close this on the reduction.** The residual is real and has an owner
+now: the posix path is [[feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image]],
+entered as `blocked-by`. The entry-stub refusal for a C `main` under the ESP
+profile is a separate question and nobody owns it — it may well be correct.

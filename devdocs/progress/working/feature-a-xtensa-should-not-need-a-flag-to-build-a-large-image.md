@@ -3,10 +3,10 @@ slug: feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
 track: A+S
 prio: 35
 type: feature
-status: new
+status: working
 found: 2026-08-31
 found-by: frankA
-owner: ""
+owner: frankS
 blocked-by: []
 summary: "An unrelated RTL commit (4419e1aa7) pushed the test-xtensa xt_backjump call0 arm past CALL8 reach WITHOUT changing the image size (622444B both ways) -- it reordered __pxx_run_finalizers to the tail, 36618 bytes out of reach of its earliest caller -- so the margin is not a property of the program and any RTL edit can flip any near-512KiB image; that arm now passes --xtensa-long-calls explicitly. WAS p35 on the grounds that the only program known to approach the wall was that awk-generated row, which DEFINES a population rather than sampling one, the hazard being conditional on some real image getting near 512KiB and none being. THAT PREMISE WAS REFUTED 2026-09-04: test/c_crtl_syscall_guarded_bodies.c is an ordinary hand-written C program whose image is ~665KB once crtl is linked in, and it refuses without the flag -- the forward call to __pxx_run_finalizers at 58526 cannot reach its body at 664880. The wall is not a property of deliberately-large generated programs, it is a property of LINKING CRTL AT ALL, so it is now the first thing every C program on this target meets, and every C-on-xtensa measurement anyone reports carries the flag. prio NOT changed by the reporter -- that is this ticket owner's call; what changed is that the sentence the p35 was reasoned from is no longer true. --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not."
 ---
@@ -146,3 +146,45 @@ routine the 2026-08-31 note names, reached from a call site 606 KB earlier. A
 trampoline at the end of the calling body is well inside CALL0 reach.
 
 I have not changed `prio:`.
+
+## The population is wider than "linking crtl": plain Pascal hits it too
+
+Measured 2026-09-05 (frankS). The body above records this as *"a property of
+LINKING CRTL AT ALL, so it is now the first thing every C program on this target
+meets"*. That is still true and it is not the boundary. **No C and no crtl
+required** — this is the whole program:
+
+```pascal
+program ex;
+uses sysutils;
+begin
+  try
+    raise Exception.Create('boom');
+  except
+    on E: Exception do writeln('caught ', E.Message);
+  end;
+  writeln('done');
+end.
+```
+
+    --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl
+    error: the forward call to __pxx_run_finalizers at code offset 58938
+           cannot reach its body at ...
+
+Add `--xtensa-long-calls` and it compiles (`code=655212B`) and **runs** under
+qemu-xtensa: `caught boom / done`, byte-identical to the riscv32 control.
+
+So the property is not C, and not crtl: it is **linking anything substantial**.
+`uses sysutils` plus one `try/except` is as ordinary as Pascal on this target
+gets, and it is over the wall. Every hosted-xtensa measurement anyone reports
+carries the flag, for Pascal as much as for C.
+
+That also makes this ticket the thing two p45s sit on top of — both now entered
+as `blocked-by`, so `effective_prio` carries 45 here without anyone re-ranking:
+
+- [[bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external]]
+- [[bug-c-including-stdio-h-refuses-to-compile-for-xtensa]]
+
+The offset in the message (58938 here, 58526 in the C case) is the *call site*,
+which barely moves; what moves is where `__pxx_run_finalizers` lands. That is
+the ticket's own point about the margin not being a property of the program.
