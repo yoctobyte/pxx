@@ -224,3 +224,48 @@ so residual 1 is narrowed to "outside FPC's own tree", not eliminated. Residual
 remains the open half — though the fixture's re-populated class-1 block now
 makes the adjacent version of that failure visible, which is how this sweep
 found `test-core` red.
+
+## RESIDUAL 2 IS CLOSED, 2026-09-05 (frankD)
+
+*"Nothing can see a name LEAVING the inert list."* It can now.
+
+**The gap, measured before building anything:** `PAS_INERT_DIRECTIVES` holds
+**107** names; `test_pascal_directive_unknown_warns.pas` mentions **26** of
+them. So **81 were unguarded** — a name that stopped being inert would warn in
+a file nobody compiles, and that fixture's TOTAL row, which is the thing
+protecting the arriving direction, would not move by one.
+
+**`test_pascal_directive_inert_list_is_complete.pas`** writes out all 107 and
+asserts **zero** warnings.
+
+**Three rows, and each closes a different way for it to be vacuous:**
+
+| row | what it stops |
+| --- | --- |
+| `.silent` — 0 warnings | the actual defect: a name leaves the list |
+| `.run` — the program prints `ok` | a comparison whose input never existed. A file that fails to compile also emits no `warning:` line |
+| `.population` — 107 directives still in the source | **deleting the rows to silence a failure.** An empty fixture prints zero warnings AND `ok` |
+
+The third row is the one worth arguing for: **a zero census is meaningless
+until the probe is proven live**, and until it is proven to still contain
+anything. Both of those are run-time assertions here rather than sentences in a
+comment.
+
+**Positive control, run rather than reasoned:** removing `zerobasedstrings`,
+`y` and `apptype` from `PAS_INERT_DIRECTIVES` and rebuilding makes the fixture
+emit exactly **three** warnings, each naming its own directive. That also rules
+out the failure mode this design was most exposed to — a name whose bare
+spelling is swallowed by an earlier arm and never reaches the classifier, which
+would have sat in the fixture contributing nothing while looking guarded.
+
+**The file is HAND-MAINTAINED and must stay so.** Generating it from
+`PAS_INERT_DIRECTIVES` at test time would make it agree with the list by
+construction — a guard that cannot fail, which is precisely this ticket's
+subject. The instruction in its header is: when you deliberately remove a name,
+delete its line in the same commit, and the diff becomes the record of what
+stopped being inert.
+
+**Residual 1 is untouched and remains the whole of what is left** — a name used
+only by Delphi, a vendor unit or FPC 3.3+ is still invisible, because no corpus
+here contains it. That one is bounded by frankA's sweep against fpc's own 9197
+sources and cannot be closed by a fixture.

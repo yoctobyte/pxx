@@ -14421,6 +14421,25 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pascal_directive_unknown_warns.total "$$(grep -c 'warning:' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "6"
 	grep -q "unknown compiler directive {\$$PACKRECRDS}" $(TESTTMP)/test_pascal_directive_unknown_warns.log
 	tools/expect_same.sh test_pascal_directive_unknown_warns "$$($(TESTTMP)/test_pascal_directive_unknown_warns26)" "ok"
+	# ...and the other direction, which nothing could see: a name LEAVING the
+	# inert list. That fixture mentions 26 of the 107 inert names, so a name
+	# that stops being inert warns in a file nobody compiles and every total
+	# above stays put -- 81 were unguarded, measured 2026-09-05. This one names
+	# all 107 and asserts ZERO. It is HAND-MAINTAINED on purpose: generating it
+	# from PAS_INERT_DIRECTIVES would make it agree by construction, which is
+	# the guard-that-cannot-fail the parent ticket is about. Remove a name from
+	# the list, delete its line there in the same commit.
+	# bug-p-a-spurious-unknown-directive-warning-cannot-fail-any-test-we-have
+	./$(COMPILER) test/test_pascal_directive_inert_list_is_complete.pas $(TESTTMP)/test_directive_inert26 > $(TESTTMP)/test_directive_inert.log 2>&1
+	tools/expect_same.sh test_directive_inert.silent "$$(grep -c 'warning:' $(TESTTMP)/test_directive_inert.log)" "0"
+	tools/expect_same.sh test_directive_inert.run "$$($(TESTTMP)/test_directive_inert26)" "ok"
+	# THE POPULATION ROW, and it is the one that makes the zero above mean
+	# anything: `0 warnings` is also what an EMPTY fixture prints, and so is
+	# `ok`. Assert that the 107 directives are still in the source, so deleting
+	# them to silence a failure is itself a failure. A zero census is
+	# meaningless until the probe is proven live -- CLAUDE.md's own rule, and
+	# this row is that proof at run time rather than in a comment.
+	tools/expect_same.sh test_directive_inert.population "$$(grep -oE '[{]\$$[a-z_0-9]+' test/test_pascal_directive_inert_list_is_complete.pas | wc -l)" "107"
 	# The same arm across pxx's TWO WALKS of every source (ExpandIncludes, then
 	# the lexer). THE COUNT IS THE ASSERTION: a terminal arm added to
 	# elfwriter.inc's evaluator would not change any message, only DOUBLE how
