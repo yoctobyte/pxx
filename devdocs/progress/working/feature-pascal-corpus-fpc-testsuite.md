@@ -6,9 +6,9 @@ prio: 65
 
 - **Type:** feature (frontend conformance corpus)
 - **Track:** P (Pascal frontend)
-- **Status:** unfinished (parked) — rung-1 harness delivered and live (sweep 279/0, gap:/wontfix: taxonomy, twatch dashboard consumes conformance.tsv); remaining burn-down is rainy-day per user call 2026-07-11, tag: compat
+- **Status:** working
   [[feature-pascal-corpus-expansion]].
-- **Owner:** —
+- **Owner:** frankA
 
 ## Idea
 FPC ships `tests/test/**` — thousands of small `.pp` programs, each exercising
