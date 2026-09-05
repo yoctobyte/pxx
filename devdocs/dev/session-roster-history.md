@@ -25042,3 +25042,53 @@ time, correctly, about the wrong machine. A 25-hour silence during a planned
 dist-upgrade is the most tempting possible shape for "T is down, so I'll run the
 full suite" — eight busy sessions, one plausible excuse. Nobody has claimed it;
 recorded so that if someone does, the answer is already measured.
+
+### frankB reports in — and a peer's belief about ANOTHER session was the finding
+
+frankB, 19:35: Track P queue, currently **mode-Delphi generic specialisation**
+(`compiler/pasparser_generic.inc`, the anchor walk). Open thread it named rather
+than took: a `<T: class>` constraint reaches the same `tkClass` arm and
+`DGenClassOpensBody` answers true for it; every test arm passes, so if real it is
+masked. Unclaimed as far as this seat can see.
+
+**The part that needed the seat.** frankB's message contained *"frankA has stood
+down"* — and frankA was dispatched this evening and `busy` in `ListAgents` five
+minutes earlier. A worker's belief about ANOTHER worker is the one class of claim
+that is systematically unavailable to the worker holding it: frankB can measure
+its own tree, its own tests, its own tickets, and **cannot measure frankA**.
+frankB's no-collision conclusion happened to be right, but it was right by luck —
+the same false premise also says the `pasparser_decl.inc` overlap is free, which
+it is not (frankA can reach that file; it is a FILE, git merges it, not flagged).
+
+Corrected with the scope stated: **`busy` is LIVENESS, not topic.** It says
+frankA is running, never what it is running. This seat holds frankuser's stated
+assignment for frankA and relays it as frankuser's words.
+
+**Generalisation worth keeping: stale beliefs about peers are the seat's actual
+subject matter.** Not stale files — git surfaces those. A wrong "X stood down"
+never conflicts, never fails a gate, and licenses exactly the behaviour the
+watch exists to prevent.
+
+### frankB's rung 6a: corroboration speaks to the READING, not the AGE
+
+`feature-pascal-corpus-expansion` recorded rung 6a (rtl-generics
+`Generics.Defaults`) green on 2026-08-30 from **two independent sessions with
+byte-identical numbers**. `b613b5fcf` broke it on 08-31; nobody re-ran it for
+five days. frankB found it failing on taking the ladder and fixed it
+(`1ea430c95`); 6a compiles again, 6b is back at its own documented wall.
+
+**Two failure shapes, and the second is the nastier one:** a ladder's recorded
+rung reads as a FLOOR, and rung 6b's error naming 6a's *file* then reads as
+progress rather than as regression. frankB put a read-this-first line at the top
+of the summary and the measured state at the bottom. **If anyone says they are
+taking the corpus ladder, point at that line before they read the canonical
+table.**
+
+frankB's rule, and it is the strongest form of this file's recurring theme:
+**corroboration speaks to the READING and is silent about the AGE.** Two
+independent measurements agreeing is the best evidence a row can have — which
+makes the row more likely to be **re-cited than re-measured**, so the
+best-established figures are the ones most likely to be stale. The mirror of
+this seat's own 09-04 miss, where the stale count was its *own* prior correct
+one. Familiarity and corroboration both feel like verification; **neither
+carries a timestamp.**
