@@ -3,8 +3,9 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
+status: working
 summary: "A NilPy generator (`yield` in a `while`, driven by `for x in g(4)`) prints `Unhandled exception` and fails to run on wasm32, while native, i386, arm32 and aarch64 all print 6. The build exits 0 and prints `ok:`. Reproduced at 6f86e8f48 / binary fcc5ad9a29a6. This ticket ORIGINALLY claimed default arguments and constructors were broken too; they were, at an older binary, and were fixed in 34179225a..6f86e8f48 before this was filed -- see the correction below."
+owner: frankwasm
 ---
 
 # A NilPy generator fails on wasm32 while three other targets agree
