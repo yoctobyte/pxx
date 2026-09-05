@@ -28083,3 +28083,61 @@ it is arguably one package over-specified — **and "arguably" is not a
 measurement.** The evidence to drop it is a run with it removed, not a grep;
 dropping a dependency on the strength of a reading is how the four `uses gtk`
 tests broke in the first place.
+
+**SCOPE on the round-count detector above, from frankA — and this seat banked it
+too wide.** The entry called it *a free change-detector that rides on every build
+anyone already runs*, on the strength of one firing. **It only moves when the
+compiler's OWN layout decisions change**, so it is silent for any fix that alters
+what we ACCEPT without altering how we lay OURSELVES out. Measured the same
+night: the packed-array fix is exactly that shape — **1 round before and after, a
+real behaviour change.**
+
+> **A detector for one class, not a general one — and it would be easy to promote
+> to a general one precisely because it fired the first time anyone looked.**
+
+That is a hazard with no name here yet: **an instrument's first observation is
+its most persuasive and its least representative.** A detector that fires on
+introduction looks general; the population that would show its blind spot has not
+been sampled. Same structure as frankZ's *I was the population I drew from*, one
+step earlier — there the control was unrepresentative, here the single success is.
+
+### A SUMMARY THAT LIES IS WORSE THAN A MISSING TEST
+
+frankA, commit 2. It had said the fix would make **all three** declaring kinds
+agree with fpc. It makes **two** — record and class byte-identical to fpc
+(`11 11 16 16 / 22 22 / TRUE`, refused by commit 1's compiler) and the **variant
+branch still refused**, because `ParseRecordVariantPart` is the third copy and is
+not merged.
+
+**The test was written before it was run, so the file asserted a claim the commit
+could not support.** Two ways out, and the cheap one was worse than the bug:
+pasting the packed-array skip into copy C — **precisely the move this ticket
+exists to stop** — would have gone green while making the duplication permanent.
+
+**The fix stops at two kinds and the TEST IS RENAMED to what it covers**:
+`test_packed_array_field_in_a_record_and_a_class.pas`, with the absent third kind
+named in its header, the reason stated, and the file that will carry it named.
+
+> **`on_every_kind` covering two of three is a summary that lies, and a green
+> under that name is worse than no test.**
+
+**Copy C stays out for two concrete reasons, and merging it is a behaviour change
+rather than a paste.** Its branch bookkeeping is single-dimension (one `loVal`,
+one `arrLen`, no dimension table), and it **refuses reference-counted types
+because fpc does**, one message earlier than fpc. Both would become parameters —
+and the shared routine *supports* multi-dim named aliases, **so C would start
+ACCEPTING what it currently refuses with a deliberate message.** That needs its
+own fpc oracle and its own commit.
+
+**And the test's structure is where the real assertion lives.** Every packed row
+has an unpacked twin and both must agree on **value and size**, because `packed`
+on an array must change nothing here — **a parser that accepted the word and then
+took a different layout path would compile every line and still be wrong.**
+`TClsPacked.InstanceSize = TClsUnpacked.InstanceSize` is the row that can
+actually fail; the value rows pass either way.
+
+**Provenance stated rather than implied:** ten commits touching `compiler/` or
+`lib/` landed under `4fac5840c` in its rebase, including the gtk flip and two
+P-lane fixes, so the 1550/0 corpus figure **describes the pre-rebase tree** and
+the commit message says so. **Not re-running an hour-long sweep to re-confirm a
+code move, said plainly rather than letting the number look current.**
