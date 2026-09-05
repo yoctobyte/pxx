@@ -9569,6 +9569,42 @@ begin
   Result := ProcParamIsNilable(i, j);
 end;
 
+function MatchArgProcAddrOk(i, j: Integer): Boolean;
+{ May a ROUTINE OR METHOD ADDRESS at argument j bind parameter j of candidate i?
+
+  Same shape of question as MatchArgNilOk, and it is about the DESTINATION for
+  the same reason: `@Free` and `@obj.Method` are both typed tyPointer on
+  purpose, so a Pointer parameter takes them, and a PROCEDURAL parameter is
+  either a tyRecord (a method pointer -- the {Code,Data} pair) or carries a
+  signature in ProcParamProcSig. The kind pair therefore reads
+  (tyRecord <- tyPointer) and says no, which is right about kinds and wrong
+  about the program.
+
+  The FREE call path never needed this channel because it re-resolves through
+  MatchCallDelphiProcAddr's AN_PROCADDR retry when the first match fails. The
+  speculative METHOD probe cannot retry -- it has already rewound its token
+  stream and its AN_ARG nodes would not come back -- so it has to be told the
+  fact instead of re-deriving it. That asymmetry is the whole of this ticket's
+  second row.
+
+  Deliberately NOT extended to `var`/`out`: an address expression is not an
+  lvalue, same reasoning and same helper as MatchArgNilOk uses.
+  refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes }
+begin
+  Result := False;
+  if not MatchArgProcAddrValid then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if not MatchArgProcAddr[j] then Exit;
+  if ByRefArgNeedsLvalue(i, j) then Exit;
+  if Procs[i].Params[j].IsArray then Exit;
+  { A method pointer (the {Code,Data} record) or a plain procedural type. }
+  Result := ((MethodPtrRecId <> REC_NONE) and
+             (ProcParamRecId[i * MAX_PROC_PARAMS + j] = MethodPtrRecId)) or
+            (ProcParamProcSig[i * MAX_PROC_PARAMS + j] >= 0);
+end;
+
+function MatchParamAccepted(i, j: Integer; aTk: TTypeKind): Boolean; forward;
+
 function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
 { "Does argument j work for parameter j of candidate i?" — the ONE place the
   compatible phases of overload matching ask that. It exists because the answer
@@ -9579,7 +9615,8 @@ function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
   differently from the others. normalise-dont-special-case.md. }
 var si, pe: Integer;
 begin
-  Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
+  Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j) or
+            MatchArgProcAddrOk(i, j);
   { ...then NARROW the blanket `tyPointer <- tyClass` rule TypesCompatible grants,
     which cannot narrow itself: it sees two KINDS and the answer needs the
     pointer's ELEMENT. Same architectural gap MatchArgNilOk exists to close, and
@@ -9693,6 +9730,32 @@ begin
     end;
   end;
 end;
+
+function MatchParamAccepted(i, j: Integer; aTk: TTypeKind): Boolean;
+{ "Would ANY phase of MatchProcCall accept argument j for parameter j of
+  candidate i?" -- the union, as opposed to MatchParamCompatible, which is the
+  one phase that asks about TYPES.
+
+  It exists because the free call path reaches the looser answers by FALLING
+  THROUGH to a later phase, and the speculative METHOD probe cannot: it has
+  already rewound its token stream, so it gets exactly one question. Spelling
+  the union here rather than widening MatchParamCompatible is deliberate --
+  widening that one would let phase 2a accept a class->interface argument that
+  today only phase 2c accepts, which changes WHICH overload wins, not just
+  whether one does. The phases keep their order; only the probe, which has no
+  phases, is given the union.
+
+  Phase 2c's own condition, spelled once instead of twice.
+  refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes }
+begin
+  Result := MatchParamCompatible(i, j, aTk) or
+            { the implicit class->interface coercion: a class argument given to
+              a CORBA-interface parameter, which is what `l.Add(TFoo.Create(3))`
+              is on an fgl TFPGInterfacedObjectList<IFoo> }
+            (ProcParamIsInterface(i, j) and (aTk = tyClass)) or
+            ProcParamUntyped[i * MAX_PROC_PARAMS + j];
+end;
+
 
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
 var i: Integer;
@@ -11238,9 +11301,7 @@ begin
       match := True;
       for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
       begin
-        if (not (MatchParamCompatible(i, j, argTypes[j]) or
-                (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
-                ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
+        if (not MatchParamAccepted(i, j, argTypes[j])) or
            MatchArgRecMismatch(i, j, argTypes[j]) then
           match := False;
       end;

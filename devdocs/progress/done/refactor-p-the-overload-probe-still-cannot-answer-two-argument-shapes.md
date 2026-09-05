@@ -5,10 +5,10 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog
+status: done
 owner: "frank-optimize"
 created: 2026-09-05
-summary: "ROW 2 NAMED THE RIGHT LINE AND THE WRONG SPELLING, AND THE MISSING CHANNEL IS A METHOD POINTER. Measured by actually widening the gate: the Pascal corpus loses 2 of 1864 programs and the fgl rung goes 7/7 -> 3/7, failing at fgl.pp:1051 and :1172 -- the `inherited Sort(@ItemPtrCompare)` lines, WITH the @. The parameter is `TFPSListCompareFunc = function(Key1, Key2: Pointer): Integer OF OBJECT`, so the shape with no channel is an @-taken routine or method address reaching a method-pointer parameter, NOT a bare routine name (bare is not in fgl, and FPC refuses it in objfpc mode anyway). Two of the three regressions are that one shape; the third is a GUID constant at test_getinterface_guid_b257:81. Row 1 (generic type parameter, tyUnknown at the declaration) fired ZERO times here, which is not evidence: the Pascal conformance directory holds no program files on this box, so the ticket gate cannot fail on that axis. The bare-name construct was a separate real bug and is fixed in 8389db919."
+summary: "RESOLVED. The widened gate now costs ZERO rows on all three axes -- Pascal corpus 1581/286 unchanged (row-level diff, not just totals), conformance 381 pass / 2 fail with an identical failure list, fgl 7/7 -- and it refuses five programs fpc 3.2.2 also refuses that pxx silently accepted. The two blocking shapes were NEITHER of the ticket's named rows. One was a real pre-existing bug in a different file: the implicit Self shift forgot `puntyped`, so a method's untyped-param flag sat one slot left of its parameter (fixed in a916c48bf). The other was the implicit class->interface coercion, which MatchProcCall reaches only by falling through to its phase 2c -- a rewound probe never falls through, so the fix is MatchParamAccepted, the UNION of what the phases accept, spelled once and called from both. Row 1 (generic type parameter) fires zero times against the real 1447-program conformance corpus."
 ---
 
 # The residual from the channel refactor
@@ -473,3 +473,79 @@ So the ticket's two named gaps have become **one**, and it is neither of them
 as written: a channel answering *"argument j is a routine or method ADDRESS"*,
 filled where `AN_PROCADDR` is built. Everything else the widening would cost is
 one GUID row.
+
+
+---
+
+## RESOLVED, 2026-09-06 (frankO) — and neither named row was what blocked it
+
+### The measurement, all three axes, both arms built from the same tree
+
+Baseline `98032c2f69fc` and widened `9a9499803ad9`, both at commit `a916c48bf`,
+each rebuilt after the last sync that touched `compiler/`:
+
+| axis | baseline | widened |
+| --- | --- | --- |
+| Pascal corpus, 1867 files | 1581 compile / 286 refuse | **1581 / 286** |
+| ...row-level diff | — | **0 rows differ** |
+| conformance (550 curated) | 381 pass / 2 fail | **381 / 2**, identical list |
+| fgl rung | 7/7 | **7/7** |
+
+**Discrimination control, because a zero-row diff is what a blind instrument
+also prints:** the same census against the pinned compiler differs from the
+baseline on **56 rows** — and one of them is
+`test_method_untyped_param_self_shift.pas`, a row whose truth this session
+established independently (1 at the pin, 0 at HEAD). The census can see a
+difference, and the zero is a real zero.
+
+### What it buys
+
+Five programs **fpc 3.2.2 refuses** and pxx accepted with no diagnostic at all,
+each a single-candidate method call: a string literal for an `Integer`
+parameter (three spellings — class, interface, and with an untyped parameter
+present), and a record for an `Integer` parameter. The identical FREE procedure
+refused every one of them. That asymmetry is what this ticket was filed about.
+
+### The two blockers, and why the ticket named neither
+
+**1. `puntyped` was not shifted with the implicit Self** —
+`bug-p-the-self-shift-forgets-puntyped-so-a-method-param-is-mislabelled`, fixed
+in `a916c48bf`. A pre-existing bug in `pasparser_proc.inc` /
+`pasparser_decl.inc`, invisible until the widened gate became the first thing
+ever to ask a METHOD parameter whether it was untyped. It was reported here as
+"a GUID constant at `test_getinterface_guid_b257:81`" — **that was wrong**;
+narrowing the row to a repro showed `constref IID: TGuid` accepts fine on its
+own and the refusal was on the untyped `out Obj` beside it.
+
+**2. The implicit class->interface coercion.** `MatchProcCall` grants it in
+**phase 2c**, a later phase the free path reaches by falling through. The
+speculative method probe has already rewound its token stream and gets exactly
+one question, so it never arrives. This is the same asymmetry as
+`MatchCallDelphiProcAddr`'s `AN_PROCADDR` retry, one layer up. Reported here as
+fgl's generic `Add(Item: Pointer)` competing with `Add(const Item: T)` — also
+wrong: with an interface *variable* the call binds fine; it is the class
+instance `TFoo.Create(3)` that needs the coercion.
+
+Fix: `MatchParamAccepted` — the UNION of what the phases accept, spelled once
+in `symtab.inc` and called from both phase 2c and the probe. **Deliberately not
+folded into `MatchParamCompatible`**: widening that would let phase 2a accept a
+class->interface argument that today only 2c accepts, which changes *which*
+overload wins, not merely whether one does. The phases keep their order; only
+the probe, which has no phases, is given the union.
+
+### The `MatchArgProcAddr` channel
+
+Still present and still load-bearing: `@Routine` / `@Obj.Method` reaching a
+method-pointer parameter (fgl.pp:1051, :1172). Without it the rung was 6/7 with
+everything else in place.
+
+### Corrections to this ticket's own body, kept because the pattern repeats
+
+Three characterisations above are wrong and each was wrong the same way — a
+shape named from **reading source** rather than from **reducing to a repro**.
+The location was right every time; the mechanism was not. `r2a`/`r2c` (GUID
+alone) and `r1a` (interface variable) are four-line programs, and each took
+under a minute to falsify the reading it replaced.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

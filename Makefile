@@ -5857,7 +5857,14 @@ test-core: $(COMPILER)
 	  | grep -q 'no overload of M matches these arguments' \
 	  || { echo 'test_method_arg_typecheck_fails: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_arg_typecheck_ok.pas $(TESTTMP)/test_margok26
-	tools/expect_same.sh test_margok26 "$$($(TESTTMP)/test_margok26)" "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
+	tools/expect_same.sh test_margok26 "$$($(TESTTMP)/test_margok26)" "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7\nifc 5\nraw\ncref')"
+	# ...and the shape the NARROW allowlist could not reach at all: a string
+	# literal given to an Integer parameter of a single-candidate method. The
+	# two guard lines only ran the check for a pointer/class argument, so this
+	# was accepted with no diagnostic while the free procedure refused it.
+	@./$(COMPILER) test/test_method_arg_typecheck_fails_str.pas $(TESTTMP)/test_margfailstr26 2>&1 \
+	  | grep -q 'no overload of M matches these arguments' \
+	  || { echo 'test_method_arg_typecheck_fails_str: FAIL - expected a compile error naming the method'; exit 1; }
 	# A STRING LITERAL must not bind a pointer whose pointee is an unrelated
 	# type. Same family as the two rows above and the same architectural gap:
 	# TypesCompatible sees two KINDS. It grants tyPointer <- tyString for a real

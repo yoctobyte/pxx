@@ -3004,6 +3004,26 @@ var
     because a flag named for one of the two things it gates is the shape
     "the name is not the thing" warns about. }
   MatchArgElemValid : Boolean;
+  { ...and whether argument j is a ROUTINE OR METHOD ADDRESS -- an AN_PROCADDR
+    (`@Free`, and a Delphi bare routine name, which TryDelphiBareProcArg builds
+    as one) or an AN_METHODREF (`@obj.Method`, and bare `@Method` inside a
+    method body, which is implicit Self).
+
+    ITS OWN CHANNEL AND NOT A KIND TEST, for the reason every channel here
+    exists: both node kinds are typed tyPointer, deliberately, so that
+    `TakesPtr(@h.M)` binds a Pointer parameter -- and a method-pointer
+    PARAMETER is a tyRecord (the 16-byte {Code,Data} pair, EnsureMethodPtrRec).
+    So the kind pair reads (tyRecord <- tyPointer) and says no, correctly about
+    kinds and wrongly about the program. The free-call path never needed this:
+    it re-resolves through MatchCallDelphiProcAddr's AN_PROCADDR RETRY when the
+    first match fails, which the speculative method probe cannot do because it
+    has already rewound its token stream. Measured: with the single-candidate
+    gate widened to the full check and this channel absent, real fgl.pp fails
+    at `inherited Sort(@ItemPtrCompare)` (fgl.pp:1051, :1172) and the rung goes
+    7/7 -> 3/7, while the identical FREE overloaded call is accepted.
+    refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes }
+  MatchArgProcAddr : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  MatchArgProcAddrValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   PasAsmModeNonIntel : Boolean;  { {$asmMode att|direct} is in force: tolerated until an actual asm block needs reading (feature-pascal-asmmode-directive-tolerance) }

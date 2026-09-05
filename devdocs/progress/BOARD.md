@@ -390,7 +390,7 @@ _none_
 | feature-toolchain-cli-ux | T | 30 | feature | FIVE OF THE SIX FLAGS ARE LANDED AND THE SIXTH IS A DECISION, NOT AN IMPLEMENTATION. `--version`, `--where`/`--config`, `--list-targets`, `--list-libraries` and `--doctor` all answer with no source file and exit 0, are covered by test-quick rows so gate.sh quick sees them, and are built to be unable to drift: `--where` calls the SAME routines a real compile calls (ResolveToolchainDirs / AddDefaultPasUnitDirs / AddDefaultCIncludeDirs) rather than re-deriving the search rule, and `--list-libraries` SCANS the resolved directories through PxxListDir rather than reciting an inventory. Config tiers 1, 2 and 3 are all in: CLI flags, then PXX_HOME/PXX_LIBPATH (all-or-nothing, so a typo shows as [MISSING] instead of half-applying), then pxx.cfg, then ExeDir defaults. ONLY `--selfcheck` IS LEFT, it answers `unknown option` (re-measured 2026-09-05 at HEAD), AND IT IS BLOCKED ON INTENT rather than on work: feature-release-packaging specifies check 1 as `pxx -> gen1`, `gen1 -> gen2`, `cmp gen1 gen2` -- a real fixedpoint STEP that requires RUNNING the freshly built binary -- while the compiler spawns no process (no PalVforkAndExec/PalFork anywhere under compiler/) and locates itself only through ExeDir. Every in-process substitute asserts something WEAKER under the same trusted name, and tools/selfcheck.sh already does the specified thing and already ships in the release tree, so `do nothing` is a live option. Filed as [[decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]] with four options and a recommendation; that ticket is still `status: new`, `owner: user`. IF THE ANSWER IS `USE THE SCRIPT`, THIS TICKET CLOSES ON THE ANSWER ALONE. User-facing docs for the five landed flags are a Track D job and are not filed here. | decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (28)
+## backlog-pascal (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -420,7 +420,6 @@ _none_
 | feature-pascal-management-operators-nested-and-array | P | 35 | feature | Management operators do not reach an array element or a nested field | — |
 | refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array | P | 25 | refactor | NodeArrNDInfo returns False for a rank-1 array — every arm tests `>= 2`. Correct for its original caller (multi-subscript lowering, where rank 1 has no comma chain), but it makes the function unusable as the general 'what shape is this array' reader that three frontends now want. Not a Pascal defect: no Pascal program behaves wrong today. | — |
 | refactor-p-nodearrndinfo-yields-spans-but-not-the-element | P | 25 | refactor | NodeArrNDInfo fills NDInfoNDims/Lo/Span but not the element triple — size, record id, type kind — so every caller that needs to know what an element IS re-derives it from Syms[] or RecField*, with its own AN_IDENT/AN_FIELD pair. That re-derivation is where three C bugs lived. | — |
-| refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes | P | 55→60 | refactor | ROW 2 NAMED THE RIGHT LINE AND THE WRONG SPELLING, AND THE MISSING CHANNEL IS A METHOD POINTER. Measured by actually widening the gate: the Pascal corpus loses 2 of 1864 programs and the fgl rung goes 7/7 -> 3/7, failing at fgl.pp:1051 and :1172 -- the `inherited Sort(@ItemPtrCompare)` lines, WITH the @. The parameter is `TFPSListCompareFunc = function(Key1, Key2: Pointer): Integer OF OBJECT`, so the shape with no channel is an @-taken routine or method address reaching a method-pointer parameter, NOT a bare routine name (bare is not in fgl, and FPC refuses it in objfpc mode anyway). Two of the three regressions are that one shape; the third is a GUID constant at test_getinterface_guid_b257:81. Row 1 (generic type parameter, tyUnknown at the declaration) fired ZERO times here, which is not evidence: the Pascal conformance directory holds no program files on this box, so the ticket gate cannot fail on that axis. The bare-name construct was a separate real bug and is fixed in 8389db919. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog-decide (45)
@@ -908,9 +907,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3373)
+## done (3374)
 
-3373 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3374 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (78)
 
@@ -1031,7 +1030,6 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
-- [p 60] [P] refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes (unblocks 1)
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -1040,6 +1038,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [P] bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [U] decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park
 - [p 60] [U] decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision
@@ -1437,5 +1436,4 @@ _none_
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
-- **1** — refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes
 - **1** — regression-test-core-c-crtl-wait

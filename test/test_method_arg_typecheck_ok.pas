@@ -21,6 +21,19 @@ uses Variants;   { FPC: boxing into a Variant is RTE 217 without it }
 type
   TCmp = function(a, b: Pointer): Integer;
 
+  { ...and the three shapes the WIDENED gate had to be taught, each one a legal
+    call the narrow allowlist happened to skip and the full check refuses
+    unless the probe is given the union of what MatchProcCall's phases accept.
+    All three were measured refusing before MatchParamAccepted existed. }
+  IFoo = interface ['{11111111-2222-3333-4444-555555555555}']
+    function V: Integer;
+  end;
+
+  TFoo = class(TInterfacedObject, IFoo)
+    FV: Integer;
+    function V: Integer;
+  end;
+
   TC = class
     { an open array parameter: its TypeKind is the ELEMENT kind, so ranking an
       argument against it is meaningless — this is CreateFmt's shape, which the
@@ -37,6 +50,13 @@ type
     procedure Sort(f: TCmp);
     { an untyped var takes anything by definition }
     procedure Raw(var x);
+    { a CLASS argument given to an INTERFACE parameter -- the implicit
+      class->interface coercion, which MatchProcCall reaches only in its
+      phase 2c and a rewound probe never falls through to. This is
+      `l.Add(TFoo.Create(3))` on fgl's TFPGInterfacedObjectList<IFoo>. }
+    procedure Ifc(const it: IFoo);
+    { a `constref` record parameter }
+    procedure Cref(constref g: TGuid);
     { a Variant accepts every kind }
     procedure Any(v: Variant);
     { and the ordinary compatible conversions must still pass }
@@ -51,9 +71,13 @@ procedure TC.Sort(f: TCmp); begin WriteLn('sort ', f = nil); end;
 procedure TC.Raw(var x); begin WriteLn('raw'); end;
 { prints no value: WriteLn of a bare Variant is RTE 217 under FPC without
   the variants unit, and what is under test is that the CALL is accepted }
+procedure TC.Ifc(const it: IFoo); begin WriteLn('ifc ', it.V); end;
+procedure TC.Cref(constref g: TGuid); begin WriteLn('cref'); end;
 procedure TC.Any(v: Variant); begin WriteLn('any'); end;
 procedure TC.Str(const s: AnsiString); begin WriteLn('str ', s); end;
 procedure TC.Num(n: Int64); begin WriteLn('num ', n); end;
+
+function TFoo.V: Integer; begin Result := FV; end;
 
 function ByPtr(a, b: Pointer): Integer;
 begin
@@ -65,6 +89,9 @@ var
   i: Integer;
   ch: Char;
   s: AnsiString;
+  iv: IFoo;
+  g: TGuid;
+  fo: TFoo;
 begin
   c := TC.Create;
   i := 7;
@@ -82,4 +109,12 @@ begin
   c.Str(ch);               { Char -> AnsiString, a legal conversion }
   c.Str('lit');            { a frozen literal -> managed AnsiString }
   c.Num(i);                { Integer -> Int64 widening }
+
+  { the three the widened gate had to be taught -- see the type section }
+  fo := TFoo.Create;
+  fo.FV := 5;
+  c.Ifc(fo);               { CLASS argument -> INTERFACE parameter }
+  iv := fo;
+  c.Raw(iv);               { an INTERFACE argument into an untyped var }
+  c.Cref(g);               { a constref RECORD parameter }
 end.

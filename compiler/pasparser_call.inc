@@ -2482,6 +2482,15 @@ begin
     bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
   MatchArgNil[i] := IsNilLiteralNode(node);
 
+  { ...and whether the argument is a ROUTINE OR METHOD ADDRESS. Both node kinds
+    are typed tyPointer deliberately (so `TakesPtr(@h.M)` works), and a
+    procedural parameter is a tyRecord or carries a ProcParamProcSig, so the
+    kind pair cannot answer it. MatchArgProcAddrOk (symtab.inc) reads this and
+    asks the DESTINATION, exactly as MatchArgNilOk does.
+    refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes }
+  MatchArgProcAddr[i] := (ASTKind[node] = AN_PROCADDR) or
+                         (ASTKind[node] = AN_METHODREF);
+
   { ...and whether the argument is DEFINITELY a scalar value, which disqualifies
     an ARRAY parameter. argTk cannot answer that: a fixed-array parameter and a
     fixed-array argument both present their ELEMENT kind, so an
@@ -2921,6 +2930,7 @@ begin
     MatchArgScalarValid := True;
     MatchArgArrayValid := True;
     MatchArgElemValid := True;
+    MatchArgProcAddrValid := True;
 
     ok := True;
     for j := 0 to nArgs - 1 do
@@ -2942,18 +2952,16 @@ begin
         if Procs[pi].Params[pj].IsArray then continue;
         if ProcParamUntyped[pi * MAX_PROC_PARAMS + pj] then continue;
         if argIsNil[j] then continue;
-        if not ((argTk[j] = tyPointer) or (argTk[j] = tyClass)) then continue;
-        if not (TypeIsOrdinal(Procs[pi].Params[pj].TypeKind) or
-                TypeIsFloat(Procs[pi].Params[pj].TypeKind) or
-                (Procs[pi].Params[pj].TypeKind = tyString) or
-                (Procs[pi].Params[pj].TypeKind = tyAnsiString) or
-                (Procs[pi].Params[pj].TypeKind = tyShortString) or
-                (Procs[pi].Params[pj].TypeKind = tyFixedString)) then continue;
-        if not TypesCompatible(Procs[pi].Params[pj].TypeKind, argTk[j]) then
+        { The UNION of what MatchProcCall's phases accept, not the one phase
+          that asks about types. The free path reaches the looser answers by
+          falling through to a later phase; this probe has rewound its token
+          stream and gets one question, so it has to ask the union directly. }
+        if not MatchParamAccepted(pi, pj, argTk[j]) then
           ok := False;
       end;
     end;
     { Nothing downstream may read a fill made for THIS argument list. }
+    MatchArgProcAddrValid := False;
     MatchArgRecValid := False;
     MatchArgNilValid := False;
     MatchArgScalarValid := False;
