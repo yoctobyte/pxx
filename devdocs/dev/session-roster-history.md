@@ -27664,3 +27664,85 @@ PPID reading held — taken while they were live, none descended from its shell.
 The **cwd** reading did not: it ran later, and a dead process and a permission
 denial both return the empty string. Reported together as though both supported
 the conclusion; only the first did.
+
+### THE COLLISION THIS SEAT EXISTS FOR, CAUGHT BEFORE IT LANDED
+
+frankC took the gtk header-default topic and **flagged the overlap itself** — is
+somebody live on gtk? Three sessions, one word, three questions: frankD holds
+gtk **ticket disposition** (Track D), frankZ holds **arm 2's precondition
+declaration** (`tools/`), frankC holds the compiler's **header/soname
+resolution**. No collision there.
+
+**But the flip collides with a lane nobody named.** `compiler/pasparser_proc.inc:3428`
+— the hardcoded absolute fallback to `/usr/include/gtk-2.0/gtk/gtk.h` — is the
+single literal that makes the four `uses gtk` tests want **`libgtk2.0-dev`** and
+`gtk3_stock` want `libgtk-3-dev`. Flip it and **three documents become false in
+the same instant**, none of them in the diff:
+
+1. frankZ's per-job dependency profiles for arm 2.
+2. `tools/install_host_deps.sh`'s gtk entries — **corrected hours earlier after
+   being backwards**, the correction resting entirely on `:3428`, including the
+   comment explaining why gtk2 is listed first.
+3. seven's explanation of its own 08-29 apt history — still true historically and
+   no longer true of the tree.
+
+> **Not a merge conflict. Three documents stay internally consistent and become
+> false about the compiler.** That is the collision class, and it is the one that
+> survives review.
+
+Routed: frankC names `:3428` and its consumers in the landing commit and messages
+both directly; **it does not edit their files** — a peer half-updating someone
+else's manifest is how the half-applied model gets manufactured, which is the
+exact shape seven had just finished repairing. Suggested to both that the durable
+form cites `:3428` as the source of truth rather than copying today's answer.
+
+### RULED ON 08-31, UNIMPLEMENTED ON 09-06, AND THE SUMMARY EVERYONE READS IS WRONG
+
+Both decision tickets sit in `decided/` — *"i think gtk3 is a sane default in
+2026"* — and `cpreproc.inc` still said `gtk-2.0` **five days later**. That also
+explains a parked p55 showing **unblocked while reading blocked**: its stated
+blocker was answered and nobody moved the ticket. **The ranker and the reader
+disagreed for five days.**
+
+frankC measured the ruling's blast radius before touching anything, and **neither
+correction overturns the ruling** — the owner's intent needs no evidence; the
+*estimate* does:
+
+- **Three files listed, four flip.** Both frontmatter summaries carry the wrong
+  count, and the sibling ticket's body had all four the whole time. **The omitted
+  one is the only test running a full `gtk_main` loop with `g_timeout_add`** —
+  the worst possible omission from a list whose purpose is sizing risk.
+- *"Those four never touch GTK at runtime — they compile against `test/my_gtk.h`,
+  a local stub."* **False in both halves.** Three call into GTK and the Makefile
+  runs them under `xvfb-run`; `my_gtk.h` is an orphan.
+
+> **The section a taker reads to size the job is the section to distrust.**
+
+**And the ruling's own warning was about the failure mode of doing HALF the
+change**: GTK3 headers against a GTK2 soname. Headers and soname move together,
+which is what keeps the flip safe. Third instance tonight of *a half-applied
+model is worse than none*.
+
+**A cross-target fix falls out of it for free.** GTK2 needs
+`/usr/lib/x86_64-linux-gnu/gtk-2.0/include/` for `gdkconfig.h`; **GTK3 keeps
+`gdkconfig.h` under `/usr/include/gtk-3.0/gdk/`**, so the flip *deletes* the
+hardcoded `x86_64-linux-gnu` path the ruling itself flagged as wrong on aarch64.
+
+### A ZERO THAT MEANS "DID NOT MEASURE", AND TWO KILLS THAT FAIL DIFFERENTLY
+
+frankC nearly reported an `strace` result: `ptrace` is unavailable here, so the
+trace came back **one line long**. It asked what the zero would look like if the
+instrument were dead, and reached for one that fails differently instead —
+`my_gtk.h` declares only `gtk_button_get_width/height`, yet `test_c_gtk_types`
+compiles `gtk_window_new(GTK_WINDOW_TOPLEVEL)` and all four link
+`libgtk-x11-2.0.so.0`. **Positive evidence of what they ARE on, not absence of
+evidence for the stub.**
+
+Same animal as the night's other zeros: `objdump`'s three conditions (no `-g`, no
+symbols, no such file), and frankS's `SKIP` doing two jobs.
+
+**`my_gtk.h` is now killed twice by instruments that cannot fail the same way** —
+frankD's positive control (the file compiles `ok` in a directory that does not
+contain it) and frankC's capability argument. That is corroboration in the sense
+this repo means it, and it is rare enough to note: most "two sources" here are
+two readings of one instrument.
