@@ -2466,9 +2466,20 @@ begin
       all (`--emit-obj --target=wasm32`, measured), and the sentence listing the
       set was maintained by hand and went stale twice.
       bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
+    { ErrorNoPos, not Error, and the difference is visible: this fires AFTER the
+      parse, so the lexer is standing inside the last builtin unit it read, and
+      `Error` passes withContext=True. The refusal came out naming
+      ./compiler/builtin/builtinheap.pas with a `near:` window of a file the
+      user never opened -- and once the appended-unit note landed it also told
+      them their own file probably had an unterminated comment. All 31 checks
+      in elfwriter.inc are ErrorNoPos for exactly this; so is the sibling
+      refusal twelve lines below, `this object would define no linkable
+      symbol`, which is what ErrorNoPos was written for. This one was its
+      neighbour and was not grepped for.
+      bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
     if not TargetHasObjectWriter(TargetArch) then
-      Error('--emit-obj: no object writer for --target=' +
-            TargetArchName(TargetArch) + '; supported: ' + EmitObjTargetList);
+      ErrorNoPos('--emit-obj: no object writer for --target=' +
+                 TargetArchName(TargetArch) + '; supported: ' + EmitObjTargetList);
     if TargetArch = TARGET_X86_64 then
     begin
       if AsmGlobalSymCount > 0 then

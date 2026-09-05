@@ -75,6 +75,22 @@ for t in $targets; do
       exit 1
     fi
     said=$(printf '%s' "$said" | tr -d ' ')
+    # ...AND IT MUST NOT NAME A SOURCE FILE. This refusal fires after the parse,
+    # when the lexer is standing inside the last builtin unit it read, so
+    # `Error` (withContext=True) gave it `in: ./compiler/builtin/builtinheap.pas`
+    # plus a `near:` window of a file the user never opened -- and once the
+    # appended-unit note landed it also told them their own file probably had an
+    # unterminated comment. All 31 checks in elfwriter.inc are ErrorNoPos for
+    # exactly this, and so is the sibling refusal twelve lines below it in
+    # compiler.pas; this one was the neighbour nobody grepped for.
+    # bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file
+    if printf '%s' "$out" | grep -qE '^  (in|near): '; then
+      echo "emit-obj-target-set: FAILED -- the refusal for $t quotes a SOURCE POSITION." >&2
+      echo "  It runs after the parse, so that position is inside whichever builtin unit" >&2
+      echo "  the lexer stopped in -- a file the user never wrote. Use ErrorNoPos." >&2
+      printf '  %s\n' "$out" >&2
+      exit 1
+    fi
     if [ -z "$claimed" ]; then claimed=$said
     elif [ "$claimed" != "$said" ]; then
       echo "emit-obj-target-set: FAILED -- two refusals name DIFFERENT sets: '$claimed' vs '$said' (for $t)" >&2
