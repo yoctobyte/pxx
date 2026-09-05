@@ -192,3 +192,76 @@ are now three permanent rows in `test/` covering what used to be its findings:
 and the string-alias index test. Those are regression rows, not the sweep — the
 sweep is still a before/after instrument and still worth rebuilding for the
 refactor itself.
+
+---
+
+## 2026-09-05 (frankA) — the flag question is ANSWERED, and the answer is a third finding
+
+The 2026-09-04 note named *"the single measurement that would most change the
+estimate"*: the body says the hand-off needs an "this is an assignment target"
+flag because the expression parser *"resolves a trailing `.name` as a
+field/method/property and may CALL it"*, and the note observed that in practice
+the shared walker peeks past the bracket group for `:=` and may not need to be
+told.
+
+**Measured. The walker decides locally in every arm, and the arms do not decide
+the same way.** Listed, not counted, in `pasparser_lval.inc` at `2792cec8f` --
+every site that picks a property's READ or WRITE accessor:
+
+| line | receiver spelling | how it peeks for `:=` |
+| --- | --- | --- |
+| 833 | bare name inside a method | balances the bracket group |
+| 2474 | instance-qualified, `c.P` | balances |
+| 4574 | the selector walker | balances |
+| 4962 | default property, `obj[i]` | balances |
+| 1169 | the class name, `TC.P` | `CurTok` and one token past it -- **fixed** |
+| 516 / 539 | with-scope | `CurTok` only, and only the FIELD slots -- **fixed** |
+| 735 | bare name, class-var-backed accessor | `CurTok` only; NOT investigated, and it re-enters on a backing global rather than building a call, so whether an indexed spelling can reach it is an open question |
+
+For an INDEXED property the `:=` sits after the whole subscript, so an arm that
+peeks at `CurTok` reads the `[`, concludes "read", and calls the GETTER for a
+write. **The balanced scan is a copy-paste that reached four sites and not the
+other three**, and nothing in the tree says which arm has it.
+
+That is not an argument against the unification — it is an argument for it, and
+of a different kind than the ticket has been carrying. The ticket's case has
+been *"two lvalue parsers is a design flaw, with no defect backlog attached"*
+since the 25/25 sweep. The defect backlog was not absent; it was **inside the
+one walker**, in the arms nobody had lined up against each other. Two live bugs
+came out of the census the same afternoon:
+
+- [[bug-p-a-class-property-cannot-be-indexed]] — `TC.A[2] := 7` picked the read
+  accessor, `WriteLn(TC.A[2])` left the `[` behind, and `index N` reached
+  neither direction. The class-name arm hand-built its accessor call.
+- [[bug-p-a-with-scoped-property-with-method-accessors-is-undefined]] — a
+  with-scoped property resolved only through a backing FIELD; a getter/setter
+  pair was `undefined variable`. The arm declined method accessors in a
+  comment.
+
+**Both are the same omission, and it is the one this ticket's remedy is about:
+an arm that resolves a property WITHOUT going through `pasparser_call.inc`'s
+four accessor helpers.** Those helpers exist and their own header says eleven
+sites had built the dispatch by hand; the two arms above were among the ones
+still doing it. Fixing each meant deleting hand-built call construction, not
+adding a case — the same move the three earlier increments made.
+
+### What this changes for whoever finishes the refactor
+
+1. **The flag is not needed, and the reason is stronger than "the walker can
+   decide".** It already does decide, at every site in the table above, from the
+   token stream alone. What it lacks is ONE decision, not a caller's flag — the peek is
+   copy-pasted with two different degrees of care. **Unifying the peek is a
+   smaller and better-defined job than unifying the two parsers, and it removes
+   the class both of today's bugs came from.** That is the next increment.
+2. **The escape census generalises from the postfix loops to the ACCESSOR
+   calls.** [[refactor-p-three-hand-rolled-postfix-loops]] built a census of
+   which shared routines each suffix loop reaches, and it predicted four
+   defects. The same instrument aimed at `MakeAccessorCall` /
+   `AccessorArgChain` / `ParsePropIndexArgs` / `PropIndexConstArg` predicted
+   these two. Run it before the unification, not after.
+3. **A "no defect backlog attached" reading of a duplication ticket should be
+   re-taken whenever the duplication is INSIDE one routine.** The 25-shape
+   sweep varies the TARGET SHAPE against a fixed receiver spelling; both bugs
+   here need a varied RECEIVER (class name, with-scope) at a fixed shape. The
+   sweep was sound and its population was the wrong axis — which is why it read
+   as 25/25 while two arms were broken.
