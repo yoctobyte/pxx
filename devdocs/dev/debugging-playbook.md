@@ -8501,6 +8501,15 @@ contains `mismatch`**, and **an awk string inside a recipe**.
 > — written by the build describing itself.** Matching on failure vocabulary counts
 > the harness's prose alongside its verdicts.
 
+**A third source of false hits, and it is not comments: the recipe's own error
+HANDLING.** Grepping a finished log for `FAIL` returned **14, and all fourteen were
+`|| { echo '...: FAIL'; exit 1; }` echoed by make as the COMMAND, not as an outcome.**
+Anchored on the emitter: **one**. The naive and corrected filters were run side by side
+deliberately, as a control on the filter itself, and they separate 14 to 1. **A recipe
+that prints a word on failure contains that word whether or not it fails** — so the
+failure branch is in the log on every clean run, spelled exactly as the failure would
+spell it.
+
 **Anchor on the emitter, not the vocabulary**: `make: *** [Makefile:` for a stop, the
 harness's own verdict line for a result, the sentinel for completion. The stable
 pattern here is worth a shared filter rather than being re-derived by each session
@@ -8694,9 +8703,13 @@ this is the qualifier the table shipped without:
   UNMEASURED, not green.** Read the `make: *** [Makefile:NNN: ...]` line as the stop
   POSITION and treat the tail as absent, exactly as with any truncation. There is no
   partial reading between 0 and 2.
-- **under `-i`** — the exit status is **0 by construction** and carries nothing. The
-  verdict is the `(ignored)` markers plus the failure greps, and a report from an
-  `-i` run must say so or its 0 will be read as the row above.
+- **under `-i`** — the exit status is **0 by construction** and carries nothing; it
+  says only that make reached the end. **But `-i` yields something a `-k` run cannot:
+  every failing recipe line emits its own `(ignored)` marker, so the MARKER COUNT IS
+  THE FAILURE COUNT.** That is a verdict shaped as a count rather than an absence,
+  which is the better shape — a `-k` run's `MAKE_EXIT=2` tells you *something* failed
+  and nothing about how many, because it stopped at the first. A report from an `-i`
+  run must still say it was `-i`, or its 0 is read as the row above.
 
 ## A NOTIFICATION IS AN EVENT, SO A CORRECT VERDICT DELIVERED NOW READS AS A VERDICT MEASURED NOW
 
@@ -8863,6 +8876,51 @@ of it.
 > **When a fact is your reason for choosing an instrument, it is not also evidence
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
+
+## A REPAIR DOES NOT LOOK DOWN — THE SIBLING TWELVE LINES BELOW THE FIX IS THE ONE NOBODY GREPS FOR
+
+Measured 2026-09-06 (frankB). The file's standing advice is *fixed one arm of a double
+case? grep for the sibling* — and it is aimed at distance. **This one was adjacent.**
+
+`compiler/defs.inc:6600`, `TargetDisplayName`, accumulates through its own bare name.
+**It sits twelve lines below `EmitObjTargetList`** — the function `331fdae5f` repaired
+for exactly this defect, months earlier, whose fix comment is still in place saying
+*"Result, not the bare own name … it warns on every build."*
+
+> **The repair was written in that file, on that screen, and did not look down.** Two
+> instances one screen apart: one fixed long ago, one untouched, with the explanation
+> of the bug sitting between them.
+
+**Adjacency is why nobody grepped.** A sibling in another file gets a search because
+the fixer knows they cannot see it. A sibling in the same function's neighbourhood is
+inside the region the fixer believes they have already read — and *"I was just looking
+at this"* is the strongest form of the belief that suppresses the check. **After
+fixing an instance, grep the FILE you are in before grepping the tree**, and read the
+whole enclosing screen rather than the diff hunk.
+
+### The compiler-specific sharpness: one line, two meanings, two compilers
+
+`if TargetDisplayName = ''` is **a result-read to pxx and a RECURSIVE CALL to FPC.**
+So a single line means different things to the seed compiler and to the self-hosted
+one, in a routine that runs on every `--target` diagnostic. That is the shape the FPC
+seed canary exists for, and it is why this class survives `make compiler/pascal26`:
+pxx's reading is the correct one, so the self-host fixedpoint is undisturbed while the
+seed build recurses.
+
+### The control that fits a rename: PREDICT THE ARTEFACT IS UNCHANGED
+
+A result-write respelled as `Result` should emit **identical code**. So the check is
+not a test — it is the binary:
+
+```
+converged after 1 round(s)   sha b9d80c73da43   before
+converged after 1 round(s)   sha b9d80c73da43   after
+```
+
+**Byte-identical, as predicted.** For a change whose whole claim is *this means the
+same thing*, an unchanged artefact is a stronger statement than any passing test, and
+a CHANGED one would have been the finding. State the prediction before you look, or
+the sha is a number you nodded at.
 
 ## AN EDGE AND ITS STATE ARE STORED IN DIFFERENT PLACES — `blocked-by:` IS A RELATIONSHIP, THE FOLDER IS THE VERDICT
 
