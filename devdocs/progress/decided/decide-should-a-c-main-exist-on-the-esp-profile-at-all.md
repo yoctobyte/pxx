@@ -122,4 +122,4 @@ regressed. That is a coverage gap rather than a defect; frankC owns the script
 and it is one row, not a redesign.
 
 ## Log
-- 2026-09-05 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit 2beb2abec.
