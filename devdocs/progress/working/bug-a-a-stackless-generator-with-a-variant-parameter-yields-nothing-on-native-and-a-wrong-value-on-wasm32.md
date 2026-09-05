@@ -3,9 +3,10 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: working
 found-by: frankwasm (while reducing bug-a-a-nilpy-generator-fails-on-wasm32)
 summary: "A `generator; stackless;` routine that declares a VARIANT PARAMETER produces ZERO iterations on native x86-64 and ONE iteration with a garbage value (0) on wasm32. Six-line Pascal repro, no NilPy involved. It does NOT depend on the body reading the parameter -- a body that yields a constant fails identically -- so it is the parameter's SLOT, not its use. A Variant LOCAL is fine, an Integer parameter is fine, a Variant return is fine; only a Variant PARAMETER. Pre-existing on the pinned compiler. This is an ALL-TARGETS bug found on the native oracle, not a wasm32 one."
+owner: frankS
 ---
 
 # A Variant parameter makes a stackless generator produce nothing
