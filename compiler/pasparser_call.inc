@@ -2936,12 +2936,69 @@ end;
   bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity,
   where the copy that asked FindUMeth (name alone) wrote an empty file and
   returned True on x86-64 while refusing to build on three other targets. }
+{ Is the token at index `ti` a BARE handle for record type `recId`? One core for
+  three callers -- TextIOFileSym and FileIOFileSym below read it at the CURRENT
+  token, and the call-site router reads it one token PAST an unconsumed `(`.
+  The two CurTok-shaped predicates were byte-for-byte the same function with one
+  record name changed, and a third copy taking an index would have been the
+  point at which they started to drift.
+
+  BARE means the next token is `,` or `)` -- not `f.field` / `f[i]`, since
+  `WriteLn(f.Name)` is a console write of the string field, not a file write.
+  SymOwnRecOf rather than the type KIND, so `var f: array[0..1] of Text` cannot
+  be read as a handle: an array of Text carries TypeKind = tyRecord, and the old
+  spelling said no only because AllocArray clears RecName.
+  audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+function IOHandleSymAt(ti, recId: Integer): Integer;
+var vidx: Integer;
+begin
+  Result := -1;
+  if recId = REC_NONE then Exit;
+  if (ti < 0) or (ti >= TokCount) then Exit;
+  if Tokens[ti].Kind <> tkIdent then Exit;
+  if not ((ti + 1 < TokCount) and (Tokens[ti + 1].Kind in [tkComma, tkRParen])) then Exit;
+  vidx := FindSym(GetTokenStr(ti));
+  if (vidx >= 0) and (SymOwnRecOf(vidx) = recId) then
+    Result := vidx;
+end;
+
+{ Does the call starting at the CURRENT token pass a file handle as its FIRST
+  argument? Asked with the routine name still unconsumed and `(` at Tokens[TokPos],
+  so the first argument is Tokens[TokPos + 1].
+
+  This is what decides `Write(f, x)` between the I/O intrinsic and a same-named
+  METHOD of the enclosing class. No ordinary member takes a Text or a FileRec in
+  first position by accident, so a file handle there is unambiguous -- whereas
+  ARITY is not: a 2-parameter `Write(const Buffer; Count: Longint)` accepts
+  `Write(f, 'payload')` on arity alone, and `const Buffer` is an untyped formal
+  that accepts anything, so the type-directed overload probe does not rescue it.
+  bug-p-a-two-argument-write-to-a-text-file-inside-a-class-with-a-write-member-silently-writes-nothing }
+function CallFirstArgIsIOHandle: Boolean;
+begin
+  Result := False;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen) then Exit;
+  Result := (IOHandleSymAt(TokPos + 1, IsRecordType('text')) >= 0) or
+            (IOHandleSymAt(TokPos + 1, IsRecordType('filerec')) >= 0);
+end;
+
 function IntrinsicNamesSelfMethodHere: Boolean;
 begin
   Result := False;
   if not (CurTok.Kind in [tkRead, tkwrite, tkReadln, tkwriteln]) then Exit;
   if (CurProc < 0) or (CurSelfClass < REC_UCLASS_BASE) then Exit;
   if Tokens[TokPos].Kind <> tkLParen then Exit;
+  { A FILE HANDLE in first position means the INTRINSIC, whatever a member's
+    arity says. Arity alone is not enough and the gap was a silent wrong value:
+    a 2-parameter `Write(const Buffer; Count: Longint)` accepts
+    `Write(f, 'payload')` on arity, `const Buffer` is an untyped formal that
+    accepts anything so the type-directed probe does not reject it either, and
+    the call bound to the member -- file created, left EMPTY, exit 0. fpc 3.2.2
+    refuses that source outright; we did neither, which is the one outcome
+    nobody can act on.
+    A member that genuinely WANTS a handle first is still reachable by
+    qualifying (`Self.Write(f, n)`) -- the same escape hatch fpc makes you use
+    to reach the intrinsic, pointed the other way. }
+  if CallFirstArgIsIOHandle then Exit;
   Result := FindUMethArityStrict(SelfMemberCi(CurTok.SVal), CurTok.SVal,
                                  CountCallArgsAhead) >= 0;
 end;

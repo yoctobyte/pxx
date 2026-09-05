@@ -35,19 +35,32 @@ program test_read_write_as_method_name;
     load-bearing ones: the whole change is "sometimes this keyword is a name", so
     a version that always treated it as a name would still pass every row above
     and break every ordinary Write in the language. `console` is a plain method
-    with no such member; `textfile` writes and reads a real file from inside a
-    class that shadows `Read`, so the intrinsic is reached from a method that
-    IS inside a shadowing class rather than from one that avoids the question.
-  * `arity` is the second half of that gate, and it pins a DELIBERATE divergence
-    rather than FPC's answer. The class declares a 2-parameter Write; the call
-    passes a Text handle and three strings. No member can accept it, so we fall
-    through to the intrinsic — fpc 3.2.2 instead refuses the whole unit
-    ("Wrong number of parameters specified for call to Write"), because it gives
-    the member absolute priority and never falls back. We diverge on purpose:
-    lib/rtl/configparser.pas is written in that shape, and the fall-through is
-    what bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity
-    installed after the un-gated version wrote an EMPTY FILE and returned True
-    on x86-64 while refusing to build on three other targets.
+    with no such member; `textfile` writes and reads a real file from inside the
+    class that shadows BOTH names with a MATCHING arity, which is the case that
+    routes on the file handle rather than on the arity.
+  * `member still wins` is that rule's other direction and it is why the fix is
+    a first-ARGUMENT test and not "prefer the intrinsic inside a shadowing
+    class". `Read(B, C)` with no handle anywhere must still reach the member.
+  * `arity falls through` pins a DELIBERATE divergence rather than FPC's answer,
+    and NOTE THAT ITS MECHANISM CHANGED under the routing fix. The call passes a
+    Text handle and three strings; it now reaches the intrinsic because the FIRST
+    ARGUMENT IS A HANDLE, not because no member could accept four arguments. The
+    arity gate still exists and still matters — for a call with NO handle whose
+    arity no member accepts — but it is no longer what carries this row. Kept
+    because the OUTCOME is the contract and it is the one FPC does not share:
+    fpc 3.2.2 refuses the whole unit here ("Wrong number of parameters specified
+    for call to Write"), giving the member absolute priority and never falling
+    back. We diverge on purpose — lib/rtl/configparser.pas is written in this
+    shape, and the fall-through is what
+    bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity
+    installed after the un-gated version wrote an EMPTY FILE and returned True on
+    x86-64 while refusing to build on three other targets.
+
+  BECAUSE OF THAT DIVERGENCE THIS FILE HAS NO FPC ORACLE, and that is stated
+  rather than left for a reader to assume: fpc REFUSES to compile it, so there
+  is no output to diff. Every expectation here is derived from the language and
+  from the two tickets named above, not from a second implementation. The rows
+  that DO have an oracle live in test_filemode.pas and test_typed_file_of_t.pas.
 
   bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic }
 {$MODE OBJFPC}
@@ -64,17 +77,6 @@ type
     function ViaWrite(const Buffer; Count: Longint): Longint;
     procedure Console;
     function ArityFallsThrough(const path: AnsiString): Integer;
-  end;
-
-  { Shadows Read and NOT Write, so an ordinary Write/Readln on a Text handle
-    inside it is the intrinsic reached from a method that shadows a sibling
-    name. TStreamish cannot host this row: it declares a 2-parameter Write, and
-    `Write(f, 'payload')` matches that arity, so the call binds to the member and
-    writes nothing at all -- a silent wrong value, pre-existing (identical on
-    pinned), and refused outright by fpc 3.2.2 with "Wrong number of parameters
-    specified for call to Write". Its own ticket, not this one's row to assert. }
-  TReaderOnly = class
-    function Read(var Buffer; Count: Longint): Longint;
     function TextRoundTrip(const path: AnsiString): AnsiString;
   end;
 
@@ -140,13 +142,14 @@ begin
   writeln('sole');
 end;
 
-function TReaderOnly.Read(var Buffer; Count: Longint): Longint;
-begin
-  Result := Count;
-end;
-
-{ Write/Readln on a Text handle from INSIDE a class that shadows Read. }
-function TReaderOnly.TextRoundTrip(const path: AnsiString): AnsiString;
+{ Write/Readln on a Text handle from inside the class that shadows BOTH names,
+  with a member whose ARITY the call matches exactly. This row lived on a
+  separate TReaderOnly class until the routing fix landed, precisely because
+  TStreamish could not host it: `Write(f, 'payload')` is two arguments, the
+  member takes two, so it bound to the member and the file was created EMPTY at
+  exit 0. Folding it back here is the point -- the class that CANNOT host the row
+  is the one that proves the fix. }
+function TStreamish.TextRoundTrip(const path: AnsiString): AnsiString;
 var f: Text; s: AnsiString;
 begin
   Assign(f, path); Rewrite(f); Write(f, 'payload'); Close(f);
@@ -165,7 +168,6 @@ end;
 
 var
   s: TStreamish;
-  ro: TReaderOnly;
   b: array[0..7] of Byte;
   tmpdir: AnsiString;
 begin
@@ -173,7 +175,6 @@ begin
   tmpdir := GetEnvironmentVariable('TMPDIR');
   if tmpdir = '' then tmpdir := '/tmp';
   s := TStreamish.Create;
-  ro := TReaderOnly.Create;
 
   { Read returns Count*2, so it is never < Count for a positive Count }
   ChkS('expr',       s.ViaExpr(b, 4),      'full');
@@ -184,7 +185,8 @@ begin
 
   s.Console;
 
-  ChkS('textfile intrinsic', ro.TextRoundTrip(tmpdir + '/test_rwname_a.txt'), 'payload');
+  ChkS('textfile intrinsic', s.TextRoundTrip(tmpdir + '/test_rwname_a.txt'), 'payload');
+  Chk ('member still wins',  s.ViaAssign(b, 5), 10);
   Chk ('arity falls through', s.ArityFallsThrough(tmpdir + '/test_rwname_b.txt'), 3);
 
   writeln('total ok ', ok, ' / ', tot);

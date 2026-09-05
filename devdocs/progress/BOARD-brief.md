@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:16 unfinished:25 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:136 backlog-nilpy:97 backlog-tools:23 backlog-pascal:40 backlog-decide:39 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3301 rejected:76`
+`working:15 unfinished:25 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:136 backlog-nilpy:97 backlog-tools:23 backlog-pascal:40 backlog-decide:39 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3302 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-p-a-two-argument-write-to-a-text-file-inside-a-class-with-a-write-member-silently-writes-nothing` [P] — owner: frankB
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA

@@ -4,7 +4,7 @@ title: "`Write(f, s)` on a Text handle, inside a class declaring a 2-parameter W
 track: P
 prio: 60
 type: bug
-status: working
+status: done
 found: 2026-09-05
 found-by: frankB
 owner: frankB
@@ -96,3 +96,6 @@ between two mechanisms that can each eat the other:
 its `TReaderOnly` class, which exists only because `TStreamish` cannot host the
 Text round-trip row while this bug is open. **Fold that class back in when this
 is fixed** — its presence is a marker.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

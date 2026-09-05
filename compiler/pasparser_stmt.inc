@@ -3493,22 +3493,11 @@ end;
 { A Text-typed first argument? Only ever true once the implicit-textfile unit is
   loaded, so the console path is unaffected otherwise. Returns the file var sym
   or -1. }
+{ CurTok is Tokens[TokPos - 1] (Next copies then increments), so the current
+  token's index is TokPos - 1. }
 function TextIOFileSym: Integer;
-var textRecId, vidx: Integer;
 begin
-  Result := -1;
-  textRecId := IsRecordType('text');
-  if (textRecId = REC_NONE) or (CurTok.Kind <> tkIdent) then Exit;
-  { Must be a BARE Text handle (next token `,` or `)`), not `f.field` / `f[i]` —
-    `WriteLn(f.Name)` is a console write of the string field, not a file write. }
-  if not ((TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen])) then Exit;
-  vidx := FindSym(CurTok.SVal);
-  { SymOwnRecOf, so `var f: array[0..1] of Text` cannot be read as a bare Text
-    handle: an array of Text carries TypeKind = tyRecord, and the old spelling
-    said no only because AllocArray clears RecName.
-    audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
-  if (vidx >= 0) and (SymOwnRecOf(vidx) = textRecId) then
-    Result := vidx;
+  Result := IOHandleSymAt(TokPos - 1, IsRecordType('text'));
 end;
 
 { The FileRec twin of TextIOFileSym, and deliberately its exact shape — bare
@@ -3517,15 +3506,8 @@ end;
   records are ambient once the textfile unit is loaded, so both questions have
   to be asked at every read/write site and neither may answer for the other. }
 function FileIOFileSym: Integer;
-var fileRecId, vidx: Integer;
 begin
-  Result := -1;
-  fileRecId := IsRecordType('filerec');
-  if (fileRecId = REC_NONE) or (CurTok.Kind <> tkIdent) then Exit;
-  if not ((TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen])) then Exit;
-  vidx := FindSym(CurTok.SVal);
-  if (vidx >= 0) and (SymOwnRecOf(vidx) = fileRecId) then
-    Result := vidx;
+  Result := IOHandleSymAt(TokPos - 1, IsRecordType('filerec'));
 end;
 
 { Bytes ONE `Read(f, v)` / `Write(f, v)` moves. This is the destination's own

@@ -6599,7 +6599,7 @@ test-core: $(COMPILER)
 	@# bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic
 	@# The `console` row prints to stdout, so the assertion reads the LAST line only.
 	./$(COMPILER) test/test_read_write_as_method_name.pas $(TESTTMP)/test_rwname26
-	tools/expect_same.sh test_rwname26 "$$($(TESTTMP)/test_rwname26 | tail -1)" "total ok 7 / 7"
+	tools/expect_same.sh test_rwname26 "$$($(TESTTMP)/test_rwname26 | tail -1)" "total ok 8 / 8"
 	@# System.FileMode -- the discriminating row is `readonly write refused`, and it
 	@# needs the $$40-or-0 spelling: PAL_OPEN_READ is also 0, so a plain 0 passes
 	@# whether or not the mapping does anything. Every row is fpc 3.2.2's output.
