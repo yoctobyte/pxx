@@ -1,6 +1,13 @@
 ---
+slug: feature-embed-dwscript-rtti
+title: "DWScript -- compile under pxx + RTTI auto-bind (scripting stress test)"
+track: B
 prio: 40
+type: feature
+status: backlog
+owner: ""
 blocked-by: []
+summary: "Vendor DWScript (MPL 1.1) and drive `dwsRTTIExposer`, which binds an arbitrary HOST OBJECT handed in from script -- the instance-taking typinfo spelling, by construction. PREMISE RE-MEASURED 2026-09-05 at c9cbcd292, compiler dc2853adbdf0, and the 2026-08-28 blocking analysis in the body is now STALE IN BOTH HALVES: (1) the blocker it names, bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, is `status: done`, and `GetPropInfo(AnObject, ''Name'')` now binds correctly -- measured against a published `Name`/`Count`, both the instance and class spellings resolve and GetOrdProp/GetStrProp through the returned PPropInfo return 42 and ''zaphod''. Nothing here is blocked on overload matching any more. (2) A segfault IS still reachable and it is NOT the one the body predicts: `lib/rtl/typinfo.pas` has no by-name `GetStrProp(Instance, PropName)` -- only `(instance: Pointer; p: PPropInfo)` -- while FPC''s typinfo does, so the FPC spelling every vendored consumer writes puts a string literal in the PPropInfo slot, which the compiler ACCEPTS (TypesCompatible grants tyPointer<-tyString for C bindings and cannot see the pointee) and then dereferences. So the real work is two things the old analysis never named: ADD the by-name typinfo overloads (Track B, the actual DWScript blocker), and stop a string literal binding to an unrelated typed pointer (Track P, filed separately, fix in hand). The vendoring half is untouched and unstarted."
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
@@ -42,6 +49,95 @@ instance spelling by construction, and vendored FPC code will spell it FPC's way
 A false edge would rank correctly for the wrong reason and outlive the reason —
 so if the RTTI half of this ticket turns out to reach only the type-level API,
 delete this edge rather than leaving it as decoration.
+
+## CORRECTION 2026-09-05 (frankH): both halves of the block above are stale
+
+*The section above is kept as written -- it is history, and its reasoning was
+sound on the evidence it had. This is what re-measuring found.*
+
+**The blocker is closed.** `bug-p-a-parameters-pointer-element-type-is-lost-
+between-registration-and-overload-matching` is `status: done`, in `done/`. Its
+fix is the pointee narrowing now at `symtab.inc` in `MatchParamCompatible`,
+whose own comment names this exact call: *"a pointer-taking overload was a
+VIABLE candidate for a class argument and was then preferred over the exact
+class match, so typinfo's `GetPropInfo(AnObject, 'Caption')` -- the spelling
+every FPC consumer uses -- bound to the PClassRTTI arm and segfaulted."*
+
+**So the instance spelling resolves.** Measured at `c9cbcd292`, compiler
+`dc2853adbdf0`, against a `TThing` with published `Name: string` and
+`Count: Integer`:
+
+```
+instance spelling: bound          { GetPropInfo(t, 'Name') }
+ord prop  = 42                    { GetOrdProp(t, GetPropInfo(t, 'Count')) }
+str prop  = zaphod                { GetStrProp(t, p) }
+done
+```
+
+No segfault, and the class spelling resolves too. **Nothing in this ticket is
+blocked on overload matching any more**, and the `blocked-by:` frontmatter --
+which was always `[]`, so the edge lived only in the prose above -- is correct
+as it stands.
+
+**The segfault is real and has a different cause.** The probe that found it
+spelled the call the FPC way:
+
+```pascal
+GetStrProp(t, 'Name')     { segfaults }
+GetStrProp(t, p)          { works, p from GetPropInfo }
+```
+
+`lib/rtl/typinfo.pas` declares exactly one `GetStrProp`, taking
+`(instance: Pointer; p: PPropInfo)`. **FPC's typinfo also has the by-name
+arm**, so every vendored FPC consumer -- `dwsRTTIExposer` included -- writes
+the first spelling. There is no overload to bind, and instead of saying so the
+compiler accepts the string literal in the `PPropInfo` slot and dereferences
+it. `TypesCompatible` grants `tyPointer <- tyString` deliberately (a Pascal
+string marshals to a `const char*`, so a C binding needs no `PChar()` cast) and,
+exactly like the `tyClass` rule one block up, **it sees two KINDS and cannot see
+the pointee.** Reduced away from RTTI entirely:
+
+```pascal
+type PRec = ^TRec;
+function Take(p: PRec): Integer; ...
+Take('Name')    { pxx: compiles, then reads the string's bytes as fields }
+                { fpc: Incompatible type for arg no. 1: Got "Constant String" }
+```
+
+This is the third spelling of one rule in that function -- the `tyClass`
+pointee narrowing, an ordinal one, and this. Not being consolidated yet, and
+deliberately: the three permit different pointee sets, so a shared helper would
+take the permitted set as a parameter and share the `if` and none of the
+thinking. The overhaul is worth doing when the pointee question has one answer.
+
+**Us accepting what FPC rejects is normally not a defect here** -- CLAUDE.md is
+explicit. This one is, and the distinction is worth keeping straight: the
+acceptance DESTROYS a diagnostic and turns it into a SIGSEGV, and it hides a
+MISSING OVERLOAD rather than merely differing about a legal program. *"Prefer
+the answer that leaves the mistake visible"* is the goal file's own test, and a
+segfault is the maximally invisible answer.
+
+**So the work this ticket actually needs, neither item named by the analysis
+above:**
+1. **Add the by-name typinfo overloads** (`GetStrProp`, `SetStrProp`,
+   `GetOrdProp`, `SetOrdProp`, taking `(Instance, const PropName: string)`).
+   Track B, and this is the real DWScript blocker -- vendored FPC code spells
+   it this way and cannot be edited to spell it ours without breaching the
+   MPL fork-publish obligation noted above.
+2. **Refuse a string literal in an unrelated typed-pointer parameter.**
+   Track P, filed as its own bug, fix in hand.
+
+Neither is a reason to keep an edge on this ticket: (1) is inside its own scope
+and (2) is a general compiler bug that would be wrong to hang here, for exactly
+the reason the section above gives for not hanging the old one on a nearer
+ticket.
+
+**Earliest sighting of the unrelated pin seam, recorded because it is the same
+kind of fact:** frankB hit `lib/rtl/typinfo.pas` refusing to compile under pin
+v403 at ~18:30 the same day, with `TMethod` in the diagnostic's own `near:`
+window, while trying to use the pin as a control. It recorded *"the pin is not
+a control here"* and moved on -- correct for its purpose. The finding existed
+in a log 90 minutes before it existed in anyone's head.
 
 ## Why this is the sharper test case
 
