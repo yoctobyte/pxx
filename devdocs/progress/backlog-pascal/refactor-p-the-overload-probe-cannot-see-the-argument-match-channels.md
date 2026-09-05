@@ -245,3 +245,88 @@ PARSING, i.e. before that entry is reached with a parsed chain — which is why 
 looks safe — but "looks safe" is the wrong standard for a globals-lifetime
 question. Establish that no free-path fill can be live across a probe before
 wiring it, then gate on the four rows in the body's table plus both baselines.
+
+---
+
+## 2026-09-05 (frankA) — the globals-lifetime question step 1 deferred, ANSWERED; and the gap has a repro
+
+Step 1's note ended: *"Establish that no free-path fill can be live across a
+probe before wiring it."* Established, and the answer has two halves — one that
+clears step 2, one that was a defect in its own right and is now fixed.
+
+### Half 1 — the free path cannot have a live fill across a probe
+
+`MatchCallDelphiProcAddr` fills at `pasparser_lval.inc:6489`, then matches and
+retry-matches down to its end at 6679. Comments and string literals stripped
+programmatically, that whole 191-line window contains **no** `Parse*`, `Next`,
+`Expect`, `Eat`, `Rewind*` or recursive `FindUMethOverloadAhead`. Nothing in it
+can parse, so no nested probe can run inside it, so the free path's fill is
+never live across one. **The direction that looked dangerous is closed.**
+
+The direction that actually *is* dangerous runs the other way, and it is the
+probe against ITSELF: `a.M(b.N(x), y)` runs a second probe inside the first
+one's argument-parsing loop. A fill placed in that loop would let the inner
+probe overwrite the outer one's channels before the outer one read them. So the
+fill must go **after the rewind** — measured the same way, lines 2500→end of
+`FindUMethOverloadAhead` contain zero parse-capable calls — which is why the
+parsed nodes are now carried in a local `argNode[]` rather than read off
+`CurASTNode` in the loop.
+
+### Half 2 — the `*Valid` flags were never a per-call lifetime, and one reader was already exposed
+
+The four flags are set `True` in **exactly one place in the tree** and set
+`False` in **none**. So after the first filled call they are True for the rest
+of the process, with the previous call's answers still in the arrays. The
+`defs.inc` contract said *"paths that never fill the array are safe"*; that held
+only before the first filled call.
+
+`PyParseVariadicMinMax` (`pyparser.inc`) is the one caller of `MatchProcCall*`
+that does not fill, and instrumenting the read site showed it reading:
+`test_nilpy_min_max_variadic.npy`, **ten reads, all four flags True**, with
+`MatchArgScalar[0]` and `[1]` carrying a leftover True. Fixed in `bc2fe10f1`,
+which declares them invalid there and corrects the contract comment. **No
+answer-changing case was constructed** and the fix does not claim one: that
+fold's candidates are the 2-argument min/max overloads, whose parameters are
+plain scalars, so no channel has an array, record or class parameter to
+disqualify. Candidate-set luck, not a property of the code.
+
+### The gap this ticket is about now has a repro, and it is SILENT
+
+```pascal
+type TIA = array[0..2] of Integer;
+     TD = class procedure One(v: Integer); end;   { ONE candidate }
+var d: TD; ia: TIA;
+begin d := TD.Create; ia[0] := 11; d.One(ia); end.
+```
+
+| | |
+| --- | --- |
+| pxx, method spelling | compiles, prints `one 4306992` — the array's ADDRESS |
+| pxx, free `One(ia)` | **refused**, "candidates: One(Integer)" |
+| fpc 3.2.2 | refused, *Incompatible type for arg no. 1: Got "TIA", expected "LongInt"* |
+| pin v403 | prints `one 4306992` — **pre-existing, not a regression** |
+
+That is `bug-p-an-array-argument-binds-a-scalar-overload` — fixed for the free
+path by adding `MatchArgArray` — arriving through the method path, which could
+not see the channel. The two spellings of one call disagree, and the method one
+is the silent one. It is the ticket's thesis with a number attached.
+
+### Step 2 as landed, and what it deliberately does NOT do
+
+The `nCand = 1` gate now fills the channels and calls `MatchArgRecMismatch` —
+the free path's own predicate — instead of only its narrow allowlist. Indexed
+by the **parameter** slot `pj`, not the argument slot `j`: `Params[0]` is Self
+on every method, and `MatchArgRecMismatch` reads `Params[j]` and `MatchArg*[j]`
+with one `j`. Under NilPy keywords `OverloadArgParamIdx` makes that mapping
+non-identity, which is the second reason not to assume `j`.
+
+**The narrow allowlist stays.** The body's table lists four legal calls a
+kinds-only gate refuses, and two of them — `slist.Add('test', l)` (a generic
+type parameter is `tyUnknown` at the declaration) and `inherited
+Sort(ItemPtrCompare)` (a routine name as a procedural value) — have a dash in
+the "channel that knows" column. Filling all five channels does not answer
+either, so widening the `TypesCompatible` half would still refuse them. Reaching
+the shared *refusal* predicate is what the channels buy; the full compatibility
+check is not unblocked by this step and should not be attempted as if it were.
+
+The flags are cleared again on the way out, for the reason half 2 gives.

@@ -5821,6 +5821,20 @@ test-core: $(COMPILER)
 	  || { echo 'test_method_arg_typecheck_fails: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_arg_typecheck_ok.pas $(TESTTMP)/test_margok26
 	tools/expect_same.sh test_margok26 "$$($(TESTTMP)/test_margok26)" "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
+	# ...and the same gate reaching the FREE path's own refusal predicate, which
+	# it could not before: an ARRAY argument must not bind a SCALAR parameter
+	# through a method, exactly as it already could not through a free call.
+	# `d.One(ia)` compiled and printed the array's ADDRESS while the identical
+	# free `One(ia)` was refused -- silent wrong value, spelling decided it.
+	# Negative half first, then the arms that must still be ACCEPTED (a char
+	# array IS a string; an open-array parameter takes an array), which are also
+	# what catches an off-by-one in the parameter-slot indexing, since Params[0]
+	# is Self on every method.
+	@./$(COMPILER) test/test_method_array_arg_scalar_param_fails.pas $(TESTTMP)/test_marrfail26 2>&1 \
+	  | grep -q 'no overload of One matches these arguments' \
+	  || { echo 'test_method_array_arg_scalar_param_fails: FAIL - expected a compile error naming the method'; exit 1; }
+	./$(COMPILER) test/test_method_array_arg_ok.pas $(TESTTMP)/test_marrok26
+	tools/expect_same.sh test_marrok26 "$$($(TESTTMP)/test_marrok26)" "$$(printf 'chararr [abc] 1\nopenarr 2 3 11\nscalar 44')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
 	tools/expect_same.sh test_method_overload_types_b24826 "$$($(TESTTMP)/test_method_overload_types_b24826)" "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"

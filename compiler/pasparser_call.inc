@@ -2326,6 +2326,10 @@ var
   argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   argRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   argIsNil: array[0..MAX_PROC_PARAMS-1] of Boolean;   { the literal `nil` at argument j }
+  argNode: array[0..MAX_PROC_PARAMS-1] of Integer;    { argument j's parsed AST node, kept
+                                                        across the rewind so the channels can
+                                                        be filled AFTER all parsing is done --
+                                                        see the fill in the nCand=1 gate }
   argKwTok: array[0..MAX_PROC_PARAMS-1] of Integer;   { token index of argument j's NilPy
                                                         keyword name, -1 if positional }
   pj: Integer;                                        { argument j's parameter slot }
@@ -2487,6 +2491,8 @@ begin
         one — consulting it from here answered False for every nil and refused
         `SetOnKeyPtrCompare(nil)` across the whole fgl rung. }
       argIsNil[nArgs] := IsNilLiteralNode(CurASTNode);
+      argNode[nArgs] := CurASTNode;   { for the channel fill below; the rewind restores
+                                        TokPos only, so the node stays valid in the arena }
       if argTk[nArgs] = tyClass then
         argRec[nArgs] := ResolveNodeRec(CurASTNode)
       else
@@ -2597,12 +2603,65 @@ begin
       population out of pasparser_lval.inc into a helper both callers share.
       That is the real fix and it is a refactor, not this. }
     pi := UMthProc_[cand[0]];
+
+    { THE ARGUMENT-MATCH SIDE CHANNELS, filled here so this gate can reach the
+      free path's own answer instead of re-deriving a weaker one from kinds.
+      Step 2 of
+      refactor-p-the-overload-probe-cannot-see-the-argument-match-channels.
+
+      WHERE this sits is the whole safety argument, so it is stated rather than
+      left to be re-derived. The channels are GLOBALS with no per-call
+      lifetime, and this probe runs NESTED inside argument parsing -- a method
+      call in an argument position (`a.M(b.N(x), y)`) runs a second probe
+      inside the first one's parse loop. Filling from that loop would therefore
+      let the inner probe overwrite the outer one's channels before the outer
+      one had read them.
+
+      So the fill happens HERE, after `TokPos := savedCurIdx; Next`, in a
+      window that was measured to contain no parsing at all: from the rewind to
+      the end of this function there is no Parse*, Next, Expect, Eat, Rewind*
+      or recursive probe call. That is the same discipline
+      MatchCallDelphiProcAddr keeps for its own fill -- fill, match, retry, all
+      with the token stream untouched -- and it is the reason the nodes are
+      carried in argNode[] rather than read off CurASTNode in the loop.
+
+      Indexed by the PARAMETER slot pj, not by the argument slot j: Params[0]
+      is Self on every method, so the channels and MatchArgRecMismatch must
+      agree about which slot they mean, and the predicate reads Params[j] and
+      MatchArg*[j] with ONE j. Under NilPy keywords OverloadArgParamIdx makes
+      that mapping non-identity, which is the other reason not to assume j.
+
+      Cleared again below: no caller of MatchProcCall* may be left reading a
+      fill that was made for a different argument list, which is the defect
+      fixed in PyParseVariadicMinMax. }
+    for j := 0 to nArgs - 1 do
+    begin
+      pj := OverloadArgParamIdx(pi, 1, j, argKwTok[j]);
+      if (pj >= 1) and (pj < MAX_PROC_PARAMS) then
+        FillMatchArgChannelsAt(pj, argNode[j], argTk[j]);
+    end;
+    MatchArgRecValid := True;
+    MatchArgNilValid := True;
+    MatchArgScalarValid := True;
+    MatchArgArrayValid := True;
+
     ok := True;
     for j := 0 to nArgs - 1 do
     begin
       pj := OverloadArgParamIdx(pi, 1, j, argKwTok[j]);
       if (pj >= 1) and (pj < MAX_PROC_PARAMS) then
       begin
+        { The shared answer, reached rather than re-derived. This is the
+          predicate the FREE path refuses on, and the asymmetry it removes was
+          silent: `d.One(ia)` with `One(v: Integer)` and `ia: array[0..2] of
+          Integer` compiled and printed the array's ADDRESS (4306992), while
+          the identical free `One(ia)` was refused -- because the free path
+          fills MatchArgArray and this probe could not. FPC 3.2.2 refuses both:
+          "Incompatible type for arg no. 1: Got "TIA", expected "LongInt"".
+          Measured on pin v403 too, so it is not a regression, it is the gap
+          this ticket was filed about.
+          bug-p-an-array-argument-binds-a-scalar-overload, method spelling. }
+        if MatchArgRecMismatch(pi, pj, argTk[j]) then ok := False;
         if Procs[pi].Params[pj].IsArray then continue;
         if ProcParamUntyped[pi * MAX_PROC_PARAMS + pj] then continue;
         if argIsNil[j] then continue;
@@ -2617,6 +2676,11 @@ begin
           ok := False;
       end;
     end;
+    { Nothing downstream may read a fill made for THIS argument list. }
+    MatchArgRecValid := False;
+    MatchArgNilValid := False;
+    MatchArgScalarValid := False;
+    MatchArgArrayValid := False;
     if not ok then
       Error('no overload of ' + name + ' matches these arguments');
     Result := FindUMethArity(ci, name, nExplicitArgs);
