@@ -1950,7 +1950,28 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                   "the `toolchain:` line against a version recorded elsewhere "
                   "-- it is spelled out in full for exactly that reason."
                   % now_fp, ""]
-    if prev and now_fp and prev != now_fp:
+    prev_keys = sorted(k for k in ((st or {}).get("toolchain") or {})
+                       if k != "fp")
+    now_keys = sorted(toolchain or {})
+    schema_moved = bool(prev and prev_keys and prev_keys != now_keys)
+    if schema_moved:
+        # A FINGERPRINT WHOSE DEFINITION MOVED IS NOT A TOOLCHAIN THAT MOVED,
+        # and collapsing the two would put a false alarm into the instrument
+        # built to prevent one. Adding `git` to the set on 2026-09-05 changes
+        # every host's fp on its next run while nothing on any box changed.
+        # Both are reported -- this one first, because it EXPLAINS the other.
+        added = [k for k in now_keys if k not in prev_keys]
+        gone = [k for k in prev_keys if k not in now_keys]
+        lines += ["> **THE FINGERPRINT'S DEFINITION CHANGED, not necessarily "
+                  "this box.** The set of tools hashed into `toolchain_fp` "
+                  "moved since this host's last run (%s%s%s). A differing "
+                  "fingerprint across that boundary says the QUESTION changed, "
+                  "not the answer. Compare the `toolchain:` lines tool by "
+                  "tool; do not read the fp difference alone as an upgrade."
+                  % ("added: " + ", ".join(added) if added else "",
+                     "; " if added and gone else "",
+                     "dropped: " + ", ".join(gone) if gone else ""), ""]
+    if prev and now_fp and prev != now_fp and not schema_moved:
         lines += ["> **TOOLCHAIN CHANGED on this host since its previous run** "
                   "(`%s` -> `%s`). Every cross-target row here was measured by "
                   "a different emulator than the last verdict on this box, so "
@@ -7018,6 +7039,14 @@ def host_toolchain():
     except (OSError, AttributeError):
         tc["kernel"] = None
     tc["gcc"] = _tool_version("gcc")
+    # GIT IS A TEST DEPENDENCY HERE, not just a VCS. Measured 2026-09-05:
+    # tools-devtest#00 went red on seven and green on plexus from a tree that
+    # is byte-identical for both tools/devtest_sync_fold.py and tools/sync.sh
+    # -- and that devtest drives git 25 times, cloning, rebasing and testing
+    # containment. Seven's git moved in the same dist-upgrade that moved qemu.
+    # The field existed, the box was fingerprinted, and the tool the failure
+    # actually turned on was not in the set.
+    tc["git"] = _tool_version("git")
     for b in RUNNER_BINARIES:
         tc[b] = _tool_version(b)
     _TOOLCHAIN_CACHE.update(tc)

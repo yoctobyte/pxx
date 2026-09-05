@@ -179,6 +179,15 @@ def main():
     import tempfile
     import types
 
+    def _render_with(st, toolchain):
+        """Same real writer, with the toolchain the box is supposedly running."""
+        clone = types.SimpleNamespace(path=tempfile.mkdtemp())
+        rep = {"tier": "full", "verdict": "GREEN", "wall": 1, "jobs": {},
+               "scale": 1.0, "toolchain": toolchain}
+        twatch.write_report_md(clone, "h", "0" * 40, "1" * 40, rep,
+                               [], [], [], st)
+        return sorted(pathlib.Path(clone.path).rglob("*.md"))[0].read_text()
+
     def _render(st):
         """A real write_report_md call, not a re-implementation of the branch.
 
@@ -213,13 +222,41 @@ def main():
     check("CHANGED on this host" in moved and "FIRST RECORDED" not in moved,
           "and a real move still announces itself, exactly once")
 
+    print("9. a fingerprint whose DEFINITION moved is not a box that changed")
+    # Adding `git` on 2026-09-05 changes every host's fp on its next run while
+    # nothing on any box changed. Collapsing that into TOOLCHAIN CHANGED would
+    # put a false alarm into the instrument built to prevent one -- and it
+    # would arrive on every host at once, which is exactly what a real fleet
+    # event looks like.
+    base = {"kernel": "k", "gcc": "1", "qemu-i386": "8.2.2"}
+    grew = dict(base, git="2.53.0")
+    prev_same = {"toolchain": dict(base, fp=twatch.fp_of_toolchain(base))}
+    try:
+        schema = _render_with(prev_same, grew)
+        real = _render_with(
+            {"toolchain": dict(grew, fp=twatch.fp_of_toolchain(grew))},
+            dict(grew, **{"qemu-i386": "10.2.1"}))
+    except Exception as e:                                          # noqa: BLE001
+        schema = real = "RAISED %s: %s" % (type(e).__name__, e)
+    check("DEFINITION CHANGED" in schema,
+          "adding a tool says the QUESTION moved, not the answer",
+          "every host would otherwise announce an upgrade at once")
+    check("CHANGED on this host" not in schema,
+          "and does not ALSO claim the box changed",
+          "the two callouts are exclusive; the schema one explains the fp gap")
+    check("git" in schema,
+          "and it names which tool joined, so the reader can check by hand")
+    check("CHANGED on this host" in real and "DEFINITION CHANGED" not in real,
+          "while a real upgrade under a STABLE key set still announces itself",
+          "the discrimination must not silence the callout it guards")
+
     check(tb.startswith("## "),
           "the heading is top-level, so it cannot orphan",
           "cross_currency_block returns [] when no host has a DATED full tier; "
           "a `###` under a parent that did not render reads as part of "
           "whatever section came before it")
 
-    print("\n  %d guard(s), %d FAIL" % (22, len(fails)))
+    print("\n  %d guard(s), %d FAIL" % (26, len(fails)))
     return 1 if fails else 0
 
 

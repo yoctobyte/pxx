@@ -1136,3 +1136,80 @@ to look like unfinished work.
 diagnosis *neither was a compiler defect*. One was a guard that could not pass
 and one was an emulator version. A red tier does not mean a broken compiler,
 and this umbrella's whole history is that reading being made by default.
+
+## 2026-09-05 — the first full tier after seven's dist-upgrade
+
+Full tier `5b5fdb0b32d3`, seven, 2026-09-05T18:33:42Z, verdict RED.
+`toolchain: kernel=7.0.0-31-generic gcc=15.2.0 qemu=10.2.1(6 of 6)
+wasmtime=48.0.1`, `toolchain_fp: b926fcc528d9`, `compiler_sha256:
+fe1e9c37d322…`.
+
+### `c_crtl_wait.c` PASSES, and that is not a demonstration
+
+`test-core#src:test/c_crtl_wait.c` -> **`pass`**. Read out of the run's job map
+(4255 entries), NOT inferred from its absence in the red list — a job missing
+from a red list has two causes, and this file's own rule is that the two must be
+separated rather than collapsed.
+
+**The dist-upgrade moved three things at once**: kernel 6.8.0-138 -> 7.0.0-31,
+gcc 13.3.0 -> 15.2.0, qemu 8.2.2 -> 10.2.1. So this is the original
+seven-vs-plexus A/B with one MORE variable in it, not one fewer. What can
+honestly be said: the `waitid` probe eliminated the kernel on seven's own box
+before the upgrade, and the row went green after qemu moved — two measurements
+pointing the same way. **That is not a single-variable demonstration and the
+residual stays owned.**
+
+### THE NEW-REDS ARE PIN v403, AND v404 LANDED SEVEN MINUTES LATER
+
+Eight-plus `lib-test` and `demos` jobs, every one `unknown type: TMethod`
+sourced from `stable_linux_amd64/default/../../lib/rtl/typinfo.pas`. New
+source, old pin: `a623307bd` was already in the tier's tree.
+
+**Do not read these as compiler regressions, and do not read them as an
+argument that a pin is still needed.** Verified at ref level, twice, by two
+sessions:
+
+    5b5fdb0b32d3  2026-09-05 18:10:50Z  the tier's tree
+    8844c8c42     2026-09-05 18:17:45Z  chore(stable): pin v404 -- binary
+                                        sha256 fe1e9c37d322 -- unblocks 20
+                                        lib/rtl units and all of lib/pcl
+
+`8844c8c42` is the ONLY commit touching `stable_linux_amd64/` since that tree,
+and `merge-base --is-ancestor 5b5fdb0b32d3 8844c8c42` is true. **The tier is
+6m55s stale in the one dimension those reds depend on.** They are the last
+measurement taken BEFORE the pin, not a case for it.
+
+**RETIREMENT EVENT: the next full tier after `8844c8c42`.** They should clear
+with nobody touching a line. **If they do not, that is a finding** — v404's
+recorded binary sha256 is `fe1e9c37d322`, the same binary this tree builds, so
+a persisting TMethod red would mean the pin did not do what its own commit
+message says.
+
+### `tools-devtest#00` — red there, green here, and the tree is exonerated
+
+The failing member is `tools/devtest_sync_fold.py` (4 checks). `git diff
+5b5fdb0b32d3 abd3a468b -- tools/devtest_sync_fold.py tools/sync.sh` is **empty**
+— byte-identical. It passes on plexus at a descendant tree.
+
+Same shape as `c_crtl_wait`: the box, not the tree. That devtest drives **git**
+25 times — clone, rebase, containment — and seven's git moved in the same
+dist-upgrade. **`toolchain_fp` did not include git**, so the field built to
+answer exactly this question could not. Now fixed; see the toolchain ticket.
+
+### Reading the transition the callout cannot announce
+
+`TOOLCHAIN FIRST RECORDED` will **never fire for seven**. Its first
+post-upgrade report (18:20:49Z) latched the baseline `b926fcc528d9` before the
+callout existed (`2bdbe4249`, 18:29:11Z), so every later report correctly finds
+`prev == now` and stays silent. Eight minutes.
+
+**So read the transition by hand, and this is where it is written down:**
+
+| | before (measured 2026-09-04) | after (report 18:33:42Z) |
+|---|---|---|
+| kernel | 6.8.0-138 | 7.0.0-31-generic |
+| gcc | 13.3.0 | 15.2.0 |
+| qemu (all) | 8.2.2 | 10.2.1 |
+
+The `toolchain:` line is unconditional and spelled out in full, which is what
+makes this possible without the callout.

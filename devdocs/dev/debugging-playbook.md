@@ -4659,6 +4659,37 @@ service is the subject: `systemctl is-active` is a true statement about now that
 implies nothing about the next boot, and the two questions are asked with almost
 the same word.
 
+## THE TIER SEES WHAT YOUR LOCAL RECIPE CANNOT — 2011 jobs past the point `make` stopped
+
+The argument that breadth belongs to Track T and that widening your own gate
+spends the machine producing it has always been structural, which is why it
+keeps getting re-litigated. Measured 2026-09-05, it is a number.
+
+`test-core` had been failing at **step 6 of 15** on `test_record_class_var_fail`
+since `a11b2b18f` — a single make recipe, so from step 6 onward roughly four
+fifths of it was **UNVERIFIED rather than green** (blocked run 3783 lines,
+unblocked past 8770). In the tstate full tier at `5b5fdb0b32d3`, over the same
+recipe:
+
+    test-core jobs: 2013     pass 2011 | fail 1 | skip 1
+
+**2011 jobs ran and passed at a tree where the local recipe saw nothing past
+step 6.** `testmgr.split_jobs()` parses the recipe into independent jobs, each
+its own shell script, so one failure cannot truncate the rest.
+
+**BOTH HALVES HAVE TO TRAVEL TOGETHER, because both directions of the wrong
+assumption are available.** The tier is immune at TIER scope and NOT at JOB
+scope: `Job.script()` emits each recipe line as `( line ) || exit $?`,
+deliberately emulating make, so the failing group's remaining lines did not run.
+Not four fifths of a tier; not zero either. A reader who takes "immune" whole
+believes the tier saw everything; a reader who takes the curtain whole believes
+it saw nothing. **The correct statement is one sentence longer than either.**
+
+And the query you would naturally use to check any of this has its own hole —
+see `bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`:
+the job is named after its group's first source, so 384 of 3264 `test/` sources
+have no key of their own and an empty result means "no job is NAMED that".
+
 **AND THE SEVENTH MEMBER POINTS THE OTHER WAY: A GUARD CAN BE LOUDLY WRONG
 WHILE RED, WHICH IS MORE DANGEROUS PER INSTANCE THAN BEING QUIETLY WRONG WHILE
 GREEN.** Measured 2026-09-05: `tools/gate_pinned_rtl_canary_devtest.py`

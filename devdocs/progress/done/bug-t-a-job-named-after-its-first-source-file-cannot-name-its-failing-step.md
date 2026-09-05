@@ -193,3 +193,15 @@ change.
 
 ## Log
 - 2026-08-30 — resolved, commit ae26693a3.
+
+---
+
+**2026-09-05 — sibling, the other direction of this naming decision.** This
+ticket fixed the PRODUCER side: a job can now say which of its lines died. The
+CONSUMER side is not covered and is filed separately as
+`bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`
+(`backlog-tools`, prio 50) — a reader holding a source cannot ask the published
+job map whether it was exercised, because the job is named after its group's
+first file. Measured: 384 of 3264 `test/` sources (~11.8%) have no job key of
+their own, so for one source in eight an empty query result is a statement about
+NAMING and not about coverage. Pointer only; nothing here is retracted.
