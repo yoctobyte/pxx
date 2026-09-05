@@ -72,3 +72,10 @@ until that is settled too.
 (1) first: it is one column plus the read sites, and it has a clean positive
 control in the inline-vs-alias asymmetry. (2) wants the third subrange copy
 folded, and wants the set-type-name `Low`/`High` question answered first.
+
+## The fork is filed
+
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]] (Track U, p55)
+names this and the sized-boolean bug as the two families ONE mechanism would
+close, and recommends the side-channel arm — which is this ticket's suggestion
+(1) generalised. Settle that first; the carry sites are shared.

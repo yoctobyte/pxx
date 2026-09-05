@@ -90,3 +90,10 @@ Chasing `tenum6.pp`, whose skip reason reads *"gap: `Str()` of boolean /
 ByteBool / WordBool / LongBool / QWordBool ('FALSE')"*. `Str(True:0, s)` works
 fine here — the reason is a symptom label again, and the mechanism underneath it
 is nothing to do with `Str`.
+
+## The fork is filed
+
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]] (Track U, p55)
+carries the two options, the trade-offs and a recommendation. Do not start here
+— the choice made there decides how this is fixed, and picking wrong makes the
+enum-identity family wider rather than merely later.
