@@ -291,3 +291,58 @@ grows its own copy of the ownership condition — which is the failure mode
 Each flag either consults `DialectIsPxx` with a test proving the carve-out, or
 carries a comment saying why it does not. `--strict-fpc` still compiles the RTL
 and the conformance pass-set.
+
+## Measured at HEAD — the umbrella WORKS, and one of the three named gaps is out of scope (frankS, 2026-09-05)
+
+At `0bbd82cd7` / `e6aea92825d0` (compiler/pascal26 sha, `converged after 1
+round(s)`). This ticket names three gaps; measuring them splits them three ways.
+
+**The umbrella is not inert, and it has a positive control drawn from the right
+population.** Cross-UNIT private access — the case FPC actually refuses:
+
+```pascal
+unit vu; interface
+type TC = class private secret: Integer; public procedure Init; end;
+```
+```pascal
+program vum; uses vu; var c: TC;
+begin c := TC.Create; c.Init; WriteLn(c.secret); end.
+```
+
+| | result |
+| --- | --- |
+| default | ACCEPTED, prints 7 |
+| `--strict-visibility` | `cannot access private member "secret" of TC from here` |
+| `--strict-fpc` | same refusal — the umbrella does flip its sub-flags |
+
+**Read the first probe of this pass as the warning.** It put `TC` in the same
+file as the access, and all three columns accepted it — which reads as "the flag
+does nothing" and is instead the probe being wrong: **FPC's `private` is
+UNIT-scoped, not class-scoped**, so a same-file access is legal under FPC too
+and the row cannot discriminate. A flag that refuses nothing and a probe that
+asks nothing produce the identical output.
+
+**Gap 1, Abs/Sqr widths: out of scope, not unimplemented.** `SizeOf(Abs(s))`
+= 2 and `SizeOf(Sqr(s))` = 8 for a SmallInt, under both default and
+`--strict-fpc`. CLAUDE.md settles this class explicitly — Double is the native
+evaluation type, an expression evaluated at double width is *the architecture,
+not a defect*, and **`SizeOf` reporting 8 is the operator working**, a true
+statement about a pxx expression. The test that governs is storing into the
+DECLARED type and comparing that. **Drop this item from the ticket**; it is
+asking for the rounding-then-widening the owner ruled out.
+
+**Gap 2, pointer difference:** `PtrInt(q) - PtrInt(p)` over four `Integer`s
+gives 16 — the byte difference, which is what FPC gives for typed pointers too
+(no C-style element scaling). No divergence measured. Whoever wrote the item
+should say which spelling diverges, because this one does not.
+
+**Gap 3, TypeInfo name:** only established here as non-nil. Genuinely unmeasured;
+it is the one item of the three that still needs a probe.
+
+**Fixed in passing:** `--strict-fpc` and `--strict-visibility` were both absent
+from `--help`, which is why a reader measuring this ticket starts by doubting the
+flag exists. Both listed now.
+
+**Suggested re-scope of the summary:** the flag family is not "incomplete" in the
+way the summary says. One item is out of scope by the settled `SizeOf` rule, one
+did not reproduce, one is unmeasured, and the umbrella itself works.

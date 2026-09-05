@@ -871,6 +871,8 @@ begin
   WriteLn;
   WriteLn('diagnostics:');
   WriteLn('  --strict-case --strict-overload --strict-operator --strict-python');
+  WriteLn('  --strict-visibility   enforce private/protected across units');
+  WriteLn('  --strict-fpc          all of the above at once (the FPC-parity umbrella)');
   WriteLn('  --mimic-fpc           adopt FPC''s define set for identity-probing headers');
   WriteLn('  --debug --dump-ir --dump-rtti --dump-cpp');
   WriteLn;
