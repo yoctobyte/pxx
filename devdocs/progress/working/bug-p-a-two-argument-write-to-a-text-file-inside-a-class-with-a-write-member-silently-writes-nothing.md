@@ -4,10 +4,10 @@ title: "`Write(f, s)` on a Text handle, inside a class declaring a 2-parameter W
 track: P
 prio: 60
 type: bug
-status: backlog
+status: working
 found: 2026-09-05
 found-by: frankB
-owner: ""
+owner: frankB
 blocked-by: []
 summary: "An unqualified Write/Read inside a method binds to a same-named member of the enclosing class when the ARITY matches, and the arity test does not look at whether the first argument is a FILE HANDLE. So `Write(f, 'payload')` on a `var f: Text`, inside a class declaring `function Write(const Buffer; Count: Longint): Longint`, is compiled as a call to that member: the file is created and stays EMPTY, no diagnostic, exit 0. PRE-EXISTING and identical on pinned. fpc 3.2.2 refuses the same source outright (`Wrong number of parameters specified for call to Write`), because it gives the member absolute priority and never falls back to the intrinsic. We do NEITHER -- we neither refuse it nor perform it -- which is the one outcome that loses the program's intent silently. The 3-and-more-argument form already falls through to the intrinsic correctly, so the defect is confined to calls whose arity happens to match a member's."
 ---
