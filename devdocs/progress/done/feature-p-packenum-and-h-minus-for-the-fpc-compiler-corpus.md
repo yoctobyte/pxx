@@ -150,3 +150,28 @@ warns about.
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 324641046.
+
+### End-to-end on the corpus it was filed for
+
+The unit tests use a hand-written `{$PACKENUM 1}`, which proves the directive
+and not the CORPUS. Checked through the real include, compiler `89f51a99f0b3`:
+
+```
+program fd; {$i fpcdefs.inc}  type TProbe = (pA, pB, pC);
+  pxx --mimic-fpc-compiler : enum under fpcdefs.inc: 1
+  fpc 3.2.2                : enum under fpcdefs.inc: 1
+```
+
+So the setting now arrives the way every FPC compiler unit actually receives it
+— nine lines down inside an include — rather than only when spelled at the top
+of a test.
+
+**This changed correctness, not reach.** The march is where it was: `cutils`,
+`globtype`, `constexp`, `version` and `cstreams` COMPILE; `cclasses`,
+`comphook`, `finput` and `cfileutl` stop at `TFPCHeapStatus`
+([[feature-b-getfpcheapstatus-needs-always-on-heap-accounting]]); `cmsgs` stops
+at `an object type cannot have a constructor`, which is a decision and not a
+gap. Those five compiled BEFORE this change too — **with 4-byte enums where
+their own source asked for 1.** A silently wrong layout in a unit that builds
+is worse than a unit that does not, because nothing reports it, so "no new units
+reached" is the wrong measure of this fix.
