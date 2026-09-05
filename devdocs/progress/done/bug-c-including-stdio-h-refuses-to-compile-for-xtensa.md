@@ -3,12 +3,12 @@ slug: bug-c-including-stdio-h-refuses-to-compile-for-xtensa
 track: C+S
 prio: 45
 type: bug
-status: new
-blocked-by: ["feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image"]
+status: done
+blocked-by: []
 owner: ""
 created: 2026-09-01
 found-by: frankA (incidentally, while fixing @external on i386)
-summary: "STATED SYMPTOM IS UNREACHABLE AT HEAD, re-measured 2026-09-05. The `__pxx_read is a pxx-internal runtime symbol` refusal still exists (symtab.inc:13982) but nothing reaches it from this file in any profile. `#include <stdio.h>` plus a `main` now fails two OTHER ways: under the default and bare profiles the C entry stub refuses outright ('hosted linux only -- no argc on the stack and no kernel to take the exit_group'), which is a deliberate guard; under --platform=posix it hits the CALL0/CALL8 +-512 KiB forward-call wall and compiles cleanly with --xtensa-long-calls. Both are true statements and neither is the one this ticket was filed on. The posix half is the blocked-by; the entry-stub half is a separate design question about C main on the ESP profile."
+summary: "RESOLVED 2026-09-05 (frankC): re-measured at HEAD and nothing this ticket claims is true any more. `#include <stdio.h>` plus a `main` on xtensa under --platform=posix compiles at 660016 B with NO --xtensa-long-calls and RUNS -- the blocked-by half was closed by frankS's f49c0e11f, which reserves the wide call form unconditionally for FiniRunnerProc. The originally stated symptom (`__pxx_read is a pxx-internal runtime symbol`) was already recorded as unreachable. THE ONE THING LEFT IS NOT A BUG: under the default and bare profiles a C `main` refuses at the entry stub deliberately, because there is no argc on the stack and no kernel to take the exit_group -- a design question about what `main` means where FreeRTOS gives tasks rather than processes. Split out as decide-should-a-c-main-exist-on-the-esp-profile-at-all, owner frankS."
 ---
 
 # `#include <stdio.h>` does not compile for xtensa
@@ -67,3 +67,34 @@ which is why the ticket never moved.
 now: the posix path is [[feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image]],
 entered as `blocked-by`. The entry-stub refusal for a C `main` under the ESP
 profile is a separate question and nobody owns it — it may well be correct.
+
+## 2026-09-05 (frankC): re-measured at HEAD, and nothing this ticket claims survives
+
+Compiler `1359b156f797`, no flags beyond the profile:
+
+```
+--platform=posix   #include <stdio.h> + int main   660016 B   links, and RUNS ("hello")
+```
+
+**No `--xtensa-long-calls`.** The blocked-by half is gone: `f49c0e11f`
+(frankS, tonight) reserves the wide call form unconditionally for
+`FiniRunnerProc`, which is the callee the CALL0/CALL8 wall was reached through.
+The `blocked-by` edge has been removed by its owner.
+
+The stated symptom — `__pxx_read is a pxx-internal runtime symbol` — was
+already recorded as unreachable earlier today. So all three readings of this
+ticket are now false: the original one, and both of the two "other ways" the
+09-05 summary substituted for it, except one.
+
+**The exception is not a bug and it is not mine.** Under the default and bare
+profiles a C `main` still refuses at the entry stub, deliberately, with a
+message that is a correct statement about the platform: no argc on the stack,
+no kernel to take the exit_group. That is a design question about what a C
+`main` means where FreeRTOS gives tasks rather than processes.
+
+Filed as [[decide-should-a-c-main-exist-on-the-esp-profile-at-all]], owner
+frankS, rather than left inside a resolved ticket where nobody would find it.
+An exculpation needs an owner for the residual question.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
