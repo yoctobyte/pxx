@@ -8877,6 +8877,78 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## A REFUSAL IS NOT SELF-DESCRIBING — THE TEXT NAMES THE POSITION, NEVER THE REASON
+
+Measured 2026-09-06 (frankA), and it nearly turned a broken probe into a published
+finding.
+
+Two probes declared `type PC = ^TC`. **`PC` is a predeclared identifier in both
+compilers.** pxx failed at the USE site with `expected ) before (` — which reads
+exactly like *"the cast is not recognised at all"*, and a write-up of a second, larger
+gap had already been started.
+
+> **A parser that cannot see a type name emits the same message whether the feature is
+> missing, the name is TAKEN, it is out of scope, or an earlier declaration errored.**
+> The message names the position it gave up at. It does not name why.
+
+Renaming `PC` to `PTC` made both compilers accept it.
+
+### What caught it: THE ORACLE REFUSED FOR A DIFFERENT REASON
+
+fpc did not accept the probe either — it said **`Duplicate identifier "PC"`**, not
+`expected )`. **Comparing exit codes would have shown two failures and read as
+agreement.**
+
+> **An oracle that refuses for a DIFFERENT REASON than yours is the tell that neither
+> refusal is about your question.** Agreement on *failed* is not agreement on *why*,
+> and a differential that compares rc alone cannot see the difference — it will report
+> the strongest possible corroboration for a result about neither compiler.
+
+**So read the oracle's TEXT on a refusal, not just its status.** This is the
+counterpart to the rule that a green needs the same experiment on both sides: **a
+matched RED needs the same reason on both sides**, or it is two unrelated failures
+wearing one verdict.
+
+### The habit, and it inverts the usual instinct
+
+> **Before writing up a probe's NEGATIVE, rename its identifiers and re-run.**
+
+Short throwaway type names — `PC`, `PA`, `TR`, `TS` — are exactly the ones a language
+has already taken. **"Keep the repro small" points the wrong way here**: the smaller
+the name, the likelier it collides with something predeclared, and the collision's
+diagnostic is indistinguishable from the finding you were hoping for.
+
+### And the census progression this completes
+
+Three questions about one loop, **each blind to the next**:
+
+| census | asks | cannot see |
+| --- | --- | --- |
+| reach | which routines does this loop CALL | a correct call with a wrong payload |
+| encoding | who READS this field, and how is it spelled | a token nobody consumed |
+| re-entry | what happens after the loop DELEGATES | — found only by generating the shape |
+
+The defect here was `ParseClassRecordSelectors`' own loop being `[tkDot, tkLBrack]`
+with **no `tkCaret`**, then breaking unconditionally — so a `^` sat in the stream and
+nothing touched it. **The defect is a token and nothing that touches it, so there is no
+site to grep in either census's domain.**
+
+> **The absence family is exactly the set a census cannot close** — so *"I ran the
+> census and it was clean"* is a statement about two of the three questions. Write that
+> beside a clean census result, or the negative reads as a whole-loop clearance.
+
+### Two test-design notes from the same fix
+
+- **Every cast row is paired with the same chain off a plain variable.** A cast row
+  alone cannot distinguish *a walk that is now fixed* from *a language that never
+  allowed the shape*; the variable row is what makes the cast row's green mean
+  something. The pin refusing exactly the two cast rows and passing the two variable
+  rows is the positive control, drawn from the right population because the chains are
+  identical.
+- **Assert the TAG, not the parse, wherever a value can print correctly by accident.**
+  A `Char` prints as an ordinal when the bytes are right and the tag is wrong — the
+  same collision as expecting `4` where `4` is also the unknown default.
+
 ## A REPAIR DOES NOT LOOK DOWN — THE SIBLING TWELVE LINES BELOW THE FIX IS THE ONE NOBODY GREPS FOR
 
 Measured 2026-09-06 (frankB). The file's standing advice is *fixed one arm of a double
