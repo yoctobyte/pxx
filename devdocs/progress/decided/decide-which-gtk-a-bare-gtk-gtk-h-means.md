@@ -3,7 +3,7 @@ track: U
 prio: 55
 type: decision
 blocked-by: []
-summary: "RULED 2026-08-31: GTK 3 is the default -- \"i think gtk3 is a sane default in 2026\". A bare <gtk/gtk.h> resolves to GTK 3; the default C include roots move from /usr/include/gtk-2.0/ to gtk-3.0/. Four hardcoded literals, not a system: cpreproc.inc:2219-2220, pasparser_proc.inc:3105, and the alias map at pasparser_proc.inc:2834-2836. Blast radius is three test files that use `uses gtk`. NilPy tk is NOT affected -- lib/pcl/tk.pas is a Tcl/Tk 8.6 soname embed that never touches GTK, checked not assumed. GTK 4 is unreachable regardless: its lib is installed here, its headers are not. Version selection filed separately as feature-a-gtk-version-selection-at-the-header-and-soname-layer -- the resolver half is cheap, the WIDGETSET half is a port and must not be promised with it."
+summary: "RULED 2026-08-31: GTK 3 is the default -- \"i think gtk3 is a sane default in 2026\". A bare <gtk/gtk.h> resolves to GTK 3; the default C include roots move from /usr/include/gtk-2.0/ to gtk-3.0/. Four hardcoded literals, not a system: cpreproc.inc:2219-2220, pasparser_proc.inc:3105, and the alias map at pasparser_proc.inc:2834-2836. Blast radius is three test files that use `uses gtk`. NilPy tk is NOT affected -- lib/pcl/tk.pas is a Tcl/Tk 8.6 soname embed that never touches GTK, checked not assumed. GTK 4 is unreachable regardless: its lib is installed here, its headers are not. Version selection filed separately as feature-a-gtk-version-selection-at-the-header-and-soname-layer -- the resolver half is cheap, the WIDGETSET half is a port and must not be promised with it. LANDED 2026-09-05 (frankC), five days after the ruling, as THREE literals not four: the arch-specific root was DELETED rather than moved, because GTK 3 keeps gdkconfig.h inside /usr/include/gtk-3.0/gdk/ -- which also retires the hardcoded x86_64-linux-gnu path this ticket flagged separately. TWO CORRECTIONS TO THE RULING BELOW: the blast radius is FOUR files, not three (test/test_c_gtk_window.pas is missing from the list and is the only one running a full gtk_main loop), and \"those four tests never touch GTK at runtime, they compile against test/my_gtk.h\" is false in both halves -- three of the four call into GTK under xvfb-run, and my_gtk.h is an ORPHAN whose only two references in the tree are a writeln string and the Makefile asserting it. Neither correction overturns the ruling; both change the estimate."
 ---
 
 # Which GTK does a bare `#include <gtk/gtk.h>` mean?
@@ -148,3 +148,66 @@ make the PCL widget layer work on 2 or 4. Filed as
 [[feature-a-gtk-version-selection-at-the-header-and-soname-layer]].
 
 *Ruled 2026-08-31 by the owner; mechanism and tk backend verified by frank-user.*
+
+---
+
+# LANDED 2026-09-05 (frankC, Track C) — and two corrections to the ruling above
+
+Implemented five days after the ruling. `cpreproc.inc` still said
+`/usr/include/gtk-2.0/` this morning. See
+[[feature-c-gtk3-header-final-wiring]] for the measured landing; the parked
+ticket this decision blocked was never unparked when the answer arrived, so
+`ready` and the ticket body disagreed for five days.
+
+**The change was three literals, not four** — the arch-specific root was
+**deleted** rather than moved, because GTK 3 keeps `gdkconfig.h` inside
+`/usr/include/gtk-3.0/gdk/` while GTK 2 kept it in
+`/usr/lib/<triplet>/gtk-2.0/include/`. That retires the hardcoded
+`x86_64-linux-gnu` path this ticket flagged as a separate worry.
+
+## Correction 1 — the blast radius is FOUR files, not three
+
+`test/test_c_gtk_window.pas` is missing from the ruling's list. The sibling
+ticket's own body names all four; the ruling's list, and both frontmatter
+summaries, say three. **The omitted one is the only test that runs a full
+`gtk_main` loop**, so it is the worst omission from a list whose whole purpose
+is sizing risk.
+
+## Correction 2 — "those four never touch GTK at runtime" is false in both halves
+
+Three of the four call into GTK (`gtk_init`, `gtk_window_new`, and the window
+test's main loop) and the Makefile runs them under `xvfb-run`. And
+**`test/my_gtk.h` is an orphan**: its only two references in the tree are a
+`writeln` string in `test_c_gtk.pas` and the Makefile asserting that string.
+Nothing includes it. Established two ways that fail differently — a positive
+control (the file compiles `ok` from a directory not containing it) and a
+capability argument (`my_gtk.h` declares only `gtk_button_get_width/height`,
+yet `test_c_gtk_types` compiles `gtk_window_new(GTK_WINDOW_TOPLEVEL)` and all
+four linked `libgtk-x11-2.0.so.0`).
+
+**Neither correction overturns the ruling.** *"gtk3 is a sane default in 2026"*
+is a statement of intent and needs no evidence. **The blast radius does** — and
+the section a taker reads to size the job is the section that was wrong.
+
+## What the ruling got right, and it is the load-bearing part
+
+The hazard it names — GTK 3 headers against a GTK 2 shared library — is real and
+is avoided **only because the include root and the alias stem move together**.
+It is precisely the failure mode of doing *half* this change.
+
+## One latent bug this surfaced
+
+`test_c_gtk_types.pas` called `gtk_window_new` with no `gtk_init`. GTK 2
+tolerated it; GTK 3 aborts without a display connection. **The test was always
+wrong and GTK 2 was lenient** — fixed by adding the `gtk_init` GTK has always
+required, not by working around GTK 3.
+
+## For anyone citing this ticket's numbers
+
+The line numbers in the ruling (`cpreproc.inc:2219-2220`,
+`pasparser_proc.inc:3105`, `:2834-2836`) had drifted to `:2507-2508`, `:3428`
+and `:3264-3265` before this landed, and have moved again since. **Cite the
+address, not the value:** grep for the root literal. seven's manifest hit the
+same wall twice in twelve hours and drew the same conclusion — a manifest pinned
+to a literal another lane is moving is a time bomb. The wrong file count in this
+ruling is that same disease: **a value copied where an address belonged.**

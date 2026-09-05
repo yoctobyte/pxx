@@ -1,7 +1,7 @@
 ---
 prio: 55
 track: C
-status: unfinished
+status: done
 blocked-by: [decide-which-gtk-a-bare-gtk-gtk-h-means]
 summary: "Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket."
 ---
@@ -9,7 +9,7 @@ summary: "Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window
 # GTK3 header import final wiring
 
 - **Type:** feature
-- **Status:** unfinished (parked on decide-which-gtk-a-bare-gtk-gtk-h-means)
+- **Status:** done
 - **Track:** C (C frontend)
 - **Owner:** frankC
 - **Opened:** 2026-06-29
@@ -147,3 +147,93 @@ crosses Track P's `pasparser_proc.inc` and Track C's `cpreproc.inc`, so it
 
 **Re-priced: unchanged**, but the ticket is one Track U answer away rather than
 one answer plus a Track B migration.
+
+## 2026-09-05 (frankC, Track C) — RESOLVED: the park's blocker was answered five days ago
+
+**Both unmet acceptance bullets are now met**, and neither needed new capability.
+
+**1. `uses gtk3` resolves the installed set with no flag.** The blocker
+[[decide-which-gtk-a-bare-gtk-gtk-h-means]] was **ruled 2026-08-31** — *"i think
+gtk3 is a sane default in 2026"* — and moved to `decided/`. Nobody implemented
+it: `cpreproc.inc` still said `/usr/include/gtk-2.0/` today. Landed here.
+Measured: `test_c_gtk3_stock.pas` now builds **without** `-I/usr/include/gtk-3.0/`,
+byte-identical output to the flagged build, and still links `libgtk-3.so.0`.
+
+**2. `lib/pcl/gtk3.pas` off hand-redeclared prototypes** —
+[[feature-b-migrate-pcl-off-the-curated-gtk3-header]], in `done/` since the
+08-30 re-measure. Track B's, closed by Track B.
+
+### The park outlived its reason by five days, and that is a mechanism
+
+The blocker was answered and **the ticket was never moved**, so `ready` listed
+this as unblocked (its `blocked-by` resolves into `decided/`) while the body
+told every reader it was parked. **The ranker and the reader disagreed for five
+days.** Whoever answers a decision owns unparking what it blocks, or the answer
+only reaches the person who already knew.
+
+### What actually landed
+
+Three literals, no structural change:
+
+| site | was | now |
+| --- | --- | --- |
+| `cpreproc.inc` default C root | `/usr/include/gtk-2.0/` | `/usr/include/gtk-3.0/` |
+| `cpreproc.inc` arch root | `/usr/lib/x86_64-linux-gnu/gtk-2.0/include/` | **deleted** |
+| `pasparser_proc.inc` alias stem for `gtk` | `gtk-x11-2.0` | `gtk-3` |
+| `pasparser_proc.inc` header fallback | `/usr/include/gtk-2.0/gtk/` | `/usr/include/gtk-3.0/gtk/` |
+
+The arch root is **deleted rather than moved**: GTK 2 needed it for
+`gdkconfig.h`, and GTK 3 keeps `gdkconfig.h` inside `/usr/include/gtk-3.0/gdk/`.
+So the flip also retires a hardcoded `x86_64-linux-gnu` path that was wrong on
+every other host arch — which the decision ticket had flagged as a **separate**
+worry. A cross-target fix falling out of a default change.
+
+The `gtk-x11-2.0` stem is deliberately **left** in the soname map and the
+system-lib set. Nothing produces it from a `uses` clause any more, but it is
+still a valid stem to name explicitly, and removing a mapping because its only
+caller went away is deleting code believed dead rather than verified dead.
+
+### The decision's blast radius was wrong, in the part everyone reads
+
+It lists **three** files flipping. **Four** do — `test/test_c_gtk_window.pas` is
+missing from the ruling's list, though the sibling ticket's own body has all
+four. Both frontmatter summaries carry the three. The omitted one is the only
+test that runs a full `gtk_main` loop.
+
+It also says *"those four tests never touch GTK at runtime — they compile
+against `test/my_gtk.h`, a local stub."* **False in both halves.** Three of the
+four call into GTK, under `xvfb-run`; and **`my_gtk.h` is an orphan** — its only
+two references in the entire tree are a `writeln` string and the Makefile
+asserting that string. Nothing includes it.
+
+So **the section a taker reads to size the job is the section to distrust.**
+Neither error overturns the ruling: *"gtk3 is a sane default"* is intent and
+needs no evidence. The blast radius does.
+
+### `test_c_gtk_types.pas` was always wrong and GTK 2 was lenient
+
+It called `gtk_window_new` **without `gtk_init`**. GTK 2 allowed a window with
+no display connection; GTK 3 aborts in `_gtk_css_lookup_resolve` with *"Can't
+create a GtkStyleContext without a display connection"*. `test_c_gtk_window`
+passed throughout because it happens to call `gtk_init` first.
+
+`gtk_init(nil, nil)` added. **This is not a GTK 3 workaround** — GTK has always
+required it — and it does not weaken the row: the subject is still that
+`gtk_window_new`'s `void*` reaches a Pascal `Pointer` untruncated, which
+`gtk_init` cannot supply.
+
+*(Noted, not fixed, as out of scope: that row asserts `window <> nil`, and a
+truncated pointer is usually non-nil too, so the assertion is weaker than the
+defect it cites. Pre-existing; flagged rather than silently widened.)*
+
+### Gate
+
+`make compiler/pascal26` converged, fixedpoint `5c40f3343701`. `gate.sh quick`
+**GREEN 17/17 including the FPC seed canary** — run with `compiler/**`
+uncommitted, which is the only state in which that canary runs at all. All four
+`uses gtk` tests build, link **`libgtk-3.so.0`** and run green under xvfb;
+`test_c_gtk3_stock` green with and without its now-redundant `-I`; the PCL stack
+(`test_gtk_window`, `test_pcl_helloworld`) builds and links GTK 3.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

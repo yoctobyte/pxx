@@ -3118,7 +3118,18 @@ begin
   else if lo = 'gtk3_c' then
     stem := 'gtk-3'
   else if lo = 'gtk' then
-    stem := 'gtk-x11-2.0'
+    { GTK 3, ruled 2026-08-31. `gtk` and `gtk3_c` now name the same library on
+      purpose. NOTE these are not the parallel names they look like: `gtk` and
+      `gtk3_c` are C-header ALIASES resolved here, while `gtk3` is a real Pascal
+      unit (lib/pcl/gtk3.pas) that this map never sees -- so `uses gtk3` finds a
+      source file, not an alias. Renaming without fixing that just moves the
+      confusion; see decide-which-gtk-a-bare-gtk-gtk-h-means.
+      The `gtk-x11-2.0` stem is intentionally LEFT in the soname map and the
+      system-lib set below: nothing produces it from a `uses` clause any more, but
+      it is still a valid stem to name explicitly, and deleting a mapping because
+      one caller stopped using it is deleting code believed dead rather than
+      verified dead. }
+    stem := 'gtk-3'
   else if (lo = 'stddef') or (lo = 'stdint') or (lo = 'stdbool') or
           (lo = 'stdarg') or (lo = 'limits') or (lo = 'assert') then
     stem := 'c'
@@ -3425,7 +3436,7 @@ begin
   end;
   if Length(content) = 0 then
   begin
-    ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
+    ConcatThree('/usr/include/gtk-3.0/gtk/', cName, '.h', path);
     LoadFile(path, content);
   end;
   if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;

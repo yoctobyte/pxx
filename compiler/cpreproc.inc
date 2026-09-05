@@ -2504,8 +2504,22 @@ begin
   CSysIncludeCount := 0;
   { entry 0 is the bare system root, and the warning above is keyed on that }
   AddCSysIncludeDir('/usr/include/');
-  AddCSysIncludeDir('/usr/include/gtk-2.0/');
-  AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/gtk-2.0/include/');
+  { GTK 3 is what a bare <gtk/gtk.h> means -- decide-which-gtk-a-bare-gtk-gtk-h-means,
+    ruled 2026-08-31. Everything in the tree already targets it (lib/pcl/gtk3.pas,
+    gtk3widgets.pas, gtk3gl.pas all bind libgtk-3.so.0); GTK 2 was the anomaly.
+    The include list is flat and global, so whichever gtk root comes first decides
+    the version for EVERY C consumer at once -- which is why this is one line and
+    not a per-unit search path.
+    There is deliberately NO arch-specific companion line here. GTK 2 needed
+    /usr/lib/<triplet>/gtk-2.0/include/ because its gdkconfig.h lives there; GTK 3
+    keeps gdkconfig.h inside /usr/include/gtk-3.0/gdk/, so the second root has no
+    GTK 3 equivalent. Dropping it also retires a hardcoded x86_64-linux-gnu path
+    that was wrong on every other host arch -- flagged in the decision ticket as a
+    separate worry, and answered by the flip rather than by a patch.
+    `uses gtk` still resolves through the alias map in pasparser_proc.inc, which
+    moves to the gtk-3 stem in the same commit: the header root and the soname must
+    travel TOGETHER or a build gets GTK 3 headers against a GTK 2 library. }
+  AddCSysIncludeDir('/usr/include/gtk-3.0/');
   AddCSysIncludeDir('/usr/include/glib-2.0/');
   AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/glib-2.0/include/');
   AddCSysIncludeDir('/usr/include/pango-1.0/');
