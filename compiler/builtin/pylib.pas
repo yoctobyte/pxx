@@ -1036,6 +1036,24 @@ function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
   bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
 function pyvar_isv(a, b: Pointer; neg: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
+{ The two variant-TAG predicates. Implementation-only while
+  lib/rtl/mimic_string.pas and lib/rtl/mimic_urllib_request.pas call them, so
+  those two units did not compile at all -- `lib-units: FAIL`, twelve
+  `undefined variable` lines, and one of the reds holding seven's full tier.
+
+  INVISIBLE FROM THE NILPY SIDE, which is why it survived: the compiler reaches
+  these by NAME for NilPy code (pyparser.inc does FindProc('pyvar_is_inttag')),
+  so a NilPy source resolves them through the builtin table and never needs a
+  declaration. Only a PASCAL consumer does, and the RTL's mimic_* units are
+  Pascal. Every sibling -- pyvar_mark_list, pyvar_eqv, pyvar_isv, pyvar_repr --
+  is already exported; these two were missed.
+
+  NOT done by open-coding `pyvartag(v) = 7` at the five call sites, which would
+  have avoided needing a pin: that copies the tag ENCODING out of pylib and into
+  two lib/rtl units, and the second copy is the one that stays wrong when the
+  encoding moves. The pin is the smaller cost. }
+function pyvar_is_inttag(const v: Variant): Boolean;
+function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
   integer arrived as a string handle and the raise SEGFAULTED; the frontend
