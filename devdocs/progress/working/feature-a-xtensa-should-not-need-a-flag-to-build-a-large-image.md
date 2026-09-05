@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: frankS
 blocked-by: []
-summary: "An unrelated RTL commit (4419e1aa7) pushed the test-xtensa xt_backjump call0 arm past CALL8 reach WITHOUT changing the image size (622444B both ways) -- it reordered __pxx_run_finalizers to the tail, 36618 bytes out of reach of its earliest caller -- so the margin is not a property of the program and any RTL edit can flip any near-512KiB image; that arm now passes --xtensa-long-calls explicitly. WAS p35 on the grounds that the only program known to approach the wall was that awk-generated row, which DEFINES a population rather than sampling one, the hazard being conditional on some real image getting near 512KiB and none being. THAT PREMISE WAS REFUTED 2026-09-04: test/c_crtl_syscall_guarded_bodies.c is an ordinary hand-written C program whose image is ~665KB once crtl is linked in, and it refuses without the flag -- the forward call to __pxx_run_finalizers at 58526 cannot reach its body at 664880. The wall is not a property of deliberately-large generated programs, it is a property of LINKING CRTL AT ALL, so it is now the first thing every C program on this target meets, and every C-on-xtensa measurement anyone reports carries the flag. prio NOT changed by the reporter -- that is this ticket owner's call; what changed is that the sentence the p35 was reasoned from is no longer true. --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not."
+summary: "PRIO HELD AT 35 by the owner 2026-09-05, on a fresh measurement that supersedes BOTH earlier arguments. The 2026-09-04 refutation -- that ordinary C programs refuse because linking crtl crosses the wall -- NO LONGER REPRODUCES: f49c0e11f reserved the wide form unconditionally for FiniRunnerProc, and `#include <stdio.h>` (651116B) and test/c_crtl_syscall_guarded_bodies.c (675692B) now both link and RUN on xtensa with no flag. That was the case every real program met first, and it is gone. What still refuses is exactly one known program, the compiler itself: `pascal26 --target=xtensa compiler/compiler.pas` fails on a forward call to CmpBits$18392 at offset 370895 whose body is at 23898992 -- an ordinary-proc-to-ordinary-proc call 23 MB out, NOT FiniRunnerProc, so the remaining population is real but is a population of one. It is also the program the goal cares about most (self-hosting off x86-64), and it builds today with --xtensa-long-calls, so nothing is blocked -- this remains about the DEFAULT and about the size/speed the flag costs. Untried candidate: a veneer slot reserved per CALLING BODY rather than per call site, which the banked negative does not rule out the way it rules out an unreserved veneer."
 ---
 
 # xtensa should not need a flag to build a large image
@@ -241,3 +241,85 @@ the same information problem as the call it would fix.
 So this fix removes the case every real program meets first, and leaves the
 class. Whoever takes the general fix should know the veneer idea was measured
 and does not close it.
+
+
+## 2026-09-05 (frankS, owner) — the prio decision, and both prior arguments are stale
+
+The ticket deferred its prio to me explicitly. Making it, on measurement taken
+today rather than on either recorded argument, because **both are now out of
+date and one of them was refuted by my own fix.**
+
+### The 2026-09-04 refutation no longer reproduces
+
+It said: the wall *"is not a property of deliberately-large generated programs,
+it is a property of LINKING CRTL AT ALL"*, so every C program meets it. Measured
+today, compiler `5783500470d0`, no `--xtensa-long-calls`:
+
+| program | code | result |
+| --- | --- | --- |
+| `#include <stdio.h>` hello | 651116 B | **links, and runs** (`hi`, exit 0) |
+| `test/c_crtl_syscall_guarded_bodies.c` — the cited program | 675692 B | **links** |
+
+Both are well over the 512 KiB wall and both build. The cited failure was *"the
+forward call to `__pxx_run_finalizers` at 58526 cannot reach its body at
+664880"* — and `f49c0e11f` (this session) reserves the wide form
+**unconditionally for `FiniRunnerProc`**, which is that exact callee. So the
+refutation was true when measured and was made obsolete by the fix that landed
+after it.
+
+**This is the third time this session that a recorded reason outlived its
+truth**, and the first where the thing that invalidated it was mine. Worth
+saying plainly: a premise-refutation is a dated measurement exactly like the
+premise it refutes, and it goes stale the same way.
+
+### What actually still refuses, measured
+
+`pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh
+compiler/compiler.pas`:
+
+```
+error: target xtensa: the forward call to CmpBits$18392 at code offset 370895
+cannot reach its body at 23898992 (CALL0/CALL8 reach +-512 KiB)
+```
+
+**This is the residual my own fix named and declined to cover** — *"a forward
+call between two ordinary procs more than 512 KiB apart still refuses"*. It is
+not `FiniRunnerProc`; the two are 23 MB apart. So the remaining population is
+**real and is a population of one: the compiler itself.**
+
+### The call: HELD AT 35
+
+Not raised. The argument for raising was "every C program hits this", and that
+sentence is no longer true — I removed the case every real program met first.
+
+Not lowered either, and this is the part I want on the record so nobody
+low-prios it later on the "population of one" reading. **That one program is the
+one the goal is about.** `the-goal-cross-cross.md` names *"pxx hosts itself
+somewhere that is not Linux/x86-64"* as one of the two proofs, and xtensa is
+Track S's primary target. A defect whose only victim is the self-hosted compiler
+on the goal target is not a small defect; it is a narrow one.
+
+What keeps it at 35 rather than higher is that **nothing is blocked**:
+`--xtensa-long-calls` builds it today. This is about the default, and about what
+the flag costs — the long form at *every* forward call site, "bigger and slower",
+which matters more on a flash-constrained target than it does on a host.
+
+### The design note, sharpened by today's failure
+
+The banked negative stands as written: *"A veneer has to be reserved during
+emission to be reachable, which is the same information problem as the call it
+would fix."* But the failure above sharpens what "reserved" has to mean, and it
+is cheaper than the ticket assumed.
+
+The flag reserves the long form **per call site**. A veneer reserved **per
+calling body, per distinct forward callee** is strictly cheaper — one slot at
+the end of a body serves every forward call to that callee from within it — and
+CALL0's ±512 KiB reach means the end of the calling body is always within reach
+of a call site inside it, which is exactly what was NOT true for the jump case
+(J reaches ±128 KiB). That is still a reservation and so does not escape the
+banked negative; what it escapes is the per-site cost that makes the flag
+expensive.
+
+**Untried. Not started here**, because it is bigger than the tail of a session
+and this ticket is not blocking anything. Recorded so the next attempt starts
+from the sharpened version rather than re-deriving it.
