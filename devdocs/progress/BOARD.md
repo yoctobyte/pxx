@@ -534,10 +534,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (2)
+## backlog-esp (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-s-c-on-the-esp-profile-cannot-reach-crtl | S | 45 | bug | A C source that reaches crtl does not build on the ESP profile: `#include <stdio.h>` plus a printf stops with `compiler error: PXXMemZero not found` under --target=xtensa --emit-obj, on BOTH the default profile and --esp-profile=bare. The 2x2 says the discriminator is the PROFILE, not the output mode -- the same source builds with --platform=posix as an executable AND as an object. PXXMemZero is defined unconditionally in compiler/builtin/builtinheap.pas:4561 (only its fast paths are CPUX86_64-guarded), so the symbol EXISTS and the lookup is not reaching it: the builtin heap unit is not being pulled into a C compilation on PLATFORM_ESP. Bounds decide-should-a-c-main-exist-on-the-esp-profile-at-all, which established that --emit-obj is the shipping path for C here -- true for FREESTANDING C and not yet for C that calls into crtl. | — |
 | bug-s-install-esp32-target-names-a-package-that-is-virtual-only-on-26-04 | S | 25 | bug | `tools/install_esp32_target.sh:96` asks for `qemu-user-static`, which on 26.04/resolute survives as a PURE VIRTUAL package: three instruments say it exists and only `apt-cache policy` says it cannot be installed. The script's own `apt_has_candidate()` already does the correct `Candidate:` test, so it WARNS rather than dying and blocks nobody today -- but it will not install the renamed package on a fresh 26.04 box. Not urgent; filed so the rename lands with the measurement rather than being rediscovered. The real package is `qemu-user-binfmt`. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
@@ -1106,6 +1107,7 @@ _none_
 - [p 45] [P] bug-p-a-functions-own-name-is-not-an-lvalue-to-str-and-val
 - [p 45] [P] bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations
 - [p 45] [P] bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles
+- [p 45] [S] bug-s-c-on-the-esp-profile-cannot-reach-crtl
 - [p 45] [T] bug-t-a-negative-test-row-cannot-say-which-way-it-flipped
 - [p 45] [T] bug-t-lane-attribution-has-two-instruments-that-disagree
 - [p 45] [T] bug-t-the-conformance-runner-lets-a-caller-read-around-its-own-directive-extractor

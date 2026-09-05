@@ -12167,6 +12167,15 @@ begin
         both build with --target=xtensa --emit-obj under the default profile
         and under --esp-profile=bare. That is the shipping path for C on this
         target; the standalone ELF this stub serves is not one.
+
+        AND THE BOUND ON THAT, because the sentence above was written without
+        it and read as more than it had earned. --emit-obj carries FREESTANDING
+        C. A C source that reaches crtl does not build on this profile yet:
+        `#include <stdio.h>` plus a printf stops with `compiler error:
+        PXXMemZero not found`. The 2x2 says it is the PROFILE and not the
+        output mode -- posix builds that source as an executable AND as an
+        object, ESP fails it as an object and never gets that far as an
+        executable. bug-s-c-on-the-esp-profile-cannot-reach-crtl 
         decide-should-a-c-main-exist-on-the-esp-profile-at-all 
         bug-cfront-no-entry-stub-for-xtensa }
       if XtensaABI <> XTENSA_ABI_CALL0 then
@@ -12177,10 +12186,15 @@ begin
         Error('C program entry stub on xtensa: a STANDALONE EXECUTABLE on the ' +
               'ESP profile has no argc on the stack to pass to main and no ' +
               'kernel to take the exit_group that ends it. Build a ' +
-              'RELOCATABLE OBJECT instead -- --emit-obj works on this profile ' +
-              'today, needs no entry stub, and exports your entry as GLOBAL ' +
-              'app_main, which is the name ESP-IDF calls. That is how C ships ' +
-              'to this target; a standalone ELF is not');
+              'RELOCATABLE OBJECT instead -- --emit-obj needs no entry stub ' +
+              'and exports your entry as GLOBAL app_main, which is the name ' +
+              'ESP-IDF calls. That is how C ships to this target; a standalone ' +
+              'ELF is not. BOUND, measured 2026-09-05: --emit-obj carries ' +
+              'FREESTANDING C today. C that reaches crtl (printf, and anything ' +
+              'else pulling the builtin heap) still stops with "PXXMemZero not ' +
+              'found" on this profile, and only on this profile -- the same ' +
+              'source builds with --platform=posix in both output modes. ' +
+              'bug-s-c-on-the-esp-profile-cannot-reach-crtl');
       { Save the initial sp to BSS_INITIAL_RSP for ParamCount/ParamStr, BEFORE
         anything moves sp -- the same ordering constraint the Pascal xtensa
         entry states. a8 is scratch and safe at process entry. }
