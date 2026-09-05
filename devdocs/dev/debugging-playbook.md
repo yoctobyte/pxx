@@ -4687,6 +4687,69 @@ were N causes** — and look for that, rather than for what they share. A shared
 NAME is the weakest possible evidence of a shared cause, and it is the evidence
 that generates the merge.
 
+## TWO APERTURES COMPOSE — a ticket sampled from the visible half, then probed from its slug, has been narrowed TWICE before anyone measures anything
+
+Two separate narrowings were measured here on 2026-09-05/06, by different
+sessions on different work. **Each is survivable alone. They multiply.**
+
+**1. The FILING aperture.** *"The refusal is what got reported, because a refusal
+is what you can SEE."* A construct that misbehaves in two directions is filed
+from the direction that produces a diagnostic:
+
+- A prio-25 ticket read *"a row of an N-D char array is a string"* with *"nothing
+  measured wants this; it is here so the exculpation has an owner"*. **True of the
+  shape reported** — the **store**, which fails loudly. The **load** direction of
+  the same predicate had never been probed: `s := a[1]` compiled, exited 0, and
+  assigned **one character where fpc assigns the row.** A wrong value in real
+  compiling code, under a prio saying nobody wants it.
+- A `type: refactor`, `prio: 30` ticket named *"a bare routine name used as a
+  procedural value"* as an unanswerable shape. **That exact shape SEGFAULTS at
+  HEAD** and had its own p60 bug. **The label was not careless — it was correct
+  about everything visible when it was written.**
+
+**A prio is a claim about a population, and a ticket written from a refusal has
+already sampled the visible half before anyone chose a number.**
+
+**2. The PROBING aperture, with a base rate.** A staleness pass over one track
+produced **five false greens on its own instruments in one evening — roughly one
+probe in nine.** Three came from probing the **slug** rather than the summary; one
+from a probe drawn from the wrong population; one reproduced for the wrong reason.
+All caught by habit, none by alertness.
+
+**The composition is the point.** Take a ticket filed from the visible half, then
+build the repro from its **slug** — the frozen citation key, stale by
+construction — and you have narrowed twice, multiplicatively, **before the first
+measurement.** Both narrowings produce the same artefact: **"cannot reproduce"**,
+which closes a real ticket and is far worse than a false positive that wastes a
+probe.
+
+Worked instance, same evening: two repros built from slugs did not reproduce. The
+real shapes were *an assignment TO a char-array row where the probe read FROM
+one*, and *an initialiser from a named const where the probe used a literal*.
+**Both would have been filed "cannot reproduce" if the first probe had been
+believed.**
+
+### What to do about it, in order of cost
+
+1. **Read the SUMMARY, never the slug.** The slug is a frozen citation key and
+   cannot be updated without breaking citations; the summary is where the residual
+   lives and is required to be true.
+2. **Before ranking anything, probe the OTHER direction of the same predicate.**
+   Store and load. Declaration and use. Accept and refuse. Cost is one probe and it
+   is the cheapest step here.
+3. **Ask what a wrong answer would LOOK like** — a refusal is visible, a wrong
+   value is not, and only one of them files itself.
+4. **Treat a first non-reproduction as information about the PROBE**, not about the
+   ticket. At one in nine, that is the base rate talking.
+
+**A third symptom class is a third filing queue.** One missing answer in the
+frontend presented as a **SIGSEGV**, a **silent wrong value**, and `undefined
+variable (G)` — a crash, a miscompile and a diagnostic. Three sessions would file
+it three times and each would have done nothing wrong. **Where one cause can wear
+three symptom classes, the duplicate-ticket rate is a property of the aperture,
+not of anyone's care.**
+
+
 ## CITE THE ADDRESS, NOT THE VALUE — and the rule HAS NO TERMINAL FORM, because what counts as an address depends on what is allowed to move
 
 A document that restates another file's current answer is a time bomb whose fuse

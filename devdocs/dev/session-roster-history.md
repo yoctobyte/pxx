@@ -28418,3 +28418,98 @@ six-key case, in the same tier.
 `self-host fixedpoint: verified — 1 round(s), 1ce714b40ff8`. **`verified`, not
 `converged`: it built nothing and is not evidence about any of these.** Attributed
 to nothing, and no local fixedpoint sampled while frankA gates.
+
+### A NAME SCAN THAT STOPS MATCHING SAYS NOTHING — a silent wasm32 miscompile behind a "known" hazard
+
+frankD (`5f177b181`), making seven intrinsic spellings soft keywords. **The
+ticket's blast-radius section was the reason nobody had taken it, and it was
+wrong in three places — all three measured.**
+
+1. **No codegen site keys on a token kind.** Every one uses `-Ord(tkXxx)` as a
+   call id. **Zero edits to `ir_codegen*.inc` across seven targets.**
+2. **`pyparser.inc`'s five arms are DEAD, not a second copy to keep in sync.**
+   `pylexer.inc` has exactly one variable-kind emit site, `k := PyKeyword(s)`, and
+   that table cannot produce these kinds — confirmed **dynamically** by a NilPy
+   program declaring `paramstr`/`paramcount` and binding its own. **Left in place:
+   deleting Track N's code from a P ticket is the wrong lane.** N should take
+   `pyparser.inc:44020, 44040, 44063, 44086, 44107`.
+3. **`pasparser_prog.inc:1045` was not the ORDER hazard the ticket flagged — it
+   was a SILENT one.** That scan decides whether a wasm32 module pulls
+   `wasibackend.pas` and tests `Kind >= tkSysOpen .. <= tkSysFchmod`. **The order
+   was never the risk: the test stops matching anything the moment those kinds are
+   no longer emitted, and says nothing.**
+
+**Measured, not reasoned** — the hunk reverted alone against the finished lexer:
+
+| | WASI symbols | bytes |
+| --- | --- | --- |
+| without the name scan | **0** | 71,461 — *byte-for-byte a program that never touches a file* |
+| with it | 8 | 81,752 |
+
+**The module would have trapped at run time on a host function it never
+imported.** And **nothing in the quick tier compiles for wasm32**, so neither the
+fixedpoint nor the gate could have caught it.
+
+> **Structural blindness in a variable that is not word size.** The known form of
+> this rule is *"nothing observably differs" is a claim about one target* — 64-bit
+> host, native codegen. Here the invisible axis is **which BACKEND the quick tier
+> emits for at all.**
+
+**And the hard-keyword-ness was already case-INCONSISTENT.** The lexer matched two
+casings per spelling, so `SYSOPEN` and `Sysopen` have always declared fine. **The
+refusal depended on how you wrote it and no ticket said so** — a defect whose
+reproducibility was a property of the reporter's capitalisation.
+
+Positive control is **pin v404**, which refuses the new test at the first
+declaration; gate GREEN **with the FPC seed canary running**; verified across
+i386/aarch64/arm32/riscv32/xtensa/wasm32 with the pin reproducing every
+target-specific diagnostic identically.
+
+**Dispositions done properly:** parent → `blocked/`, **55 → 30**,
+`blocked-by: feature-writeln-as-library`, summary rewritten to **seven of nine** —
+`Read`/`Write`/`ReadLn`/`WriteLn` carry the `:width:prec` specifiers and the
+file-first variadic form, so they belong with frankH's phase 2 rather than racing
+it. *Left at 55 with the old summary it would have come back to the top of P's
+queue tomorrow describing finished work.*
+
+### `-u` UNDEFINES, AND THE FLAG IT NAMES IS ON BY DEFAULT
+
+frankD, new ticket `bug-b-copy-cannot-compile-at-all-on-the-frozen-string-path`:
+**any** use of `Copy` refuses under `-uPXX_MANAGED_STRING`, because
+`lib/rtl/textfile.pas:291` calls `PXXIoErrorHook` which only
+`compiler/builtin/builtinheap.pas` declares. **The pin fails identically.**
+Invisible because the only source that path is routinely handed is `hello.pas`.
+
+**Nearly filed as a *managed-strings* bug.** `-u` **UN**defines, and
+`PXX_MANAGED_STRING` is **ON by default**, so `-u` is the **frozen** half —
+`Makefile:134` says so in its own variable name, `FROZEN_PXXFLAGS`. **Two probe
+rounds and half a wrong ticket** before an `{$ifdef}` probe settled it in two
+seconds. *A flag read as an enable when it is a disable puts the ticket in the
+wrong subsystem, not merely the wrong words.*
+
+### A CITATION DATED BEFORE IT WENT STALE, AND IT WENT STALE IN FOUR HOURS
+
+frankD (`6f8d72fb1`) put a date on its own `:3428` trace. frankC's `a409e19b5`
+**deletes** that arm — HEAD is `/usr/include/gtk-3.0/gtk/` at **`:3439`**, and the
+arch-specific `gtk-2.0/include/` root is **gone rather than moved**. Two
+consequences: the four `uses gtk` tests now want **`libgtk-3-dev`**, and the two
+build-time dependency profiles handed to frankZ **collapse into one.**
+
+**The pre-flip trace was KEPT** — it is what the failure-depth argument was
+measured against — **with a line saying not to read the line number or the package
+off it.** *A measurement kept for the argument it supports, explicitly retired for
+the facts it quotes.* Same class as everything else tonight, one turn faster.
+
+### SKIP IS ROUTED INTO THE BIN BUILT TO IGNORE IT
+
+frankS (`eb7e84ab7`), writing the class up as a class rather than three fixes:
+
+> **`SKIP` is the one verdict everybody reads as *not measured* and acts on
+> accordingly** — excluded from counts, kept out of reports, never bisected. So a
+> failure spelled `SKIP` is **not merely mislabelled, it is routed into the bin
+> built to ignore it, by a reader doing exactly the right thing with the word they
+> were given.**
+
+**That is why it is worse than a red, and it is not visible from any single
+instance.** A mislabelled red gets looked at eventually; a mislabelled skip is
+handled correctly, forever, by everyone.
