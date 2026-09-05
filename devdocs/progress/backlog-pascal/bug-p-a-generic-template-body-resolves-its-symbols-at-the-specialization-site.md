@@ -1,5 +1,5 @@
 ---
-slug: bug-p-a-generic-template-in-a-unit-may-reference-a-non-global-symbol
+slug: bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site
 title: "A generic template body resolves its symbols at the SPECIALIZATION site, so it captures the caller and cannot see its own unit"
 track: P
 prio: 55
@@ -10,6 +10,13 @@ owner: ""
 created: 2026-09-05
 summary: "MEASURED 2026-09-05 (frankS), and the direction is the OPPOSITE of what this ticket said. A generic template body resolves its symbols AT THE SPECIALIZATION SITE, in the specializing scope, and the declaring unit's scope is never consulted. Two defects, not one. (1) WRONG OBSERVABLE: a unit template calling its own LocalFill runs the PROGRAM's LocalFill when the program happens to declare that name -- the method's meaning depends on who specializes it. (2) LEGAL SOURCE REFUSED: remove the program's LocalFill and the unit no longer compiles at all -- `undefined variable (LocalFill)` against a procedure ten lines above the template method IN THE SAME FILE. So a template can never use its own unit's private helpers. Identical on pin v403, so pre-existing and not fallout from the template-visibility work. NOT `wontfix: dialect-pass`: FPC refusing this (`Global Generic template references static symtable`) is FPC diagnosing a limit its expansion model has; pxx has the SAME limit and silently rebinds instead of diagnosing. Raised 30 -> 55: a silent wrong answer plus a refusal of legal code is not a missing diagnostic. Corpus-free two-file repro in the body."
 ---
+
+**RENAMED 2026-09-05** from `bug-p-a-generic-template-in-a-unit-may-reference-a-non-global-symbol`, which asserted the OPPOSITE of what was
+measured. Grep that name to find older citations; it is recorded here so they
+still resolve. The rename was affordable because the old slug had ZERO code
+citations and one live ticket reference, and it was WORTH doing because
+`ready`/`next` print the slug and nothing else, so the queue was advertising a
+false claim at p55 to every reader choosing work.
 
 # The shape
 

@@ -333,7 +333,7 @@ refuses it with `expected '>' before '>='` **in ugeneric4.pp** — it was green
 because the parser could not read the unit. What it actually tests is a
 diagnostic pxx has never had (`Global Generic template references static
 symtable`). Filed as
-[[bug-p-a-generic-template-in-a-unit-may-reference-a-non-global-symbol]], the
+[[bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site]], the
 THIRD instance of this shape after tgenfunc17/18.
 
 **Expect more of these.** A `%FAIL` row is a pass-by-refusal, so every parser
