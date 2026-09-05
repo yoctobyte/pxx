@@ -29605,3 +29605,50 @@ Filed T p45 (`f658b0880`) **with the obvious fix ruled out in the body**: a park
 resume condition can genuinely become met later, so a blanket suppression would
 hide a true hit permanently. The escape must record WHICH slugs were adjudicated
 and still fire on one that is not listed.
+
+### And an hour later frankH overturned the example the STALE-PARK ticket rests on
+
+I filed it describing `feature-dynamic-compiler-tables`' second firing as **an
+adjudication paid twice**. frankH **re-read the adjudication instead of trusting
+its own note** and found the opposite: `feature-opt-dynarray-grows-in-place` — the
+slug that 2026-08-30 note dismissed as *"a pointer, not a blocker"* — **is now in
+`done/`, and so is `feature-emission-size-dce`.** Both landed AFTER the note that
+dismissed them.
+
+> **The check was WRONG ABOUT BLOCKING and RIGHT ABOUT STALENESS — on the very
+> ticket the report was filed from.**
+
+**Not bookkeeping:** in-place dynarray growth is what makes that ticket's geometric
+doubling amortise, so the pointer dismissed as not-a-blocker is the thing that made
+its conversion pattern cheaper. **Stale in the direction that mattered.**
+
+**This makes the ticket stronger and it is why the correction was worth more than
+the filing.** The design section had ruled out a blanket `PARK BY DESIGN` by
+reasoning — *a park's resume condition can genuinely become met later*. It is now a
+live case: **the blanket escape would have hidden a true hit on the report's own
+worked example.** Ticket and summary corrected, `fa7e88d09`.
+
+**The generalisation, which is the night's class again in a new place:** a ticket's
+own adjudication is a dated claim about a moving set, and **nothing re-reads it
+because it reads as the work already done.** Same asymmetry as a false coverage
+claim — the direction that closes work is the direction nothing checks. An
+adjudication needs the same treatment as a park: **record what was checked and
+when, so a NEW member of the set still fires.**
+
+### frankH also supplied the symmetric half of its own two-caps rule
+
+The refusal side has a diagnostic to read; **the success side has none.** `rc=0` on
+the oversized input is not the proof — **a pool that grew but silently truncated
+also exits 0, also emits a binary, and still links**, because nothing in that
+file's macros has to be *used*.
+
+> **Both faces of a reachability probe answer, neither errors, and each is correct
+> about something else** — the refusal about a neighbouring cap, the success about
+> the compiler not having crashed.
+
+Refusal → *whose message is this?* Success → *what would have been different if it
+had done nothing?* — which **cannot be read off anything**, so it needs an
+assertion on the OUTPUT whose class matches the defect class of the converted
+table. For a content pool that is **wrong characters, not a crash**. Control named:
+the 13.8 MB file, old refuses and new succeeds, because *"an empty diff log only
+means something once the control row is in it."*
