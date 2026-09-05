@@ -7568,10 +7568,11 @@ function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
   `const Z = Low(TE)` declared tyInteger and printed 0 instead of eA, and
   `const W = Low(TC)` printed 97 instead of 'a'.
   bug-p-the-constant-evaluator-erases-an-ordinals-type }
-var btk: TTypeKind; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
+var btk: TTypeKind; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
+  aliasEtid := -1;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
      (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
   begin
@@ -7604,7 +7605,18 @@ begin
         Next;
         Result := True; Exit;
       end;
-      btk := IntToTypeKind(AliasTk[aliasIdx]);
+      { …and a named ENUM alias answers its ENUM's range, for the same reason
+        one line up. `type TD = D` gave Low = -2147483648 / High = 2147483647,
+        because an enum's KIND is tyInteger and the line below reads exactly
+        that -- so `for d := Low(TD) to High(TD)` ran four billion times where
+        the identical loop over `D` runs four. Not a second enum arm: it
+        resolves the id and lets the one below answer, so the identity that
+        makes WriteLn print `mon` cannot drift between the two spellings.
+        bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
+      if AliasEnumId[aliasIdx] <> 0 then
+        aliasEtid := AliasEnumId[aliasIdx] - 1
+      else
+        btk := IntToTypeKind(AliasTk[aliasIdx]);
     end;
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, v) then
@@ -7613,7 +7625,7 @@ begin
     Next;
     Result := True; Exit;
   end;
-  etid := FindEnumType(nm);
+  if aliasEtid >= 0 then etid := aliasEtid else etid := FindEnumType(nm);
   if etid >= 0 then
   begin
     EnumTypeOrdRange(etid, eLo, eHi);
@@ -7639,10 +7651,11 @@ begin
 end;
 
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
-var btk: TTypeKind; bv: Int64; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
+var btk: TTypeKind; bv: Int64; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
+  aliasEtid := -1;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
      (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
   begin
@@ -7674,7 +7687,13 @@ begin
         ASTTk[outNode] := Ord(IntToTypeKind(AliasTk[aliasIdx]));
         Result := True; Exit;
       end;
-      btk := IntToTypeKind(AliasTk[aliasIdx]);
+      { the same ENUM-alias rule as TryConstHighLowValue, and for the same
+        reason the subrange rule above is duplicated here: these two are one
+        concept in two places and they change together }
+      if AliasEnumId[aliasIdx] <> 0 then
+        aliasEtid := AliasEnumId[aliasIdx] - 1
+      else
+        btk := IntToTypeKind(AliasTk[aliasIdx]);
     end;
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, bv) then
@@ -7683,7 +7702,7 @@ begin
     Result := True; Exit;
   end;
 
-  etid := FindEnumType(nm);
+  if aliasEtid >= 0 then etid := aliasEtid else etid := FindEnumType(nm);
   if etid >= 0 then
   begin
     EnumTypeOrdRange(etid, eLo, eHi);

@@ -3,7 +3,7 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-summary: "Two measured losses of a type's IDENTITY at a registration boundary, both pre-existing on pin v403. (1) `type TDays = D` where D is an enum: a variable declared through the ALIAS prints its ORDINAL where fpc prints the member name -- `WriteLn(a)` gives `1`, not `tue` -- because enums are tyInteger plus an id and the alias table has no column for the id. The same variable's `case` still works, since members resolve globally, which is what hides it. (2) `Low`/`High` of a `set of 'c'..'k'` answer 99 and 107 where fpc answers c and k: the element's CHAR kind is dropped. The BOUNDS half was a SECOND defect and is FIXED (2026-09-05): the bounds survived only in the INLINE spelling -- through `type TCS = set of 'c'..'k'` they were lost too and Low/High answered 0 and 255, the element type's full range. The remaining open half is the element KIND on the inline spelling, which is the decide-fork's business. Same family as the AliasStrCap / AliasStrElemTk / AliasFileElemTk gaps already fixed in RegisterGeneralAlias -- a fact that is live in a LastType* channel at registration and has nowhere to be written."
+summary: "FIXED (the enum half; the set-of-char half is split out as [[bug-p-a-set-of-a-char-subrange-drops-its-element-kind]] and this ticket no longer covers it). `type TDays = D` now carries the enum's IDENTITY through the alias: a variable, an alias chain, a record field, a value and a var parameter, a function result, an array element and the ordinal operators all print member names, and `Low(TDays)`/`High(TDays)` answer mon/thu instead of INT_MIN/INT_MAX. One new column in RegisterGeneralAlias — the SIXTH fact in a list whose five neighbours each say `same window and same reason`, and the one that was never written."
 ---
 
 # A type alias drops the enum identity; a set drops its char element kind
@@ -126,3 +126,70 @@ there and stays open.
 
 **Still open on (2):** the element KIND on the inline spelling (fork), and
 `Low`/`High` of a set TYPE NAME being refused outright.
+
+
+# Resolved — the enum half
+
+## One column, and the reason it was missing is the finding
+
+`RegisterGeneralAlias` carries five facts out of the `LastType*` channels: a
+frozen string's capacity, a subrange's bounds, a file's element width, a managed
+string's element width, a pointer's target. Each is its own guarded block, and
+four of the five say some version of *"exactly AliasStrCap's problem one type
+over"*. The enum id is the sixth and **nobody wrote it**.
+
+That is the omission class arriving inside the duplication class. Reading the
+five copies against each other cannot find the sixth, because **they agree** —
+the instrument for a missing caller is the callee's own contract, not a diff of
+its callers.
+
+## AliasEnumId is stored +1, and on purpose
+
+Its five neighbours use 0 as "not one" because 0 is not a valid capacity or
+kind. **0 IS a valid enum index**, so an unwritten row would read as enum 0 —
+and an unwritten row is precisely how this fact went missing. With the bias, a
+registration site that forgets the column yields NONE and the omission is inert
+rather than silently wrong. Six sites call `Inc(AliasCount)`; only one of them
+needed to learn anything.
+
+## The guard is EnumKindMatches, not `LastTypeEnumId >= 0`
+
+`set of TCol` leaves the ELEMENT's id in that global. Capturing unguarded would
+stamp a SET alias with its element's identity and print a bitset as a member
+name. `EnumKindMatches` is the predicate seven other sites already use for
+exactly this question, and its own header records that the kind test *"is the
+only thing stopping a set from inheriting a member name"*. This is its eighth
+caller, and `CONTROL set alias` in the test is the row that fails without it.
+
+Its forward declaration MOVED from `pasparser_name.inc` to `symtab.inc`'s
+existing forward block rather than being duplicated: a duplicate forward across
+two `.inc` files builds clean, passes `--tier quick`, and is caught only by the
+FPC seed canary — a class CLAUDE.md names by that description. The canary passed.
+
+## Low/High of the alias NAME was a second site, and a double case
+
+`Low(TDays)` answered -2147483648. The alias arm fell through to
+`IntToTypeKind(AliasTk[])`, which for an enum is `tyInteger`, and
+`OrdinalTypeBound` answered about Integer and returned True before the enum arm
+below was ever reached — so `for d := Low(TD) to High(TD)` ran four billion
+times where the identical loop over `D` runs four.
+
+Fixed in BOTH twins (`TryConstHighLowValue` and `TryFoldHighLowType`), whose own
+comment already says *"these two are one concept in two places, so they change
+together"*. Neither got a second enum arm: the alias resolves the id and lets
+the existing arm answer, so the identity that makes `WriteLn` print `mon` cannot
+drift between the two spellings.
+
+## The ticket's own suggested control is in the test
+
+A NAMED subrange OF an enum (`type TWork = tue..thu`) takes the `AliasIsSub`
+arm, and the INLINE spelling of the same subrange printed member names all
+along. That asymmetry is what puts the defect at the alias boundary rather than
+in the formatter, and it is a row.
+
+## Found while fixing, filed rather than folded
+
+`Low(a)` / `High(a)` on an enum VARIABLE print `0 2` where fpc prints
+`mon wed` — and the DIRECT enum variable is equally wrong, so it is not an alias
+defect and does not belong here.
+[[bug-p-low-and-high-of-an-enum-variable-print-the-ordinal]].

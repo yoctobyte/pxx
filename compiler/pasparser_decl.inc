@@ -1181,6 +1181,12 @@ begin
                   Alloc* stamps Syms[].ElemType and `x[i]` uses the right stride }
                 if AliasStrElemTk[aliasIdx] <> 0 then
                   LastTypeStrElemTk := IntToTypeKind(AliasStrElemTk[aliasIdx]);
+                { …and an ENUM alias hands back its IDENTITY, so the decl site
+                  stamps SymEnumId and WriteLn prints the member name rather
+                  than the ordinal. Sixth in this list; see RegisterGeneralAlias
+                  for why it is stored +1. }
+                if AliasEnumId[aliasIdx] <> 0 then
+                  LastTypeEnumId := AliasEnumId[aliasIdx] - 1;
                 if AliasIsSub[aliasIdx] then
                 begin
                   { named subrange: hand the retained bounds to Alloc* for

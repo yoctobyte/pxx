@@ -1,0 +1,11 @@
+variable      : tue
+alias chain   : wed
+record field  : thu
+value param   : mon
+var param     : tue
+array element : mon tue wed
+ord / succ    : 2 tue wed
+low / high    : mon thu
+named subrange: thu
+case          : W
+CONTROL set alias: mon wed

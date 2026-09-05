@@ -565,7 +565,11 @@ function NodeEnumIdOf(node: Integer): Integer; forward;
   prescans and does not need it, which is exactly why only the seed canary
   catches a missing one. feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus }
 function EnumStorageTypeKind(etid: Integer): TTypeKind; forward;
-function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean; forward;
+{ EnumKindMatches's forward MOVED to symtab.inc's block beside
+  TypeIsFrozenString: RegisterGeneralAlias now asks it too, and symtab.inc is
+  included first. One forward, not two -- a duplicate forward across two .inc
+  files passes the build and --tier quick and is caught only by the FPC seed
+  canary, which is a class CLAUDE.md names by that description. }
 function ParseVarRecLiteralAST: Integer; forward;
 { pasparser_stmt.inc, but ParseVarRecLiteralAST (in _lval.inc, included two
   files earlier) formats `[ x:8:2 ]` elements through it. }

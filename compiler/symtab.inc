@@ -277,6 +277,12 @@ function FrozenStrAlign(tk: TTypeKind): Integer; forward;
   RecFieldByteSize -- which is above both -- is one of the callers that has one.
   bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
 function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer; forward;
+{ ...and "is this declaration actually OF that enum", which RegisterGeneralAlias
+  asks for the same reason its seven other callers do: LastTypeEnumId being set
+  is not the same claim as this type BEING that enum -- `set of TCol` leaves the
+  ELEMENT's id in it. Forwarded here rather than in pasparser_name.inc, which is
+  included later, so there stays exactly one forward. }
+function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean; forward;
 
 procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
 begin
@@ -386,6 +392,26 @@ begin
     AliasStrElemTk[AliasCount] := Ord(LastTypeStrElemTk)
   else
     AliasStrElemTk[AliasCount] := 0;
+  { …and an ENUM alias keeps its IDENTITY, which is the sixth entry in this list
+    and the one that was never written. An enum is an integer KIND plus an id;
+    the kind survived every alias and the id did not, so `type TDays = D; var a:
+    TDays; WriteLn(a)` printed `1` where fpc prints `tue`. The `case` statement
+    kept working the whole time, because members resolve globally rather than
+    through the variable's type — which is what hid it, and is why the ticket
+    reads as a display quirk rather than a lost type.
+
+    Guarded on the kind MATCHING the enum's own storage kind, not on
+    `LastTypeEnumId >= 0` alone: `set of TCol` leaves the ELEMENT's id in that
+    global (pasparser_decl.inc says so at LastTypeSetEnumId), so an unguarded
+    read would stamp a set alias with its element's enum identity and
+    `WriteLn(s)` would try to print a set as a member name.
+
+    Stored +1; the column's comment in defs.inc says why, and the reason is this
+    bug's own history. }
+  if EnumKindMatches(IntToTypeKind(tk), LastTypeEnumId) then
+    AliasEnumId[AliasCount] := LastTypeEnumId + 1
+  else
+    AliasEnumId[AliasCount] := 0;
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;

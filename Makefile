@@ -6644,6 +6644,23 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_char_array_3d_row_not_a_string_fail.pas $(TESTTMP)/test_ca3d26 > $(TESTTMP)/test_ca3d.log 2>&1
 	@grep -q 'cannot assign ShortString to Char' $(TESTTMP)/test_ca3d.log \
 	  || { echo 'test_char_array_3d_row_not_a_string_fail: FAIL - refused, but not for the reason asserted'; exit 1; }
+	./$(COMPILER) test/test_enum_type_alias_keeps_identity.pas $(TESTTMP)/test_etai26
+	@# .expected is fpc 3.2.2's own output. An enum is an integer KIND plus an id;
+	@# every alias carried the kind and dropped the id, so a variable declared
+	@# through the alias printed `1` where fpc prints `tue`. `case` kept working
+	@# throughout, because members resolve globally rather than through the
+	@# variable's type -- which is why a test that only exercises control flow
+	@# passes on the broken compiler. These rows print VALUES for that reason.
+	@# CONTROL `set alias` is load-bearing: `set of C` leaves the ELEMENT's enum
+	@# id in LastTypeEnumId, so capturing on `LastTypeEnumId >= 0` instead of
+	@# EnumKindMatches stamps a SET alias with its element's identity and tries to
+	@# print a bitset as a member name. Every other row still passes if you do.
+	@# CONTROL `named subrange` is the ticket's own suggested control: the NAMED
+	@# subrange of an enum takes the AliasIsSub arm, and the INLINE spelling of the
+	@# same subrange always worked -- the asymmetry is what puts the defect at the
+	@# alias boundary rather than in the formatter.
+	@$(TESTTMP)/test_etai26 | diff -u test/test_enum_type_alias_keeps_identity.expected - \
+	  || { echo 'test_enum_type_alias_keeps_identity: FAIL - an enum alias dropped its identity again'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --
