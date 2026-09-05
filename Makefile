@@ -10518,6 +10518,30 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }
+	# THE SILENT ARM, and its positive control. Until 2026-09-05 an undeclared
+	# identifier in a FILE-SCOPE initializer produced no diagnostic at all and
+	# folded to 0 — the shape `static const int f = O_NOFOLLOW;` takes, which is
+	# how eighteen crtl constants reached eleven busybox TUs as zero. The
+	# function-body arm was already an error, so the loud half was fixed while
+	# the quiet half stayed.
+	@./$(COMPILER) test/c_undeclared_in_file_scope_init_refused.c $(TESTTMP)/c_fsundecl26 \
+	   > $(TESTTMP)/c_fsundecl.log 2>&1; \
+	 test $$? -ne 0 \
+	   || { echo 'c_undeclared_in_file_scope_init_refused: FAIL - four undeclared file-scope initializers must refuse'; \
+	        cat $(TESTTMP)/c_fsundecl.log; exit 1; }
+	@test "$$(grep -c 'used as value' $(TESTTMP)/c_fsundecl.log)" = 4 \
+	   || { echo 'c_undeclared_in_file_scope_init_refused: FAIL - expected one diagnostic per shape; a silent shape is the whole bug'; \
+	        cat $(TESTTMP)/c_fsundecl.log; exit 1; } \
+	   && echo "c_undeclared_in_file_scope_init_refused: 4 shapes, 4 refusals"
+	# THE CASE THAT MUST NOT BREAK, and it is the same code path: an identifier
+	# in a constant expression that is DECLARED but not constant is a VLA, not a
+	# mistake. Refusing these would take out the VLA, the NARGS idiom and
+	# BUILD_BUG_ON. Asserted against gcc rather than a transcribed line, so
+	# adding a row here needs no expected value re-derived — and so the row
+	# cannot pass by agreeing with a stale constant.
+	./$(COMPILER) test/c_const_expr_legit_identifiers.c $(TESTTMP)/c_constlegit26
+	gcc -std=gnu99 -o $(TESTTMP)/c_constlegit_gcc test/c_const_expr_legit_identifiers.c
+	tools/expect_same.sh c_constlegit26 "$$($(TESTTMP)/c_constlegit26)" "$$($(TESTTMP)/c_constlegit_gcc)"
 	# #if `?:`, #line renumbering, and __LINE__ inside #if — three evaluator gaps
 	# that only became visible once #error above stopped being a no-op.
 	./$(COMPILER) test/cpreproc_cond_line.c $(TESTTMP)/cpreproc_cond_line26

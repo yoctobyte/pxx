@@ -14342,15 +14342,39 @@ begin
   begin
     idx := FindSym(CurTok.SVal);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal
-    else
-      { A name that is not a compile-time constant contributes 0, and the
+    else if idx >= 0 then
+      { DECLARED but not a compile-time constant. It contributes 0, and the
         caller cannot tell that from a genuine zero. In an array DIMENSION that
         is a VLA, and the silent 0 sized the array at nothing: `int arr[n]`
         then overlapped the next stack slot, so a loop over it clobbered its
         own counter and exited after two iterations — wrong output, no error
         (bug-cfront-vla-stack-corruption). Record it; the dimension reader
         decides what to do. }
+      CConstExprSawNonConst := True
+    else
+    begin
+      { NOT DECLARED AT ALL — a different population, and it used to share the
+        flag above and therefore say nothing. `int a = NO_SUCH;` at file scope
+        compiled clean and folded to 0; so did an INTEGER element of an
+        aggregate and a file-scope `static`. THREE OF THE FOUR SILENT SHAPES
+        ARE HOW A crtl CONSTANT GAP ENTERS A PROGRAM: `static const int f =
+        O_NOFOLLOW;` is a security guard switched off, with no diagnostic
+        anywhere, and a census that counts diagnostics cannot see it. The
+        function-body arm has been a hard error since a157e88ee; this is its
+        sibling, and it was the more dangerous half because it was quiet.
+
+        `FindSym` separates the two populations exactly: >= 0 is the VLA case
+        above, which must keep working. `__`-names stay silent for the reason
+        they stay silent in the value path — a missing __LINE__ or __builtin_*
+        is our gap in a namespace the program does not own.
+
+        ErrorRecover, not Error: Result is already 0, which is the well-formed
+        stand-in the contract asks for, and ErrCount being nonzero suppresses
+        all output. }
+      if (Length(CurTok.SVal) < 2) or (CurTok.SVal[1] <> '_') or (CurTok.SVal[2] <> '_') then
+        ErrorRecover('undeclared identifier ''' + CurTok.SVal + ''' used as value');
       CConstExprSawNonConst := True;
+    end;
     Next;
   end;
 end;

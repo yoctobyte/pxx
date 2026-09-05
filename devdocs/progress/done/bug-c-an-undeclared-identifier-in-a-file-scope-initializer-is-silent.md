@@ -3,11 +3,11 @@ slug: bug-c-an-undeclared-identifier-in-a-file-scope-initializer-is-silent
 track: C
 type: bug
 prio: 50
-status: open
+status: done
 found: 2026-09-05
 found-by: frankC
 blocked-by: []
-summary: "An undeclared identifier in a FILE-SCOPE initializer produces no diagnostic at all and folds to 0 — not a warning, nothing. Four of seven measured shapes are silent: `int a = NO_SUCH;`, `int b = NO_SUCH + 1;`, an INTEGER element of an aggregate `int arr[3] = { NO_SUCH, 2, 3 };`, and a file-scope `static int s = NO_SUCH;`. gcc errors on all seven. This is the sibling arm of bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error, which became a hard error on 2026-09-05 — for expressions in FUNCTION BODIES only. It is also the arm that matters most for the busybox constant class: `static const int f = O_NOFOLLOW;` is silent today, and a census counting diagnostics cannot see it."
+summary: "FIXED 2026-09-05 (frankC), same day it was found. An undeclared identifier in a FILE-SCOPE initializer used to produce no diagnostic at all and fold to 0 — four shapes mute, including `static const int f = O_NOFOLLOW;`, which is how eighteen crtl constants reached eleven busybox TUs as zero. Cause: CEvalConstPrimary set ONE flag for two populations — declared-but-not-constant (a VLA, which must keep working) and not-declared-at-all. FindSym separates them exactly, so the fix is a condition. The speculative-fold risk across 43 CEvalConstExpr call sites was settled both ways: the enum folder pre-scans and cannot reach the evaluator with an unresolved name, and a 625-file sweep (625 reached) produced a nonzero-exit set byte-identical to the baseline. Verified at fec9d034dc2b: gate.sh quick GREEN all 17 rows on the post-v404 tree, conformance 220/220, lua and sqlite build, cross i386/aarch64/arm32/riscv32, busybox 75 TUs byte-identical to the gcc oracle. AND THE POSITIVE CONTROL THAT FOUND IT NOW PASSES: an undeclared name injected into a real busybox TU at file scope refuses instead of exiting ok:, so the corpus zero is backed in both positions."
 ---
 
 # The silent arm: file-scope initializers report nothing
@@ -67,3 +67,6 @@ made. `CConsumeCastProcInit` does lookahead and is the first place to look.
 Keep the `__`-prefix carve-out: it covers predefined-but-unmodelled
 `__LINE__`/`__FILE__`/`__func__` and the `__builtin_*` surface, where a missing
 name is our gap in a namespace the program does not own.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
