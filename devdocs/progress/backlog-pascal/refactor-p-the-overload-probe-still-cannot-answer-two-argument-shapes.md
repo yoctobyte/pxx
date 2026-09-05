@@ -6,9 +6,9 @@ prio: 55
 type: refactor
 blocked-by: []
 status: backlog
-owner: ""
+owner: "frank-optimize"
 created: 2026-09-05
-summary: "The overload probe now fills the five argument-match channels and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak."
+summary: "The overload probe now fills the seven argument-match channels (five, then MatchArgStrElemTk and MatchArgPtrElemTk on 2026-09-05 -- read FillMatchArgChannelsAt's list, not any number written down) and refuses on MatchArgRecMismatch, but it still cannot run the full TypesCompatible check, because two argument shapes have no channel that answers them: a generic type parameter is tyUnknown at the declaration, and a bare routine name used as a procedural value types as neither. Both were MEASURED refusing legal code. Until each has an answer the single-candidate gate keeps its narrow allowlist, so a wrong argument to a single-candidate method is still accepted whenever neither the channels nor the allowlist can speak."
 ---
 
 # The residual from the channel refactor

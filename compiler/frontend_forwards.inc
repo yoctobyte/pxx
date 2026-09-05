@@ -36,6 +36,13 @@ procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 {$endif}
 procedure EmitAnsiStringRuntime; forward;
+
+{ ParseArgExpr (pyforwards.inc, included at compiler.pas:169) diverts a Delphi
+  bare routine name in argument position through this, and the body is in
+  pasparser_lval.inc, five includes later. FPC's seed is single-pass, so the
+  forward is load-bearing rather than tidy.
+  bug-p-a-bare-routine-name-is-refused-as-a-method-argument }
+function TryDelphiBareProcArg: Integer; forward;
 procedure EmitVariantBlobs; forward;   { emitted at EmitAnsiStringRuntime's tail; defined after the two bodies it splices }
 procedure EmitHeapLockSlowStub; forward;
 procedure EmitDiv0Stub; forward;

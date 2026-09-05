@@ -5959,6 +5959,13 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas $(TESTTMP)/test_bare_procvar_call_b27326
 	tools/expect_same.sh test_bare_procvar_call_b27326 "$$($(TESTTMP)/test_bare_procvar_call_b27326)" "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a Delphi BARE routine name as a whole argument, at a METHOD call site --
+	# it was tried only at the free-call argument loops, so `FreeRun(MyCompare)`
+	# compiled and `s.Run(MyCompare)` said `undefined variable`. Rows 6-7 assert
+	# the opposite risk: a paramless / all-defaulted function must still be
+	# CALLED there, not addressed.
+	./$(COMPILER) test/test_delphi_bare_proc_method_arg.pas $(TESTTMP)/test_delphi_bare_proc_method_arg26
+	tools/expect_same.sh test_delphi_bare_proc_method_arg26 "$$($(TESTTMP)/test_delphi_bare_proc_method_arg26)" "BAREPROCARG OK"
 	# FreeAndNil must RUN THE DESTRUCTOR (it silently skipped it: Free through an untyped
 	# reference does not dispatch Destroy)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_freeandnil_destructor_b300.pas $(TESTTMP)/test_freeandnil_destructor_b30026

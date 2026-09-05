@@ -287,7 +287,42 @@ procedure ParseArgExpr;
   (bug-nilpy-bare-genexpr-as-a-method-argument-does-not-parse). The ordinary
   site's own check is now redundant and harmless: it fires first and does the
   same thing. }
+var delphiProcArg: Integer;
 begin
+  { A DELPHI BARE ROUTINE NAME as a whole argument -- `s.Run(MyCompare)` -- is
+    diverted here for exactly the reason the bare genexpr below is, and the
+    two are the same bug twice.
+
+    It used to be tried only at the FREE-call argument loops
+    (pasparser_expr.inc, pasparser_stmt.inc), so `FreeRun(MyCompare)` compiled
+    and `s.Run(MyCompare)` answered `undefined variable (MyCompare)` -- the
+    name never became a value at all on the method path. Measured against
+    fpc 3.2.2 -Mdelphi, which accepts both, along with `v := MyCompare`,
+    `FreeRun(@MyCompare)` and `s.Run(@MyCompare)`: five spellings, and the
+    bare method one was the only cell that differed.
+
+    There are SEVEN parameter-driven argument loops that reach an argument
+    expression (two in pasparser_call.inc, four in pasparser_lval.inc, three
+    in pasparser_expr.inc, counting the speculative probe), and five of them
+    funnel through here. Adding the attempt to each was the alternative and it
+    is the shape normalise-dont-special-case.md is about -- the loop nobody
+    remembers is the one that stays broken, which is how this construct got
+    here in the first place. The free sites' own calls are now redundant and
+    harmless: they fire first and do the same thing, exactly as the genexpr
+    note below says of its own site.
+
+    Guarded to nothing outside its construct: TryDelphiBareProcArg exits
+    unless DelphiMode is on, the token is an identifier that is NOT a variable
+    but IS a routine, and the very next token closes or separates the argument
+    -- so NilPy's 56 callers and every non-Delphi Pascal call reach it and
+    return -1 without looking further.
+    bug-p-a-bare-routine-name-is-refused-as-a-method-argument }
+  delphiProcArg := TryDelphiBareProcArg;
+  if delphiProcArg >= 0 then
+  begin
+    CurASTNode := delphiProcArg;
+    Exit;
+  end;
 {$ifdef PXX_NO_NILPY}
   { No NilPy frontend: PyExprMode can never be True, so the hook IS ParseExpr.
     Spelled out rather than left to dead-code elimination, because the two
