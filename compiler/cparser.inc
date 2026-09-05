@@ -46,6 +46,52 @@ begin
   Result := True;
 end;
 
+function CFindProcFromModule(const name: AnsiString): Integer;
+{ Resolve a C function name FROM THE MODULE THAT IS ASKING.
+
+  C gives a file-scope `static` INTERNAL linkage, so `static int sysret` in
+  fcntl.c and `static int sysret` in unistd.c are two distinct functions. The
+  preprocessor inlines crtl's modules into ONE buffer, so both reach the
+  compiler as one translation unit and FindProc -- which knows about units, not
+  about C modules -- answers with whichever row registered FIRST. That is the
+  right answer for exactly one of the two callers and the wrong one for the
+  other.
+
+  So: a call written inside module M prefers a `static` row DEFINED in M. Every
+  other name is untouched -- no static row in this module means the walk finds
+  nothing and FindProc's answer stands, which is every name in every program
+  that does not do this.
+
+  Deliberately not a change to FindProc itself. FindProc serves Pascal, NilPy
+  and the C frontend, and its "representative of a same-named set" contract is
+  load-bearing for two of those (pyparser reads RetType off it; the Pascal
+  parser reads the signature to tell an open-array constructor from a SET).
+  A C-module preference has no meaning there.
+  feature-c-two-same-named-file-scope-statics-share-one-procs-row }
+var i, mine, myMod: Integer;
+begin
+  Result := FindProc(name);
+  if Result < 0 then Exit;
+  if not CProgramMode then Exit;
+  { Only a name that HAS a C-static row can be ambiguous, and asking the token
+    map costs a backward scan -- so answer the common case from the row we
+    already have and never walk at all. }
+  myMod := CModuleOfTok(TokPos - 1);
+  if myMod < 0 then Exit;                  { the main source owns no statics }
+  if ProcCModule[Result] = myMod then Exit;
+  mine := -1;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if (Procs[i].Name = name) and ProcCStaticLink[i] and
+       CProcHasLocalDef[i] and (ProcCModule[i] = myMod) and
+       (ProcUnitIdx[i] = CurrentUnitIdx) then
+      begin mine := i; Break; end;
+    i := ProcHashNext[i];
+  end;
+  if mine >= 0 then Result := mine;
+end;
+
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 { The braced-list loop condition, called from the first such loop ~3200 lines
@@ -2384,7 +2430,9 @@ begin
             Exit;
           end;
         end;
-        procIdx := FindProc(name);
+        { CFindProcFromModule, not FindProc: a call written inside a C module
+          that defines its own `static` of this name must reach THAT body. }
+        procIdx := CFindProcFromModule(name);
         { `<unit>_pas_<Identifier>` — a routine of a Pascal unit this translation
           unit imported with `#include "<unit>.pas"`. Tried only after FindProc
           has missed, so nothing that resolves today can change meaning. }
@@ -2492,7 +2540,9 @@ begin
             e.g. `BinOp f = add;`. Otherwise an unresolved identifier (a token
             left by a self-referential / unmodelled macro) degrades to a 0
             literal — best-effort frontend, matching the old skip leniency. }
-          procIdx := FindProc(name);
+          { Same module preference as the call path: `&sysret` inside unistd.c
+            is unistd's sysret, not fcntl's. }
+          procIdx := CFindProcFromModule(name);
           if procIdx >= 0 then
           begin
             node := AllocNode(AN_PROCADDR);
@@ -12896,7 +12946,10 @@ begin
   end
   else
   begin
-    procIdx := FindProc(name);
+    { CFindProcFromModule, not FindProc: a redeclaration inside the module that
+      owns a `static` must land on THAT module's row, not on the first-registered
+      twin from a sibling module. }
+    procIdx := CFindProcFromModule(name);
     { `<unit>_pas_<Identifier>` -- a routine of a Pascal unit this translation
       unit imported with `#include "<unit>.pas"`. The C PROTOTYPE is what picks
       an overload: it names the unit, the routine and the signature in syntax C
@@ -13063,6 +13116,36 @@ begin
       if xnBad then procIdx := -1;
     end;
   end;
+  { RUNG S -- A FILE-SCOPE `static` DOES NOT SHARE A ROW ACROSS C MODULES.
+
+    C gives a file-scope `static` internal linkage, so `static int sysret` in
+    fcntl.c and `static int sysret` in unistd.c are two distinct functions and
+    gcc compiles both. They arrived here as ONE row because the preprocessor
+    inlines crtl's modules into one buffer: the second definition seized the
+    first's entry and overwrote BodyAddr, along with CProcHasLocalDef,
+    ProcCStaticLink, ProcObjRuntimeCopy and ProcUnitIdx, which are all per-row
+    too. Calls still reached the right body -- each site keeps a CallFixTarget
+    snapshot and stays BAKED -- so this was never a wrong answer, only an
+    unrepresentable one: a baked displacement cannot survive a linker moving
+    either function, and there was no second symbol to relocate against because
+    the first body did not have one.
+
+    The same predicate the duplicate-definition warning already uses, and for
+    the same reason: ProcCModule is the term that tells two legal cross-module
+    statics apart from the ONE-module redefinition that must still warn.
+
+    NARROW ON PURPOSE. Both sides must be `static`. A `static` colliding with a
+    plain external definition of the same name in another module is also two
+    functions by 6.2.2, but no corpus produces it, and widening the rung would
+    change how every crtl override of a Pascal builtin binds -- the thing three
+    rungs above this one are careful about. Measure that before arming it.
+    feature-c-two-same-named-file-scope-statics-share-one-procs-row }
+  if (procIdx >= 0) and CProgramMode and procSawStatic
+     and CProcHasLocalDef[procIdx] and ProcCStaticLink[procIdx]
+     and (ProcUnitIdx[procIdx] = CurrentUnitIdx)
+     and (ProcCModule[procIdx] >= 0)
+     and (ProcCModule[procIdx] <> CModuleOfTok(TokPos - 1)) then
+    procIdx := -1;
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);

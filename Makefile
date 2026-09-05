@@ -10626,6 +10626,40 @@ test-core: $(COMPILER)
 	# diagnostic wholesale passes the first and costs the true positive above.
 	# bug-c-static-functions-in-different-crtl-modules-collide
 	./$(COMPILER) test/c_crtl_prototype_pull_module_split.c $(TESTTMP)/c_protopull26 > $(TESTTMP)/c_protopull.log 2>&1
+	# THE FOURTH FILE IN THAT FAMILY, and the only one whose two bodies DIFFER.
+	# cstatic_two_modules.c uses crtl's real pair -- `static int sysret` in
+	# fcntl.c and unistd.c -- whose bodies are BYTE-IDENTICAL, so it cannot tell
+	# a correct bind from a wrong one and would pass with every call bound to
+	# the other module's copy. Its modules are test/fixtures/cstatic_mod_a.c and
+	# test/fixtures/cstatic_mod_b.c, which return 1 and 2.
+	#
+	# ORACLE IS GCC COMPILING IT AS THREE TRANSLATION UNITS (-DSEPARATE_TU),
+	# because that is the semantics pxx's single-buffer module attribution
+	# emulates. Do NOT run gcc the way pxx runs this file: a unity build really
+	# is one TU and gcc correctly rejects it, `redefinition of 'who'`.
+	#
+	# Ablated at 47618f77c240 (the fix stashed out): 1 1 / 2 2 / 3 2 / 4 2 / 5 0.
+	# Rows 1-2 pass either way (each call site keeps a CallFixTarget snapshot and
+	# stays baked) and are a regression control on the row split. ROW 3 IS THE
+	# WRONG VALUE -- the ADDRESS-taking path never went through that snapshot, so
+	# module A's own function pointer called module B's body. Row 4 is right for
+	# the wrong reason pre-fix (both pointers resolved to B, and B answers 2) and
+	# is kept only as row 3's pair. Row 5 states the claim: two functions, two
+	# addresses.
+	# feature-c-two-same-named-file-scope-statics-share-one-procs-row
+	./$(COMPILER) test/cstatic_two_modules_distinct.c $(TESTTMP)/cstatic_distinct26 > $(TESTTMP)/cstatic_distinct.log 2>&1
+	tools/expect_same.sh cstatic_distinct.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_distinct.log)" "0"
+	tools/expect_same.sh cstatic_distinct26 "$$($(TESTTMP)/cstatic_distinct26)" "$$(printf '1 1\n2 2\n3 1\n4 2\n5 1')"
+	# ...and the OBJECT half, which is the defect the ticket was actually about:
+	# a baked displacement has no symbol to relocate against. pinned-target was 7
+	# here pre-fix (`who` plus crtl's six `sysret`) and must be 0. Asserted on the
+	# census line rather than on a symbol dump so it names WHICH callee pinned.
+	./$(COMPILER) --emit-obj --function-sections test/cstatic_two_modules_distinct.c $(TESTTMP)/cstatic_distinct26.o > $(TESTTMP)/cstatic_distinct_obj.log 2>&1
+	tools/expect_same.sh cstatic_distinct-pinned "$$(sed -n 's/.*pinned-target \([0-9]*\).*/\1/p' $(TESTTMP)/cstatic_distinct_obj.log | head -1)" "0"
+	# Two LOCAL `who` symbols at DIFFERENT addresses, which is what gcc emits for
+	# the multi-TU build. Without the row split there is one, and that is why the
+	# call could not be relocated.
+	tools/expect_same.sh cstatic_distinct-syms "$$(readelf -sW $(TESTTMP)/cstatic_distinct26.o | awk '$$8=="who" && $$5=="LOCAL"' | awk '{print $$2}' | sort -u | wc -l)" "2"
 	tools/expect_same.sh c_protopull.log "$$(grep -c 'duplicate definition' $(TESTTMP)/c_protopull.log)" "0"
 	tools/expect_same.sh c_protopull26 "$$($(TESTTMP)/c_protopull26)" "prototype pull ok"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
