@@ -2,12 +2,12 @@
 track: C
 prio: 45
 type: bug
-status: open
+status: done
 found: 2026-09-01
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "In C, `typedef double TA[4]; TA *p = &a; (*p)[i] = v;` compiles clean and produces a SILENT WRONG VALUE, while the identical program written `double (*p)[4] = &a;` is correct and matches gcc. Re-measured at 97788cf59: it prints `0.00 0.00` where gcc prints `1.50 6.00`, rc=0 — NOT a segfault, whatever this ticket originally said. CAUSE MEASURED, and it is not the one this ticket predicted: `SymPtrElemArrLen` is 0 for BOTH spellings, so that carrier is not the discriminator. The two spellings take DIFFERENT BRANCHES — a parenthesised `(*p)[4]` declarator is consumed whole by ParseCDeclType and reaches the pointer-to-array arm, while `TA *p` falls through to the ordinary name loop, where `cparser.inc:6444` enters the fixed-array path on `tdArrLen >= 1` with NO pointer-depth guard. So the typedef's inherent [4] is folded onto the VARIABLE and `p` is stamped isArray=TRUE, instead of onto the pointee."
+summary: "In C, `typedef double TA[4]; TA *p = &a; (*p)[i] = v;` was wrong while the identical program written `double (*p)[4] = &a;` was correct. FIXED in both declarator arms: the typedef's inherent dimension no longer folds onto the VARIABLE when the declarator has stars, and the length is recorded as the pointee's (SymPtrElemArrLen) — the same slot the parenthesised `elem (*name)[N]` arms already write. THE TWO ARMS FAILED DIFFERENTLY, which is why both had to land together: ablated at 10492cae86d8 the LOCAL spelling SEGFAULTS (rc=139) and the GLOBAL spelling prints `0.00 0.00` at rc=0 — silent, and the global arm is the one busybox-shaped code reaches. That also reconciles this ticket's two contradictory symptom reports: `segfault` and `0.00 0.00` are both real and are different ARMS, not a changed diagnosis. The carrier this ticket originally predicted (SymPtrElemArrLen staying 0) was NOT the discriminator — it is 0 in the working spelling too; `isArray` was."
 ---
 
 # C: a pointer to a typedef'd array loses the pointee's shape
@@ -124,3 +124,56 @@ Two cautions for whoever takes it:
 Parked rather than fixed: the declarator path has several interacting flags
 (`declPtr`, `hadStar`, `declPtrDepth`) and two arms, and this is a fix to land
 with its own gate rather than tacked onto another change.
+
+## RESOLVED 2026-09-05 (frankC), and the two symptom reports were both right
+
+Fixed in BOTH declarator arms, which is the part that mattered:
+
+- `ParseCLocalDeclAST` — the fixed-array arm now requires `declPtrDepth = 0`
+  before folding a typedef's inherent dimension onto the variable, and the
+  plain-pointer registration writes `SymPtrElemArrLen` instead.
+- `ParseCGlobalVarDecl` — the same guard, but it had no per-declarator depth to
+  ask: its loop did `while CurTok.Kind = tkStar do Next;`, discarding the count.
+  It now counts into `gStars` and consults `baseTk` only for the FIRST
+  declarator, whose stars `ParseCDeclType` had already consumed. That answer is
+  used ONLY for this guard, so `Sym *a, *b` binds exactly as before.
+
+**Ablated at `10492cae86d8`:**
+
+```
+  local  `TA *p`  inside a function   SEGFAULT, rc=139
+  global `TA *gp` at file scope       "0.00 0.00", rc=0, SILENT
+  both direct spellings               correct, both compilers
+```
+
+**This reconciles the disagreement in this ticket's own history.** It was filed
+saying SEGFAULTS; the 2026-09-05 re-measurement above says `0.00 0.00` and
+"NOT a segfault, whatever this ticket originally said". Both are true and they
+are **different arms** — the loud one and the silent one — so the re-measurement
+was correcting a claim that had never been wrong, only unlabelled as to scope.
+What I have NOT established is which arm the earlier `0.00 0.00` note was taken
+from; it cites the local spelling, which segfaults today, so either the note or
+the intervening commits moved it. Recorded rather than smoothed over.
+
+**The predicted carrier was wrong and saying so saved the second attempt.**
+This ticket originally expected `SymPtrElemArrLen` to be 0 for the broken
+spelling. It is 0 for the WORKING spelling too, so it was never the
+discriminator — `isArray` was. The parked diagnosis said this explicitly, which
+is why the fix started at the fold site rather than at the slot.
+
+**Both of the parked diagnosis's cautions were load-bearing**: the
+per-declarator star count (`TA *a, b;` is a pointer and an array), and the
+existence of the second arm.
+
+Test: `test/c_pointer_to_typedefd_array.c`, all four spellings, matching gcc at
+both widths (`-m32` identical). Rows 5-8 are the control on the GUARD — the fold
+must still apply when there are no stars, and `TA gs[2]` -> [2][4] is what would
+break first.
+
+**Found while asserting that and NOT fixed here:** `sizeof` of the TYPE NAME
+answers the element size (`sizeof(TA)` = 8 against gcc's 32). Ablated as
+pre-existing. Filed as
+[[bug-c-sizeof-of-an-array-typedef-name-answers-the-element-size]].
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -58,3 +58,30 @@ decide the unknown-type answer ONCE and have both read it.
 - Not measured: which other operands still reach `tyUnknown` here, and whether
   any real program spells one. **That census is the first job** — if the
   answer is none, this is `rejected/` rather than a low prio, per CLAUDE.md.
+
+## A NEARBY defect that is measurably NOT this one, found 2026-09-05 (frankC)
+
+`sizeof` of an ARRAY TYPEDEF's NAME drops the dimension. Measured at
+`9048792b2dc3`, and ablated against `10492cae86d8` — identical, so not a
+regression from that day's pointer-to-typedef'd-array work, which found it.
+
+```c
+typedef double TA[4];   sizeof(TA)   gcc 32   pxx 8
+typedef char   TC[4];   sizeof(TC)   gcc  4   pxx 1
+typedef int    TI[4];   sizeof(TI)   gcc 16   pxx 4
+```
+
+**Filed separately as
+[[bug-c-sizeof-of-an-array-typedef-name-answers-the-element-size]], and the
+reason it is not folded into this ticket is worth recording**, because the
+first reading said it WAS this ticket. `sizeof(TA)` = 8 looks exactly like
+`TypeSlotSize(tyUnknown)`, which is this ticket's whole complaint — and the
+double row alone cannot tell the two apart, because `sizeof(double)` is 8 and
+the pointer default is 8. The `char` and `int` rows separate them in one
+command: a tyUnknown default answers 8 for all three, and the observed answers
+are 8 / 1 / 4, i.e. the ELEMENT size every time. Different mechanism, so a
+fixer who came here from that number would have been sent to the wrong walk.
+
+Recorded here rather than only in the new ticket so the next person who
+measures `sizeof(TA)` = 8 and recognises this ticket's signature has the
+discriminator in front of them.

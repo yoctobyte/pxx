@@ -10667,6 +10667,30 @@ test-core: $(COMPILER)
 	# the multi-TU build. Without the row split there is one, and that is why the
 	# call could not be relocated.
 	tools/expect_same.sh cstatic_distinct-syms "$$(readelf -sW $(TESTTMP)/cstatic_distinct26.o | awk '$$8=="who" && $$5=="LOCAL"' | awk '{print $$2}' | sort -u | wc -l)" "2"
+	# A POINTER TO A TYPEDEF'D ARRAY describes the POINTEE. `typedef double
+	# TA[4]; TA *p;` is a pointer to an array of four, but both declarator paths
+	# entered the fixed-array arm on the typedef's inherent dimension alone, with
+	# no test on pointer depth, so the [4] landed on `p` and `(*p)[i] = v` strode
+	# as though p were the array.
+	#
+	# BOTH ARMS, AND THEY FAILED DIFFERENTLY -- ablated at 10492cae86d8:
+	#   local  `TA *p`  in a function  -> SEGFAULT, rc=139
+	#   global `TA *gp` at file scope  -> "0.00 0.00", rc=0, SILENT
+	# The global arm is the one busybox-shaped code reaches and the one that says
+	# nothing, which is why fixing only the loud arm would have been worse than
+	# useless. normalise-dont-special-case.md is about this exact pair.
+	# The direct spelling `double (*p)[4]` was correct throughout, in both
+	# scopes: it is parenthesised, so ParseCDeclType consumes the whole
+	# declarator and it reaches the pointer-to-array arm that records the length
+	# as the pointee's. Two spellings of one type that never met.
+	#
+	# Rows 5-8 are the CONTROL ON THE GUARD, not on the bug: the fix suppresses
+	# the inherent-dimension fold when the declarator has stars, so `TA gs[2]`
+	# -> [2][4] and a bare `TA g` -> [4] have to keep working. Expected text is
+	# gcc's, verified against it at BOTH widths (-m32 identical).
+	# bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works
+	./$(COMPILER) test/c_pointer_to_typedefd_array.c $(TESTTMP)/cptd26
+	tools/expect_same.sh cptd26 "$$($(TESTTMP)/cptd26)" "$$(printf '1 1.50 6.00\n2 1.50 6.00\n3 1.50 6.00\n4 1.50 6.00\n5 32 64\n6 1 4\n7 10 13\n8 7 9')"
 	tools/expect_same.sh c_protopull.log "$$(grep -c 'duplicate definition' $(TESTTMP)/c_protopull.log)" "0"
 	tools/expect_same.sh c_protopull26 "$$($(TESTTMP)/c_protopull26)" "prototype pull ok"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926

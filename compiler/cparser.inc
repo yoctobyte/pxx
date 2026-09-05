@@ -6491,7 +6491,21 @@ begin
       if CurTok.Kind = tkComma then begin Next; Continue; end;
       Break;
     end;
-    if (CurTok.Kind = tkLBrack) or (tdArrLen >= 1) then
+    { A TYPEDEF'S INHERENT DIMENSION DESCRIBES THE POINTEE WHEN THE DECLARATOR
+      HAS STARS. `typedef double TA[4]; TA *p;` is a pointer to an array of
+      four doubles, not an array of four pointers — but this arm entered the
+      fixed-array path on `tdArrLen >= 1` alone, with no test on pointer depth,
+      and stamped the [4] onto p itself. `(*p)[i] = v` then strided as though p
+      were the array and wrote off the object: measured as a SEGFAULT here and
+      as a silent wrong value in other spellings, while the byte-equivalent
+      `double (*p)[4]` was correct throughout — that spelling is parenthesised,
+      so ParseCDeclType consumes the whole declarator and it lands in the
+      pointer-to-array arm above, which records the length as the POINTEE's.
+
+      declPtrDepth, not ptrDepth: it is the PER-DECLARATOR count, and
+      `TA *a, b;` is a pointer and an array in one declaration.
+      bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works }
+    if (CurTok.Kind = tkLBrack) or ((tdArrLen >= 1) and (declPtrDepth = 0)) then
     begin
       { fixed array  T name[N][M]...  — dimensions are constant expressions.
         Storage is flattened row-major for >=2 dimensions and tagged with
@@ -7050,6 +7064,12 @@ begin
       begin
         SetSymPointerType(idx, IntToTypeKind(declElemTk), declElemRec,
                           declPtrDepth, declBaseTk, declBaseRec);
+        { ...and the length the guard above declined to fold onto the variable
+          belongs HERE, on the pointee — the same slot, in the same order, that
+          the parenthesised `elem (*name)[N]` arm writes, so the two spellings
+          converge on one stamping instead of this one growing a private rule. }
+        if (tdArrLen >= 1) and (declPtrDepth >= 1) then
+          SymPtrElemArrLen[idx] := tdArrLen;
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
         { `ft *pf` — pointer to a fn-pointer: the pointee sig lets `(*pf)(args)`
           resolve (SymElemProcSig channel, shared with `pf[0](args)`). }
@@ -9839,6 +9859,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     declSawExtern, declSawStatic, declSymIsNew: Boolean;
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
+    gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
+    gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   { Read the storage class BEFORE the type is consumed: both keywords are
@@ -10143,6 +10165,7 @@ begin
     Eat(tkSemicolon);
     Exit;
   end;
+  gFirstDecl := True;
   while True do
   begin
     { A subsequent declarator carries its OWN pointer stars: `T *a, *b, *c`.
@@ -10154,7 +10177,8 @@ begin
       IRLowerAddress(int-literal) -> "Unsupported linear node" (tcc tccgen.c).
       The stars keep the base pointer depth (uniform declarators, the common case
       and all of tcc's `Sym *a, *b`). }
-    while CurTok.Kind = tkStar do Next;
+    gStars := 0;
+    while CurTok.Kind = tkStar do begin Next; Inc(gStars); end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
     { Global array dimension(s). Pointer arrays with string-literal initializers
@@ -10179,8 +10203,23 @@ begin
       if dimCount = 1 then arrLen := dimVal;
     end;
     { Array typedef inherent dim folds UNDER any declarator dims: `v4 g` -> [4],
-      `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init). }
-    if tdArrLen >= 1 then
+      `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init).
+
+      ...UNLESS THIS DECLARATOR HAS STARS, in which case the dimension is the
+      POINTEE's: `typedef double TA[4]; TA *gp;` is a pointer to an array of
+      four, and folding the [4] onto gp made `(*gp)[i] = v` write off the
+      object — measured as `0.00 0.00` against gcc's `1.50 6.00`, rc=0, a
+      SILENT wrong value at file scope where the same declaration inside a
+      function segfaulted. The local arm carries the identical guard; this is
+      the sibling that devdocs/dev/normalise-dont-special-case.md is about, and
+      it is the one busybox-shaped code reaches.
+
+      PER-DECLARATOR, not the base depth: `TA *a, b;` is a pointer and an
+      array. The first declarator's stars were already consumed by
+      ParseCDeclType, so it asks baseTk; later ones count their own.
+      bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works }
+    if (tdArrLen >= 1) and
+       (not (((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)))) then
     begin
       wasArr := True;
       if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := tdArrLen;
@@ -10400,6 +10439,11 @@ begin
     begin
       SetSymPointerType(idx, IntToTypeKind(CTypeElemTk), CTypeElemRec,
                         CTypePtrDepth, CTypePtrBaseTk, CTypePtrBaseRec);
+      { The length the guard above declined to fold onto the variable belongs
+        on the POINTEE — the same slot the `elem (*name)[N]` arm writes from
+        gPaLen, so a typedef'd spelling and a parenthesised one land alike. }
+      if (tdArrLen >= 1) and ((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)) then
+        SymPtrElemArrLen[idx] := tdArrLen;
       { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
       if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
       SymSyncTypeRef(idx);
@@ -10969,6 +11013,9 @@ begin
         while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
               (CurTok.Kind <> tkEOF) do Next;
     end;
+    { Every declarator after this one counts its OWN stars; only the first
+      inherits the base type's, which ParseCDeclType already consumed. }
+    gFirstDecl := False;
     if CurTok.Kind = tkComma then begin Next; Continue; end;
     Break;
   end;
