@@ -1,15 +1,15 @@
 ---
 slug: bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic
-title: "An UNQUALIFIED call to a user routine named Read/Write is eaten by the I/O intrinsic — the declaration side was fixed and the call side never was"
+title: "PARTLY FIXED — a GLOBAL routine still cannot be NAMED Read/Write; the expression-position call is done"
 track: P
-prio: 60
+prio: 40
 type: bug
 status: backlog
 found: 2026-09-05
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "`read`/`write`/`readln`/`writeln` are LEXER KEYWORDS (tkRead, tkwrite, ...), so they are not identifiers anywhere an identifier is expected. pasparser_name.inc already re-admits them in MEMBER-NAME and METHOD-NAME position -- its own comment says `so e.g. TStream.Read / TStream.Write can be declared` -- so declaring the method works and QUALIFIED calls (`Self.Read(b,c)`, `s.Read(b,c)`) work. An UNQUALIFIED call does not: inside TStream.ReadBuffer, `if Read(Buffer,Count) < Count` is refused with `expected expression`, in statement position as well as expression position. Separately, a global (non-method) routine cannot be NAMED Read at all -- `function Read(var B; C: Longint): Longint;` is refused at the declaration with `expected name`, so the method-name predicate was never extended to routine names. Measured 2026-09-05 against compiler 62fa62403452: this is the TOP BLOCKER for four of the five units of the FPC compiler-source march, all reaching it through cstreams.pas:227."
+summary: "EXPRESSION-POSITION HALF IS FIXED (c7632de85): an unqualified Read/Write naming a METHOD of the enclosing class now resolves in expression position, through one predicate shared with the statement arm. WHAT REMAINS is row 6 of the table below -- a GLOBAL (non-method) routine cannot be NAMED Read/Write/Readln/Writeln at all: `function Read(var B; C: Longint): Longint;` is refused at the DECLARATION with `expected name`, because IsMethodNameKind in pasparser_name.inc admits these tokens in METHOD-name position and the routine-name path never got the same predicate. FPC accepts it -- `read` is not a reserved word there, which is the premise pasparser_name.inc is already written around. Ranked BELOW the fixed half on evidence rather than on shape: the FPC compiler corpus wanted the METHOD spelling, and no unit in it declares a global routine by these names, so nothing measured is blocked on this today."
 ---
 
 # The measurement — the FPC compiler-source march, re-run 2026-09-05
@@ -127,3 +127,27 @@ CONTROL that the intrinsic still wins where nothing shadows it — an ordinary
 `Read(f, x)` and `Write(f, x)` on a Text and on a typed file, which is what
 `test_typed_file_of_t.pas` already asserts, so that test is the control and
 must stay green. Then re-run the march and record which row moves.
+
+## The march after the fix, 2026-09-05 — `cstreams.pas` BUILDS
+
+Re-run with compiler `946502b21167`, same invocation as above.
+
+| unit | before this ticket | after the expression fix | after `FileMode` |
+| --- | --- | --- | --- |
+| `cstreams` | `cstreams.pas:227 expected expression` | `cstreams.pas:396 undefined variable (filemode)` | **OK — compiles** |
+| `cclasses` | `cstreams.pas:227` | `cstreams.pas:396` | `cclasses.pas:676 unknown type: TFPCHeapStatus` |
+| `comphook` | `cstreams.pas:227` | `cstreams.pas:396` | (behind `cclasses`) |
+| `finput` | `cstreams.pas:227` | `cstreams.pas:396` | (behind `cclasses`) |
+| `cfileutl` | — | — | `conditional directive: comparison requires integer operands` |
+| `cmsgs` | — | — | `unknown type: TSystemCodePage` |
+
+**`cstreams.pas` is the first FPC compiler unit to compile end to end here.**
+The two steps were a parser fix and an RTL variable, in that order, and the
+second was only visible once the first landed — which is the argument for
+walking a corpus rather than triaging a backlog: `FileMode` was not on anyone's
+list, and it was one line of real blocking.
+
+The three remaining walls are all RTL/preprocessor gaps rather than parser gaps
+(`TFPCHeapStatus`, `TSystemCodePage`, and a `{$if}` comparing non-integer
+operands), so the next holder is looking at Track B or the directive evaluator,
+not at `pasparser_*`.

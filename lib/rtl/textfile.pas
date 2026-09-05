@@ -252,6 +252,24 @@ var
   Input: Text;
   Output: Text;
 
+  { FPC's System.FileMode: the access mode `Reset` opens a TYPED or UNTYPED file
+    with. 0 = read-only, 1 = write-only, anything else = read/write, and 2 is the
+    default -- which is what makes the read-modify-write idiom (Reset, Seek,
+    Read, Seek, Write) work with no reopen.
+
+    A real variable rather than the constant it used to be, because real code
+    SETS it: FPC's own cstreams.pas saves it, forces `$40 or Mode`, opens, and
+    restores it, which is the standard way to open a file read-only in Pascal
+    when you do not control the Reset call. Reset used to hardcode the mode-2
+    behaviour and merely NAME FileMode in a comment; a caller that set it got no
+    error and no effect.
+
+    The high bits FPC uses for share modes ($40 = fmShareDenyNone and friends)
+    are accepted and IGNORED -- we do not lock, so denying nothing is what we
+    already do, and masking them off is what lets `filemode := $40 or 0` mean
+    read-only here as it does there. }
+  FileMode: Integer = 2;
+
 implementation
 
 const
@@ -859,14 +877,25 @@ begin
 end;
 
 procedure Reset(var f: FileRec);
+var mode: Integer;
 begin
-  { FPC opens a typed file according to FileMode, whose default is 2 = read/write
-    — which is what makes the read-modify-write idiom (Reset, Seek, Read, Seek,
-    Write) work with no reopen. Fall back to read-only rather than failing, so a
-    file the process may only read still opens; the failure then lands on the
-    Write, where it names the real problem. }
-  f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_RDWR, 0);
-  if f.Handle < 0 then
+  { Opened according to FileMode, as FPC does. The share bits are masked off:
+    they select LOCKING, which we do not do, and leaving them in would turn the
+    common `filemode := $40 or 0` (read-only, deny nothing) into an unrecognised
+    mode. }
+  mode := FileMode and $0F;
+  if mode = 0 then
+    f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_READ, 0)
+  else if mode = 1 then
+    f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_WRITE, 0)
+  else
+    f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_RDWR, 0);
+  { Fall back to read-only rather than failing, so a file the process may only
+    read still opens under the default mode; the failure then lands on the
+    Write, where it names the real problem. Only for the read/write default --
+    an EXPLICIT FileMode is a request, and silently downgrading it would hide
+    exactly the error the caller set it to surface. }
+  if (f.Handle < 0) and (mode <> 0) and (mode <> 1) then
     f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_READ, 0);
   if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
 end;

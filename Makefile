@@ -6600,6 +6600,11 @@ test-core: $(COMPILER)
 	@# The `console` row prints to stdout, so the assertion reads the LAST line only.
 	./$(COMPILER) test/test_read_write_as_method_name.pas $(TESTTMP)/test_rwname26
 	tools/expect_same.sh test_rwname26 "$$($(TESTTMP)/test_rwname26 | tail -1)" "total ok 7 / 7"
+	@# System.FileMode -- the discriminating row is `readonly write refused`, and it
+	@# needs the $$40-or-0 spelling: PAL_OPEN_READ is also 0, so a plain 0 passes
+	@# whether or not the mapping does anything. Every row is fpc 3.2.2's output.
+	./$(COMPILER) test/test_filemode.pas $(TESTTMP)/test_filemode26
+	tools/expect_same.sh test_filemode26 "$$($(TESTTMP)/test_filemode26 | tail -1)" "total ok 5 / 5"
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
 	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1
