@@ -75,7 +75,7 @@ numbers out of this ticket.
 and `file of T` sections are writable now and do not change.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c3895a009.
 
 ## Delivered 2026-09-05 — `docs/reference/representation.md`
 
