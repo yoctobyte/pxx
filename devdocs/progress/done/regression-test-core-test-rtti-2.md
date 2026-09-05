@@ -91,4 +91,4 @@ arms rather than passing on `'' = ''`.
 `FIXED:` line share one cause, so re-verifying one and reasoning about the rest
 would have been the cheap version; the cross row was run because a cross target
 is exactly where a native-only green stops generalising.
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4212b584e.
