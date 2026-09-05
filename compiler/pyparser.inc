@@ -48146,7 +48146,29 @@ begin
         Expect(tkRParen, ')');
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := 0;          { plain pointer reinterpret (no char +8 adapter) }
+        { plain pointer reinterpret -- no char +8 adapter -- but ir.inc reads
+          this field as an ALIAS INDEX, and 0 is alias row ZERO there, not
+          "no alias", so the stride for `TRec(p)[i]` came from whatever type
+          the program declared first. The Pascal twin of this arm is where it
+          was measured (b7b9e309e): element 0 right by coincidence, every other
+          element wrong, and as a target silent -- the store went to the wrong
+          address and the read-back through the same cast agreed.
+
+          THE FRONTENDS DUPLICATE THE PARSER ON PURPOSE and share the AST and
+          IR, so a stamp defect crosses the language boundary while the arm
+          that makes it does not. This is the same character-for-character arm,
+          reaching the same two ir.inc readers.
+
+          NOT CONSTRUCTED AS A NILPY REPRO, and saying so rather than implying
+          one: `TVarRec(x)` compiles from a .npy, so the arm is reachable, but
+          nothing here builds a pointer to an array of records to subscript
+          through, and I did not find a NilPy spelling that does. The fix is
+          strictly an improvement either way -- it replaces an unrelated type's
+          stride with the right one -- and leaving the sibling to be found again
+          is the failure normalise-dont-special-case.md is about.
+          See EnsureRecPtrAlias. }
+        ASTIVal[node] := EnsureRecPtrAlias(baseRec);
+        if ASTIVal[node] < 0 then ASTIVal[node] := 0;
         ASTTk[node]   := Ord(tyPointer);
         tk := tyPointer; recName := baseRec;
         if CurTok.Kind = tkDot then
