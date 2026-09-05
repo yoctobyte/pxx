@@ -73,4 +73,4 @@ codegen bug on the one target where a missing multiply-high instruction is
 plausible. The Makefile row carries that flag; my hand-run did not.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 87f818e2e.
