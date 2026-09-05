@@ -130,6 +130,23 @@ end;
 mirroring the `tyRecord` arm directly below, which already retypes rather than
 returning the operand unchanged.
 
+## Both halves sit on DUPLICATED arms, and here are the counts
+
+Neither number is in this ticket's cause section and both decide whether a green
+means anything.
+
+- **Five per-target twins** of the IR refusal, listed above. A fix keyed on the
+  x86-64 arm passes a native gate and leaves four targets refusing.
+- **Seven parameter-driven argument loops** in the Pascal parsers (counted by
+  frank-optimize, 2026-09-05, while fixing `TryDelphiBareProcArg`, which was
+  called from two of the free-call loops and from NONE of the seven method
+  ones). Requirement 3 below is therefore asserted at whichever loop the test
+  happens to reach, and says nothing about the other six.
+
+Establish both before the fix rather than after — and make the CURRENT compiler
+fail on each arm you claim to have covered, because reading every hit of a name
+in the file that declares it is a weaker claim than it feels.
+
 ## What a fix has to satisfy
 
 1. `writeln(t(p))` prints `abc`; `Length(t(p))` answers 3.

@@ -125,7 +125,12 @@ begin
   i := a;
   while i <= b do
   begin
-    if CPrepCharLen >= MAX_CPREP_CHARS then Error('C preprocessor text overflow');
+    if CPrepCharLen >= CPrepCharCap then
+    begin
+      if CPrepCharCap = 0 then CPrepCharCap := 262144
+      else CPrepCharCap := CPrepCharCap * 2;
+      SetLength(CPrepChars, CPrepCharCap);
+    end;
     CPrepChars[CPrepCharLen] := src[i];
     Inc(CPrepCharLen);
     Inc(i);

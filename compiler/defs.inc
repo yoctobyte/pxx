@@ -234,7 +234,6 @@ const
     MAX_C_INCLUDE_DIRS = 64, which is a limit on `-I' roots and had nothing to
     do with this. }
   MAX_CRTL_PULLS = 512;
-  MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
   MAX_PXXLIB_CACHE   = 64;   { directories remembered by the pxxlib.cfg walk }
@@ -4950,8 +4949,22 @@ var
     out-of-bounds read deleted.
     bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array }
   CPrepInclude  : array[0..MAX_CPREP_INCLUDES-1] of AnsiString;
-  CPrepChars    : array[0..MAX_CPREP_CHARS-1] of Char;
+  { CPrepChars grows on demand. MAX_CPREP_CHARS is gone with it -- the
+    constant had exactly one code use, this table's bound.
+    The old 8 MB fixed pool WAS a reachable ceiling, not merely BSS waste --
+    measured 2026-09-05 on the pinned compiler: 30000 macros whose values are
+    each ~430 bytes of text (13.8 MB total) answer
+      pascal26:1: error: C preprocessor text overflow
+    which is this table's own message and not the MAX_CPREP_MACROS cap (that
+    one is 32768 and reports 'too many C macros'). Both limits are in range of
+    one generated header, so which of the two you hit depends on the ratio of
+    macro count to macro length -- an 18.5 MB file of 300000 SHORT macros trips
+    the count cap first and says nothing about this pool.
+    One writer (CPStoreRange), no address-taking, all other uses indexed reads.
+    feature-dynamic-compiler-tables }
+  CPrepChars    : array of Char;
   CPrepCharLen  : Integer;
+  CPrepCharCap  : Integer;
   CPActiveMacros : array[0..63] of Integer;
   CPActiveMacroCount : Integer;
   CPTempStr0, CPTempStr1, CPTempStr2, CPTempStr3, CPTempStr4, CPTempStr5, CPTempStr6, CPTempStr7,

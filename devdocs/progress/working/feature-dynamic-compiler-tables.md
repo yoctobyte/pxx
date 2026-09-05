@@ -4,17 +4,17 @@ title: "Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+
 prio: 45  # auto
 track: A
 type: feature
-status: unfinished
+status: working
 owner: ""
 blocked-by: []
-summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, no agent holds it. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code. STILL FIXED: Data (MAX_DATA, 2 MB), Strs (MAX_STRS), CPrepChars (MAX_CPREP_CHARS, 8 MB), TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. Parked for want of an agent, not for want of a bridge."
+summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars. STILL FIXED: Data (MAX_DATA, 2 MB), Strs (MAX_STRS), TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. TWO STANDING CONSTRAINTS ON THE REMAINING FAMILIES, greps already done: (1) MAX_DATA has a use that is NOT a bound -- symtab.inc:5548 degrades gracefully to runtime init near the cap, so converting Data DELETES a silent fallback; (2) STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so TokChars needs that constant SPLIT before it can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
 ---
 
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A
-- **Status:** unfinished (campaign mid-flight; no agent holds it)
-- **Owner:** —
+- **Status:** working
+- **Owner:** frankH
 - **Opened:** 2026-06-27
 - **Relation:** forced into view by [[feature-c-desktop-lua-sqlite-path]] M5 —
   sqlite's 257k-line amalgamation blew `MAX_TOKENS` (512K) and needed a bump to
@@ -420,3 +420,138 @@ those two justify very different amounts of risk.
 
 Still fixed after this: `Data`, `Strs`, `CPrepChars`, `TokChars`,
 `LabelFixupPos`/`LabelFixupTarget`, `UCls*`, and `Procs` deliberately.
+
+## 2026-09-06 (frankH) — CPrepChars converted, and the cap was REAL this time
+
+`CPrepChars : array[0..MAX_CPREP_CHARS-1] of Char` (8 MB) → `array of Char`
+grown geometrically from 256 KB in its single writer, `CPStoreRange`.
+`MAX_CPREP_CHARS` is deleted: it had exactly one code use, this table's bound.
+
+**bss 98454060 → 90066100**, the 8 MB, on top of LoadFileBuf's.
+
+### The method step, and why it earned its place
+
+The previous family (LoadFileBuf) taught that a `MAX_` grep finds the constant
+and not the *reachability*, so the rule added there was: **before claiming a
+fixed table costs correctness, make the current compiler fail on it.** Applied
+here it paid immediately, and it paid in BOTH directions:
+
+- **First attempt said "unreachable" and was wrong.** 18.5 MB of C, 300000
+  `#define M_%08d (...)` lines, answered `pascal26:1: error: too many C macros`
+  — that is `MAX_CPREP_MACROS` (32768), a **different cap**, and stopping there
+  would have recorded this pool as unreachable behind the macro-count limit.
+- **Second attempt reached it.** 30000 macros whose *values* are ~430 bytes of
+  text each (13.8 MB) answers `pascal26:1: error: C preprocessor text overflow`
+  — this table's own message.
+
+So the generalisation is not "grep the cap, then try a big input". It is
+**two caps can be in range of one input, and which one you hit is a ratio.**
+Macro COUNT and macro TEXT are independent axes; an input that maximises one
+tells you nothing about the other, and the diagnostic is the only thing that
+says which axis you actually tested. Read the error string, not the exit code.
+An unreachable ceiling and a ceiling you failed to aim at are the same rc=1.
+
+### The method, stated symmetrically — a probe's SUCCESS is not evidence either
+
+The rule inherited from LoadFileBuf was *make the current compiler fail on it*,
+and the near-miss above sharpens its refusal half: **a refusal from a DIFFERENT
+limit reads exactly like your answer**, so read whose message it is.
+
+The other half has no diagnostic at all and is the quieter of the two. After
+converting, the 13.8 MB input answers `rc=0` — and **`rc=0` is not the proof.**
+A pool that grew but silently truncated, or mis-deduplicated a stored range,
+also exits 0 and also emits a linkable binary, because nothing in that file's
+macros has to be *used*. The success face has the same structure as the refusal
+face: it answers, it does not error, and it is correct about something else
+(that the compiler did not crash).
+
+So, for a reachability probe on a converted table:
+
+- the **refusal** is read by asking *whose message is this* — the diagnostic
+  string names the axis you actually tested;
+- the **success** cannot be read that way, because there is no string. It needs
+  an assertion on the OUTPUT, and **the assertion class must match the defect
+  class of the table.** A content pool fails as wrong characters, never as a
+  crash — so "did the oversized input produce a correct program", not
+  "did it exit 0".
+
+### Scope of the claim
+
+Reachable **with a synthetic input**, measured. I have *not* shown a real
+header reaching 8 MB of macro text, and this ticket should not claim one. What
+the measurement does establish is that this was a **ceiling** and not pure BSS
+waste — which is the distinction that decides how much risk the conversion is
+worth, and it is exactly the distinction LoadFileBuf turned out to fail.
+
+### Verification
+
+- Self-host `converged after 1 round(s)`, sha `545ff59e4299`.
+- The 13.8 MB input that overflowed now compiles (`rc=0`) and the emitted binary
+  runs; peak RSS 61 MB, i.e. the pool grew to fit rather than reserving.
+- **Before/after emitted-code comparison over the C test corpus.** The change is
+  to a content pool, so the defect class is *corrupted or mis-deduplicated macro
+  text*, which no crash and no rc would show — it shows as different bytes in
+  the output. Built the pre-change compiler by stashing the diff (`3a3e6125cc32`),
+  restored, rebuilt, and confirmed the restored build reproduces `545ff59e4299`
+  exactly — so the two binaries differ in this diff and nothing else. Then
+  compiled every `test/*.c` with both and compared outputs byte for byte.
+  **Positive control:** the 13.8 MB macro file, which MUST differ (old refuses,
+  new succeeds) — a corpus comparison with no must-differ row is a guard that
+  cannot fail.
+- `PXX_ALLOW_FULL_SUITE=1` lifted for the corpus run: the quick tier does not
+  exercise the C preprocessor's only string pool, and this is the one table
+  whose users are all in the C frontend. `test-c-conformance` and `test-cjson`
+  both SKIP on this box — no fetched corpus — so the before/after comparison is
+  the C coverage, not an addition to it.
+
+### Two findings for the NEXT families (grep done, conversion not)
+
+- **`MAX_DATA` has a use that is not a bound.** `compiler/symtab.inc:5548`:
+  `if base + n * esz >= MAX_DATA then Exit;` with the comment *"out of data
+  space: keep the old path rather than fail the compile"*. That is a **policy
+  threshold**, not an array bound — a graceful degradation to runtime init.
+  Making `Data` dynamic makes the condition permanently false, so converting it
+  **deletes a silent fallback**. That is the right direction (a large static
+  array init should be emitted, not quietly demoted) but it is a behaviour
+  change and must be stated in the commit, not discovered later. Every other
+  MAX_DATA hit — ~20 of them across `emit.inc`, `ir.inc`, `pasparser_*.inc`,
+  `elfwriter.inc` — is a real `Error('data overflow')` bound.
+- **`STRING_CAP` sizes two unrelated things and the second one is a TYPE.**
+  Besides ~15 token-pool bounds it appears as `sz := STRING_CAP + 8`
+  (`ast_syminfer.inc:151`) and `elemSize := STRING_CAP + 8` (`ir.inc:2703`) —
+  that is the **shortstring storage size**, decided at declaration time. So
+  `TokChars` cannot be converted by changing `STRING_CAP`; the constant must be
+  **split first** into a string-type width and a pool capacity. This is the same
+  shape LoadFileBuf had (it borrowed STRING_CAP too) and it is now the second
+  instance, which makes it a property of the constant rather than an accident.
+
+### Constraint on the conversion pattern (from frank-coordinator's landmine)
+
+**This ticket's pattern is realloc that PRESERVES INDICES, and that is load
+bearing.** Geometric growth is safe for zero-init sentinel columns like
+`AliasEnumId` (`defs.inc`, stores enum index **plus one** so an unwritten row
+reads 0 = NONE, written by one of six allocators, inert because `AliasCount`
+never decreases and no row is recycled). A **free list or a compaction pass** is
+not safe: it turns every allocator that does not write such a column into a
+stale read that **fails open**. Out of scope here — a free list for one of these
+tables is a different ticket with a different gate.
+
+### STALE-PARK, answered a second time — and the answer changed
+
+`progress.sh check` reports `STALE-PARK-HELD` on this ticket. It is a false
+positive **by the check's own note** — the slug matched, not the question;
+`blocked-by:` is `[]` and the citations are prose references to landed work.
+The 2026-08-30 re-measure already adjudicated it once.
+
+But re-reading it was not free of information, because **one detail of that
+2026-08-30 note is now stale**: it recorded `feature-opt-dynarray-grows-in-place`
+as *"the one open slug ... a pointer, not a blocker"*, and that ticket is now in
+`done/`, as is `feature-emission-size-dce`. Both cited dependencies have landed.
+That matters here rather than being bookkeeping: in-place dynarray growth is the
+thing that makes this ticket's doubling amortise, so the conversion pattern got
+cheaper after the note that dismissed the pointer was written.
+
+Which is the actual lesson about the check: it fires on slug adjacency and it
+will keep firing, so it cannot be closed by being right once — but a report that
+is wrong about *blocking* was still right about *staleness*, and the ticket had
+a sentence that had quietly become untrue. Read it; do not act on it.
