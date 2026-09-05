@@ -2,12 +2,12 @@
 track: P
 prio: 35
 type: bug
-status: working
+status: done
 found: 2026-09-01
 found-by: claude-T
 owner: frankA
 blocked-by: []
-summary: "A compile error's `near:` excerpt can quote text from a completely unrelated token stream — RTL/builtin unit source with no relation to the file being compiled. The line number and the diagnosis are correct; only the excerpt is wrong, so it does not error and does not look wrong. Reproduces on a 10-line program: the same `undefined variable` error gives a CORRECT excerpt in a trivial program and a bogus one once the unit declares a generic specialization alias, which brackets it tightly."
+summary: "FIXED. There is ONE token array -- main file, then each `uses`d unit, then the builtin units appended to every program, with nothing between them -- and the nine-token `near:` window had no idea, so it quoted across the seam and spliced the user's tokens onto ours. The window now clips at the anchor token's own source, the same way it already clipped at the ends of the array. Both repros in this ticket had gone stale; the replacement is three lines with no `end.`"
 ---
 
 # A `near:` excerpt can quote an unrelated token stream
@@ -130,3 +130,81 @@ it.
 Filed 2026-09-01 and already re-verified once the same day, because generics
 were changing hourly. Anyone picking this up should re-run the pair first: the
 control is the part that makes it a bracket rather than an anecdote.
+
+---
+
+## Resolution (2026-09-05, frankA)
+
+**Both repros in this ticket were stale, and the mechanism they proposed was
+wrong.** Re-run first, as the ticket asks: at `2422505f4` the `n1`/`n2` pair now
+produces a CORRECT excerpt on both arms —
+
+```
+pascal26:9: error: undefined variable (TNotDeclared)
+  near: TAlias ; begin t := TNotDeclared >>> . Create ;
+```
+
+So it is not generics, and it was never "the position indexes past the end of
+the user's tokens while the line number is carried separately". The line number
+and the anchor token were always the same token and both were always right.
+
+### What it actually is
+
+There is **one token array**, and every source goes in it: the main file first,
+then each `uses`d unit, then the builtin units the compiler appends to every
+program, with **nothing between them**. `WriteTokenContext` printed
+`TokPos-6 .. TokPos+2` and clipped only at `1` and `TokCount` — the ends of the
+ARRAY. It had no notion that the array holds several files, so a window centred
+near a seam quoted two of them spliced together.
+
+Live at `2422505f4`, three lines and no generics:
+
+```pascal
+program m1;
+begin
+  WriteLn('hi');
+```
+```
+pascal26:2: error: a statement cannot start with 'unit'
+  in: ./compiler/builtin/builtinheap.pas
+  near: ( 'hi' ) ; unit builtinheap >>> ; interface type
+```
+
+`( 'hi' ) ;` is the user's and `unit builtinheap` is ours. That is the ticket's
+observable exactly — *"an excerpt confidently drawn from another file"* — and it
+reproduces without a generic anywhere near it. Any construct that runs the parse
+off the end of the user's tokens gets there; generics were how the original
+sighting got there, not what was broken.
+
+### The fix
+
+`WriteTokenContext` takes `PasSrcOfTok(TokPos - 1)` as the anchor's source and
+skips any window token that does not answer the same. **This is the clip the
+window already did, applied to what the array actually holds.** A shorter window
+is the honest one:
+
+```
+  near: unit builtinheap >>> ; interface type
+```
+
+Deliberately not clever about which side to keep: a diagnostic whose anchor sits
+in a builtin is truthfully about a builtin, and the `in:` note landed in
+`310a8fa33` says whose file that is and which file to look at instead. The two
+halves are one answer.
+
+Frontends that plant no Pascal source ranges (C, NilPy) get `''` for every
+token, so every token matches the anchor and their output is byte-identical —
+`test_diag_near_window_nilpy_fail.npy` asserts an exact window and is unchanged,
+as is the Pascal `test_diag_near_window_fail.pas` row.
+
+### Fixture
+
+`test/test_the_near_window_stops_at_the_file_boundary.pas`, asserted on the
+WINDOW and not the exit code (the file has no `end.`, so it has always been
+refused). Two rows, because the negative alone is a guard that cannot fail: one
+asserts a `near:` line was printed AT ALL, the other that it does not carry
+`'hi'` across the seam. Positive control: the pre-change binary prints the
+spliced window above for exactly this source.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

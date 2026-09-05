@@ -14168,6 +14168,16 @@ test-core: $(COMPILER)
 	# and a REAL used unit must NOT get that note -- the note is scoped to the
 	# appended builtins, not to every `in:` line
 	! grep -q "appended to every program" $(TESTTMP)/test_nestbrace.log
+	# 3) ...and the `near:` window must stop at that same seam. One token array
+	#    holds every source, so a nine-token window near the boundary used to
+	#    print `( 'hi' ) ; unit builtinheap >>> ; interface type` -- the user's
+	#    tokens spliced onto ours with nothing to say so.
+	! ./$(COMPILER) test/test_the_near_window_stops_at_the_file_boundary.pas $(TESTTMP)/test_nearbound26 > $(TESTTMP)/test_nearbound.log 2>&1
+	# AIMED: the window must have been printed at all, or the next row is a
+	# comparison whose input was never proven to exist.
+	grep -q "^  near: " $(TESTTMP)/test_nearbound.log
+	# ...and it must not carry a token from this file across the seam.
+	! grep -q "near:.*'hi'" $(TESTTMP)/test_nearbound.log
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was

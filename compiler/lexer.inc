@@ -695,13 +695,40 @@ procedure WriteTokenContext;
   {$i} includes, so "line 19" can be a comment in one file and a directive in
   another. Every Error gets it now, not just the token-mismatch path.
 
-  Token text lives in the TokChars pool; the raw token's SOffset indexes it. }
-var ctx: AnsiString; ei: Integer;
+  Token text lives in the TokChars pool; the raw token's SOffset indexes it.
+
+  THE WINDOW STOPS AT A FILE BOUNDARY, and that is the whole of
+  bug-p-error-context-near-quotes-an-unrelated-token-stream. There is ONE token
+  array and every source goes in it -- the main file first, then each `uses`d
+  unit, then the builtin units the compiler appends to every program, with
+  nothing between them. So a nine-token window centred on a token near a
+  boundary quoted two files spliced together and said nothing about it:
+
+    program m1; begin WriteLn('hi');      { three lines, no `end.` }
+    ->  near: ( 'hi' ) ; unit builtinheap >>> ; interface type
+
+  `( 'hi' ) ;` is the user's; `unit builtinheap` is ours; the reader is invited
+  to believe they wrote a line that nobody wrote. The line number and the
+  message were right in every sighting -- it was only ever the excerpt, which
+  is why it does not error and does not look wrong.
+
+  The window ALREADY clips at 1 and TokCount, i.e. at the ends of the array.
+  This is the same clip, applied to the thing the array actually holds: the
+  anchor's source, from PasSrcOfTok, bounds it on both sides. A shorter window
+  is the honest one. Frontends that plant no source ranges (C, NilPy) get ''
+  for every token, so every token matches the anchor and their output is
+  byte-identical.
+
+  It does NOT try to be clever about which side to keep -- a diagnostic whose
+  own anchor sits in a builtin is reported truthfully about a builtin, and the
+  `in:` note under it now says so and names the file to look at instead. }
+var ctx, anchorSrc: AnsiString; ei: Integer;
 begin
   if (TokPos < 1) or (TokPos > TokCount) then Exit;
   ctx := '';
+  anchorSrc := PasSrcOfTok(TokPos - 1);
   for ei := TokPos - 6 to TokPos + 2 do
-    if (ei >= 1) and (ei <= TokCount) then
+    if (ei >= 1) and (ei <= TokCount) and (PasSrcOfTok(ei - 1) = anchorSrc) then
     begin
       if ei = TokPos then ctx := ctx + '>>> ';
       { TokSrcOff/TokSrcLen -- the token's SOURCE SPELLING, not SOffset/SLen.
