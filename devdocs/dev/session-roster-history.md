@@ -28752,3 +28752,59 @@ of `pasparser_name.inc` into `symtab.inc`'s block). **A duplicate forward across
 two `.inc` files builds clean and passes `--tier quick`; the FPC seed canary is
 the only thing that catches it** — which is why the gate ran before the commit.
 It passed.
+
+### A MISSING CAPABILITY WEARING DEAD CODE'S CLOTHES
+
+frankS (`b85f61c3b`), taking the N-lane item — and it was not what any of three
+sessions thought. **They are not dead NilPy code: they are the sibling arms of
+frankB's own conversion, left behind in the other frontend.** `5f177b181` made
+those spellings soft keywords **tonight**, so the Pascal parsers now have **zero**
+token-consuming arms and `pyparser.inc` kept its five.
+
+> **You find it by grepping for the pattern, never by re-reading the file you
+> just edited.**
+
+frankS notes it violated the same shape on its own tls13 fix an hour earlier.
+**Two sessions, two changes, one evening, neither caught in its own diff.**
+
+**The finding that made it more than a tidy-up, caught while checking boundaries
+before cutting:** every `-Ord(tkSysOpen)`…`-Ord(tkArgStr)` **construction site**
+was **inside the arms about to be removed.** Five arms, five sites, all in the
+dead region — **so those arms were the only path from NilPy to those intrinsics,
+and the path could not fire. NilPy has never been able to call them.**
+
+**Deleting silently would have made the absence invisible along with the thing
+that hid it** — *a wrong fact gets challenged, a missing fact collides with
+nothing.* Filed `feature-n-nilpy-has-no-reachable-path-to-the-sys-and-arg-intrinsics`
+at **p20 while arguing the answer may well be NO**: a `.npy` can already declare
+and bind its own `paramstr`, Python's idiom is `sys.argv`, and a Pascal-shaped
+intrinsic is what the divergences doc exists to keep deliberate. **But it should
+be a decision, not an absence.**
+
+### TWO CONFIDENT WRONG GREPS, IMMEDIATELY BEFORE A DELETION
+
+- `paramcount` in `pyparser.inc` → **134 hits, every one `Procs[].ParamCount`**, an
+  unrelated struct field. *A search that returns plenty and answers nothing.*
+- `tkSysOpen` in either lexer → **zero**, reading as *already gone*. The mapping is
+  a **character-by-character keyword table**, so **the token name appears nowhere
+  near the spelling that produces it.**
+
+**The second is structurally incapable of another answer** — the instrument is not
+lossy, it is looking at a representation the fact never takes. Both fired at the
+moment of maximum cost: **deletion is the one action the next reader cannot
+notice.**
+
+**Four sources that fail differently is the bar that was actually met** —
+frankD's dynamic probe, the 09-04 sweep over all 830 `.npy` programs, the lexer
+emitting no such token for either frontend, and the Pascal side already having
+none.
+
+**And the stale-ticket check was run before raising it**, because *a false alarm
+about a stale ticket is itself the thing*: nine of thirteen spellings are now
+declarable — all five `sys*`, all four `arg*`/`param*` — and
+`bug-p-sysopen-intrinsic-shadows-a-user-function-name` is already in `done/`.
+
+**Probes carried because the fixedpoint proves nothing about a frontend under
+edit:** a `.npy` binding its own `paramstr`/`paramcount` (3 and 8), an ordinary
+`.npy`, Pascal `ParamCount`/`ParamStr`, and `System.SysOpen`/`SysClose` on
+`/dev/null`. **Four probes, four surfaces the self-host cannot see.**
