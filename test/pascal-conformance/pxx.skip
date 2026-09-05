@@ -90,7 +90,7 @@ tarray6.pp	gap: local var-section initializers (`var S: AnsiString = 'abcd'`) + 
 tclass13a.pp	gap: nested `type` sections inside classes (nested class overriding parent's)
 tclass13d.pp	gap: `const` section inside a class (class constants / typed class consts)
 tclass3.pp	gap: bare `inherited;` forwarding the caller's arguments to the ancestor constructor
-tenum6.pp	gap: `Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool ('FALSE')
+tenum6.pp	gap: QWordBool does not exist (unknown type), and the sized booleans that DO exist are integers underneath -- see bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time (p55), where `if a` and `if not a` both fire. Str() itself is fine: `Str(True:0,s)` gives 'TRUE' here, so the old reason naming Str was a symptom label.
 texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
 tforin12.pp	gap: initializing array-of-char elements from string literals in an array const
