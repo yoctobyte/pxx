@@ -6634,6 +6634,50 @@ nothing. Guard it the way you would any A/B: **identity is not a pass on its
 own**, because a program that never reaches the site is identical too — assert
 the site was exercised.
 
+## A REACHABILITY PROBE CAN BE INTERCEPTED BY A DIFFERENT LIMIT, AND THAT REFUSAL LOOKS EXACTLY LIKE YOUR ANSWER — read WHOSE message it is
+
+Measured 2026-09-06 (frankH), converting `CPrepChars` off its fixed 8 MB cap.
+This matters more than it looks, because in this repo **"no compiling program can
+reach it" sends a ticket to `rejected/`** — so a mis-measured reachability answer
+does not merely mislead, it *disposes*.
+
+**The question:** is the 8 MB cap a reachable ceiling or just BSS waste?
+
+**The first attempt: 300000 short macros, 18.5 MB of input** — comfortably over
+the cap — and the compiler refused with **`too many C macros`.** That is
+`MAX_CPREP_MACROS`, **a different cap**, hit first. A refusal, from the right
+compiler, on an input built for the question. **Stopping there reads as
+"unreachable", and it is the opposite of the truth.**
+
+**The second: 30000 macros at ~430 bytes, 13.8 MB** — same total scale, different
+ratio — answers `pascal26:1: error: C preprocessor text overflow`, **which is this
+table's own message.** Reachable. `bss 98454060 -> 90066100`.
+
+> **Two caps were in range of one input, and which one you hit depends on a RATIO
+> the question never mentioned** — here macro count against macro length.
+
+### The guard, and it is one line of reading
+
+**Check that the refusal is the message belonging to the limit you are probing.**
+A generic "too big" from the neighbouring table is a refusal that answers a
+question you did not ask, and it wears the shape of an answer to the one you did
+— the house failure mode, one layer down.
+
+**And the discriminator for reachability is only ever "make the CURRENT compiler
+fail on it."** Not a grep, not a size argument. frankH's previous family in the
+same ticket looked identical from the grep and was genuinely unreachable for an
+unrelated reason: `LoadFile` is intercepted as builtin `-100`, so its Pascal body
+is **dead in the self-host** and no input reaches the cap at all. **Grep-identical
+families, opposite reachability** — the grep cannot tell them apart and the
+running compiler can.
+
+### Corollary for anything with a family of MAX_ constants
+
+When several caps guard one pipeline, **an input large enough to test one is
+usually large enough to trip another**, and the cheap ones trip first. Vary the
+*shape* of the input, not only its size, and expect to need a different shape per
+cap.
+
 ## POISON AND DIFF — turn "is this reachable" into a byte count
 
 Named 2026-09-01 (frankA; caveats frankB). To find out whether a function's
