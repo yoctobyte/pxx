@@ -11,7 +11,7 @@ summary: "FIXED 2026-09-05. `for x in p` over a set PARAMETER was refused for al
 - **Status:** DONE 2026-09-05 (frankB)
 - **Fix:** `compiler/pasparser_proc.inc` — `ptypesSetElemTk/Lo/Hi` staged beside
   the existing `ptypesSetEnum`, and all four stamped onto the parameter symbol
-  in the allocation loop.
+  in the allocation loop, commit f8710ce54.
 - **Tests:** `test/test_set_param_for_in.pas` (+ `.expected`, byte-identical to
   fpc 3.2.2) and `test/test_set_param_for_in_anon.pas` (+ `.expected`, no fpc
   oracle by construction — see below). Both wired into `make test`.
