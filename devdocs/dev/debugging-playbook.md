@@ -5455,6 +5455,20 @@ is harder to detect than a wrong fact**, because every component survives checki
 > it.** Two readings that each hold one axis fixed cannot, between them, say
 > anything about how the axes interact.
 
+### The other half, supplied by the session whose report was composed
+
+**"An asymmetry sitting next to a real measurement acquires that measurement's
+credibility."** frankwasm's own account, and it is the half the relay could not
+see: it had reported **two outputs on two targets and never measured which defect
+produced either.** That sentence *reads* like a discriminator and is not one — it is
+an observation parked beside a genuine measurement, inheriting its standing.
+
+**So the surface and the layering are two different errors and both are needed.**
+The relay supplied a correspondence because the arities matched; the report supplied
+an asymmetry that made the correspondence look evidenced. **And varying the TARGET
+is precisely what obscured the axis that mattered** — the parameter list — so the
+report did not merely fail to settle the question, it pointed away from it.
+
 **And a relay is where this is most likely to happen and least likely to be
 caught**, because the composer does not run experiments: the tidy mapping has
 nothing to collide with before it leaves, and it arrives in the confident register
@@ -7120,6 +7134,61 @@ nothing. Guard it the way you would any A/B: **identity is not a pass on its
 own**, because a program that never reaches the site is identical too — assert
 the site was exercised.
 
+## TWO TABLES CAN SHARE A CEILING WITHOUT SHARING A CONSTANT — and a grep for the `MAX_` name cannot find that
+
+Measured 2026-09-06 (frankH), converting `Data` off its fixed bss array.
+
+The method says *grep the `MAX_` name across `compiler/**`*. It found **26
+`MAX_DATA` hits and zero connection to the string table.** But every string literal
+costs **`32 + align8(len+1)`** bytes of `Data` — measured linear across five
+lengths (3/11/19/27/35 → 40/48/56/64/72), the 32 being a managed-string header
+`InternStr` lays down deliberately so a literal doubles as a handle.
+
+> **Floor 40 bytes × `MAX_STRS` 65536 = 2.6 MB, against a `MAX_DATA` of 2 MB. So
+> `Error('string table overflow')` COULD NOT FIRE.**
+
+**A guard that cannot fail — and worse than the ones already in this file, because
+it does not even print PASS. It prints nothing at all.** The `Data` cap always won
+first, so the string-table guard was dead code wearing the shape of a limit.
+
+**The coupling is ARITHMETIC BETWEEN TWO INDEPENDENT CONSTANTS**, which is why no
+identifier search reaches it:
+
+> **The shared thing is a RESOURCE, not an identifier. Ask what ELSE consumes the
+> thing a cap is denominated in.**
+
+**Proven by migration, not by the arithmetic.** 52000 literals compile at
+`data=2092792`; 52200 says `data overflow`; 66000 said `data overflow` too — **and
+after the conversion the same 66000-literal input says `string table overflow`.**
+That migration is the only thing separating *"`MAX_STRS` was unreachable"* from
+*"I never aimed at it"* — the reachability rule applied to a cap nobody was probing.
+
+**Queue consequence:** converting `Strs` was worth **nothing observable** before
+this and is load-bearing after it. A conversion whose value is unlocked by a
+*different* conversion cannot be ranked from its own ticket.
+
+### After converting a table, enumerate its WRITE sites — not its CAP sites
+
+frankH's first build **segfaulted in round 2**. Seven writes reach `Data` with **no
+overflow check at all**: two at constant offsets in `compiler.pas`, and five byte
+runs — `'True'`/`'False'`/`'None'`/`'<object>'`, a 16-byte RTTI backlink plus VMT
+zero-fill, an 8-byte GOT slot.
+
+> **A fixed bss array never required them to check, so they are invisible to the cap
+> grep BY CONSTRUCTION: the cap sites are the ones that were already thinking about
+> the limit.**
+
+Found by **scripting** *"every write — does an `ensure` dominate it?"*, not by eye,
+and that mattered: **the class is silent for any input under the initial 64 KB
+reserve**, so it crashes only when the table is big, which is the input nobody runs.
+The wrong-value-far-from-the-edit shape, in the one region no test visits.
+
+**And one silent fallback deleted deliberately:** `symtab.inc` held the single
+`MAX_DATA` use that was **not a bound** — a policy threshold abandoning
+typed-const-array promotion near 2 MB **with no diagnostic**, sending a large array
+back to ~29 bytes of startup code per element. A performance cliff with no message
+is the same animal as a guard that cannot fail, pointing the other way.
+
 ## A REACHABILITY PROBE CAN BE INTERCEPTED BY A DIFFERENT LIMIT, AND THAT REFUSAL LOOKS EXACTLY LIKE YOUR ANSWER — read WHOSE message it is
 
 Measured 2026-09-06 (frankH), converting `CPrepChars` off its fixed 8 MB cap.
@@ -7676,6 +7745,39 @@ And element 0 answering correctly is the collision again: **it needs no stride**
 the right answer and the broken answer are the same number at index 0. A sweep that
 probed only the first element would have certified the bug.
 
+
+### A STAMP defect crosses the language boundary; the arm that makes it does not
+
+Measured 2026-09-06 (frankA), finding the NilPy sibling of the record-cast stride
+bug. `pyparser.inc:48145` stamps the identical `ASTIVal[node] := 0` **under the
+identical comment.**
+
+**This is a direct consequence of the two north stars pulling in opposite
+directions**, and it is worth stating as a search rule:
+
+> **The frontends DUPLICATE the parser and SHARE the AST and IR. So a defect in what
+> a parser STAMPS crosses every language boundary, while the arm that stamps it does
+> not.**
+
+`normalise-dont-special-case` says grep for the sibling within a language.
+`the-substrate-is-ast-and-ir-not-the-parser` says the parsers are *deliberately*
+duplicated across languages. **Together they say: a bug in a shared-substrate ENCODING
+has one sibling per frontend, and no amount of within-language normalising will find
+them.** After fixing what any parser writes into an AST or IR field, grep **every**
+frontend for the same stamp — the comment is often copied verbatim, which makes the
+search a text search rather than an identifier one.
+
+**And note the honest limit frankA attached rather than implying a repro:**
+`TVarRec(x)` compiles from a `.npy` so the arm is reachable, but **no NilPy spelling
+was found that builds a pointer to an array of records to subscript through — so the
+NilPy reachability is NOT constructed.** The fix is a strict improvement regardless,
+since it replaces an unrelated type's stride with the right one.
+
+**Saying that in the comment is the right call**: a sibling fix with an unconstructed
+repro is still worth landing, and **the alternative is leaving the sibling to be
+found again** — but a comment implying a repro that nobody ran is the false-coverage
+shape one register down.
+
 ### The step for any "should these be one routine" question
 
 1. **Which shared routines does each opener reach?** — the escape census. Cheap, and
@@ -8071,6 +8173,83 @@ size but `TypeStorageSize(tyUnknown)`, i.e. nothing recorded at all.
 **Re-measure the ticket's own numbers before you accept its diagnosis.** It
 costs one compile, and a stale number does not error — it points somewhere.
 
+
+## A VERDICT THAT IS A COUNT CAN BE CHECKED AGAINST AN EXPECTED COUNT; A VERDICT THAT IS AN ABSENCE CANNOT
+
+Named 2026-09-06 (frankH), answering a truncation notice — and the answer is more
+useful than the notice, because it says which harnesses the whole truncation class
+can touch.
+
+**The native core tier reports an ABSENCE**: no FAIL rows. **There is no arithmetic
+in that verdict**, so a run that stopped a third of the way through produces the
+same evidence as a run that finished. The prefix is genuinely green.
+
+**A harness whose verdict is a COUNT is structurally immune**, and cheaply:
+
+> `identical + differing + both-refused` **must equal 2494** (630 `.c` + 1864
+> `.pas`). If the loop dies halfway, **the sum is short — and a short sum is not a
+> green, it is a different number in a place you have to read anyway.**
+
+**That is the whole difference between the two shapes**, and it costs one counter.
+The point is not that one harness is virtuous; it is that **an absence has no
+denominator to disagree with**, so nothing in it can contradict a truncation, a
+skipped population, or a filter that matched nothing. Cf. *an instrument that
+reports a RESULT should report its DENOMINATOR* — this is the executable form of
+it: **make the denominator a number the run must produce, not a number the reader
+must remember.**
+
+**And check the sum before quoting the run**, not only the diff log — frankH's own
+addition, because a harness that CAN detect its truncation still does not unless
+someone reads the arithmetic.
+
+### The live case that produced it
+
+The `test_record_nested_type_section` regression was a **STOP**, not a red row.
+`make` halts at the first failing recipe line — `Makefile:13117` — and the tier's
+recipe runs from `Makefile:5309` to 18649. **5532 of 13340 recipe lines, 41.5%, went
+unmeasured for every session on the box** until it landed, and every one of those
+runs looked like a short green.
+
+**A truncated run and a short run are the same artefact unless you read the tail.**
+The check is the **exit status plus the last line** — never the absence of FAIL rows,
+which is precisely the reading a truncation defeats.
+
+### The fourth cause, and it leaves LESS evidence than the other three: I STOPPED THE RUN
+
+Measured 2026-09-06 (frankA), same night, different mechanism. The three above are
+all *the run stopped*. This one is *the caller stopped it.*
+
+A tier run in the **foreground with a 900s tool timeout** was SIGTERM'd at the
+limit. **`rc=143` — 128+15.** The log ends mid-recipe, and **there is no `Error`
+line anywhere, because `make` never got to print one.**
+
+The first instinct was a count: `grep -icE '^make.*Error|FAILED|MISMATCH'` answered
+**3** — and all three were **comment prose echoed by make** (*"…failed to build IN
+lib/rtl/configparser.pas"*, *"Skipped, not failed"*). **So the count instrument
+reported "3 failures" about a run that had no failures and no verdict either.** A
+count is only immune when it is a count the run PRODUCES against an expected total;
+a count of matching lines is just another absence-shaped reading.
+
+**Two discriminations, and neither is in the list above:**
+
+- **`rc=143` is not a verdict, it is a signal.** No test in the harness can produce
+  it. The same tell this file already names for `rc=2` being a shell parse error
+  wearing the shape of a verdict — arriving here as **a caller's timeout wearing the
+  same shape.**
+- **A caller-side timeout truncates identically to a `make` stop and leaves LESS
+  evidence.** A stop at least prints `make: *** [Makefile:N] Error 1` as its last
+  line — **the very thing "read the tail" relies on.** A SIGTERM prints nothing, so
+  reading the last line returns **a perfectly ordinary recipe line**: the prefix is
+  green and the tail looks like *work in progress* rather than like an ending.
+
+> **"Read the exit status and the last line" degrades gracefully against a stop and
+> fails silently against a kill.** Against a kill, the exit status is the only
+> instrument left — and it is a number nobody looks at when the log reads fine.
+
+**The fix is the one this repo already prescribes for an unrelated reason:
+background the job and let its completion be the wait**, rather than putting a
+number on how long a tier may take. **A foreground timeout is a guess about the
+machine, and the guess failing is indistinguishable from the tier failing.**
 
 ## A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT — which is why "I found nothing" needs the control and "I found something" often does not
 
