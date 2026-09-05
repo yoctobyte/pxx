@@ -442,3 +442,17 @@ attached so nobody builds it expecting to close this ticket.
 independent: option 3 is a type-inference question in the NilPy frontend, not an
 inliner question. That is a different lane's shape of work and this ticket
 should say so rather than keep pointing at the inliner.
+
+### Ownership: this needs a Track N owner, not a Track O one
+
+Stated so the next reader does not re-derive the pricing above and arrive at the
+same place. Option 3 — know the type statically and emit no dispatch — is a
+**NilPy frontend type-inference** question: it is about what `pyparser`/the N
+frontend can prove about a value's tag, not about what the inline pass will
+expand. Track O has now measured this ticket twice and has nothing further to
+contribute to it; option 1, the only inliner-shaped option, is priced at ~13%
+and is filed separately as
+[[feature-opt-inline-procedures-the-third-admission-axis]].
+
+Nobody holds Track N as of 2026-09-05, so left under [O] this will sit in a lane
+that has explicitly disclaimed it. Re-track to **N** when someone takes it.
