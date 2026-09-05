@@ -8,7 +8,7 @@ owner: frankB
 # `for x in F` is refused when F returns a set
 
 - **Type:** bug — Track P (Pascal frontend)
-- **Status:** working
+- **Status:** done
 - **Found:** 2026-09-05 (frankB), while fixing the set-PARAMETER stamp
 
 ## Repro
@@ -107,3 +107,6 @@ move the dyn-array and fixed-array call-result arms in `ParseForInNodeAST`
 already make and document. fpc evaluates it once; `test_for_in_over_a_set_valued_call`
 row E asserts `calls=2` and is the row a fix that merely stops the refusal
 still fails.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

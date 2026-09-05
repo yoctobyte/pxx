@@ -5,7 +5,7 @@ summary: "ParseSetMembershipAST picks a compare chain when every element is cons
 track: P
 type: bug
 prio: 35
-status: working
+status: done
 found: 2026-09-05
 found-by: frankO (the check bug-p-set-membership-item-constant-truncated-to-32-bits asked for by name)
 owner: frankB
@@ -135,3 +135,6 @@ CONSTRUCT cannot be audited by SLUG.** A slug records what the reporter noticed;
 the construct is what the fix turned out to be about. Those coincide only when
 the reporter already knew the cause — which is exactly the case where the group
 would not have needed finding.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -5,16 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:25 unfinished:22 blocked:8 backlog:9 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:39 backlog-pascal:25 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3377 rejected:78`
+`working:23 unfinished:22 blocked:8 backlog:9 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:39 backlog-pascal:25 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3379 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site` [P] — owner: frankS
 - `bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor` [P] — owner: frankB
-- `bug-p-for-in-over-a-set-returning-function-call-is-refused` [P] — owner: frankB
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
-- `bug-p-the-two-arms-of-in-disagree-about-their-own-domain-silently` [P] — owner: frankB
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
