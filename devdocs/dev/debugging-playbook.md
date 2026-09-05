@@ -8449,27 +8449,81 @@ variable"*, a slug containing `scopedenums-ignored`, and *"hint directives … i
 **The count was 4 and the answer was 0.**
 
 > **The vocabulary of a test log is the vocabulary of a test log's COMMENTS.** This
-> recipe is ~5300 lines of commented rationale that make echoes, so `error`, `fail`,
-> `mismatch` and `ignored` all appear as English before they appear as verdicts.
+> recipe is thousands of lines of commented rationale that make echoes, so `error`,
+> `fail`, `mismatch` and `ignored` all appear as English before they appear as
+> verdicts.
 
-The anchored form is `^make.*Error.*(ignored)$`, and **the reason it works is
-mechanical rather than lucky: `make:` at column 0 is something a comment line cannot
-produce, because the `#` is always first.**
+**The reason an anchored form works is mechanical rather than lucky: `make:` at
+column 0 is something a comment line cannot produce, because the `#` is always
+first.**
 
 > **The discriminator is the line's ORIGIN, not its wording.** Anchor on the speaker.
 > That generalises to every log any session greps and has nothing to do with `-i`.
 
-### Three flags, all green-looking by default
+Generalised (frankD): **grep for what only the EMITTER can produce, not for what the
+failure MEANS.** Meaning-words are shared with the prose describing the failure;
+emitter-shapes are not. That survives arbitrary future prose, which *"pick a word the
+comments do not use"* does not — **every verdict word in this repo is also a word the
+rationale comments use, and that will not stop being true, because the comments are
+the good part of the Makefile.**
 
-Counted 2026-09-06, in one night, on one target:
+### The controlled forms, with the sub-make alternation that a first draft omits
+
+```
+grep -c  'expect_same: MISMATCH' <log>
+grep -cE '^make(\[[0-9]+\])?: \*\*\* ' <log>
+grep -cE '^make(\[[0-9]+\])?: \[.*\] Error .*\(ignored\)$' <log>
+```
+
+**The `make[1]:` alternation is required, not decorative.** A sub-make prefixes its
+own name, and this tier spawns at least one, so a plain `^make: ` anchor **goes blind
+exactly where a nested failure lives** — the deepest failure is the one the narrow
+anchor cannot see. Patterns two and three also distinguish a `-k` stop from an `-i`
+ignore, which matters whenever a report does not say which flag produced it.
+
+Controls both directions: pattern 2 fires on a real `make: *** [Makefile:3: bad]
+Error 1`; a negative file containing `# this comment mentions *** Error 1 and
+(ignored) deliberately` **plus an INDENTED `make: *** …` line** scores 0 on both. The
+indented case is the one that gets missed by reasoning — a recipe that echoes make's
+own output is not hypothetical in a repo with nested makes.
+
+### A pattern that is clean for a reason that is not the pattern
+
+Measured 2026-09-06 (frankD), turning the rule on its own filter. `grep -cE
+'\*\*\*.*Error'` returned **0**, and that was being read as the filter working. It
+is clean because **the recipe contains zero `***` sequences in its 13328 lines** —
+while **282 of those lines contain the word "error"**.
+
+> **The only thing between that filter and a false count is that nobody has yet
+> written `***` in a comment. That is a property of TODAY'S PROSE, not of the
+> pattern.** It would have retired silently, and the failure direction is a red
+> reading as green.
+
+**A guard that has not fired yet and a guard that cannot fire are indistinguishable
+from the count.** Ask what would have to change in the *inputs* — not in the code —
+for the guard to start lying.
+
+### Four flags, all green-looking by default — and the asymmetry is the tell
+
+Counted 2026-09-06, in one night, on one target, by three sessions:
 
 - **`-k`** does not do what it looks like it does (see the section below).
 - **`-i`** produces an exit status that **cannot come out false**.
 - **a backgrounded run** reports the **wrapper's** exit code, not the job's.
+- **`grep -c` on an unanchored verdict word** returns a number that reads as a count
+  of failures and is a **count of mentions**.
 
-**Each one independently turns a red into something that reads as green**, and all
-three are the ordinary way to run a long job. Whenever you reach for one, say in the
-report which of the three you used and what you read the verdict FROM.
+Each is an instrument answering a slightly different question than the one asked —
+this file's opening claim — but the operational tell is narrower and worth carrying:
+
+> **In every one of the four, the wrong answer is the SAFE-LOOKING one. Nobody is
+> ever misled into thinking a clean run failed.**
+
+That asymmetry is why none of them get caught by use: a wrong red gets investigated
+within minutes, and a wrong green gets reported. All four are the ordinary way to run
+a long job. **Whenever you reach for one, say in the report which you used and what
+you read the verdict FROM** — the flag is part of the measurement's provenance, not a
+detail of how it was launched.
 
 ### The live case that produced it
 
@@ -8550,6 +8604,73 @@ this is the qualifier the table shipped without:
   verdict is the `(ignored)` markers plus the failure greps, and a report from an
   `-i` run must say so or its 0 will be read as the row above.
 
+## A NOTIFICATION IS AN EVENT, SO A CORRECT VERDICT DELIVERED NOW READS AS A VERDICT MEASURED NOW
+
+Measured 2026-09-06 (frankD), and it is the sharpest member of the night's family
+because **the verdict is not wrong about anything — the TRANSPORT re-dates it.**
+
+Forty minutes before landing a compiler fix, a task notification arrived: *"Background
+command 'Wait for the gate and read its verdict' completed (exit code 0)"*, with:
+
+```
+gate: mode=quick  logs=/tmp/pxx-gate-2361324
+gate: GREEN (exit 0)
+```
+
+The disciplined reading was performed — **the verdict was taken from the log, not from
+the wrapper's exit code** — and the log says GREEN. It is true. It is about a compiler
+that no longer exists on disk:
+
+| | |
+| --- | --- |
+| gate ran | 2026-09-05 21:54–21:56 |
+| binary under test built | 2026-09-06 00:30:37 |
+| the measuring run began | 2026-09-06 00:47:57 |
+| **notification delivered** | **2026-09-06 01:14:52** |
+
+The gate's own logs record `sha256 8898deffca3a`; the binary on disk is
+`a5a70b71b5a1`. **That gate ran nearly three hours before the compiler it appeared to
+bless was built**, on a tree predating half the fix.
+
+### Which existing guards did NOT fire, and this is the whole value of the case
+
+- *"Read the verdict from the log, not the wrapper"* — **passed.** The log says GREEN.
+- *"Check the exit status directly"* — **0, and correctly 0.**
+- *"`converged` versus `verified`"* — the gate log contains `converged after 2
+  round(s)`, **the recompute verb**, so even the fixedpoint tell reads clean.
+
+**Three guards, all green, all about the wrong binary.** Every one of them is a rule
+about whether the measurement was performed properly, and the measurement *was*
+performed properly. **None of them is a rule about WHEN.**
+
+> **A notification is an event; events happen now; so a verdict delivered now reads as
+> a verdict measured now. Nothing in the message carries a clock** — not the wrapper
+> line, not the log body, not the `(exit 0)`. The staleness is recoverable only from
+> the filesystem, and only if you think to look.
+
+**The one instrument that fails differently is the `sha256` beside the number** — the
+CLAUDE.md rule *print `sha256sum compiler/pascal26` beside every number you report*,
+which is easy to quote at other people and easy not to apply to a green handed to you.
+
+### What the standing ask becomes
+
+A report of a long-running measurement should carry four things, not one:
+
+1. **which flag** was used (`-k`, `-i`, backgrounded, or none);
+2. **what the verdict was read FROM** (sentinel, anchored grep, exit status);
+3. **the binary's sha** — a verdict with no sha cannot be attached to a compiler;
+4. **the wall-clock of the MEASUREMENT, not of the report** — a verdict with no
+   measurement time cannot be attached to a moment.
+
+### And the check that was right to run
+
+The same session then verified that the stale gate **had not disturbed the live run**:
+`compiler/pascal26` still `a5a70b71b5a1`, mtime 00:30:37, unchanged since before the
+measurement started at 00:47:57. A gate that rebuilds or reseeds under a running
+measurement is the exact instrument-corruption failure this file opens with — so a
+surprise green is not only a claim to date, it is **a thing that may have MOVED your
+tree**, and that is checked with a mtime and a sha rather than assumed either way.
+
 ## AN INSTRUMENT THAT ANSWERS IDENTICALLY WITH AND WITHOUT THE FLAG THAT IS SUPPOSED TO CHANGE ITS BEHAVIOUR WAS NEVER READING THE FLAG
 
 Named 2026-09-06 (frankB), confirmed the same hour by frankD from the opposite
@@ -8557,8 +8678,9 @@ direction, and it generalises well past `make`.
 
 **The case.** `make -k test-core` was adopted by two sessions as the way to recover
 the coverage a STOP was truncating. It recovers nothing. **`-k` continues across
-TARGETS**, and `test-core` is ONE target whose recipe is ~5300 lines
-(`Makefile:5309` to 18637), so a failing recipe LINE ends the recipe with or without
+TARGETS**, and `test-core` is ONE target whose recipe is **13353 lines**
+(`Makefile:5316` to 18668, measured 2026-09-06 — the line numbers drift by tens per
+day and the shape does not), so a failing recipe LINE ends the recipe with or without
 the flag — there is no sibling target to continue to. Measured on the real target:
 
 ```
@@ -9110,10 +9232,31 @@ corroboration available and therefore the one nobody re-derives.
 
 ### The check, and it is cheap
 
-Before relaying a composition, **name the quantity, in units**, that each source would
-have had to MEASURE to produce its sentence. If the two measurements are of different
+Before relaying a composition, **name the quantity — in units, OF WHAT POPULATION** —
+that each source would have had to MEASURE to produce its sentence. If the two measurements are of different
 quantities, the composition is a new claim that neither author has taken and it needs
 its own evidence — say so, or do not send it.
+
+### Units are not enough: the third instance, forty minutes after the rule was agreed
+
+The recipient of the warning above committed the same error to a pushed commit message
+within the hour, and the shape is worth the amendment it forces.
+
+Two true measurements of the same run, taken minutes apart: **5538** (the lines that
+go DARK after the halt) and **13353** (the lines of the RECIPE). The commit said
+*"one target whose recipe is ~5300 lines."* **The first number was carried forward and
+allowed to answer a question it had never been measured for.**
+
+**Both numbers had units — lines.** What neither carried was **what it was lines OF.**
+
+> **So the check is not "name the quantity in units" but "name the quantity in units,
+> OF WHAT POPULATION."** That is the population rule the rest of this file already
+> makes for counts, applied to measurements.
+
+**And note the direction of the error**, which is why it mattered enough to correct a
+pushed message: a 5300-line recipe losing its tail sounds like a fragment; a
+13353-line recipe losing 41% of itself is most of a tier. **The wrong number made the
+problem look smaller**, which is the direction that does not get investigated.
 
 **The check cannot be "read the sources again"** (frankB's addition, and it is the
 part that changes what a reader does). Both authors used the word correctly, so no
