@@ -25199,3 +25199,58 @@ writing up the hazard rather than causing it, and the tempting fix (lift the
 flag) silently corrupts the commit record it is written into. Track T owns the
 hook; noted rather than filed, since a hook that is over-eager in this direction
 is far cheaper than one that misses a real sweep.
+
+### The seat's instrument, refined: `readlink /proc/<pid>/cwd`
+
+Three sessions asked "am I alone?" within twenty minutes (frankA, frank-optimize,
+frankS — frankS offering to HOLD on the answer, which is the first time this
+seat's output gated a peer's action). The instrument converged:
+
+```
+pgrep -af 'bash tools/gate\.sh'          # how many gates
+readlink /proc/<pid>/cwd                 # which CHECKOUT, i.e. which session
+ps -o lstart= -p <pid>                   # when it started
+```
+
+`readlink /proc/<pid>/cwd` supersedes parsing the wrapper's command line for
+`cd /home/neo/<name>`: it is shorter, and it works when the wrapper never spelled
+a `cd`. 19:43:53 — one gate, PIDs 981722/981728, `cwd=/home/neo/frankS`, started
+19:43:37. frankS alone; cleared to proceed.
+
+**I AM INSIDE MY OWN SEARCH SPACE, AND IT SHOWED UP THE SAME HOUR I RELAYED THE
+WARNING ABOUT IT.** Widening the sweep to count processes per checkout returned
+**3 in `/home/neo/frank-coordinator`** — my own shell and pgrep. Identical
+mechanism to `pkill -f optfuzz.sh` matching frank-optimize's own shell earlier
+today, which I had relayed to frankS in the message immediately before. The gate
+count is unaffected (this seat runs none), but **any process count from here is
+one I must subtract myself from**, and peers were told to challenge a number that
+looks inflated. A pattern is correct and its population includes the searcher.
+
+**Load average, second reading, confirming the shape:** 5.52 / 7.30 / 6.00 at
+19:43 — 1-minute now BELOW the longer averages, decaying from the three gates
+that ended at ~19:41. The exact mirror of the 9.30 / 8.24 / 6.02 spike twenty
+minutes earlier. Two readings, same box, forty minutes apart, and **neither
+described the present**; only the process table did.
+
+### frankS's three-failures-one-channel separation, worth more than any one fix
+
+A gate can hand back a wrong or absent verdict three distinct ways, and they
+arrive through the same channel:
+
+1. **wrapper exit 0 over `gate: RED (exit 1)`** — the exit-code defect.
+2. **an OOM-killed run with NO verdict line at all** — discriminated by
+   `grep -c 'gate: \(GREEN\|RED\)'` returning **0**. frankS lost a background
+   gate to this last night and recorded it in the wrapper ticket as explicitly
+   NOT that bug.
+3. **a neighbour's `summary.log` read as your own** — today's hazard.
+
+The middle one is the one that gets misfiled, because "no verdict" is the honest
+outcome and reads as nothing having happened. **Keeping the three separate is
+worth more than fixing any one**, since a fix aimed at the wrong one leaves the
+symptom intact and the diagnosis spent.
+
+**And frankS's structural answer beats all three: it ran the gate in the
+FOREGROUND.** A verdict you never have to locate cannot be located wrongly —
+the attribution problem removed by construction rather than by discipline. That
+is the "what runs the rule?" test from this file's own section, answered with a
+command shape instead of a habit.
