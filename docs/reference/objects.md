@@ -93,8 +93,63 @@ into it — Pascal and C sources, integer and floating-point signatures, string
 work through the pxx heap, and pxx calling back out to a shared library
 (`sqrt` from `libm`) resolved by the system linker.
 
-Also a **shared library** — see below. Not yet: a Pascal `library` unit, and
-object output for arm32 and aarch64.
+Also a **shared library** — see below — including one written as a Pascal
+`library`. Not yet: object output for arm32 and aarch64.
+
+## Writing it as a `library`
+
+A source whose header says `library` instead of `program` is the Delphi and FPC
+spelling for "this compilation is a library, not an executable", and pxx takes
+it:
+
+```pascal
+library mylib;
+
+function pxx_sum(n: Integer): Integer; cdecl;
+var i, s: Integer;
+begin
+  s := 0;
+  for i := 1 to n do s := s + i;
+  pxx_sum := s;
+end;
+
+exports pxx_sum;
+
+begin
+end.
+```
+
+**`exports` declares the surface; it does not select it.** This is the one thing
+to get straight coming from Delphi. The export surface is still exactly the
+C-convention routines — the rule from [What the object exports](#what-the-object-exports),
+unchanged — so a `cdecl` routine you leave out of the `exports` clause is
+exported anyway. What the clause buys you is that it is **checked**: each name
+must resolve to a routine that this library actually defines and that the writer
+will actually export. Naming something that is not a routine, that is `external`
+(imported, so there is no body here), that is not `cdecl`, or that is C `static`
+(internal linkage) is an error at the clause, with the reason — rather than a
+symbol quietly missing from the `.so` and surfacing at someone else's link step.
+
+Two other spellings are diagnosed rather than ignored, because silently dropping
+either would write a library whose symbols are not the ones the source asked
+for: `exports Foo name 'bar'` (renaming) is not supported yet — rename the
+routine — and `exports Foo index 3` (export by ordinal) is not supported at all,
+since ELF has no ordinal table.
+
+`exports` is rejected in a `program`, which has no export surface.
+
+Two differences from FPC worth knowing:
+
+- **The main body is still required.** `library mylib; … exports f; end.` does
+  not compile; write `begin end.` before the final `end.` even when there is
+  nothing to run. (FPC lets you omit it.)
+- **`library` does not choose the output kind — the flag does.** Compiling one
+  without `--shared` produces an ordinary ELF executable, not a `.so`. Write
+  `pascal26 --shared mylib.pas mylib.so`.
+
+And the rule from below applies here too: loading the library does not run the
+main body, so `begin end.` is not a place to initialise anything an exported
+routine depends on.
 
 ## A shared library
 

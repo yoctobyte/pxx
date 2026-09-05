@@ -97,6 +97,22 @@ end.
 The `pxx` wrapper created by `install.sh` adds the bundled library roots, so
 project units can usually be found without extra flags.
 
+A `uses` entry may also name the file the unit lives in, which is the spelling
+Delphi and FPC project files write:
+
+```pascal
+uses mymod in 'mymod.pas', other in 'sub/other.pas';
+```
+
+A bare file name is resolved against the directory of the *file holding the
+clause* — for a program that is the program's own directory, for a unit it is
+that unit's. Anything containing a `/` is used as written, so a relative path is
+relative to that same directory and an absolute one is absolute. A backslash is
+not a path separator here, so Delphi's `in '..\shared\Foo.pas'` does not
+resolve; write it with forward slashes.
+
+`in` and `as` do not combine — an entry uses one or the other.
+
 ## Next
 
 - [Types](./types.md)

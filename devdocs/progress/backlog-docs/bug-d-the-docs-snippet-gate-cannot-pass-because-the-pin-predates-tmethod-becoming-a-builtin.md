@@ -3,7 +3,7 @@ track: D
 prio: 45
 type: bug
 blocked-by: []
-summary: "`tools/docsnip.py` compiles docs/** snippets against the PINNED compiler, and three of them now fail with `unknown type: TMethod` — inside lib/rtl, not inside the snippet. `a623307bd` made TMethod a builtin and deleted the RTL duplicates, so the pin's compiler cannot build the current RTL at all. Nothing is wrong with the three documents; Track D's only gate is red for every session until the next pin."
+summary: "`tools/docsnip.py` compiles docs/** snippets against the PINNED compiler, and three of them now fail with `unknown type: TMethod` — inside lib/rtl, not inside the snippet. `a623307bd` made TMethod a builtin and deleted the RTL duplicates, so the pin's compiler cannot build the current RTL at all. Nothing is wrong with the three documents; Track D's only gate is red for every session until the next pin. Second aperture hole found 2026-09-05: the completeness test is `^program`, so a `library` snippet is invisible to the gate entirely — and the pin rejects `library` at token 1 anyway."
 ---
 
 # The docs snippet gate cannot pass: the pin predates `TMethod` becoming a builtin
@@ -61,3 +61,37 @@ so it is the easier half to catch — but only once.
 Found 2026-09-05 by frankD (Track D) while gating the `{$MODE}` dialect-scope
 doc update — which added no snippets, deliberately, because the pin cannot
 demonstrate the behaviour being documented either.
+
+## 2026-09-05 — the same gate has a second hole, and it is an APERTURE one
+
+Documenting `library`/`exports` in `docs/reference/objects.md` I hit the other
+end of the same problem. `docsnip.py`'s completeness test is
+
+```python
+if lang not in ('pascal', 'pas') or not (
+        re.match(r'^program\s', t) and t.rstrip().endswith('end.')):
+```
+
+so a block whose header is `library` is classified as a **fragment** and never
+compiled. It does not error and it does not skip-with-a-reason; it is counted in
+`fragments/other` alongside the genuine one-liners. The gate reports the same
+green whether the snippet is correct or nonsense.
+
+The two holes compound rather than cancel. Even if the completeness test grew a
+`library` arm, the pinned compiler answers, measured at `9bcfd2b4da30`:
+
+```
+$ stable_linux_amd64/default/pinned mylib.pas mylib.out
+pascal26:1: error: expected 'begin' before 'library'
+```
+
+`library`/`exports` landed 2026-09-04, after the pin. So there is **no pinned
+compiler that can check a `library` snippet**, and widening the aperture without
+a new pin converts a silent gap into a permanent red — which is option 1 above,
+again, and still Track A's call.
+
+Meanwhile the snippet now in `objects.md` is hand-verified at HEAD `ce19e5482`
+(binary `9bcfd2b4da30`) and the document says so. That is the honest handling,
+not a substitute for the gate: the next person to edit that block gets no
+warning from `docsnip.py` at all.
+
