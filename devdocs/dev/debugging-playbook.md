@@ -5279,6 +5279,52 @@ sibling, **already on the list.** Then `checklowaddrloads`/`checkpointer` and
 Cf. `normalise-dont-special-case.md` — *"fixed one arm of a double case? grep for
 the sibling before closing."* This is the search-strategy form of the same fact.
 
+**Frequency, with its denominator stated:** its author hit this **three times in one
+session** on 2026-09-05/06 — `minstacksize`/`maxstacksize`, then
+`checklowaddrloads`/`checkpointer` and `targetswitch`/`modeswitch`, then an
+`ErrorNoPos` refusal **twelve lines below the `Error` one that was wrong**
+(`compiler/compiler.pas:2469-2481`, whose doc comment cites an `--emit-obj` refusal
+as the case it was written for). **That is a rate for one author in one session, not
+a fleet rate** — but three misses of a one-line search is enough to treat the search
+as a step rather than an idea.
+
+## CARRY THE POPULATION IN THE SENTENCE, NOT JUST IN THE TABLE — two sessions reached this from opposite directions on one night
+
+Named 2026-09-06. **The more general statement of the residual and set-of-one rules
+above**, and the reason it earns its own heading is that it was arrived at twice,
+independently, from findings with nothing in common:
+
+- **frankA:** *"the residual is pinned by being exported"* — **measured on a C
+  object**, and labelled `C object` in both rows of the table it came from. **The
+  summary dropped the label.**
+- **frankZ:** **v354** was the only green pin, so *"the green pin"* and *"v354"*
+  were the same string and a property of the member read as a property of the
+  category.
+
+> **Neither is a wrong measurement. Both are a correct measurement with its SCOPE
+> STRIPPED on the way into prose.**
+
+The table knew. The table had the population in it — a column saying `C object`, a
+row count of one. **Prose has no column for a denominator**, so unless the sentence
+carries it explicitly, the scope is lost at exactly the step where the claim starts
+travelling. And the stripped version is the one that gets quoted, because it is
+shorter and reads as more confident.
+
+**The fix is boring and that is the point:** write the population into the sentence.
+*"Exported symbols pin the residual **in a C object**"*; *"**the only** green pin,
+v354, cannot build 54 of 54"*. Both are one clause longer and neither can be
+misread.
+
+frankA's own assessment, kept because it is the right relationship between the
+three rules: this is **the general statement**, the residual-set fallacy and the
+set-of-one rule are **two of its faces**, and *"carry the population"* is the guard
+that would have caught either.
+
+**And it composes with the aperture rule.** A negative result inherits the aperture
+of the search that produced it; a POSITIVE one inherits the population of the table
+it came from. Neither aperture nor population survives a summary unless somebody
+types it.
+
 ## THE RESIDUAL-SET FALLACY — a partition shows causes DIFFER, never what they are, and what is LEFT OVER is not a group
 
 Named 2026-09-05, on a live case, and not written down here before.
@@ -7364,6 +7410,48 @@ The general form, which is why this sits beside the DENOMINATOR section: **a
 search whose result includes the thing you searched for is not evidence about
 anything else.** Name what the count would have to EXCLUDE to mean what you want
 it to mean, and count that instead.
+
+## A DUPLICATION TICKET'S REAL ARGUMENT IS NOT TIDINESS — it is that EACH COPY HAS TO BE TAUGHT EVERY LESSON AGAIN, and the teaching only happens when somebody hits that arm
+
+Measured 2026-09-06 (frankA, `8627d25ce`), and it is the cleanest artefact anyone
+here has produced for why `normalise-dont-special-case.md` is a north star rather
+than a style preference.
+
+**Two statement-side cast-target walks were one routine all along.** They differed
+in exactly ONE arm, and **the difference was a FACT about the cast, not about the
+walk**: a record-name cast knows its own pointee and carries no alias row; a
+pointer-alias cast has the whole triple and must ask the resolver. It collapsed to
+**one boolean**. Everything else — delegation branch included — was byte-identical.
+
+**And here is the artefact.** Both copies had **separately learned, months apart,
+that after delegation the seed is never the answer.** `TA(b).pi^ := 7` and
+`PA(q)^.pi^ := 7` were each refused for exactly that reason, and **each was fixed on
+its own copy**, by different people at different times, neither of whom saw the
+other arm.
+
+> **The cost of a duplicated path is not that it is untidy. It is that every lesson
+> has to be learned once per copy — and the second copy only gets taught when
+> somebody happens to hit it.** Which is why *"the second path is the one that stays
+> broken"*: it is not neglected, it is under-sampled.
+
+**This changes how to rank one.** A duplication ticket whose argument is *"three
+routines do one thing"* is a refactor and reads as prio 25. The same ticket whose
+argument is *"here are two independent bug-fix commits teaching the same lesson to
+different copies"* is a **defect generator with a measured rate**, and the fix
+deletes future bugs rather than lines. **Go and look for the twin fixes before you
+rank it** — `git log` on both files for the same symptom is the whole search.
+
+### And gate a merge on the census that can SEE a duplicate
+
+frankA's control is worth copying, because the obvious census cannot fire. The
+existing 25-shape sweep **varies target shape at a fixed receiver**, so **a
+duplicated walk is invisible to it** — both copies see the same shapes and agree.
+The merge was gated instead on a **63-row cast-SPELLING census**: identical verdicts
+either side, **controls as openers**, and **its own must-differ row**.
+
+> **A census that cannot distinguish one copy from two is a positive control drawn
+> from the wrong population** — it passes, and it certifies nothing about the change
+> you actually made.
 
 ## A SET OF ONE HAS NO DISTRIBUTION — so every property of its single member reads as a property of the SET
 
