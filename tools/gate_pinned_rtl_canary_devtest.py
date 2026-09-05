@@ -26,6 +26,7 @@ This guards the canary, and specifically guards the way it would rot:
 Run: tools/gate_pinned_rtl_canary_devtest.py   (exit 0 = pass)
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -51,11 +52,67 @@ def t_the_gate_still_has_the_canary():
     # lib/rtl's references, the run asks whether the result works. A pinned RTL
     # that compiles and then dies is just as broken for Track B.
     fn = src.split("pinned_rtl_canary() {", 1)[1].split("\n}", 1)[0]
-    assert '"$bin"' in fn, (
-        "the canary no longer RUNS the program it built -- it answers only "
-        "half the question feature-t-gate-quick-should-smoke-the-pinned-"
-        "compiler asked")
-    return "gate.sh defines the canary, compiles AND runs"
+    # ASSERT THE BEHAVIOUR, NOT THE SPELLING. This row used to look for the
+    # literal `"$bin"` -- the variable the canary happened to use. b6212f43f
+    # rewrote the sweep and named its artifact `$work/run.bin`, so the guard
+    # went RED while the canary still compiled AND ran exactly as before, and
+    # `make tools-devtest` reported that the run step had been dropped when it
+    # was sitting there under a new name. A text check cannot tell a renamed
+    # variable from a deleted step; the fix is to ask the question the row
+    # actually means -- does this function EXECUTE something it just built?
+    built = sorted(set(re.findall(r'"\$pin(?:abs)?"[^\n]*?"(\$[^"]*\.bin)"',
+                                  fn)))
+    assert built, (
+        "the canary compiles nothing -- no `\"$pinabs\" ... \"$x.bin\"` "
+        "invocation found, so there is no artifact for it to run")
+    ran = [b for b in built
+           if re.search(r'^\s*"%s"' % re.escape(b), fn, re.M)]
+    assert ran, (
+        "the canary no longer RUNS the program it built -- it compiles %s and "
+        "executes none of them, answering only half the question "
+        "feature-t-gate-quick-should-smoke-the-pinned-compiler asked"
+        % ", ".join(built))
+    return ("gate.sh defines the canary, compiles AND runs (%s)"
+            % ", ".join(ran))
+
+
+def t_the_run_assertion_can_discriminate():
+    """The row above went RED on a RENAME while the behaviour was intact, so
+    the replacement has to be shown doing both halves: red when the run step is
+    really gone, green when only the artifact's name moved.
+
+    Controls are derived from the LIVE gate.sh rather than from a fixture --
+    a control built from a hand-written string tests the regex against my
+    idea of the file, which is the population the original assertion was
+    already wrong about."""
+    with open(GATE) as f:
+        fn = f.read().split("pinned_rtl_canary() {", 1)[1].split("\n}", 1)[0]
+
+    def ran(text):
+        built = set(re.findall(r'"\$pin(?:abs)?"[^\n]*?"(\$[^"]*\.bin)"',
+                               text))
+        return [b for b in built
+                if re.search(r'^\s*"%s"' % re.escape(b), text, re.M)]
+
+    live = ran(fn)
+    assert live, "precondition: the live canary must be running something"
+
+    # POSITIVE CONTROL: the defect the row exists to catch. Drop the execution
+    # while leaving every compile in place.
+    cut = re.sub(r'^\s*"\$work/[^"]*\.bin"[^\n]*$', '  :', fn, flags=re.M)
+    assert not ran(cut), (
+        "the assertion cannot fail: with every execution line removed it still "
+        "reports that the canary runs what it built")
+
+    # NEGATIVE CONTROL: the false alarm of 2026-09-05. A rename must NOT be
+    # reported as a deletion.
+    renamed = fn.replace("run.bin", "smoke.bin")
+    assert ran(renamed), (
+        "renaming the artifact reads as deleting the run step -- this is the "
+        "exact false RED that made `make tools-devtest` claim the canary had "
+        "lost half its question while it was intact under a new name")
+
+    return "red when the run is deleted, green when it is merely renamed"
 
 
 def t_make_pin_verifies_the_binary_it_just_blessed():
@@ -152,6 +209,7 @@ def t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin():
 def main():
     rc = 0
     for fn in (t_the_gate_still_has_the_canary,
+               t_the_run_assertion_can_discriminate,
                t_make_pin_verifies_the_binary_it_just_blessed,
                t_the_fixture_exists_so_the_skip_is_not_permanent,
                t_the_canary_is_green_on_a_sound_tree,
