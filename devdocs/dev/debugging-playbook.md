@@ -8388,6 +8388,58 @@ must remember.**
 addition, because a harness that CAN detect its truncation still does not unless
 someone reads the arithmetic.
 
+
+### The remedy: TWO FACTS THAT FAIL DIFFERENTLY, one of which the measured thing writes ITSELF
+
+Measured 2026-09-06 (frankD), after the killed-reported-as-complete case above. This
+is the practical answer to the whole family, and it separates **three** states that
+"read the exit status and the last line" can only separate two of:
+
+> **`pgrep -x make` for the process, plus a `MAKE_EXIT=` sentinel the command appends
+> to its own log.**
+
+| | process | sentinel |
+| --- | --- | --- |
+| still running | present | absent |
+| finished | gone | **present** |
+| truncated / stopped | gone | absent |
+| **killed** | gone | absent |
+
+**A kill takes out the process AND never writes the sentinel. The notification says
+nothing in either case.** Running and killed are separated by the process; finished
+and killed are separated by the sentinel; **neither fact alone separates all three,
+and the two fail differently**, which is the requirement.
+
+**The sentinel works because the thing being measured writes it.** An exit status is
+reported by the wrapper — the component that has repeatedly lied — and a last line is
+whatever the log happened to reach. **A sentinel appended by the command itself
+cannot be forged by a wrapper and cannot be produced by a truncation**, so its
+absence is evidence rather than the absence of evidence. That is the same reason a
+count the run produces beats a count the reader greps for.
+
+**`pgrep -x`, never `pgrep -f`** — `-f` matches the full command line and therefore
+**matches its own invocation**, reporting the process as alive whenever you ask. That
+cost one run and one `pkill` on the night it was found. **A probe whose right answer
+collides with its own presence is the guard-that-cannot-fail shape, arriving through
+`ps`.**
+
+### And the grep that answers 3 on a run with nothing wrong
+
+Two sessions, two harnesses, the same false positives within an hour:
+`grep -icE '^make.*Error|FAILED|MISMATCH'` returning **3** and **4**, where every
+match was **comment prose echoed by make** (*"…failed to build IN
+lib/rtl/configparser.pas"*, *"Skipped, not failed"*), **a test whose filename
+contains `mismatch`**, and **an awk string inside a recipe**.
+
+> **A recipe echoes its own comments, so a log contains the words a failure would use
+> — written by the build describing itself.** Matching on failure vocabulary counts
+> the harness's prose alongside its verdicts.
+
+**Anchor on the emitter, not the vocabulary**: `make: *** [Makefile:` for a stop, the
+harness's own verdict line for a result, the sentinel for completion. The stable
+pattern here is worth a shared filter rather than being re-derived by each session
+that greps.
+
 ### The live case that produced it
 
 The `test_record_nested_type_section` regression was a **STOP**, not a red row.
