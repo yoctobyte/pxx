@@ -26298,3 +26298,156 @@ it lands"; reserve a hold for work that concurrency would corrupt* — which is
 what actually happened for frankD. An underestimate that costs nothing is still
 worth not repeating, and a cost that varies per lane is a reason to ask rather
 than to assume either way.
+
+## 2026-09-05, late — the seat inherits fleet routing, and its first routing error
+
+### The seat's remit widened; the timer did not transfer
+
+The owner narrowed frank-user to owner-facing work: *"frank-user talks to the
+human, points out priorities, and goes over decision tickets. Everything else is
+delegated."* Worker reports, regression routing and sequencing, and the
+overnight pass moved here.
+
+**The overnight pass came with an hourly monitor attached and that half was
+refused.** The monitor was granted to frank-user by the owner directly; a peer
+relaying a permission is the thing this fleet refuses in every other direction,
+including an hour earlier when frankB declined a CLAUDE.md edit *because a peer
+asked* and this seat was the peer. frank-user agreed on its own initiative —
+*"it would be a poor rule that only ran in one direction"* — and put the gap in
+front of the owner rather than leaving him with a belief about what runs at
+03:00 that nothing satisfies. **The pass runs woken, not timed.**
+
+### The address change, and why it was the urgent item
+
+The owner is interrupted roughly twice a minute. **The handover alone did not
+stop it, because workers still held frank-user as their address** and each
+learned otherwise only by messaging it and being redirected — which is one more
+interruption, not one fewer. Broadcast to the five untold (frankB, frankD,
+frankS, frankH, frank-optimize), naming the three already redirected so nobody
+read it as aimed at them alone. **One route up, batched, or two seats interrupt
+him from two directions.**
+
+### THE ROUTING ERROR: a scoped caveat inflated into a general claim
+
+frankC wrote *"x86_64 for every busybox number; i386 unmeasured"* — true, and
+scoped to its own run. **This seat converted it into "the C corpus has no i386
+instrument"**, built an assignment on it, told frankC to spend a night building
+the instrument, and relayed the absence to frank-user as fleet state.
+
+**`feature-c-corpus-busybox-i386-the-second-architecture` was closed green on
+2026-09-04** (`7cb67ad14`, ancestor-verified): 521/521 TUs to objects on i386,
+they link, byte-identical to the `gcc -m32` oracle over 938 differential cases.
+
+The subject drifted between the caveat and the conclusion — the day's recurring
+class, committed by the seat cataloguing it. **No check was made because the
+question felt too simple to need one**, which is frankS's generalisation from an
+hour earlier, arriving on its author's desk.
+
+**The compounding factor is new and belongs to this seat specifically: a bad
+number in a ticket is one wrong statement; A BAD PREMISE IN AN ASSIGNMENT SPENDS
+A SESSION'S NIGHT.** Now that routing sits here, this seat's errors are all of
+the second kind. frankC sent the correction in ten minutes instead of starting
+work, so the cost was a message. **Under the old address it would have gone to
+frank-user, been relayed back, and cost an hour** — the redirect is what made it
+cheap, on its first day.
+
+The honest residual survived the correction: not *"no instrument"* but *"the
+instrument has not been pointed at HEAD in a day and 55 `compiler/` commits."*
+A re-run, not a build.
+
+### Two pin-shaped consequences in one evening, opposite directions
+
+**Fixed at HEAD, inert until pinned** — `lib/rtl` and `compiler/builtin/**` are
+both frozen by `make pin`, so a landed compiler fix does not reach a
+`$(PXX_STABLE)` consumer until the next pin.
+
+- **frankB, invisible fix:** `generics.collections` — the corpus ladder's live
+  edge, the wall every session had stopped at for weeks — was **pin-blocked, not
+  frontend-blocked.** `IEnumerator<T>` lacked `property Current` only because
+  the pin rejected a property in an interface; the parser fix had sat in `done/`
+  for days doing nothing. **v404 was the whole dependency.**
+- **frankS, fix that will read as a regression:** `unresolved forward:
+  PXXClassFinalize` under the pin is v404 predating `6758c7ce7`. **Nothing that
+  used to build stopped building** — no class program has ever built for
+  `--esp-profile=bare` on either chip. Put next to the error string in the
+  ticket, not only in a report, *"because someone hitting this at 2am will grep
+  the error text"* — the same conclusion frankB reached from a committed note in
+  `classes.pas` that predicted its own wrong probe.
+
+### The corrections table — eight in one evening, every one already relayed
+
+20→24 units (frankD, and 28 had conflated two causes) · 51→29 ESP assertions
+(frankS, a line range overrunning into the next target) · 8→7 gcc shapes
+(frankC, lines counted where the claim was about names) · 1.67x→1.543x
+(frank-optimize, a "quiet box" with qemu at 180% outside its process filter) ·
+"both sessions checked"→neither did and neither could (frankA) · this seat's
+backlog 52→38 · `2de85ffdf`→`a4c89e31d` (ghost, ~100% by construction) ·
+"the pinned-RTL row is a 1s sampler"→22s and 29s post-v404, caveat retired.
+
+**Deriving state was cheap. Chasing state that had already moved was not** — the
+seat is the single point every fact passes through, so it is the single point
+every correction must chase. This is the load, and it is the charter proposed
+for the sub-coordinator the owner is considering: **answer with the INSTRUMENT,
+not the ANSWER** (a cached answer is never re-measured — frankB re-deriving
+`gate.sh` from four source locations is the only reason the CLAUDE.md staleness
+was found at all), plus **a ledger of live claims where every entry retires on a
+stated EVENT.** Read-mostly, tree-answerable, no topic view required.
+
+**Hard limits, first one load-bearing: the topic view does not shard.** The
+second seat never routes, never assigns, never messages a worker unprompted, and
+escalates nothing. Two seats volunteering to workers is itself a topic collision
+and we would be the ones unable to see it.
+
+### The seventh member, and the only one with reversed polarity
+
+frankZ: **six instruments today were silently wrong while GREEN; the
+pinned-RTL devtest was loudly wrong while RED.** A green liar survives because
+nobody looks. **A red liar is under active pressure from every lane it blocks,
+and the cheapest way to make it stop is to DELETE it** — by someone who is, that
+day, correct that it is lying. **frankH's cost analysis is the mechanism
+underneath it:** false-RED and false-PASS differ not in magnitude but in WHO
+PAYS — the false PASS is paid later by a stranger, the false RED is paid now, by
+the blocked lane, visibly, and the blocked lane is the only party with an
+incentive. Corollary, now policy: **a guard rewritten after a false alarm needs
+the NEGATIVE control most of all, because the false alarm is the failure mode it
+has just demonstrated.**
+
+frankS's instance is the same coin: a red control is how you find out. **Both
+are true at once, so "the control went red and I investigated" is not a policy
+— it is what happened to one session, once.**
+
+### frankS's generalisation, which reorders where to look for these
+
+Four instruments answering about a range or population adjacent to the one
+asked: `tail`'s exit code, `ls devdocs/progress/*/`, `pkill -f optfuzz`
+self-matching, a line range overrunning its target. **In every case the correct
+instrument was available and cheaper** — bounding at the next target, counting
+one folder, reading the printed `logs=` line, matching the `commit` reflog
+entry. **The wrong instrument was not chosen for convenience; it was chosen
+because the question felt too simple to need one.**
+
+That converts an unusable discipline problem (*check your instrument* — nobody
+skips a check they think they need) into a triage rule: **the exposure is
+concentrated in the questions that feel beneath checking.** Elaborate
+measurements are comparatively safe, because their difficulty triggers the care.
+
+### frankD: write the GREEN record down, with its discriminating content
+
+The pxxc.org 503 was handed up as **a regression against a verified baseline**
+rather than a broken link, because `task-d-verify-the-published-status-urls`
+had recorded that URL `ok` on 2026-08-30 **with its content marker `[fib
+sieve]`** — proving the page served the actual timings, not a shell. That
+bounds the question to six days and two suspects (generator or deploy). **A pass
+logged as a bare "ok" would have left the owner the unbounded version.**
+
+It also closed the loop on `ce89ff14b`, which had explicitly priced *"a number
+goes stale (visible, self-correcting)"* against *"a URL fails (invisible from
+this repo)"* and noted the residual had never occurred. **It has now: once in
+six days, and `doclinks.py` caught it** — a rate rather than an unbounded
+exposure, and the mitigation as evidence rather than intent. Both written into
+the *done* ticket, cross-referenced, because that is where someone revisiting
+the trade will look. **The trade stands, for a better reason than when it was
+made.**
+
+Symmetric exchange: **a standing red belongs in a ticket, because a
+coordinator's memory is the instrument that goes away at restart.**
