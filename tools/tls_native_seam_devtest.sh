@@ -41,17 +41,31 @@ fi
 printf 'subjectAltName=DNS:localhost\n' > "$D.ext"
 
 # mint a self-signed root + a localhost leaf signed by it, with $1 key args
+# MINT_ERR carries openssl's own reason out to the caller. Without it, "this
+# openssl has no ed25519", "the disk is full" and "the umask is wrong" were one
+# observation, and the caller spelled all three `SKIP` with exit 0 -- the same
+# word and code it uses for openssl being ABSENT. Present-and-failing is not
+# absent; see gen_or_bail in tools/tls13_handshake_devtest.sh.
+MINT_ERR=""
 mint() {
   nm=$1; keyargs=$2
   # shellcheck disable=SC2086
-  openssl req -x509 $keyargs -keyout "$D.$nm.cakey" -out "$D.$nm.ca" -days 1 -nodes \
-    -subj "/CN=PXX Seam CA $nm" >/dev/null 2>&1 || return 1
+  MINT_ERR="$(openssl req -x509 $keyargs -keyout "$D.$nm.cakey" -out "$D.$nm.ca" \
+    -days 1 -nodes -subj "/CN=PXX Seam CA $nm" 2>&1 >/dev/null)" || return 1
   # shellcheck disable=SC2086
-  openssl req $keyargs -keyout "$D.$nm.key" -out "$D.$nm.csr" -nodes \
-    -subj "/CN=localhost" >/dev/null 2>&1 || return 1
-  openssl x509 -req -in "$D.$nm.csr" -CA "$D.$nm.ca" -CAkey "$D.$nm.cakey" \
-    -CAcreateserial -days 1 -extfile "$D.ext" -out "$D.$nm.leaf" >/dev/null 2>&1 || return 1
+  MINT_ERR="$(openssl req $keyargs -keyout "$D.$nm.key" -out "$D.$nm.csr" -nodes \
+    -subj "/CN=localhost" 2>&1 >/dev/null)" || return 1
+  MINT_ERR="$(openssl x509 -req -in "$D.$nm.csr" -CA "$D.$nm.ca" -CAkey "$D.$nm.cakey" \
+    -CAcreateserial -days 1 -extfile "$D.ext" -out "$D.$nm.leaf" 2>&1 >/dev/null)" || return 1
+  MINT_ERR=""
   return 0
+}
+mint_or_bail() {   # $1 = scheme name, $2 = openssl key args
+  mint "$1" "$2" && return 0
+  say "INCONCLUSIVE: $1 keygen failed -- openssl is present but could not do it"
+  say "  openssl said: ${MINT_ERR:-(nothing on stderr)}"
+  say "  This is NOT a pass. The $1 seam was not exercised."
+  exit 2
 }
 
 serve() {
@@ -88,9 +102,9 @@ expect_refused() {
   fi
 }
 
-mint rsa "-newkey rsa:2048"                                  || { say "SKIP: rsa keygen"; exit 0; }
-mint ed  "-newkey ed25519"                                   || { say "SKIP: ed keygen";  exit 0; }
-mint ec  "-newkey ec -pkeyopt ec_paramgen_curve:P-256"       || { say "SKIP: ec keygen";  exit 0; }
+mint_or_bail rsa "-newkey rsa:2048"
+mint_or_bail ed  "-newkey ed25519"
+mint_or_bail ec  "-newkey ec -pkeyopt ec_paramgen_curve:P-256"
 
 expect_ok "rsa_pss server"   28821 "$D.rsa.leaf" "$D.rsa.key" "$D.rsa.ca" localhost
 expect_ok "ed25519 server"   28822 "$D.ed.leaf"  "$D.ed.key"  "$D.ed.ca"  localhost

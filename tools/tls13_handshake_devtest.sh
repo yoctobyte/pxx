@@ -113,14 +113,23 @@ scheme_run() {
   SKEY=/tmp/pxx_tls13_s_$scheme_name.key;  SCA=/tmp/pxx_tls13_s_$scheme_name.ca.pem
   SLK=/tmp/pxx_tls13_s_$scheme_name.leaf.key; SCSR=/tmp/pxx_tls13_s_$scheme_name.csr
   SLP=/tmp/pxx_tls13_s_$scheme_name.leaf.pem; SDER=/tmp/pxx_tls13_s_$scheme_name.ca.der
+  # THE SIBLING ARM of the three gen_or_bail calls above -- same three openssl
+  # invocations, once per scheme. It was missed when the first block was fixed,
+  # and it was the WORSE of the two: `return 0` let scheme_run report nothing at
+  # all, so a scheme whose certs could not be minted vanished silently while the
+  # final line kept claiming "ed25519 + rsa_pss + ecdsa_p256". A suite naming a
+  # scheme it never ran is a stronger false claim than one that exits early.
   # shellcheck disable=SC2086
-  openssl req -x509 $ca_args -keyout "$SKEY" -out "$SCA" -days 1 -nodes \
-    -subj "/CN=PXX Test Root CA $scheme_name" >/dev/null 2>&1 || { say "SKIP  $scheme_name: CA gen failed"; return 0; }
+  gen_or_bail "$scheme_name CA generation" \
+    openssl req -x509 $ca_args -keyout "$SKEY" -out "$SCA" -days 1 -nodes \
+      -subj "/CN=PXX Test Root CA $scheme_name"
   # shellcheck disable=SC2086
-  openssl req $leaf_args -keyout "$SLK" -out "$SCSR" -nodes \
-    -subj "/CN=localhost" >/dev/null 2>&1 || { say "SKIP  $scheme_name: leaf csr failed"; return 0; }
-  openssl x509 -req -in "$SCSR" -CA "$SCA" -CAkey "$SKEY" -CAcreateserial -days 1 \
-    -extfile "$EXT" -out "$SLP" >/dev/null 2>&1 || { say "SKIP  $scheme_name: leaf sign failed"; return 0; }
+  gen_or_bail "$scheme_name leaf CSR" \
+    openssl req $leaf_args -keyout "$SLK" -out "$SCSR" -nodes \
+      -subj "/CN=localhost"
+  gen_or_bail "$scheme_name leaf signing" \
+    openssl x509 -req -in "$SCSR" -CA "$SCA" -CAkey "$SKEY" -CAcreateserial -days 1 \
+      -extfile "$EXT" -out "$SLP"
   openssl x509 -in "$SCA" -outform DER -out "$SDER" 2>/dev/null
   # Re-read the clock: $NOW was taken before the ed25519 runs, and these certs
   # are minted afterwards, so their notBefore is LATER than it -- the client
