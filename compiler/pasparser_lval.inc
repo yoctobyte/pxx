@@ -392,7 +392,7 @@ var
   helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
   idxHelperNode: Integer;   { a type-helper call on an INDEXED receiver — `a[i].ToUpper` }
   w, withNode, recId: Integer;
-  propFOff, propFLen: Integer;
+  propFOff, propFLen, propW: Integer;   { propW: bracket depth for the indexed-property `:=` peek — NOT `w`, which is the with-stack cursor }
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
@@ -565,6 +565,92 @@ begin
                 recName := UFldRec_[fldIdx];
                 ASTTk[fieldNode] := Ord(tk);
                 node := fieldNode;
+                withResolved := True;
+                Break;
+              end;
+            end;
+
+            { ...and a with-scoped property with METHOD accessors, which this
+              arm used to decline IN PROSE -- the note above said "method
+              accessors are out of scope here (fall through)" and the fall
+              through went all the way out: past the field arm, past the `Free`
+              desugar, past the method lookup (a property name is not a method
+              name), out of the with loop, and out as `undefined variable`.
+
+              `with c do V := 5` over `property V: LongInt read GetV write
+              SetV` is the plainest spelling of a property there is, and every
+              OTHER receiver already resolved it -- `c.V`, a bare `V` inside a
+              method, `Self.V`. One concept, four resolution paths, and the
+              fourth declined in a comment. A comment recording a gap is not a
+              guard against reaching it.
+
+              MakeAccessorCall is the right dispatcher here, unlike the
+              class-NAME arm further down: the receiver is an INSTANCE, so Self
+              belongs at argument 0 for a plain or virtual call and comes out of
+              the fat pointer for an interface. That three-way choice is the one
+              thing the eleven hand-rolled accessor calls each got wrong in
+              their own way, and it is why this arm asks rather than builds.
+              bug-p-a-with-scoped-property-with-method-accessors-is-undefined }
+            isAssign := (CurTok.Kind = tkAssign);
+            { An INDEXED property puts the `:=` after the SUBSCRIPT. The
+              property name is already consumed on entry (prevTok is the
+              caller's `TokPos - 1`), so CurTok IS the `[` and the group starts
+              at TokPos - 1. }
+            if (not isAssign) and UPropIsIndexed[pri] and
+               (CurTok.Kind = tkLBrack) then
+            begin
+              i := TokPos - 1; propW := 0;
+              while i < TokCount do
+              begin
+                if Tokens[i].Kind = tkLBrack then Inc(propW)
+                else if Tokens[i].Kind = tkRBrack then
+                begin Dec(propW); if propW = 0 then begin Inc(i); Break; end; end;
+                Inc(i);
+              end;
+              if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+            end;
+
+            if isAssign and (UPropWriteMLen[pri] > 0) then
+            begin
+              methName := '';
+              for i := 0 to UPropWriteMLen[pri] - 1 do
+                AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+              mmi := FindUMeth(selfClassCi, methName);
+              if mmi >= 0 then
+              begin
+                mpi := UMthProc_[mmi];
+                margIdx := -1; mlastArg := -1;
+                if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
+                else PropIndexConstArg(pri, margIdx, mlastArg);
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                { A complete call STATEMENT, the same shape the unqualified
+                  setter arm below returns: the caller does not go on to expect
+                  a `:=` it has already consumed. }
+                Result := MakeAccessorCall(selfClassCi, mmi, mpi, withNode,
+                            AccessorArgChain(margIdx, mlastArg, CurASTNode));
+                Exit;
+              end;
+            end
+            else if (not isAssign) and (UPropReadMLen[pri] > 0) then
+            begin
+              methName := '';
+              for i := 0 to UPropReadMLen[pri] - 1 do
+                AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+              mmi := FindUMeth(selfClassCi, methName);
+              if mmi >= 0 then
+              begin
+                mpi := UMthProc_[mmi];
+                margIdx := -1; mlastArg := -1;
+                if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
+                else PropIndexConstArg(pri, margIdx, mlastArg);
+                node := MakeAccessorCall(selfClassCi, mmi, mpi, withNode, margIdx);
+                tk := Procs[mpi].RetType;
+                recName := ProcRetRecId[mpi];
+                if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+                { Break, not Exit: a trailing selector on the RESULT
+                  (`with c do WriteLn(Items[0].Name)`) is the suffix loop's job,
+                  exactly as it is for the field-backed arm above. }
                 withResolved := True;
                 Break;
               end;

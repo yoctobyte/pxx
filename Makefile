@@ -14013,6 +14013,13 @@ test-core: $(COMPILER)
 	# slot 0 and still prints a plausible number.
 	./$(COMPILER) test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26
 	tools/expect_same.sh test_clsprop_idx26 "$$($(TESTTMP)/test_clsprop_idx26)" "$$(cat test/test_class_property_indexed.expected)"
+	# A with-scoped property whose accessors are METHODS. The with-scope arm
+	# resolved only FIELD-backed properties and said so in a comment; the fall
+	# through went out of the compiler as `undefined variable`. Every getter
+	# here adds 100, so a row that reached the BACKING FIELD instead of the
+	# accessor prints a number 100 too small rather than failing to compile.
+	./$(COMPILER) test/test_with_scoped_property_method_accessors.pas $(TESTTMP)/test_withprop26
+	tools/expect_same.sh test_withprop26 "$$($(TESTTMP)/test_withprop26)" "$$(cat test/test_with_scoped_property_method_accessors.expected)"
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was
