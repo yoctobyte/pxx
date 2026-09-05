@@ -409,3 +409,67 @@ merge** — the expr record-cast twin hand-builds its own `AN_INDEX` arm where
 the statement side delegates `[`, so unifying those is a question about whether
 that arm is right, not about lifting a body. That is the next measurement, and
 it wants its own census of what indexing a record cast is supposed to yield.
+
+---
+
+## 2026-09-06 (frankA, later) — the question about the hand-built arm has an answer, and it is a silent wrong address
+
+The note above named the next measurement: the expr record-cast twin hand-builds
+its own `AN_INDEX` arm where the statement side delegates `[`, so **the question
+is whether that arm is RIGHT, not whether a body can be lifted.**
+
+**It is not, and neither is the delegation.** Both sides are wrong in the same
+place and self-consistently so, which is why no sweep had caught it.
+
+```
+t: array[0..2] of TRec;   a = 10 11 12
+
+PRec(raw)[0..2].a    10 11 12      the pointer-alias spelling
+TRec(raw)[0..2].a    10  0  0      the record-name spelling
+```
+
+Element 0 is right **by coincidence** — it needs no stride. And as an assignment
+target it is the quiet kind: `TRec(raw)[1].a := 71` left `t[1].a` at 11 and then
+**read back 71 through the same cast**, because the read goes to the same wrong
+address. A row comparing a store to its own read-back cannot fail on it.
+
+### The cause was one number, and two AST dumps found it
+
+The same access under both spellings differs in **exactly one field**:
+
+```
+alias    #8195 kind=39 tk=17 ival=14      <- an alias row
+recname  #8195 kind=39 tk=17 ival=0       <- "plain reinterpret, no adapter"
+```
+
+`ir.inc` reads that field as an **alias index**, and `0` passes its `< 0` test
+for "no alias", so the stride came from **alias row zero — whatever type the
+program declared first.** A default that is also a real answer cannot signal
+"not applicable"; that is the trap the PChar adapter fallback already carries a
+paragraph about one file over, arriving here through a different field.
+
+Fixed in `b7b9e309e` by minting the row the cast should always have carried
+(`EnsureRecPtrAlias`), which fixes **both** `ir.inc` sites that read the field
+rather than teaching either one what a record cast is.
+
+### What this says about the remaining three walks
+
+**Delegating is not the fix by itself.** The statement side already delegates
+`[` here and was equally wrong, because both consumers read the same missing
+field. So the remaining merge is not "lift the body and delete the hand-built
+arm" — the hand-built arms and the shared walker have to agree about what the
+NODE carries first. That is a smaller and better-defined question than the
+merge, and it is the one to answer next:
+
+**for each of the three remaining loops, what does its opener stamp on the node,
+and does every consumer of that field read the same encoding?** The escape
+census answers "which shared routines does this loop reach"; this one is "what
+does it hand them", and the two are not the same instrument.
+
+### Recorded blank
+
+`EnsureRecPtrAlias` mints a row with `AliasPtrDepth = 0` and no base kind, which
+is what `RegisterPtrAlias` writes; a source-declared `PRec = ^TRec` gets those
+filled by the `^T` parse. Every row of the fixture and all three censuses agree
+across the change, so nothing measured needs them — but **`^^` through a
+record-name cast was NOT probed** and is where a missing depth would show.
