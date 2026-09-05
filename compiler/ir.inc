@@ -8132,14 +8132,14 @@ begin
         { Align DataLen to 8 bytes }
         while (DataLen mod 8) <> 0 do
         begin
-          if DataLen >= MAX_DATA then Error('data overflow');
+          DataEnsure(1);
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
         idx := DataLen;
         for i := 0 to 31 do
         begin
-          if DataLen >= MAX_DATA then Error('data overflow');
+          DataEnsure(1);
           Data[DataLen] := 0;
           Inc(DataLen);
         end;

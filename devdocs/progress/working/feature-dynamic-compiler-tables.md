@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: ""
 blocked-by: []
-summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars. STILL FIXED: Data (MAX_DATA, 2 MB), Strs (MAX_STRS), TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. TWO STANDING CONSTRAINTS ON THE REMAINING FAMILIES, greps already done: (1) MAX_DATA has a use that is NOT a bound -- symtab.inc:5548 degrades gracefully to runtime init near the cap, so converting Data DELETES a silent fallback; (2) STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so TokChars needs that constant SPLIT before it can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
+summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars, Data. STILL FIXED: Strs (MAX_STRS, NOW REACHABLE AND THEREFORE NEXT), TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. 2026-09-06: Data converted, 2 MB (90066100 -> 87985348), and it settled a coupling the ticket''s own grep method CANNOT see: TWO TABLES CAN SHARE A CEILING WITHOUT SHARING A CONSTANT. Every string literal costs 32 bytes of managed-string header plus its 8-aligned text, so MAX_DATA (2 MB) capped the string table at ~52108 entries and MAX_STRS (65536) WAS UNREACHABLE -- `Error(''string table overflow'')` was a guard that could not fail. Proven by the SAME 66000-literal input answering `data overflow` before and `string table overflow` after. Converting Strs was worth nothing before this and is load-bearing now. The conversion also segfaulted first: five byte runs and two constant-offset writes reach Data with no overflow check at all, because a fixed bss array never needed one. METHOD ADDITION: after converting a table, enumerate its WRITE sites, not its CAP sites -- the cap sites were already thinking about the limit. STILL STANDING FOR TokChars: STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so that constant must be SPLIT before TokChars can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
 ---
 
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
@@ -555,3 +555,83 @@ Which is the actual lesson about the check: it fires on slug adjacency and it
 will keep firing, so it cannot be closed by being right once — but a report that
 is wrong about *blocking* was still right about *staleness*, and the ticket had
 a sentence that had quietly become untrue. Read it; do not act on it.
+
+## 2026-09-06 (frankH) — Data converted, and it exposed a guard that could not fail
+
+`Data : array[0..MAX_DATA-1] of Byte` (2 MB reserved in bss) → `array of Byte`,
+grown by a single helper `DataEnsure(n)` in `util.inc` (included after
+`lexer.inc`, where `Error` lives, and before every user). `MAX_DATA` deleted.
+
+**bss 90066100 → 87985348**, the 2 MB.
+
+### The two tables were coupled, and the ticket's own method could not see it
+
+The prescribed step is *grep the `MAX_` name across `compiler/**`*. That found 26
+`MAX_DATA` hits and zero connection to the string table — **because the coupling
+is not an identifier, it is arithmetic between two independent constants.**
+
+Measured, on the pre-change compiler:
+
+- every string literal costs `32 + align8(len+1)` bytes of `Data` — a 32-byte
+  managed-string header (`size`/`meta`/`rc`/`len`) so the literal doubles as a
+  managed handle, which `InternStr` documents deliberately. Confirmed linear
+  across five lengths: len 3/11/19/27/35 → 40/48/56/64/72 bytes.
+- so the floor is **40 bytes per entry**, and `MAX_DATA` = 2097152 caps the
+  string table at ~52108 entries.
+- `MAX_STRS` is **65536**. It is 13000 short of ever being reached.
+
+Confirmed by running it, not by the arithmetic: 52000 literals compile at
+`data=2092792`; **52200 answers `error: data overflow`**; 66000 answered
+`data overflow` too. `emit.inc`'s `Error('string table overflow')` was
+**a guard that cannot fail**, and it had no way to say so.
+
+**After the conversion the same 66000-literal input answers
+`error: string table overflow`.** That is the positive control for the whole
+claim: the identical input moved from one cap's message to the other's, which is
+the only evidence that could distinguish "MAX_STRS was unreachable" from
+"I never aimed at it". `Strs` is therefore the next family and it is now load
+bearing, where before converting it would have changed nothing observable.
+
+Generalisation for the remaining families: **two tables can share a ceiling
+without sharing a constant.** Grep finds shared identifiers; it cannot find a
+shared *resource*. Before converting a table, ask what else consumes the thing
+its cap is denominated in.
+
+### The one MAX_DATA use that was not a bound
+
+`symtab.inc` had `if base + n * esz >= MAX_DATA then Exit;` — a **policy
+threshold**, not an array bound. Near the 2 MB reserve, the typed-const-array
+promotion silently gave up and left the array on the startup-store path, i.e.
+the ~29-bytes-of-code-per-element treatment that optimisation exists to delete,
+with **no diagnostic**. The function fails closed (`Result := False` default), so
+this read as "not eligible". Now `DataEnsure(base - DataLen + n * esz)`:
+promotion no longer depends on how much `.data` the rest of the compile used
+first. Behaviour change, deliberate, in the direction the optimisation wants.
+
+### What the conversion actually broke, and how it was found
+
+The first build **segfaulted in round 2**. Cause: writes into `Data` that never
+went through an overflow check at all, because with a fixed bss array they never
+needed one. A grown array is nil until asked.
+
+- `compiler.pas` writes `Data[MINUS_OFFSET]` and `Data[NEWLINE_OFFSET]` at
+  **constant offsets** after setting `DataLen := STR_INIT_OFFSET` — the one
+  place that needs the buffer to exist before anything appends.
+- five unguarded byte runs — `'True'`/`'False'`/`'None'`/`'<object>'`
+  (`ir_codegen.inc`), the 16-byte RTTI/layout backlink and the VMT zero-fill
+  (`pyparser.inc`), the 8-byte GOT slot (`symtab.inc`).
+
+**The grep that finds these is not the `MAX_` grep** — it is *every write to the
+table, and does an ensure dominate it*. Scripted, not eyeballed, because the
+failure is silent for any run that stays under the initial 64 KB reserve: this
+class only crashes once the table is big, which is exactly the input nobody runs.
+Add to the method: **after converting a table, enumerate its WRITE sites, not its
+CAP sites.** The cap sites are the ones that were already thinking about the
+limit; the write sites are the ones that never had to.
+
+`DataEnsure` also zeroes the newly grown region explicitly. Bytes at or past
+`DataLen` **are read before being written** — the static-array path aligns `base`
+up from `DataLen` and never writes the padding — and the old array was bss, i.e.
+zero by construction. `SetLength` is specified to zero new elements; the loop
+states the property rather than inheriting it, because a garbage alignment byte
+lands in `.data` silently and nothing in this compiler asserts on `.data` padding.

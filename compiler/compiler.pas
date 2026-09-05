@@ -2097,6 +2097,13 @@ begin
   CurTok.Line := 1;
   ValidateBuiltinRecordLayout;
   CodeLen  := 0;
+  { The fixed low block of .data -- INTBUF, then the two single bytes below --
+    is written at CONSTANT offsets, never through DataLen, so it is the one
+    place that needs the buffer to exist before anything appends to it. With
+    the old fixed array this was free; a grown array is nil until asked.
+    feature-dynamic-compiler-tables }
+  DataLen      := 0;
+  DataEnsure(STR_INIT_OFFSET);
   DataLen      := STR_INIT_OFFSET;
   SpacesOffset := -1;
   Data[MINUS_OFFSET]   := Ord('-');

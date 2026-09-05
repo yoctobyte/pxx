@@ -2749,13 +2749,13 @@ begin
   { emit the folded mask }
   while (DataLen mod 8) <> 0 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0; Inc(DataLen);
   end;
   idx := DataLen;
   for i := 0 to 31 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := mask[i]; Inc(DataLen);
   end;
   Result := idx;
@@ -6827,7 +6827,7 @@ begin
           (bug-a-class-managed-fields-not-finalized-on-destroy). }
         for i := 0 to 15 do
         begin
-          if DataLen >= MAX_DATA then Error('data overflow');
+          DataEnsure(1);
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
@@ -6837,7 +6837,7 @@ begin
         if vmtSlots < 1 then vmtSlots := 1;
         for i := 0 to vmtSlots * 8 - 1 do
         begin
-          if DataLen >= MAX_DATA then Error('data overflow');
+          DataEnsure(1);
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
@@ -6883,7 +6883,7 @@ begin
             if mmi < 0 then Error('class does not implement interface method: ' + imName);
             imProc := UMthProc_[mmi];
             AddMethodFix(DataLen, imProc);
-            for i := 0 to 7 do begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := 0; Inc(DataLen); end;
+            for i := 0 to 7 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;
           end;
         end;
       end

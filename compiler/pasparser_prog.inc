@@ -489,7 +489,7 @@ begin
     materialises one). }
   for i := 0 to 15 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
@@ -504,7 +504,7 @@ begin
   if vmtN < 1 then vmtN := 1;
   for i := 0 to vmtN * 8 - 1 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;

@@ -32,7 +32,7 @@ end;
 
 procedure DataPutB(v: Byte);
 begin
-  if DataLen >= MAX_DATA then ErrorNoPos('data overflow');
+  DataEnsure(1);
   Data[DataLen] := v;
   Inc(DataLen);
 end;

@@ -5611,7 +5611,16 @@ begin
   end;
 
   base := AlignTo(DataLen, TypeAlign(elemTk));
-  if base + n * esz >= MAX_DATA then Exit;   { out of data space: keep the old path rather than fail the compile }
+  { WAS `if base + n * esz >= MAX_DATA then Exit` -- the ONE use of MAX_DATA in
+    the compiler that was not an array bound. It was a POLICY threshold: near
+    the 2 MB reserve this promotion silently gave up and left the array on the
+    startup-store path, so a large typed const array quietly got the +29
+    bytes-of-code-per-element treatment this whole optimisation exists to
+    avoid, with no diagnostic. Data grows now, so the condition is permanently
+    false and the fallback is gone -- promotion no longer depends on how much
+    .data the rest of the compile happened to use first.
+    feature-dynamic-compiler-tables }
+  DataEnsure(base - DataLen + n * esz);
   for k := firstPI to PendingInitCount - 1 do
   begin
     v := PendingInitVal[k];
@@ -14222,6 +14231,7 @@ begin
     extIdx := ExternalCount;
     ExternalProc[extIdx] := procIdx;
     ExternalGotOff[extIdx] := DataLen;
+    DataEnsure(8);
     for i := 0 to 7 do
     begin
       Data[DataLen] := 0;

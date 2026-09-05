@@ -249,3 +249,40 @@ begin
     Inc(TokCharLen);
   end;
 end;
+
+{ THE .data IMAGE GROWS ON DEMAND. `Data` was `array[0..MAX_DATA-1] of Byte`
+  (2 MB reserved in bss), and MAX_DATA was a REACHABLE ceiling: measured
+  2026-09-06, a C program with 52200 distinct short string literals answers
+  `error: data overflow` while 52000 compiles at data=2092792. That is not an
+  exotic input -- every string literal costs 32 bytes of managed-string header
+  plus its 8-aligned text (see InternStr), so 2 MB is ~52k literals and nothing
+  else in .data.
+
+  WHY THE STRING TABLE'S OWN CAP COULD NEVER FIRE, which is the reason these two
+  tables move together in the ticket even though no constant is shared:
+  MAX_STRS is 65536 and every entry costs at least 40 bytes of Data, so DataLen
+  overflowed at ~52108 entries and `Error('string table overflow')` in InternStr
+  was unreachable -- a guard that cannot fail. Converting Data makes it reachable
+  for the first time. The coupling is arithmetic BETWEEN two independent
+  constants, so the ticket's prescribed `grep the MAX_ name` cannot see it:
+  the two tables share a resource, not an identifier.
+
+  Callers keep their own `DataEnsure(n)` immediately before their own write, so
+  the guard stays exactly where the overflow check was and nothing is hoisted.
+  feature-dynamic-compiler-tables }
+procedure DataEnsure(n: Integer);
+var oldCap, i: Integer;
+begin
+  if DataLen + n <= DataCap then Exit;
+  oldCap := DataCap;
+  if DataCap = 0 then DataCap := 65536;
+  while DataCap < DataLen + n do DataCap := DataCap * 2;
+  SetLength(Data, DataCap);
+  { Bytes at or past DataLen ARE read before being written: symtab.inc's
+    static-array initialiser path aligns `base` up from DataLen and never writes
+    the padding, and the old fixed array was bss, i.e. zero by construction.
+    SetLength is specified to zero new elements; this loop states the property
+    rather than inheriting it, because a garbage alignment byte lands in .data
+    silently and no assertion in this compiler reads .data padding. }
+  for i := oldCap to DataCap - 1 do Data[i] := 0;
+end;

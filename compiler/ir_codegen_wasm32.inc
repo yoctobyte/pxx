@@ -4837,7 +4837,7 @@ begin
   WasmLateDataCell[WasmLateDataCount] := DataLen;
   for i := 0 to 7 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;

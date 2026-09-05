@@ -67,7 +67,6 @@ const
   FROZEN_CSTR_CAP = 255;
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
-  MAX_DATA    = 2097152;      { 2 MB }
   { Was 8192, an outlier nobody had revisited: its neighbours in this block are
     MAX_SYMS/MAX_FIXUPS 131072 and MAX_PROCS/MAX_USES_EDGES 16384, and it sat
     16x below the symbol table beside it with no comment justifying it. A
@@ -3104,8 +3103,12 @@ var
     it says, and the pad is not code, so nothing true is being hidden. }
   CodePadStart : Integer;
 
-  Data    : array[0..MAX_DATA-1] of Byte;
+  { Grown on demand by DataEnsure (util.inc) -- see the note there for why the
+    2 MB fixed reserve was a REACHABLE ceiling and why it masked MAX_STRS.
+    feature-dynamic-compiler-tables }
+  Data    : array of Byte;
   DataLen      : Integer;
+  DataCap      : Integer;
   SpacesOffset : Integer;  { -1 = not yet allocated; set lazily on first :width use }
 
   BSSSize : Integer;

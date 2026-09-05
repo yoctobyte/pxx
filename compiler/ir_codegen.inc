@@ -709,7 +709,7 @@ begin
 
   for i := 0 to 19 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
@@ -840,7 +840,7 @@ begin
 
   for i := 0 to 19 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
@@ -864,7 +864,7 @@ begin
   AnonDynArrayElSize[anonIdx] := Integer(IRIVal[node]);
   for i := 0 to 19 do
   begin
-    if DataLen >= MAX_DATA then Error('data overflow');
+    DataEnsure(1);
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
@@ -5480,6 +5480,7 @@ begin
 
   { bool: 0/1 -> False/True (Python spelling — the .npy print path; a Pascal
     writeln of a Variant-held bool matches FPC's True/False rendering) }
+  DataEnsure(9);   { 'True' + 'False', written a byte at a time below }
   trueOff := DataLen;
   Data[DataLen] := Ord('T'); Inc(DataLen);
   Data[DataLen] := Ord('r'); Inc(DataLen);
@@ -5545,6 +5546,7 @@ begin
   Patch32(pNone, CodeLen - (pNone + 4));
   if PyProgramMode then
   begin
+    DataEnsure(4);   { 'None' }
     noneOff := DataLen;
     Data[DataLen] := Ord('N'); Inc(DataLen);
     Data[DataLen] := Ord('o'); Inc(DataLen);
@@ -5559,6 +5561,7 @@ begin
   { object slot: CPython prints `<__main__.C object at 0x…>`, whose address
     cannot be diffed against an oracle — but a BLANK line is worse than a
     visible placeholder for anyone debugging. }
+  DataEnsure(8);   { '<object>' }
   objOff := DataLen;
   Data[DataLen] := Ord('<'); Inc(DataLen);
   Data[DataLen] := Ord('o'); Inc(DataLen);
@@ -11730,7 +11733,7 @@ begin
         AnonDynArrayElSize[anonIdx] := slElemSize;
         for i := 0 to 19 do
         begin
-          if DataLen >= MAX_DATA then Error('data overflow');
+          DataEnsure(1);
           Data[DataLen] := 0;
           Inc(DataLen);
         end;

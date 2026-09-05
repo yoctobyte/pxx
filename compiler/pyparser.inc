@@ -34771,12 +34771,14 @@ begin
     same layout the Pascal path reserves, so an instance can reach its class RTTI
     at [[instance+0] - 8] and its managed-field layout at [[instance+0] - 16].
     Keep the two in step. }
+  DataEnsure(16);
   for i := 0 to 15 do
   begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
   UClsVMTOffset[ci] := DataLen;
+  DataEnsure(UClsVirtCount[ci] * 8);
   for i := 0 to UClsVirtCount[ci] * 8 - 1 do
   begin
     Data[DataLen] := 0;
