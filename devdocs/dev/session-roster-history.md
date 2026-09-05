@@ -28290,3 +28290,63 @@ instrument rather than the outcome:** extracting `ArrTypeDimList` made the missi
 site visible **in the same commit that fixed it**. A diff of callers is blind to
 absence because absence has no text; a callee has a name, and every site that
 should reference it and does not is a grep away.
+
+### A CLASS RETIREMENT READ AS A TIER VERDICT — scoped by its own author
+
+frankZ, correcting itself before anyone challenged it. When it reported the
+TMethod retirement condition firing at `c1fe3e414d25`, **that was true of the
+class it names** — `grep -c TMethod` = 0 on the first full tier after pin v404 —
+**and it let that read as a statement about the tier.** It was not:
+`c1fe3e414d25` is RED.
+
+**Three consecutive full tiers are red at the same 14 jobs** (`580d703b62ea`
+19:37, `c1fe3e414d25` 19:14, `fd2e90d` 19:00; red lines 68 → 30 at `fd2e90d`,
+flat since), **and there is NO NEW-RED section in any of them.** Nothing
+regressed in these runs — **the tier is red on a standing population, not a fresh
+break.** So the umbrella is further from done than reported, said on the record
+rather than quietly revised.
+
+> **A retirement condition is a claim about a CLASS. A tier verdict is a claim
+> about a POPULATION.** The first can fire cleanly inside a red tier, and the
+> sentence that carries both is the one that misleads.
+
+### THE TSTATE INDEX'S ROLL-UP IS STALE AND POINTS AT A WEEK-OLD RANGE
+
+frankZ, flagging rather than working it. `TSTATE.md`'s **"Open regressions"**
+section lists two cascades — **18 jobs bad `154d1aa3fba6`, 42 jobs bad
+`b8e3b3010249`** — whose commit ranges resolve to the **Rust topic-branch merge
+of 2026-08-29.**
+
+**Reading the index's roll-up instead of the newest full report would have had
+someone bisecting a week-old range against today's reds.** And the aggregate does
+not error; it answers about a snapshot nobody retired.
+
+frankZ explicitly did **not** establish whether those cascades are genuinely open
+or merely never cleared from the aggregate, **and does not claim which** — which
+is the right shape: the finding is *"this section can mislead"*, not *"these are
+stale"*. Anyone reading that section should go to the newest full report first.
+
+### SIX RED JOB KEYS ARE NOT SIX FAILURES — a filed ticket meets its author
+
+Fourteen still-red jobs, four groups:
+
+| group | jobs |
+| --- | --- |
+| `compiler_srchash.sh` / `.pascal26.fixedpoint` | **6** — sqlite-threads ×4 (x86_64/i386/arm32/aarch64), test-uforth, test-emit-obj |
+| test-emit-obj | 3 — incl. xtensa `undefined reference to lwip_accept` |
+| test-pascal-conformance | 3 — shards 1, 4, 5 of 6 |
+| singletons | 3 — crtl_reachability.py, size-canary, test-fpjson |
+
+**The six-job group shares a job KEY, not necessarily a cause.**
+`tools/compiler_srchash.sh` is what `extract_src` picked as the source identity
+for six unrelated targets, and the `near:` text for all six is **the fixedpoint
+line PRECEDING the failure rather than the failure itself.**
+
+> **Six job keys are red; that is not yet six failures.** If it is one cause the
+> tier is 9 reds, not 14 — and if it is six, the grouping tells you nothing.
+
+That is `bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`
+— **frankZ's own filed ticket meeting it from the other side.** Measuring it
+before doing anything else is correct: **the denominator of the tier is unknown
+until it is settled**, and every plan built on "14 reds" is built on a count the
+instrument cannot yet support.
