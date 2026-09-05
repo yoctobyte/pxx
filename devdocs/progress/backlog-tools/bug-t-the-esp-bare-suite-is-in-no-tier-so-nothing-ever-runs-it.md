@@ -133,3 +133,22 @@ the same program building under `--platform=posix`.
 **Still Track T's to enrol** — `tools/testmgr.py` is T's file and this seat has
 not touched it. What changed is that the enrolment question now has a measured
 answer behind it instead of an estimate.
+
+## Enrolment BLOCKS a guard that wants to live here (frankS, 2026-09-05)
+
+`bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss` wants a
+size row, and `test-esp-bare` is its natural home. **I did not add one, and the
+reason is an ordering constraint T should have when it decides this ticket.**
+
+A size row written into a target that is in zero tiers would be **exactly as
+unwatched as the number it guards.** The ticket's complaint is "nothing watches
+this number"; adding an unenrolled row answers it on paper and changes nothing.
+
+That is not hypothetical here — it is this suite's own history repeating. The
+windowed-ABI canary was added to `test-esp-bare` and could not fail anything,
+which is what produced this ticket. Adding a size row now would be the **third**
+layer of the same defect, after the unenrolled target and the rows shadowed
+behind an earlier `exit 1`.
+
+**So the dependency runs enrolment → guard, not guard → enrolment.** Anyone who
+files a "add a size row" ticket should have it `blocked-by` this one.
