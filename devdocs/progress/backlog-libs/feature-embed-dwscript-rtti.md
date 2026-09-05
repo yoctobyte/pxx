@@ -7,7 +7,7 @@ type: feature
 status: backlog
 owner: ""
 blocked-by: []
-summary: "Vendor DWScript (MPL 1.1) and drive `dwsRTTIExposer`, which binds an arbitrary HOST OBJECT handed in from script -- the instance-taking typinfo spelling, by construction. PREMISE RE-MEASURED 2026-09-05 at c9cbcd292, compiler dc2853adbdf0, and the 2026-08-28 blocking analysis in the body is now STALE IN BOTH HALVES: (1) the blocker it names, bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, is `status: done`, and `GetPropInfo(AnObject, ''Name'')` now binds correctly -- measured against a published `Name`/`Count`, both the instance and class spellings resolve and GetOrdProp/GetStrProp through the returned PPropInfo return 42 and ''zaphod''. Nothing here is blocked on overload matching any more. (2) A segfault IS still reachable and it is NOT the one the body predicts: `lib/rtl/typinfo.pas` has no by-name `GetStrProp(Instance, PropName)` -- only `(instance: Pointer; p: PPropInfo)` -- while FPC''s typinfo does, so the FPC spelling every vendored consumer writes puts a string literal in the PPropInfo slot, which the compiler ACCEPTS (TypesCompatible grants tyPointer<-tyString for C bindings and cannot see the pointee) and then dereferences. So the real work is two things the old analysis never named: ADD the by-name typinfo overloads (Track B, the actual DWScript blocker), and stop a string literal binding to an unrelated typed pointer (Track P, filed separately, fix in hand). The vendoring half is untouched and unstarted."
+summary: "PREMISE FALSE, MEASURED 2026-09-05 BY ATTEMPTING THE TARGET at af8b53310 / compiler 450d7de641d8: `dwsRTTIExposer` DOES NOT USE `typinfo`. It uses Delphi EXTENDED RTTI -- 15 distinct `TRtti*` classes including `TRttiIndexedProperty` eight times -- and across all 102 units in Source/ exactly one file (dwsComp.pas) touches the classic GetPropInfo/GetStrProp API at all. Packages/ holds only Delphi packages, and dws.inc names FPC exactly twice, both `{$IFNDEF FPC}`. fpc 3.2.2 CANNOT COMPILE dwsRTTIExposer EITHER: it has TRttiContext/TRttiType but no TRttiIndexedProperty. pxxs lib/rtl/rtti.pas exports TRttiMethod and TRttiProc and has no TRttiContext at all. DONE ANYWAY AND STILL WORTH IT: lib/rtl/typinfo.pas gained the sixteen FPC by-name arms it was missing (GetStrProp(Instance, PropName) and siblings), verified byte-identical to FPCS OWN typinfo on every comparable row, and a stale ALL-CAPS warning in that unit claiming its TObject lookups crash was retracted after re-measuring under both HEAD and the PIN -- real FPC parity, one DWScript consumer (dwsComp.pas), and zero lines of dwsRTTIExposer moved. THE CORPUS WALL WAS A FLAG, NOT A GAP: the `{$IF CompilerVersion>21.0}` float-literal refusal both this ticket and feature-embed-pascal-script record sits inside `{$IFNDEF FPC}`, and --mimic-fpc removes it outright. With that flag the ONLY remaining wall is Delphi dotted unit-scope names -- 7 of 8 probed units stop at `unit source not found: system.classes`, and the 8th (dwsStrings) COMPILES CLEAN -- filed as [[feature-p-resolve-delphi-dotted-unit-scope-names]], with fpc 3.2.2 measured failing the same way. NEXT DECISION IS A SPLIT, NOT A DEMOTION: the DWScript core (100 of 102 units) is a live corpus target blocked on that one feature, while the RTTI exposer this ticket is NAMED for needs extended RTTI and is not startable. Nothing here is vendored."
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
@@ -274,3 +274,75 @@ compiler carrying the char-literal narrowing. **Under the current pin they still
 mis-resolve and crash**, so `test/lib_typinfo_byname.pas` is gated with
 `$(COMPILER)` and not `$(PXX_STABLE)`; it moves to the pinned `lib-test` set at
 the next pin. A Track B consumer built against the pin cannot use these arms yet.
+
+## 2026-09-05 (frankH), later — THE TARGET WAS ATTEMPTED, AND THE TICKET'S OWN PREMISE IS FALSE
+
+Everything above is about `typinfo`. Per the umbrella rule — grow by attempting
+the target, never by triaging — I cloned DWScript outside the repo and pointed
+pxx at it. **`dwsRTTIExposer` does not use `typinfo`.**
+
+Measured at HEAD `af8b53310`, compiler `450d7de641d8`, against
+`github.com/EricGrange/DWScript` (shallow clone, scratchpad, not vendored):
+
+- `dwsRTTIExposer.pas` (1088 lines) declares
+  `uses System.Classes, System.SysUtils, System.RTTI, System.TypInfo, ...` and
+  uses **15 distinct `TRtti*` classes** — `TRttiType` ×17, `TRttiMethod` ×13,
+  `TRttiProperty` ×8, **`TRttiIndexedProperty` ×8**, `TRttiParameter`,
+  `TRttiInstanceType`, `TRttiDynamicArrayType`, `TRttiSetType`,
+  `TRttiRecordType`, `TRttiInterfaceType`, `TRttiEnumerationType`, `TRttiField`,
+  `TRttiNamedObject`, `TRttiMember`, `TRttiContext`. That is Delphi's **extended
+  RTTI object model**, not the classic `GetPropInfo`/`GetStrProp` API.
+- Across all 102 units in `Source/`, exactly **one** file uses the classic
+  typinfo accessors at all: `dwsComp.pas`.
+- `Packages/` holds **only Delphi packages** (D2009, D2010, DXE…DXE7, D10Rio,
+  D11, D11.1). There is no Lazarus/FPC package. `dws.inc` names FPC exactly
+  **twice**, both `{$IFNDEF FPC}` — FPC is a case it excludes, not one it
+  supports. The ticket body's own line 23 already said *"Delphi-leaning; FPC
+  support weaker than Pascal Script"*; the summary asserted the opposite in
+  stronger words, and the summary is the part everyone reads.
+- **fpc 3.2.2 cannot compile `dwsRTTIExposer` either.** It has `TRttiContext` and
+  `TRttiType` — a probe resolving `TObject` runs and prints `TObject` — and it
+  has **no `TRttiIndexedProperty`** (`Error: Identifier not found`), which that
+  unit needs eight times.
+- pxx's `lib/rtl/rtti.pas` is 294 lines and exports `TRttiMethod` and
+  `TRttiProc`. There is no `TRttiContext`; `TRttiContext.Create` does not parse.
+
+**So the by-name typinfo work above was worth doing and is not what this ticket
+needed.** It is real FPC parity, it is differentially verified, and `dwsComp.pas`
+is one of its consumers — but it does not move `dwsRTTIExposer` one line.
+
+### The wall the corpus actually hits, and it was a FLAG, not a gap
+
+Both this ticket and [[feature-embed-pascal-script]] record stopping on a `{$IF}`
+comparison — pxx answers `conditional directive: float literals not supported`
+on `{$IF CompilerVersion>21.0}`. **That is not a compiler gap.** Those directives
+sit inside `{$IFNDEF FPC}`, so a compiler that defines `FPC` never evaluates
+them: `--mimic-fpc` removes the wall outright, measured on four units. The
+pascal-script ticket's note that uPSRuntime *"stops earlier on a `{$IF}`
+comparison"* should be re-measured with that flag before anyone treats it as a
+blocker.
+
+With `--mimic-fpc -Mdelphi`, the next and only wall is **Delphi dotted
+unit-scope names**: 7 of 8 probed units stop at `unit source not found:
+system.classes` / `system.sysutils`, and the eighth, `dwsStrings`, **compiles
+clean**. Filed as [[feature-p-resolve-delphi-dotted-unit-scope-names]], with the
+measurement that fpc 3.2.2 fails identically and that `pxxlib.cfg` — the
+per-directory manifest this repo already has — is the right home for the alias
+table.
+
+### What this ticket should become
+
+Not a recommendation I can make alone, so both readings are stated:
+
+1. **The DWScript CORE** (compiler, symbols, runtime — 100 of the 102 units) is a
+   legitimate corpus target and is blocked on exactly one nameable feature, now
+   filed. That half is alive and is worth its prio.
+2. **`dwsRTTIExposer` specifically is not reachable** and will not be until pxx
+   has Delphi extended RTTI, which is a large feature our own oracle only partly
+   has. A ticket whose TITLE is the RTTI exposer is ranked for work nobody can
+   start.
+
+The honest move is to split them rather than to demote or reject the whole: the
+core is a good target, the exposer is a different and much larger one. Left for
+whoever picks this up, because choosing between "one ticket re-scoped" and "two
+tickets" is a judgement about the backlog's shape rather than a measurement.
