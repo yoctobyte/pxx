@@ -1504,6 +1504,286 @@ def apply_host_tool_skips(jobs, absent):
     return n
 
 
+# ---- host DEVELOPMENT LIBRARY requirements ---------------------------------
+# The THIRD face of one guard: the silicon (HOST_CAPS), then $PATH (host tools
+# above), and now the filesystem's development headers. Same argument each
+# time -- a prerequisite that cannot be satisfied should announce itself, not
+# be reported as a defect in the code.
+#
+# MEASURED 2026-09-05, and the bill is eighteen tickets. seven's dist-upgrade
+# REMOVED libgtk2.0-dev and libgtk-3-dev (installed 08-29, gone during
+# 15:20-17:30, reinstalled by hand 17:59:31). Five test-core jobs went RED at
+# 17:58:11 and auto-filed at 17:58:16 -- 75 seconds before the reinstall. That
+# was the FOURTH batch wearing those same five names; the other three had three
+# different real causes, and folding them together would have erased two
+# genuine fixes. A red asserts "the tree is broken"; a skip says "this was not
+# measured here". Only the second is true when a package is missing.
+#
+# THE PATHS ARE DERIVED FROM THE COMPILER, NEVER RESTATED. If this guard
+# carried its own copy of the search roots it would drift the moment the
+# compiler moved one, and a guard probing a path nothing uses passes every job
+# forever -- the exact failure this whole family exists to prevent. Only the
+# PACKAGE NAMES are restated, because the compiler does not know them and they
+# are the actionable half.
+DEV_PKG_BY_ROOT = [
+    ("/usr/include/gtk-3.0", "libgtk-3-dev"),
+    ("/usr/include/gtk-2.0", "libgtk2.0-dev"),
+    ("/usr/include/glib-2.0", "libglib2.0-dev"),
+    ("/usr/include/pango-1.0", "libpango1.0-dev"),
+    ("/usr/include/cairo", "libcairo2-dev"),
+]
+# Where `uses <name>` lands when nothing in the tree matches. frankD traced it
+# with strace rather than reading it: the resolver misses the source dir,
+# lib/rtl, lib/pcl, lib/asmcore, compiler/builtin and lib/crtl/include in
+# order, then opens this absolute path. A test/my_gtk.h in the same directory
+# is NOT consulted -- the resolver looks for <name>.pas/.pp/.c/.h and never a
+# my_* spelling, and the test still compiles from a directory that has none.
+_USES_FALLBACK_RE = re.compile(
+    r"ConcatThree\(\s*'([^']*)'\s*,\s*cName\s*,\s*'\.h'")
+UNIT_SEARCH_DIRS = ("lib/rtl", "lib/pcl", "lib/asmcore", "compiler/builtin",
+                    "lib/crtl/include")
+_DASH_I_RE = re.compile(r"-I(/usr/include/[^\s'\"]+)")
+# The unit search path is ON THE COMMAND LINE, not in a list I can keep here.
+# `-Futest/chdrstatic` / `-Itest/chdrstatic` is how test-local units resolve,
+# and a static UNIT_SEARCH_DIRS missed 47 of them -- every one a FALSE SKIP.
+_DASH_FU_RE = re.compile(r"-(?:Fu|I)([^\s'\"]+)")
+_XVFB_RE = re.compile(r"\bxvfb-run\b")
+_USES_RE = re.compile(r"^\s*uses\s+([^;]+);", re.I | re.M)
+
+
+def _strip_pascal_comments(text):
+    """Comments and string literals blanked, newlines kept. -> str
+
+    Because `uses` is an ENGLISH WORD and this file's own tests are full of
+    prose. Two jobs survived every other rule by matching "Uses only the
+    language surface that ALL backends support today" in a header comment,
+    which yielded `i386` as a unit name and would have SKIPPED the
+    cross-portable conformance harness on a healthy box. Newlines are
+    preserved so the ^-anchored scan still sees real line starts.
+    """
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "{":
+            j = text.find("}", i)
+            j = n if j < 0 else j + 1
+        elif c == "(" and text[i:i + 2] == "(*":
+            j = text.find("*)", i + 2)
+            j = n if j < 0 else j + 2
+        elif c == "/" and text[i:i + 2] == "//":
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+        elif c == "'":
+            j = text.find("'", i + 1)
+            j = n if j < 0 else j + 1
+        else:
+            out.append(c)
+            i += 1
+            continue
+        out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+        i = j
+    return "".join(out)
+
+
+def uses_fallback_roots():
+    """EVERY absolute path `uses <name>` falls back to, in order. -> [str]
+
+    ALL of them, not the first. The resolver tries `/usr/include/<name>.h` and
+    then `/usr/include/gtk-2.0/gtk/<name>.h`, and frankD's strace shows the
+    first missing and the second opening. A guard that checked only the first
+    would declare the dependency absent while the unit resolves perfectly --
+    a FALSE SKIP, which is worse than the false red it replaces because a red
+    is loud and a skip is silent.
+
+    An empty list is a FAILURE the caller must report, not a reason to pass:
+    it means the compiler moved its fallbacks and this guard has stopped being
+    about anything. Read from pasparser_proc.inc so the two cannot disagree.
+    """
+    try:
+        with open(os.path.join(REPO, "compiler", "pasparser_proc.inc"),
+                  encoding="utf-8", errors="replace") as f:
+            src = f.read()
+    except OSError:
+        return []
+    return _USES_FALLBACK_RE.findall(src)
+
+
+def _pkg_for(path):
+    for root, pkg in DEV_PKG_BY_ROOT:
+        if path.startswith(root):
+            return pkg
+    return None
+
+
+_UNIT_DIR_CACHE = {}
+
+
+def _dir_lower(d):
+    """Lowercased filenames in one repo directory, cached. -> set
+
+    CASE-INSENSITIVELY, because Pascal is: `uses SysUtils` resolves
+    lib/rtl/sysutils.pas. A case-SENSITIVE check here reported 83 healthy jobs
+    as missing a host package on a box that has every package -- including
+    compiler/compiler.pas, the self-host job -- and every one of them would
+    have become a SILENT SKIP. Caught by a dry run over 2206 jobs before this
+    shipped; it is the exact "guard aimed at the wrong population" this whole
+    family is about, pointed at itself.
+    """
+    if d not in _UNIT_DIR_CACHE:
+        try:
+            _UNIT_DIR_CACHE[d] = {f.lower()
+                                  for f in os.listdir(os.path.join(REPO, d))}
+        except OSError:
+            _UNIT_DIR_CACHE[d] = set()
+    return _UNIT_DIR_CACHE[d]
+
+
+def _job_unit_dirs(job):
+    """Every unit search dir this job's own command line names.
+
+    -> tuple, or None meaning "not statically knowable, do not judge this job".
+
+    Derived from the recipe rather than restated here, for the same reason
+    the fallback roots are read out of the compiler: a list of directories
+    maintained beside the thing it describes goes stale silently, and stale
+    here means the guard reports a unit ABSENT that the compiler resolves --
+    a skip, and a skip is invisible.
+    """
+    out = []
+    for ln in job.lines:
+        for d in _DASH_FU_RE.findall(ln):
+            if "$" in d or "`" in d:
+                # A search path the SHELL computes -- test-core's fgl rung
+                # builds -Fu$fglsrc from whichever corpus tree exists. I
+                # cannot evaluate it, and "I cannot evaluate it" must mean DO
+                # NOT SKIP: an unknown path is not an absent one, and this
+                # guard's mistakes are silent while the red it replaces is
+                # loud. That job also does its own absence check already.
+                return None
+            if d.startswith("/usr/") or d in out:
+                continue
+            out.append(d)
+    return tuple(out)
+
+
+def _in_tree_unit(name, srcdir, extra=()):
+    lo = name.lower()
+    for d in (srcdir,) + tuple(extra) + UNIT_SEARCH_DIRS:
+        names = _dir_lower(d)
+        for ext in (".pas", ".pp", ".c", ".h", ".inc"):
+            if lo + ext in names:
+                return True
+    return False
+
+
+def missing_dev_requirement(job, fallback_roots):
+    """What this job needs from the host and cannot get. -> (what, pkg) or None.
+
+    Three rules, each derived from text in the tree rather than from a list of
+    test names -- an exclusion list is the part that rots, and the population
+    here is already four packages across three profiles, so a single flag was
+    never going to fit it.
+
+    THIS ARM OWNS *ABSENT*, AND ONLY ABSENT. It never runs the job, so it
+    cannot tell a dependency that is missing from one that is present and
+    broken -- and that is a property of a precondition check, not a gap to
+    close. A guard that ran the job to find out would BE the job. "Present and
+    failing" belongs to the job itself, which is where tls13_handshake_devtest
+    puts it: exit 2, with the tool's own stderr quoted. Two mechanisms because
+    there are two findings. Do not "fix" this one by making it execute things.
+
+    WHEN IN DOUBT, DO NOT SKIP. The failure this guard adds is SILENT and the
+    failure it removes is LOUD, so the default has to lean toward the loud one.
+    An unevaluable path (a -Fu the shell computes) is an unknown path, not an
+    absent one, and the tempting answer -- treat unknown as absent -- converts
+    a red that someone reads into a skip that nobody does.
+    """
+    for ln in job.lines:
+        for inc in _DASH_I_RE.findall(ln):
+            if not os.path.isdir(inc.rstrip("/")):
+                return (inc, _pkg_for(inc))
+        if _XVFB_RE.search(ln) and not shutil.which("xvfb-run"):
+            return ("xvfb-run on PATH", "xvfb")
+    if not fallback_roots:
+        return None
+    for src in job.lines:
+        for tok in src.split():
+            if not tok.endswith(".pas"):
+                continue
+            path = os.path.join(REPO, tok)
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, encoding="utf-8",
+                          errors="replace") as f:
+                    text = f.read()
+            except OSError:
+                continue
+            srcdir = os.path.dirname(tok) or "."
+            extra = _job_unit_dirs(job)
+            if extra is None:
+                return None
+            for m in _USES_RE.finditer(_strip_pascal_comments(text)):
+                for name in (u.strip() for u in m.group(1).split(",")):
+                    if not name or not re.match(r"^[A-Za-z_]\w*$", name):
+                        continue
+                    if _in_tree_unit(name, srcdir, extra):
+                        continue
+                    # The compiler expresses in-tree roots (lib/rtl/, ...)
+                    # and absolute ones in the same call, so a relative root
+                    # is repo-relative and must be joined -- otherwise it is
+                    # resolved against the CWD and never found, and the guard
+                    # skips a job whose unit is sitting in the tree.
+                    cand = [r if os.path.isabs(r)
+                            else os.path.join(REPO, r)
+                            for r in fallback_roots]
+                    cand = [os.path.join(r, name + ".h") for r in cand]
+                    if any(os.path.exists(c) for c in cand):
+                        continue
+                    # Name the root that WOULD have supplied it -- the bare
+                    # /usr/include/ arm is where every unresolved unit lands
+                    # and naming it would send the reader after the wrong
+                    # package. Prefer a root a package map recognises.
+                    named = ([c for c in cand if _pkg_for(c)] or cand)[-1]
+                    return (named, _pkg_for(named))
+    return None
+
+
+def apply_host_lib_skips(jobs):
+    """-> the number skipped. Ordered after the CPU and emulator guards for the
+    same reason those are ordered after the corpus one: a job already skipped
+    has a reason and the FIRST reason is the actionable one."""
+    roots = uses_fallback_roots()
+    if not roots:
+        print("testmgr: WARNING — the `uses` fallback root could not be read "
+              "from compiler/pasparser_proc.inc, so the dev-library guard is "
+              "checking only -I paths and xvfb. That is the guard losing its "
+              "aperture, not a clean tree.", flush=True)
+    n, seen = 0, {}
+    for j in jobs:
+        if j.status == "skip":
+            continue
+        need = missing_dev_requirement(j, roots)
+        if not need:
+            continue
+        what, pkg = need
+        j.status = "skip"
+        j.skip_reason = (
+            "host dev dependency absent: %s — this box does not have it, so "
+            "the job cannot pass here and a red would be a statement about "
+            "the box rather than about the tree%s"
+            % (what, "; install %s" % pkg if pkg else ""))
+        seen[pkg or what] = seen.get(pkg or what, 0) + 1
+        n += 1
+    if n:
+        print("testmgr: %d job(s) SKIPPED — absent host dev dependencies (%s). "
+              "That is coverage this box is not providing, not a verdict on "
+              "the tree."
+              % (n, ", ".join("%s x%d" % (k, v)
+                              for k, v in sorted(seen.items()))), flush=True)
+    return n
+
+
 CORPUS_ROOTS = [
     (CORPUS_RE, "library_candidates",
      "tools/install_lib_candidates.sh %s"),
@@ -5837,6 +6117,7 @@ def main():
     # corpus guard: a job already skipped has a reason, and the FIRST reason is
     # the actionable one.
     apply_host_tool_skips(jobs, missing_emulators())
+    apply_host_lib_skips(jobs)
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:

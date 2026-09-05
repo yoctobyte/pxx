@@ -118,3 +118,36 @@ A guard's assertion must be able to distinguish a RENAME from a DELETION. If it
 cannot, it will eventually report one as the other, and it does not get to
 choose which direction. See `devdocs/dev/debugging-playbook.md`, "a guard can be
 loudly wrong while RED".
+
+## 2026-09-05 (frankZ) — the same instrument, one polarity over: prose read as code
+
+This ticket's population is guards that read a code line's SPELLING and call it
+a behaviour. Building the dev-library skip path I produced the mirror image and
+it is worth recording here rather than in a new ticket, because it is the same
+instrument failing for the same reason: **a text scan cannot tell an assertion
+from a description of one.**
+
+`tools/testmgr.py`'s `uses` detector matched, in a header COMMENT:
+
+```
+  Uses only the language surface that ALL backends support today — no classes,
+  ...  output on x86-64, i386, ARM32 and AArch64 ...
+```
+
+and yielded the unit name `i386`, which resolves nowhere, which meant "this box
+is missing a development package", which meant **SKIP `test_conformance_2.pas`
+— the cross-portable conformance harness** — on a box that has every package.
+Silently, because a skip scores passlike.
+
+**Where this one differs from the thirteen, and it is the part that generalises:**
+those guards read the RIGHT file and asked it a question it could not answer.
+This read the right file and could not tell which REGION of it was source. The
+fix is not a better regex — it is stripping comments and string literals before
+scanning at all (`_strip_pascal_comments`), i.e. **deciding what is source
+before asking what it says.** Any guard that greps a source file for a language
+construct has this hole; `uses`, `type`, `var`, `begin` and `end` are all
+ordinary English or ordinary prose punctuation in a comment block.
+
+Not fixed here for the thirteen — this is one data point on the same mechanism,
+filed so the census has it. The dev-library guard's own version is fixed and
+carries a positive control (`tools/host_dev_lib_skip_devtest.py` section 7).
