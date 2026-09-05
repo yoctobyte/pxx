@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d8h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `6758c7ce7dbd` | 2026-09-05T18:37:38Z | RED (native) | 149.4s | `b8e3b3010249` RED |
+| seven | `6758c7ce7dbd` | 2026-09-05T18:47:32Z | RED (full) | 540.9s | `6758c7ce7dbd` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b8e3b3010249` on seven, 2026-09-04T18:47:37Z (23h ago).**
+**Newest full tier in the fleet: `6758c7ce7dbd` on seven, 2026-09-05T18:47:32Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `b8e3b3010249` | RED | 23h | — (newest) |
-| plexus | `27424c927b65` | RED | 6d8h | 5d8h |
+| seven | `6758c7ce7dbd` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 6d8h | 6d8h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -90,6 +90,33 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-pascal-conformance#shard5/6`
   </details>
 - **test-core#src:test/strict_fpc_case_fail.pas** — test/strict_fpc_case_fail.pas test/test_record_self_field_fail.pas +5 (seven): bad `f2c6ff3288b4`, last good `7867c5481c01`, 2 commit(s) in range
+- **CASCADE 23 jobs** (seven): bad `6758c7ce7dbd`, last good `b8e3b3010249`, 105 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-emit-obj#src:test/c_obj_data_dup_a.c`
+  - `test-emit-obj#src:test/test_emit_obj.pas@3`
+  - `test-emit-obj#src:tools/compiler_srchash.sh`
+  - `test-pascal-conformance#shard1/6`
+  - `test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh`
+  - `test-sqlite-threads-arm32#src:tools/compiler_srchash.sh`
+  - `test-sqlite-threads-i386#src:tools/compiler_srchash.sh`
+  - `test-sqlite-threads-x86_64#src:tools/compiler_srchash.sh`
+  - `test-uforth#src:tools/compiler_srchash.sh@1`
+  - `test-uforth#src:tools/compiler_srchash.sh@10`
+  - `test-uforth#src:tools/compiler_srchash.sh@11`
+  - `test-uforth#src:tools/compiler_srchash.sh@12`
+  - `test-uforth#src:tools/compiler_srchash.sh@13`
+  - `test-uforth#src:tools/compiler_srchash.sh@2`
+  - `test-uforth#src:tools/compiler_srchash.sh@3`
+  - `test-uforth#src:tools/compiler_srchash.sh@4`
+  - `test-uforth#src:tools/compiler_srchash.sh@5`
+  - `test-uforth#src:tools/compiler_srchash.sh@6`
+  - `test-uforth#src:tools/compiler_srchash.sh@7`
+  - `test-uforth#src:tools/compiler_srchash.sh@8`
+  - `test-uforth#src:tools/compiler_srchash.sh@9`
+  - `test-xtensa#src:test/test_cross_record.pas@3`
+  - `test-zlib#src:tools/compiler_srchash.sh`
+  </details>
 
 ## Held — quiet hosts (not actionable)
 
