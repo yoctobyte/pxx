@@ -533,6 +533,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
     ptrCastElemTk: TTypeKind;   { element of a PChar/PWideChar cast — what `p^` and `p[i]` yield }
+    castEtid: Integer;   { enum type index of a `TEnum(x)` cast, else -1 — see the cast arm }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -4066,7 +4067,12 @@ begin
                   prevTok := SizeOfSlot(IntToTypeKind(AliasTk[aliasIdx]), AliasStrCap[aliasIdx]);
               end
               else if FindEnumType(name) >= 0 then
-                prevTok := TypeSlotSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
+                { THE THIRD COPY of "an enum is integer-sized", and the one a
+                  {$PACKENUM} fix would most easily miss: the record-field path
+                  reaches the width through ParseTypeKind's kind, so field
+                  OFFSETS come out right while SizeOf(TheType) keeps answering 4.
+                  Both were wrong here and only one was visible in a layout test. }
+                prevTok := TypeSlotSize(EnumStorageTypeKind(FindEnumType(name)))
               else
               begin
                 { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
@@ -7521,13 +7527,26 @@ begin
           { `string` is a KEYWORD, not one of the identifier-spelled builtins,
             so it stays here rather than joining the shared table. }
           if (castTk = tyUnknown) and CaseEqual(name, 'string') then castTk := tyString;
-          { Ordinal->enum typecast, TEnum(intExpr). Enums are integer-sized
-            ordinals (cf. ParseTypeKind / the SizeOf branch above), so the cast
-            is a plain integer reinterpret; the enum->ordinal direction already
-            worked via the Integer(...) case above.
-            See bug-integer-to-enum-typecast-undefined-variable. }
-          if (castTk = tyUnknown) and (FindEnumType(name) >= 0) then
-            castTk := tyInteger;
+          { Ordinal->enum typecast, TEnum(intExpr): a reinterpret at the enum's
+            OWN storage width, which under {$PACKENUM} is no longer always
+            integer-sized (cf. ParseTypeKind / the SizeOf branch above). The
+            enum->ordinal direction already worked via the Integer(...) case.
+            See bug-integer-to-enum-typecast-undefined-variable.
+
+            castEtid is captured HERE rather than re-derived below, because the
+            identity guard used to read `castTk = tyInteger` -- which was a
+            correct test only while every enum WAS tyInteger. Narrowing the kind
+            without moving that guard would have made `TSmall(i)` under
+            {$PACKENUM 1} lose its enum identity and print an ordinal, with
+            nothing failing: the same shape as NodeEnumIdOf naming one of five
+            call kinds. Two lines that must change together, so they hold one
+            value between them instead of agreeing by coincidence. }
+          castEtid := -1;
+          if castTk = tyUnknown then
+          begin
+            castEtid := FindEnumType(name);
+            if castEtid >= 0 then castTk := EnumStorageTypeKind(castEtid);
+          end;
 
           if castTk <> tyUnknown then
           begin
@@ -7600,10 +7619,12 @@ begin
             ASTIVal[node] := -1; { indicates built-in cast }
             ASTTk[node]   := Ord(castTk);
             { `TEnum(i)` — the cast target IS the value's enum type, and the
-              reinterpret to tyInteger is the only trace left of it. Keep the
-              identity or WriteLn prints the ordinal. FindEnumType answers -1
-              for `Integer(x)` and every other builtin spelling. }
-            if castTk = tyInteger then ASTEnumId[node] := FindEnumType(name);
+              reinterpret to its storage kind is the only trace left of it. Keep
+              the identity or WriteLn prints the ordinal. castEtid is -1 for
+              `Integer(x)` and every other builtin spelling, and is set only by
+              the enum arm above -- it does not ask what kind the cast became,
+              which is what let {$PACKENUM} narrow the kind safely. }
+            if castEtid >= 0 then ASTEnumId[node] := castEtid;
             { `Pointer(expr)^` — FPC's untyped deref, legal where only the
               ADDRESS matters (an untyped var/const argument: synautil's
               `Move(Pointer(Value)^, ...)` is the driving consumer). There is

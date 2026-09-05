@@ -557,6 +557,13 @@ function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function NodeEnumIdOf(node: Integer): Integer; forward;
+{ An enum's STORAGE WIDTH as a kind, and "is this declaration of that enum" --
+  bodies in pasparser_decl.inc, which compiler.pas includes AFTER the expression
+  and statement parsers that call them. Forwarded for FPC's single pass; pxx
+  prescans and does not need it, which is exactly why only the seed canary
+  catches a missing one. feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus }
+function EnumStorageTypeKind(etid: Integer): TTypeKind; forward;
+function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean; forward;
 function ParseVarRecLiteralAST: Integer; forward;
 function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer; forward;
 function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;

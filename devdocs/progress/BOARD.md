@@ -396,8 +396,8 @@ _none_
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause | P | 30 | feature | ExpandGenericMethod rewrites a generic method into one ordinary method per concrete type argument, and every edit it makes is at or ABOVE the class body. A program calling a USED UNIT\'s generic method is the shape where a use sits BELOW the declaration -- unit tokens are appended after the program\'s -- so the expansion bails out whole and the row still reports the old parse error. tgenfunc7 and tgenfunc9. The free ROUTINE already solved this, at the uses clause; the method needs the same move plus TokPos and DeclItem-span bookkeeping the routine did not. | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
+| feature-p-h-minus-makes-a-bare-string-a-shortstring | P | 45 | feature | {$H-} is accepted and ignored, so a bare `string` stays a managed 8-byte handle where the source asked for a 256-byte ShortString. MEASURED under {$mode objfpc}, which is the only mode where the directive bites: `record s: string; n: Integer` is 260 bytes under fpc 3.2.2 and 16 under pxx, and SizeOf(string) is 256 vs 8. It is line 3 of FPC 3.2.2's fpcdefs.inc, included by essentially every unit of that compiler, so this is the corpus-wide string model and not one file's opinion. Split out of feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus when the enum half landed; that ticket asked for exactly this measurement before scoping, and the answer is that the H half is real. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
-| feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus | P | 45 | feature | {$PACKENUM 1} and {$H-} are accepted and not implemented, and both are in the first nine lines of FPC 3.2.2's fpcdefs.inc — so every unit of the FPC compiler corpus is compiled with 4-byte enums and a longstring default where the source asked for 1-byte enums and shortstrings. Silent until 2026-09-04; the unknown-directive warning is what surfaced them. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 15 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
 | feature-pascal-corpus-passrc | P | 30 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
@@ -886,9 +886,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3305)
+## done (3306)
 
-3305 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3306 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1111,7 +1111,7 @@ _none_
 - [p 45] [N] feature-nilpy-methods-on-int-and-float
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 45] [N] feature-nilpy-threadsafe-containers
-- [p 45] [P] feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus
+- [p 45] [P] feature-p-h-minus-makes-a-bare-string-a-shortstring
 - [p 45] [A] refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel
 - [p 45] [A] refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths [parked — re-claim, do not duplicate]
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count

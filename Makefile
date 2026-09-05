@@ -6481,6 +6481,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_open_array_field_args.pas $(TESTTMP)/test_open_array_field26
 	tools/expect_same.sh test_open_array_field26 "$$($(TESTTMP)/test_open_array_field26)" "$$(printf '15 3\nhb=3 hd=15\ndirect: 42\nhb=3 hd=15\nindirect: 74\nhb=3 hd=15\nwith: 106')"
 	# {$SCOPEDENUMS}: scoped members + TEnum.member access (bug-pascal-scopedenums-ignored)
+	./$(COMPILER) test/test_packenum.pas $(TESTTMP)/test_packenum26
+	@# The .expected here is fpc 3.2.2's own output, byte for byte -- the enum
+	@# NAMES in it are the part that a layout-only test cannot check, and every
+	@# one of them printed an ordinal while {$$PACKENUM} narrowed the storage
+	@# kind out from under seven `kind = tyInteger` identity guards.
+	@$(TESTTMP)/test_packenum26 | diff -u test/test_packenum.expected - \
+	  || { echo 'test_packenum: FAIL - a packed enum stopped behaving like an enum'; exit 1; }
 	./$(COMPILER) test/test_scopedenums.pas $(TESTTMP)/test_scopedenums26
 	tools/expect_same.sh test_scopedenums26 "$$($(TESTTMP)/test_scopedenums26)" "$$(printf '0\n2\n1\ncase-ok')"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
@@ -23927,6 +23934,63 @@ test-record-abi-mixed-link: $(COMPILER)
 	  { echo "test-record-abi-mixed-link: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }; \
 	test -z "$$PXX_REQUIRE_ALL_TARGETS" || test "$$ran" = "$$want" || \
 	  { echo "test-record-abi-mixed-link: RED -- PXX_REQUIRE_ALL_TARGETS is set, $$want asked for, $$ran ran"; exit 1; }
+
+.PHONY: test-packenum-gcc-oracle
+test-packenum-gcc-oracle: $(COMPILER)
+	@# {$$PACKENUM n} and gcc's -fshort-enums are the same promise, so gcc built
+	@# TWICE is both the oracle and its own positive control: with the flag it
+	@# must match pxx's {$$PACKENUM 1} line, without it pxx's undirected line.
+	@# fpc cannot serve as the 32-bit oracle here -- ppc386 is not installed on
+	@# this host -- and gcc -m32 can, which is why the oracle is gcc.
+	@#
+	@# THE TWO LINES MUST DIFFER. pxx's default already agrees with gcc's
+	@# default, so line 2 would match even if the directive were accepted and
+	@# thrown away, which is precisely how this directive family failed before.
+	@# Only the packed line separates "implemented" from "swallowed".
+	@# feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus
+	@overall=0; ran=0; want=0; skipped=0; \
+	for t in x86_64 i386; do \
+	  want=$$((want+1)); \
+	  case $$t in \
+	    x86_64) tgt=""; gccflag="-no-pie" ;; \
+	    i386)   tgt="--target=i386"; gccflag="-m32" ;; \
+	  esac; \
+	  if ! echo 'int main(void){return 0;}' | gcc $$gccflag -x c - -o $(TESTTMP)/pke_probe_$$t >/dev/null 2>&1; then \
+	    echo "test-packenum-gcc-oracle: SKIP $$t (gcc $$gccflag cannot build a hosted binary here)"; \
+	    skipped=$$((skipped+1)); continue; \
+	  fi; \
+	  if ! gcc -O0 $$gccflag -fshort-enums -o $(TESTTMP)/pke_packed_$$t test/packenum_oracle.c 2>$(TESTTMP)/pke_$$t.err || \
+	     ! gcc -O0 $$gccflag -o $(TESTTMP)/pke_plain_$$t test/packenum_oracle.c 2>>$(TESTTMP)/pke_$$t.err; then \
+	    echo "test-packenum-gcc-oracle: ORACLE BUILD FAIL $$t"; tail -2 $(TESTTMP)/pke_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if ! ./$(COMPILER) $$tgt test/packenum_pxx.pas $(TESTTMP)/pke_pxx_$$t >$(TESTTMP)/pke_$$t.perr 2>&1; then \
+	    echo "test-packenum-gcc-oracle: PXX COMPILE FAIL $$t"; tail -3 $(TESTTMP)/pke_$$t.perr; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  want_p="$$($(TESTTMP)/pke_packed_$$t)"; want_u="$$($(TESTTMP)/pke_plain_$$t)"; \
+	  got_all="$$(tools/run_target.sh $$t $(TESTTMP)/pke_pxx_$$t 2>/dev/null)"; \
+	  got_p="$$(printf '%s\n' "$$got_all" | sed -n 1p)"; \
+	  got_u="$$(printf '%s\n' "$$got_all" | sed -n 2p)"; \
+	  if [ -z "$$want_p" ] || [ -z "$$want_u" ] || [ -z "$$got_p" ] || [ -z "$$got_u" ]; then \
+	    echo "test-packenum-gcc-oracle: FAIL $$t -- a side produced no row, so nothing was compared"; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if [ "$$want_p" = "$$want_u" ]; then \
+	    echo "test-packenum-gcc-oracle: FAIL $$t -- gcc gave the SAME answer with and without -fshort-enums, so the oracle cannot discriminate"; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if [ "$$got_p" != "$$want_p" ]; then \
+	    echo "test-packenum-gcc-oracle: FAIL $$t {\$$PACKENUM 1} disagrees with gcc -fshort-enums"; \
+	    echo "    gcc: $$want_p"; echo "    pxx: $$got_p"; overall=1; \
+	  elif [ "$$got_u" != "$$want_u" ]; then \
+	    echo "test-packenum-gcc-oracle: FAIL $$t undirected layout disagrees with gcc default"; \
+	    echo "    gcc: $$want_u"; echo "    pxx: $$got_u"; overall=1; \
+	  else \
+	    echo "test-packenum-gcc-oracle: PASS $$t (packed=$$got_p, control=$$got_u)"; \
+	  fi; \
+	  ran=$$((ran+1)); \
+	done; \
+	echo "test-packenum-gcc-oracle: $$ran of $$want targets measured, $$skipped skipped"; \
+	test "$$overall" = "0" || { echo "test-packenum-gcc-oracle: RED"; exit 1; }; \
+	test "$$ran" -ge 1 || \
+	  { echo "test-packenum-gcc-oracle: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }
 
 .PHONY: test-packrecords-c-gcc-oracle
 test-packrecords-c-gcc-oracle: $(COMPILER)

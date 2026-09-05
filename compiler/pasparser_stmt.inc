@@ -4064,7 +4064,7 @@ begin
     { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
       lands here with tk=tyInteger and used to claim SymEnumId — the slot that
       means "this VALUE is an enum". Element identity has its own slot. }
-    if (tk = tyInteger) and (LastTypeEnumId >= 0) then
+    if EnumKindMatches(tk, LastTypeEnumId) then
     begin
       if isArr then SymElemEnumId[idx] := LastTypeEnumId
       else SymEnumId[idx] := LastTypeEnumId;
@@ -4114,7 +4114,7 @@ begin
       { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
         lands here with tk=tyInteger and used to claim SymEnumId — the slot that
         means "this VALUE is an enum". Element identity has its own slot. }
-      if (tk = tyInteger) and (LastTypeEnumId >= 0) then
+      if EnumKindMatches(tk, LastTypeEnumId) then
       begin
         if isArr then SymElemEnumId[idx] := LastTypeEnumId
         else SymEnumId[idx] := LastTypeEnumId;

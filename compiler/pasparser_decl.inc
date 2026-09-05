@@ -110,6 +110,95 @@ begin
   LastTypeSetElemHi := elemHi;
 end;
 
+{ The STORAGE WIDTH of an enum type, decided once at its declaration.
+
+  {$PACKENUM n} is a MINIMUM, not a size: a type whose largest member does not
+  fit in n bytes widens anyway. That is the whole difference between this and
+  "pack enums to one byte", and it is the row a naive implementation gets wrong
+  -- `TBig = (bA, bB = 300)` is TWO bytes under {$PACKENUM 1}, which is why the
+  test carries it as the discriminating case rather than only a 3-member enum
+  whose answer is 1 under both readings.
+
+  Frozen HERE and not recomputed where the type is used, because the directive
+  governs the declarations that follow it: an enum declared under {$PACKENUM 1}
+  keeps its byte when the unit later says {$PACKENUM 4}. Reading PackEnumVal at
+  the use site would give the last directive in the file to every type in it. }
+procedure FreezeEnumStorageSize(etid, packVal: Integer);
+var i, base, n, fit: Integer; lo, hi: Int64;
+begin
+  base := EnumTypeValBase[etid];
+  n := EnumTypeValCount[etid];
+  lo := 0; hi := 0;
+  for i := base to base + n - 1 do
+  begin
+    if EnumValOrd[i] < lo then lo := EnumValOrd[i];
+    if EnumValOrd[i] > hi then hi := EnumValOrd[i];
+  end;
+  { A negative member forces the SIGNED range, so -1 needs a whole byte's sign
+    bit and cannot share the 0..255 case. }
+  if (lo >= 0) and (hi <= 255) then fit := 1
+  else if (lo >= -128) and (hi <= 127) then fit := 1
+  else if (lo >= 0) and (hi <= 65535) then fit := 2
+  else if (lo >= -32768) and (hi <= 32767) then fit := 2
+  else fit := 4;
+  { packVal is PASSED, never read from the global here: directives run in the
+    LEX pass, so PackEnumVal holds the last {$PACKENUM} in the FILE by the time
+    any type section parses. The caller snapshots it off the declaration's own
+    token. A single-directive file cannot distinguish the two -- every size
+    comes out the same either way -- so this is a difference no one-directive
+    test can fail on, and the test carries a second directive for that reason. }
+  if fit < packVal then fit := packVal;
+  EnumTypeSize[etid] := fit;
+end;
+
+{ The TTypeKind an enum's values travel in -- its WIDTH, with the identity
+  carried beside it in SymEnumId as it always was. Enums were unconditionally
+  tyInteger, and the same one-line comment sat on both arms that said so; this
+  is that decision in one place now that the answer can differ per type.
+  A packed enum is UNSIGNED where it can be: an enum's ordinals are
+  non-negative unless the source wrote otherwise, and a signed byte would halve
+  the range that fits in one. }
+function EnumStorageTypeKind(etid: Integer): TTypeKind;
+var i, base, n: Integer; anyNeg: Boolean;
+begin
+  if (etid < 0) or (etid >= EnumTypeCount) then
+  begin
+    Result := tyInteger;
+    Exit;
+  end;
+  anyNeg := False;
+  base := EnumTypeValBase[etid];
+  n := EnumTypeValCount[etid];
+  for i := base to base + n - 1 do
+    if EnumValOrd[i] < 0 then anyNeg := True;
+  case EnumTypeSize[etid] of
+    1: if anyNeg then Result := tyInt8 else Result := tyUInt8;
+    2: if anyNeg then Result := tyInt16 else Result := tyUInt16;
+  else
+    Result := tyInteger;
+  end;
+end;
+
+{ Does kind `tk` belong to enum type `etid` -- i.e. is this declaration actually
+  OF that enum, rather than merely near it?
+
+  Seven sites used to ask `tk = tyInteger` for this, which was exact while every
+  enum was integer-sized and became wrong the moment {$PACKENUM} narrowed one.
+  The kind half is NOT redundant with `etid >= 0` and must not simply be
+  dropped: `set of TCol` leaves LastTypeEnumId holding the ELEMENT's id, so the
+  kind test is the only thing stopping a set from inheriting a member name and
+  printing `cRed` for a bitset.
+
+  So the test narrows instead of disappearing, and it asks the ENUM rather than
+  a list of kinds -- there is no second table here to drift out of step with
+  EnumStorageTypeKind, because this IS EnumStorageTypeKind. Enumerating
+  [tyInteger, tyUInt8, tyUInt16, ...] would have worked today and rotted at the
+  next width, which is the failure mode TypeIsAnyString's header records. }
+function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean;
+begin
+  Result := (etid >= 0) and (tk = EnumStorageTypeKind(etid));
+end;
+
 procedure ParseEnumMembers(etid: Integer);
 { The member list of an enum type: CurTok is on '(' at entry, past ')' at exit.
   Lifted out of ParseTypeSection so the ANONYMOUS form (`var c: (red, green)`,
@@ -118,10 +207,13 @@ procedure ParseEnumMembers(etid: Integer);
   keep two copies of.
   EnumTypeScoped[etid] must already be set by the caller: it is read from the
   token position of the '(' and an anonymous enum has no name to scope under. }
-var ordinal, hiVal, enumNOff, enumNLen: Integer;
+var ordinal, hiVal, enumNOff, enumNLen, packHere: Integer;
     enumNm: AnsiString;
     done: Boolean;
 begin
+  { The {$PACKENUM} in force AT THE '(' -- CurTok is on it at entry, so TokPos-1
+    is its index, the same position EnumTypeScoped is read from. }
+  packHere := TokPackEnum[TokPos - 1];
   Next; ordinal := 0;
   done := False;
   while (CurTok.Kind = tkIdent) and not done do
@@ -163,7 +255,9 @@ begin
   end;
   Expect(tkRParen, ')');
   EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
+  FreezeEnumStorageSize(etid, packHere);
 end;
+
 
 { BareStringKind -- what a bare scalar `string` IS -- moved to util.inc beside
   RealTypeKind, its sibling one-answer helper, so that SizeOf's table can reach
@@ -334,7 +428,7 @@ begin
       LastTypeEnumId := RegisterEnumType(0, 0);
       EnumTypeScoped[LastTypeEnumId] := False;
       ParseEnumMembers(LastTypeEnumId);
-      Result := tyInteger;   { enums are ordinal/integer-sized at codegen }
+      Result := EnumStorageTypeKind(LastTypeEnumId);   { width per {$PACKENUM} }
       Exit;
     end;
     tkInteger, tkMinus, tkString:
@@ -1086,7 +1180,7 @@ begin
                 Result := tyPointer;
               end
               else if LastTypeEnumId >= 0 then
-                Result := tyInteger   { enums are ordinal/integer-sized at codegen }
+                Result := EnumStorageTypeKind(LastTypeEnumId)   { width per {$PACKENUM} }
               else if PtrElemDepth > 0 then
                 { A `^` ELEMENT may name a type that does not exist yet — `PNode = ^TNode;`
                   before TNode is the classic forward reference, and
@@ -1475,12 +1569,12 @@ begin
     if VDElemProcSig >= 0 then SymElemProcSig[idx] := VDElemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
     { array of TEnum: the element's enum identity. NOT SymEnumId — that one means
       "this value is an enum", and an array is not one. }
-    if (VDElemTk = tyInteger) and (VDElemEnumId >= 0) then SymElemEnumId[idx] := VDElemEnumId;
+    if EnumKindMatches(VDElemTk, VDElemEnumId) then SymElemEnumId[idx] := VDElemEnumId;
   end
   else
   begin
     idx := AllocVar(nm, VDTk);
-    if (VDTk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
+    if EnumKindMatches(VDTk, LastTypeEnumId) then SymEnumId[idx] := LastTypeEnumId;
     if (VDTk = tyRecord) or (VDTk = tyClass) then
     begin
       Syms[idx].RecName := LastTypeRecId;
@@ -3067,7 +3161,7 @@ begin
         cIdx := AllocVar(name, cTk);
         AllocStaticLocal := False;
         { `const K: TEnum = Two` is an enum-typed value like any var of that type. }
-        if (cTk = tyInteger) and (cEnumId >= 0) then SymEnumId[cIdx] := cEnumId;
+        if EnumKindMatches(cTk, cEnumId) then SymEnumId[cIdx] := cEnumId;
         if cTk = tyPointer then
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
@@ -4480,7 +4574,7 @@ begin
         end
         else
           AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-        if (fTk = tyInteger) and (fEnumId >= 0) then UFldEnumId[UFldCount-1] := fEnumId;
+        if EnumKindMatches(fTk, fEnumId) then UFldEnumId[UFldCount-1] := fEnumId;
         UFldIsArray[UFldCount-1] := isArr or fIsDyn;
         if fIsDyn then UFldArrLen[UFldCount-1] := -1
         else UFldArrLen[UFldCount-1] := arrLen;
@@ -6578,7 +6672,7 @@ begin
               end
               else
                 AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-              if (fTk = tyInteger) and (fEnumId2 >= 0) then UFldEnumId[UFldCount-1] := fEnumId2;
+              if EnumKindMatches(fTk, fEnumId2) then UFldEnumId[UFldCount-1] := fEnumId2;
               UFldIsArray[UFldCount-1] := isArr or fIsDyn;
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;

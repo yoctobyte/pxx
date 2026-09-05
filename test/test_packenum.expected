@@ -1,0 +1,13 @@
+sizes 1 2 4 6
+name cGreen
+ord 1
+cast cBlue
+castord 2
+cmp TRUE TRUE
+loop 0 loop 1 loop 2 
+set TRUE FALSE
+rec 1 2 300 9
+recname cBlue
+late lB 1
+toint 2
+lohi 0 2

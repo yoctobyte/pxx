@@ -650,6 +650,7 @@ begin
                               and always works. }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
+  PackEnumVal := 4;   { fpc's default with no {$PACKENUM}: measured 4/4/4 }
   ScopedEnumsVal := False;
   QChecksVal := False;
   { ON by default -- see AssertionsVal in defs.inc for why this deliberately is
@@ -1677,7 +1678,12 @@ const
     the message can say "not implemented" instead of "unknown", which is the
     truthful half of the distinction and the searchable one. }
   PAS_UNIMPL_DIRECTIVES =
-    ' bitpacking calling minenumsize packenum packset z1 z2 z4 ';
+    { `minenumsize packenum z1 z2 z4` LEFT THIS LIST when {$PACKENUM} was
+      implemented, for the reason the 'a' row above records: a rule that can no
+      longer fire still tells the next reader the directive is ignored, which is
+      the part that stopped being true. `packset` and `bitpacking` stay -- they
+      are the SET-side siblings and are still unimplemented. }
+    ' bitpacking calling packset ';
 var lower: AnsiString;
 begin
   lower := PasDirectiveLower(command);
@@ -2259,6 +2265,44 @@ begin
         arm and 'invalid packrecords value' on a line that says {$ALIGN} sends
         the reader to the wrong half of it. }
       else ErrorAt(SrcLine, 'invalid ' + command + ' value: ' + name);
+    end
+    else if CaseEqual(command, 'packenum') or CaseEqual(command, 'minenumsize') then
+    begin
+      { {$PACKENUM n} / {$MINENUMSIZE n} -- the same setting under two names, and
+        the ninth line of fpc 3.2.2's own fpcdefs.inc ("This reduces the memory
+        requirements a lot"), so it is the corpus-wide setting for every unit of
+        the FPC compiler rather than one file's opinion.
+
+        The VALUE SPACE is measured, not assumed -- the mistake the {$ALIGN} arm
+        above documents. Against fpc 3.2.2, 2026-09-05, on enums whose largest
+        member is 2 / 300 / 70000:
+
+          {$PACKENUM 1}  1 2 4      {$PACKENUM 8}   Illegal enum minimum-size
+          {$PACKENUM 2}  2 2 4      {$PACKENUM 3}   Illegal enum minimum-size
+          {$PACKENUM 4}  4 4 4      {$PACKENUM ON}  Illegal enum minimum-size
+          NORMAL/DEFAULT 4 4 4      {$PACKENUM OFF} Illegal enum minimum-size
+
+        So it is a MINIMUM and the space is CLOSED: unlike {$PACKRECORDS}, which
+        takes 1..16 and C, this one refuses 8 outright. Rejecting what fpc
+        rejects is a choice here rather than a rule -- accepting more is not a
+        defect -- but a bad value SILENTLY changes a record layout, so the error
+        is worth more than the tolerance. }
+      if CaseEqual(name, 'normal') or CaseEqual(name, 'default') then PackEnumVal := 4
+      else if CaseEqual(name, '1') then PackEnumVal := 1
+      else if CaseEqual(name, '2') then PackEnumVal := 2
+      else if CaseEqual(name, '4') then PackEnumVal := 4
+      else ErrorAt(SrcLine, 'invalid ' + command + ' value: ' + name +
+                   ' (1, 2, 4, NORMAL or DEFAULT)');
+    end
+    else if CaseEqual(command, 'z1') then PackEnumVal := 1
+    else if CaseEqual(command, 'z2') then PackEnumVal := 2
+    else if CaseEqual(command, 'z4') then PackEnumVal := 4
+    else if CaseEqual(command, 'z') and ((dsign = '+') or (dsign = '-')) then
+    begin
+      { {$Z+} is {$Z4} and {$Z-} is {$Z1} -- measured, not inferred from the
+        usual +/- polarity, because "on" meaning the WIDER layout is the
+        opposite of how {$PACKRECORDS} reads. fpc 3.2.2: {$Z+} 4 4 4, {$Z-} 1 2 4. }
+      if dsign = '+' then PackEnumVal := 4 else PackEnumVal := 1;
     end
     else if PasAlignSwitchVal(command, dsign, idx) then
       { {$A1}/{$A8}/{$A+}/{$A-} -- the same setting as {$PACKRECORDS}, under its
@@ -3124,6 +3168,7 @@ begin
     Tokens[TokCount].Line    := CurTok.Line;
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
+    TokPackEnum[TokCount]    := PackEnumVal;
     TokQChecks[TokCount] := QChecksVal;
     TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
