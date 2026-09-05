@@ -5003,13 +5003,17 @@ run and the runs still disagree, stop reaching for more repetitions — they wil
 not converge, and a third run only picks a third point on a curve.
 
 **The fix is an instrument that does not measure time.** Ranked by what they can
-actually answer, because they are not interchangeable:
+actually answer, because they are not interchangeable — and note the third row:
+**the sysctl is a denial on both boxes and seven can already run it as root**, so
+*"perf is blocked here"* is a statement about a privilege level, never about the
+machine.
 
 | instrument | availability here | answers | cannot answer |
 | --- | --- | --- | --- |
 | **static disassembly diff** (`objdump -d`, see below) | now, free | *categorically*, did the call/spill/branch go away | **cannot price it** |
 | **`gprof` via an FPC `-pg` build** | now, free — see *"`perf` being blocked is not 'no profiler'"* | **CALL COUNTS on the real workload**, weighted by execution, deterministic | time shares are FPC's codegen, indicative only |
-| **callgrind**, `perf stat -e instructions:u` | **needs root** (`valgrind` not installed; `perf_event_paranoid = 4`) | dynamic instruction count — a genuine time proxy on fixed hardware | — |
+| **`perf stat -e instructions:u`** | **available on SEVEN today** under sudo — measured 2026-09-06: unprivileged returns *No supported events found*, `sudo` returns `134,205 instructions:u`. Denied, not absent, on both boxes (`perf_event_paranoid = 4`) | dynamic instruction count — weighted by execution, deterministic, a genuine time proxy on fixed hardware | nothing, for a same-host A/B |
+| **callgrind** | `valgrind` not installed anywhere; `Candidate: 1:3.26.0-0ubuntu1` | same, plus a call graph | needs an install |
 | wall/user time | now | the only thing that prices it | **exactly the reading this section is about** |
 
 **A COUNT FINDS A CANDIDATE; IT DOES NOT PRICE ONE.** Recorded because it has
