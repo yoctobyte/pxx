@@ -9,7 +9,7 @@ created: 2026-09-01
 found-by: frankA
 owner: frankA
 blocked-by: []
-summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout. STEP 2'S FIRST HALF IS NOW DONE (277e082b5, f15ea507e, 777dba285): .rela.text, .rela.data, .rela.init_array and .rela.fini_array name the .text SECTION symbol ZERO times in both a Pascal and a C object, so an earlier line in this summary saying ProcAddrFix still does is superseded. Getting there found a LIVE BUG in the default path, not just in objects: a VMT/RTTI method slot for a method with NO BODY -- an interface method, or an abstract one like TStream.Read -- was patched to `entry + (-1)', one byte below the entry point, and typinfo's GetMethodAddr handed that out where nil is its only documented "no address" answer (3, 5 and 27 such words in three linked executables). WHAT REMAINS FOR STEP 2: real per-function sections with real extents -- the two init/fini thunk symbols carry SIZE 0 -- plus six BAKED call displacements that the .text-naming metric cannot see because they are not relocations at all. Those six are all crtl's `sysret', banked as feature-c-two-same-named-file-scope-statics-share-one-procs-row-so-neither-can-have-a-symbol (track C, NOT wired as blocked-by so this ticket stays visible). PARKED AFTER STEP 1 (533858cce, --function-sections: internal calls become relocations). MEASURED ON THE PARKED TREE AT 39c7042211a7, two things the next session needs: (a) --function-sections DOES NOT PRODUCE FUNCTION SECTIONS -- the object still has one .text and 13 sections, so -Wl,--gc-sections drops 168 bytes of 624888 (0.03%) in every combination; the flag does what its help text says and its NAME asserts a property step 2 has not built yet. (b) Step (3), DCE under --emit-obj, is now on for BOTH frontends (60edd4853 wired the C one in; passages above saying it is off for C are stale) and its residual is PINNED BY BEING EXPORTED, not unpruned: a C object exports 286 crtl entry points WEAK, --dce drops 269 LOCAL bodies and exactly ZERO weak ones, and those 286 hold 52% of the pruned object's .text. No compile-time pass may contradict an export contract, which is a second independent argument for option (4)'s COMDAT group. Cost of separation for a 3-TU C program: 242568 without --dce, 42176 with it. tools/busybox_diff.sh takes an opt-in --dce so the 149-object number can be retaken; unrun here, no busybox tree on this box."
+summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout. STEP 2'S FIRST HALF IS NOW DONE (277e082b5, f15ea507e, 777dba285): .rela.text, .rela.data, .rela.init_array and .rela.fini_array name the .text SECTION symbol ZERO times in both a Pascal and a C object, so an earlier line in this summary saying ProcAddrFix still does is superseded. Getting there found a LIVE BUG in the default path, not just in objects: a VMT/RTTI method slot for a method with NO BODY -- an interface method, or an abstract one like TStream.Read -- was patched to `entry + (-1)', one byte below the entry point, and typinfo's GetMethodAddr handed that out where nil is its only documented "no address" answer (3, 5 and 27 such words in three linked executables). WHAT REMAINS FOR STEP 2: real per-function sections with real extents -- the two init/fini thunk symbols carry SIZE 0 -- plus six BAKED call displacements that the .text-naming metric cannot see because they are not relocations at all. Those six are all crtl's `sysret', banked as feature-c-two-same-named-file-scope-statics-share-one-procs-row-so-neither-can-have-a-symbol (track C, NOT wired as blocked-by so this ticket stays visible). PARKED AFTER STEP 1 (533858cce, --function-sections: internal calls become relocations). MEASURED ON THE PARKED TREE AT 39c7042211a7, two things the next session needs: (a) --function-sections DOES NOT PRODUCE FUNCTION SECTIONS -- the object still has one .text and 13 sections, so -Wl,--gc-sections drops 168 bytes of 624888 (0.03%) in every combination; the flag does what its help text says and its NAME asserts a property step 2 has not built yet. (b) Step (3), DCE under --emit-obj, is now on for BOTH frontends (60edd4853 wired the C one in; passages above saying it is off for C are stale) and its residual is PINNED BY BEING EXPORTED, not unpruned -- IN A C OBJECT, which is the only thing that measurement was taken on and which the summary used to say generally (frankZ's catch, 2026-09-06, 63aa7d146): a C object exports 286 crtl entry points WEAK, --dce drops 269 LOCAL bodies and exactly ZERO weak ones, and those 286 hold 52% of the pruned object's .text. A PASCAL object exports NOTHING WEAK at all -- 1 GLOBAL and 129 LOCAL FUNC, measured -- and --dce prunes it hard on x86-64: 129 LOCAL to 44, code 64793B to 17489B. THE RETENTION frankZ SAW ON XTENSA IS NOT A RETENTION MECHANISM: --dce IS OFF ON EVERY NON-X86-64 TARGET BY DESIGN (dce.inc -- 'the reference shapes this pass knows how to re-patch are x86-64's rel32 call/jmp'), so --dce-report answers `off: target is not x86-64' and the pass never ran. Swept 2026-09-06: x86_64 prunes, i386/riscv32/xtensa are byte-identical with and without --dce -- for EXECUTABLES as well as objects -- and aarch64/arm32 have no object writer at all. No compile-time pass may contradict an export contract, which is a second independent argument for option (4)'s COMDAT group. Cost of separation for a 3-TU C program: 242568 without --dce, 42176 with it. tools/busybox_diff.sh takes an opt-in --dce so the 149-object number can be retaken; unrun here, no busybox tree on this box."
 ---
 
 # N objects cost N runtimes
@@ -925,3 +925,68 @@ bodiless-slot fix is confirmed on a second machine, from a second build, by
 someone who did not write it — and `test_typinfoovl26`, the RTTI job converted
 to `expect_same.sh` in `22fe29814` an hour earlier, is GREEN, which separates
 the two adjacent changes before a sweep could make them look entangled.
+
+---
+
+## 2026-09-06 (frankA) — the export claim was C-only, and the Pascal residual is a pass that never ran
+
+frankZ hit `test-emit-obj`'s xtensa link red (`63aa7d146`) and pushed back on the
+standing explanation in this summary. **They were right, and the correction is
+bigger than the sentence.**
+
+### What the summary said, and what it was measured on
+
+*"Its residual is PINNED BY BEING EXPORTED, not unpruned: a C object exports 286
+crtl entry points WEAK…"* — the table under it is labelled `C object, base` /
+`C object, --dce`. **The measurement was always C-scoped; the summary dropped
+the label.** frankZ's Pascal xtensa object shows `__pxxAssert` and
+`PalBackendSocket` as `LOCAL`, retained, which contradicts the general reading
+and not the measured one.
+
+### Measured here, x86-64, a three-line Pascal program with one `cdecl` export
+
+| | FUNC symbols | code |
+| --- | --- | --- |
+| `--emit-obj` | 1 GLOBAL, 129 LOCAL, **0 WEAK** | 64793B |
+| `--emit-obj --dce` | 1 GLOBAL, 44 LOCAL | 17489B |
+
+So a Pascal object has **no weak export surface at all**, and `--dce` prunes it
+by 73%. The export-pinning argument is a property of the C frontend's crtl
+export contract, not of `--emit-obj`.
+
+### And the xtensa retention is not a mechanism — the pass is off
+
+`dce.inc`: `if TargetArch <> TARGET_X86_64 then why := 'target is not x86-64'`,
+with the reason beside it — *"the reference shapes this pass knows how to
+re-patch are x86-64's rel32 call/jmp. Every other target keeps its bodies."*
+Asked directly, `--dce-report` on the same source answers **`dce: off: target is
+not x86-64`**.
+
+Swept across every target, same source, with and without `--dce`:
+
+| target | base | --dce | |
+| --- | --- | --- | --- |
+| x86_64 | 64793B | 17489B | prunes |
+| i386 | 108980B | 108980B | **no-op** |
+| riscv32 | 259076B | 259076B | **no-op** |
+| xtensa | 203764B | 203764B | **no-op** |
+| aarch64 / arm32 | — | — | no object writer |
+
+**And it is not an `--emit-obj` property either**: plain executables behave the
+same way (i386 106348B and riscv32 261996B, byte-identical either way). So
+`--dce` is an x86-64-only pass, deliberately, and everything the xtensa object
+retains is retained because nothing ran — not because anything pinned it.
+
+That is the answer to frankZ's red at this ticket's level: **COMDAT is not what
+frees the Pascal residual, and neither is anything about exports.** For xtensa
+the first question is whether this pass can re-patch that target's call shapes
+at all, which is a separate and much larger piece of work than option (4).
+
+frankZ's other two points stand and are recorded as theirs: every symbol in that
+object carries `SIZE 0`, so `--gc-sections` has no extents to work with even
+after per-function sections land; and `f0a1a8be9` is correct and must not be
+reverted — nothing available to that session could have seen the cost, because
+the fixedpoint never targets ESP, `quick` never links xtensa, and on x86-64
+every one of those symbols resolves from libc silently.
+
+**Still parked. Nothing here was worked past what the contradiction required.**
