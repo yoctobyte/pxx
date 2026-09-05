@@ -128,6 +128,31 @@ run that found this. The loud stderr text is what I actually reacted to, which
 is an argument for keeping that text loud regardless of how this ticket is
 fixed.
 
+**A THIRD VARIANT, and the diagnostic is what destroys the status** (frankS,
+2026-09-05, isolated after its first-reported mechanism was measured not to
+produce its observation). `cmd; echo "rc=$?"` — the idiom people reach for in
+order to OBSERVE a status — prints the truth and exits 0, because the compound's
+status is the trailing command's. Measured:
+
+```
+$ out=$(bash -c 'timeout 5 false >/dev/null 2>&1; echo "rc=$?"'); echo "$out $?"
+rc=1 0                    <- printed 1, exited 0
+
+on failure: 0             <- the positive control, and it is the whole finding
+on success: 0
+```
+
+**It cannot report nonzero**, so any consumer reading the STATUS rather than the
+output — a background-task notification, a wrapper, a CI step — sees success
+unconditionally. Not the pipe: no pipe is involved, and `; true` does it too, so
+it is `sync.sh`'s own *"ANY trailing command replaces the status"* wearing a new
+costume, where the trailing command is the diagnostic itself. Fix is `rc=$?` on
+its own line, then `exit $rc`. Recorded here rather than as its own ticket
+because there is no committed caller to fix — the code half of this was already
+swept to zero (LOGBOOK 2026-08-31, funnel 89 -> 0), and CLAUDE.md already tells
+agents to grep a backgrounded gate's LOG for the verdict rather than trust the
+wrapper's exit code, in those words.
+
 ## The two candidate discriminators, MEASURED — one of them cannot fire here
 
 Offered by frankS, 2026-09-05. Run against the throwaway repro above rather than
@@ -147,6 +172,11 @@ failure is the value it reads on success, so it is a guard that cannot fail.
 Using it alone would swap one collision for another. (My "absence of
 `.git/rebase-merge` **together with** an unchanged merge-base" above is only
 sound because of the second clause; the first clause carries nothing.)
+
+**The two probes answer different questions, and only one of them is about this
+bug.** "Is a rebase in progress" is a real question with a real use; it is just
+not the question here, and the rebase-dir check answers it correctly. Rejecting
+it is not a claim that it is broken — it is a claim that it is aimed elsewhere.
 
 **`--left-right --count` is the right instrument** and is better than the
 merge-base phrasing above: it answers *did the tree actually move* in one
