@@ -26186,3 +26186,115 @@ Second relay error tonight of the same shape, after the stale CLAUDE.md canary
 rule: **repeating a peer's artifact without running the check I would have
 demanded of anyone else.** Recovery was by subject, as documented, and the
 author knew what it had landed while the relayer did not.
+
+### A ZERO CENSUS IS INDISTINGUISHABLE FROM A BROKEN DETECTOR — the canary's mirror
+
+frankD promoted the `library` block into docsnip's compiled population, which
+emptied the `unit` population — so the `NOT CHECKED` line **disappears
+entirely**. An absent line is indistinguishable from a detector that silently
+stopped working.
+
+**This is tonight's canary from the opposite direction.** The pinned-RTL row
+*looked like it ran and hadn't*; this one *looks like it found nothing and might
+not be looking*. **The second is harder**: nothing is printed at all, so there is
+no row to be suspicious of, no runtime to compare against a population, no
+verdict wearing the wrong word — **and the census-arithmetic tell that catches
+the first cannot catch the second, because the arithmetic is over an empty set.**
+
+Controlled end-to-end rather than by reasoning: a real `unit` block planted in
+`limits.md`, file and line confirmed reported, removed with an empty diff after.
+A classifier control alone proves the regex works and says nothing about whether
+the pipeline still reaches it. `unit` stays reported permanently **by design** —
+pxx refuses a bare unit, and checking one would mean generating a host program,
+which docsnip's own docstring refuses — so that line is a standing tell, not a
+deferral.
+
+Track D green: **`BROKEN: 0`, first time today** (`36ee694fa`), with the aperture
+**closed** rather than reported — `7763e1df6` is an ancestor of `5b5fdb0b3`,
+confirmed by `merge-base` *and* by compiling the snippet (v404 accepts `library`
+where v403 answered `expected 'begin' before 'library'` at token 1). 40→41
+complete programs, 34→35 compiled.
+
+### A TRIGGER MUST BE CHEAP ENOUGH THAT NOBODY ADJUDICATES WHETHER IT FIRED
+
+This seat gave frankD a reading of its own trigger — *a pin is neither a new
+backend nor a new target-scoped flag, so your scope rows stand.* Correct by the
+letter, and frankD noticed that **the letter and the provenance point different
+ways**: the rows were measured with v403, and a new pin is a new instrument.
+
+**It dissolved the question with a measurement instead of defending either
+reading** — all four flags, every target, under v404, byte-identical, pin sha
+printed before and after, under a minute — and then **widened the trigger to "a
+new backend, a new target-scoped flag, OR a new pin."**
+
+That improves the trigger idea itself: **the moment a trigger requires judgement
+it has the same defect as "remember to re-check"** — it depends on someone being
+in the right frame of mind. A trigger should cost less than the argument about
+whether it applies.
+
+### Two more predictions that FAILED, reported rather than dropped
+
+frankA is the **third** independent session to predict its clean-tree gate would
+SKIP the FPC canary and then observe `PASS ... (concurrent)` with zero SKIPs.
+**All three reported the failed prediction instead of quietly dropping the
+caveat — which is the only reason CLAUDE.md's staleness surfaced at all.** A
+dropped caveat leaves no trace.
+
+**frankA named the arm this seat filed wrong.** The decide ticket said *false
+constraint, not false safety*, at frankuser's request so it would not be ranked
+as a near-miss — true as measured, and one-sided. The same stale belief read the
+other way is a live under-gating mechanism: **a session that thinks the canary is
+dead on a clean tree may gate after committing and believe it got no coverage,
+or skip a gate it has concluded is worthless.** Ticket amended (`0c6cda0a4`):
+rank on the friction, do not record the hazard as one-sided, and note no
+instance of that arm has been observed.
+
+frankA's confirmation pattern for "did the fix land" is the one to copy: a
+direct probe (pinned sha matching the pin's claim, four previously-failing units
+compiling) **and then the canary itself**, because *the probe answers the
+mechanism; only the sweep answers the row* — the probe covered 4 of 20 units
+against a 54-root sweep.
+
+### frankS EDITED A SCRIPT THAT WAS RUNNING, CAUGHT IT, AND DISCARDED BOTH RUNS
+
+`tools/esp_run_bare.sh` written 20:22:43; two `make -k test-esp-bare` run logs
+last written 20:22:47 and 20:22:48 — **both in flight.** `/bin/sh` reads
+incrementally, the handbook's exact hazard, and it explains the nonsense
+returned: `ok=3` where the clean run had 16, plus a mismatch in a row the first
+run never reported. **The tell is a row count no clean run can produce**, and
+frankS had it.
+
+**Discarded both, and established it by timestamps rather than by feel.** The
+finding survives on independent evidence: the 20:18 run predates any edit, and
+the diagnosis was confirmed three ways that never touched the harness — a
+by-hand compile printing the error, a five-line class program failing on both
+chips, the same program building under `--platform=posix`. **A corrupted
+measurement does not retract a conclusion reached without it**, and keeping the
+two separate is what makes a discard cheap rather than catastrophic.
+
+**And the sharper find, which the discard would otherwise have buried: its
+negative control was drawn from the WRONG POPULATION.** `writeln(1)` returned
+rc=1 through the patched runner — it *builds* but cannot emit under the bare
+profile, **so it could never have demonstrated a working success path**, only
+ever looked like a regression frankS had caused. Replaced with
+`test_esp_bare_arg64.pas`: rc=0, eight lines of UART identical to the x86-64
+oracle, no build noise added.
+
+**Third distinct control failure in the fleet tonight, three different
+mechanisms:** a guard aimed at 1/111th of its population (frankH), an expected
+value colliding with the failure value (frank-optimize's `objdump` 0), and a
+control that could not have passed (frankS). **All three authors had run a
+control and reasonably believed themselves covered.**
+
+### The hold lesson survives and is NARROWER — frankD paid nothing
+
+frankD reports the ~20-minute window cost it nothing: it spent it on the scope
+sweep and the aperture work, neither of which needed the pin, **and the twenty
+minutes is why the `--shared` finding exists at all.**
+
+**This seat had two lanes' costs and assumed the shape generalised. It did
+not.** The rule survives in a narrower form — *default to "I will tell you when
+it lands"; reserve a hold for work that concurrency would corrupt* — which is
+what actually happened for frankD. An underestimate that costs nothing is still
+worth not repeating, and a cost that varies per lane is a reason to ask rather
+than to assume either way.
