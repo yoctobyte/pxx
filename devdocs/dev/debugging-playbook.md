@@ -8209,3 +8209,76 @@ the same error wearing a host name instead of a slug.
 
 Related: "The instrument answered, correctly, about something else"; "A CONTROL
 has to be the commit under test"; "Do not read a green as coverage".
+
+## `SKIP` DOES TWO JOBS AND ONLY ONE IS SAFE — a failure wearing a skip's clothes is worse than a red
+
+Measured 2026-09-05 (frankS), four instances across three scripts, all landed.
+**Every one of them was in the tooling that exists to catch instruments which
+cannot fail.**
+
+**The two jobs.** `SKIP` is written for *the precondition is absent* — no
+`xvfb-run`, no `openssl`, no pinned compiler. It gets used for *the precondition
+is present and the work FAILED* — an openssl built without ed25519, a full disk,
+a bad umask. **These are different findings and every script here spelled both
+with the same word and the same exit code.**
+
+**Why the second is worse than a red.** `SKIP` is the one verdict everybody reads
+as *not measured*, and acts on accordingly: it is excluded from counts, it does
+not go in a report, nobody bisects it. A red gets chased. So a failure spelled
+`SKIP` is not merely mislabelled — it is **routed into the one bin built to
+ignore it**, by a reader doing exactly the right thing with the word they were
+given.
+
+### The four, and the shape of each
+
+**1. Nothing ran and it said OK.** `tools/gui_suite.sh` with no `xvfb-run` and no
+`xdotool`: every real-window check skipped, verdict `GUI suite OK`, exit 0. The
+real-window checks are not part of that suite — **they are the reason a GUI
+suite exists.** A suite whose entire purpose can be skipped while it reports
+success is a stopped clock that reads correctly by construction.
+
+**2, 3 and 4. Something ran, it FAILED, and it said SKIP.**
+`tools/tls13_handshake_devtest.sh` had three `openssl` invocations answering
+`SKIP: CA gen failed` with `exit 0` — three lines below two *genuine*
+preconditions using the identical spelling, so the eye reads all five as one
+kind. Then the **sibling arm**: `scheme_run` holds the same three calls again,
+once per scheme, with `return 0` — so a scheme whose certs could not be minted
+reported *nothing at all* while the final line kept claiming
+`ed25519 + rsa_pss + ecdsa_p256`. **A suite naming a scheme it never ran makes a
+stronger false claim than one that exits early.** And a third copy in
+`tools/tls_native_seam_devtest.sh`'s `mint()`.
+
+### The compounding factor, which is what made three causes into one observation
+
+Every failing call was `>/dev/null 2>&1`. **The reason was discarded at the same
+place the verdict was flattened**, so "this openssl has no ed25519", "the disk is
+full" and "the umask is wrong" were one non-observation. The same discard was
+found in `tools/esp_run_bare.sh` the same day, where it made a build failure and
+a silent run identical. **A runner that throws away the diagnostic and a runner
+that reports success are the same instrument.**
+
+### What to do
+
+- **`exit 2` is this repo's "cannot answer" code.** The working models to copy:
+  `tools/gcc_diff_probe.sh`, `tools/c_corpus_probe.sh`,
+  `tools/wasm32_gap_census.sh` (seven's `wabt` row), and now `gui_suite.sh`.
+- **Say which of the two jobs you mean, in the word.** *Absent* → `SKIP`, and it
+  may exit 0. *Present and failed* → `INCONCLUSIVE`, and it must not.
+  `INCONCLUSIVE` is the missing vocabulary: `PASS` claims an observation, `SKIP`
+  disclaims one, **`INCONCLUSIVE` reports the coverage hole as the finding.**
+- **Count the skips and put the number in the verdict.** A verdict that cannot
+  say *N checks did not run* cannot distinguish a full pass from an empty one.
+- **Do NOT count a skip that is downstream of a FAIL you already reported.**
+  "It did not build" is not a coverage hole; counting it reports one defect twice
+  and makes the count loudest exactly where it is least informative.
+- **Capture stderr before you branch on the exit status.** `2>&1 >/dev/null` into
+  a variable, and quote it in the message. Without it the three causes above stay
+  one.
+- **Grep for the sibling.** Three of the four here were second and third copies
+  of a block already fixed once, in the same file and in a neighbour. The first
+  fix was landed and pushed before the siblings were found, and they were found
+  by grepping for the *pattern*, not by re-reading the file just edited.
+
+Related: "A GUARD THAT CANNOT FAIL IS NOT A GUARD" (CLAUDE.md); "Do not read a
+green as coverage"; "A guard whose failure mode is a SILENT FALLBACK cannot be
+distinguished from a guard that is absent".
