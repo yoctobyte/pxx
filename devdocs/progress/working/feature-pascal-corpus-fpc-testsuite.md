@@ -407,3 +407,34 @@ cannot be used as a type for a variable"). Second time in one session that
 
 **So the cluster is roughly 10 mechanisms behind 41 rows**, and the top three
 account for 16 of them. Generics is not 42 problems.
+
+
+## 2026-09-05 (frankA) — the generic-routine lever, and what it did to the census
+
+`feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling` is resolved
+(`63b699013`, `0ee1e272f`). Against the mechanism table above:
+
+| was | now |
+| --- | --- |
+| 4 rows — `generic function F<T>` as a CLASS METHOD | **mechanism closed.** tgenfunc4 passes; tgenfunc5/6 parse and compute; tgenfunc12 partial; tgenfunc7/9 split out |
+| 4 rows — Delphi `function F<T>`, free and method | **mechanism closed.** Same commit, same expansion — it was one job |
+
+**Two mechanisms closed, two conformance rows moved.** That gap between the two
+numbers is the whole point of reporting mechanisms: the remaining rows are held
+by things that have nothing to do with generic routines —
+
+- `tgenfunc5`, `tgenfunc6`: the ROWS call an instance method on a
+  never-`Create`d object. pxx raises nil-reference 216 where fpc runs it, and
+  that is **pre-existing, non-generic and chosen** (an ordinary method on a nil
+  receiver does the same on pin v403). One added `Create` and both exit 0.
+- `tarray16`: dynamic-array const initializers, verified still missing.
+- `tgenfunc7`, `tgenfunc9`: cross-unit, now
+  [[feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause]].
+- `tgenfunc12`: `.Free` on a method RESULT, and `specialize F<C>;` with no
+  argument list.
+
+**And the pass count is again the wrong instrument.** Both commits moved it by
++1 and 0 respectively while turning two `%FAIL` rows red (`tgeneric31`, caught
+and fixed — it was a real diagnostic the change had removed; `tgenfunc14`, kept,
+because accepting a redundant constraint is not a defect). Read by NAME or you
+see nothing.

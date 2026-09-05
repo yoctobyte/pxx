@@ -5,10 +5,10 @@ track: P
 prio: 45
 type: feature
 blocked-by: []
-status: working
+status: done
 owner: frankA
 created: 2026-09-05
-summary: "`generic procedure`/`function` at unit level works (71deb21d4). Two adjacent spellings do not parse at all: `generic function Add<T>(...)` declared INSIDE a class body, and the Delphi form `function Add<T>(...)` with no `generic` keyword, both as a free routine and as a method. Eight FPC-testsuite rows, four each, one diagnostic each — measured 2026-09-05, and they are the largest remaining lever in the generics conformance cluster."
+summary: "RESOLVED 2026-09-05 (63b699013, 0ee1e272f). Both spellings parse: the Delphi `function Add<T>(...)` as a free routine and, with `generic`, as an instance or class METHOD — one parser and one token-level expansion, nothing added to the class parser, method registrar, VMT builder or call path. Each surface diffed against fpc 3.2.2 OUTPUT. Of the eight rows, tgenfunc2 and tgenfunc4 pass; tgenfunc5/6 parse and compute correctly and fail on a nil receiver pxx refuses by choice; tarray16 needs dyn-array initializers; tgenfunc7/9 (cross-unit) are split out to [[feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause]] and tgenfunc12 needs two unrelated things."
 ---
 
 # Two spellings, four rows each, one diagnostic each
@@ -308,3 +308,6 @@ It is left RED rather than skipped with `accepts-invalid:`, to sit with
 disposition. Whoever decides that these four should stop occupying a permanently
 red list can move all four together; doing it for mine alone would hide the one
 row a reader has the most reason to check.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
