@@ -1,5 +1,6 @@
 ---
 prio: 5  # standing index, not dispatchable work — see the note below
+track: A
 ---
 
 # Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded)

@@ -2,6 +2,7 @@
 summary: "Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code"
 type: feature
 prio: 30
+track: B
 ---
 
 # Landmark demo — a minimal IDE in Nil-Python (`import tk`)

@@ -4,6 +4,7 @@ type: feature
 prio: 25
 status: blocked
 blocked-by: [feature-t-freebsd-image-and-runner]
+track: A
 ---
 
 # FreeBSD native target (amd64) — raw-syscall, stays in the libc-free family

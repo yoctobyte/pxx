@@ -1,5 +1,6 @@
 ---
 prio: 35
+track: C
 ---
 
 # Decide the Pascal-import namespace for C packages (`uses zlib` collision)

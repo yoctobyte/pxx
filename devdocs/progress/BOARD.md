@@ -313,7 +313,7 @@ _none_
 | feature-n-sys-version-info-implementation-and-the-probe-suite | N | 62 | feature | Implement sys.version_info / version / hexversion at (3, 9, 0, 'final', 0) plus sys.implementation carrying NilPy's own identity, per the owner's ruling. All four read ONE constant. The number is a compatibility affordance and must be backed by a probe suite that fails when it stops being true -- the same feature probes that produced the ruling. | — |
 | feature-nilpy-a-genexpr-is-lazy-not-materialised | N | 30 | feature | A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression. | — |
 | feature-nilpy-ascii-flag-fast-path | N | 25 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
-| feature-nilpy-collections-and-string-methods | A | 30 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
+| feature-nilpy-collections-and-string-methods | N | 30 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-counter-api-beyond-the-constructor | N | 35 | feature | collections.Counter counts and reads correctly now, but three ordinary CPython spellings are missing: `Counter({...})` (no dict overload — a COMPILE error listing the three that exist), `.elements()` (AttributeError), and Counter arithmetic `c1 - c2` / `c1 + c2` (TypeError). All three wall LOUDLY, which is the right failure mode, so this is a feature gap and not a bug. | — |
 | feature-nilpy-cpyext-cycle-collector | N | 30 | feature | cpyext: a cycle collector for the extension object model | — |
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
@@ -373,7 +373,7 @@ _none_
 | feature-t-a-test-s-expected-transcript-should-live-beside-the-pas-not-in-the-makefile-recipe | T | 50 | feature | A whole-transcript test's expected output lives in an inline printf inside a 12000-line Makefile, so EXTENDING THE TEST LOOKS COMPLETE FROM INSIDE THE TEST -- you add rows to the .pas, the .pas is self-consistent and its own comments agree, and the assertion it is judged by is in a file you never opened. That is what cost 18 hours of RED on the native tier (2ba37ba91 added rows j..n; the printf still said a..i). Proposal: let a `.expected` file beside the .pas be the default source, as several tests already do, and keep the inline printf only where the transcript is target-dependent. NOT started -- filed at frankuser's suggestion and explicitly not to be done without asking, since it touches many recipes. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
-| feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
+| feature-toolchain-cli-ux | T | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
 ## backlog-pascal (40)
@@ -482,8 +482,8 @@ _none_
 | feature-b-getfpcheapstatus-needs-always-on-heap-accounting | B | 50→65 | feature | FPC's System exposes `TFPCHeapStatus` (a record of MaxHeapSize/MaxHeapUsed/CurrHeapSize/CurrHeapUsed/CurrHeapFree) and `GetFPCHeapStatus`. cclasses.pas:676 uses both in its tmemdebug helper, and that is now the ONLY open wall on the FPC compiler-source corpus -- it blocks cclasses, comphook, finput and cfileutl, measured 2026-09-05 with compiler 108f95a7f278 under --mimic-fpc-compiler. The type is trivial; the FUNCTION is not, and that is the whole ticket. Our allocator has NO always-on counters: -dPXX_ALLOC_CENSUS instruments PXXAlloc/PXXFree at COMPILE time, so a released binary carries no heap accounting at all. Returning zeros would make four units compile while the function lies -- a caller printing a memory delta would print 0 with no error -- which is the compiler-appeasement workaround CLAUDE.md refuses. The real work is deciding whether the allocator carries always-on counters and paying that cost per allocation. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
 | feature-busybox-kiosk-selfhosting-target | B | 80 | feature | Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1, 2, 2b AND 3 ARE DONE. As of 2026-09-04 the userland is 258 APPLETS built busybox's own way -- 400 translation units, 400 objects, one real link, 621 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`) -- and it BOOTS AS PID 1 under qemu-system-x86_64 with that same case list re-run inside the guest and compared byte for byte (`tools/mkkiosk.sh --busybox= --cases=`, feature-b-a-bootable-image-...). With --selfhost it reaches a SELF-HOST FIXEDPOINT INSIDE THAT VM (stage1 == stage2, seeded by pinned v403 against HEAD sources), and the kiosk app answers, so the owner's sentence -- busybox userland, shell, self-hosting compiler, kiosk app -- is met end to end on x86-64 with every one of those built by pxx. aarch64 is proven at 26 applets by unity build and still waits on an --emit-obj object writer. WHAT IS OPEN is no longer kernel-or-rootfs (settled by measurement 2026-08-30): it is aarch64, and running applets with REAL ARGUMENTS. That last is a measurement, not a ratio (feature-c-corpus-busybox-394-applets): frankc-af's 374-applet corpus -- 506 objects, 853 cases BYTE-IDENTICAL to the gcc oracle, GREEN -- was green on the same binary whose `uname -a` printed `Linux` eight times, because the corpus invokes applets with `--help` and `--help` prints a string literal. A wider, greener corpus, equally blind. The miscompile behind it (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently) is FIXED in 62463923f; the blindness that hid it is not, and frankD's real-argument case group (d0104ec8e) is the answer to it. | — |
-| feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
-| feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
+| feature-demo-nilpy-ide | B+E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
+| feature-demo-portable-userland | B+E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | bug-nilpy-render-backend-py-compile-does-not-terminate |
 | feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | — |
 | feature-embed-dwscript-rtti | B | 40 | feature | Vendor DWScript (MPL 1.1) and drive `dwsRTTIExposer`, which binds an arbitrary HOST OBJECT handed in from script -- the instance-taking typinfo spelling, by construction. PREMISE RE-MEASURED 2026-09-05 at c9cbcd292, compiler dc2853adbdf0, and the 2026-08-28 blocking analysis in the body is now STALE IN BOTH HALVES: (1) the blocker it names, bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, is `status: done`, and `GetPropInfo(AnObject, ''Name'')` now binds correctly -- measured against a published `Name`/`Count`, both the instance and class spellings resolve and GetOrdProp/GetStrProp through the returned PPropInfo return 42 and ''zaphod''. Nothing here is blocked on overload matching any more. (2) A segfault IS still reachable and it is NOT the one the body predicts: `lib/rtl/typinfo.pas` has no by-name `GetStrProp(Instance, PropName)` -- only `(instance: Pointer; p: PPropInfo)` -- while FPC''s typinfo does, so the FPC spelling every vendored consumer writes puts a string literal in the PPropInfo slot, which the compiler ACCEPTS (TypesCompatible grants tyPointer<-tyString for C bindings and cannot see the pointee) and then dereferences. So the real work is two things the old analysis never named: ADD the by-name typinfo overloads (Track B, the actual DWScript blocker), and stop a string literal binding to an unrelated typed pointer (Track P, filed separately, fix in hand). The vendoring half is untouched and unstarted. | — |
@@ -502,10 +502,10 @@ _none_
 | feature-c-crtl-has-no-pty-family-at-all | C | 45 | feature | crtl has NO pty support: posix_openpt, grantpt, unlockpt, ptsname and ptsname_r are all absent from include/ and src/ (grep -rn over both returns nothing). busybox's libbb/getpty.c calls ptsname_r directly and busybox ASSUMES it exists -- include/platform.h:410 `#define HAVE_PTSNAME_R 1` is the default and nothing undefines it for a glibc-shaped libc, so there is no fallback path to take. Not blocking the current 141-applet busybox set (getpty.c is not in that TU list; measured against the harness's tulist), which is why this is filed rather than fixed: it blocks telnetd, script, microcom and the login-ish applets whenever the config grows to include them. Filed as a GROUP because the five calls are one mechanism -- open /dev/ptmx, TIOCSPTLCK to unlock, TIOCGPTN to get the number, format /dev/pts/N -- and implementing any one alone is not usable. | — |
 | feature-c-crtl-resolv-h-and-the-ns-parser | C | 40 | feature | networking/nslookup.c is the last busybox translation unit stopped by a header that is really an implementation. It needs `struct __res_state` and the _res global, res_init/res_mkquery/res_msend, and the ns_* message-parsing API -- ns_initparse, ns_parserr, ns_msg/ns_rr and their accessors, ns_name_uncompress. One TU, so it ranks below regex.h (7); filed separately because the two share nothing but their shape. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
-| feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
-| feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
+| feature-c-esp-conformance-coverage | C+S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
+| feature-c-package-namespace-decision | C | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
-| perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
+| perf-c-parse-codegen-large-file-superlinear | C | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 
 ## backlog-web (8)
 
@@ -1224,8 +1224,8 @@ _none_
 - [p 35] [A] chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites
 - [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
 - [p 35] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- [p 35] [A] feature-c-package-namespace-decision
-- [p 35] [E] feature-demo-portable-userland
+- [p 35] [C] feature-c-package-namespace-decision
+- [p 35] [B+E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-counter-api-beyond-the-constructor
 - [p 35] [A] feature-nilpy-cycle-collector
 - [p 35] [N] feature-nilpy-walrus-operator
@@ -1269,9 +1269,9 @@ _none_
 - [p 30] [A] feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy
 - [p 30] [A] feature-a-the-fixedpoint-stamp-could-rebuild-itself-but-every-shape-costs-make-n
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
-- [p 30] [E] feature-demo-nilpy-ide
+- [p 30] [B+E] feature-demo-nilpy-ide
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
-- [p 30] [A] feature-nilpy-collections-and-string-methods
+- [p 30] [N] feature-nilpy-collections-and-string-methods
 - [p 30] [N] feature-nilpy-cpyext-cycle-collector
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-math-module-twelve-absent-names-measured
@@ -1280,7 +1280,7 @@ _none_
 - [p 30] [P] feature-p-assertions-switch-and-strict-default
 - [p 30] [P] feature-pascal-corpus-passrc
 - [p 30] [P] feature-pascal-management-operators-copy-and-addref
-- [p 30] [A] feature-toolchain-cli-ux
+- [p 30] [T] feature-toolchain-cli-ux
 - [p 30] [W] feature-web-syndication-feeds
 - [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-the-for-in-exception-runtime-trigger-is-the-whole-token-shape
@@ -1323,7 +1323,7 @@ _none_
 - [p 25] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 25] [N] feature-nilpy-match-statement
 - [p 25] [A+O] feature-opt-arch-level-and-dispatch
-- [p 25] [A] perf-c-parse-codegen-large-file-superlinear
+- [p 25] [C] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 25] [A] refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files
 - [p 25] [P] refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array
@@ -1354,7 +1354,7 @@ _none_
 - [p 20] [M] feature-t-windows-wine-harness
 - [p 20] [A] feature-typeinfo-last-categories
 - [p 20] [A] meta-constant-normalisation [meta — a standing index, never "done"; link work to it, do not claim it]
-- [p 18] [S] feature-c-esp-conformance-coverage
+- [p 18] [C+S] feature-c-esp-conformance-coverage
 - [p 18] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 15] [N] compat-n-repr-does-not-escape-non-printables-above-u007f

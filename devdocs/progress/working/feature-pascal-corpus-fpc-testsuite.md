@@ -1,6 +1,7 @@
 ---
 prio: 65
 blocked-by: [feature-b-getfpcheapstatus-needs-always-on-heap-accounting, feature-b-erroraddr-is-missing-from-system]
+track: P
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)

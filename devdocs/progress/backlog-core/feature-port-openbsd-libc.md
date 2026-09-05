@@ -3,6 +3,7 @@ summary: "OpenBSD/amd64 target — route RTL through libc.so. The LOWERING lande
 type: feature
 prio: 25
 blocked-by: [decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]
+track: A
 ---
 
 # OpenBSD native target (amd64) — libc-through, ELF

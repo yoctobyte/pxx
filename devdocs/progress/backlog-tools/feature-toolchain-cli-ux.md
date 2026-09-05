@@ -1,5 +1,6 @@
 ---
 prio: 30
+track: T
 ---
 
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
