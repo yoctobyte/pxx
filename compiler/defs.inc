@@ -3738,6 +3738,7 @@ var
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   SymObjDataExternOnly : array of Boolean;
   SymCStaticLink : array of Boolean;   { `static` seen: internal linkage, LOCAL, never UND }
+  SymCModule : array of Integer;   { the C .c MODULE whose text DEFINED this global (KeyStrs[] index, -1 = the main source / not C). The data-side twin of ProcCModule: C gives a file-scope `static` INTERNAL linkage, so the same name in two modules is two distinct objects, and without this they share one Syms[] row and alias. bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
   { MEMBERSHIP in the object's linkable data surface, which the two flags above
     cannot express. Both default to False, and False is a meaningful LINKAGE
     answer ("a definition with external linkage"), so neither can distinguish a

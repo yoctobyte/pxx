@@ -4765,7 +4765,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymObjDataExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
@@ -4947,6 +4947,7 @@ begin
   SymCLongRank[SymCount]  := 0;
   SymObjDataExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymCStaticLink[SymCount] := False;
+  SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
   SymAllocSize[SymCount] := 0;         { set by whichever reservation path takes global storage }

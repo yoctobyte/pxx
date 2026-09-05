@@ -10994,6 +10994,43 @@ test-core: $(COMPILER)
 	# the multi-TU build. Without the row split there is one, and that is why the
 	# call could not be relocated.
 	tools/expect_same.sh cstatic_distinct-syms "$$(readelf -sW $(TESTTMP)/cstatic_distinct26.o | awk '$$8=="who" && $$5=="LOCAL"' | awk '{print $$2}' | sort -u | wc -l)" "2"
+	# THE VARIABLE ARM of the same defect, and it is the worse one. Functions
+	# survived sharing a Procs row because every call site keeps a CallFixTarget
+	# snapshot and stays BAKED -- which is why rows 1-2 of the test above pass
+	# either way. A VARIABLE has no snapshot: one Syms row is one address is one
+	# OBJECT, so module A's read returned B's value and A's WRITE changed B's.
+	#
+	# ABLATED FOUR WAYS, and the measurements corrected two things this comment
+	# claimed before they were run:
+	#   whole fix out            1 a=2 / 2 b=2 / 3 a=70 / 4 b=70 / 5 size 24 24
+	#   sizeof routing only out  1 a=1 / 2 b=2 / 3 a=70 / 4 b=2  / 5 size 24 24
+	#   RUNG S only out          2 / 2 / 70 / 70   (measured pre-row-5)
+	#   value path only out      2 / 2 / 70 / 70   (measured pre-row-5)
+	#
+	# CORRECTION 1: the rung and the value-path lookup do NOT fail differently.
+	# Each is individually necessary and neither alone moves a single row --
+	# without the rung there is one Syms row, so the module-preferring lookup
+	# has nothing to prefer; without the lookup the two rows exist but every
+	# reference still takes the first. Row 4 is kept because it observes the
+	# WRITE direction (a store through A seen through B), not as a discriminator
+	# between those two arms, which it is not.
+	#
+	# CORRECTION 2, and it is why row 5 exists: THE SIZE ROW DOES FAIL
+	# INDEPENDENTLY. sizeof reads the symbol's own ArrLen rather than any value
+	# and resolves at five other call sites, so with only the value path routed
+	# rows 1-4 were already correct while both modules answered 24. No read or
+	# write assertion can observe a size taken from the wrong object -- and that
+	# site was found by VARYING THE SHAPE, not by reading the code.
+	#
+	# ORACLE IS GCC COMPILING IT AS THREE TRANSLATION UNITS (-DSEPARATE_TU), the
+	# semantics pxx's single-buffer module attribution emulates -- and DIFFED
+	# WHOLE rather than transcribed, so no expected value is written down twice.
+	# Do NOT run gcc the way pxx runs this file: a unity build really is one TU
+	# and gcc correctly rejects two file-scope `static int v` as a redefinition.
+	# bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias
+	gcc -std=gnu99 -DSEPARATE_TU -o $(TESTTMP)/cstatic_vars_gcc test/cstatic_two_modules_vars_distinct.c test/fixtures/cstatic_var_mod_a.c test/fixtures/cstatic_var_mod_b.c
+	./$(COMPILER) test/cstatic_two_modules_vars_distinct.c $(TESTTMP)/cstatic_vars26 > $(TESTTMP)/cstatic_vars.log 2>&1
+	tools/expect_same.sh cstatic_vars26 "$$($(TESTTMP)/cstatic_vars26)" "$$($(TESTTMP)/cstatic_vars_gcc)"
 	# A POINTER TO A TYPEDEF'D ARRAY describes the POINTEE. `typedef double
 	# TA[4]; TA *p;` is a pointer to an array of four, but both declarator paths
 	# entered the fixed-array arm on the typedef's inherent dimension alone, with

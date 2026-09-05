@@ -92,6 +92,54 @@ begin
   if mine >= 0 then Result := mine;
 end;
 
+function CFindSymFromModule(const name: AnsiString): Integer;
+{ Resolve a C file-scope VARIABLE from the module that is asking -- the data
+  side of CFindProcFromModule, and the same argument applies verbatim: C gives
+  a file-scope `static` INTERNAL linkage, the preprocessor inlines every module
+  into ONE buffer, and FindSym knows about units rather than about C modules,
+  so it answers with whichever row registered first. Right for one caller,
+  wrong for the other.
+
+  WORSE THAN THE FUNCTION ARM. A call site keeps a CallFixTarget snapshot and
+  stays BAKED, so calls reached the right body even while sharing a Procs row.
+  A variable has no snapshot: one row is one address is one object, so a read
+  in module A returns B's value and a write in A changes B's.
+
+  Deliberately NOT a change to FindSym, for the reason CFindProcFromModule
+  records about FindProc: it serves Pascal and NilPy too, where a C-module
+  preference has no meaning, and it is a hot path.
+
+  TWO fast-outs, because this sits on every C identifier reference. The row
+  already belonging to the asking module is the overwhelmingly common case and
+  never walks; and a row that is not a C `static` at all cannot be the
+  ambiguity this function exists for, so it never walks either. That second
+  guard also keeps this exactly as narrow as RUNG S -- a `static` colliding
+  with a plain external definition of the same name is two objects by 6.2.2,
+  but no corpus produces it and both sides decline it together rather than
+  drifting apart.
+  bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
+var i, mine, myMod: Integer;
+begin
+  Result := FindSym(name);
+  if Result < 0 then Exit;
+  if not CProgramMode then Exit;
+  if not SymCStaticLink[Result] then Exit;
+  myMod := CModuleOfTok(TokPos - 1);
+  if myMod < 0 then Exit;                  { the main source owns no statics }
+  if SymCModule[Result] = myMod then Exit;
+  mine := -1;
+  i := SymHashHead[SymNameFoldHash(name)];
+  while i >= 0 do
+  begin
+    if StrEqual(Syms[i].Name, name) and SymCStaticLink[i]
+       and (SymCModule[i] = myMod)
+       and (SymUnitIdx[i] = CurrentUnitIdx) then
+      begin mine := i; Break; end;
+    i := SymHashPrev[i];
+  end;
+  if mine >= 0 then Result := mine;
+end;
+
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 { The braced-list loop condition, called from the first such loop ~3200 lines
@@ -2522,7 +2570,10 @@ begin
         end
         else
         begin
-          idx := FindSym(name);
+          { module-preferring, for the same reason as the value path: the
+            fn-pointer being called is a VARIABLE and can be a file-scope
+            static. }
+          idx := CFindSymFromModule(name);
           if (idx >= 0) and (SymProcSig[idx] >= 0) then
           begin
             { `f(args)` where f is a fn-pointer variable -> indirect call.
@@ -2545,7 +2596,12 @@ begin
       end
       else
       begin
-        idx := FindSym(name);
+        { CFindSymFromModule, not FindSym: an identifier written inside a C
+          module prefers a file-scope `static` DEFINED in that module. Same
+          argument as the CFindProcFromModule call on the call path above --
+          without it, two modules' same-named statics share one Syms row and
+          therefore one address. }
+        idx := CFindSymFromModule(name);
         if idx < 0 then
         begin
           { A bare function name decays to its address (a fn-pointer value),
@@ -3484,7 +3540,19 @@ begin
       while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
       if (starCount > 1) and (CurTok.Kind = tkIdent) then
       begin
-        si := FindSym(CurTok.SVal);
+        { CFindSymFromModule at all five sizeof identifier sites, not FindSym.
+          sizeof reads the SYMBOL's own metadata -- ArrLen, PtrDepth,
+          AllocSize -- so resolving to another module's same-named static
+          answers about the wrong object.
+          FOUND BY VARYING THE SHAPE, NOT BY READING. With only the value path
+          routed, `static int sarr[3]` in one module and `static int sarr[6]`
+          in another both answered sizeof 24, where gcc says 12 and 24 -- while
+          every read and write row was already correct, so nothing in the
+          value assertions could see it. A per-caller rule fails by a MISSING
+          copy, and a missing copy is invisible to a search for the pattern
+          you already wrote; grep the CALLEE instead.
+          bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
+        si := CFindSymFromModule(CurTok.SVal);
         { SymPtrDepth/SymPtrBaseTk exist for exactly this — defs.inc says "pair
           them with PtrDepth to recover the pointee (depth > 1)". Fewer stars
           than the depth still leaves a POINTER, whose size is the default sz
@@ -3495,7 +3563,7 @@ begin
       end
       else if CurTok.Kind = tkIdent then
       begin
-        si := FindSym(CurTok.SVal);
+        si := CFindSymFromModule(CurTok.SVal);
         { `sizeof(*s.field)` / `sizeof(*s->field)` — deref of a pointer-typed
           struct field yields the field's POINTEE size, not the pointer size.
           Without this `CLEAR_HASH`'s `(hash_size-1)*sizeof(*s->head)` (head a
@@ -3570,7 +3638,7 @@ begin
     end
     else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
-      si := FindSym(CurTok.SVal);
+      si := CFindSymFromModule(CurTok.SVal);
       { A VARIABLE-LENGTH array. C evaluates sizeof on a VLA at RUN TIME, and
         the declaration parked that byte count in a `$vlasz$` companion local
         precisely so this can read it. Without this the symbol is an ordinary
@@ -3708,7 +3776,7 @@ begin
   end
   else if CurTok.Kind = tkIdent then
   begin
-    si := FindSym(CurTok.SVal);
+    si := CFindSymFromModule(CurTok.SVal);
     procIdx := FindProc(CurTok.SVal);
     Next;   { consume the base identifier }
     { Unparenthesized `sizeof ident <postfix...>` (C 6.5.3: the operand of the
@@ -3763,7 +3831,7 @@ begin
       is int (4). }
     if CurTok.Kind = tkIdent then
     begin
-      si := FindSym(CurTok.SVal);
+      si := CFindSymFromModule(CurTok.SVal);
       if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         vlaSz := FindSym('$vlasz$' + CurTok.SVal);
     end;
@@ -9896,6 +9964,14 @@ begin
   if declSawStatic then SymCStaticLink[idx] := True;
   if not declSawExtern then SymObjDataExternOnly[idx] := False
   else if declSymIsNew then SymObjDataExternOnly[idx] := True;
+  { WHOSE OBJECT IS THIS -- the data-side twin of `ProcCModule[procIdx] := ...`
+    at the one place a C function BODY is attributed. Guarded on the same
+    `not declSawExtern` as the line above and for the same reason: a
+    declaration without `extern` is a definition (C 6.9.2) and settles the
+    question, while an `extern` only claims import-so-far and must not
+    re-attribute a row another module defined.
+    bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
+  if not declSawExtern then SymCModule[idx] := CModuleOfTok(TokPos - 1);
   if CDeclIsFromCrtl(TokPos - 1) then SymObjRuntimeCopy[idx] := True
   else SymObjDataScope[idx] := True;
   if PxxDbgEnabled('a.clink') then
@@ -10159,6 +10235,26 @@ begin
     end;
     idx := FindSym(name);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    { RUNG S, DATA SIDE -- A FILE-SCOPE `static` DOES NOT SHARE A ROW ACROSS
+      C MODULES. The exact mirror of RUNG S in ParseCSubroutine, and the
+      variable arm is the worse one: a function's call sites keep a
+      CallFixTarget snapshot and stay BAKED, so calls reached the right body
+      even while sharing a row. A variable has no such snapshot -- one row IS
+      one address IS one object, so module A's read returns B's value and A's
+      write changes B's. Silent, rc=0.
+      NARROW ON PURPOSE, same as the proc side: both sides must be `static`,
+      both in the current unit, and the existing row's module must be KNOWN.
+      A `static` colliding with a plain external definition of the same name in
+      another module is also two objects by 6.2.2, but no corpus produces it
+      and widening this would change how every crtl override binds. Measure
+      before arming that.
+      bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
+    if (idx >= 0) and CProgramMode and declSawStatic
+       and SymCStaticLink[idx]
+       and (SymUnitIdx[idx] = CurrentUnitIdx)
+       and (SymCModule[idx] >= 0)
+       and (SymCModule[idx] <> CModuleOfTok(TokPos - 1)) then
+      idx := -1;
     declSymIsNew := idx < 0;
     if idx < 0 then
     begin
@@ -10504,6 +10600,26 @@ begin
       names are case-sensitive anyway. Shadow it with a fresh exact-case global
       (the exact-case FindSym pass then resolves uses to the variable). }
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    { RUNG S, DATA SIDE -- A FILE-SCOPE `static` DOES NOT SHARE A ROW ACROSS
+      C MODULES. The exact mirror of RUNG S in ParseCSubroutine, and the
+      variable arm is the worse one: a function's call sites keep a
+      CallFixTarget snapshot and stay BAKED, so calls reached the right body
+      even while sharing a row. A variable has no such snapshot -- one row IS
+      one address IS one object, so module A's read returns B's value and A's
+      write changes B's. Silent, rc=0.
+      NARROW ON PURPOSE, same as the proc side: both sides must be `static`,
+      both in the current unit, and the existing row's module must be KNOWN.
+      A `static` colliding with a plain external definition of the same name in
+      another module is also two objects by 6.2.2, but no corpus produces it
+      and widening this would change how every crtl override binds. Measure
+      before arming that.
+      bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias }
+    if (idx >= 0) and CProgramMode and declSawStatic
+       and SymCStaticLink[idx]
+       and (SymUnitIdx[idx] = CurrentUnitIdx)
+       and (SymCModule[idx] >= 0)
+       and (SymCModule[idx] <> CModuleOfTok(TokPos - 1)) then
+      idx := -1;
     declSymIsNew := idx < 0;
     if idx < 0 then
     begin
