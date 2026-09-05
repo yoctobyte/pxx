@@ -127,3 +127,28 @@ this (*"ANY trailing command replaces the status"*), and I did it anyway in the
 run that found this. The loud stderr text is what I actually reacted to, which
 is an argument for keeping that text loud regardless of how this ticket is
 fixed.
+
+## The two candidate discriminators, MEASURED — one of them cannot fire here
+
+Offered by frankS, 2026-09-05. Run against the throwaway repro above rather than
+reasoned about, because both sound equally plausible and only one is an
+instrument for THIS failure.
+
+| probe | clean tree | after the rebase that REFUSED TO START |
+| --- | --- | --- |
+| `.git/rebase-merge` / `.git/rebase-apply` exist | absent | **absent** |
+| `git rev-list --left-right --count origin/master...HEAD` | `0 0` | **`1 1`** |
+
+**The rebase directory is NOT a discriminator for this bug.** It separates *a
+rebase in progress* from *no rebase in progress* — and a rebase that never began
+is in the second group, exactly like one that finished cleanly. It is the same
+shape as the unmerged-path test it would replace: the value it reads on the
+failure is the value it reads on success, so it is a guard that cannot fail.
+Using it alone would swap one collision for another. (My "absence of
+`.git/rebase-merge` **together with** an unchanged merge-base" above is only
+sound because of the second clause; the first clause carries nothing.)
+
+**`--left-right --count` is the right instrument** and is better than the
+merge-base phrasing above: it answers *did the tree actually move* in one
+command, needs no before/after capture, and `left > 0` after a rebase the loop
+believes succeeded is precisely the impossible state. Prefer it in the fix.
