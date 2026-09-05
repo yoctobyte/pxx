@@ -291,6 +291,26 @@ the five is its own job and the first and only source of its group. The tickets
 name the right tests; the ~11.8% job-map naming gap does not apply here, and the
 "fifth scale of one mechanism" line should not be carried further.
 
+## A THIRD polarity, from the gtk3 flip: a test wearing a green that belonged to the host's library version
+
+`test_c_gtk_types` called `gtk_window_new` with **no `gtk_init`**. GTK 2
+tolerates that; GTK 3 aborts. So the flip to GTK 3 surfaced it, and frankC fixed
+it as a bug rather than working around it.
+
+Worth recording beside the other two, because it is the worst of the three and
+the only one that does not look like a host question from inside the ticket:
+
+- a host condition wearing a **red** — the 09-05 batch;
+- a host condition wearing a **green** — verifying at HEAD on a box that has the
+  headers;
+- **a test wearing a green that belonged to the host's library version.**
+
+**That test was green for five days for a reason unrelated to what it asserts**,
+so its green was never evidence about `gtk_window_new` at all — GTK 2's
+tolerance was the only thing between a real defect in the test and a red. And
+the consequence runs forward: **anyone re-adding the gtk-2 fallback later takes
+that green back with them and does not know it.** (frankB, 2026-09-05.)
+
 ## A trap in the tickets, worth fixing in the filer
 
 The **Failing step** block quotes a bare command. For `gtk3_stock` the real

@@ -5678,7 +5678,7 @@ var
   wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
   incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
-  cond, active, outermost, savedNestedComments: Boolean;
+  cond, active, outermost, savedNestedComments, optOn: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
   savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -5774,7 +5774,35 @@ begin
         if condCount >= MAX_PAS_CONDS then ErrorNoPos('include conditional nesting overflow');
         cond := False;
         if CaseEqual(command, 'ifopt') then
-          cond := False { compiler option switches are not modelled; branch off }
+        begin
+          { SAME ANSWER AS THE REAL LEXER, from the same function. This read
+            `cond := False` with a comment saying compiler option switches are
+            not modelled -- the identical stale line ParseFactorCore's copy
+            carried, left behind when that one was fixed. It is the second path
+            that stayed broken, and here it is WORSE than choosing the wrong
+            arm: this pre-pass decides whether an include is LOADED, so a
+            dollar-I inside a true dollar-IFOPT arm was dropped from the text,
+            the real lexer then took that arm and found nothing in it, and
+            neither arm ran. No diagnostic. Measured 2026-09-05 with R+ then
+            IFOPT R+ around an include: fpc printed the included line, we
+            printed nothing at all.
+
+            RESIDUAL, and it is why the probe above still fails: this pass does
+            not track switch DIRECTIVES, only defines, so a dollar-R-plus
+            written in the source above the dollar-IFOPT is invisible here and
+            the letter answers at its command-line/default state. Six of the
+            eight letters we model default ON (C I Z G J X) and are therefore
+            fixed by this; R and Q default off and agree with the old answer
+            anyway. bug-p-ifopt-is-hardwired-false-so-the-wrong-arm-compiles
+
+            An unmodelled letter keeps branching OFF rather than flipping to
+            ON: loading an include from an arm that should be dead is not free
+            -- a missing file is a hard error even in a dead branch (measured),
+            so guessing ON would trade a silent drop for a spurious refusal. }
+          if not PasIfOptState(name, optOn) then cond := False
+          else if (k <= Length(src)) and (src[k] = '-') then cond := not optOn
+          else cond := optOn;
+        end
         else if CaseEqual(command, 'if') then
         begin
           { Inactive branches need only nesting bookkeeping (FPC semantics):

@@ -13914,6 +13914,14 @@ test-core: $(COMPILER)
 	# refuses the second outright. Pin v404 scores 4/7.
 	./$(COMPILER) test/test_ifopt_unconditional_letters.pas $(TESTTMP)/test_ifopt_uncond26
 	tools/expect_same.sh test_ifopt_uncond26 "$$($(TESTTMP)/test_ifopt_uncond26 | tail -1)" "total ok 7 / 7"
+	# ...and the SECOND path with its own copy of the IFOPT decision:
+	# ExpandIncludes splices includes in before the lexer runs, so a dollar-I
+	# inside a dollar-IFOPT arm is dropped rather than merely mis-armed --
+	# neither arm runs and there is no diagnostic. Row 2 is the negative that
+	# stops the fix being "always load". Both rows agree with fpc 3.2.2;
+	# pin v404 scores 0/2.
+	./$(COMPILER) test/test_ifopt_guards_an_include.pas $(TESTTMP)/test_ifopt_inc26
+	tools/expect_same.sh test_ifopt_inc26 "$$($(TESTTMP)/test_ifopt_inc26 | tail -1)" "total ok 2 / 2"
 	# A subrange's bounds do not have to be LITERALS. Both type-level subrange
 	# arms keyed on a TOKEN KIND (tkInteger/tkMinus/tkString), so a bound that
 	# was a NAME fell through to the "is this a type name" arm and came back as
