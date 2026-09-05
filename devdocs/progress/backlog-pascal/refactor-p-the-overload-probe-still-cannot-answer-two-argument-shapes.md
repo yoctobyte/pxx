@@ -153,3 +153,76 @@ carries them and not a message log:
    which is exactly the channel this ticket is missing. The rest of that commit
    was the enforcement, which is what went red. Re-measure before reusing any
    of it -- the conformance numbers in the table above predate the channels.
+
+---
+
+## Row 2 re-measured 2026-09-05 (frankO) — the construct is real, the CITATION is not
+
+**`inherited Sort(ItemPtrCompare)` does not appear in fgl.** Real
+`/usr/share/fpcsrc/3.2.2/rtl/objpas/fgl.pp` is `{$mode objfpc}` and writes the
+`@`:
+
+```
+fgl.pp:1051  inherited Sort(@ItemPtrCompare);
+fgl.pp:1172  inherited Sort(@ItemPtrCompare);
+fgl.pp:1297  inherited Sort(@ItemPtrCompare);
+fgl.pp:1531  inherited Sort(FOnKeyPtrCompare);   { a procvar FIELD, not a name }
+```
+
+Both shapes compile and run correctly under pxx and match the FPC oracle —
+checked directly, not inferred. And FPC **refuses** the bare spelling in
+`objfpc` mode anyway (`Incompatible types: got "LongInt" expected
+"<procedure variable type...>"`), so the row as written could not have come
+from this corpus. Whatever took the fgl rung from 7/7 to 0/7 under a naive
+gate, it was not this line. That number is pre-channel and pre-`5dbd56a3c` in
+any case; **today's fgl baseline is 7/7, re-measured at HEAD.**
+
+## The construct underneath it WAS real, and it was a different bug
+
+Measured as a matrix rather than a single row, because one cell is not a
+finding. `fpc 3.2.2 -Mdelphi` accepts all five:
+
+| spelling | pxx before | fpc |
+| --- | --- | --- |
+| `v := MyCompare` | ok | ok |
+| `FreeRun(MyCompare)` | ok | ok |
+| `FreeRun(@MyCompare)` | ok | ok |
+| `s.Run(@MyCompare)` | ok | ok |
+| **`s.Run(MyCompare)`** | **`undefined variable (MyCompare)`** | ok |
+
+So it is **not** "types as neither a pointer nor the signature" — the gate
+never got a chance to abstain, because the name never resolved at all on the
+method path. `TryDelphiBareProcArg` was called from the two free-call argument
+loops and from NilPy, and from none of the seven method ones.
+
+**Fixed in `8389db919`** by moving the attempt into `ParseArgExpr`, the shared
+funnel five of the seven loops pass through — the same place, and for the same
+reason, that the bare generator expression was diverted (that function's own
+header records the identical free-works/method-fails symptom for
+`obj.take(x for x in xs)`).
+
+**What that means for THIS ticket is the part to re-measure, not to assume:**
+the argument now yields an `AN_PROCADDR` typed `tyPointer` instead of failing
+to resolve, so the probe finally has *an* answer for row 2. Whether it is the
+RIGHT answer for a widened `TypesCompatible` gate — `tyPointer` against a
+procedural parameter — is exactly what the widening experiment has to show.
+Row 2 may be closed as a blocker; it is not closed as a question.
+
+## The gate in this ticket is UNSATISFIABLE ON THIS BOX
+
+`test/pascal-conformance/` holds `pxx.skip` (166 lines) and **zero `.pas`
+files**; `library_candidates/` is **empty**; `/usr/share/fpcsrc/3.2.2/tests/`
+does not exist. The suite lives at
+`library_candidates/fpc-testsuite/tests/test` and is fetched, not vendored.
+
+So the `347/2` half of the gate cannot be measured here at all — and the
+harness prints SKIP and exits 0 when the suite is absent, which this ticket
+already warns about in its own Gate section. **That warning is now the live
+condition, not a hypothetical.** The generic-type-parameter gap (row 1) is the
+one the parent attributed to *seven conformance programs and tgeneric9*, so
+the corpus that would catch a regression in row 1 is precisely the one that is
+missing.
+
+Anyone landing the widening needs `tools/install_lib_candidates.sh` run first,
+or the measurement is blind on the axis that broke it last time. fgl (7/7) and
+`testmgr --tier quick` are available and are NOT a substitute.
