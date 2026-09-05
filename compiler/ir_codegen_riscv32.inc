@@ -1411,7 +1411,7 @@ begin
     IREmitNodeRISCV32(node);
 end;
 
-procedure EmitSysBuiltinRISCV32(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: Boolean);
+procedure EmitSysBuiltinRISCV32(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd, pathIsArg0: Boolean);
 { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family: evaluate the builtin's
   arguments and issue one raw syscall. Twin of EmitSysBuiltinXtensa, landed in
   the same pass and deliberately the same shape.
@@ -1426,7 +1426,7 @@ procedure EmitSysBuiltinRISCV32(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd:
 
   `atFdCwd` prepends AT_FDCWD and `nZeroTail` appends zero words, which is how
   SysOpen reaches openat(2) -- rv32 is asm-generic and has NO plain open. }
-var argNode, i, total: Integer;
+var argNode, i, total, pathSym: Integer;
 begin
   total := 0;
   if atFdCwd then
@@ -1439,7 +1439,28 @@ begin
   i := 0;
   while (argNode <> -1) and (i < nArgs) do
   begin
-    IREmitNodeRISCV32(IRA[argNode]);
+    pathSym := -1;
+    if pathIsArg0 and (i = 0) then pathSym := SysPathFrozenSym(argNode);
+    if pathSym >= 0 then
+    begin
+      { A LENGTH-PREFIXED path. Take the buffer address from the SYMBOL rather
+        than from the generic value evaluation -- the same choice x86-64 makes,
+        and the reason is that what a generic load leaves in a register for a
+        frozen string is a per-backend convention, while the slot address is
+        not. Then NUL-terminate at data+len and pass the DATA pointer, so the
+        kernel never sees the length byte as the first path character.
+
+        The prefix width comes from FrozenStrPrefixSize by way of these two
+        helpers, so this site adds no sixth place for a layout change to miss. }
+      EmitSlotAddrRISCV32(reg_a0, pathSym);
+      EmitLoadStrLenRISCV32(reg_a1, reg_a0, Syms[pathSym].TypeKind);
+      EmitLeaStrDataRISCV32(reg_a2, reg_a0, Syms[pathSym].TypeKind);
+      rv32_add(reg_a1, reg_a2, reg_a1);
+      rv32_sb(reg_zero, reg_a1, 0);
+      rv32_addi(reg_a0, reg_a2, 0);
+    end
+    else
+      IREmitNodeRISCV32(IRA[argNode]);
     rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
     Inc(total); Inc(i);
     argNode := IRB[argNode];
@@ -3231,15 +3252,15 @@ begin
              (procIdx = -Ord(tkSysFchmod)) then
           begin
             if procIdx = -Ord(tkSysOpen) then
-              EmitSysBuiltinRISCV32(node, 56, 2, 1, True)   { openat(AT_FDCWD,path,flags,0) }
+              EmitSysBuiltinRISCV32(node, 56, 2, 1, True, True)   { openat(AT_FDCWD,path,flags,0) }
             else if procIdx = -Ord(tkSysRead) then
-              EmitSysBuiltinRISCV32(node, 63, 3, 0, False)  { read(fd,buf,count) }
+              EmitSysBuiltinRISCV32(node, 63, 3, 0, False, False)  { read(fd,buf,count) }
             else if procIdx = -Ord(tkSyswrite) then
-              EmitSysBuiltinRISCV32(node, 64, 3, 0, False)  { write(fd,buf,count) }
+              EmitSysBuiltinRISCV32(node, 64, 3, 0, False, False)  { write(fd,buf,count) }
             else if procIdx = -Ord(tkSysClose) then
-              EmitSysBuiltinRISCV32(node, 57, 1, 0, False)  { close(fd) }
+              EmitSysBuiltinRISCV32(node, 57, 1, 0, False, False)  { close(fd) }
             else
-              EmitSysBuiltinRISCV32(node, 52, 2, 0, False); { fchmod(fd,mode) }
+              EmitSysBuiltinRISCV32(node, 52, 2, 0, False, False); { fchmod(fd,mode) }
             Exit;
           end;
           begin

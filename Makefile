@@ -5003,6 +5003,32 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_sosp26.2 "$$($(TESTTMP)/test_sosp26 | head -2 | tail -1)" "short open  TRUE"
 	tools/expect_same.sh test_sosp26.3 "$$($(TESTTMP)/test_sosp26 | head -3 | tail -1)" "short read  5 PXX26"
 	tools/expect_same.sh test_sosp26.4 "$$($(TESTTMP)/test_sosp26 | head -4 | tail -1)" "short miss  TRUE"
+	# CROSS ROWS, wired when bug-a-riscv32-and-xtensa-accept-a-shortstring-
+	# sysopen-path-and-open-nothing closed. riscv32 and xtensa COMPILED this and
+	# printed `short open  FALSE` for a file that exists: the generic arg
+	# evaluation handed openat() the address of [len][chars], so the kernel read
+	# the length byte as the first path character. Both now take the buffer
+	# address from the SYMBOL, NUL-terminate at data+len and pass the data
+	# pointer -- the same choice x86-64 makes.
+	# Compared against the x86-64 build of the SAME source rather than a literal:
+	# every line here is a RELATION (does the open succeed, do the bytes come
+	# back) and none of it is a per-target constant, so this row carries no
+	# expected width and would still be right if a target changed one.
+	# EVIDENCE IS A LOCAL QEMU RUN, not a cross-compile-and-inspect.
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_rv32
+	tools/expect_same.sh riscv32/test_sosp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_sosp_rv32; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_xt
+	tools/expect_same.sh xtensa/test_sosp "$$(tools/run_target.sh xtensa $(TESTTMP)/test_sosp_xt; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
+	# The other three REFUSE this shape by name. Asserted, not assumed: a refusal
+	# that silently became a miscompile is exactly the transition riscv32 and
+	# xtensa had already made when nobody was asserting them. These rows pin the
+	# refusal so that growing the arm on any of the three is a deliberate edit
+	# here rather than a row that quietly starts passing.
+	# bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it
+	for a in i386 aarch64 arm32; do \
+	  ! ./$(COMPILER) --target=$$a --platform=posix test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_$$a > $(TESTTMP)/test_sosp_$$a.log 2>&1 || exit 1; \
+	  tools/expect_same.sh $$a/test_sosp_refusal "$$(grep -c "error: target $$a: SysOpen expects a managed AnsiString path" $(TESTTMP)/test_sosp_$$a.log)" "1" || exit 1; \
+	done
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

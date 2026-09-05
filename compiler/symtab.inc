@@ -268,6 +268,7 @@ end;
 { Defined further down this include; RegisterGeneralAlias below needs it to
   recognise a frozen-string alias, and the FPC seed build wants the forward. }
 function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+function SysPathFrozenSym(argNode: Integer): Integer; forward;
 function TypeIsAnyString(tk: TTypeKind): Boolean; forward;
 { The length-prefix WIDTH the two frozen kinds disagree about; see its body. }
 function FrozenStrPrefixSize(tk: TTypeKind): Integer; forward;
@@ -3842,6 +3843,38 @@ function TypeIsFrozenString(tk: TTypeKind): Boolean;
   the new kinds route through the frozen-string path without 250 new arms. }
 begin
   Result := (tk = tyString) or (tk = tyShortString) or (tk = tyFixedString);
+end;
+
+function SysPathFrozenSym(argNode: Integer): Integer;
+{ The symbol behind a syscall PATH argument when that path is a FROZEN
+  (length-prefixed) string, else -1.
+
+  Linux path syscalls want a NUL-terminated string starting at the first
+  CHARACTER. A managed AnsiString handle already is one. A ShortString is
+  [len][chars] with no terminator, so handing its buffer address to openat(2)
+  gives the kernel the length byte as the first character of the path.
+
+  x86-64 has always converted (EmitTerminateString + EmitLeaStrDataRdi) and
+  wasm32 spells it as one i32.store8; i386, aarch64 and arm32 refuse the shape
+  by name. riscv32 and xtensa did NEITHER -- they took the generic argument
+  path and opened nothing, silently, for a file that opens one line earlier
+  through a managed path. Two targets answering wrong where three answer
+  honestly is the worst of both, and the wrong answer is only visible if you
+  RUN a 32-bit binary.
+  bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-open-nothing
+
+  Shared rather than copied into each backend because the QUESTION is
+  target-independent -- only the instruction sequence differs. }
+var v: Integer;
+begin
+  Result := -1;
+  v := IRA[argNode];
+  if v < 0 then Exit;
+  if (IRKind[v] <> IR_LOAD_SYM) and (IRKind[v] <> IR_LEA) then Exit;
+  v := IRA[v];
+  if v < 0 then Exit;
+  if TypeIsFrozenString(Syms[v].TypeKind) and (not Syms[v].IsArray) then
+    Result := v;
 end;
 
 function TypeIsAnyString(tk: TTypeKind): Boolean;

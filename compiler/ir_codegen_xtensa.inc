@@ -1645,7 +1645,7 @@ begin
     IREmitNodeXtensa(node);
 end;
 
-procedure EmitSysBuiltinXtensa(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: Boolean);
+procedure EmitSysBuiltinXtensa(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd, pathIsArg0: Boolean);
 { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family: evaluate the builtin's
   arguments and issue one raw syscall.
 
@@ -1669,7 +1669,7 @@ procedure EmitSysBuiltinXtensa(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: 
   `atFdCwd` prepends AT_FDCWD and `nZeroTail` appends zero words, which is how
   SysOpen reaches openat(2). See the SysOpen arm for why it is openat and not
   open on this target. }
-var argNode, i, total: Integer;
+var argNode, i, total, pathSym: Integer;
 begin
   total := 0;
   if atFdCwd then
@@ -1681,7 +1681,29 @@ begin
   i := 0;
   while (argNode <> -1) and (i < nArgs) do
   begin
-    IREmitNodeXtensa(IRA[argNode]);
+    pathSym := -1;
+    if pathIsArg0 and (i = 0) then pathSym := SysPathFrozenSym(argNode);
+    if pathSym >= 0 then
+    begin
+      { A LENGTH-PREFIXED path: NUL-terminate at data+len and pass the DATA
+        pointer, so the kernel never sees the length byte as the first path
+        character. Twin of the riscv32 arm, landed in the same pass and
+        deliberately the same shape -- see SysPathFrozenSym for why the
+        question is shared and only this sequence is not.
+
+        The buffer address comes from the SYMBOL, not from the generic value
+        evaluation: what a generic load leaves in a register for a frozen
+        string is a per-backend convention, the slot address is not. }
+      EmitSlotAddrXtensa(reg_xtensa_a2, pathSym);
+      EmitLoadStrLenXtensa(reg_xtensa_a3, reg_xtensa_a2, Syms[pathSym].TypeKind);
+      EmitLeaStrDataXtensa(reg_xtensa_a4, reg_xtensa_a2, Syms[pathSym].TypeKind);
+      xtensa_add(reg_xtensa_a3, reg_xtensa_a4, reg_xtensa_a3);
+      xtensa_movi(reg_xtensa_a5, 0);
+      xtensa_s8i(reg_xtensa_a5, reg_xtensa_a3, 0);
+      xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
+    end
+    else
+      IREmitNodeXtensa(IRA[argNode]);
     XtensaPushA2; Inc(total); Inc(i);
     argNode := IRB[argNode];
   end;
@@ -3458,15 +3480,15 @@ begin
               Exit;
             end;
             if procIdx = -Ord(tkSysOpen) then
-              EmitSysBuiltinXtensa(node, 288, 2, 1, True)    { openat(AT_FDCWD,path,flags,0) }
+              EmitSysBuiltinXtensa(node, 288, 2, 1, True, True)    { openat(AT_FDCWD,path,flags,0) }
             else if procIdx = -Ord(tkSysRead) then
-              EmitSysBuiltinXtensa(node, 12, 3, 0, False)    { read(fd,buf,count) }
+              EmitSysBuiltinXtensa(node, 12, 3, 0, False, False)    { read(fd,buf,count) }
             else if procIdx = -Ord(tkSyswrite) then
-              EmitSysBuiltinXtensa(node, 13, 3, 0, False)    { write(fd,buf,count) }
+              EmitSysBuiltinXtensa(node, 13, 3, 0, False, False)    { write(fd,buf,count) }
             else if procIdx = -Ord(tkSysClose) then
-              EmitSysBuiltinXtensa(node, 9, 1, 0, False)     { close(fd) }
+              EmitSysBuiltinXtensa(node, 9, 1, 0, False, False)     { close(fd) }
             else
-              EmitSysBuiltinXtensa(node, 52, 2, 0, False);   { fchmod(fd,mode) }
+              EmitSysBuiltinXtensa(node, 52, 2, 0, False, False);   { fchmod(fd,mode) }
             Exit;
           end;
           { Names the builtin. The message used to read "builtin calls not
