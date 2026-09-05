@@ -3747,21 +3747,6 @@ begin
   if (dstTk = tyClass) and (srcTk <> tyPointer) then Exit;
   if (srcTk = tyClass) and (dstTk <> tyPointer) then Exit;
 
-  { A POINTER destination and a non-pointer ORDINAL source. The slot holds an
-    address; an Integer stored there is not one, and calling or dereferencing it
-    jumps through the value. TypeIsOrdinal INCLUDES tyPointer -- pointers are
-    ordinals in this dialect -- so the ordinal/ordinal rule above waved every
-    one of these through, which is why the pair had no rule at all.
-
-    ASYMMETRIC ON PURPOSE, and narrower than FPC. Only the POINTER SINK is
-    refused. Reading a pointer INTO an integer (`i := p`) is how NativeInt
-    round-trips are spelled and is left alone; it is also not the direction that
-    crashes. FPC rejects both and we do not have to -- accepting what FPC
-    rejects is not a defect here, and the sink is where the wrong value becomes
-    an instruction pointer.
-    bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
-  if (dstTk = tyPointer) and TypeIsOrdinal(srcTk) and (srcTk <> tyPointer) then Exit;
-
   AssignKindsIncompatible := False;
 end;
 
@@ -9203,23 +9188,6 @@ begin
       the Integer overload — so fpjson's TJSONArray.Create([1,2,3]) built
       [true, true, true]. Silent wrong VALUES, no diagnostic. The reverse
       (Boolean arg -> integer param) stays accepted for now. }
-
-    { A POINTER PARAMETER accepts only a pointer argument, and it is the same
-      statement the assignment sink rule makes one path over: the slot holds an
-      address, so an ordinal put there becomes an instruction pointer the moment
-      it is called. `TakesIt(G)` on `procedure TakesIt(p: TF)` and a
-      parameterless `function G: Integer` compiled, printed, and SIGSEGV'd --
-      TypeIsOrdinal INCLUDES tyPointer, so the blanket ordinal rule above
-      accepted the Integer result as a procedural argument. FPC rejects it
-      ("Incompatible type for arg no. 1"). Asymmetric like the assignment rule:
-      only the pointer SINK is refused, so an untyped/NativeInt round-trip in
-      the other direction is untouched.
-      bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
-    if (pType = tyPointer) and (aType <> tyPointer) then
-    begin
-      Result := False;
-      Exit;
-    end;
     Result := (pType <> tyBoolean) or (aType = tyBoolean);
     Exit;
   end;

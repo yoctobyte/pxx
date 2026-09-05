@@ -378,10 +378,11 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (42)
+## backlog-pascal (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode | P | 60 | bug | `f := G;` where `f` is a procedural variable and `G` a function compiles OUTSIDE `{$mode delphi}` and segfaults at runtime. FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix. | — |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-char-array-row-of-a-2d-array-is-not-a-string | P | 25 | bug | `a[0] := 'hi'` where `a: array[0..2] of array[0..15] of Char` is still refused as `cannot assign ShortString to Char`. ASTCharArrayCap now answers for AN_IDENT, AN_FIELD and AN_DEREF, which is every shape the synapse failure and its five siblings needed; the AN_INDEX row of a multi-dimensional Char array is the one left, and it needs a per-dimension extent the other three do not. Low prio on purpose: no measured program wants it — it is the residual named when the parent bug closed, not a report from real code. | — |
 | bug-p-a-char-array-typed-constant-cannot-be-initialised-from-a-string-literal | P | 35 | bug | A string literal standing in for the element list of an `array[..] of Char` typed constant is refused with `expected '(' before ''ABCD''`. It is ordinary Pascal and FPC accepts it. Nested one level down the same gap reads as `too many array initializer elements`, because the outer list expands the literal's characters at the WRONG level. Blocks conformance rows tarray3 and tforin12. | — |
@@ -902,9 +903,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3316)
+## done (3315)
 
-3316 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3315 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1040,6 +1041,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [P] bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [U] decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park
 - [p 60] [U] decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision

@@ -6530,40 +6530,6 @@ test-core: $(COMPILER)
 	@# belongs to decide-how-a-type-carries-an-identity-its-kind-cannot-hold.
 	@$(TESTTMP)/test_setelembounds26 | diff -u test/test_set_elem_bounds.expected - \
 	  || { echo 'test_set_elem_bounds: FAIL - a set element subrange lost its bounds'; exit 1; }
-	./$(COMPILER) test/test_procvar_bare_name_binding.pas $(TESTTMP)/test_procvar_bind26
-	@# .expected is fpc 3.2.2's own output (-Mobjfpc). The POSITIVE half: every
-	@# legal way to fill a procedural slot must keep working, and the `round`
-	@# row asserts the rule's deliberate ASYMMETRY -- pointer-into-integer is
-	@# NOT refused -- which an over-broad fix would break.
-	@$(TESTTMP)/test_procvar_bind26 | diff -u test/test_procvar_bare_name_binding.expected - \
-	  || { echo 'test_procvar_bare_name_binding: FAIL - a legal procedural binding was refused'; exit 1; }
-	./$(COMPILER) test/test_procvar_bare_name_delphi.pas $(TESTTMP)/test_procvar_delphi26
-	@# THE CONTROL FOR THE DELTA: {$$mode delphi} still binds the bare name's
-	@# ADDRESS. Binding it everywhere would also fix the crash and would silently
-	@# delete the one thing {$$mode delphi} means, passing every other row.
-	tools/expect_same.sh test_procvar_delphi26 "$$($(TESTTMP)/test_procvar_delphi26)" "7"
-	@# ...and the four REFUSALS, one per code path, each asserting its SPECIFIC
-	@# diagnostic rather than a non-zero exit -- "the compiler failed" also
-	@# passes when the fixture has a typo in it. Separate files because the
-	@# argument arm is diagnosed at PARSE time and aborts the compile before the
-	@# assignment arms are lowered, so one file cannot show all four.
-	@# Spelled out one per line rather than looped over `var field elem`: the
-	@# loop was the first form and check-test-wiring rejected it, correctly --
-	@# a path built from a shell variable does not name a file, so nothing can
-	@# verify these three are run at all. Same reasoning as the rest of this
-	@# file's guards: an assertion nobody can see is not an assertion.
-	@./$(COMPILER) test/procvar_bare_name_var.pas $(TESTTMP)/test_procvar_ref_var 2>&1 \
-	  | grep -q 'cannot assign Integer to Pointer' \
-	  || { echo 'procvar_bare_name_var: FAIL - a bare function name into a procedural VARIABLE was accepted'; exit 1; }
-	@./$(COMPILER) test/procvar_bare_name_field.pas $(TESTTMP)/test_procvar_ref_field 2>&1 \
-	  | grep -q 'cannot assign Integer to Pointer' \
-	  || { echo 'procvar_bare_name_field: FAIL - a bare function name into a procedural FIELD was accepted'; exit 1; }
-	@./$(COMPILER) test/procvar_bare_name_elem.pas $(TESTTMP)/test_procvar_ref_elem 2>&1 \
-	  | grep -q 'cannot assign Integer to Pointer' \
-	  || { echo 'procvar_bare_name_elem: FAIL - a bare function name into a procedural ELEMENT was accepted'; exit 1; }
-	@./$(COMPILER) test/procvar_bare_name_arg.pas $(TESTTMP)/test_procvar_ref_arg 2>&1 \
-	  | grep -q 'no overload of TakesIt matches' \
-	  || { echo 'procvar_bare_name_arg: FAIL - a bare function name was accepted as a procedural ARGUMENT'; exit 1; }
 	./$(COMPILER) test/test_delphi_generic_constraint_anchor.pas $(TESTTMP)/test_dgen_constraint26
 	@# .expected is fpc 3.2.2's own output. Arms 4 and 6 are the negative
 	@# controls (an UNCONSTRAINED later template, and no later template at all --

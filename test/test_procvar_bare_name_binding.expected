@@ -1,9 +1,0 @@
-var    7
-nil    ok
-copy   7
-field  9
-elem   7 9
-arg    7
-ptr    ok
-ptrnil ok
-round  ok

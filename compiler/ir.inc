@@ -96,30 +96,7 @@ begin
         if (si < 0) or (si >= SymCount) then Exit;
         if Syms[si].IsArray then Exit;          { the kind is the ELEMENT's }
         if Syms[si].IsRef then Exit;            { by-ref/untyped: the slot holds an address }
-        { A PROCEDURAL variable. Its Syms[].TypeKind is the RESULT's type and not
-          the slot's -- measured, not read off the old comment here, which said
-          so and was right: reporting the raw kind for `f: TF` where
-          `TF = function: Integer` leaves `f := G` looking like Integer :=
-          Integer, the two sides AGREE, and the check passes on a store that
-          SIGSEGVs when the slot is called. Bailing out did the same thing more
-          quietly. Either way the only assignment type-check in the compiler
-          could never see a procedural destination.
-
-          The slot holds a CODE ADDRESS, so say tyPointer -- which is true of
-          the slot, is what `@G` and `nil` already produce, and lets the
-          pointer-vs-ordinal rule refuse the bare call result.
-
-          A METHOD pointer keeps the bail: it is a 16-byte {Code,Data} record,
-          not a pointer, and the record rule plus RecIsReferenceShaped below
-          are what cover it.
-          bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
-        if SymProcSig[si] >= 0 then
-        begin
-          if Syms[si].TypeKind = tyRecord then Exit;
-          tk := tyPointer;
-          AssignSideKind := True;
-          Exit;
-        end;
+        if SymProcSig[si] >= 0 then Exit;       { procvar: the kind is the RESULT's }
         if SymCellPtr[si] >= 0 then Exit;       { captured cell: one indirection away }
         { An INTERFACE variable is spelled tyRecord -- it is a 16-byte fat
           pointer {IMT, instance} -- so the record rule would refuse `p := ifc`,
@@ -160,33 +137,6 @@ begin
       begin
         tk := IntToTypeKind(ASTTk[node]);
         AssignSideKind := (tk <> tyUnknown);
-      end;
-    AN_CALL, AN_CALL_IND, AN_VIRTUAL_CALL, AN_CLASS_VIRTUAL_CALL, AN_INTF_CALL:
-      { A CALL RESULT, and this is the FOURTH arm this function has needed for
-        one reason -- the AN_BINOP arm above already says the shape does not
-        change, and it did not. A side this function cannot type is a side the
-        rule never sees, so `f := G` on a procedural `f` and a parameterless
-        `function G: Integer` short-circuited here and looked exactly like a
-        check that fired and passed. It compiled, then SIGSEGV'd when `f()`
-        jumped through the Integer 7.
-
-        Read off ASTTk like the element/field/deref arm below, and for its
-        reason: the parser already resolved the result type when it built the
-        node, and walking to Procs[IVal].RetType would be a second, divergent
-        answer to a question already answered -- and would not cover
-        AN_CALL_IND, which has no proc index to walk to.
-
-        tyUnknown stays silent, and the reference-shaped bail is the same one:
-        an interface-returning call is a 16-byte fat pointer spelled tyRecord,
-        and refusing `p := MakeIntf` would be a false reject of working code.
-        bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
-      begin
-        nk := IntToTypeKind(ASTTk[node]);
-        if nk = tyUnknown then Exit;
-        rec := ResolveNodeRec(node);
-        if RecIsReferenceShaped(rec) then Exit;
-        tk := nk;
-        AssignSideKind := True;
       end;
     AN_INDEX, AN_FIELD, AN_DEREF:
       { An ELEMENT, a FIELD, a DEREF. The identifier arm above is the only one
