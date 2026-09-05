@@ -410,3 +410,66 @@ population is absent.
 
 The widening is NOT ready to land, and the reason is now specific rather than
 historical: it costs the fgl rung four drivers at a line that exists.
+
+
+---
+
+## Conformance MEASURED, 2026-09-06 (frankO) — the widening is free on that axis
+
+The suite is fetchable and was simply not on this box. `tools/install_lib_candidates.sh
+fpc-testsuite` brings 1447 programs, pinned to the release_3_2_2 tag, into
+gitignored `library_candidates/`. `test/pascal-conformance/` holds only
+`pxx.skip` and is the skip list, **not** the corpus — reading it as the corpus
+is what produced the "gate cannot fail" note above, and that note was right
+about the consequence and wrong about the remedy: nothing was missing from the
+repo, the fetch had never been run here.
+
+### Result — same sources both arms, differing ONLY by the widening
+
+| | baseline `ce3cbc03f79a` | widened `80d91c4a6605` |
+| --- | --- | --- |
+| pascal conformance (550 curated) | **381 pass / 3 fail** | **381 pass / 3 fail** |
+| failures | tdefault8, tgeneric4, tgenfunc14 | tdefault8, tgeneric4, tgenfunc14 |
+
+**Zero conformance regressions.** The same three rows fail on both sides.
+
+**Row 1 is empirically closed.** The parent attributed the generic-type-parameter
+gap to *"7 conformance programs and tgeneric9"* and measured `346 -> 338/8`.
+Today the widening costs **nothing** there — the seven argument-match channels
+added since have absorbed it. `346 -> 338/8` is not merely stale as a baseline,
+it is stale as a *diagnosis*: the shape it described no longer regresses.
+
+### A measurement error of mine, recorded because the artefact is instructive
+
+My first conformance pair read `382/2 -> 381/3` and I nearly reported
+`tdefault8.pp` as the widening's one remaining cost. It is not: **tdefault8
+fails at HEAD with the widening reverted.** The baseline arm had been measured
+with a binary built before a `sync.sh` pulled two `compiler/` commits, and I did
+not rebuild — the exact failure CLAUDE.md names ("rebuild after any sync
+touching `compiler/**` before you measure"). The two arms differed by my
+experiment *and* by someone else's commits, and the difference was attributed
+entirely to mine.
+
+The tell was that the "regression" made no sense for the mechanism: a gate that
+refuses on argument/parameter compatibility has no way to produce
+`unknown type: TRange`. **A regression whose error message does not fit the
+mechanism under test is the signature of a contaminated baseline**, and it is
+worth more than the sha check that would also have caught it, because it fires
+without your having to suspect anything.
+
+`tdefault8` is a real regression, just not this one's — narrowed to a two-commit
+window, reported to its author, and tracked separately.
+
+### What actually blocks the widening now, and it is ONE channel
+
+| cost | rows | shape |
+| --- | --- | --- |
+| fgl rung 7/7 -> 3/7 | fgl.pp:1051, :1172 | `@Routine` -> METHOD POINTER parameter |
+| corpus 1578 -> 1576 | test_fpc_compat_batch2:138 | same shape (`methodptr-param-arg-and-call`) |
+| | test_getinterface_guid_b257:81 | GUID constant |
+| conformance | — | **none** |
+
+So the ticket's two named gaps have become **one**, and it is neither of them
+as written: a channel answering *"argument j is a routine or method ADDRESS"*,
+filled where `AN_PROCADDR` is built. Everything else the widening would cost is
+one GUID row.
