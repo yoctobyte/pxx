@@ -49,8 +49,11 @@ python3-dev         # Python.h/pythread.h/structmember.h -- test_cpyext_*.npy
 libsqlite3-dev      # libsqlite3 -- test-sqlite-threads, test-sqlite-parity
 tcl-dev             # libtcl8.6.so.0 -- lib/pcl/tk.pas
 tk-dev              # libtk8.6.so.0  -- lib/pcl/tk.pas, the tkinter demo
-libgtk-3-dev        # gtk/gtk.h + libgtk-3.so.0 -- test_c_gtk*, gtk3_c.h census
-libgtk2.0-dev       # the gtk2 header surface
+libgtk2.0-dev       # the FOUR `uses gtk` tests. pasparser_proc.inc:3428 falls back
+                    # to a HARDCODED /usr/include/gtk-2.0/gtk/<name>.h -- so gtk3
+                    # dev alone does NOT satisfy them. Measured 2026-08-29: the
+                    # failures did not clear until this landed, 33 min after -3-dev
+libgtk-3-dev        # test_c_gtk3_stock only (`uses gtk3_c` -> /usr/include/gtk-3.0)
 
 xvfb                # 6 GUI jobs; testmgr treats xvfb as an exclusive resource
 xdotool             # gui_realwindow() real-window-size assertion; SKIPS SILENTLY
