@@ -106,27 +106,30 @@ type
     bug-b-rtl-provides-no-ienumerable-generic-interface's follow-on, not a
     silent gap.
 
-    NO `property Current: T read GetCurrent;` — FPC's IEnumerator has one and
-    ours still does not. **The compiler bug is FIXED; the blocker is now the
-    PIN, not the parser.** bug-p-a-property-in-an-interface-declaration-is-
-    rejected is in `done/`, and an instantiated generic interface carrying a
-    property compiles and runs on a HEAD-built compiler (probe prints 1 2 3).
-    It still fails on `stable_linux_amd64/default/pinned` with
-    `expected 'end' before 'Integer'`, and Track B builds lib/rtl with the
-    PINNED compiler — `gate.sh quick`'s first step is exactly that. So adding
-    the property today turns that step red for every lane until a `make pin`
-    lands, which is why it is still absent.
+    `property Current: T read GetCurrent;` IS PRESENT as of pin v404 (2026-09-05),
+    which is what the note that stood here was waiting for. The parser bug
+    (bug-p-a-property-in-an-interface-declaration-is-rejected) had been fixed for
+    days; the blocker was that Track B builds lib/rtl with the PINNED compiler --
+    `gate.sh quick`'s first step is exactly that -- so adding the property before
+    a pin postdating ba99a4e81 would have turned that step red for every lane.
+    Verified both halves before adding it: `merge-base --is-ancestor ba99a4e81
+    <pin tree>`, and the property compiling under `stable_linux_amd64/default/
+    pinned` rather than only under HEAD.
 
-    ADD IT ON THE FIRST PIN THAT POSTDATES ba99a4e81, and delete this note. Until
-    then, call GetCurrent directly. That residue is what rtl-generics' rung 6b
-    now stops on: `for LValue in AEnumerable` at generics.collections.pas:1480,
-    over an `IEnumerable<T>`, needs a readable Current and reports
-    `for-in: enumerator has no readable Current`.
+    THE FALSE-GREEN WARNING THE OLD NOTE LEFT, KEPT BECAUSE IT ALMOST WORKED ON
+    ME: an UNINSTANTIATED generic interface carrying a property compiles fine on
+    a compiler that cannot do it, because its body is never parsed. The obvious
+    probe -- a plain non-generic interface with a property -- passes for the same
+    reason and is not the question either. INSTANTIATE, and run it. My first
+    probe was the non-generic one and it was worthless; the note said so before
+    I wrote it. Generalised in debugging-playbook.md, "A PROBE CAN BE DRAWN FROM
+    A POPULATION WHERE THE MACHINERY NEVER RUNS".
 
-    Keep the FALSE-GREEN warning when you do it: an UNINSTANTIATED generic
-    interface carrying a property compiles fine because its body is never
-    parsed, so the obvious quick check passes on a compiler that cannot do it.
-    Instantiate.
+    DO NOT REMOVE THE PROPERTY AS UNUSED. It is what cleared Track P's corpus
+    rung 6b -- generics.collections compiles end to end only with it -- and that
+    is attributed by ablation, not by plausibility: same binary, same source,
+    this one line removed gives `for-in: enumerator has no readable Current` at
+    generics.collections.pas:1481. See feature-pascal-corpus-expansion.
 
     The non-generic TObject-based pair FPC keeps in objpash.inc:273/280 is not
     here either; nothing in the corpus references it. Add it when something
@@ -135,6 +138,7 @@ type
     function GetCurrent: T;
     function MoveNext: Boolean;
     procedure Reset;
+    property Current: T read GetCurrent;
   end;
 
   IEnumerable<T> = interface

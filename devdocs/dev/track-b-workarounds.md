@@ -162,6 +162,37 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   blocked, not worked around, so nothing to revert — just resumable when chess is
   picked back up.
 
+## Reverted 2026-09-05 (pin v404 `fe1e9c37d322`, verified against `$(PXX_STABLE)`)
+
+- **`lib/rtl/classes.pas` — `IEnumerator<T>` now carries
+  `property Current: T read GetCurrent;`.** Blocker was
+  [[bug-p-a-property-in-an-interface-declaration-is-rejected]], fixed at HEAD and
+  in `done/` for days while the pin still refused a property inside an interface,
+  so B could not use it. Pin v404 (`8844c8c42`) carries the fix
+  (`git merge-base --is-ancestor ba99a4e81 8844c8c42` → yes), and the property
+  compiles AND runs under `stable_linux_amd64/default/pinned`. `gate.sh quick`
+  GREEN, including `PASS pinned builds live lib/rtl`, which is the row that IS
+  the test for this change. It unblocked Track P's corpus rung 6b:
+  `generics.collections` compiles end to end for the first time
+  ([[feature-pascal-corpus-expansion]]), attributed by ablation — the line
+  removed reproduces `for-in: enumerator has no readable Current` exactly.
+
+**What this row adds, and it is about THIS FILE's aperture.** The header above
+already names the third state — *fixed at HEAD, not yet pinned* — and this was a
+textbook instance of it. **It was still not in this registry.** Every row here is
+a *shape*: code written non-idiomatically, which a reader can see and a grep can
+find. This workaround was an **OMISSION** — a declaration that was simply not
+written — and a missing declaration leaves nothing to spot. It survived for six
+days as a comment in `classes.pas` and in no index anywhere, which meant the
+"re-check each session against the latest pin" instruction at the top of this
+file could not reach it: there was no row to re-check.
+
+**So: an omission-shaped workaround must be filed here explicitly, because
+nothing else will surface it.** The tell that one exists is a source comment
+saying "add this when the pin moves". If you write that comment, write a row too;
+if you find one, file the row before you fix it. The comment reaches whoever is
+editing that file. The registry reaches whoever is looking for unblocked work,
+and those are not the same person.
 ## Reverted 2026-08-30 (pin v393 `1d69760deabe`, verified against `$(PXX_STABLE)`)
 
 Three of the four rows `bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing`

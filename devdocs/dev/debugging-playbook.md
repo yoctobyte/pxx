@@ -7696,3 +7696,68 @@ when N agents run one tool concurrently, every *shared, conventionally-named*
 output path becomes a way to read a correct answer to someone else's question.
 The discriminator is never "is this file well-formed" — it is **"did MY run say
 this path is mine"**.
+
+---
+
+## A PROBE CAN BE DRAWN FROM A POPULATION WHERE THE MACHINERY NEVER RUNS — and the obvious simplification is usually that probe
+
+Measured 2026-09-05 (frankB, corpus rung 6b). It is the third member of the
+family this file already carries two of, and it is the sharpest, because here
+the trap was **written down in advance, in the file I was editing, and it still
+almost worked.**
+
+**The question.** `lib/rtl/classes.pas` declares `IEnumerator<T>`. A committed
+note said `property Current: T read GetCurrent;` had been left out only because
+Track B builds `lib/rtl` with the PINNED compiler and the pin of the day
+rejected a property inside an interface. *"Add it on the first pin that
+postdates `ba99a4e81`."* So the thing to establish was: **can the pinned
+compiler compile a property in a generic interface?**
+
+**The probe I reached for first.** A plain, non-generic interface with a
+property. It compiled. That is a green, from the pinned compiler, on the
+construct named in the note — and it is worth **nothing**.
+
+**Why it is worthless.** An UNINSTANTIATED generic's body is never parsed. A
+generic interface carrying a property therefore compiles cleanly on a compiler
+that cannot compile that property at all, because the compiler never looks
+inside. And a non-generic interface with a property exercises a different path
+that was never the question. Both spellings are quiet for reasons unrelated to
+the answer:
+
+| probe | passes because | says about the question |
+| --- | --- | --- |
+| non-generic interface + property | that path always worked | nothing |
+| `generic IEnum<T>` + property, never specialized | body never parsed | nothing |
+| `generic IEnum<T>` + property + `specialize IEnum<Integer>`, **run** | the body was parsed and codegen'd | the answer |
+
+Only the third row can come out false.
+
+**The generalisation, and it is not about generics.** Wherever the feature under
+test lives inside a construct that is **lazily elaborated** — an uninstantiated
+generic, an untaken conditional branch, a dead `if`, an unreferenced unit, an
+inline function never called, a template never used, a `{$IFDEF}` arm that is
+off — a probe placed there compiles for a reason that has nothing to do with
+whether the feature works. **The machinery you are testing never runs.** So ask
+the population question this file already asks about controls, and ask it about
+the PROBE too: *is my probe in a place where the code under test is actually
+executed?*
+
+This sits beside the other two members deliberately:
+
+- **the `sizeof(int)` collision** — the right answer equals the failure value,
+  so a correct probe cannot fail;
+- **the leak that passes every value assertion** — the assertion class cannot
+  observe the defect;
+- **this one** — the probe is in a region the machinery never enters.
+
+Three different ways to build a green that could not have been red. The first
+two are about the ASSERTION; this one is about the SITE. Checking one does not
+check the others.
+
+**And the practical tell.** I simplified the probe to isolate the variable —
+dropping the generic, because "a property in an interface" was the sentence in
+the note. Simplifying a repro is the right instinct and it is exactly what
+walked the probe out of the population: **the part I removed as incidental was
+the part that made the body get parsed.** When you simplify a probe, name what
+the removed element was doing, and if the answer is "it made the code under test
+run", you have not simplified it — you have disarmed it.

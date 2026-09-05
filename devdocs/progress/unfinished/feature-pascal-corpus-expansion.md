@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: unfinished
 owner:
-summary: "READ THE 2026-09-05 SECTION AT THE BOTTOM BEFORE ANY OTHER FIGURE IN THIS FILE. Rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30 and was NOT green on 2026-09-05: b613b5fcf broke it the next day and nobody re-ran it, so 6b appeared to stop inside 6a's file and the ladder had moved BACKWARDS while reading as a floor. Fixed (bug-p-a-method-pointer-type-derails-the-delphi-generic-alias-anchor); 6a compiles again and 6b is back at its own wall. THE STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- the better-confirmed a rung is, the more it gets re-cited instead of re-measured. Re-run the rung before you trust any row here. The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current`, REDUCED to `for LValue in AEnumerable` over an IEnumerable<T> at :1480 -- which is NOT a bug but a PIN-ORDERING dependency: our IEnumerator<T> lacks `property Current` only because the pinned compiler still rejects a property in an interface, while HEAD accepts it (bug-p-a-property-in-an-interface-declaration-is-rejected is DONE). Track B builds lib/rtl with the PINNED compiler, so the one-line RTL addition must wait for a make pin. Remaining distance on rung 6b: one pin, one RTL line, re-measure. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles end to end (`code=720664B data=163024B bss=127228B procs=1902`, 4m33s), and so does `generics.defaults` (`procs=1780`, 16s). READ THE 2026-09-05 BLOCKQUOTE AT THE TOP OF `LIVE STATUS` BEFORE ANY OTHER FIGURE IN THIS FILE -- every other wall table here is a dated snapshot and they disagree by design. THE LAST WALL ON 6b WAS NOT IN THE FRONTEND, IT WAS THE PIN: `for-in: enumerator has no readable Current` fell to ONE LINE in `lib/rtl/classes.pas` (`property Current: T read GetCurrent;` on `IEnumerator<T>`), deliberately omitted since 2026-08-30 because Track B builds `lib/rtl` with $(PXX_STABLE) and the pin rejected a property in an interface; the parser fix sat in `done/` doing nothing for this corpus until pin v404 (8844c8c42) carried it. ATTRIBUTED BY ABLATION, not by plausibility -- same binary, same source, that line removed reproduces the exact wall at :1481, rc=1. THE CLASS TO CARRY: \"fixed at HEAD, inert until pinned\" -- any compiler fix a $(PXX_STABLE) consumer needs is closed while still unusable there, the ticket folder gives the wrong answer and the pin gives the right one (`devdocs/dev/track-b-workarounds.md` names this state; THIS instance was missing from that registry because the workaround was an OMISSION and a missing declaration leaves no code to spot). STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30, b613b5fcf broke it the next day, nobody re-ran it, and 6b then appeared to stop inside 6a's file, so the ladder had moved BACKWARDS while reading as a floor. Re-run the rung before you trust any row here. NEXT RUNG IS 7 (`fcl-passrc`, 60k LOC); rungs 1-6 green. NO coordinate on this corpus is trustworthy: `near:` has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -281,6 +281,51 @@ last — right for the record, wrong for anyone asking "where is this now", who
 then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
 and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
+
+> **RUNG 6 IS COMPLETE — 2026-09-05 (frankB). `generics.collections` COMPILES
+> END TO END, for the first time.** Supersedes every note below, including
+> frankwasm's, which are kept as snapshots.
+>
+> Binary: HEAD, `sha256 3be4ee80a0d4`, `converged after` (a real rebuild, not a
+> stamp). Same `-Fu` invocation as every row below.
+>
+> | rung | probe | result |
+> | --- | --- | --- |
+> | 6a | `uses Generics.Defaults` | **ok** — `code=687896B data=138472B bss=127228B procs=1780`, 16 s |
+> | 6b | `uses Generics.Collections` | **ok** — `code=720664B data=163024B bss=127228B procs=1902`, 4 m 33 s |
+>
+> **The last wall was not in the frontend. It was the PIN.** `for-in: enumerator
+> has no readable Current` fell to ONE LINE in `lib/rtl/classes.pas` —
+> `property Current: T read GetCurrent;` on `IEnumerator<T>` — which had been
+> deliberately omitted since 2026-08-30 because Track B builds `lib/rtl` with
+> `$(PXX_STABLE)` and the pin of the day rejected a property inside an
+> interface. The parser fix ([[bug-p-a-property-in-an-interface-declaration-is-rejected]])
+> had been in `done/` for days and was doing nothing for this corpus until
+> **pin v404** (`8844c8c42`, `fe1e9c37d322`) carried it.
+>
+> **ATTRIBUTED BY ABLATION, not by plausibility.** Same binary, same source,
+> same invocation, that one line removed: `pascal26:1481: error: for-in:
+> enumerator has no readable Current`, rc=1, 244 s. Line back in: clean. The
+> wall matching the expected text exactly is the condition under which the
+> control gets skipped, so it was run.
+>
+> `tools/gate.sh quick` GREEN at that tree (`logs=/tmp/pxx-gate-1582198`), and
+> the load-bearing row is `PASS pinned builds live lib/rtl (22s)` — the pinned
+> compiler is what the retired note was guarding against, so that row IS the
+> test for this change.
+>
+> **THE SHAPE TO CARRY FORWARD: "fixed at HEAD, inert until pinned."** Any
+> compiler fix a `$(PXX_STABLE)` consumer needs is landed and closed while still
+> unavailable to that consumer; the ticket's folder gives the wrong answer and
+> the pin gives the right one. `devdocs/dev/track-b-workarounds.md` already
+> names this state and holds a labelled row for it — but **this instance was not
+> in that registry**, because the workaround was an OMISSION rather than a
+> non-idiomatic shape, and a missing declaration leaves no code to spot. It
+> survived as a comment in `classes.pas` and nowhere else. frankS has a live
+> instance tonight (the ESP class fix is at HEAD and not in v404, because the
+> pin freezes `compiler/builtin/**`); two in one evening makes it a class.
+>
+> **Next rung is 7** (`fcl-passrc`, 60k LOC). Rung 6 has no remaining wall.
 
 > **RUNG 6b ADVANCED AGAIN, 2026-08-30 LATE (frankwasm) — BOTH known walls are
 > down and the INTERFACE SECTION IS CLEAN.** Supersedes every note below,
