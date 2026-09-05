@@ -3,8 +3,8 @@ track: O
 prio: 55
 type: feature
 blocked-by: []
-status: unfinished
-owner: 
+status: working
+owner: frank-optimize
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 summary: "Container subscript is NilPy's worst primitive against CPython. RE-MEASURED 2026-08-31 on a quiet box: b[2] is now 117 ns vs 11 (10.6x, was 234 vs 12 = 19.2x) and d['k'] 262 vs 25 (10.6x, was 16.5x) -- the absolute cost roughly HALVED, and the -O3 reserve this ticket recorded as 30-40% is now 3-7% because the static-literal pass promoted to -O2 exactly as predicted. All FOUR previously-named drivers are now resolved, so a ~10x gap remains with no cause. New suspect, named categorically and then CORRECTED the same night: a subscript costs 11 out-of-line calls, 8 into retain/release/release-and-clear -- three genuinely DIFFERENT operations (confirmed by which refcount helpers each calls), not duplicates, so do not merge them. What is real is that each re-derives the value's type tag with six compares, so the tag is classified ~8x per subscript for a value whose type never changes. Benchmark committed as bench/nilpy_primitives.npy. Next step is confirm-then-decide, not a fix."
@@ -366,3 +366,79 @@ three duplicates" would have been a refactor toward a bug.
 confirm step done and it refuted my own suspect framing; next is a design choice between inlining the tag classification, hoisting it per statement, or eliminating it statically
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+
+## 2026-09-05 (frank-optimize) — the parked three-way fork is PRICED, and its order is inverted
+
+Resumed from the park. The park asked for a design choice between (1) inlining
+the tag classification so the call disappears, (2) classifying once per
+statement, (3) knowing the type statically and emitting no dispatch. It listed
+them "in increasing order of ambition". **Measured, the ambition order and the
+value order are the same but the gaps are not what the framing implies: option 1
+is worth less than a third of what is on the table.**
+
+A Pascal microbench in the slot-op shape — a small branchy procedure writing
+through a pointer param, six calls per iteration, which is what one subscript
+statement emits — compiled -O3 by `9bcfd2b4da30`, min-of-5 interleaved, six
+agents contending on the box:
+
+| | | |
+| --- | --- | --- |
+| **A** out-of-line calls (today) | 0.200 s | 1.00x |
+| **B** inlined, compares kept (**option 1**) | 0.140 s | **1.43x** |
+| **C** no dispatch at all (**option 3**) | 0.050 s | **4.00x** |
+
+**The call overhead is the SMALLEST term. The classification compares are worth
+2.80x on top of inlining** — B/C — and option 1 leaves all of that on the table.
+So "inline the classification so the call disappears" is the cheapest option and
+also the least valuable one, and building it would close ~1.4x of an available
+~4x in this shape.
+
+**Scope of that claim, stated because it is easy to over-read:** these are
+ratios in a *synthetic shape standing in for* the slot ops, not end-to-end
+subscript deliveries. Mapping to the real number: the per-call cost measures at
+~3.3 ns, and a subscript statement emits 6 slot-op calls, so option 1 is bounded
+at roughly 20 ns against `b[2]`'s 148.7 ns marginal — **~13%, not the ~10x this
+ticket is about.** That is an estimate built from a measured per-call cost, not
+a measurement of the fix.
+
+### Re-measured baseline, because this ticket's headline has rotted twice
+
+Binary `9bcfd2b4da30`, both sides same box back to back, CPython 3.14.4:
+
+| marginal ns/iter | pxx | CPython | ratio |
+| --- | --- | --- | --- |
+| `b[2]` | 148.7 | 22.2 | 6.7x |
+| `d['AAA']` | 512.5 | 33.5 | 15.3x |
+| `f.body[f.ip]` | 621.6 | 38.6 | 16.1x |
+| `isinstance(t,(i,f))` | 63.3 | 184.0 | **0.34x — we win** |
+
+`b[2]` reads 6.7x where the ticket records 10.6x, and **most of that movement is
+CPython's side doubling under load** (11 -> 22.2 ns), not our side improving.
+Six agents are on this box. Quote the ratio only with the load stated, or quote
+the ns.
+
+### The mechanism claim still holds on today's binary
+
+Verified rather than inherited: `n = n + b[2]` emits **10 calls**, and the
+`retain`/`release-and-clear` pair repeats three times — 6 of the 10 — matching
+the recorded "8 of 11". `PyVarSlotManaged` and `PyVarSlotIsObj` are pure
+Boolean expression leaves and are already inlined into the thunks, as recorded.
+
+### What option 1 is ACTUALLY blocked on, and it is not in any ticket
+
+`PyVarSlotSet`, `PyVarSlotClear` and `PyVarSlotInit` are **procedures**, and
+`TryRetainInlineBody` opens with `if not Procs[procIdx].IsFunc then Exit`. The
+inliner has never inlined a procedure at any -O level, however trivial the body:
+measured with identical bodies, `function AddF` inlines at -O3 while
+`procedure SetG(v: Integer); begin g := v; end` is not even *retained*.
+
+That is a **third admission axis** — is-function — alongside return type and
+body shape, and no ticket names it. Filed as
+[[feature-opt-inline-procedures-the-third-admission-axis]], with the 1.43x bound
+attached so nobody builds it expecting to close this ticket.
+
+**So this ticket's own next step is option 3, not option 1**, and the two are
+independent: option 3 is a type-inference question in the NilPy frontend, not an
+inliner question. That is a different lane's shape of work and this ticket
+should say so rather than keep pointing at the inliner.

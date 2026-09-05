@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:15 unfinished:25 blocked:7 backlog:4 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:23 backlog-pascal:40 backlog-decide:39 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:4 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3309 rejected:76`
+`working:16 unfinished:24 blocked:7 backlog:4 backlog-umbrella:7 backlog-core:136 backlog-nilpy:97 backlog-tools:23 backlog-pascal:40 backlog-decide:39 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:4 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3309 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
@@ -17,6 +17,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: frank-optimize
+- `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -25,7 +26,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (25) — parked mid-flight; re-claim, do not duplicate
+## unfinished (24) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -43,7 +44,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-nilpy-user-defined-decorators` [N]
-- `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O]
 - `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
 - `feature-pal-esp-posix-fd-semantics` [B+S]
 - `feature-pascal-corpus-expansion` [P]
