@@ -187,3 +187,75 @@ sites 2b/2c can't reach. Needs (see the design notes in
   divergences) then root-caused + re-landed with the IRInlineExpand reentrancy
   contract (d4c19919); post-land fuzz-clean. REMAINING scope for the next
   session: while/for loop bodies; deeper non-leaf (depth budget >1).
+
+## 2026-09-05 (frank-optimize) — the depth budget lifted; the REACH is the finding
+
+Two slices remained: while/for bodies, and depth>1 non-leaf. **Measured the
+bound on each before writing any code**, because the choice between them is an
+empirical question and the census-of-opportunity answer would have been wrong.
+
+| remaining slice | current -O3 | hand-inlined | bound |
+| --- | --- | --- | --- |
+| while/for body (`SumTo(3)` in a hot loop) | 0.26s | 0.19s | 1.37x |
+| **depth>1 non-leaf** (Top -> Mid -> Leaf) | 0.53s | 0.17s | **3.12x** |
+
+`SumTo` declines today (`PXXDBG=a.inline` shows no retention), confirming the
+loop-body slice is unimplemented rather than merely unprofitable.
+
+**Isolated the mechanism instead of inferring it.** Hand-inlining ONLY `Leaf`
+into `Mid` — leaving the `Top`->`Mid` chain to the compiler — gave 0.16s against
+0.46s. So one additional depth level is worth 2.87x of the 3.29x total, and the
+budget is the cost rather than anything else in the pass.
+
+### The change
+
+`InliningActive < 2` in the `AN_CALL` gate was a bare literal permitting one
+re-inline level. It is now `MAX_INLINE_DEPTH` (defs.inc) = 3. **The constant is
+the termination proof, not a tuning knob**: there is no recursion guard by proc
+identity, so a self-recursive chain stops only because the budget is spent.
+`RecSum` in the new test exists to keep that honest.
+
+### Delivered, and the reach is narrow
+
+- 3-level wrapper loop: 0.46s -> 0.24s = **1.92x** (bound 3.29x, so 69% captured;
+  the splice does not reach the 0.16s a human gets, because it carries temps)
+- **raytracer 768x512: 2.08s -> 1.84s = 1.13x**, identical checksum, **+8192
+  bytes (+5.4%)**
+- **12 of 13 real example programs: byte-identical output. Zero change.**
+- `compiler.pas`: byte-identical at -O0/-O1/-O2 **and -O3**
+
+**EVERY NUMBER IN THIS SECTION WAS TAKEN UNDER LOAD 12.9-15.2** (fleet gating;
+frankC, frankS and frankH all building). That is the contaminated regime, not the
+clean one, and this ticket's own calibration pair from the record half says which
+way it errs: the same kind of ratio read 1.543x unloaded and 1.665x at load
+16-19, ~8% inflated, because the call-heavy control loses more to contention than
+the inlined arm does. **So 1.92x and 1.13x are upper estimates and both need a
+re-take on a quiet box before they are quoted as delivered.** Recording them with
+their conditions rather than discarding them: the pair above is enough to
+calibrate, and the byte-identical results (12 of 13 programs, compiler.pas at
+every level) are load-INDEPENDENT and stand as measured.
+
+**The 12-of-13 is the honest headline, not the 1.92x.** The extra level needs a
+three-deep chain of mutually-retained bodies, and that conjunction is rare: 170
+procs retain in `compiler.pas` and 60 of those have calls, yet the depth change
+alters nothing there. Checked `FrameIntrinsicUsed` first as the candidate
+explanation and it is NOT the cause — no frame intrinsic is called in
+`compiler.pas` (the grep hits are the parser recognising the names).
+
+So this is a **narrow win at an opt-in level**, not a general one. It is
+recorded that way so nobody reads 1.92x as what a program will get.
+
+### Not proven
+
+`test_inline_depth2.pas` added and wired into the -O3 sweep block. Its expected
+values are **FPC 3.2.2's** (verified by compiling and running it under FPC), per
+that block's own standard. It asserts side-effect COUNT and ORDER through two
+splice levels, not values alone — a value check cannot see an argument evaluated
+twice when the second evaluation yields the same number. Confirmed the test is
+AIMED: the emitted binary differs between the old and new compilers, so its
+program actually reaches the new path.
+
+Also corrected `test_inline_nonleaf.pas`'s header, which still claimed inner
+calls stay real calls — untrue since d4c19919 re-landed depth-1.
+
+**REMAINING: while/for loop bodies (bound 1.37x, measured above).**

@@ -140,6 +140,17 @@ const
   MAX_PROC_PARAMS = 32;
   MAX_INLINE_LOCALS = 8;   { max callee locals in a slice-2b (-O3) inline body }
   MAX_INLINE_REC_FIELDS = 4; { max fields in an inlinable RECORD result. 4 covers the double-double kernels (2) with headroom; a wider record is more copying than the removed call saves, and the cap keeps the per-field definite vector a fixed array. }
+  MAX_INLINE_DEPTH = 3;    { -O3 re-inline budget: how many nested splice levels a
+                             call may sit under and still expand. InliningActive
+                             counts levels already open, so this permits levels
+                             0..MAX_INLINE_DEPTH-1. It was the bare literal 2 in
+                             the AN_CALL gate (one re-inline level) until
+                             2026-09-05, when a depth-2 wrapper chain measured
+                             2.87x for exactly one more level. It is ALSO the
+                             termination proof for self-recursion -- a proc that
+                             calls itself lowers as a real call once the budget
+                             is spent -- so raising it raises the worst-case
+                             splice nesting and the code size with it. }
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;

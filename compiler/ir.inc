@@ -12754,11 +12754,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand
-        declines (-1). A spliced body's inner calls may re-inline ONE level
-        (InliningActive < 2, -O3): safe under the IRInlineExpand reentrancy
+        declines (-1). A spliced body's inner calls may re-inline up to
+        MAX_INLINE_DEPTH levels (-O3): safe under the IRInlineExpand reentrancy
         contract (locals-first binding, globals only in the clone window);
-        depth stays bounded and self-recursion terminates (level 2 lowers as
-        a real call). -O2 keeps depth 0.
+        depth stays bounded and self-recursion terminates (a call at the budget
+        lowers as a real call). -O2 keeps depth 0.
+        THE BUDGET IS THE TERMINATION PROOF, not a tuning knob: there is no
+        recursion guard by proc identity, so a self-recursive or mutually
+        recursive chain stops ONLY because InliningActive reaches it.
         FrameIntrinsicUsed disables the non-leaf cases: once a unit walks the
         saved-fp chain (get_frame / get_pc_addr / get_caller_stackinfo), the
         PHYSICAL frame count between a walker and its target is observable, and
@@ -12769,7 +12772,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
          (InlineBodyRoot[cpi] >= 0) and
          (not (FrameIntrinsicUsed and
                (ProcFrameSensitive[cpi] or InlineBodyHasCall[cpi]))) and
-         ((InliningActive = 0) or ((OptLevel >= 3) and (InliningActive < 2))) then
+         ((InliningActive = 0) or ((OptLevel >= 3) and (InliningActive < MAX_INLINE_DEPTH))) then
       begin
         outNode := IRInlineExpand(node, cpi);
         if outNode >= 0 then begin Result := outNode; Exit; end;

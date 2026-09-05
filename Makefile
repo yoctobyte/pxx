@@ -13795,6 +13795,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O3 test/test_inline_depth_reentry.pas $(TESTTMP)/sweep_inl_reentry_O3 >/dev/null
 	tools/expect_same.sh sweep_inl_reentry_O0 "$$($(TESTTMP)/sweep_inl_reentry_O0)" "$$($(TESTTMP)/sweep_inl_reentry_O3)"
 	tools/expect_same.sh sweep_inl_reentry_O3 "$$($(TESTTMP)/sweep_inl_reentry_O3)" "$$(printf 'cs=13127050266571306376\ns=6650214\ng=50000')"
+	# The depth budget: a Top -> Mid -> Leaf chain collapses only when
+	# MAX_INLINE_DEPTH allows more than one re-inline level, so the -O3 row
+	# exercises a path -O0 never reaches. gcount is the assertion that matters
+	# -- a value check cannot see an argument evaluated twice when the second
+	# evaluation yields the same number. Values are FPC 3.2.2's.
+	./$(COMPILER) test/test_inline_depth2.pas $(TESTTMP)/sweep_inl_depth2_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_inline_depth2.pas $(TESTTMP)/sweep_inl_depth2_O3 >/dev/null
+	tools/expect_same.sh sweep_inl_depth2_O0 "$$($(TESTTMP)/sweep_inl_depth2_O0)" "$$($(TESTTMP)/sweep_inl_depth2_O3)"
+	tools/expect_same.sh sweep_inl_depth2_O3 "$$($(TESTTMP)/sweep_inl_depth2_O3)" "$$(printf 'Top      208\nTopEff   360\ngcount   6\nRecSum   55')"
 	./$(COMPILER) test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O3 >/dev/null
 	tools/expect_same.sh sweep_resid_uni_O0 "$$($(TESTTMP)/sweep_resid_uni_O0)" "$$($(TESTTMP)/sweep_resid_uni_O3)"

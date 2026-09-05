@@ -1,8 +1,12 @@
 { Non-leaf inlining slice 1 (feature-inline-nonleaf-and-branch-locals, -O3):
   a body whose EXPRESSIONS contain direct calls to plain internal scalar
-  functions retains and splices; the inner calls stay REAL calls after the
-  splice (InliningActive blocks re-inlining) — the win is the removed outer
-  frame. Because a body-call may have side effects, the splice temp-captures
+  functions retains and splices. When this test was written the inner calls
+  stayed REAL calls and the win was only the removed outer frame; that stopped
+  being true when depth-1 re-inline re-landed (d4c19919) and again when the
+  budget became MAX_INLINE_DEPTH (2026-09-05), so at -O3 the inner calls now
+  splice too. The assertions are unchanged and still correct: they are about
+  side-effect count and order, which no depth may alter.
+  Because a body-call may have side effects, the splice temp-captures
   EVERY argument (InlineBodyHasCall), preserving Pascal's evaluate-args-once
   order — g= below counts side effects exactly. Callees that write globals
   are NOT retained themselves (LHS is not Result/local) and stay as calls.
