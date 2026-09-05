@@ -286,3 +286,73 @@ binary** — it prints `Program` and halts 1 where the test demands `Unit`, and
 none of that evidence required running anything. A `wontfix:` on `tgeneric4`
 without this ticket in place would have converted a silent wrong-code bug into a
 green row with a reason attached.
+
+## 2026-09-06 (frankS) — re-measured at HEAD, and the boundary is now exact
+
+Five rows, all at HEAD. Rows 1 and 5 are new and they are the ones that matter:
+they are CONTROLS, and both are green, which narrows this from "generic scope is
+wrong" to one sentence.
+
+| # | shape | expected | measured |
+| --- | --- | --- | --- |
+| 1 | **NON-generic** unit method calling the unit's private helper, called from a program that declares the same name | `UNIT` | **`UNIT`** — correct |
+| 2 | generic, cross-unit, program declares the same name | `UNIT` | **`PROGRAM`** — silent wrong binding |
+| 3 | generic, cross-unit, program does NOT declare the name | compiles | **`undefined variable (LocalFill)`**, reported against `ug4.pas` |
+| 4 | generic, cross-unit, helper is in the unit's INTERFACE | `UNIT` | resolves fine |
+| 5 | **generic, specialized INSIDE the declaring unit**, private helper | `UNIT` | **`UNIT PrivFill`** — correct |
+
+### The sentence
+
+**A generic template body's symbols resolve as if the body had been written at
+the SPECIALIZATION SITE.** It sees exactly what the specializing scope sees —
+the declaring unit's INTERFACE (row 4, via the `uses`), and the specializer's
+own declarations, which SHADOW (row 2) — and never the declaring unit's
+implementation section (row 3).
+
+Row 1 rules out "unit implementation scope is broken for methods": an ordinary
+method in the identical shape binds correctly. Row 4 rules out "the body sees
+nothing": exported symbols resolve. **Row 5 is the important one — the same
+template, the same private helper, specialized inside its own unit, is
+CORRECT.** So the machinery already does the right thing whenever the spliced
+body lands in the declaring unit. Nothing about template bodies or scope
+capture is fundamentally missing.
+
+### Which relocates the defect
+
+`FlushPendingClassSpecializations` streams each buffered method body to an
+anchor and it is re-parsed THERE, so the anchor decides the scope. The anchor is
+`UnitImplAnchor` — "just inside the implementation section, past its `uses`" —
+but ONLY when `InInterface`. A program is not in an interface, so `anchor := -1`
+and `SpecializeStream` splices at the current token position, which is the
+program. Row 5 works because the same-unit path materialises bodies from the
+unit's own implementation, where `UnitImplAnchor` is not even needed.
+
+So this is not "generic bodies do not capture their scope". It is **one missing
+anchor case**: a cross-unit specialization has no anchor into the DECLARING
+unit, so it falls back to splicing where it stands.
+
+### What that changes about the disposition
+
+The ticket said to decide first whether we WANT the diagnostic, on the grounds
+that FPC refuses this outright (`Global Generic template references static
+symtable`) and pxx has the same limit. **Row 5 says pxx does NOT have the same
+limit.** pxx already compiles and runs the construct correctly when the
+specialization is in the declaring unit; FPC refuses it at the DECLARATION,
+before any specialization exists, so FPC refuses row 5 too.
+
+That makes `accepts-invalid` the wrong frame. This is not a missing diagnostic
+for a construct we cannot support — it is a construct we already support in one
+position and mis-bind in another. Under CLAUDE.md that is a plain bug (a silent
+wrong answer), and us accepting what FPC rejects is not a defect.
+
+**So: fix the anchor, do not add the diagnostic.** The `pxx.skip`/
+`known-incompat` route this ticket floated would have written off a case that
+demonstrably works today.
+
+### Not verified
+
+- Whether the declaring unit's implementation section is still a legal splice
+  target at the moment a PROGRAM specializes — i.e. whether its tokens lie ahead
+  of the specialization point and its scope is still live. That is the next
+  measurement and it decides whether the fix is an anchor change or something
+  larger.
