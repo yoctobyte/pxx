@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P from the FAILING STEP** — line 1 of 2, `./compiler/pascal26 test/test_c_gtk.pas /tmp/test_c_gtk26`, which names `test/test_c_gtk.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -37,3 +38,25 @@ pascal26:2: error: uses: unit source not found: gtk
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Closed 2026-09-05 (frankB) — reproduce-clean at HEAD, full job, not just the failing step
+
+Ran the ticket's own Repro line — `testmgr.py --tier native --job ...` — at HEAD,
+not the sha it was filed against: **1/1 pass, testmgr GREEN.** The failing step
+alone was also re-run and compiles. Both, because a ticket whose recorded
+failure is step 1 of 2 can have step 2 fail for its own reasons, and "the
+failing step passes" is a narrower claim than "the job passes".
+
+**Cause, and it is mine.** These five `test_c_gtk*` rows plus the stackless one
+read as STILL-RED to the watcher and were not unchanged: they were extra
+instances of `4760474da` (my `AssignSideKind` / pointer-sink rule, which refused
+every legal Char→PChar binding). Reverted in `2d6bfadd6`. A STILL-RED whose
+CAUSE has changed is indistinguishable from background noise in the verdict
+column, which is why they sat here after the revert had already fixed them.
+
+**The lane was a guess and the guess is now moot.** The banner at the top of
+this file says so itself: `track: P` was inferred from the failing step naming a
+`.pas` file, and the ranker reads only the frontmatter. That put six auto-filed
+regressions in the top rows of `ready --track P`. They are closed on evidence,
+not re-laned — a re-lane would have moved a finished ticket to another queue.

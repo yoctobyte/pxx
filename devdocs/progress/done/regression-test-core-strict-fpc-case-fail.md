@@ -1,5 +1,5 @@
 ---
-prio: 70
+prio: 55
 track: P
 status: done
 ---
@@ -68,3 +68,35 @@ Note also that `test-core` stops at the FIRST failing recipe, so while this row
 is red every row after step 6 of 15 is UNVERIFIED rather than green. `make -k`
 is the way to see past it.
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8727b1907.
+
+## The FPC oracle, four modes, measured 2026-09-05 (frankB)
+
+Recorded after the close, because the ticket resolved on "the fixture asserts a
+rule we no longer have" and nobody had established the other half: **is
+`class var` in a record something a programmer means to write, or only something
+a mistake produces?** That question decides whether accepting it is a feature or
+a hole, and the scope rule turns on it.
+
+frankA had flagged this exact probe as mode-sensitive, so all four
+configurations were run rather than one:
+
+| invocation | fpc 3.2.2 |
+| --- | --- |
+| default | **refuses** — `Syntax error, ":" expected but "VAR" found` |
+| `-Mobjfpc` | **refuses** — `Syntax error, "identifier" expected but "CLASS" found` |
+| `-Mdelphi` | **ACCEPTS** |
+| `objfpc` + `{$modeswitch advancedrecords}` | **ACCEPTS** |
+
+Two of FPC's four configurations take it. So it is **real language somebody
+means to write**, not a construct only reachable by error — which puts pxx
+accepting it in default mode under "us accepting what FPC rejects there", not a
+defect, and confirms the fixture (not the compiler) was the thing to change.
+Had the matrix come out refusing in all four, the opposite conclusion would have
+been available and the fixture would have been right.
+
+**Method note worth more than the result.** The first version of this probe
+could not report ACCEPTS at all: it piped fpc's output through `grep | head`,
+and `head` always exits 0, so the `|| echo ACCEPTS` branch was unreachable. It
+printed three plausible "refuses" lines and nothing for `-Mdelphi` — the blank
+row is the only reason it got caught. A guard that cannot come out one way,
+found by the absence of output rather than by an error.
