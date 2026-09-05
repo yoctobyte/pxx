@@ -389,3 +389,75 @@ mistake the silence: `{$mode objfpc}` does not imply `{$H+}` in fpc (only
 `{$mode delphi}` does), so pxx's default bare string matches fpc in delphi mode
 only. frankB measured it, it is pre-existing, and it is the managed-string model
 this compiler chose — a chosen divergence, not this fork's business.
+
+---
+
+## A fourth consumer, from the library side (frankH, 2026-09-05) — evidence, no arm picked
+
+Found while measuring what a library `writeln` must reproduce for phase 3 of
+[[feature-writeln-as-library]], by a session that had not read this fork. Adding
+it because it is the same missing identity reaching a consumer none of the three
+recorded ones covers, and because **it constrains both arms rather than
+favouring either.**
+
+### The measurement
+
+`array of const` boxing, at compiler `9bcfd2b4da30`, one program printing
+`a[i].VType`:
+
+| declared | tag emitted |
+| --- | --- |
+| `Boolean` | 1 `vtBoolean` |
+| `WordBool` | **0 `vtInteger`** |
+| `LongBool` | **0 `vtInteger`** |
+
+So `sysutils.Format`, any user variadic, and the phase-3 library `writeln` all
+receive a sized boolean *described as an integer* and render `1`. The builtin
+`writeln` prints `TRUE`. Same split as the three consumers already listed —
+`WriteLn(a)`, `not a`, `Ord(a)` — reached independently.
+
+### Why this one is not just a fourth instance of the same thing
+
+Section 4 records `tyWideChar`'s declaration saying a node-level marker *"cannot
+serve `WriteLn`"*, and `tyUCS4Char` sharpening it to *"the marker is lost through
+a variable."*
+
+**At an `array of const` boundary the marker is not merely lost — there is no
+node to lose it from.** The value is written into a runtime `TVarRec` whose
+`VType` tag is the *entire* description that survives, and the consumer is
+ordinary Pascal in another unit, reading that tag at run time with nothing else
+to consult. Not a later compiler stage that could in principle re-derive from
+node shape: a `case v.VType of` in `lib/rtl/sysutils.pas`.
+
+That makes this the strictest test either arm has to pass, and it is a
+**requirement, not an argument for a winner**:
+
+> whatever carries the identity must be readable at the `AN_VARREC_ARRAY`
+> boxing site in `ir.inc`, because that is where the last chance to write it
+> into the tag is.
+
+Arm A meets that by construction — a distinct kind is visible at the box site
+like any other. Arm B is not thereby excluded; its channel simply has to be
+one lowering can read there, and that is a question about the channel's design
+rather than about the arm. **Whoever settles this should check the chosen arm
+against that site specifically**, because the boxing site is the one consumer
+where "re-derive it later" is not merely discouraged but impossible.
+
+The tag space is not the obstacle: `vtBoolean` already exists and is already
+emitted correctly for a plain `Boolean`. The boxing arm simply has no way to
+ask "is this an integer, or a boolean stored in an integer" — which is this
+ticket's sentence, at a fourth site.
+
+### Explicitly not part of this fork
+
+The same measurement found `QWord` boxing as `vtInt64` where fpc emits
+`vtQWord` ([[bug-a-a-qword-boxes-as-vtint64-so-array-of-const-loses-unsignedness]]).
+**That is a different animal and does not belong here.** `vtQWord` exists, is
+declared, and simply is not emitted — the identity has a carrier and nothing
+writes to it, where this fork is about an identity with no carrier at all.
+Recorded so the next reader does not bundle them: they were found in one
+program, and that is their only relationship.
+
+No arm picked, and deliberately: two sessions have costed this fork already and
+it is the owner's to settle.
+
