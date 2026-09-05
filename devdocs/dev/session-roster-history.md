@@ -26451,3 +26451,176 @@ made.**
 
 Symmetric exchange: **a standing red belongs in a ticket, because a
 coordinator's memory is the instrument that goes away at restart.**
+
+## 2026-09-05, later — the taxonomy of unfindable defects, and a tier read seven minutes early
+
+### THE SEVEN-MINUTE TIER — what only the top seat could see
+
+Seven published a full tier with **eight-plus NEW-REDs** across `lib-test` and
+`demos`, all `unknown type: TMethod` from
+`stable_linux_amd64/default/../../lib/rtl/typinfo.pas`. frankZ read them
+honestly and framed them as *"the strongest argument yet for frankH's pin
+landing."*
+
+**They are the last measurement taken BEFORE the pin.** Ref-level:
+`5b5fdb0b3` (tier tree, 20:10) → `8844c8c42` (pin v404, 20:17), the **only**
+commit touching `stable_linux_amd64/` since, with `a623307bd` already in the
+source at the tier tree. **New source, old pin** — the seam the pin closed.
+
+**The hazard is the framing, not the reds.** A full tier with eight new reds is
+the most alarming artifact the fleet produces, and *"argument for the pin
+landing"* reads as *the pin is still pending*. **Retirement event: the next full
+tier after `8844c8c42`.** If TMethod reds survive it, that is a real finding.
+
+frankZ could not have known — the gap is visible only to whoever holds the tier
+and the pin at once. **A concrete instance of what the undivided seat is for**,
+on the night the question of splitting it came up.
+
+### THE TAXONOMY OF DEFECTS BY HOW THEY CAN BE FOUND — three kinds, all measured tonight
+
+**A SHAPE is findable by READING.** Code written non-idiomatically to sidestep
+an open bug. `track-b-workarounds.md`'s rows are all of these; a reader sees it,
+a grep finds it, the standing "re-check against the latest pin" reaches it.
+
+**An OMISSION is findable by NOTHING** (frankB). A declaration nobody wrote
+because the compiler could not take it — `IEnumerator<T>` missing `property
+Current` for six days. **A missing declaration leaves nothing to spot, so the
+registry's own re-check instruction could not reach it: there was no row.** The
+tell that one exists is a source comment saying *"add this when the pin moves"*
+with no registry row. **The registry's aperture is shape-only, and that is the
+finding, not the instance.**
+
+**A NEVER-EXECUTED artifact is findable only by RUNNING** (frankS, checking
+whether the ESP fix was either of the above; it was neither). The coverage
+existed and was correct: `test/test_esp_class.pas` uses a class and is wired for
+both chips. **Shadowed twice** — the suite is in no tier, and within it the
+class rows at `Makefile:26166` sit behind a row that `exit 1`s at `26164`, so
+even a hand run without `-k` never reaches them.
+**The fix is therefore NOT "add a test"** — that adds a second unrun test behind
+the same `exit 1`. **The defect is in REACH, not in coverage.**
+
+**Method note that generalises: an omission cannot be excluded by failing to
+find evidence of one.** frankS ruled it out by finding the artifact PRESENT.
+And **no registry row was owed — filing one would have been WRONG**, since a
+feature that never compiled cannot have accumulated workarounds to revert, and a
+row with no revert is the decay that file's own header records.
+
+### THE SIMPLIFICATION TELL — the same move, opposite outcomes, one evening
+
+**frankB:** simplified its probe to isolate the variable and **dropped the
+element that made the body get parsed** — an uninstantiated generic interface
+carrying a property compiles fine on a compiler that cannot do it. Probe went
+silently green and was worthless.
+
+**frankS:** cut `test_esp_exception.pas` to a five-line class program and **it
+kept failing**, which is what converted one red row into a profile-wide
+statement. Had the class declaration been the part dropped as incidental, the
+row would have been reported **flaky** — worse than the original red, because it
+retires the observation.
+
+**Rule, in their joint form: when you simplify a probe, name what the removed
+element was DOING. If the answer is "it made the code under test run," you have
+disarmed it, not simplified it.** Filed by frankB as its own playbook section,
+correctly — the family splits on **assertion vs SITE**: the `sizeof(int)`
+collision and the leak-passing-every-value-assertion are about the assertion;
+this is about the site, where the assertion was fine and the probe sat where the
+code never runs. Generalises past generics to untaken branches, unreferenced
+units, uncalled inline functions, off `{$IFDEF}` arms — anything lazily
+elaborated.
+
+### THE HANDLED INSTANCE — the list was all failures until frankC's
+
+`busybox_diff.sh` computes the oracle-vs-oracle diff and announces, **unprompted
+and before anyone asked**, that its own case set cannot answer the question the
+target implies:
+
+> `ORACLE gcc -m32 build, 23 cases -- IDENTICAL to the 64-bit oracle, so no case
+> in this set is width-dependent`
+
+So the i386 re-run at HEAD (compiler `fec9d034dc2be4f6`, tree `fb1ee1ab1`, 9
+applets / 75 TUs) **re-validates compile, link and run against 55 `compiler/`
+commits and re-validates NOTHING about width** — both oracles agreeing means the
+comparison is physically unable to detect a width bug in that set. **Width
+retires when someone re-runs frankD's 394 applets / 938 cases**, which is where
+`expr 2147483647 + 1` lives.
+
+**An instrument that reports its own aperture converts silent false-confidence
+into a visible scope limit, at the only moment anyone is reading.** Every other
+member of this class tonight was a failure; this is what the pattern looks like
+when someone anticipated it, and it is the one to copy.
+
+Also from that run: `bb_bswap_64` is macro-shadowed at 64 bits (empty object,
+omitted from the map) and a real function at 32 — `grow_and_link` detected the
+missing symbol, compiled the extra TU and re-linked. 76 objects vs 75. **A
+harness repairing a known-benign width asymmetry is honest HERE only because it
+announces its aperture separately.**
+
+### A GUARD THAT EXPIRES CORRECTLY — the counter-example worth keeping
+
+`pasparser_expr.inc` keys its refusal on the VALUE (`UContextPCOffset < 0`), not
+on an arch list, with a comment saying *"add the row and this opens by itself"*
+— **and its stated reason was that an arch list is what had gone stale one
+paragraph above.** frankS changed no parser code; adding the measured offsets
+opened the gate. **frankD's trigger rule implemented in source: retires on a
+condition, not on someone remembering.**
+
+Measured with the control first — the probe reproduced riscv32's documented
+160/168 **before** being aimed at anything unknown; xtensa `UContextPCOffset`
+20, `UContextSPOffset` 56, corroborated by an identical SP signature (riscv32's
+168 at delta −16 from the pad, xtensa's 56 the same). And
+`test_signal_sp_rewrite` is the taxonomy again: **a wrong SP offset does not
+crash** — the resumed proc runs on the old stack, every value assertion passes,
+and only `raiser-ran-on-the-spare-stack=TRUE` can fail.
+
+### STALE TICKETS: READING CONFIRMS, ONLY RUNNING REFUTES
+
+frankS, third instance this session, stated as a class: **a refusal gets lifted
+somewhere, the tickets citing it are not updated, and the cited code still
+exists and still refuses SOMETHING — so verification-by-reading returns PASS.**
+
+The xtensa pair was the sharp case: the p35 was false (`test_signal_altstack`
+prints `handler-off-faulting-stack=TRUE`, impossible without a signal runtime),
+**but its real content had migrated one level in** to `UContextPCOffset`'s `-1`
+guard — a different refusal that nothing had recorded. **Not "one stale, one
+live": one sentence that had become two, with only the obsolete half written
+down.** Invisible while holding either ticket alone.
+
+### frankZ against its own instrument, and the schema-vs-value trap
+
+`toolchain_fp` was built today so a verdict says which tools measured it. **The
+very next environment-shaped regression turned on a tool it omits: git.**
+`tools/devtest_sync_fold.py` drives git 25 times, source byte-identical between
+trees, green here and red on seven, whose git moved in the dist-upgrade.
+
+**The trap in the fix, which frankZ caught before shipping: adding a tool to the
+hashed set changes every host's fingerprint, so every box announces `TOOLCHAIN
+CHANGED` when nothing changed but the definition. A fingerprint whose SCHEMA
+moved is not a toolchain that moved** — and shipping that puts a false alarm
+into the instrument built to prevent one, which is the failure whose cheapest
+remedy is deletion.
+
+**And `TOOLCHAIN FIRST RECORDED` can never fire for seven.** Report 18:20:49Z,
+commit `2bdbe4249` 18:29:11Z — the report latched the baseline before the
+callout existed, so every later report correctly finds `prev == now`. Live and
+correct for plexus, borg, xeon and every future host; **structurally unable to
+fire for the transition it was written for.** The double-duty problem finished:
+the pipeline's first exercise was also the one-shot. Mitigation is a diff of the
+`toolchain:` line against the ticket's pre-upgrade table, and it belongs in the
+ticket because the callout cannot say it.
+
+Devtest census landed (`6d114d1de`): 138 files → 82 read repo source → 17 probe
+with a literal → 63 sites → 42 anchors → **21 assertions, 13 code-shaped
+literals**, filed as a group, none fixed with the reason stated. **AST-based,
+because a text-shaped census of text-shaped guards shares their failure mode.**
+Null result recorded on purpose: all 9 split-anchors index `[1]`+ and fail loud;
+**zero use `.split(x)[0]`, which returns the whole file silently.**
+
+### Fleet structure changed
+
+Three seats launched and blocked on the owner's trust-folder keystroke:
+`frank-subcoord` (shared-state desk — **answer with the instrument, not the
+answer**, plus the live-claims ledger where retirement is a stated EVENT),
+`frank-coord-core` (A + O/F/S/M), `frank-coord-front` (C/N/P/R/Z). **None
+dispatch. The global topic map stays undivided at the top seat.** No keys sent
+into any pane; the trust prompt is the owner's, and the pane rule has no
+carve-out.
