@@ -595,3 +595,55 @@ already as `TA(b).pi^`. Whether each remaining hand-built arm re-enters its own
 loop after delegating, or breaks, is the next thing to measure, and unlike the
 first two censuses it needs a differential rather than a grep, because the
 failure is a token nobody consumed.
+
+## 2026-09-06 (frankA, later still) — the re-entry question found a refusal, and four becomes three
+
+The control-flow measurement this ticket named as next is run, and it found a
+real defect on the one loop that had never been taught the lesson.
+
+**`PTC(raw)^.GetP^` and `PTC(raw)^.Pp^` were refused outright** — *expected `)`
+before `^`* — while `pc^.GetP^` and `pc^.Pp^`, the same chains off a plain
+variable, compiled and printed 42. fpc 3.2.2 accepts all four. The pinned
+compiler refuses exactly the two cast rows and passes the two variable rows, so
+it pre-dates v403 and the test can fail.
+
+The pointer-alias cast walk delegates a METHOD or PROPERTY name to
+`ParseClassRecordSelectors` — whose own loop is `[tkDot, tkLBrack]` with **no
+`tkCaret`** — and then `Break`ed unconditionally. Nobody consumed the `^`. The
+record-name twin has carried `if CurTok.Kind <> tkCaret then Break; Continue;`
+since `TA(b).pi^`, and `ApplyCallResultPtrSuffix` has it too. **One opener of
+three had never been told.**
+
+### The instrument, and why the two earlier censuses could not find it
+
+- *escape census* — which shared routines does this loop REACH? All four reach
+  them. Cannot see this.
+- *encoding census* — what does it HAND them? Clean, one triple, no second
+  convention. Cannot see this either.
+- *re-entry* — does it come back into its own loop after delegating? **This one
+  needs a differential, not a grep**, because the failure is a token nobody
+  consumed. An absent case leaves no site to grep, so no census over the source
+  can contain it; only running the shape can.
+
+Three instruments, three different questions, and each found exactly what the
+previous one was structurally unable to see.
+
+### The fix removes copies rather than adding one
+
+The minimal fix is pasting the guard a third time, which is this ticket's own
+complaint. Instead: all three post-delegation `^` handlers were writing out the
+same block — ask `ResolveDerefShape`, stamp remaining depth in `ASTSOffset`,
+ultimate base in `ASTSLen`/`ASTIVal`, `StrValTk` in `ASTTk`. That is now
+**`StampDerefFromShape`** (`pasparser_lval.inc`), called from all three. Three
+copies to one, orphaned locals dropped with them. `414099b7f`.
+
+**Count: three hand-rolled postfix walks remain in Pascal** (was four this
+morning, five yesterday), and they now share the deref-stamp body even where
+they still have their own loops. What is left duplicated is the LOOP and its
+token set, not what the arms write.
+
+Test `test_a_deref_after_a_delegated_member_on_a_pointer_cast` pairs every cast
+row with the same chain off a variable — a cast row alone cannot tell a fixed
+walk from a language that never allowed this — and rows 5-8 assert the TAG
+rather than the parse, since consuming the token is not enough. 8 rows,
+byte-identical to fpc.
