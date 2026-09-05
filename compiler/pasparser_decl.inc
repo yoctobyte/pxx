@@ -4472,6 +4472,310 @@ begin
   end;
 end;
 
+procedure ParseFieldDeclInto(ci: Integer; var curFieldOff, classAlign: Integer;
+                             isPackedRecord, inRecordBody: Boolean;
+                             pub, vis: Integer);
+{ ONE field-declaration parser for `X, Y: T;` -- in a record body, a class body
+  and (next commit) a variant branch. It parses the comma-separated names and
+  the type (inline fixed or dynamic array, named array alias, scalar, frozen
+  string), computes size and alignment, appends the fields, and eats the
+  trailing hint directives and `;`.
+
+  IT EXISTED THREE TIMES. Not two: the ticket said two and undercounted, which
+  is the dangerous direction -- ParseRecordVariantPart is a third copy and had
+  two silent defects the other two did not. The copies were kept in step by
+  hand, and the failure mode is silent by construction: a field-level feature
+  added to one copy works on records and not on classes, which reads as a
+  mysterious dialect gap rather than as a missing paste.
+
+  AND IT HAD ALREADY DRIFTED. Measured before this lift:
+  `entries: packed array[0..0] of TRec` -- fcl-fpcunit's own spelling --
+  compiles as a RECORD field and is `expected 'record' before 'array'` as a
+  CLASS field and in a variant branch. fpc 3.2.2 takes all three.
+
+  inRecordBody gates the four arms that are record-only TODAY, so this commit is
+  a pure code move whose evidence is a byte-identical self-host. Three of the
+  four are record-only BY RIGHTS -- {$PACKRECORDS} and `packed record` say
+  nothing about a class, and a by-value field of the enclosing type is only
+  infinitely recursive when that type is a value type. The fourth, the
+  packed-array skip, is the measured divergence above and is NOT record-only by
+  rights; it is gated here only so the move and the fix are separate commits
+  with separate evidence.
+  refactor-p-the-field-declaration-parser-exists-twice }
+var
+  arrLen, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
+  hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
+  tdLo, tdHi, tdi: Integer;
+  fEnumId: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
+  isArr, fIsDyn: Boolean;
+  fTk: TTypeKind;
+  fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..15] of Integer;
+  tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+begin
+  { comma-separated names share one type: `X, Y: Integer` }
+  fldNOffs[0] := Tokens[TokPos-1].SOffset;
+  fldNLens[0] := Tokens[TokPos-1].SLen;
+  nFldNames := 1;
+  Next;
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+    fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+    fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+    Inc(nFldNames);
+    Next;
+  end;
+  Expect(tkColon, ':');
+  isArr := False;
+  fEnumId := -1;   { `f: TEnum` / `array[..] of TEnum`: the enum type index }
+  arrLen := 1;
+  fIsDyn := False;
+  fDynDepth := 0;
+  fNDims := 0;
+  { `entries: packed array[0..0] of TRec;` (fcl-fpcunit's testutils) — `packed`
+    is legal on an array field, not just on a record. It only affects ELEMENT
+    padding, and pxx already lays array elements out contiguously, so it is
+    accepted and the array parsed exactly as an unpacked one. Without this the
+    field type parser fell through to ParseTypeKind, whose tkPacked case assumes
+    a record and demanded one. }
+  if inRecordBody and (CurTok.Kind = tkPacked) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkArray) then
+    Next;
+  if CurTok.Kind = tkArray then
+  begin
+    Next;
+    if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      { Bounds through ParseArrayDimBounds: const EXPRESSIONS (`0..N - 1`,
+        bug-inline-array-field-const-bound) and a whole ordinal TYPE as the
+        index (`array[Byte]`, `array[TKind]`) alike. }
+      ParseArrayDimBounds(loVal, hiVal);
+      arrLen := hiVal - loVal + 1;
+      { N-D field: collect dim0 then any comma dims. }
+      fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+      while CurTok.Kind = tkComma do
+      begin
+        Eat(tkComma);
+        ParseArrayDimBounds(tdLo, tdHi);
+        if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+        tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+        arrLen := arrLen * tdDimSpan[fNDims];
+        Inc(fNDims);
+      end;
+      Expect(tkRBrack, ']');
+      Expect(tkOf, 'of');
+      fTk := ParseTypeKind;
+      fRec := LastTypeRecId;
+      fEnumId := LastTypeEnumId;
+      isArr := True;
+    end
+    else
+    begin
+      { Dynamic-array field: `array of T`, including nested. }
+      fIsDyn := True;
+      fDynDepth := 1;
+      Expect(tkOf, 'of');
+      while CurTok.Kind = tkArray do
+      begin
+        Next;
+        Inc(fDynDepth);
+        Expect(tkOf, 'of');
+      end;
+      fTk := ParseTypeKind;
+      fRec := LastTypeRecId;
+      fEnumId := LastTypeEnumId;
+      { THE ELEMENT'S CAPACITY, CAPTURED HERE BECAUSE NOTHING ELSE WILL.
+        `fIsDyn` short-circuits the frozen-field arm below, which is the one
+        place fStrCap was ever assigned -- so a dynamic-array field kept
+        whatever the PREVIOUS field in the same record had left in it.
+        Measured: `record row: array of string[N] end` clamped every store
+        at 3 for every N (3 being the leftover from the builtin prelude,
+        hence constant across programs and easy to mistake for a real
+        answer), and putting `pad: string[17]` in front of it made the same
+        field clamp at 17. LastTypeStrCap is correct HERE and only here --
+        ParseTypeKind has just run on the element.
+        bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
+      if (fTk = tyFixedString) or (fTk = tyShortString) then
+        fStrCap := LastTypeStrCap
+      else
+        fStrCap := 0;
+    end;
+  end
+  else
+  begin
+    { Named dynamic-array type field (`TDynArr = array of T`): mirror
+      the inline `array of T` field so SetLength/Length/indexing see a
+      real dynamic array. Without this the field's UFldDynDepth stayed
+      0 and SetLength(Self.field, n) misrouted to the string path. }
+    fAi := -1;
+    if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+    if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+    begin
+      fIsDyn := True;
+      fDynDepth := ArrTypeDynDepth[fAi];
+      fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+      fRec := ArrTypeElemRec[fAi];
+      fEnumId := ArrTypeElemEnumId[fAi];
+      { The alias row is the carrier here -- same reason as the inline arm
+        above, one spelling over. }
+      fStrCap := ArrTypeElemStrCap[fAi];
+      { AddUField reads the pointee record for a tyPointer field straight off
+        the LastTypePointerElemRec global -- prime it here (see
+        ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
+      LoadPointeeFromArrType(fAi);
+      Next;   { consume the named array type }
+    end
+    else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+    begin
+      { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+        make it a real array field (1-D or flattened N-D) so a.x[i]
+        indexes with the right stride. Without this ParseTypeKind drops
+        TG's dimension and the field collapses to a single base element
+        (corrupting r.field[i] and r.field passed as a var array arg). }
+      isArr := True;
+      fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+      fRec := ArrTypeElemRec[fAi];
+      fEnumId := ArrTypeElemEnumId[fAi];
+      LoadPointeeFromArrType(fAi);
+      if ArrTypeNDims[fAi] >= 2 then
+      begin
+        fNDims := ArrTypeNDims[fAi];
+        arrLen := 1;
+        for tdi := 0 to fNDims - 1 do
+        begin
+          tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+          tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+          arrLen := arrLen * tdDimSpan[tdi];
+        end;
+      end
+      else
+      begin
+        fNDims := 1;
+        tdDimLo[0]   := ArrTypeLo[fAi];
+        tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+        arrLen := tdDimSpan[0];
+      end;
+      Next;   { consume the named array type }
+    end
+    else
+    begin
+      fTk := ParseTypeKind;
+      fRec := LastTypeRecId;
+      fEnumId := LastTypeEnumId;
+    end;
+  end;
+  if fIsDyn then
+  begin
+    fSize := TARGET_PTR_SIZE;
+    fAlign := TARGET_PTR_SIZE;
+  end
+  else if fTk = tyString then
+  begin
+    fSize := LOCAL_STR_CAP + 8;
+    fAlign := TARGET_PTR_SIZE;
+  end
+  else if (fTk = tyFixedString) or (fTk = tyShortString) then
+  begin
+    { `string[N]` field: inline [len][chars:N] slot, same layout as a
+      tyString field but capacity N. Stored as tyString (identical read/
+      write codegen) with UFldStrCap = N driving the truncating store.
+
+      tyShortString WAS MISSING FROM THIS TEST and fell through to
+      TypeSlotSize, which answers a POINTER WIDTH for a string kind: under
+      -dPXX_SHORTSTRING a `record x, y: string[10]` measured 16 bytes with y
+      at offset 8, so y OVERLAPPED x by three bytes and writing y silently
+      truncated x. FPC says 22 and offset 11. The variant-part arm a few
+      hundred lines up already tested both kinds; this one and its class
+      sibling did not. }
+    fStrCap := LastTypeStrCap;
+    if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
+    fSize := FrozenStrSlotSize(fTk, fStrCap);
+    fAlign := FrozenStrAlign(fTk);
+  end
+  else if fTk = tyRecord then
+  begin
+    fSize := RecSize(fRec);
+    if inRecordBody and (fRec >= REC_UCLASS_BASE) then
+      fAlign := UClsAlign[fRec - REC_UCLASS_BASE]
+    else
+      fAlign := TARGET_PTR_SIZE;
+  end
+  else
+  begin
+    fSize := TypeSlotSize(fTk);
+    fAlign := TypeFieldAlign(fTk);
+  end;
+  if inRecordBody then
+  begin
+    if isPackedRecord then
+      fAlign := 1
+    else if fAlign > TokPackRecords[TokPos - 1] then
+      fAlign := TokPackRecords[TokPos - 1];
+  end;
+  if isArr then
+    fSize := fSize * arrLen;
+  { A by-value field of the record's OWN type (direct or transitive) is
+    infinitely recursive — FPC rejects it (terecs9); pxx used to lay out a
+    zero-sized field silently. Dynarray fields (heap indirection) are fine
+    and skipped by the walk. }
+  if inRecordBody and (fTk = tyRecord) and (not fIsDyn) and (fRec <> REC_NONE) and
+     RecContainsRecId(fRec, REC_UCLASS_BASE + ci) then
+    Error('record field cannot be of the enclosing record type');
+  for fni := 0 to nFldNames - 1 do
+  begin
+    curFieldOff := AlignTo(curFieldOff, fAlign);
+    { A FROZEN FIELD CARRIES ITS CAPACITY WHICHEVER KIND IT IS. tyFixedString
+      is recorded AS tyString (identical read/write codegen, the capacity in
+      UFldStrCap); tyShortString must keep its OWN tag, because that tag is
+      where its one-byte prefix width comes from -- but it needs the cap
+      just the same, and it was getting neither the cap nor a real size. }
+    if (fTk = tyFixedString) or (fTk = tyShortString) then
+    begin
+      if fTk = tyFixedString then
+        AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec)
+      else
+        AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+      UFldStrCap[UFldCount-1] := fStrCap;
+    end
+    else
+      AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+    if EnumKindMatches(fTk, fEnumId) then UFldEnumId[UFldCount-1] := fEnumId;
+    UFldIsArray[UFldCount-1] := isArr or fIsDyn;
+    if fIsDyn then UFldArrLen[UFldCount-1] := -1
+    else UFldArrLen[UFldCount-1] := arrLen;
+    UFldDynDepth[UFldCount-1] := fDynDepth;
+    if fNDims >= 2 then
+    begin
+      UFldArrNDims[UFldCount-1] := fNDims;
+      for tdi := 0 to fNDims - 1 do
+      begin
+        UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
+        UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
+      end;
+    end
+    else if isArr and (not fIsDyn) then
+      { 1-D static array field: record its LOW BOUND in dim 0 of the same table.
+        UFldArrNDims deliberately stays 0 — nothing dispatches differently — this
+        is only where the index lowering reads a field array's `lo` from. Without
+        it the low was never subtracted: `array[1..3]` wrote one element past its
+        extent and `array[-2..2]` two before it, corrupting the neighbouring field
+        (or, on a class, the object header — Free then segfaulted).
+        bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+      UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := tdDimLo[0];
+    { The class body's own stamp. A record caller passes AddUField's own
+      defaults (0 / VIS_PUBLIC), so this line is behaviour-identical there. }
+    UFldPub[UFldCount-1] := pub;
+    UFldVis[UFldCount-1] := vis;
+    curFieldOff := curFieldOff + fSize;
+  end;
+  if fAlign > classAlign then classAlign := fAlign;
+  SkipHintDirectives;   { `f: Integer deprecated;` -- a hint on a FIELD, the
+                          record/class twin of the var-section skip }
+end;
+
 procedure ParseRecordFields(ci: Integer; isPackedRecord, isObjectType: Boolean);
 var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
@@ -4716,260 +5020,8 @@ begin
 
     if CurTok.Kind = tkIdent then
     begin
-      { comma-separated names share one type: `X, Y: Integer` }
-      fldNOffs[0] := Tokens[TokPos-1].SOffset;
-      fldNLens[0] := Tokens[TokPos-1].SLen;
-      nFldNames := 1;
-      Next;
-      while CurTok.Kind = tkComma do
-      begin
-        Next;
-        if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-        fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
-        fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-        Inc(nFldNames);
-        Next;
-      end;
-      Expect(tkColon, ':');
-      isArr := False;
-      fEnumId := -1;   { `f: TEnum` / `array[..] of TEnum`: the enum type index }
-      arrLen := 1;
-      fIsDyn := False;
-      fDynDepth := 0;
-      fNDims := 0;
-      { `entries: packed array[0..0] of TRec;` (fcl-fpcunit's testutils) — `packed`
-        is legal on an array field, not just on a record. It only affects ELEMENT
-        padding, and pxx already lays array elements out contiguously, so it is
-        accepted and the array parsed exactly as an unpacked one. Without this the
-        field type parser fell through to ParseTypeKind, whose tkPacked case assumes
-        a record and demanded one. }
-      if (CurTok.Kind = tkPacked) and (TokPos < TokCount) and
-         (Tokens[TokPos].Kind = tkArray) then
-        Next;
-      if CurTok.Kind = tkArray then
-      begin
-        Next;
-        if CurTok.Kind = tkLBrack then
-        begin
-          Next;
-          { Bounds through ParseArrayDimBounds: const EXPRESSIONS (`0..N - 1`,
-            bug-inline-array-field-const-bound) and a whole ordinal TYPE as the
-            index (`array[Byte]`, `array[TKind]`) alike. }
-          ParseArrayDimBounds(loVal, hiVal);
-          arrLen := hiVal - loVal + 1;
-          { N-D field: collect dim0 then any comma dims. }
-          fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
-          while CurTok.Kind = tkComma do
-          begin
-            Eat(tkComma);
-            ParseArrayDimBounds(tdLo, tdHi);
-            if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
-            tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
-            arrLen := arrLen * tdDimSpan[fNDims];
-            Inc(fNDims);
-          end;
-          Expect(tkRBrack, ']');
-          Expect(tkOf, 'of');
-          fTk := ParseTypeKind;
-          fRec := LastTypeRecId;
-          fEnumId := LastTypeEnumId;
-          isArr := True;
-        end
-        else
-        begin
-          { Dynamic-array field: `array of T`, including nested. }
-          fIsDyn := True;
-          fDynDepth := 1;
-          Expect(tkOf, 'of');
-          while CurTok.Kind = tkArray do
-          begin
-            Next;
-            Inc(fDynDepth);
-            Expect(tkOf, 'of');
-          end;
-          fTk := ParseTypeKind;
-          fRec := LastTypeRecId;
-          fEnumId := LastTypeEnumId;
-          { THE ELEMENT'S CAPACITY, CAPTURED HERE BECAUSE NOTHING ELSE WILL.
-            `fIsDyn` short-circuits the frozen-field arm below, which is the one
-            place fStrCap was ever assigned -- so a dynamic-array field kept
-            whatever the PREVIOUS field in the same record had left in it.
-            Measured: `record row: array of string[N] end` clamped every store
-            at 3 for every N (3 being the leftover from the builtin prelude,
-            hence constant across programs and easy to mistake for a real
-            answer), and putting `pad: string[17]` in front of it made the same
-            field clamp at 17. LastTypeStrCap is correct HERE and only here --
-            ParseTypeKind has just run on the element.
-            bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
-          if (fTk = tyFixedString) or (fTk = tyShortString) then
-            fStrCap := LastTypeStrCap
-          else
-            fStrCap := 0;
-        end;
-      end
-      else
-      begin
-        { Named dynamic-array type field (`TDynArr = array of T`): mirror
-          the inline `array of T` field so SetLength/Length/indexing see a
-          real dynamic array. Without this the field's UFldDynDepth stayed
-          0 and SetLength(Self.field, n) misrouted to the string path. }
-        fAi := -1;
-        if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-        if (fAi >= 0) and ArrTypeIsDyn[fAi] then
-        begin
-          fIsDyn := True;
-          fDynDepth := ArrTypeDynDepth[fAi];
-          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-          fRec := ArrTypeElemRec[fAi];
-          fEnumId := ArrTypeElemEnumId[fAi];
-          { The alias row is the carrier here -- same reason as the inline arm
-            above, one spelling over. }
-          fStrCap := ArrTypeElemStrCap[fAi];
-          { AddUField reads the pointee record for a tyPointer field straight off
-            the LastTypePointerElemRec global -- prime it here (see
-            ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
-          LoadPointeeFromArrType(fAi);
-          Next;   { consume the named array type }
-        end
-        else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
-        begin
-          { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
-            make it a real array field (1-D or flattened N-D) so a.x[i]
-            indexes with the right stride. Without this ParseTypeKind drops
-            TG's dimension and the field collapses to a single base element
-            (corrupting r.field[i] and r.field passed as a var array arg). }
-          isArr := True;
-          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-          fRec := ArrTypeElemRec[fAi];
-          fEnumId := ArrTypeElemEnumId[fAi];
-          LoadPointeeFromArrType(fAi);
-          if ArrTypeNDims[fAi] >= 2 then
-          begin
-            fNDims := ArrTypeNDims[fAi];
-            arrLen := 1;
-            for tdi := 0 to fNDims - 1 do
-            begin
-              tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
-              tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
-              arrLen := arrLen * tdDimSpan[tdi];
-            end;
-          end
-          else
-          begin
-            fNDims := 1;
-            tdDimLo[0]   := ArrTypeLo[fAi];
-            tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
-            arrLen := tdDimSpan[0];
-          end;
-          Next;   { consume the named array type }
-        end
-        else
-        begin
-          fTk := ParseTypeKind;
-          fRec := LastTypeRecId;
-          fEnumId := LastTypeEnumId;
-        end;
-      end;
-      if fIsDyn then
-      begin
-        fSize := TARGET_PTR_SIZE;
-        fAlign := TARGET_PTR_SIZE;
-      end
-      else if fTk = tyString then
-      begin
-        fSize := LOCAL_STR_CAP + 8;
-        fAlign := TARGET_PTR_SIZE;
-      end
-      else if (fTk = tyFixedString) or (fTk = tyShortString) then
-      begin
-        { `string[N]` field: inline [len][chars:N] slot, same layout as a
-          tyString field but capacity N. Stored as tyString (identical read/
-          write codegen) with UFldStrCap = N driving the truncating store.
-
-          tyShortString WAS MISSING FROM THIS TEST and fell through to
-          TypeSlotSize, which answers a POINTER WIDTH for a string kind: under
-          -dPXX_SHORTSTRING a `record x, y: string[10]` measured 16 bytes with y
-          at offset 8, so y OVERLAPPED x by three bytes and writing y silently
-          truncated x. FPC says 22 and offset 11. The variant-part arm a few
-          hundred lines up already tested both kinds; this one and its class
-          sibling did not. }
-        fStrCap := LastTypeStrCap;
-        if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
-        fSize := FrozenStrSlotSize(fTk, fStrCap);
-        fAlign := FrozenStrAlign(fTk);
-      end
-      else if fTk = tyRecord then
-      begin
-        fSize := RecSize(fRec);
-        if fRec >= REC_UCLASS_BASE then
-          fAlign := UClsAlign[fRec - REC_UCLASS_BASE]
-        else
-          fAlign := TARGET_PTR_SIZE;
-      end
-      else
-      begin
-        fSize := TypeSlotSize(fTk);
-        fAlign := TypeFieldAlign(fTk);
-      end;
-      if isPackedRecord then
-        fAlign := 1
-      else if fAlign > TokPackRecords[TokPos - 1] then
-        fAlign := TokPackRecords[TokPos - 1];
-      if isArr then
-        fSize := fSize * arrLen;
-      { A by-value field of the record's OWN type (direct or transitive) is
-        infinitely recursive — FPC rejects it (terecs9); pxx used to lay out a
-        zero-sized field silently. Dynarray fields (heap indirection) are fine
-        and skipped by the walk. }
-      if (fTk = tyRecord) and (not fIsDyn) and (fRec <> REC_NONE) and
-         RecContainsRecId(fRec, REC_UCLASS_BASE + ci) then
-        Error('record field cannot be of the enclosing record type');
-      for fni := 0 to nFldNames - 1 do
-      begin
-        curFieldOff := AlignTo(curFieldOff, fAlign);
-        { A FROZEN FIELD CARRIES ITS CAPACITY WHICHEVER KIND IT IS. tyFixedString
-          is recorded AS tyString (identical read/write codegen, the capacity in
-          UFldStrCap); tyShortString must keep its OWN tag, because that tag is
-          where its one-byte prefix width comes from -- but it needs the cap
-          just the same, and it was getting neither the cap nor a real size. }
-        if (fTk = tyFixedString) or (fTk = tyShortString) then
-        begin
-          if fTk = tyFixedString then
-            AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec)
-          else
-            AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-          UFldStrCap[UFldCount-1] := fStrCap;
-        end
-        else
-          AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-        if EnumKindMatches(fTk, fEnumId) then UFldEnumId[UFldCount-1] := fEnumId;
-        UFldIsArray[UFldCount-1] := isArr or fIsDyn;
-        if fIsDyn then UFldArrLen[UFldCount-1] := -1
-        else UFldArrLen[UFldCount-1] := arrLen;
-        UFldDynDepth[UFldCount-1] := fDynDepth;
-        if fNDims >= 2 then
-        begin
-          UFldArrNDims[UFldCount-1] := fNDims;
-          for tdi := 0 to fNDims - 1 do
-          begin
-            UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
-            UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
-          end;
-        end
-        else if isArr and (not fIsDyn) then
-          { 1-D static array field: record its LOW BOUND in dim 0 of the same table.
-            UFldArrNDims deliberately stays 0 — nothing dispatches differently — this
-            is only where the index lowering reads a field array's `lo` from. Without
-            it the low was never subtracted: `array[1..3]` wrote one element past its
-            extent and `array[-2..2]` two before it, corrupting the neighbouring field
-            (or, on a class, the object header — Free then segfaulted).
-            bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
-          UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := tdDimLo[0];
-        curFieldOff := curFieldOff + fSize;
-      end;
-      if fAlign > classAlign then classAlign := fAlign;
-      SkipHintDirectives;   { `f: Integer deprecated;` -- a hint on a FIELD, the
-                              record/class twin of the var-section skip }
+      ParseFieldDeclInto(ci, curFieldOff, classAlign, isPackedRecord, True,
+                         0, VIS_PUBLIC);
       Eat(tkSemicolon);
     end
     else if CurTok.Kind = tkCase then
@@ -6825,235 +6877,8 @@ begin
             ParsePropertyDecl(ci, curPublished)
           else if CurTok.Kind = tkIdent then
           begin
-            { comma-separated names share one type: `A, B: Integer` }
-            fldNOffs[0] := Tokens[TokPos-1].SOffset;
-            fldNLens[0] := Tokens[TokPos-1].SLen;
-            nFldNames := 1;
-            Next;
-            while CurTok.Kind = tkComma do
-            begin
-              Next;
-              if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-              fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
-              fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-              Inc(nFldNames);
-              Next;
-            end;
-            Expect(tkColon, ':');
-            isArr := False;
-            fEnumId2 := -1;   { `f: TEnum` / `array[..] of TEnum` in a CLASS body }
-            arrLen := 1;
-            fIsDyn := False;
-            fDynDepth := 0;
-            fNDims := 0;
-            if CurTok.Kind = tkArray then
-            begin
-              Next;
-              if CurTok.Kind = tkLBrack then
-              begin
-                Next;
-                { Bounds through ParseArrayDimBounds, the same helper the var
-                  section and the named-array-type path use — const EXPRESSIONS
-                  (`0..N - 1`, bug-inline-array-field-const-bound) and, since it
-                  is shared, a whole ordinal TYPE as the index (`array[Byte]`,
-                  `array[TTypeKind]`, rtl-generics' comparer tables). Inline
-                  ConstEval here accepted only the `lo..hi` form, so an index
-                  type that a var section took happily was `not a constant` in a
-                  field — a second mechanism for one concept, which is the case
-                  devdocs/dev/normalise-dont-special-case.md is about. }
-                ParseArrayDimBounds(loVal, hiVal);
-                arrLen := hiVal - loVal + 1;
-                { N-D field: collect dim0 then any comma dims. }
-                fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
-                while CurTok.Kind = tkComma do
-                begin
-                  Eat(tkComma);
-                  ParseArrayDimBounds(tdLo, tdHi);
-                  if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
-                  tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
-                  arrLen := arrLen * tdDimSpan[fNDims];
-                  Inc(fNDims);
-                end;
-                Expect(tkRBrack, ']');
-                Expect(tkOf, 'of');
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-                fEnumId2 := LastTypeEnumId;
-                isArr := True;
-              end
-              else
-              begin
-                { Dynamic-array field: `array of T`, including nested. The slot is
-                  a pointer-sized handle; fTk/fRec carry the base element type. }
-                fIsDyn := True;
-                fDynDepth := 1;
-                Expect(tkOf, 'of');
-                while CurTok.Kind = tkArray do
-                begin
-                  Next;
-                  Inc(fDynDepth);
-                  Expect(tkOf, 'of');
-                end;
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-                fEnumId2 := LastTypeEnumId;
-                { The class face of the same capture -- see ParseRecordFields.
-                  Same missing assignment, and it shows BOTH signs depending on
-                  what the previous field left behind. Measured with a 26-char
-                  store into an `array of string[20]` class field: with a
-                  `pad: string[17]` in front the store clamped at 17 and with
-                  `string[9]` at 9 -- the leftover, short. With NO preceding
-                  frozen field the leftover is 0, which the store path reads as
-                  "no limit", so all 26 characters went into the 20-capacity
-                  element and OVERRAN it. The 26 there is the literal's length,
-                  not a capacity: an absent answer and a wrong one, from one
-                  hole.
-                  bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
-                if (fTk = tyFixedString) or (fTk = tyShortString) then
-                  fStrCap := LastTypeStrCap
-                else
-                  fStrCap := 0;
-              end;
-            end
-            else
-            begin
-              { Named dynamic-array type field (`TDynArr = array of T`): mirror
-                the inline `array of T` field so SetLength/Length/indexing see a
-                real dynamic array. Without this the field's UFldDynDepth stayed
-                0 and SetLength(Self.field, n) misrouted to the string path. }
-              fAi := -1;
-              if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-              if (fAi >= 0) and ArrTypeIsDyn[fAi] then
-              begin
-                fIsDyn := True;
-                fDynDepth := ArrTypeDynDepth[fAi];
-                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-                fRec := ArrTypeElemRec[fAi];
-                fEnumId2 := ArrTypeElemEnumId[fAi];
-                { The alias row is the carrier here -- same reason as the inline
-                  arm above, one spelling over. }
-                fStrCap := ArrTypeElemStrCap[fAi];
-                LoadPointeeFromArrType(fAi);
-                Next;   { consume the named array type }
-              end
-              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
-              begin
-                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
-                  make it a real array field (1-D or flattened N-D) so a.x[i]
-                  indexes with the right stride. Without this ParseTypeKind drops
-                  TG's dimension and the field collapses to a single base element
-                  (corrupting r.field[i] and r.field passed as a var array arg). }
-                isArr := True;
-                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-                fRec := ArrTypeElemRec[fAi];
-                fEnumId2 := ArrTypeElemEnumId[fAi];
-                LoadPointeeFromArrType(fAi);
-                if ArrTypeNDims[fAi] >= 2 then
-                begin
-                  fNDims := ArrTypeNDims[fAi];
-                  arrLen := 1;
-                  for tdi := 0 to fNDims - 1 do
-                  begin
-                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
-                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
-                    arrLen := arrLen * tdDimSpan[tdi];
-                  end;
-                end
-                else
-                begin
-                  fNDims := 1;
-                  tdDimLo[0]   := ArrTypeLo[fAi];
-                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
-                  arrLen := tdDimSpan[0];
-                end;
-                Next;   { consume the named array type }
-              end
-              else
-              begin
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-                fEnumId2 := LastTypeEnumId;
-              end;
-            end;
-            if fIsDyn then
-            begin
-              fSize := TARGET_PTR_SIZE;
-              fAlign := TARGET_PTR_SIZE;
-            end
-            else if fTk = tyString then
-            begin
-              fSize := LOCAL_STR_CAP + 8;
-              fAlign := TARGET_PTR_SIZE;
-            end
-            else if (fTk = tyFixedString) or (fTk = tyShortString) then
-            begin
-              { `string[N]` field: see ParseRecordFields — tyString layout,
-                capacity N via UFldStrCap, and BOTH frozen kinds (a class field
-                had the same overlap a record field did). }
-              fStrCap := LastTypeStrCap;
-              if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
-              fSize := FrozenStrSlotSize(fTk, fStrCap);
-              fAlign := FrozenStrAlign(fTk);
-            end
-            else if fTk = tyRecord then
-            begin
-              fSize := RecSize(fRec);
-              fAlign := TARGET_PTR_SIZE;
-            end
-            else
-            begin
-              fSize := TypeSlotSize(fTk);
-              fAlign := TypeFieldAlign(fTk);
-            end;
-            if isArr then
-              fSize := fSize * arrLen;
-            for fni := 0 to nFldNames - 1 do
-            begin
-              curFieldOff := AlignTo(curFieldOff, fAlign);
-              { both frozen kinds, see ParseRecordFields }
-              if (fTk = tyFixedString) or (fTk = tyShortString) then
-              begin
-                if fTk = tyFixedString then
-                  AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec)
-                else
-                  AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-                UFldStrCap[UFldCount-1] := fStrCap;
-              end
-              else
-                AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-              if EnumKindMatches(fTk, fEnumId2) then UFldEnumId[UFldCount-1] := fEnumId2;
-              UFldIsArray[UFldCount-1] := isArr or fIsDyn;
-              if fIsDyn then UFldArrLen[UFldCount-1] := -1
-              else UFldArrLen[UFldCount-1] := arrLen;
-              UFldDynDepth[UFldCount-1] := fDynDepth;
-              if fNDims >= 2 then
-              begin
-                UFldArrNDims[UFldCount-1] := fNDims;
-                for tdi := 0 to fNDims - 1 do
-                begin
-                  UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
-                  UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
-                end;
-              end
-              else if isArr and (not fIsDyn) then
-                { 1-D static array field: record its LOW BOUND in dim 0 of the same table.
-                  UFldArrNDims deliberately stays 0 — nothing dispatches differently — this
-                  is only where the index lowering reads a field array's `lo` from. Without
-                  it the low was never subtracted: `array[1..3]` wrote one element past its
-                  extent and `array[-2..2]` two before it, corrupting the neighbouring field
-                  (or, on a class, the object header — Free then segfaulted).
-                  bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
-                UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := tdDimLo[0];
-              UFldPub[UFldCount-1] := curPublished;
-              UFldVis[UFldCount-1] := curVis;
-              curFieldOff := curFieldOff + fSize;
-            end;
-            if fAlign > classAlign then classAlign := fAlign;
-            SkipHintDirectives;   { `f: Integer deprecated;` on a CLASS field --
-                                    the class-body twin of the record-field and
-                                    var-section skips. A class body has its own
-                                    field parser, so it needed its own call. }
-            Eat(tkSemicolon);
+            ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False,
+                               curPublished, curVis);
           end
           else
             Next;
