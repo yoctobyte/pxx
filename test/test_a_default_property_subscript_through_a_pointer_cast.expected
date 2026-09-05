@@ -1,0 +1,12 @@
+1 var  subscript
+  [GetA]
+  t=77
+2 cast subscript
+  [GetA]
+  t=77
+3 cast named
+  [GetA]
+  t=77
+4 var  store
+  [SetA]
+  arr3=23

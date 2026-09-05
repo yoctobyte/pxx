@@ -7343,6 +7343,34 @@ begin
             end
             else if CurTok.Kind = tkLBrack then
             begin
+              { A CLASS value with a DEFAULT PROPERTY means the accessor, not a
+                raw subscript. The `.name` arm below has delegated to
+                ParseClassRecordSelectors since it was written; this one never
+                did, so `t := PTC(raw)^[3]` built an AN_INDEX straight over the
+                object and read t=0 with NO ACCESSOR CALLED, while the same
+                subscript off a plain variable (`pc^[3]`) and the same property
+                named explicitly through the same cast (`PTC(raw)^.A[3]`) both
+                answered 77 through the getter. Silent, and one spelling of
+                three. The store face `PTC(raw)^[3] := 23` was refused outright.
+                Pre-dates pin v403 on both faces.
+
+                The shared walker already knows all of this -- getter, setter,
+                the multi-index group and the PropAccessIsWrite lookahead that
+                decides between them -- which is the argument for handing it the
+                `[` rather than teaching this loop a second copy of a rule that
+                is four arms long. refactor-p-three-hand-rolled-postfix-loops
+                asks of each hand-built arm not whether it is reached but
+                whether it is the right arm at all; this is the answer for this
+                one. }
+              if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+                 (FindDefaultProp(recName - REC_UCLASS_BASE) >= 0) then
+              begin
+                node := ParseClassRecordSelectors(node, recName, tk);
+                recName := ResolveNodeRec(node);
+                pcDelegated := True;
+                if CurTok.Kind <> tkCaret then Break;
+                Continue;
+              end;
               Next;
               indexNode := AllocNode(AN_INDEX);
               ASTLeft[indexNode] := node;

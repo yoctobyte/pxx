@@ -14291,6 +14291,11 @@ test-core: $(COMPILER)
 	# the same chain off a plain variable, which was right on the pin too
 	./$(COMPILER) test/test_a_deref_after_a_delegated_member_on_a_pointer_cast.pas $(TESTTMP)/test_dlgderef26
 	tools/expect_same.sh test_dlgderef26 "$$($(TESTTMP)/test_dlgderef26)" "$$(cat test/test_a_deref_after_a_delegated_member_on_a_pointer_cast.expected)"
+	# a DEFAULT PROPERTY subscripted on a cast: row 2 read t=0 with no accessor
+	# called, while rows 1 and 3 -- same subscript off a variable, same property
+	# named through the same cast -- were right throughout
+	./$(COMPILER) test/test_a_default_property_subscript_through_a_pointer_cast.pas $(TESTTMP)/test_dfltprop26
+	tools/expect_same.sh test_dfltprop26 "$$($(TESTTMP)/test_dfltprop26)" "$$(cat test/test_a_default_property_subscript_through_a_pointer_cast.expected)"
 	# DIAGNOSTIC LOCATION, both asserted on the MESSAGE and not the exit code:
 	# each file was always refused, and the whole defect was where the refusal
 	# pointed, so an exit-code row passes on the bug.
