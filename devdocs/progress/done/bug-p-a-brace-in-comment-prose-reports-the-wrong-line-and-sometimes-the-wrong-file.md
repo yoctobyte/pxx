@@ -3,8 +3,8 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-summary: "`{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording."
-status: working
+summary: "FIXED. Both diagnostics now name a place the reader can act on. `unterminated comment` keeps the OUTER brace's line (it is the genuinely unclosed one) and adds notes naming every nested open-brace inside it — the offender is in that list. And a diagnostic landing inside an appended builtin unit now says that unit is the compiler's, that the mistake is at or before the last line of the file you named, and that an unterminated comment or string is the usual cause. Two must-not-compile fixtures assert the NOTE text, not the exit code."
+status: done
 owner: frankA
 ---
 
@@ -128,3 +128,72 @@ If the nesting rule itself is up for discussion that is a **Track U** question
 Recorded in `feature-lib-mimic-string-template`'s write-up as well, so the next
 person writing a `mimic_` shim about brace-using syntax meets the note before
 the bug. The workaround there was to spell braces in words inside comments.
+
+## Resolution (2026-09-05, frankA)
+
+Both halves fixed. The nesting RULE is untouched — that stays a Track U
+question, as this ticket already said.
+
+### Repro 1: the notes carry the offender, the headline keeps the outer line
+
+The ticket asked for the **innermost unclosed** open-brace. That is wrong for
+this repro, and working it out is the whole finding: in repro 1 the innermost
+unclosed brace **is the outer one on line 2**. The author's `}` on line 10 did
+close a comment — it closed the NESTED one that `` `${who `` opened. So
+"innermost unclosed" would print exactly the line the ticket complains about.
+
+What the reader actually needs is not one line but the SET: `compiler/paslexer.inc`
+now records the line of every nested open-brace inside the comment (up to
+`MAX_COMMENT_NEST_REPORTED = 32`, in `compiler/defs.inc`) and lists them as
+notes. The headline stays at the outer brace because that is the only line the
+scanner can truthfully call unterminated:
+
+```
+pascal26:17: error: unterminated comment
+  note: brace comments NEST, and a quote does not protect a brace inside one.
+  note: an open-brace inside this comment opened a nested one, so the closing brace
+        balanced THAT instead. Look at line:
+          22
+```
+
+The nesting property is stated in the note, because "unterminated" reads as
+"you forgot a `}`" when the truth is "you wrote an extra `{`" — the ticket's
+own observation.
+
+### Repro 2: the derailed parse says whose file that is
+
+`compiler/lexer.inc` gains `PathIsAppendedBuiltin`, and the `in:` arm of
+`ErrorPrintAt` adds a note when the path is an appended builtin. Established
+first with `PXXDBG='a.srcmap:*'`: builtin units are lexed into the SAME token
+array as the main source, appended after it with no boundary, so a parse that
+overruns the user's file reports **truthfully** at coordinates inside a file the
+author never opened. Nothing is lying; the coordinates are real and belong to
+somebody else's file.
+
+```
+  in: ./compiler/builtin/builtinheap.pas
+  note: that unit is appended to every program by the compiler -- you did not write it.
+        Either the parse ran off the end of <yourfile> (an unterminated comment or
+        string literal is the usual cause), or this is a compiler bug. Check the
+        first: the mistake would be at or before that file's last line.
+```
+
+### Fixtures, and why they assert the message
+
+- `test/test_unterminated_comment_names_the_nested_brace.pas`
+- `test/test_a_derailed_parse_names_the_appended_unit_as_the_compilers.pas`
+
+Both are must-not-compile, and both are asserted on the **note text, never the
+exit code**. Both files have always been refused — the entire defect was that
+the refusal pointed somewhere useless — so an exit-code row scores a pass on
+the bug itself. The Makefile rows grep for the wording AND for the offender's
+line number (` 22`), plus a negative control: the nested-brace log must NOT
+carry the appended-unit note, so the note is scoped to the builtins rather than
+fired on every `in:` line.
+
+Controls run by hand as well: a genuinely unterminated outer comment with no
+nesting inside gets no notes; a balanced `${who}` still compiles; an error in a
+real `uses`d unit prints `in: myunit.pas` with no note.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -2749,6 +2749,23 @@ end;
 
 procedure SkipSpace;
 var commentDepth: Integer; cDone: Boolean; openLine: Integer;
+    { Every line inside this comment that opened a NESTED one, and how many
+      there were. The report itself stays at the outer brace, which is the
+      brace that is genuinely unclosed -- but that line is the one place
+      guaranteed NOT to be the mistake, because it is what the author wrote
+      correctly. On the ticket's own case the offender was 42 lines below it and
+      four fix attempts were aimed at the reported line.
+
+      The offender is a NESTED open: prose that happens to contain an
+      open-brace. The author's final close-brace then balances THAT one and the
+      outer comment runs to end of file. So the note lists the nested opens --
+      one of them is a shell placeholder, a JSON snippet or a C block, and
+      naming them is the whole difference between a two-minute fix and four
+      compiles.
+      bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
+    nestOpenLines: array[0..MAX_COMMENT_NEST_REPORTED-1] of Integer;
+    nestOpenCount, nestI: Integer;
+    outerLine: Integer;
 begin
   if DebugTrace then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
   while SrcPos <= Length(Source) do
@@ -2858,6 +2875,8 @@ begin
               the depth so the matching close-brace ends the right level; off
               (default) keeps the historic flat scan ending at the first one. }
             openLine := SrcLine;
+            outerLine := SrcLine;
+            nestOpenCount := 0;
             commentDepth := 1;
             while (SrcPos <= Length(Source)) and (commentDepth > 0) do
             begin
@@ -2874,16 +2893,42 @@ begin
                   quoting a directive, and the self-build stops on the first of
                   them (ir.inc's range-check note).
                   compat-pascal-directive-in-comment-ignores-nested-comments-off }
-                Inc(commentDepth)
+              begin
+                Inc(commentDepth);
+                if nestOpenCount < MAX_COMMENT_NEST_REPORTED then
+                begin
+                  nestOpenLines[nestOpenCount] := SrcLine;
+                  Inc(nestOpenCount);
+                end;
+              end
               else if Source[SrcPos] = '}' then Dec(commentDepth);
               Inc(SrcPos);
             end;
             { Standard diagnostic: a brace comment that never closes (a lone
               open-brace in the prose shifted the nesting counter) is reported at
-              its OPEN line, not left to cascade into a bogus token downstream. }
+              its OPEN line, not left to cascade into a bogus token downstream.
+
+              The line is the outer brace's and that is correct -- it IS the
+              unclosed one. It is also never the mistake, so the notes name the
+              nested opens, which is where the mistake is: brace comments NEST,
+              a quote does not protect a brace inside one, and the author's
+              closing brace has gone to balance a nested open instead. }
             if commentDepth > 0 then
             begin
               writeln('pascal26:', openLine, ': error: unterminated comment');
+              if nestOpenCount > 0 then
+              begin
+                writeln('  note: brace comments NEST, and a quote does not protect',
+                        ' a brace inside one.');
+                writeln('  note: an open-brace inside this comment opened a nested',
+                        ' one, so the closing brace');
+                if nestOpenCount = 1 then
+                  writeln('        balanced THAT instead. Look at line:')
+                else
+                  writeln('        balanced THAT instead. Look at these lines:');
+                for nestI := 0 to nestOpenCount - 1 do
+                  writeln('          ', nestOpenLines[nestI]);
+              end;
               Halt(1);
             end;
           end;

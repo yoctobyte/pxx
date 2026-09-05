@@ -14146,6 +14146,28 @@ test-core: $(COMPILER)
 	# pointer variable, so a chain that is wrong for everyone cannot pass.
 	./$(COMPILER) test/test_call_result_suffix_after_a_field.pas $(TESTTMP)/test_callsuffix26
 	tools/expect_same.sh test_callsuffix26 "$$($(TESTTMP)/test_callsuffix26)" "$$(cat test/test_call_result_suffix_after_a_field.expected)"
+	# DIAGNOSTIC LOCATION, both asserted on the MESSAGE and not the exit code:
+	# each file was always refused, and the whole defect was where the refusal
+	# pointed, so an exit-code row passes on the bug.
+	# 1) a brace in comment PROSE opens a nested comment, so the author's
+	#    closing brace balances that one. The error stays at the outer brace
+	#    (it is the unclosed one) and the NOTES name the nested open -- the
+	#    outer line is the one place guaranteed not to be the mistake.
+	! ./$(COMPILER) test/test_unterminated_comment_names_the_nested_brace.pas $(TESTTMP)/test_nestbrace26 > $(TESTTMP)/test_nestbrace.log 2>&1
+	grep -q "unterminated comment" $(TESTTMP)/test_nestbrace.log
+	grep -q "brace comments NEST" $(TESTTMP)/test_nestbrace.log
+	# the OFFENDER's line, which is what the whole change is for
+	grep -qE '^ +22$$' $(TESTTMP)/test_nestbrace.log
+	# 2) ...and a derailed parse runs off the end of the user's tokens into the
+	#    builtin units, which share the token array. The `in:` line names a real
+	#    file in the compiler's own RTL; the note says it is appended and which
+	#    file to check first.
+	! ./$(COMPILER) test/test_a_derailed_parse_names_the_appended_unit_as_the_compilers.pas $(TESTTMP)/test_derail26 > $(TESTTMP)/test_derail.log 2>&1
+	grep -q "builtin/builtinheap.pas" $(TESTTMP)/test_derail.log
+	grep -q "appended to every program by the compiler" $(TESTTMP)/test_derail.log
+	# and a REAL used unit must NOT get that note -- the note is scoped to the
+	# appended builtins, not to every `in:` line
+	! grep -q "appended to every program" $(TESTTMP)/test_nestbrace.log
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was

@@ -163,6 +163,26 @@ end;
   as the `near:` window that follows it, and anything that does not understand
   it ignores it.
   bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
+{ Is this path one of the units the compiler appends to every program? They all
+  live in a `builtin` directory -- ./compiler/builtin/ when building from the
+  tree, ./stable_linux_amd64/<profile>/builtin/ under the pin -- and that is the
+  whole test. Deliberately a PATH test rather than a flag on the range: the
+  range table is populated by the lexer and carries no notion of provenance, and
+  adding one would touch every planting site for a diagnostic-only fact. }
+function PathIsAppendedBuiltin(const p: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 1 to Length(p) - 8 do
+    if (p[i] = '/') and (p[i+1] = 'b') and (p[i+2] = 'u') and (p[i+3] = 'i') and
+       (p[i+4] = 'l') and (p[i+5] = 't') and (p[i+6] = 'i') and (p[i+7] = 'n') and
+       (p[i+8] = '/') then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 procedure WriteDiagSourceFile;
 var path, cpath: AnsiString; t, dbgI, cmod: Integer;
 begin
@@ -202,7 +222,42 @@ begin
       writeln('PXXDBG c.srcmap   [', dbgI, '] start=', CModRangeStart[dbgI],
               '  ', KeyStrs[CModRangeId[dbgI]]);
   end;
-  if (path <> '') and (path <> DbgSrcName) then writeln('  in: ', path)
+  if (path <> '') and (path <> DbgSrcName) then
+  begin
+    writeln('  in: ', path);
+    { ...and when THAT file is one the compiler appends to every program, say
+      so, because the reader is otherwise being pointed at the RTL for a mistake
+      in their own five-line file.
+
+      The builtin units are lexed into the SAME token array, AFTER the main
+      source, with nothing between them. So any parse that runs out of the
+      user's tokens carries straight on into `unit builtinheap` and reports --
+      truthfully, at correct coordinates -- about a file the author never
+      opened. Measured on a 5-line program whose comment contained a close-brace
+      inside quotes: the comment ended early, the rest of the line became code,
+      the remaining source was swallowed by an unterminated string, and the
+      first diagnostic named ./compiler/builtin/builtinheap.pas line 2. The
+      driver's own note about an empty source file records the same shape
+      ("failed with a bewildering complaint about `unit builtinheap`"), so this
+      is a class and not one input.
+
+      The note does not claim WHICH of the two causes it is, because the
+      diagnostic cannot tell: a genuine defect in a builtin unit prints exactly
+      the same coordinates. It names both and says which to check first, which
+      is the part the reader cannot work out and the part that was costing
+      people a probe.
+      bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
+    if PathIsAppendedBuiltin(path) then
+    begin
+      writeln('  note: that unit is appended to every program by the compiler --',
+              ' you did not write it.');
+      writeln('        Either the parse ran off the end of ', DbgSrcName,
+              ' (an unterminated comment or');
+      writeln('        string literal is the usual cause), or this is a compiler bug.',
+              ' Check the');
+      writeln('        first: the mistake would be at or before that file''s last line.');
+    end;
+  end
   { The C fallback, and it is an APPENDED arm on purpose: it fires only where
     `path` is EMPTY, i.e. where the Pascal range table has no answer at all, so
     every state that printed something before still prints exactly that, and

@@ -202,6 +202,13 @@ const
     file whose first error cascades produces noise, not information, past a
     handful. feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
   MAX_REPORTED_ERRORS = 20;
+  { How many levels of NESTED brace comment the lexer remembers an open line
+    for, so `unterminated comment` can name the INNERMOST unclosed open-brace rather
+    than the outermost -- the outermost being the one line the author certainly
+    got right. Deeper than this the report falls back to the outer line, which
+    is the old behaviour and never worse than it.
+    bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
+  MAX_COMMENT_NEST_REPORTED = 32;
   { The widest OpConvSourceRank a USE site accepts -- an integer reaching a float
     parameter, the last rank there is. A declaration-time duplicate check passes 0
     (exact source kind) instead. }
