@@ -2,9 +2,9 @@
 track: P
 prio: 55
 type: bug
-status: backlog
+status: working
 blocked-by: []
-owner: ""
+owner: frankD
 summary: "MEASURED 2026-09-04 and the ticket below is wrong in both halves. The count is not ten: it was 30 of 36 at this ticket's own commit and is 28 of 30 at HEAD -- the 10 was a `comm` artefact under the default locale, reproducible exactly and only there. And the prescribed fix is backwards: a reachability probe over all 830 .npy programs says ALL 28 Pascal-arm sites inside ParseFactorCore are UNREACHED (17 of them provably, behind the PyExprMode dispatch) while all 3 outside it are live. So the body tells its taker to preserve and share ~28 arms that should be DELETED, which is a wrong-change-lands risk rather than a mis-scheduled tidy-up, and is why this is no longer a 35. Do NOT use duplication as the test: a duplicated diagnostic (TPyList.extend) is live. Position relative to the dispatch is the only discriminator. The measured population now also lives in the pasparser_expr.inc comment above the dispatch, so it survives this ticket."
 ---
 
