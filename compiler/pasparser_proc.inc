@@ -3099,6 +3099,30 @@ begin
   AddCSystemLibStem(stem);
 end;
 
+function CGtkIncludeRoot: AnsiString;
+{ The ONE place a GTK version becomes an include root. Paired with CGtkStem
+  below and read by cpreproc.inc's BuildCSysIncludeDirs, so the headers and the
+  soname are derived from the same variable and cannot disagree -- which is the
+  hazard decide-which-gtk-a-bare-gtk-gtk-h-means names: GTK 3 headers against a
+  GTK 2 library is what doing HALF this change produces.
+  feature-a-gtk-version-selection-at-the-header-and-soname-layer }
+begin
+  if CGtkVersion = 2 then Result := '/usr/include/gtk-2.0/'
+  else if CGtkVersion = 4 then Result := '/usr/include/gtk-4.0/'
+  else Result := '/usr/include/gtk-3.0/';
+end;
+
+function CGtkStem: AnsiString;
+{ ...and the matching library stem, which CHeaderSoname turns into a soname.
+  GTK 2's stem is `gtk-x11-2.0' rather than `gtk-2': the library is
+  libgtk-x11-2.0.so.0, so the stem is not derivable from the version number and
+  a table is the honest way to say that. }
+begin
+  if CGtkVersion = 2 then Result := 'gtk-x11-2.0'
+  else if CGtkVersion = 4 then Result := 'gtk-4'
+  else Result := 'gtk-3';
+end;
+
 function CHeaderStem(const name: AnsiString; var stem: AnsiString): Boolean;
 var lo: AnsiString;
 begin
@@ -3116,9 +3140,19 @@ begin
   else if (lo = 'math') or (lo = 'm') then
     stem := 'm'
   else if lo = 'gtk3_c' then
-    stem := 'gtk-3'
+    { FOLLOWS THE SELECTOR, despite the `3' in the name, and that is deliberate.
+      The C include list is FLAT AND GLOBAL -- there is no per-unit search path
+      -- so one compilation has exactly one GTK's headers. Pinning this alias to
+      GTK 3 while --gtk=2 moved the include root would hand it GTK 2's headers
+      against libgtk-3.so.0, which is precisely the mismatch this feature exists
+      to make unrepresentable. The flag wins and the two halves stay coherent.
+      The name is a known wart, not an oversight: the ruling records that `gtk',
+      `gtk3_c' and `gtk3' live in three different namespaces (two C aliases and
+      a Pascal unit) and that renaming without fixing that just moves the
+      confusion. }
+    stem := CGtkStem
   else if lo = 'gtk' then
-    { GTK 3, ruled 2026-08-31. `gtk` and `gtk3_c` now name the same library on
+    { Selector-driven; GTK 3 by default, ruled 2026-08-31. `gtk` and `gtk3_c` now name the same library on
       purpose. NOTE these are not the parallel names they look like: `gtk` and
       `gtk3_c` are C-header ALIASES resolved here, while `gtk3` is a real Pascal
       unit (lib/pcl/gtk3.pas) that this map never sees -- so `uses gtk3` finds a
@@ -3128,8 +3162,8 @@ begin
       system-lib set below: nothing produces it from a `uses` clause any more, but
       it is still a valid stem to name explicitly, and deleting a mapping because
       one caller stopped using it is deleting code believed dead rather than
-      verified dead. }
-    stem := 'gtk-3'
+      verified dead -- and --gtk=2 now produces it again, so it is live. }
+    stem := CGtkStem
   else if (lo = 'stddef') or (lo = 'stdint') or (lo = 'stdbool') or
           (lo = 'stdarg') or (lo = 'limits') or (lo = 'assert') then
     stem := 'c'
@@ -3273,6 +3307,7 @@ begin
   else if CStemMatches(stem, 'm') then soname := 'libm.so.6'
   else if CStemMatches(stem, 'pthread') then soname := 'libpthread.so.0'
   else if CStemMatches(stem, 'gtk-3') then soname := 'libgtk-3.so.0'
+  else if CStemMatches(stem, 'gtk-4') then soname := 'libgtk-4.so.1'   { --gtk=4; the runtime lib ships even where the -dev headers do not }
   else if CStemMatches(stem, 'gtk-x11-2.0') then soname := 'libgtk-x11-2.0.so.0'
   else if CStemMatches(stem, 'dl') then soname := 'libdl.so.2'
   else if CStemMatches(stem, 'rt') then soname := 'librt.so.1'
@@ -3298,7 +3333,7 @@ begin
     <pthread.h>` resolves to the project's own implementation like <stdio.h>/
     <math.h>. The real glibc libpthread is still available on demand via
     `--system-libs=pthread` (CSystemLibStemSelected below still honours it). }
-  Result := CStemMatches(stem, 'gtk-3') or
+  Result := CStemMatches(stem, 'gtk-3') or CStemMatches(stem, 'gtk-4') or
             CStemMatches(stem, 'gtk-x11-2.0') or CStemMatches(stem, 'dl') or
             CStemMatches(stem, 'rt') or CStemMatches(stem, 'z') or
             CStemMatches(stem, 'sqlite3');
@@ -3436,7 +3471,7 @@ begin
   end;
   if Length(content) = 0 then
   begin
-    ConcatThree('/usr/include/gtk-3.0/gtk/', cName, '.h', path);
+    ConcatThree(CGtkIncludeRoot + 'gtk/', cName, '.h', path);
     LoadFile(path, content);
   end;
   if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;

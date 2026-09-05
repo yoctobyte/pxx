@@ -14738,6 +14738,32 @@ test-core: $(COMPILER)
 	# a correct link is still worth checking, it is just a different claim.
 	readelf -d $(TESTTMP)/test_c_gtk3_stock26 | grep -q 'libgtk-3.so.0'
 	tools/expect_same.sh test_c_gtk3_stock26 "$$(xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
+	# --gtk=N SELECTS THE HEADER ROOT AND THE SONAME TOGETHER. The point of the
+	# feature is that they cannot disagree: GTK 3 headers against a GTK 2
+	# library is the hazard decide-which-gtk-a-bare-gtk-gtk-h-means names, and
+	# it is what doing half the change produces.
+	#
+	# THE SONAME ROW IS THE DISCRIMINATOR, not the build. If the selector did
+	# nothing at all, --gtk=2 would still BUILD and would still link
+	# libgtk-3.so.0 -- the default -- so "it compiled" proves nothing here and
+	# only the DT_NEEDED separates a working flag from an ignored one.
+	./$(COMPILER) --gtk=2 test/test_c_gtk_window.pas $(TESTTMP)/gtksel2_26
+	tools/expect_same.sh gtksel-2-soname "$$(readelf -dW $(TESTTMP)/gtksel2_26 | grep -o 'libgtk[^]]*' | head -1)" "libgtk-x11-2.0.so.0"
+	./$(COMPILER) --gtk=3 test/test_c_gtk_window.pas $(TESTTMP)/gtksel3_26
+	tools/expect_same.sh gtksel-3-soname "$$(readelf -dW $(TESTTMP)/gtksel3_26 | grep -o 'libgtk[^]]*' | head -1)" "libgtk-3.so.0"
+	# ...and the GTK 2 build RUNS. A soname assertion alone cannot tell a
+	# coherent pick from a mismatched one -- headers and library disagreeing
+	# links fine and dies at runtime -- so the pair is the claim.
+	tools/expect_same.sh gtksel-2-runs "$$(xvfb-run -a $(TESTTMP)/gtksel2_26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
+	# GTK 4 is PROBED, not hardcoded unavailable: its runtime lib ships here and
+	# its headers do not. Assert the refusal NAMES the missing -dev package --
+	# an unrecognised flag would also "fail", and the two must not read alike.
+	# When libgtk-4-dev is installed this row flips to a build, which is the
+	# behaviour wanted: the refusal expires by itself instead of going stale.
+	! ./$(COMPILER) --gtk=4 test/test_c_gtk_window.pas $(TESTTMP)/gtksel4_26 > $(TESTTMP)/gtksel4.log 2>&1
+	grep -q 'libgtk-4-dev' $(TESTTMP)/gtksel4.log
+	grep -q '/usr/include/gtk-4.0' $(TESTTMP)/gtksel4.log
+	# feature-a-gtk-version-selection-at-the-header-and-soname-layer
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
 	tools/expect_same.sh test_c_header_case_sensitive_import26 "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" "77"
 	# A C translation unit reached ONLY through a Pascal unit's uses clause: the

@@ -2510,16 +2510,26 @@ begin
     The include list is flat and global, so whichever gtk root comes first decides
     the version for EVERY C consumer at once -- which is why this is one line and
     not a per-unit search path.
-    There is deliberately NO arch-specific companion line here. GTK 2 needed
-    /usr/lib/<triplet>/gtk-2.0/include/ because its gdkconfig.h lives there; GTK 3
-    keeps gdkconfig.h inside /usr/include/gtk-3.0/gdk/, so the second root has no
-    GTK 3 equivalent. Dropping it also retires a hardcoded x86_64-linux-gnu path
-    that was wrong on every other host arch -- flagged in the decision ticket as a
-    separate worry, and answered by the flip rather than by a patch.
-    `uses gtk` still resolves through the alias map in pasparser_proc.inc, which
-    moves to the gtk-3 stem in the same commit: the header root and the soname must
-    travel TOGETHER or a build gets GTK 3 headers against a GTK 2 library. }
-  AddCSysIncludeDir('/usr/include/gtk-3.0/');
+    THE ROOT AND THE SONAME COME FROM ONE VARIABLE. CGtkIncludeRoot here and
+    CGtkStem in pasparser_proc.inc both read CGtkVersion, so they cannot
+    disagree -- GTK 3 headers against a GTK 2 library is exactly what doing half
+    this change produces, and it is the hazard the decision ticket names.
+    --gtk=2|3|4 selects; 3 is the default.
+    feature-a-gtk-version-selection-at-the-header-and-soname-layer }
+  AddCSysIncludeDir(CGtkIncludeRoot);
+  { GTK 2 ALONE needs a second, ARCH-SPECIFIC root: its gdkconfig.h lives in
+    /usr/lib/<triplet>/gtk-2.0/include/, while GTK 3 and 4 keep theirs inside
+    /usr/include/gtk-N.0/gdk/. So this is not a line that moves with the version
+    -- it exists only for the 2 arm, which is why the default path adds one root
+    and not two.
+    The triplet is spelled literally, and that is a KNOWN pre-existing wart
+    shared with its neighbours below (glib's arch root, /usr/include/<triplet>/,
+    the gcc include dirs) rather than something this feature introduces: it is
+    wrong on every non-x86-64 host for all of them at once, so it is one job
+    across the block and not a special case here. Recorded rather than silently
+    reintroduced -- the GTK 3 default reaches no literal triplet at all. }
+  if CGtkVersion = 2 then
+    AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/gtk-2.0/include/');
   AddCSysIncludeDir('/usr/include/glib-2.0/');
   AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/glib-2.0/include/');
   AddCSysIncludeDir('/usr/include/pango-1.0/');

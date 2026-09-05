@@ -23,5 +23,5 @@
 #if !defined(GTK_MAJOR_VERSION)
 #error "test/gtk3stock: <gtk/gtk.h> did not define GTK_MAJOR_VERSION -- no GTK headers found. Pass the GTK3 include root."
 #elif GTK_MAJOR_VERSION < 3
-#error "test/gtk3stock: <gtk/gtk.h> resolved to GTK2, but this test exists to gate the stock GTK3 path. Pass -I for the gtk-3.0 include root."
+#error "test/gtk3stock: <gtk/gtk.h> resolved to GTK2, but this test exists to gate the stock GTK3 path. GTK 3 is the default since the gtk3-default flip, so this now means --gtk=2 was passed (or a -I put a gtk-2.0 root first). Drop it: the stock path needs no flag at all."
 #endif

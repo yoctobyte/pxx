@@ -960,6 +960,7 @@ begin
   MainPxxDialect := False;
   CTUnitCount := 0;
   CModRangeCount := 0;
+  CGtkVersion := 3;   { the ruled default; --gtk=N overrides }
   DeclVisibilityProbe := False;
   UsesInjected := False;
   VisCacheUnit := -2;
@@ -1624,6 +1625,33 @@ begin
     else if option = '--threadsafe' then
     begin
       ThreadSafeMode := True;
+      Inc(i);
+    end
+    else if (option = '--gtk=2') or (option = '--gtk=3') or (option = '--gtk=4') then
+    begin
+      { The RESOLVER half only. This selects which GTK's headers are searched
+        and which soname the alias map names -- together, because moving one
+        without the other is the exact hazard the decision ticket warned about
+        (GTK 3 headers against a GTK 2 library). It does NOT port the PCL
+        widget layer, which binds GTK 3 specifically.
+        feature-a-gtk-version-selection-at-the-header-and-soname-layer }
+      CGtkVersion := Ord(option[7]) - Ord('0');
+      { PROBED, NOT HARDCODED AS UNAVAILABLE. GTK 4's runtime library is
+        installed on this box and its headers are not, so a literal "4 is
+        unsupported" would be a refusal that stays wrong after somebody
+        installs libgtk-4-dev -- a fallback that expires silently, which is the
+        same defect the versioned gcc include dirs above were fixed for. Ask
+        the filesystem instead, and the diagnostic names the package. }
+      if CGtkVersion = 4 then
+      begin
+        PxxListDir('/usr/include/gtk-4.0');
+        if DirEntCount = 0 then
+          Error('--gtk=4: no /usr/include/gtk-4.0 on this system, so GTK 4''s '
+            + 'headers cannot be found (the runtime library may still be '
+            + 'installed -- it is the -dev package that is missing). Install '
+            + 'libgtk-4-dev, or build with --gtk=3, which is the default and '
+            + 'is what lib/pcl targets.');
+      end;
       Inc(i);
     end
     else if option = '--compact-classes' then
