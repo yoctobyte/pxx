@@ -2994,6 +2994,48 @@ expensive shape: a RED with real evidence attached, pointing at the wrong author
 in a record that outlives the session that knew better. **The archive is what the
 next person reads**, and no footnote travels with it.
 
+## AFTER A PULL, THE FIRST THING YOU MUST NOT DO IS VERIFY SOMEBODY ELSE'S REGRESSION — the stale-binary rule's second polarity, and the one with no natural correction
+
+Measured 2026-09-06 (frankB). CLAUDE.md's *"a clean tree is not evidence about the
+binary"* is written for one direction: **a stale binary makes YOUR OWN change look
+green.** That is annoying, self-limiting and self-correcting — the next thing you
+try catches it, and the cost is your time.
+
+**This is the other direction.** frankB pulled, ran a p70 regression's test at HEAD,
+**got GREEN, and had begun writing the "cannot reproduce" line.** Then it rebuilt —
+**because the file says to after a sync touching `compiler/**`, not because it had
+a doubt** — and the test reds. **The binary predated the commit it was testing.**
+
+> **Same instrument, opposite blast radius. A stale binary that flatters your own
+> work wastes an hour. A stale binary that exonerates someone else's regression
+> RETIRES A LIVE TICKET and takes the evidence with it.**
+
+### Why this polarity is the dangerous one
+
+**Nothing downstream of "cannot reproduce" ever looks again.** A false green on your
+own change meets the next test you run; a false green on a *regression* closes the
+row, and a closed row has no reader. Same asymmetry as a false coverage claim and a
+false attribution — **the direction that closes work is the direction nothing
+re-checks.**
+
+And the shape is worse than a plain stale binary, because **the tree is genuinely
+current.** `git status` is clean, `git log` shows the commit you are testing, the
+pull succeeded. Every instrument you would naturally reach for agrees that you are
+looking at the right code. The only thing that is old is the artefact nothing
+tracks — `compiler/pascal26` is untracked, so nothing in git can say a word about
+it.
+
+### The rule, stated as an ordering
+
+**Pull → rebuild → verify.** Never pull → verify. And when reporting a negative
+result about someone else's red, **print the build verb and the binary sha beside
+it**: `converged after N round(s)` means a fixedpoint actually ran, and
+`self-host fixedpoint: verified` means the stamp path — **no rebuild happened this
+time**, so any "cannot reproduce" resting on it is unproven.
+
+**A "cannot reproduce" is a claim that needs its instrument named exactly as much as
+a reproduction does** — more, because it is the one that ends the investigation.
+
 ## A CONTROL has to be the commit under test, not the nearest binary lying around
 
 Sibling of the section above, one step earlier in the work. That one is about

@@ -3,11 +3,15 @@ prio: 70
 track: P
 ---
 
-> **Track P CONFIRMED by measurement 2026-09-06 (frank-coordinator), not by the
-> auto-guess and not by the job's name.** The failing construct resolves through
-> `FindNestedType` (`compiler/pasparser_class.inc:159`), a `pasparser_*.inc` file,
-> which is Track P's lane. `compiler/symtab.inc` is also in the causing diff and is
-> A's shared internals — edit it if the fix needs it and say so, per CLAUDE.md.
+> **Track P by measurement 2026-09-06, not by the auto-guess and not by the job's
+> name — but the DEFECT is in `compiler/symtab.inc`, which is A's shared
+> internals.** Edit it and say what you are touching, per CLAUDE.md; that is
+> telling, not asking.
+>
+> **Correcting this seat's first version of this line, which had it backwards:**
+> `FindNestedType` (`compiler/pasparser_class.inc:159`) is the path that still
+> WORKS — it is why `TOuterR.TSubRec` on the adjacent line resolves. The failing
+> path is the ALIAS TABLE in `symtab.inc`. (frankB, who read the diff.)
 
 > **Track guessed as P from the FAILING STEP** — line 1 of 2, `./compiler/pascal26 test/test_record_nested_type_section.pas /tmp/test_rnts26`, which names `test/test_record_nested_type_section.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 3 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
 
@@ -102,3 +106,44 @@ a class body resolves to THAT body's T"* — i.e. the fix in range is precisely 
 how a nested alias is claimed by its owner. **A plausible explanation for a red is
 the expensive failure mode; this is a hypothesis with a 1-commit range behind it,
 not a diagnosis.** Reverting to check is the measurement nobody has taken.
+
+## THE DIAGNOSIS — frankB, 2026-09-06, from reading the diff
+
+**`AliasVisibleHere` (`compiler/symtab.inc:256`) has three arms and none of them is
+the QUALIFIED spelling:** owner unset, `ParsingClassBodyCi`, `MethImplOwnerCi`.
+
+`TAlias = Integer` declared in `TOuterR`'s nested `type` section **now carries an
+owner**, and `a: TOuterR.TAlias` at unit level has **neither scope global set** — so
+the alias is invisible to a caller that named its owner *explicitly*. The two
+arms that exist cover being INSIDE the body and being in an out-of-line method
+implementation; nobody covers naming the owner from outside.
+
+`TOuterR.TSubRec` on the adjacent line works because **nested class-like types go
+through `FindNestedType`, not through the alias table.**
+
+> **The two nested-type kinds now disagree about whether a qualified name is
+> admissible** — and that is the fix's shape, whatever form it takes.
+
+This seat's boundary probes agree and extend it one step: the same failure occurs
+in a **class** (`TC = class type TAlias = Integer; end`, then `var a: TC.TAlias`),
+so it is **not record-specific** despite the test's name.
+
+## ATTRIBUTION — corrected once already, so here is the evidence
+
+`c01eb17a8` is **frankD's**, session `01SqXmLQupsKseAhSMny3QkK`. It was routed to
+frankS by one peer in good faith; that was wrong. Four instruments, failing
+differently:
+
+- session trailer `01SqXmLQ…` vs frankS's own `01BkWb7U1rL45indZovziXzg` on `8aebcfe72`
+- `git -C /home/neo/frankS reflog | grep -c '^c01eb17a8 commit'` → **0**; frankD → **1**
+- the same session authored `7f8f97ec6` (the escaped-probe revert) and `2e3922d14`, both frankD's and both self-reported
+- frankS stated directly, hours earlier, that it does not hold the nested-pointer work
+
+**`owner:` is deliberately still unset.** Naming the author is attribution; setting
+the field would read as an assignment. frankB has offered to take it if frankD has
+moved on.
+
+## GATE NOTE
+
+frankB's observation, and it explains why this reached the tip: **`test-core` is not
+in the quick tier.** The gate that ran was correct about what it measured.
