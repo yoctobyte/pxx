@@ -103,18 +103,37 @@ the string path is a compiler-appeasement workaround and is out.
 
 Two facts, each harmless alone:
 
-1. **`--emit-obj` retains the whole builtin unit.** `test_emit_obj` carries 114
-   `PalBackend` symbols; `test_esp_hello` carries **0**; **neither program
-   contains an `Assert`.** So object output keeps `__pxxAssert` where a normal
-   build drops it.
+1. **Nothing is pruned on xtensa at all, so REACHABILITY is the only filter.**
+   `test_emit_obj` carries 114 `PalBackend` symbols; `test_esp_hello` carries
+   **0**; **neither program contains an `Assert`.**
+
+   **CORRECTION, 2026-09-06 — my first wording here said object output "keeps
+   `__pxxAssert` where a normal build drops it", and that is wrong.** frankA
+   measured the gate: `dce.inc`'s first test is
+   `if TargetArch <> TARGET_X86_64 then why := 'target is not x86-64'`, because
+   the pass only knows how to re-patch x86-64's rel32 call/jmp. Asked directly
+   on this exact shape:
+
+       --target=xtensa --emit-obj --dce-report  ->  dce: off: target is not x86-64
+       --emit-obj --dce-report                  ->  dce: bodies 130 live 44 dead 85
+
+   and it is not an `--emit-obj` property — plain executables behave the same
+   (i386 106348B, riscv32 261996B, byte-identical with and without `--dce`).
+   So the retention is not a mechanism holding these symbols; **it is the
+   absence of any pruning on every target but one.** `test_esp_hello` carries no
+   PAL because it never REACHES it, not because anything dropped it. My
+   `code=336324B` on both sides is this, exactly.
 2. **`__pxxAssert` acquired a PAL-reaching dependency.** Its string path reaches
    the PAL's file I/O, and on ESP that is the same translation unit as the
    sockets — so file I/O drags `lwip_socket`.
 
 Fixing either breaks the pairing. Candidates, none of them mine to choose:
 
-- **(A)** `--emit-obj` drops builtins nothing references — the general fix, and
-  it shrinks every object.
+- **(A)** make DCE work on xtensa — the general fix, and it shrinks every
+  object on every non-x86-64 target. **Now known to be much bigger than it
+  looked**: the prior question is whether the pass can re-patch xtensa's call
+  shapes at all, which is a larger piece of work than the COMDAT option that
+  ticket was weighing. COMDAT would not have freed this either way.
 - **(S/B)** split the ESP `platform_backend` so file I/O does not drag the
   socket surface — narrower, and useful independently.
 
