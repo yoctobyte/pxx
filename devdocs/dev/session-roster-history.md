@@ -29652,3 +29652,135 @@ assertion on the OUTPUT whose class matches the defect class of the converted
 table. For a content pool that is **wrong characters, not a crash**. Control named:
 the 13.8 MB file, old refuses and new succeeds, because *"an empty diff log only
 means something once the control row is in it."*
+
+## 2026-09-06, before dawn — a mis-attribution with a live consequence, and a red this seat triaged itself
+
+### THE ATTRIBUTION ERROR FIRED IN BOTH DIRECTIONS INSIDE FOUR HOURS
+
+frankB diagnosed a p70 regression correctly and **routed it to frankS, who did not
+write the commit.** It is frankD's `c01eb17a8`. Four instruments, failing
+differently: the session trailer `01SqXmLQ…` against frankS's own
+`01BkWb7U…` on `8aebcfe72`; frankS's reflog holding **zero** `commit` entries for
+it and frankD's holding **one**; the same session behind `7f8f97ec6` (frankD's
+escaped-probe revert) and `2e3922d14` (frankD's two-bugs write-up), both
+self-reported; and **frankS having told this seat directly, hours earlier, that it
+does not hold the nested-pointer work.**
+
+> **The consequence is the part worth recording: frankB deliberately stayed OUT of
+> the file to avoid colliding with a session that was never in it — so the actual
+> author was uncovered for as long as the belief stood.** A wrong attribution does
+> not merely misfile credit; it *creates* the collision it was avoiding, in the
+> other seat.
+
+This seat had made the mirror image earlier the same night (*"frankS has the fix"*
+when the fix was frankD's), and frankS's rule — **a wrong attribution is not
+re-checked either** — has now been demonstrated in both directions by two different
+authors within four hours.
+
+### The seat triaged the red rather than forwarding the stub
+
+The auto-file guessed **P from the failing step**, which is the better heuristic
+than the job's name — and frankuser flagged that the name would be the gtk trap
+again. Both were right to be suspicious and **the name IS misleading**:
+
+Rebuilt at HEAD (`converged after 2 round(s)`, binary `1e6f67eb4e67`, exit code read
+**without a pipe**): still `rc=1`. Three minimal probes:
+
+| probe | HEAD | pinned |
+| --- | --- | --- |
+| record nested alias, `TR.TAlias` | **rc=1** | rc=0 |
+| **class** nested alias, `TC.TAlias` | **rc=1** | rc=0 |
+| nested record, `TR.TSub` | rc=0 | rc=0 |
+
+**A qualified nested ALIAS is unresolvable in both records and classes; a qualified
+nested record still resolves; the pin accepts all three.** So: a real regression,
+**not record-specific despite the test's name**, and not about nested types in
+general. Corroborated by the failing test's own line numbers — it dies at 87, so 85
+and 86 were accepted.
+
+**And this seat got the mechanism backwards, corrected by frankB from the diff.** I
+wrote that the failing construct resolves through `FindNestedType`; it is the
+reverse — `FindNestedType` is the path that still WORKS. The defect is
+`AliasVisibleHere` (`symtab.inc:256`), whose three arms are owner-unset,
+`ParsingClassBodyCi` and `MethImplOwnerCi`, and **none is the qualified spelling**.
+Ticket corrected in place with the old error named, so nobody re-derives it.
+
+**Three sessions attached, and a fourth asked first.** frankA later reported the same
+STILL-RED, said it looked unclaimed, and **asked before taking it** — which is the
+whole mechanism working. Told: frankD by authorship, frankB ahead of it by a
+standing offer.
+
+### frankB — the false cause that arrived PRE-AUTHORED
+
+`texception3` prints **`exception generates memory holes`** and frankB had written
+*"EXCEPTION HANDLING LEAKS"* into `pxx.skip` and started the ticket. Then the
+control: 100 `IntToStr`/concat iterations, **no exception anywhere** —
+`Lost: 208 bytes` under pxx and **`Lost: 64 bytes` under FPC.**
+
+> **The oracle "leaks" by the same instrument.** `DoMem <> 0` is a heap high-water
+> reading, not a leak detector, in either compiler.
+
+Census agrees (`allocs=1871 frees=1868 live=3`), and the test passes **all 119**
+exception sub-tests. **Caught before shipping — the first of three such instances
+that was.** frankB's own point, and it is why this got a heading of its own rather
+than joining the other two: **the previous two were its own inferences, which
+announce themselves as thinking. This sentence was printed by FPC's testsuite** —
+pre-authored, naming a mechanism, carrying the marched-against corpus's
+credibility. **The more respectable the corpus, the more the claim gets waved
+through.**
+
+The reusable move nobody here had named: **run the message's own claim against the
+ORACLE.** Residual filed with an owner rather than hand-waved
+(`bug-b-currheapused-does-not-return-to-its-prior-value-after-a-freed-block`, B
+p20), neither question claimed as established.
+
+### frankB — the one site with NO copy was the one site that was right
+
+Thirteen intrinsic destination sites did not know a function's own name is its
+result variable. **The rule was already extracted** as `OwnNameResultSym` and
+**exactly one caller knew**; twelve spelled `FindSym` + `ParseLValueAST` themselves
+and `SetLength` carried a **fourteenth inline restatement** of the four conditions,
+written before the routine existed. **Twelve copies agreeing perfectly and all
+missing the same fact** — one reading counted twelve times.
+
+> **`GetMem` was already green, BECAUSE it takes its destination through
+> `ParseExpr` and so never had a copy of the rule to be wrong about.**
+
+Paired in the playbook with frankA's evidence from the opposite end — **both copies
+separately learned the same lesson months apart** — because together they retire
+"duplication is untidy": **the second path is not neglected, it is UNDER-SAMPLED**,
+and every lesson has to be taught once per copy.
+
+### frankA — reaching a routine and handing it the right encoding are different questions
+
+The hand-built `AN_INDEX` arm question answered, and **delegating was not the fix.**
+`TRec(raw)[0..2].a` gave `10 0 0` against `PRec(raw)`'s `10 11 12`, and the two AST
+dumps differed in **one field**: `ival=14` against `ival=0`. The parser stamps 0 for
+*"plain reinterpret, no adapter"*; `ir.inc` reads that field as an **alias index**
+and 0 passes its `< 0` test — **the stride came from alias row zero, whatever type
+the program declared first.**
+
+> **A DEFAULT THAT IS ALSO A REAL ANSWER CANNOT SIGNAL "NOT APPLICABLE."**
+
+**Both sides wrong, in the same place, self-consistently**, so no sweep caught it —
+and a **store-vs-its-own-read-back row cannot fail**, because the read goes to the
+same wrong address. A guard that cannot fail produced by SYMMETRY rather than by a
+weak assertion, which is why it survives review. **Element 0 is right by
+coincidence** — it needs no stride — so a sweep probing only the first element
+certifies the bug.
+
+The instrument distinction, which is the reusable half: **the escape census asks
+which shared routines a loop REACHES; the next question is what it HANDS them.**
+*"Delegate to the shared walker"* is no remedy when the shared walker reads a field
+the opener never filled.
+
+**Fourth sibling-grep instance, and the hardest shape:** the PChar adapter fallback
+already carries a paragraph about this exact trap, one file over, through a
+different field. **The sibling shared a MECHANISM and not a NAME**, so the grep had
+to be for the sentence rather than the identifier.
+
+**And a discipline worth copying:** frankA **closed a recorded blank the same
+session instead of banking it** — `TRec(raw)^^.a` and `PPRec(raw)^^.a` both answer
+11, **and both answer 11 on pin v403**, which is the row that matters because it
+shows the agreement was not arranged by the change. *A recorded blank that takes one
+file to close should be closed, not banked; banking is for the ones that cannot be.*
