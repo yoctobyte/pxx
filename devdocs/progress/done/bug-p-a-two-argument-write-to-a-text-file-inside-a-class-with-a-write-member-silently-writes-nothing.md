@@ -99,3 +99,36 @@ is fixed** — its presence is a marker.
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 98eb6127f.
+
+## The oracle, added after landing — "writes something" and "writes the RIGHT BYTES" are different claims
+
+Compiler `47618f77c240`. The fix was landed on the strength of a round-trip
+returning `payload`, which is content and not bytes, and **this source has no
+direct FPC oracle: fpc refuses to compile it**, since it gives the member
+absolute priority. So the oracle was CONSTRUCTED rather than skipped.
+
+Three programs, one emission — a string, a formatted `Write(f, ' ', 42, ' ',
+3.5:0:2)`, a bare `Writeln(f)`, and a three-iteration `Writeln` loop:
+
+| | program | built by |
+| --- | --- | --- |
+| A | class DECLARES `function Write(const Buffer; Count: Longint)` | pxx only (fpc refuses) |
+| B | identical emission, no member named `Write` | pxx |
+| C | same source as B | fpc 3.2.2 |
+
+```
+B == C   the intrinsic itself is right
+A == B   shadowing changes nothing
+A == C   the claim: 34 bytes, IDENTICAL
+```
+
+`payload 42 3.50\nrow 1\nrow 2\nrow 3\n`. Positive control: appending one byte
+to A makes it differ, so the comparison can fail.
+
+**Why the middle row is the load-bearing one.** A == C alone would be satisfied
+by a fix that routed to the intrinsic and got the FORMATTING wrong in some way
+fpc happened to match. A == B says the shadowed and unshadowed paths produce the
+same bytes, i.e. the routing decision is the ONLY thing that differs between
+them — which is the actual claim this ticket makes. Checking only that the file
+was non-empty would have passed against a fix that wrote `payload` and dropped
+the formatted arguments.
