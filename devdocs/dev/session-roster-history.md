@@ -25791,3 +25791,70 @@ objection is correct and structural: **a closed item that keeps arriving costs a
 check each time and crowds out the open ones.** A relay list needs a retirement
 mechanism or it degrades into re-flagging whatever the relayer happens to
 remember. Dropped.
+
+### "No worktrees, no clones" is about BRANCHES and reads as one shared TREE
+
+frank-optimize briefly read CLAUDE.md's *"All tracks work on `master`. No
+worktrees, no clones, no `dev` branch"* as meaning the fleet shares **one
+working tree** — under which any `make pin` during anyone's uncommitted edit is
+a live hazard, and every lane would have to serialise around every dirty diff.
+
+It is not: there are ~16 sibling checkouts under `/home/neo`, **same branch,
+separate trees.** The rule is about branching strategy.
+
+**Worth recording because of WHO it catches: the session being careful.**
+frank-optimize hit it while checking whether *its own* uncommitted
+`compiler/**` diff could endanger someone else's pin — the misreading only
+matters to a session that stops to ask. It cost nothing this time because it
+checked rather than acted, and because frankH had independently done the right
+thing anyway: stashed its uncommitted compiler change and rebuilt before
+starting, watching the fixedpoint sha move `7e3cc20afd1f → dc2853adbdf0`, which
+is the check that a pin cannot bake unlanded work.
+
+### Re-taking BOTH arms after a revert, and why the clean tree IS the control
+
+frank-optimize's 1.55x was measured stock-vs-patched across `9f65e23ccbdc` /
+`9ac545b62722`, on a tree the revert has since moved. Its resolution is the one
+to copy: **keep the patch as a patch rather than committing it, so the clean
+post-revert tree IS the control arm** and both binaries share a base, differing
+only by the patch. The failure mode it avoids — rebuilding one side only — is
+the cheapest possible way to turn a real number into a plausible wrong one.
+
+**And it appends the new pair BESIDE the sha-attributed old one rather than
+overwriting**: if `2d6bfadd6` mattered, the comparison exists; if it did not,
+the reproduction exists. Overwriting destroys both.
+
+It also held the rebase until its running optfuzz exited, rather than swapping
+`compiler/*.inc` under a fuzzer compiling from the tree — *do not touch the
+instrument while it is measuring*, applied to a lesson it had already paid for
+once.
+
+### frankS declined a virtue this seat credited it with
+
+This seat framed frankS's local `qemu-xtensa` runs as a discipline it chose —
+the lane covered where others were not. frankS corrected it: **local qemu is
+what Track S work requires**, and it only checked its stale-process exposure
+because this seat raised the question.
+
+**Inflating a lane's CONSTRAINT into a DECISION is a small error with a real
+cost** — it credits a choice nobody made, and the next reader plans as though it
+were repeatable elsewhere. The underlying property is still worth writing down,
+in frankS's words rather than this seat's: **independence rather than
+redundancy** — *a lane that executes its own targets fails differently from T,
+which is the whole reason two readings count as two.*
+
+### An unmeasured claim CANNOT GO STALE, BECAUSE IT WAS NEVER FRESH
+
+frankS filed Instance B on `feature-a-a-refusal-is-a-claim-with-a-date-on-it`
+(`8858dbaa1`), and it limits a ticket this seat generalised. That ticket's
+proposed mechanism re-runs **cited blockers** — which works on claims that named
+something checkable. *"wasm32 would implement it"* named nothing: wasm32 cannot
+build the test at all, so its position is **UNMEASURED**, not refusing.
+
+**A tool sweeping for stale blockers would report a clean sweep about a
+population that excludes the defect** — the sixth-family shape one layer up, and
+it would read as coverage. So if that mechanism is ever built, **"which claims
+can this tool see?" must be answered before "does it find any?"**
+
+Correctly recorded by frankS in the ticket rather than asserted here: it is a
+limit on the generalisation, not on frankwasm's original measurement.
