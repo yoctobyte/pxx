@@ -12158,15 +12158,29 @@ begin
         kernel to take an exit_group and no argc on the stack to read. Both
         would produce a stub that assembles and runs into garbage, which is the
         failure mode this whole ticket exists to avoid.
+
+        NEITHER REFUSAL MEANS "C HAS NO ENTRY POINT ON ESP", and the message
+        used to read that way. --emit-obj needs no stub at all: it emits a
+        relocatable object whose entry is exported as GLOBAL `app_main`, the
+        name the IDF calls, and it accepts a C `main` on BOTH ESP profiles
+        today. Measured 2026-09-05: `int main(void)` and `void app_main(void)`
+        both build with --target=xtensa --emit-obj under the default profile
+        and under --esp-profile=bare. That is the shipping path for C on this
+        target; the standalone ELF this stub serves is not one.
+        decide-should-a-c-main-exist-on-the-esp-profile-at-all 
         bug-cfront-no-entry-stub-for-xtensa }
       if XtensaABI <> XTENSA_ABI_CALL0 then
         Error('C program entry stub on xtensa: only the call0 ABI is ' +
               'implemented. A windowed image is entered by ESP-IDF startup, ' +
               'not by this stub, so there is nothing here to enter it with');
       if TargetPlatform = PLATFORM_ESP then
-        Error('C program entry stub on xtensa: hosted linux only. On the ESP ' +
-              'profile there is no argc on the stack to pass to main and no ' +
-              'kernel to take the exit_group that ends it');
+        Error('C program entry stub on xtensa: a STANDALONE EXECUTABLE on the ' +
+              'ESP profile has no argc on the stack to pass to main and no ' +
+              'kernel to take the exit_group that ends it. Build a ' +
+              'RELOCATABLE OBJECT instead -- --emit-obj works on this profile ' +
+              'today, needs no entry stub, and exports your entry as GLOBAL ' +
+              'app_main, which is the name ESP-IDF calls. That is how C ships ' +
+              'to this target; a standalone ELF is not');
       { Save the initial sp to BSS_INITIAL_RSP for ParamCount/ParamStr, BEFORE
         anything moves sp -- the same ordering constraint the Pascal xtensa
         entry states. a8 is scratch and safe at process entry. }
