@@ -12978,6 +12978,18 @@ test-core: $(COMPILER)
 	# Whole output compared, byte-identical to fpc 3.2.2 -Mdelphi -O1.
 	./$(COMPILER) test/test_cast_field_deref.pas $(TESTTMP)/test_cfd2_26
 	tools/expect_same.sh test_cfd2_26 "$$($(TESTTMP)/test_cfd2_26)" "$$(cat test/test_cast_field_deref.expected)"
+	# ...and a member that is NOT a field, through a call result. The suffix
+	# loop went straight to RequireRecMember, which knows only fields, so a
+	# method or a property was rejected: GetP^.Doubled, GetP^.Bump(1), GetP^.P
+	# and GetP^.P := 7 all said "no such member on this record/class". The
+	# plain/vardrf/ptrcast/reccast rows are four openers spelling the same
+	# member that were correct throughout -- the control for the opener -- and
+	# the callfld/calldrf/callstore rows are the control that fields through the
+	# same opener did not move. Each of the four faces was confirmed to fail
+	# ALONE on the pinned compiler.
+	# Whole output compared, byte-identical to fpc 3.2.2 -Mdelphi -O1.
+	./$(COMPILER) test/test_callres_record_member.pas $(TESTTMP)/test_crm26
+	tools/expect_same.sh test_crm26 "$$($(TESTTMP)/test_crm26)" "$$(cat test/test_callres_record_member.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

@@ -393,3 +393,70 @@ narrowing is gated on delegation, and an adapter cast cannot BE delegated —
 `PChar`'s pointee has no fields — so "adapter cast plus delegation" is not a
 constructible shape and the new guard has no positive control drawn from it.
 The adapter rows prove only that the undelegated path still works.
+
+---
+
+## 2026-09-05 (frankA) — the last `ParseClassRecordSelectors` gap, and frankH's lead was refutable from evidence already in hand
+
+frankH released `ApplyCallResultPtrSuffix` (its words, recorded by frankuser),
+so the row banked two sections above is now done.
+
+**A non-field member through a call result was refused.** The suffix loop's
+`.name` arm goes straight to `RequireRecMember`, which knows only fields:
+
+| shape | pinned pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `GetP^.Doubled` (function) | `"Doubled": no such member on this record/class` | 42 |
+| `GetP^.Bump(1)` (procedure) | same | stores |
+| `GetP^.P` (property read) | same | 40 |
+| `GetP^.P := 7` (property write) | same | stores |
+
+**All four confirmed failing ALONE on the pin.** Four other openers spell the
+same member on the same record and all four were right throughout, on the pin
+too: `a.Doubled`, `vp^.Doubled`, `PRec(q)^.Doubled`, `TRec(a).Doubled`.
+
+### The lead, and why it did not need running
+
+frankH offered a hypothesis, explicitly labelled unverified: that
+`ProcRetPtrElemRec` might be `REC_NONE` for a pointer-to-record return, so the
+shared walker would be asked to find a method on a record whose identity it had
+not been told — *"which would refuse the method loudly while a field might still
+resolve by another route, and that matches the shape of what you measured."*
+
+**It is refuted by evidence that was already on the table.** A plain field
+through the identical chain — `GetP^.value`, measured hours earlier while
+probing the deref bug — has always resolved correctly, and it resolves through
+`recId` in the very same arm. An empty record id cannot produce a correct field
+offset. So the id was populated and the ONLY thing missing was the escape.
+
+Worth recording because the hypothesis was a good one and cost nothing: it named
+a specific column, a specific consequence, and a cheap falsification. What made
+it unnecessary was that the discriminating observation had already been taken
+for a different question. **Before running a proposed probe, check whether an
+earlier measurement already separates the arms** — the field row was collected
+to test the deref bug and happens to answer this one too.
+
+Fixed by peeking the member name before consuming the dot
+(`FindUField(recId - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0`, the same idiom
+the pointer-alias loop uses, because the shared walker's own loop starts ON the
+dot) and delegating. Regression rows:
+`test/test_callres_record_member.pas`, byte-identical to fpc 3.2.2.
+
+### Where the ticket stands
+
+All five Pascal postfix loops now reach both `ResolveDerefShape` and
+`ParseClassRecordSelectors` where they can be reached. **The escape census is
+spent as a defect predictor** — it found four separate bugs across three
+sessions of use and there are no unequal rows left in it.
+
+What remains is the ticket's original ask: ONE suffix parser rather than five.
+That is now a pure refactor with no defect backlog attached, and the case for it
+should be argued on its own merits — the same place
+[[refactor-p-one-lvalue-path-for-statements-and-expressions]] ended up.
+
+**One caveat for whoever ranks it.** The last fix found a defect class the
+census structurally CANNOT see: the stmt alias-cast loop CALLED
+`ResolveDerefShape`, correctly, and discarded the answer downstream. A census of
+which routines a loop calls scores that loop as having the arm. So "all five now
+reach every escape" is a weaker statement than it sounds, and it is not evidence
+that the loops agree.

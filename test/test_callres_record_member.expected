@@ -1,0 +1,12 @@
+plain=42
+vardrf=42
+ptrcast=42
+reccast=42
+callfn=42
+callprop=40
+callproc=22
+callset=8
+callfld=22
+calldrf=42
+callstore=9
+CALLRES RECORD MEMBER OK

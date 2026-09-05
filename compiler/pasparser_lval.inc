@@ -5253,6 +5253,34 @@ begin
       end
       else { tkDot — field of the pointed-at record }
       begin
+        { A METHOD or a property is not a field, and the builder below can only
+          make AN_FIELD -- RequireRecMember rejects the name outright, so
+          `GetP^.Doubled` and `GetP^.Bump(1)` answered
+          `"Doubled": no such member on this record/class` while the same member
+          on the same record through every OTHER opener was fine: `a.Doubled`,
+          `vp^.Doubled`, `PRec(q)^.Doubled` and `TRec(a).Doubled` all return 42
+          and fpc 3.2.2 accepts all five. Four openers as the negative control.
+
+          The record id in hand is NOT the problem -- a plain field through the
+          same chain (`GetP^.value`) has always resolved correctly, which it
+          could not if ProcRetPtrElemRec were empty here. What was missing is
+          only the escape: members that are not fields are what
+          ParseClassRecordSelectors resolves, and this loop was the one of five
+          that never reached it (devdocs/dev/normalise-dont-special-case.md).
+
+          Peeked with GetTokenStr(TokPos) BEFORE consuming the dot, because the
+          shared walker's own loop starts on tkDot -- same idiom as the
+          pointer-alias loop in pasparser_expr.inc.
+          refactor-p-three-hand-rolled-postfix-loops }
+        if (recId >= REC_UCLASS_BASE) and
+           (FindUField(recId - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+        begin
+          node := ParseClassRecordSelectors(node, recId, tk);
+          recId := ResolveNodeRec(node);
+          if CurTok.Kind <> tkCaret then Break;
+          movedOffCall := True;
+          Continue;
+        end;
         Next;
         if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
           Error('expected field name after .');
