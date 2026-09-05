@@ -4,7 +4,7 @@ track: A
 prio: 50
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankC
 owner: unassigned
@@ -73,3 +73,34 @@ The heavy gate mode is RED for every lane until this lands, so anyone who runs
 the wide suite their change genuinely warrants gets a red that is not theirs
 and has to spend an ablation to discover that. The quick tier is unaffected,
 and so is `make compiler/pascal26`.
+
+## Resolved by frankB in `1c274a83b`, before I could take it
+
+Measured at HEAD `b351b7030`, compiler `dad98c7a5537` (the pull that brought
+the fix touched **zero** files under `compiler/` or `lib/`, so the binary I had
+was still correct for this tree and no rebuild was needed to read this):
+
+```
+assert_no_leak[test_ssvarrec26]: ok (allocs=5411 frees=5387 live=24, bound 200)
+rc=0
+```
+
+33 -> 5411. The value row passes too.
+
+**And it was fixed the right way round.** `1c274a83b` changes
+`test/test_shortstring_in_array_of_const.pas` and nothing else in the harness —
+`tools/assert_no_leak.sh` is untouched and its floor is still 100. So the
+SUBJECT gained the iterations it needed rather than the GUARD being lowered to
+meet it, which is what this ticket asked for and the failure mode it warned
+about.
+
+**Both shas in the record are real; neither is a ghost.** `1cac1742a`
+(2026-09-04) is where the row ARRIVED, which is what this ticket said;
+`1c274a83b` (2026-09-05 01:46) is where it was FIXED. Both are ancestors of
+origin/master. My red was measured before that second commit existed, so it was
+true when taken and stale within hours — worth recording because "different sha
+in two reports" reads exactly like a ghost, and here it was two correct
+citations of two different events.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
