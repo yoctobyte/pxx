@@ -28228,3 +28228,65 @@ exactly like `[AB  ]`** — the first oracle read said spaces and pxx was writte
 match it. `cat -A` on the raw bytes separated them; both tests are now `diff -u`
 of output rather than greps. **The rendering was the instrument, and it was
 lossy in the one direction that mattered.**
+
+### ONE MISSING ANSWER, TWO CONSUMERS — and the tidy-up label was hiding a segfault
+
+frankB, closing frankS's cross-link with one probe and **no code** (`6bf9be71a`).
+Confirmed: `refactor-p-the-overload-probe-still-cannot-answer-two-argument-shapes`
+(p30, `type: refactor`) and
+`bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode`
+(p60) **share a cause**, and the deliverable is the **prio**.
+
+**The bug is twice as wide as its own summary.** It reported `f := G`. The same
+bare name in an **argument** is the same defect:
+
+```pascal
+procedure Use(h: TF); begin writeln(h()); end;
+begin Use(G); end.     { default mode: compiles, SIGSEGV rc=139 }
+                       { {$MODE DELPHI}: prints 7 }
+```
+
+Both positions, both modes, measured; fpc rejects both bare forms in objfpc and
+accepts both in Delphi. **And that argument shape is verbatim the refactor's
+second unanswerable row.**
+
+> **ONE missing answer with TWO consumers.** The overload gate cannot run the full
+> `TypesCompatible` check without it, and the default-mode arm **cannot REFUSE**
+> without it — *because refusing requires knowing the name is a routine reference
+> and not a call.*
+
+Re-ranked **30 → 55**: under the crash it enables rather than equal to it,
+because it supplies **the fact and not the fix** — the enforcement is still the
+half reverted this morning (`4760474da` → `2d6bfadd6`). **`prio: 30` with
+`type: refactor` was set before anyone knew that the shape in its own measurement
+table segfaults.**
+
+**A third face, and it crosses a lane boundary.** `Use(G)` where G is a
+**procedure** is not accepted at all — `undefined variable (G)`. Same mechanism:
+a bare FUNCTION name read as a call is a *value* (an Integer, into a pointer
+slot, jumped through); a bare PROCEDURE name read as a call is **not a value at
+all**, so name resolution reports it undefined.
+
+> **A name-resolution error and a segfault are the same bug here** — and anyone
+> triaging `undefined variable (G)` would file it in a different lane entirely.
+
+**A THIRD SYMPTOM CLASS IS A THIRD FILING QUEUE.** One cause presenting as a
+crash, a silent wrong value, and a diagnostic is a cause that will be filed three
+times by three sessions who each did nothing wrong.
+
+### THE OMISSION CLASS GETS A CHEAP TELL — grep for the CALLEE, not for the pattern
+
+frankB sharpening the framing this seat had banked from its char-array
+prerequisite. The three copies each **answered** a question the callee could have
+been asked, so:
+
+> Where a rule is spelled per caller, the test for a fourth site is not **"do the
+> copies match"** but **"does every caller that needs this rule reach the thing
+> that knows it"** — and that is greppable, because **you grep for the callee, not
+> for the pattern.**
+
+**That is what makes the absence findable at all, and it is why extraction is the
+instrument rather than the outcome:** extracting `ArrTypeDimList` made the missing
+site visible **in the same commit that fixed it**. A diff of callers is blind to
+absence because absence has no text; a callee has a name, and every site that
+should reference it and does not is a grep away.
