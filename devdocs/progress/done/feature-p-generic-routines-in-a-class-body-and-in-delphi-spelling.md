@@ -310,4 +310,4 @@ red list can move all four together; doing it for mine alone would hide the one
 row a reader has the most reason to check.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 46aac96a3.
