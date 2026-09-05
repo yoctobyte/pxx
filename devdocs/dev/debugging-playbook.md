@@ -4473,6 +4473,48 @@ That is what to say when someone proposes a convenient zero. Applies equally to
 variant tags, index fields, capacity counts, and any "not set yet" state whose
 type has a natural-looking neutral value.
 
+### The other half: where a column can be FORGOTTEN, make forgetting INERT
+
+The rule above makes *"never set"* **loud**. Its mirror image applies when the
+omission is expected rather than exceptional — **a parallel-column table filled
+in by many callers, where the fact is optional for most of them.** There, loud is
+wrong and **the right default is the right answer**.
+
+Measured 2026-09-06 (`35cc74fa8`). `RegisterGeneralAlias` carries five facts out
+of the `LastType*` channels — a frozen string's capacity, a subrange's bounds, a
+file's element width, a managed string's element width, a pointer's target — each
+its own guarded block, **and four of the five say some version of "exactly
+`AliasStrCap`'s problem one type over".** The **sixth** column, an enum id, was
+never written by anyone: `type TDays = D; var a: TDays; WriteLn(a)` printed `1`
+where fpc prints `tue`.
+
+**The five copies AGREE. That is the whole difficulty** — this is the omission
+class inside the duplication class, and a diff of the copies is blind to it (see
+*grep for the CALLEE, not for the pattern*).
+
+**The encoding is what stops it recurring.** `AliasEnumId` is stored **`+1`**.
+Its five neighbours use `0` for *"not one"* because zero is not a valid capacity
+or kind — **but 0 IS a valid enum index**, so an unwritten row would read as
+*enum 0* rather than *none*, which is precisely how the fact went missing to
+begin with.
+
+> **Where a column can be forgotten, pick the sentinel so that forgetting it is
+> INERT.** The omission class cannot be prevented; it can be made harmless.
+
+Six sites call `Inc(AliasCount)` and only one needed to learn anything — that
+ratio is the test for which half of this rule applies. **If most callers legitimately
+have nothing to say, bias the encoding so silence means "nothing to say". If a
+caller that says nothing is a bug, use the illegal sentinel above and be loud.**
+
+**And guard the CAPTURE, not just the storage.** Capturing on
+`LastTypeEnumId >= 0` would stamp a **set** alias with its ELEMENT's identity —
+`set of TCol` leaves the element's id in that global — and print a bitset as a
+member name. `EnumKindMatches` is the predicate **seven other sites already use
+for exactly this**, and its own header says the kind test *"is the only thing
+stopping a set from inheriting a member name"*. **Eighth caller, not a new
+predicate**; `CONTROL set alias` is the row that fails without it and every other
+row still passes.
+
 ### And a companion trap from the same episode
 
 **Verifying one arity and generalising.** The same callable-value work was

@@ -28690,3 +28690,65 @@ assumed.
 autonomously for a named reason:** second widening of the one function that
 decides overload matching, and the previous one broke four rows quick does not
 cover. **If that run turns frankZ's row red, the bisect is free.**
+
+### THE OMISSION CLASS GETS A PREVENTION — bias the sentinel so forgetting is inert
+
+frankB, Track P group 4 (`35cc74fa8`): **5 closed, 3 filed** across the campaign.
+`RegisterGeneralAlias` carries five facts out of the `LastType*` channels, each
+its own guarded block, **four of the five saying some version of "exactly
+`AliasStrCap`'s problem one type over".** The **sixth** column — an enum id — was
+never written: `type TDays = D; var a: TDays; WriteLn(a)` printed `1` where fpc
+prints `tue`. **The five copies agree; that is the whole difficulty**, and the
+callee-not-pattern rule held on its second instance the same day.
+
+> **Where a column can be forgotten, pick the sentinel so that forgetting it is
+> INERT.** The omission class cannot be prevented; it can be made harmless.
+
+`AliasEnumId` is stored **+1**, because its five neighbours use 0 for *not one*
+and **0 IS a valid enum index** — an unwritten row would read as *enum 0* rather
+than *none*, which is exactly how the fact went missing. **Six sites call
+`Inc(AliasCount)` and only one needed to learn anything.** Appended to the
+playbook's existing illegal-sentinel section rather than given a new heading —
+the two are opposite prescriptions for opposite situations, *loud when a silent
+caller is a bug, inert when most callers legitimately have nothing to say.*
+
+**The guard was already written down and this is its eighth caller.** Capturing
+on `LastTypeEnumId >= 0` would stamp a **set** alias with its ELEMENT's identity
+— `set of TCol` leaves the element's id in that global — and print a bitset as a
+member name. `EnumKindMatches`'s own header says the kind test *"is the only
+thing stopping a set from inheriting a member name"*. **`CONTROL set alias` is
+the row that fails without it and every other row still passes** — a control
+aimed at the one thing the change could break.
+
+**A double case where the code said so first.** `Low(TDays)` answered
+**-2147483648**, because the alias arm fell through to
+`IntToTypeKind(AliasTk[])` = `tyInteger` and `OrdinalTypeBound` **answered about
+Integer and returned True** before the enum arm below was reached — so
+`for d := Low(TD) to High(TD)` ran **four billion times** where the same loop
+over `D` runs four. The twins' own comment already said *"these two are one
+concept in two places, so they change together"*, **so the sibling grep was
+free.**
+
+### A TICKET SPLIT MID-CLOSE, BECAUSE ITS TWO HALVES SHARE A FAMILY AND NOT A MECHANISM
+
+**The failure this campaign exists to avoid, live inside a ticket frankB was
+already closing.** Half 1 was one column; half 2 is a third copy of a subrange
+parse **plus a `Low`/`High` question that is not answerable yet** (`Low` of a set
+TYPE NAME is refused outright).
+
+> **A reader taking the slug at face value would have fixed half 1 and closed
+> it.**
+
+Split out as `bug-p-a-set-of-a-char-subrange-drops-its-element-kind`.
+
+**And the second filing is a boundary test rather than a scope decision:**
+`Low(a)`/`High(a)` on an enum **variable** print `0 2` where fpc prints
+`mon wed` — **and the DIRECT enum variable is equally wrong**, so it loses nothing
+at a boundary, is not an alias defect, and folding it in would have made the
+ticket wrong **in the same way the parent was.**
+
+**One forward declaration MOVED rather than duplicated** (`EnumKindMatches`, out
+of `pasparser_name.inc` into `symtab.inc`'s block). **A duplicate forward across
+two `.inc` files builds clean and passes `--tier quick`; the FPC seed canary is
+the only thing that catches it** — which is why the gate ran before the commit.
+It passed.
