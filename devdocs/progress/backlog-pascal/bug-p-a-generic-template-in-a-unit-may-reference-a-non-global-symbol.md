@@ -1,14 +1,14 @@
 ---
 slug: bug-p-a-generic-template-in-a-unit-may-reference-a-non-global-symbol
-title: "A generic template declared in a unit can bind a symbol from the USING program, and nothing says no"
+title: "A generic template body resolves its symbols at the SPECIALIZATION site, so it captures the caller and cannot see its own unit"
 track: P
-prio: 30
+prio: 55
 type: bug
 blocked-by: []
 status: backlog
 owner: ""
 created: 2026-09-05
-summary: "tgeneric4.pp specializes a generic declared in ugeneric4 at a point where the program has its own LocalFill; the template must bind the unit\'s, and FPC refuses the whole construct with `Global Generic template references static symtable`. pxx accepts it silently. It scored as a pass until 2026-09-05 only because the parser could not read ugeneric4 at all — the accidental-pass shape, third instance."
+summary: "MEASURED 2026-09-05 (frankS), and the direction is the OPPOSITE of what this ticket said. A generic template body resolves its symbols AT THE SPECIALIZATION SITE, in the specializing scope, and the declaring unit's scope is never consulted. Two defects, not one. (1) WRONG OBSERVABLE: a unit template calling its own LocalFill runs the PROGRAM's LocalFill when the program happens to declare that name -- the method's meaning depends on who specializes it. (2) LEGAL SOURCE REFUSED: remove the program's LocalFill and the unit no longer compiles at all -- `undefined variable (LocalFill)` against a procedure ten lines above the template method IN THE SAME FILE. So a template can never use its own unit's private helpers. Identical on pin v403, so pre-existing and not fallout from the template-visibility work. NOT `wontfix: dialect-pass`: FPC refusing this (`Global Generic template references static symtable`) is FPC diagnosing a limit its expansion model has; pxx has the SAME limit and silently rebinds instead of diagnosing. Raised 30 -> 55: a silent wrong answer plus a refusal of legal code is not a missing diagnostic. Corpus-free two-file repro in the body."
 ---
 
 # The shape
@@ -144,3 +144,73 @@ Note the trap in reading the control: the program's own `LocalFill` call MUST
 print `PROGRAM`. If both lines print `PROGRAM`, check the control before
 concluding capture — a probe where the wrong answer and one right answer share a
 spelling is the collision this repo has been bitten by before.
+
+## 2026-09-05 (frankS) — MEASURED, and the ticket had the direction backwards
+
+The discriminating question this ticket had not asked — *which* `LocalFill` does
+pxx bind — turns out to have a third answer that neither row of my own table
+predicted. Both probes use the corpus-free pair above.
+
+**Probe A — the program declares its own `LocalFill`:**
+
+```
+PROGRAM LocalFill        <- the control: the program's direct call. Correct.
+PROGRAM LocalFill        <- l.Fill, which must print UNIT. IT DOES NOT.
+```
+
+**Probe B — the control that settles it. Same unit, same template call, but the
+program's `LocalFill` is DELETED:**
+
+```
+pascal26:11: error: undefined variable (LocalFill)
+  in: ug4.pas
+  near: TIntList . Fill ; begin LocalFill >>> ; end ;
+```
+
+The unit no longer compiles. `LocalFill` is a procedure **ten lines above the
+template method in the same file**, and the template body cannot see it.
+
+**So the mechanism is: a generic template body resolves its symbols AT THE
+SPECIALIZATION SITE, in the specializing scope, and the declaring unit's scope is
+never consulted at all.** Probe B is what makes that a measurement rather than an
+inference — without it, Probe A is equally consistent with "the unit's
+`LocalFill` was shadowed", and the two have different fixes.
+
+**Identical on pin v403** (both probes, same output, same error), so this is
+pre-existing and not fallout from the template-visibility work.
+
+### This is two defects, and the ticket counted one
+
+1. **A wrong observable.** A template method's meaning depends on who specializes
+   it. The unit's author writes `LocalFill` meaning their own; a program that
+   happens to declare that name silently substitutes its own. No diagnostic.
+2. **Legal source refused.** A template body can never call its own unit's
+   private helpers — the ordinary way anybody would factor a unit. This is not a
+   divergence at all; it is a refusal of code that has to work.
+
+The second is the one that moves the rank, and it is the half the original
+framing could not see, because *"pxx accepts it silently"* is a statement about
+the accepting case only. **Raised 30 → 55.**
+
+### Why it is NOT `wontfix: dialect-pass`, despite the tgeneric14 precedent
+
+I went looking for that precedent and it does not hold. FPC's `Global Generic
+template references static symtable` **is FPC diagnosing a real limit of its own
+expansion model** — a global template re-expanded in the importer's context
+cannot reach a unit-private symbol. The precedent case (`tgeneric14.pp`,
+*"assembler symbols not global"*) is an FPC limit that pxx **does not share**, so
+pxx passing is correct there. Here pxx has **the same limit FPC has** and, rather
+than diagnosing it, silently rebinds to whatever the specializer's scope offers.
+Sharing a limit and hiding it is the opposite of the dialect-pass argument.
+
+### Two notes for whoever repairs it
+
+- The title and summary were wrong in a specific and instructive way. *"may
+  reference a non-global symbol"* had the direction backwards — it **cannot**
+  reference its own non-global symbols, and instead reaches the caller's. Fixed
+  in place; the slug stays as the citation key.
+- Read Probe B before designing anything. A fix that only stops the capture
+  (defect 1) and does not give the body its declaring scope will convert every
+  such template into `undefined variable`, turning a silent wrong answer into a
+  refusal — which is *better*, but is not the whole job and should be a
+  deliberate choice rather than a surprise.
