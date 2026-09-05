@@ -26943,3 +26943,185 @@ unrelated, so the guard cost it a minute rather than an afternoon.
 red guard, late* — **and nothing about tonight's behaviour is evidence about
 that case.** Recorded as an untested claim rather than a demonstrated one, at
 its own insistence.
+
+## 2026-09-05, late night — the Track P campaign, and a green that was true about the wrong machine
+
+### THE ONE-TARGET RULE EXTENDS TO THE BUILD HOST'S INSTALLED PACKAGES
+
+frankB closed five `test-c-gtk*` regressions on evidence, then **retracted within
+the hour** when frankD measured the real cause off the log tails: **seven has no
+GTK development headers at all** — `uses: unit source not found: gtk`,
+`C include file not found: "gtk/gtk.h"`. Not a version mismatch, not GTK2-vs-
+GTK3, not Track P.
+
+> I measured on **plexus**, which has both `/usr/include/gtk-2.0/gtk/gtk.h` and
+> `/usr/include/gtk-3.0/gtk/gtk.h`. **A host with the headers passes whether or
+> not a bug exists.** "1/1 pass GREEN at HEAD" was true about plexus and silent
+> about seven, where the failure happened.
+
+**CLAUDE.md's version of this rule names the TARGET ARCHITECTURE and says the
+default place anyone looks is the 64-bit host. This is one level further out:
+the variable was the build host's installed packages** — no test, no gate row,
+no ticket field carries it. **frankB did the two things that usually save you —
+full job rather than failing step, HEAD rather than the filed sha — and neither
+could have caught it, because THE DISCRIMINATOR WAS NEVER IN THE TREE.**
+
+**And the count is what makes it a disposition rather than a mistake: 18 gtk
+regression tickets filed in four batches — 3 on 08-21, then 5 each on 08-30,
+09-01 and 09-05. The same five tests, refiled four times, closed every time,
+every closure verified on a host that has the headers.**
+
+> **A transient does not recur on a schedule with identical membership.**
+
+**The answer cannot be a fifth closure; it has to stop the refiling.** Two moves:
+installing the headers on seven (the owner's, sudo), and **making the test
+declare its precondition** — worth doing even if the headers arrive, because
+**a test that cannot tell "the feature is broken" from "the toolchain is absent"
+keeps generating tickets that close wrongly**, for every optional system
+dependency.
+
+### A TIER'S VERDICT IS PAST TENSE AND EVERY NATURAL READING IS PRESENT
+
+frankZ, tabulating three instances in one evening rather than treating them as
+three accidents:
+
+| the reading | offset | which way |
+|---|---|---|
+| tier NEW-REDs "argue for a pin" | v404 landed **6m55s** later | already fixed |
+| class-var "disagrees with frankH" | the fix landed **13m46s** later | already fixed |
+| `TOOLCHAIN FIRST RECORDED` "did not fire" | baseline latched **8m22s** earlier | never could |
+
+**All three reports are correct and the TENSE misleads** — and **the three point
+in different directions**, so there is no safe default reading. Remedy is one
+command, now in the umbrella: `git log <tier-sha>..origin/master -- <the files
+the red depends on>` before reading a tier as a finding.
+
+The near-miss is the instructive part: frankZ had **two instruments, same target,
+opposite verdicts** — the exact disagreement it had been asked to escalate, so
+escalating would have been authorised and reasonable. It ran the ref-level check
+first. `merge-base --is-ancestor 8727b1907 c1fe3e414d25` FALSE.
+
+**frankH's falsifier fired clean:** `grep -c TMethod` = 0 on the first tier after
+v404. **A prediction with a date beat the ancestry argument this seat would
+otherwise have carried.**
+
+### THE SLUG IS STALE BY CONSTRUCTION; THE SUMMARY IS WHERE THE RESIDUAL LIVES
+
+frankS, Track P staleness pass, 46 of 53 rows probed at HEAD:
+
+> A slug is a **citation key**, so it is frozen at filing while the ticket keeps
+> being worked; the summary is the part CLAUDE.md **requires** to stay true.
+> **Three of three slug-shaped probes produced a false green, and each green was
+> correct about something, which is why none errored.**
+
+> **A staleness sweep that reads only the slug does not measure staleness — it
+> measures how much of the original report has already been fixed, and reports
+> the fixed part.**
+
+Three closed and reopened within the hour: ifopt (**R** answers correctly both
+ways, G/J/X still answer OFF — the summary recorded the fixed subset, the slug
+could not); operator-in-a-unit-interface (needs a **circular** implementation-
+`uses`; the summary says the non-circular cases work); open-array default
+(**genuinely half fixed** — the misprinted length is unreachable behind a new
+good diagnostic, the wrong reason on `['x']` still stands).
+
+Budget kept at one minute per ticket, **plus one line: read the summary first,
+then aim the probe at the residual.**
+
+**Result split that matters for the handoff: 22 REPRODUCE** (about half a
+REFUSAL of legal source, about half a **WRONG ANSWER from code that compiles** —
+a SIGSEGV, a `ByteBool` taking both arms of `if a` and `if not a`,
+`1 in [4294967297]` = TRUE); **17 have NO RUNTIME OBSERVABLE** and are excluded
+rather than counted as survivors, since *stale is not a question you can ask
+them*; 4 are not what their slug says; 1 is already U's.
+
+### A TERMINAL FOLDER THAT IS UNRANKED IS THE WRONG HOME FOR A CORRECT MEASUREMENT
+
+frankS put the generic-routine type-param ticket in `rejected/` on the scope rule
+— renaming a type parameter between interface and implementation is produced by
+a mistake and we accept what FPC rejects — **and pulled it back**, because its
+summary names **two live conformance FAILs (`tgenfunc17/18`) in an otherwise
+347/2 run**, and **`rejected/` is not ranked, so rejecting it leaves two red rows
+with nothing pointing at why and the next reader files it again.**
+
+**Structural, not local: `rejected/` is the right home for a wrong REPORT and the
+wrong home for a correct MEASUREMENT that explains a live red.**
+`known-incompat/` with the rows cited as expected FAILs is what that folder is
+for. Routed to U as a fork rather than decided.
+
+### A HALF-APPLIED MODEL IS WORSE THAN NONE
+
+frankC, `5435c14a7` — and the seat's hypothesis that the two `sizeof` p40s share
+a mechanism was **wrong and provably**, disproved by the `double` discriminator
+before any code was touched (8/1/4 against gcc's 32/4/16 tracks the ELEMENT size;
+a `tyUnknown` default answers 8 for all three).
+
+`CTypedefArrLen` is **one integer**, so `typedef int T2[2][3]` records `[2]` and
+the enclosing `while CurTok.Kind <> tkSemicolon do Next` eats the `[3]` — **a
+skip-the-tail loop cannot tell a dimension it should have modelled from
+punctuation it should discard.** The local is allocated for 2 elements instead of
+6 **and indexed with a 2-wide row**, so it **overwrites the local declared before
+it. Silent, rc=0.** `cglm`'s `mat4` is `typedef float mat4[4][4]` — the library
+the recording site's own comment cites.
+
+> The comment said a multi-dim typedef *"leaves it scalar (unchanged
+> behavior)"*. **Leaving it scalar would answer 4 and allocate 4 — visibly
+> wrong. What happened is the first dimension WAS folded in and the rest
+> dropped, allocating a plausible-looking 2. A half-applied model is worse than
+> none, because it lands in the right neighbourhood** — which is the version
+> that survives review.
+
+**New member of the class: every other one was an instrument correct about the
+wrong SUBJECT; this is a model correct about PART of its subject, and the part
+that works is what manufactures the plausibility.**
+
+### REACH BEFORE BOUND, MEASURED
+
+frank-optimize, `efc4d3e33`. Census by **distinct function name** (the raw count
+was inflated because the RTL recompiles into every program — `StrLCopy` 24
+times; **a number identical for every program is a number about the harness**):
+`while` 102, **bare call statement 67 — no ticket had named it**, `for` 32,
+`case` 19. **135 distinct functions blocked solely by a loop, against the depth
+slice's ONE affected program in thirteen.**
+
+> **A 1.37x ceiling on a common shape beats a 3.12x ceiling on a shape that
+> occurs once in thirteen programs.**
+
+**Its own zero-vs-unmeasurable fault, caught: the first census printed `life 2`**
+— life does not compile at all (rc=1, no binary) and the 2 was partial output
+before the error. **Worse than the warned case, because a 2 looks like a
+measurement where a 0 at least looks like nothing-found.** It then re-checked the
+already-shipped depth census for the same flaw and found it clean — *"I would
+rather report that I checked than that I assumed."*
+
+**And it flagged its own upper bound rather than letting the number travel:** the
+binding constraint will be definite assignment through a construct that may run
+**zero** times, so **135 sizes opportunity, not delivery** — the exact error that
+ticket already made once.
+
+### THE COLLISION THIS SEAT EXISTS FOR, AND TWO RELAY ERRORS
+
+**Caught:** frankD, freed and routed to the campaign, proposed taking the five
+gtk regressions **while frankB was running `testmgr --job
+test-core#src:test/test_c_gtk_window.pas` on the same five** — because this seat
+had given frankB the re-laning task and not told frankD. Two sessions, same
+tickets, both diffs would have applied cleanly, neither able to see the other.
+Stopped both and sent them to settle it peer-to-peer.
+
+**Two relay errors by this seat in the same hour, both on the same group:**
+
+1. **Told frankD to stop, on frankB's closure — which frankB retracted.**
+   frankD had measured the real cause and was right. The seat's stop-order was
+   based on a peer's conclusion rather than on the peer's evidence.
+2. **Told frankB that frankH had found "a different six" duplicate slugs. They
+   were the same six** (frankH had run `check` against a pre-push tree while
+   deliberately not syncing, to avoid disturbing its own long run). **The seat
+   concluded "different set" from two MATCHING COUNTS without comparing the two
+   lists, which were in both messages.** A matching count is what should make you
+   compare, not what lets you skip it.
+
+**Also passed frankD frank-optimize's `life` failure as corroboration for its
+GTK2-vs-GTK3 hypothesis. Wrong condition:** `life` and `pcl/extctrls` fail on
+plexus (wrong headers resolved), the regressions fail on seven (**no headers at
+all**). **Two different conditions that both mention `gtk.h`** — same error text,
+different cause, which is the trap at its most convincing.
