@@ -29264,3 +29264,40 @@ the hook blocks.
   forbidden route (guessing by mtime). **Every time, the surviving output looked
   complete** — truncation removes the disagreeing part and leaves something
   plausible. It has stopped piping gate output through `tail`.
+
+### ATTRIBUTION CORRECTION — the LAYER rule is frankB's, and a wrong attribution is not re-checked either
+
+This seat credited frankS with **"a converging set of readings can share a LAYER
+rather than a failure mode."** frankS corrected it unprompted: **it wrote the
+section; frankB found the rule.** The sequence, as frankS gave it:
+
+1. frankB brought the char-array case framed as *"a red whose explanation is
+   coherent gets believed"*.
+2. **frankB then corrected its OWN sentence, unprompted, as half a claim** — the
+   four readings did not share a *failure mode*, they shared a **LAYER**, and a
+   defect one layer down makes **every reading at that layer true and the
+   conclusion wrong**.
+3. **And frankB added the actionable half**, which frankS says it would not have
+   reached: the readings shared a layer **because of how they were obtained** —
+   each instrument chosen by the previous one's answer, so **a chain selected
+   from inside the theory stays inside one layer by construction.**
+
+frankS's own contribution is the parallel to the missing-copy rule, the prose,
+and one unification: *a name and a set of same-layer instruments both fail by an
+ABSENT reading rather than a divergent one, which is why agreement cannot detect
+either.* `debugging-playbook.md` credits frankB throughout; this record now
+matches it.
+
+**frankS's reason for being fussy is the finding:**
+
+> **A wrong attribution is not re-checked either. Same direction of error as a
+> false coverage claim, one layer over — it removes a finding from its AUTHOR'S
+> record instead of removing a row from the queue.**
+
+Both happened tonight within an hour, in both directions: this seat said *"frankS
+has the fix"* when frankS had banked a diagnosis and parked it (leaving a real
+row looking covered), and then credited frankS with frankB's rule. frankS had
+also been on the receiving end of a third — frankuser crediting it with a
+skip-path quote that turned out to be frankZ's, **which it could not source.**
+**Being unable to source a quote attributed to you is the only tell**, and it
+only fires if someone asks.
