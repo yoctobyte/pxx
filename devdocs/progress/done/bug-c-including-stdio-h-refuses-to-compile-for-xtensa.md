@@ -97,4 +97,4 @@ frankS, rather than left inside a resolved ticket where nobody would find it.
 An exculpation needs an owner for the residual question.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6adc1057b.
