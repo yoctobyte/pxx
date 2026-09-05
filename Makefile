@@ -26919,6 +26919,56 @@ test-quick: $(COMPILER)
 	./$(COMPILER) --where > $(TESTTMP)/cliux_sysinc.txt
 	! grep -E '(/usr/lib/gcc/|/lib/clang/)' $(TESTTMP)/cliux_sysinc.txt | grep -q MISSING || \
 	  { echo "a versioned host include root is [MISSING] -- hardcoded version?"; exit 1; }
+	# WASM32 IN THE INNER LOOP. Until this landed, `grep -c wasm tools/testmgr.py`
+	# was 0 and this 276-line recipe compiled for exactly one cross target
+	# (aarch64, twice) -- so a change that made the whole wasm32 backend refuse,
+	# or stop emitting, was invisible to every gate an author actually runs.
+	# test-wasm32 exists but is enrolled in no tier, so the slow sweeps did not
+	# cover it either.
+	#
+	# IT ASSERTS AN IMPORT, NOT AN EXIT CODE, AND THAT IS THE WHOLE POINT.
+	# The bug this is aimed at (frankD, 2026-09) is a name scan that decides
+	# whether a module pulls wasibackend.pas, stops matching when its token kinds
+	# change, and says NOTHING: the module compiles `ok:`, links, and traps at RUN
+	# time on a host function it never imported -- at byte-for-byte the size of a
+	# program that never touches a file. A compile-only check cannot see that and
+	# a size check cannot either. The import list can, because the missing import
+	# IS the defect rather than a symptom of it.
+	#
+	# So this needs no wasmtime, which is why it can live in quick: host seven has
+	# none, and tools/run_target.sh's own header records six test-core rows
+	# auto-filing as six separate regressions in one run for exactly that reason.
+	# A quick-tier row that reddened on a host gap would be worse than no row.
+	# THE PROBE'S OWN POPULATION FIRST. The scan fires on the identifier SPELLING
+	# followed by `(` (CaseEqual + a tkLParen lookahead), so if this slice is ever
+	# refactored to reach the sys* layer through a wrapper, or loses the parens,
+	# the imports below legitimately disappear and the row beneath would report a
+	# compiler defect that did not happen. A zero census means nothing until the
+	# probe is proven to still contain something. (frankD, who measured the revert
+	# control for this canary and landed the same shape in 4ef367091.)
+	grep -q 'sysopen(' test/wasm/sysio_slice.pas && grep -q 'sysread(' test/wasm/sysio_slice.pas || \
+	  { echo "qc_wasm32: sysio_slice.pas no longer spells sysopen(/sysread( -- the import rows below are testing nothing, and their failure would be about THIS file, not the backend"; exit 1; }
+	./$(COMPILER) --target=wasm32 test/wasm/sysio_slice.pas $(TESTTMP)/qc_wasm32.wasm
+	# TWO imports, not one, and NOT fd_write. Measured by frankD against a
+	# deliberate revert of the fix: the defect drops the whole wasibackend.pas
+	# unit, so path_open/fd_close/fd_read/fd_seek all go to zero together --
+	# while fd_write (2) and proc_exit (1) SURVIVE UNCHANGED, because they come
+	# from WriteLn and Halt rather than the file layer. So a row keyed on
+	# fd_write would pass on a module with no file support whatsoever: a guard
+	# that cannot fail. Asserting two of the four costs nothing and records that
+	# the difference was known rather than stumbled into.
+	for sym in path_open fd_close; do \
+	  grep -qa "$$sym" $(TESTTMP)/qc_wasm32.wasm || \
+	    { echo "qc_wasm32: a file-using module does NOT import $$sym -- the wasi file layer was not pulled in. This compiles ok: and exits 0; the module traps at RUN time on a host function it never imported."; exit 1; }; \
+	done
+	# THE CONTROL, and it is not ceremony: the assertion above is a grep for a
+	# string in a binary, and a grep that can only come back true is not a check.
+	# A program that touches no file must NOT carry that import. If this arm ever
+	# passes, the arm above stopped being able to fail and has been reporting
+	# nothing.
+	./$(COMPILER) --target=wasm32 test/quick_canary_wasm32_nofile.pas $(TESTTMP)/qc_wasm32_nofile.wasm
+	! grep -qa 'path_open' $(TESTTMP)/qc_wasm32_nofile.wasm || \
+	  { echo "qc_wasm32: a module that touches no file imports path_open -- the positive arm above can no longer fail"; exit 1; }
 
 # test-smoke: the pre-commit iteration gate = test-quick + the full self-host
 # byte-identity chain (the artifacts stabilize-core pins). Catches self-host
