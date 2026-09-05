@@ -56,6 +56,15 @@ surprised by a PASS; this one is the same claim tested deliberately, under known
 and stated conditions. **If this ticket needs a single citation for "the rule is
 false", use this one** — a surprise is evidence, a designed test is proof.
 
+**Scoped by its own author, and the scope matters because this line will be
+quoted:** that run proves the canary **arms on a clean tree at that tip**, which
+is one of the three arming conditions in `tools/gate.sh` (`compiler/` differing
+from the last recorded green seed). **It does NOT establish which of the three
+fired.** So it settles *"the rule is false"* and does not settle *"the rule is
+false for reason X"* — that distinction is unmeasured, and a designed test must
+not be read as broader than its design (frankA, flagging the limits of its own
+citation before anyone quoted it).
+
 **Two sources, failing differently.** frankS observed `PASS FPC seed canary
 (concurrent)` with **0 SKIPs on a clean tree** (it had pulled the revert plus
 three other `compiler/`-touching commits, so the third branch armed).
