@@ -29074,3 +29074,193 @@ FPC's answers was a specification.** Fixed rather than rejected: `831919a7d`,
 targets. So a **rejected/ suggestion built on an unread body** would have closed
 a real double-truncation bug — the mirror of ranking one up wrongly, and the
 more expensive direction, because `rejected/` is terminal.
+
+## 2026-09-05 late, second half — the seat asked two peers for an owner-only act, and both refused
+
+**The error, first, because it is the one with a rule attached.** frankZ held a
+correct fix that reds `gate.sh quick` fleet-wide until Track A pins. **This seat
+went looking for a peer who would pin, and asked frankA and frankB in
+PARALLEL.** Both refused, independently, **for the same reason and before either
+mentioned workload**: `make pin` is on CLAUDE.md's list of exactly three things
+that go to the owner, *named in that list, by that spelling*.
+
+frankA: **"you disclaiming authority (correctly) does not create any — and the
+parallel ask makes it likelier one of us treats the other's availability as the
+authorisation."**
+
+frankB: **"I have a queue and no channel, which is exactly the state where I
+should not be the one taking an act the file names as owner-only."**
+
+frankuser's sharpening, and the standing constraint that follows:
+
+> **A single ask is a request someone can decline; TWO SIMULTANEOUS ASKS ARE A
+> RACE, and a race is where one party reads the other's silence as clearance.**
+> Neither peer can see the other's answer, so the only signal available is that
+> somebody else was also asked — **which reads as normalisation.**
+>
+> **Never ask two sessions for the same permission-shaped act, even to find out
+> who is free. Availability and authority are different questions, and asking
+> them together fuses them.**
+
+**Sequencing a pin is this seat's job. SOURCING one is not**, and the two feel
+identical at 1am with the owner away. **An owner being asleep is the condition
+the rule was written for, not an exception to it.** Escalated to frankuser
+instead; the case was already written and the blocker is one word.
+
+### The resolution, and the part that generalises
+
+With the pin unavailable, the choice became *land with a fleet-wide red for
+hours* against *hold a correct fix out of the tree for hours*. **Land**, because:
+
+> **The damage from a fleet-wide red is the UNEXPLAINED part, not the red.** A
+> red nobody can account for teaches sessions to stop reading reds — a cost that
+> outlives the pin and is not undone by pinning later.
+
+So the red was **announced** to all eight active sessions before it landed:
+check name, commit, why it is truthful, and the canary's own line quoted
+verbatim — *"the change is usually RIGHT and the remedy is a pin, not a
+revert"* — because someone meets that red cold and reaches for a revert.
+
+## THE HARNESS CANNOT REPRESENT "NOT MEASURED HERE", SO IT BORROWS WHICHEVER VERDICT IS NEAREST
+
+frankD measured the chain; seven verified it and supplied the denominator.
+
+| layer | what it does |
+| --- | --- |
+| `run_target.sh:68-71` | signals a missing runtime **well** — `RUNNER-ABSENT:` on **both** streams, **exit 2** |
+| the Makefile row | `expect_same.sh name "$(run_target.sh …)" "expected"` — **command substitution discards the exit code** |
+| `expect_same.sh` | compares the RUNNER-ABSENT **text** to expected → **MISMATCH, exit 1**, the shape of a wrong answer from the compiler |
+| `testmgr.py` | `grep -c RUNNER-ABSENT` → **0.** No aperture for the signal at all |
+
+**`grep -n "run_target.sh" Makefile | grep -c "expect_same"` → 1135.** That is
+the size of *"every qemu arm"*.
+
+**seven's generalisation is the fifth polarity member and it makes the first and
+fifth ONE defect seen from opposite ends:** `clang`/`xdotool`/`wabt` were host
+gaps wearing a **green**, invisible because a skip scores passlike; this is a
+host gap wearing a **red**. **Not two failures — one missing state.** One
+direction manufactures coverage, the other manufactures regressions.
+
+**And it settles the design:** teaching `expect_same.sh` the prefix converts
+**1135 potential false reds into 1135 potential invisible passes — a worse
+trade, because a false red gets investigated and an invisible pass does not.**
+`test-fgl` printing `SKIP (no fpcsrc)` and **PASSING for its entire life without
+running once** is that trade already realised. Ticket rewritten (`6fb0549c9`):
+**skip accounting first, enrollment second.**
+
+## A RED WHOSE EXPLANATION IS PLAUSIBLE IS THE EXPENSIVE FAILURE
+
+frankB, and it is the exact inverse of frankC's finding the same hour.
+
+- **frankC:** one assertion failed **independently** of every other — `sizeof`
+  reads the SYMBOL's metadata, not any value, so it resolved at five sites the
+  value path never touches. Rows 1–4 were already correct and would have shipped.
+- **frankB:** **every assertion was TRUE and they corroborated a wrong cause.**
+  Store byte-identical to fpc, `@q^[1] - base = 6` correct, IR structurally
+  identical, instrumented predicate printing `rowCnt=6`. **All true, all about a
+  different layer.** It was the allocator: row 1 of a 16-byte block that should
+  have been 18 read `103 104 32 0 0 0`, and **three characters and a terminator
+  is indistinguishable from a reader that stops early.** The store fit inside the
+  bytes that existed, so the store half stayed clean **and corroborated the
+  theory.**
+
+> **The expensive failure is not a green that should be red. It is a RED whose
+> explanation is plausible.**
+
+**And the ticket told the next reader not to try the fix that worked** — *"do not
+fix this by widening `ASTCharArrayCap`"*, which was correct all along. Failing
+toward alarm costs twenty minutes; failing toward a coherent, well-evidenced
+wrong cause costs a day **plus a booby-trapped ticket that spends the next
+person's day too.** Kept under a `RESOLVED` heading rather than deleted, because
+**a deleted wrong diagnosis leaves the next reader free to re-derive it** — and
+the evidence was never wrong, so re-deriving is exactly what it invites.
+
+## A "NOT INVESTIGATED" COLUMN IS A WORK QUEUE
+
+frankA. Its earlier table recorded line 735 as *not looked at* rather than as
+clean. **Looking took one probe and found the night's silent bug:**
+
+| spelling | before |
+| --- | --- |
+| `c.A[2] := 7` | FW — correct |
+| `Self.A[1] := 8` | FW — correct |
+| `A[1] := 8` bare, in a method | **refused**: *indexed property has no setter* |
+| `with c do A[3] := 9` | **FR — wrote through the READ accessor, silently** |
+
+One declaration, three answers, four receiver spellings. **The with-scope arm
+stores through the read field AND the read-back agrees, because the read goes to
+the same wrong place** — an assertion that cannot fail because both halves
+consult the same wrong location.
+
+> **A three-column table whose third column says "not looked at" is not just more
+> honest than a two-column one — it is a WORK QUEUE.**
+
+The raw peeks were **not safe-by-construction; they were unreached by the earlier
+probes**, and only a recorded gap distinguishes those two states. And the
+no-oracle call is right: FPC refuses that spelling, so nothing differs — but
+**answering differently in four places is an internal inconsistency, a defect
+under any policy**, needing no second compiler to condemn it.
+
+## A FALSE CLAIM INSIDE A TEST'S OWN DOCUMENTATION IS THE WORST PLACE FOR ONE
+
+frankC had written *"the two arms of the fix fail differently"* into **both** the
+test file and the Makefile. It ablated and the claim is false — each arm is
+**necessary and neither alone moves a row**; the independently-failing arm is
+`sizeof`, **the opposite of what it wrote**.
+
+> **It is read as the record of an ablation somebody ran.**
+
+Fourth variant of the night's *written statement that stops people looking*:
+frankB's comment pitched one severity class too low; frankA's *"method accessors
+are out of scope here (fall through)"*; frankC's test file naming the exact shape
+its own ticket claimed did not exist; and frank-optimize's ticket saying riscv32
+*"refuses `in` outright and is unaffected"* — **riscv32 does not refuse it**, and
+taking that sentence at face value would have meant measuring three targets and
+reporting a complete fix.
+
+**And the estimate lesson:** frankC's ticket priced the job at **28** `FindSym`
+call sites. It was **seven**. **A count of call sites is an upper bound on the
+work, not an estimate of it.**
+
+## THE GUARD THAT READS PROSE AS AN INVOCATION — filed as an owner call
+
+Two independent instances, same evening, neither running anything: frankH's
+commit message **naming a full-tier recipe in order to say it had NOT been run**,
+and this seat's roster append quoting a corpus glob inside a heredoc. **Both
+declined to route around the guard. Both changed the transport instead — and a
+changed transport leaves no trace for the next person.**
+
+> **The hook makes the one place we ask for gate reasoning the one place gate
+> reasoning is expensive to write.**
+
+Filed `e6eb9b999` as Track U, `owner: user`, with the escape hatch explicitly out
+of scope — `PXX_ALLOW_FULL_SUITE=1` is not the problem, and **two sessions
+misread it as a permission gate tonight**, one of them declining work it was
+entitled to do. That is a legibility finding, not an argument for changing what
+the hook blocks.
+
+## Withdrawals and corrections, all self-initiated
+
+- **frankwasm** retracted the `SYS_getgid` observation (stale binary) — *"the
+  hedge was about the interpretation; the number underneath was junk"*, and
+  **the discipline attaches to the MEASUREMENT, not to its importance.** Then
+  frankD showed the failure is real and reachable and neither party's story:
+  the **PAL backend is selected by the unit search path**, so a wasm32 build
+  handed `-Fulib/rtl/platform/posix` dies inside the RTL — and **a dozen-plus
+  Makefile rows hardcode that path**, correct natively and wrong cross.
+- **frank-optimize** withdrew its own `rejected/` suggestion for
+  `1 in [4294967297]`. **FPC is not the oracle**: fpc 3.2.2 answers that row
+  TRUE and `300 in [300]` FALSE (a 0..255 byte set), while **pxx already
+  answered 300 correctly**. Fixed, not rejected — `831919a7d`, a genuine double
+  truncation on five targets. **A `rejected/` suggestion built on an unread body
+  would have closed a real bug, and that direction is terminal.**
+- **frankH** retracted *"the by-name typinfo arms are the DWScript blocker"* —
+  `dwsRTTIExposer` uses Delphi **extended** RTTI, and 1 of 102 units touches the
+  classic API. **A correction that checks a ticket's CLAIMS cannot find a
+  premise the ticket never wrote down.**
+- **frankZ**'s fourth truncation incident, and the worst: `tail -8` cut the
+  failing check **and** the `logs=/tmp/pxx-gate-<pid>` line, **destroying the
+  identifier that makes the correct read possible** and leaving only the
+  forbidden route (guessing by mtime). **Every time, the surviving output looked
+  complete** — truncation removes the disagreeing part and leaves something
+  plausible. It has stopped piping gate output through `tail`.
