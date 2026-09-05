@@ -27746,3 +27746,139 @@ frankD's positive control (the file compiles `ok` in a directory that does not
 contain it) and frankC's capability argument. That is corroboration in the sense
 this repo means it, and it is rare enough to note: most "two sources" here are
 two readings of one instrument.
+
+### FOURTEEN GREEN GUARDS CERTIFIED AN INSTRUMENT THAT WOULD HAVE SKIPPED THE SELF-HOST JOB
+
+frankZ, building arm 2. Devtest: **14 guards, 0 FAIL.** Dry run over the real
+2206-job population: **83 jobs would SKIP on a box that has every package** —
+`compiler/compiler.pas` among them. **Every one silent**, and a skip scores
+passlike, so the self-host job vanishing from the tier reads as coverage.
+
+> **"A control drawn from the wrong population passes" — and I was the population
+> I drew from.**
+
+**That is better than the rule it instantiates.** The existing rule says draw the
+control from the population your question is about. It does not say the trap is
+that **you are the most available population and the least representative one.**
+Fourteen guards written by the author, passing against a guard written by the
+author.
+
+**Section 7 — the healthy-box scan over the REAL RECIPES — is the only row that
+caught it**, and the row can fail three ways, proved rather than assumed:
+reverting each fix alone takes 0 back to **2, 45 and 1**. Sequence 83 → 47 → 2 → 0.
+
+Three causes, three different lessons:
+
+1. **Case-sensitive unit lookup** (`uses SysUtils` vs `sysutils.pas`) — Pascal is
+   not, the instrument was.
+2. **A hardcoded search path** when the unit path is **on the command line**
+   (`-Futest/chdrstatic`). *Copying an answer instead of citing where it comes
+   from* — the same disease this seat had warned frankZ about for the guard's
+   OUTPUT, arriving in the guard's own INTERNALS, unspotted by the warner.
+3. **The `uses` regex read English prose out of a header comment** — *"Uses only
+   the language surface that ALL backends support today"* → the unit `i386`. **An
+   instrument that reads text cannot tell an assertion from a description of
+   one**; it would have skipped the cross-portable conformance harness.
+
+**And a fourth that is a design point rather than a bug.** test-core's fgl rung
+builds `-Fu$fglsrc` in the shell, from whichever corpus tree exists, and cannot
+be evaluated:
+
+> **"I cannot evaluate it" must resolve to DO NOT SKIP.** An unknown path is not
+> an absent one, and this guard's errors are silent while the red it replaces is
+> loud.
+
+**The asymmetry is the argument** — the failure being added is quiet, the failure
+being removed is noisy, so the default biases toward the noisy one.
+
+**The SKIP limit, stated rather than closed:** the guard names the package and
+makes the box the subject, so *absent* is auditable; it cannot distinguish
+*absent* from *broken* **because it never runs the job** — which is a property of
+a precondition check, not a gap. **The arm owns *absent*; *present and failing*
+belongs to the job**, which is where frankS put it in `tls13_handshake_devtest.sh`.
+Two mechanisms because there are two findings.
+
+### THE AXIS WAS NEVER BOUND-VS-REACH — IT WAS STATIC-VS-EXECUTED
+
+frank-optimize (`2e2b271a7`), via the `-pg`/gprof route, **eleven seconds, no
+sudo**, on the FPC-built compiler compiling `raytracer.pas` at -O3:
+
+```
+total attributed calls                       9,507,756
+to functions the inliner ALREADY retains     1,235,476   13.0%
+to functions it DECLINES on statement kind     106,690    1.12%
+118 of 156 declined functions called            ZERO times
+```
+
+**Three quarters of the remaining "opportunity" does not execute at all**, and
+the 1.12% is concentrated: `TypeSlotSize` 39,995 and `ResidentRegOf` 38,847 are
+79k of the 107k.
+
+> Bound picked depth>1 → **1 of 13**. Reach picked statement-calls → **0 of 16**.
+> Frequency says why: **both counted shapes a validator COULD admit, and the
+> shapes it cannot admit are overwhelmingly COLD.** Three static metrics, one
+> dynamic, and only the dynamic one was predictive.
+
+**So *reach beats bound* was the wrong axis, not the wrong answer** — and both
+earlier positions sat on the same side of the real distinction. p40's remaining
+scope **closed on VALUE, not difficulty**, with `while`/`for` bodies left
+unimplemented **as a decision with 1.12% behind it**: a materially different
+artefact from the code merely being absent, because the next session cannot
+reopen it by noticing the gap, which is what three static passes each did.
+
+**And it is the inverse worked case for *a count finds a candidate, it does not
+price one*.** The push/pop case shows a big count buying little (27,000 pairs →
+~6%); this shows a **small count correctly predicting nothing worth doing.** Same
+instrument, both directions — a count is not weak evidence, it is evidence about
+a different quantity.
+
+**The owner ask is dropped entirely, not de-prioritised.** The instrument was
+wanted to price the depth slice; the measurement made the price irrelevant.
+
+### THE ATTRIBUTION MOVES AND THE REQUIREMENT DOES NOT
+
+seven (`c9d804deb`), on the manifest rows that had gone **correct-then-wrong
+twice in twelve hours, both times by the same author**. This seat suggested
+citing the source of truth; seven went further and removed the need to know:
+
+> **Both packages listed unconditionally, because the ATTRIBUTION moves and the
+> REQUIREMENT does not.** Install both and the box is correct under either state
+> of `:3428`.
+
+Today's value is recorded *as of 2026-09-05* with the pending 08-31 decision
+named, rather than asserted. **It also kills the reading-order hazard at the root
+rather than by ordering** — the shared comment block now covers both rows, so
+there is no first-gtk-line for the eye to stop at. *The earlier fix was a fix to
+the reading; this is a fix to the thing that made the reading matter.*
+
+> **A manifest pinned to a literal that another lane is moving is a time bomb;
+> cite the ADDRESS of the literal, not its value.** The correctness of today's
+> value was never the variable.
+
+**frankZ's guard turned out to be built that way already** — `uses_fallback_roots()`
+parses the `ConcatThree('<root>', …)` calls out of the compiler source and keys
+packages **by root path, not by test name** — verified by simulating the flip in
+a temp copy. Resilient to the root MOVING, not to `:3428` changing SHAPE; that
+case **warns and disables the arm** rather than passing quietly, because *an empty
+root list is the guard losing its aperture, not a clean tree*. Two consumers, two
+different immunisations, neither needing anything from frankC. Collision closed.
+
+### A WRITTEN ANSWER, PRESENT AND UNCONSULTED — THREE TIMES IN ONE NIGHT
+
+frank-optimize declined this seat's framing that the playbook had been *"sitting
+there the whole time"* for it specifically, and the correction is the general
+form: **neither of us grepped it.** This seat wrote *no load-independent
+instrument exists* into the roster without checking the file named for that
+question; frank-optimize said the same and then **went hunting for valgrind and
+qemu plugins — actively searching for a substitute for a thing it already had.**
+Its own notes had the objdump `-g` answer verbatim, in a loaded file.
+
+> **In each case the search that replaced the reading cost more than the reading
+> would have.** A written rule fires only when someone chooses to consult it,
+> which is exactly the moment they believe they do not need to.
+
+Also recorded: `raytracer.pas` is **not** a gprof target — it uses `png`,
+`hashing`, `platform` in `{$MODE PXX}`, which FPC cannot compile. It is the
+**workload** for the `-pg` compiler, which is the better instrument anyway, since
+`compiler.pas` is the biggest real Pascal program here and the only one both
+slices actually changed.
