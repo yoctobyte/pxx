@@ -5585,6 +5585,7 @@ function UContextPCOffset: Integer;
     arm32     92 = uc_mcontext(20)  + arm_pc(72)
     i386      76 = uc_mcontext(20)  + gregs[REG_EIP=14]*4
     riscv32  160 = uc_mcontext(160) + sc_regs.pc, which is its first field
+    xtensa    20 = uc_mcontext(20)  + sc_pc, which is ITS first field
 
   xtensa has NO ROW and falls through to -1, which is a real reachable state,
   not an impossible one. The comment here used to say "xtensa never reaches
@@ -5603,7 +5604,8 @@ begin
   else if TargetArch = TARGET_ARM32 then Result := 92
   else if TargetArch = TARGET_I386 then Result := 76
   else if TargetArch = TARGET_RISCV32 then Result := 160
-  else Result := -1;   { xtensa: no row yet. REACHABLE -- the caller raises
+  else if TargetArch = TARGET_XTENSA then Result := 20
+  else Result := -1;   { no row for this target. REACHABLE -- the caller raises
                          "needs the saved-PC/SP offset inside this target's
                          ucontext_t" rather than emitting a wrong offset. }
 end;
@@ -5629,6 +5631,8 @@ function UContextSPOffset: Integer;
     arm32     84 = uc_mcontext(20)  + arm_sp(64)
     i386      48 = uc_mcontext(20)  + gregs[REG_ESP=7]*4
     riscv32  168 = uc_mcontext(160) + sc_regs.sp, its third field
+    xtensa    56 = uc_mcontext(20)  + 8 leading longs(32) + sc_a[1], and a1 IS
+                   the stack pointer on xtensa under both ABIs
 
   i386 is the one the dump could NOT settle: gregs[REG_ESP=7] and
   gregs[REG_UESP=17] (offsets 48 and 88) hold the same value at fault time, so
@@ -5645,7 +5649,8 @@ begin
   else if TargetArch = TARGET_ARM32 then Result := 84
   else if TargetArch = TARGET_I386 then Result := 48
   else if TargetArch = TARGET_RISCV32 then Result := 168
-  else Result := -1;   { xtensa: no row yet. REACHABLE -- the caller raises
+  else if TargetArch = TARGET_XTENSA then Result := 56
+  else Result := -1;   { no row for this target. REACHABLE -- the caller raises
                          "needs the saved-PC/SP offset inside this target's
                          ucontext_t" rather than emitting a wrong offset. }
 end;

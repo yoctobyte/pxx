@@ -4,8 +4,8 @@ track: A+S
 prio: 35
 type: feature
 blocked-by: []
-status: backlog
-summary: "xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact."
+status: done
+summary: "STALE AS FILED, verified by RUNNING. Hosted xtensa HAS a signal runtime: test_signal_altstack builds and runs under qemu and reports handler-off-faulting-stack=TRUE, which cannot happen without one. The exclusion was already re-keyed off the arch under ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired, and ir.inc's own comment records the change. What was genuinely still missing was the SIBLING half -- the ucontext PC/SP offsets -- which is why these two were taken as one group and closed together. Both now measured (PC=20, SP=56); fault-to-raise and stack-overflow-to-exception both work on xtensa. See feature-a-xtensa-ucontext-pc-sp-offsets."
 owner: unassigned
 ---
 
@@ -140,3 +140,53 @@ capability fix retires the justification for an exclusion, so grep for what was
 excluded FOR THAT REASON* — not only for the sibling code path. Two sites in
 `ir_codegen_xtensa.inc` cited the unwind gap for exclusions that were not the
 unwind, and both would have read as current to the next person.
+
+
+## Resolved 2026-09-05 (frankS) — stale premise, live sibling, closed as a pair
+
+### The premise did not survive being run
+
+This ticket says *"xtensa is the only hosted target with NO signal runtime —
+EmitSignalRuntimeForTarget … falls through for xtensa"*. Measured instead of
+read:
+
+```
+test_signal_altstack, --target=xtensa --platform=posix --xtensa-soft-mulhigh
+  recursing
+  code=2
+  handler-off-faulting-stack=TRUE
+  exit=0
+```
+
+A handler that runs, takes a fault, and reports it ran off the faulting stack is
+not a target without a signal runtime. `ir_codegen.inc:1494` carries the arm,
+gated on `TargetHasSignalRuntime` rather than on an arch list, and
+`UContextPCOffset`'s comment records exactly when this changed: *"That stopped
+being true when the signal exclusion was re-keyed off the arch … hosted xtensa
+now has a signal runtime."*
+
+### Why it was still worth holding, and why as a PAIR
+
+The ticket's real content had migrated into its sibling. With the runtime
+present, `test_signal_pc_rewrite` and `test_signal_sp_rewrite` reached
+`UContextPCOffset` and stopped at its `-1` guard — a **different** refusal, one
+level further in. So "xtensa cannot do signals" had become "xtensa can do
+signals but cannot turn a fault into a raise", and only one of those two
+sentences was written down anywhere.
+
+**Taken as one group on that basis.** A signal runtime and the ucontext offsets
+that disagree about where PC and SP live would be two half-fixes each passing
+its own gate. Closing them together is what makes that impossible here.
+
+The measured half is in `feature-a-xtensa-ucontext-pc-sp-offsets`: PC=20, SP=56,
+two agreeing sources each, probe calibrated on riscv32 first, three rows wired
+in `test-core` and byte-identical to the x86-64 run under local qemu.
+
+### For the next reader
+
+Both tickets in this pair were STALE IN THE SAME DIRECTION — each described a
+gap wider than the one that remained, and in both cases the discriminator was
+running a program rather than reading the source. That is now three this session
+(the dyn-array function result was the third). The common shape: a refusal is
+lifted somewhere, the tickets that cite it are not updated, and **the cited code
+still exists and still refuses something**, so reading confirms the ticket.

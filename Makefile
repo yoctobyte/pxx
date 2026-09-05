@@ -22281,6 +22281,30 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_frame32k_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
 	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	# FAULT-TO-RAISE ON XTENSA, the three rows the ucontext PC/SP offsets open.
+	# Until 2026-09-05 UContextPCOffset/UContextSPOffset had no xtensa row and
+	# returned -1, so __pxxSigPCPtr/__pxxSigSPPtr were REFUSED here by name --
+	# an honest refusal, and the only hosted target still carrying it.
+	# Both offsets are MEASURED, not read off a header, and each has two
+	# independent sources that agree (see the tables in ir.inc):
+	#   PC=20 -- the two-fault dump (write vs call) leaves 20 among the
+	#            call-ONLY words, and uc_mcontext sits at 20 with sc_pc first.
+	#   SP=56 -- the 4096-byte-pad dump puts 56 at delta -16 from the pad, the
+	#            SAME signature riscv32's known-good 168 shows, and the struct
+	#            predicts 20 + 8 leading longs + sc_a[1], a1 being xtensa's sp.
+	# The probe was validated against riscv32 FIRST and reproduced its
+	# documented 160/168 before being pointed at xtensa.
+	# sp_rewrite is the load-bearing row of the three: a wrong SP offset does
+	# not crash, it leaves the resumed proc on the OLD stack, so only
+	# `raiser-ran-on-the-spare-stack=TRUE` can tell a right entry from a
+	# plausible one. That is what settled i386's REG_ESP vs REG_UESP.
+	# EVIDENCE IS A LOCAL QEMU RUN. All three match the x86-64 run byte for byte.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_pc_rewrite.pas $(TESTTMP)/test_xtensa_pcrw
+	tools/expect_same.sh xtensa/test_xtensa_pcrw "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_sp_rewrite.pas $(TESTTMP)/test_xtensa_sprw
+	tools/expect_same.sh xtensa/test_xtensa_sprw "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_stack_overflow_raise.pas $(TESTTMP)/test_xtensa_sovf
+	tools/expect_same.sh xtensa/test_xtensa_sovf "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# xtensa was the ONE target without this row -- i386, aarch64, arm32 and
 	# riscv32 all had it. The reason recorded on
 	# bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function was that xtensa

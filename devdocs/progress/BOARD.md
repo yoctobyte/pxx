@@ -109,7 +109,7 @@ _none_
 | umbrella-sizeof-is-one-answer | A | 75 | umbrella | GOAL: a program can trust SizeOf. `FillChar(x, SizeOf(x), 0)` and `Move(a, b, SizeOf(a))` are correct for EVERY type in every frontend, and `file of T` can write a layout that reads back. Today they are not: SizeOf answers 8 for every `string[N]` while pxx's OWN layout engine gives that type 18, so `FillChar` on an `array[0..2] of string[10]` clears 24 of 54 bytes and leaves a[2] intact -- silent, and correct under FPC so no differential probe sees it. Root cause is measured and structural: FOUR functions answer `how big is this type`, each adding one more parameter because the kind alone was not enough -- TypeSlotSize(tk) at 363 sites, TypeStorageSize(tk, recId), SizeOfSlot(tk, cap), FrozenStrSlotSize(tk, cap). SizeOfSlot's own comment says it: `A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS KIND`. Two is a smell, three is a design flaw; this is four, plus duplicated builtin type tables in A, N and P that disagree with each other. | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets, bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386, bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size, bug-c-sizeof-reaches-a-pointee-through-one-spelling-only, bug-n-nilpy-carries-its-own-copies-of-the-float-type-table, bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes, bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable, bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more, bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size, bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts, compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, feature-p-implement-the-real-tyshortstring-byte-prefix-layout, refactor-a-the-const-cast-width-table-is-the-third-copy |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps, bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (135)
+## backlog-core (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -180,7 +180,6 @@ _none_
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
-| feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
 | feature-a-an-extern-only-variable-still-reserves-its-storage | A | 25 | feature | A variable declared only `extern` (C) or `external` (Pascal) is emitted as an UND symbol and every reference is retargeted to it -- but AllocFromDeclTypeDesc has already reserved its storage, and the slot stays in .bss unaddressed. Measured: a TU containing `extern int Big[1000];` has exactly the same bss= as one containing `int Big[1000];` (42156B both), so the object carries 4000 bytes it can never reach. Wasted space, never a wrong value. Both frontends. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
@@ -205,7 +204,6 @@ _none_
 | feature-a-typeinfo-integer-name-under-strict-fpc | A | 20 | feature | TypeInfo of a plain Integer rename reports `Integer`; FPC reports `LongInt`. decide-typeinfo-scalar-name-spelling settled this on 2026-08-21 -- keep ours by default, report FPC's under --strict-fpc -- and cited this slug as its Implementation. It was never filed. Measured NOT delivered: the name is `Integer` under default, --mimic-fpc and --strict-fpc alike. | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
-| feature-a-xtensa-ucontext-pc-sp-offsets | A+S | 40 | feature | xtensa has no ucontext PC/SP offset, so fault-to-raise is refused there | — |
 | feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 20 | feature | Cross-frontend interop contract — umbrella | — |
@@ -904,9 +902,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3327)
+## done (3329)
 
-3327 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3329 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1190,7 +1188,6 @@ _none_
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-gtk-version-selection-at-the-header-and-soname-layer
 - [p 40] [A] feature-a-report-fixed-cap-headroom
-- [p 40] [A+S] feature-a-xtensa-ucontext-pc-sp-offsets
 - [p 40] [C] feature-c-crtl-resolv-h-and-the-ns-parser
 - [p 40] [C] feature-c-csmith-differential-fuzzing
 - [p 40] [B] feature-embed-dwscript-rtti
@@ -1232,7 +1229,6 @@ _none_
 - [p 35] [T] bug-t-the-full-suite-hook-scans-heredoc-prose-and-refuses-documentation
 - [p 35] [A] chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites
 - [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
-- [p 35] [A+S] feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile
 - [p 35] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 35] [A] feature-c-package-namespace-decision
 - [p 35] [E] feature-demo-portable-userland
