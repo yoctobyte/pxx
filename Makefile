@@ -9633,6 +9633,17 @@ test-core: $(COMPILER)
 	# the objfpc arm of the same defect: INLINE `specialize T<X>` in a non-binder
 	# position, cross-unit. The binder form always worked, which is what made this
 	# read as Delphi-only.
+	# A generic template's method body belongs to the unit that DECLARED it. The
+	# body is streamed to each specialization and re-parsed there, so it used to
+	# resolve in the SPECIALIZING scope: it saw the unit's INTERFACE and this
+	# program's declarations, which SHADOW, and never the unit's implementation.
+	# Row 2 ran the PROGRAM's PrivFill (a silent wrong answer whose value depended
+	# on who specialized it); with no PrivFill in the program the UNIT stopped
+	# compiling. Row 1 must stay green too -- a fix that merely HID the program's
+	# copy would pass row 2 and break row 1. Rows 4 and 5 were always green and
+	# are here because they are what a wrong fix breaks.
+	./$(COMPILER) -Futest/generic_declunit_units test/test_generic_body_binds_in_its_declaring_unit.pas $(TESTTMP)/test_gen_declunit26
+	tools/expect_same.sh test_gen_declunit26 "$$($(TESTTMP)/test_gen_declunit26)" "$$(printf 'program priv\nunit priv\nunit iface\nunit priv\nunit priv')"
 	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
 	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
 	# A specialized method body's diagnostic must name the file that CONTAINS the

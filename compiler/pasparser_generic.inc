@@ -128,6 +128,31 @@ begin
       Result := i;
 end;
 
+{ The unit that DECLARED the template a specialization was minted from, or -1
+  when `nm` does not name a specialization.
+
+  Asked by ParseSubroutine when it is about to parse a method body whose owning
+  class is a specialization: the body's tokens were copied from the template and
+  spliced here, but they belong to the unit they were written in, and that is
+  the unit whose implementation section they must be able to see.
+
+  Goes through SpecTemplateIdx rather than matching Specializations[].Name
+  against Templates[].Name, because a name is not an identity — two files may
+  each declare a `TBox<T>` and both mint `TBox$Integer`, which is the bug
+  SpecTemplateIdx exists to fix. Reading the name back here would reintroduce it
+  one level down, and it would pick the WRONG UNIT, which is exactly the kind of
+  wrong answer this function is being added to prevent. }
+function SpecTemplateDeclUnit(const nm: AnsiString): Integer;
+var si, ti: Integer;
+begin
+  Result := -1;
+  si := FindSpecialization(nm);
+  if si < 0 then Exit;
+  ti := SpecTemplateIdx[si];
+  if (ti < 0) or (ti >= TemplateCount) then Exit;
+  Result := TemplateUnitIdx[ti];
+end;
+
 { ---- HOISTING a template's own nested types --------------------------------
 
   `TDict<TKey,TVal>` declaring `type TPair = record K: TKey; V: TVal; end;` and

@@ -615,6 +615,7 @@ var
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
+  savedBodyUnitIdx, tmplDeclUnit: Integer;   { a specialization's method body parses as its DECLARING unit — see below }
   savedMIO: Integer;   { MethImplOwnerCi across this decl -- see defs.inc }
   inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
@@ -3028,7 +3029,40 @@ begin
       non-method plain routine is a candidate; TryRetainInlineBody re-checks all
       eligibility and no-ops unless OptLevel>=2. Behaviour is otherwise identical
       to ParseBlock, so -O0/-O1 stay byte-identical. }
+    { A METHOD OF A SPECIALIZATION IS A TEMPLATE BODY, copied here from another
+      file, so it PARSES AS ITS DECLARING UNIT.
+
+      A template's method bodies are buffered as tokens and streamed to each
+      specialization, then re-parsed there — so by default they resolved their
+      names in the SPECIALIZING scope. That gave them the declaring unit's
+      INTERFACE (via the importer's `uses`) and the specializer's own
+      declarations, which SHADOW, and never the declaring unit's implementation
+      section: a unit template calling its own private helper ran the PROGRAM's
+      same-named routine, and with no such routine the unit stopped compiling at
+      all.
+
+      Becoming the unit for the duration answers both halves at once. Its private
+      names resolve on DeclVisibleSect's `declUnit = CurrentUnitIdx` path, and
+      the PROGRAM's names stop being visible — which is correct rather than
+      incidental: a unit cannot see a program's declarations, and this body is
+      the unit's code no matter where its tokens were pasted.
+
+      Making the unit merely VISIBLE was tried first and is not enough; the
+      specializing scope's same-named routine still won, which is the silent
+      wrong-binding half and the worse one.
+
+      Saved and restored rather than assigned: a body can contain a nested
+      routine that comes back through here.
+      bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site }
+    savedBodyUnitIdx := CurrentUnitIdx;
+    if methOwnerCi >= 0 then
+    begin
+      tmplDeclUnit := SpecTemplateDeclUnit(
+                        GetTokenStrFromRaw(UClsNOff[methOwnerCi], UClsNLen[methOwnerCi]));
+      if tmplDeclUnit >= 0 then CurrentUnitIdx := tmplDeclUnit;
+    end;
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
+    CurrentUnitIdx := savedBodyUnitIdx;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     { ASK THE LANDING-PAD QUESTION AGAIN, from inside CompileAST, once the
       hidden argument temps exist. Requested only when the prologue said NO -- a
