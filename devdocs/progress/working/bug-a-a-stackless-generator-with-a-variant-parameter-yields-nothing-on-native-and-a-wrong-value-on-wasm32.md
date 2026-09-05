@@ -282,16 +282,43 @@ wasm32  sizeof(Variant)=16  sizeof(Pointer)=4
 ZERO times and wasm32 runs it once yielding 0. Whatever separates them is not
 size, not offset and not the zero-fill.
 
-### The one place I would look next, stated as a hypothesis and NOT measured
+### That hypothesis is now DEAD too — the layout is identical as well
 
-`SizeOf(Pointer)` is the only thing left that differs. If the `{tag, payload}`
-pair places its members differently at the same total width — a tag and a
-pointer-sized payload plus padding on a 32-bit target, against two 8-byte
-members on a 64-bit one — then the FIRST 8 bytes that `SlSet` does write cover
-different parts of the value on the two targets, which would produce exactly
-this "half-works on one, not at all on the other" split from one defect rather
-than two. **I did not measure the field offsets and this may be wrong.** It is a
-place to point a probe, not a finding.
+I wrote above that `SizeOf(Pointer)` was the only thing left, and guessed the
+`{tag, payload}` pair might place its members differently at the same total
+width. **Measured, and it does not.** Writing `v := 33` and dumping all 16
+bytes:
+
+```
+native  bytes: 1 0 0 0 0 0 0 0  33 0 0 0 0 0 0 0
+wasm32  bytes: 1 0 0 0 0 0 0 0  33 0 0 0 0 0 0 0
+```
+
+Byte-for-byte identical: an 8-byte tag at offset 0, an 8-byte payload at offset
+8, on both targets. So **the first 8 bytes that `SlSet` writes are the TAG on
+both**, and the payload at slot offset +8 is never written on either.
+
+That is a sixth negative result and it is worth stating as one: the
+native/wasm32 asymmetry is not size, not slot offset, not `instsize`, not
+zero-fill, and not member placement. Every compile-time quantity I can find is
+the same on the two targets.
+
+**What it leaves, and I am labelling the inference as an inference.** frankS
+measured that `SlSet(g, 64, v)` with a Variant writes **33** — the payload, via
+a Variant->Int64 conversion — rather than the tag. Combined with the layout
+above, that puts the payload value 33 into the TAG word and leaves the real
+payload word zero, i.e. the restored Variant is `{tag = 33, payload = 0}` with
+33 as a nonsense type code. One corruption, and two runtimes are then free to
+react to an invalid tag differently — one bailing out of the iteration, one
+yielding 0. **I have not verified that either runtime does that**; it is the
+cheapest remaining explanation for a divergence with no compile-time difference
+behind it, and it predicts that the two symptoms are the same defect seen twice
+rather than a third thing.
+
+The falsifiable version, for whoever picks this up: dump the instance's 16 bytes
+at the slot offset on both targets after the store. If they are equal, the
+divergence is entirely in the Variant runtime's handling of a bad tag and there
+is nothing target-specific in the generator machinery at all.
 
 ### Scope
 
