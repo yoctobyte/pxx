@@ -271,3 +271,69 @@ The measurement is banked; the deletion is not attempted. ~28 arms in a hot file
 that Track A, P and the C frontend all read, landed one at a time each green, is
 past what is left of this session — `root-cause-over-microfix.md`'s "bank the
 diagnosis and park it" rather than a consolation microfix.
+
+---
+
+# 2026-09-06, frankD: the reachability zero re-measured at HEAD, with the control in the same build
+
+Re-ran the 2026-09-04 sweep at `62448f1b0` because a verification claim scopes to
+the tree it was taken on, and `5f177b181` (soft keywords) had landed since.
+
+**One instrument carrying both the control and the measurement**, so a zero
+cannot be a dead probe. Two lines, one build, either side of the dispatch at
+`pasparser_expr.inc:605`:
+
+```pascal
+  if NilPyUserCode then WriteLn('PROBE-ABOVE');
+  if PyExprMode then begin PyParseFactorCore; Exit; end;
+  if NilPyUserCode then WriteLn('PROBE-BELOW');
+```
+
+Over every `.npy` program in `test/`:
+
+```
+programs=827   above_total=96762   below_total=0
+```
+
+`NilPyUserCode` is true **96,762 times** above the dispatch and **never once**
+below it. A separate control build would have left exactly the gap that matters
+open; here the same binary proves the predicate can be true and the probe can
+print.
+
+## Why this is a proof and not only a census
+
+`NilPyUserCode` is `isNilPy and ((CurrentUnitIdx < 0) or PyExprMode)`
+(`symtab.inc:25`). The dispatch Exits whenever `PyExprMode`, so below it the
+predicate reduces to `isNilPy and (CurrentUnitIdx < 0)` — a NilPy compile whose
+MAIN PROGRAM is being parsed as Pascal. `isNilPy` is set from the root file's
+extension alone (`compiler.pas:1970`, `.npy`/`.py`), so a `.npy` cannot produce
+it. The corpus agrees with the argument rather than substituting for it.
+
+## The arms, counted as arms
+
+The `17 / 11` above counts diagnostic SITES. What a deletion removes is ARMS,
+and there are **14 guarded by `NilPyUserCode`** — every one a top-level
+`if`/`else if` with the predicate as its leading conjunct, read individually
+rather than inferred:
+
+`__file__` 1974 · `len` 2114 · 2276 · `int` 2339 · `exec` 2733 · `eval` 2780 ·
+`open` 2876 · `float` 2960 · `map` 3009 · `filter` 3086 · `next` 3123 ·
+`str` 3209 · `round` 3387 · `divmod` 6411
+
+...and **4 guarded by plain `isNilPy`** (2473, 3372, 3442, 3492), which is TRUE
+while the Pascal RTL is parsed. Those stay: their zero is empirical only, and
+deleting code you believe is dead is still wrong.
+
+A first pass at this classification used nearest-preceding-guard within 400
+lines and disagreed with the recorded count. It turned out to be right, but only
+reading all eighteen guard lines established that — **a heuristic that happens to
+agree is not an instrument**, and the deletion must not rest on one.
+
+## Still to do
+
+Delete the 14, one at a time with a build between each (they sit in an `else if`
+chain; two — 3387 and 6411 — are nested rather than standalone and need reading
+individually). `tools/npy_differential.sh` shape: capture compile+run output for
+all 827 before and after and require byte-identity, **with a positive control
+that deletes a LIVE arm and must differ** — "output identical" is also what
+deleting nothing produces.
