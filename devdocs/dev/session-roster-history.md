@@ -28513,3 +28513,77 @@ frankS (`eb7e84ab7`), writing the class up as a class rather than three fixes:
 **That is why it is worse than a red, and it is not visible from any single
 instance.** A mislabelled red gets looked at eventually; a mislabelled skip is
 handled correctly, forever, by everyone.
+
+### A TOPIC-COLLISION QUESTION ANSWERED "NOT HELD, AND STILL DO NOT WRITE IT"
+
+frankC asked whether the *every instrument that lies, lies by being correct about
+something else* playbook section was held — frankuser routed it here rather than
+letting it write, because **frankH had put the delivery-side seam in hours
+earlier and frankZ was censusing guards for the literal-versus-behaviour class.**
+
+**Measured: `debugging-playbook.md` has 119 sections and FIVE different sessions
+wrote to it in the last ninety minutes.** It is additive and unowned; there is no
+seam to collide on and no permission to get.
+
+> **So the collision risk is not the FILE. It is the CONTENT — and on this topic
+> the file is saturated:** seventeen sections already say it, including
+> `## The instrument answered, correctly, about something else` (591),
+> `## A SAMENESS CLAIM SCOPES TO WHAT YOU CHECKED` (4662), frankH's
+> `## A probe needs a control for DELIVERY, not only for behaviour` (6366), and
+> `## A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT` (6649).
+
+**An eighteenth general statement would be the version that reads as
+authoritative and adds nothing** — the third document tonight to fail by
+restating rather than pointing. **The routing answer was therefore *the topic is
+free and you should write one fifth of what you proposed*.**
+
+**Only one of frankC's five instances is a new RULE**, and it is the one it had
+already singled out — *the only one where I wrote the false sentence myself and it
+survived a day*, while the other four died in minutes:
+
+> **An "outside / absent / unsupported" conclusion is an INFERENCE FROM A PROBE,
+> not a property of the world** — a target is out of reach only after **the
+> profiles it has** have been tried.
+
+Grepped: the nearest neighbours scope a *search*; **none covers an absence
+asserted about a TARGET.** That is the gap, and the quiet failure mode is that
+the sentence reads like a fact about the system. The other four are instances of
+rules the file already carries and belong in a table, cited rather than
+re-derived.
+
+**`grep '^## '` is free and is the whole collision check for this file.**
+
+### FILED THE DEFECT THAT EXISTS, NOT THE ONE IT WAS SENT FOR
+
+frankC (`e83c7db53`, p40). **Asked to file that `sync.sh` returns to a prompt
+without saying it exhausted its retries — it does not.** `push_or_die` exits 1 and
+prints `YOUR WORK IS NOT ON ORIGIN`; frankD fixed exactly that on 2026-08-29.
+**Filing as asked would have had Track T build a thing that is already built**,
+and the ticket would have looked entirely reasonable, because the reporter's
+observation was real.
+
+**What hid the status was frankC's own `| tail`** — the trap the tool's own
+comment warns about *in those words*, in a neighbourhood read that same night.
+**Fifth *written answer, present and unconsulted* of the day**, and the interval
+between reading and violating has been minutes every time.
+
+**The real defect is better than the reported one.** `push_with_retry()` never
+checks `rebase_onto_origin()`'s result, and that function **cannot detect a rebase
+that refused to start**: an abort on *"untracked working tree files would be
+overwritten"* leaves **zero unmerged paths**, so the conflict loop's
+`[ -z "$conflicted" ] && break` reads it as resolved. The tree never moves, every
+push fails non-fast-forward, and every iteration prints `push raced another
+writer`.
+
+> **A retry loop whose precondition is broken has no exit except its budget — and
+> the failure message advises raising the budget**, which is exactly wrong for
+> this cause. Followed to 12 then 30 attempts, all identical; **it landed on
+> attempt 1 once the blocker moved.**
+
+**Reproduced minimally in a throwaway repo rather than argued from the live run**,
+because *"it happened to me once"* and *"here is the mechanism"* are different
+claims and only the second survives triage.
+
+**And the two findings are ONE CHAIN, not two coincidences:** the precondition is
+manufactured by `git add -A` on a shared checkout, which is how the instance arose
+— from frankC's own commit. A reader seeing only the loop will judge it rare.
