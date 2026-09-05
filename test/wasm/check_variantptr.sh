@@ -61,7 +61,16 @@ echo "ok  every routine in the slice lowered"
 # string pulls in the full WASI surface (fd_prestat_get, path_open, ...) and
 # the shim provides two calls. The shim would fail at INSTANTIATION with a
 # LinkError, which is loud, but it fails before running a single row.
-node --no-warnings "$here/wasihost.js" "$work/v.wasm" > "$work/wasm.txt"
+# NOT fatal, deliberately, and this is the one place in the suite where that is
+# right: the LIVE-destination row makes the module TRAP ("variant holds an
+# unknown tag") rather than answer wrongly. Under a bare `set -e` the script
+# would die here with a bare rc and never reach a single named assertion, so
+# the reader would learn that something failed and nothing about which shape.
+# Keep whatever was written before the trap and let the diff below name it.
+if ! node --no-warnings "$here/wasihost.js" "$work/v.wasm" > "$work/wasm.txt" 2>"$work/err.txt"; then
+  echo "note the module TRAPPED partway through — output kept, rows named below:"
+  sed 's/^/      /' "$work/err.txt"
+fi
 [ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") lines)"

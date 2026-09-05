@@ -3,8 +3,8 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
-summary: "DIAGNOSED 2026-09-06, not fixed, no compiler change held -- and the REPRO IN THIS TICKET POINTS AT THE WRONG FEATURE. It is not the `while` loop and not the yield: a NilPy generator that READS A PARAMETER yields None on wasm32, with no control flow needed -- `def g(n): yield n` / `for x in g(7)` gives 7 native, None wasm32. Declaring a parameter and never reading it is FINE; multiple yields, and a loop in a generator that takes no parameter, are both fine. `def g(n): i = n + 1; yield i` yields 1, i.e. the parameter reads as ZERO. The discriminator that says where NOT to look: a PASCAL `generator; stackless;` with an Integer parameter, the same program shape, WORKS on wasm32 -- so the slgen transform, the one-word slot path and the $pc dispatch are all fine, and what differs is how a NilPy parameter is REPRESENTED. bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate is NOT this bug: adding that guard fixed nothing and REGRESSED two passing rows (tested, then reverted). Pre-existing on pinned. Full shape battery and next steps in the diagnosis section at the bottom."
+status: done
+summary: "FIXED 2026-09-06. Root cause was NOT in the generator machinery, the slgen transform or NilPy at all: a Variant stored THROUGH A POINTER did not reach the pointee on wasm32. A cell-promoted generator parameter gets a 16-byte pycell_new cell and the caller seeds it with `cell^ := arg` -- exactly that shape -- so the cell stayed pristine (tag 0) and every such parameter read None. WasmVariantAddr dispatched on IRKind = IR_LOAD_SYM alone, which is two questions in one opcode: a VARIANT symbol's address is its slot, a POINTER symbol's address is the slot's VALUE. Fixed by testing the symbol type. Both repros in this ticket now agree with native. Regression test test/wasm/check_variantptr.sh, wired into check_all.sh, with the pre-fix compiler as the positive control."
 ---
 
 # A NilPy generator fails on wasm32 while three other targets agree
@@ -238,3 +238,64 @@ The earlier section's "look at `AssignStacklessSlots`'s multi-word arms" is
 arms. The `SymCellPtr` line it flagged as *"unmeasured, and it should be the
 first thing checked"* was the right instinct, and the answer is yes — it is
 cell-promoted, and that is why it has no slot.
+
+
+## RESOLVED 2026-09-06 — the cause was a pointer store, not a generator
+
+The narrowing that got there, each row measured on both targets:
+
+| shape | native | wasm32 (before) |
+| --- | --- | --- |
+| `def g(n): yield n` | 9 | **None** |
+| `def g(n): yield 1; yield n` | 1 9 | 1 **None** |
+| `def g(n): yield n; n = 5; yield n; n = n+1; yield n` | 9 5 6 | **None** 5 6 |
+| `def g(n): n = 5; yield n; yield n` | 5 5 | 5 5 |
+| `def g(a,b): a = 7; yield 0; b = 8; yield a; yield b` | 0 7 8 | 0 7 8 |
+| `def g(a,b): a = 7; yield 0; yield b` | 0 2 | 0 **None** |
+
+Row 3 is the one that carries the weight: the initial read is empty, then a
+write lands and SURVIVES two further yields including a read-modify-write. So
+the cell, the resume, the yield and the state machine were all correct on
+wasm32 and only the INITIALISATION of the cell from the argument was missing.
+
+Row 5 kills the null-pointer reading: two parameters do not alias, so each cell
+is distinct and valid, and every value there crosses a yield so no fold can
+explain it. Row 6 is the sharpest — within ONE generator, one cell is correct
+and the other empty, differing only by whether the body ever wrote to it. A
+never-written cell reading `None` rather than aliasing means a FRESH cell, and
+`pycell_new` zeroes `VType`, which is exactly what `None` is.
+
+**The IR was structurally identical on both targets** (caller and callee both
+diffed; every difference was symbol/proc renumbering), which is what moved the
+search into the wasm backend.
+
+Root cause and fix: `WasmVariantAddr` in `compiler/ir_codegen_wasm32.inc`
+dispatched on `IRKind = IR_LOAD_SYM` alone. That opcode covers a load of a
+VARIANT symbol, whose address is its slot, and a load of a POINTER symbol,
+whose address is the slot's VALUE; it answered the first for both. Measured
+bytes for `pv^ := 42` into a variant holding 0:
+
+```
+native  1 0 0 0 0 0 0 0 | 42 0 0 0 0 0 0 0    tag=1, payload=42
+wasm32 42 0 0 0 0 0 0 0 |  0 0 0 0 0 0 0 0    tag=42, payload=0
+```
+
+Minimal repro, no NilPy and no generator: `p: ^Variant; New(p); p^ := 42;`
+answers 42 native and 0 on wasm32.
+
+**Two earlier hypotheses in this ticket are now positively retired, not merely
+unconfirmed.** The `while` loop was never involved. And
+`bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate`
+is confirmed a separate defect — adding that guard fixed nothing here and
+regressed two passing rows.
+
+**What the diagnosis got wrong, recorded because the shape recurs:** this
+ticket's earlier `storeoff=48 / realoff=40` reading was a true measurement of
+`a.slslot` and a false lead. `realoff=40` is the probe computing `48 + 8*(-1)`
+for a symbol with `symgenslot=-1`, i.e. a nonsense address reported honestly.
+It looked like a caller/callee offset disagreement and there was none: the
+generator prologue reads offset 48, the caller writes offset 48, and the IR
+agrees on both targets.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
