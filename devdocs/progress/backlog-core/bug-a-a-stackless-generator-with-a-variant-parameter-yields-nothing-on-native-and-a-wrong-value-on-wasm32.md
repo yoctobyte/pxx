@@ -83,3 +83,46 @@ Variant to the right offset and still write half of it.
 Still only x86-64 native and wasm32. The ticket's own note that 32-bit targets
 are the interesting ones stands, and Defect 1 makes that sharper — `8*(k-1)`
 is a hardcoded 8 on every target, while `TypeSlotSize` is not.
+
+## 2026-09-06 (frankS, later) — the two symptoms are NOT the two defects, and both occur on native
+
+A tempting mapping is going around: *native's zero iterations is Defect 1, wasm32's
+`got=0` is Defect 2.* **It does not hold, and acting on it would misroute the fix.**
+
+**Both symptoms occur on native, from one binary.** All four programs below yield
+the CONSTANT 9, so the parameter list is the only variable and nothing depends on
+reading a parameter:
+
+| parameters | native result |
+| --- | --- |
+| `c: Variant` | **no iterations** |
+| `c: Variant; a: Integer` | **no iterations** |
+| `a: Integer; c: Variant` | `got=9` — correct |
+| `a: Integer` | `got=9` — correct |
+
+**Zero iterations happens exactly when the FIRST parameter is a Variant.** It is
+not about targets and not about how many parameters there are.
+
+Separately, and independently: with a Variant anywhere in the list, the OTHER
+parameters read 0 while iteration still works — `Gen(a: Integer; c: Variant)`
+yielding the constant prints `9`, and the same signature yielding `a` prints `0`.
+
+**And Defect 1 does not apply to this ticket's own headline repro.** For
+`Gen(n: Variant): Variant`, `PXXDBG=a.slslot` prints
+`arg1: storeoff=48 ... realoff=48` — the two spellings AGREE, because a single
+leading parameter is at argument index 0 and slot index 0 whichever way you
+compute it. Defect 1 needs a parameter AFTER a Variant to diverge. So the
+headline repro is Defect 2 plus the open mechanism, and **fixing Defect 1 would
+not change it at all.**
+
+That matters for anyone reading the wasm32/native asymmetry as diagnostic: the
+asymmetry is real and worth explaining, but it is a THIRD thing, not a view of
+the two defects. Same source, same parameter list, two targets, two symptoms —
+while native alone already produces both symptoms from different parameter lists.
+
+**Sharpest statement of the open mechanism**, replacing the looser one above:
+*with a Variant anywhere in the parameter list, the caller's slot stores for the
+NON-Variant parameters do not take effect* — the offsets are provably correct
+and the restore provably reads them, so the stores are the remaining suspect.
+And when the Variant is FIRST, the generator additionally reports has-next False
+on its first call, which no wrong parameter value should be able to cause.
