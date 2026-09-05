@@ -28141,3 +28141,90 @@ actually fail; the value rows pass either way.
 P-lane fixes, so the 1550/0 corpus figure **describes the pre-rebase tree** and
 the commit message says so. **Not re-running an hour-long sweep to re-confirm a
 code move, said plainly rather than letting the number look current.**
+
+### THE GTK CONDITIONAL IS CLOSED — GREEN ON SEVEN, POST-FLIP
+
+`7fb6ca6d51cf` contains `a409e19b5` (`merge-base --is-ancestor`), `testmgr:
+GREEN`, `twatch: GREEN`, **no gtk job red.** That is the independent
+corroboration seven declined to claim an hour earlier: frankC's green stood on
+frankC's box, seven's now stands on seven's. **Two hosts, two runs, and the
+scoping was stated before the second one existed rather than after.**
+
+### THE ADDRESS/VALUE RULE HAS NO TERMINAL FORM — four failures, two rows, one day
+
+seven's manifest rows went wrong **four times in under a day**, and the fourth is
+the one that generalises: the citation `pasparser_proc.inc:3428` **moved by
+eleven lines in the same commit that flipped N**, so *the address went stale in
+the exact commit that made reading it matter.* Fixed by pattern (`2e60e04c1`).
+
+> **Whether a thing is an ADDRESS or a VALUE is not a property of the thing — it
+> is a property of what is allowed to MOVE.** A package name in prose is a value
+> under a resolver change; a line number is an address of a construct and a value
+> under any edit above it; a grep pattern is an address and a value under a
+> rename. **There is no final version — only one robust against the movements
+> that actually happen in THIS file.**
+
+Here that is edits (constant), not renames of `ConcatThree` (never). **So the
+rule does not terminate; it asks *what moves here?* and is answered per
+document.** Three of seven's four failures were three different answers to that
+question, each correct against the previous movement and blind to the next.
+
+Written up in `debugging-playbook.md` with the four-row table, the derivation
+form (`_USES_FALLBACK_RE`, which had settled it before any of the four), and the
+note that **a stale path in a GUARD is worse than in prose** — prose misleads a
+reader who may notice; a guard probing a path nothing uses **asserts a pass on
+every job forever.**
+
+**Fourth *written answer, present and unconsulted* of the night, and the worst:**
+its author had **read `_USES_FALLBACK_RE` two messages earlier**, quoted its
+comment approvingly *while checking for exactly this hazard*, and then wrote a
+line number into its own file. **Reading the better implementation is not
+adopting it.**
+
+### A RULE SPELLED PER CALLER FAILS BY A MISSING COPY, NOT A DIVERGENT ONE
+
+frankB, Track P group 3 (`9c63d5a8b`, `628669546`) — 2 closed, 1 filed, and the
+prerequisite is the finding. `array[..] of Char = 'ABCD'` could not be fixed on
+its own: **the const declaration path was the one of THREE that never merged a
+named array element's dimensions**, so `const a: array[1..3] of T` reported
+SizeOf 12 for a 9-byte object at HEAD, silently, with a wrong-strided store.
+*There is no row to fill if the compiler does not know the row is three chars
+wide.*
+
+> **Reading the three copies against each other cannot find it — they AGREE. Only
+> the caller that isn't there is wrong.**
+
+That is the omission class arriving inside the duplication class, and it inverts
+the usual advice: *grep for the sibling* finds a divergent copy and is blind to an
+absent one. **The instrument for a missing caller is the callee's own contract,
+not a diff of its callers.**
+
+**And the silent half of a reported refusal was worth more than the refusal.**
+frankZ had filed *"a row of an N-D char array is a string"* at prio 25 with
+*"nothing measured wants this; it is here so the exculpation has an owner"* —
+true of the shape REPORTED, which is the **store**, and the store fails loudly.
+**The LOAD direction had never been probed: `s := a[1]` compiled, exited 0, and
+assigned ONE character where fpc assigns the row.** A wrong value in real
+compiling code, under a prio saying nobody wants it.
+
+> **The refusal is what got reported because a refusal is what you can SEE.**
+
+Found by the oracle, not the author — a test row for the previous cluster printed
+`[adg]` where fpc printed `[abcdefghi]`. Same asymmetry the parent ticket had
+already found between five refused lvalue shapes and one silently-unchecked one,
+so it is **recurring in this file rather than a one-off.**
+
+**Stopped on purpose at the deref base.** `q^[1]` over `^array[0..2,0..5] of Char`
+loads three characters of six through the same arm while `q^[0]` loads all six
+and the store is byte-identical to fpc; at HEAD both loaded ONE. **Admitting the
+deref would have traded a wrong answer for a MORE PLAUSIBLE wrong answer, which
+is the harder one to notice.** The arm excludes it, keeps HEAD's behaviour, and
+the count 3 is the OUTER span — which points at the dimension table rather than
+at the predicate. A diagnosis banked and parked, not a microfix skipped.
+
+**Sixth instance of frankS's denominator, in a new instrument.** fpc pads a short
+char-array initialiser with `#0`, not spaces, and **a terminal renders `[AB\0\0]`
+exactly like `[AB  ]`** — the first oracle read said spaces and pxx was written to
+match it. `cat -A` on the raw bytes separated them; both tests are now `diff -u`
+of output rather than greps. **The rendering was the instrument, and it was
+lossy in the one direction that mattered.**

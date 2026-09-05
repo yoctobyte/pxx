@@ -4687,6 +4687,72 @@ were N causes** — and look for that, rather than for what they share. A shared
 NAME is the weakest possible evidence of a shared cause, and it is the evidence
 that generates the merge.
 
+## CITE THE ADDRESS, NOT THE VALUE — and the rule HAS NO TERMINAL FORM, because what counts as an address depends on what is allowed to move
+
+A document that restates another file's current answer is a time bomb whose fuse
+is set by a lane you are not in. Measured 2026-09-05/06 on **two rows of one
+provisioning manifest, which went wrong FOUR times in under a day, each fix
+correct against the previous movement and blind to the next**:
+
+| # | what the rows said | what moved | why it broke |
+| --- | --- | --- | --- |
+| 1 | the two gtk dev packages, **attributed backwards** | — | the attribution was guessed from two install timestamps, which cannot say which package did the work |
+| 2 | the correct attribution, in prose | `pasparser_proc.inc`'s gtk root | a compiler lane flipped the literal; the prose was right for ~12 hours |
+| 3 | *"as of 2026-09-05 that N is 2"* + *"pending implementation"* | the same flip | **the rule's own violation shipped in the same commit as the rule**, and outlived the value it recorded by four hours |
+| 4 | `pasparser_proc.inc:3428` — an address, not a value | **the line number**, by 11 lines, **in the same commit that flipped N** | the citation went stale in the exact commit that made reading it matter |
+
+**There is no final version, and that is the finding.** Whether a thing is an
+ADDRESS or a VALUE is not a property of the thing — it is a property of **what is
+allowed to move**:
+
+- a **package name in prose** — an address of nothing; a value under any resolver change.
+- a **line number** — the address of a construct, and a value under *any edit above it*.
+- a **grep pattern** — the address of the construct, and a value under a *rename* of the thing matched.
+
+**So the rule does not terminate. It asks *what moves HERE?* and you answer it
+per document.** In `pasparser_proc.inc` the movement that actually happens is
+**edits** — constant — and not renames of `ConcatThree`, which have never
+happened. Hence the fix that finally held:
+
+```sh
+grep -n "ConcatThree.*usr/include/gtk" compiler/pasparser_proc.inc
+```
+
+**A line number is the most seductive wrong answer** because it *feels* like an
+address. This repo has the same failure at another scale: three `Makefile:<n>`
+citations were all correct when written and one had drifted **142 lines** by that
+evening, to `fi; \` — a real line that explains nothing. **A stale line number
+does not error; it points somewhere.**
+
+**The best form is not a citation at all — it is a derivation.** `tools/testmgr.py`
+had already settled this before any of the four: `_USES_FALLBACK_RE` regexes the
+`ConcatThree` call out of the compiler source at runtime and stores only package
+NAMES, so the active root is never restated. Its own comment is the rule in its
+strongest form:
+
+> **THE PATHS ARE DERIVED FROM THE COMPILER, NEVER RESTATED … a guard probing a
+> path nothing uses passes every job forever.**
+
+Note that last clause — **the failure mode of a stale path in a GUARD is worse
+than in prose.** Prose misleads a reader who may notice; a guard probing a path
+nothing uses **asserts a pass on every job, indefinitely, on a healthy box**, and
+nothing about it looks wrong. Worse than a silent skip, which at least declines
+to claim.
+
+**And when the value genuinely must appear, remove it rather than update it.**
+Updating restarts the clock and re-arms the same bomb; the reader who would have
+gone to the source now has a reason not to. Where a requirement is stable under
+the movement, **state the requirement instead of the attribution** — the manifest
+that finally held lists *both* gtk dev packages unconditionally, because
+**the ATTRIBUTION moves and the REQUIREMENT does not.**
+
+**Reading the better implementation is not adopting it.** The author of the four
+failures above had read `_USES_FALLBACK_RE`, quoted its comment approvingly two
+messages earlier while checking for exactly this hazard, **and then wrote a line
+number into its own file afterwards.** A written rule fires only when someone
+chooses to consult it, which is precisely the moment they believe they need not.
+
+
 ## FAILURE DEPTH IS EVIDENCE ABOUT WHAT WAS PRESENT — a later line number proves the earlier dependency resolved
 
 The instrument that separated those four batches, and it costs nothing:
