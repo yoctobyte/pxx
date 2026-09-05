@@ -5534,6 +5534,30 @@ begin
           arm the fifth had -- not by anyone hitting it.
           bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
         FoldDerefArrayLowBound(sub, ndIsND, ndFlat);
+        { THE `^` ARM'S OWN GUARD, ONE ARM OVER. `elemTk`/`elemRec` and the
+          remDepth triple are the CALL's constants, captured once before the
+          loop. They are right for `f()^[i]`, which really does index the
+          returned pointer, and wrong the moment the walk has moved onto a
+          FIELD, whose element is its own: `GetP(raw)^.arr[1] := 44` was refused
+          with `incompatible types: cannot assign Integer to record`, because
+          the store's target had been re-stamped with the record the call points
+          AT. The same store through every other opener is accepted, and so is
+          the READ of the identical chain -- which is what says this is the arm
+          and not the shape.
+
+          The `^` arm three screens up took exactly this fix (`if movedOffCall
+          then ... ResolveDerefShape ... Continue`) when the escape census found
+          it. The two arms sit in one loop and only one of them got it: fixing
+          one arm of a double case and not grepping for the sibling, in the
+          routine whose ticket is about that habit. Found by an opener x chain
+          differential rather than by a report -- 45 rows, 5 openers, one red.
+          refactor-p-three-hand-rolled-postfix-loops }
+        if movedOffCall then
+        begin
+          ASTTk[sub] := StrValTk(tk);
+          node := sub;
+          Continue;
+        end;
         tk := IntToTypeKind(elemTk); recId := elemRec;
         { `f()[i]` spends a level exactly as `f()^` does -- indexing a `^PChar`
           result yields a PChar, not another `^PChar`. }

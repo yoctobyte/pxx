@@ -14099,6 +14099,15 @@ test-core: $(COMPILER)
 	# are different fields on purpose: with one field every row passes.
 	./$(COMPILER) test/test_indexed_property_over_a_field_is_one_answer.pas $(TESTTMP)/test_idxprop_fld26
 	tools/expect_same.sh test_idxprop_fld26 "$$($(TESTTMP)/test_idxprop_fld26)" "$$(cat test/test_indexed_property_over_a_field_is_one_answer.expected)"
+	# A CALL RESULT walked onto a field and then INDEXED, as a store. The `^`
+	# arm of ApplyCallResultPtrSuffix took a movedOffCall guard when the escape
+	# census found it; the `[` arm three screens down the same loop did not, so
+	# `GetP(raw)^.arr[1] := 44` was refused with `cannot assign Integer to
+	# record` while the READ of the same chain was right and every other opener
+	# accepted the store. Each row is run through the call AND through a plain
+	# pointer variable, so a chain that is wrong for everyone cannot pass.
+	./$(COMPILER) test/test_call_result_suffix_after_a_field.pas $(TESTTMP)/test_callsuffix26
+	tools/expect_same.sh test_callsuffix26 "$$($(TESTTMP)/test_callsuffix26)" "$$(cat test/test_call_result_suffix_after_a_field.expected)"
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
 	# parser, and only the RECORD one skipped a `packed` before `array`, so
 	# fcl-fpcunit's own spelling compiled as a record field and was

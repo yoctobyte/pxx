@@ -460,3 +460,71 @@ census structurally CANNOT see: the stmt alias-cast loop CALLED
 which routines a loop calls scores that loop as having the arm. So "all five now
 reach every escape" is a weaker statement than it sounds, and it is not evidence
 that the loops agree.
+
+---
+
+## 2026-09-05 (frankA) — the census's own caveat, spent: an OPENER x CHAIN differential, 46 rows, one red
+
+The 2026-09-05 summary says the escape census *"cannot see a loop that CALLS an
+escape and discards its answer"*, and that is exactly what was left. A census of
+which shared routines each loop REACHES is a census of call sites; it cannot
+see what happens to the answer. So this pass varied the other axis: run the same
+CHAIN through every OPENER and compare against fpc 3.2.2.
+
+**Five openers x five chains, read and write.** Openers: a plain record
+variable, a pointer variable, `PRec(raw)^` (the alias cast), `TRec(raw)^` (the
+record-name cast), `GetP(raw)^` (the call result). Chains: `.a`, `.pi^`,
+`.arr[1]`, `.n^.a`, `.o.Twice`. The two variable openers are the control: a
+chain that is simply wrong for everyone shows up as a whole COLUMN, not as a
+cell.
+
+```
+agree=36  DIFFER=1(the injected control)  PXX-REFUSES=1  pxx-only=9  total=46
+```
+
+**The harness carries a must-differ row of its own** — one tag is handed
+DIFFERENT source to each compiler, so a harness that cannot report DIFFER is
+caught by its own output instead of by trusting a clean sweep. It fires. The 36
+is therefore a measured zero and not a vacuous one.
+
+### The one red
+
+```
+GetP(raw)^.arr[1] := 44     ->  incompatible types: cannot assign Integer to record
+```
+
+The READ of the identical chain was correct, and the same store through all
+four other openers was accepted; fpc accepts it too.
+
+**It is the `^` arm's own fix, one arm over.** `ApplyCallResultPtrSuffix`
+captures the CALL's pointee once before the loop. The `^` arm learnt that this
+is only right while the walk is still on the call — that is the `movedOffCall`
+guard added when the escape census found `GetP^.pi^ := 9` refused with the
+IDENTICAL message — and the `[` arm, three screens down the same loop, kept
+re-stamping `tk`/`recId` from the call's constants. One arm of a double case
+fixed and the sibling not grepped for, **inside the routine whose own ticket is
+about that habit** (`devdocs/dev/normalise-dont-special-case.md`: *"Fixed one
+arm of a double case? Grep for the sibling before closing."*).
+
+Fixed with the same guard. `test/test_call_result_suffix_after_a_field.pas`
+pins it, every row run through the call AND through a pointer variable.
+Negative control: the pre-fix compiler (`5ec14c826891`) refuses two rows.
+
+### The nine rows with no oracle, and why they are a RESULT
+
+`TRec(raw)^...` — a record-name cast of a raw pointer — is refused by fpc in all
+nine spellings, so pxx accepting it is not a defect and there is nothing to
+differ from. **What the column DOES say is that all nine values equal the
+control's**: `11 / 77 / 33 / 5 / 18` reading and `42 / 43 / 44 / 45` writing,
+identical to the plain-variable opener. The record-name cast loop is internally
+consistent with the other four, which is the strongest thing that column can
+say and is worth more than a missing oracle row.
+
+### What is left
+
+The count is unchanged: five in Pascal, two in NilPy. With this red closed the
+five agree on every shape the differential can express, so **the unification now
+has no defect backlog under it and a 46-row before/after instrument above it.**
+The generator is small enough to rebuild from the opener and chain lists here;
+it lives in ticket history rather than `test/` because it is a before/after
+instrument, and the one row that became permanent is in `test/`.
