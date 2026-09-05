@@ -235,3 +235,37 @@ Regression cover: `test/test_generic_impl_template_is_private_{ok,fail}.pas` wit
 for the specific message so it cannot pass on an unrelated refusal, and the
 positive row asserts `42 5` — the cross-unit case AND the declaring unit's own
 use — so applying the rule to the six internal scans by mistake would fail it.
+
+## 2026-09-06 (frankS) — the accessor checked against frankD's rank-sentinel trap: NOT exposed
+
+frankD hit a trap while fixing the nested-pointer bug and warned that it might
+sit near this change: it added a scope bonus to `UsesRankOf`, which returns
+`2147483647` for a row in the CURRENT unit — a sentinel, not a count — so the sum
+overflowed and ranked the nested alias last of everything. Checked here rather
+than assumed.
+
+**`FindNameableTemplate` is not exposed.** It does no rank arithmetic and never
+calls `UsesRankOf` (zero occurrences in `pasparser_generic.inc`); selection is a
+comparison on arity, not a sum.
+
+**But it takes ARRAY ORDER, and that deserved its own measurement**, because
+"whichever registered later wins" is the same coin-flip shape this ticket just
+removed, one level over. Two units exporting an interface template of the same
+name, against fpc 3.2.2:
+
+| program | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `uses da, db` → names `TDup` | `got B` | `got B` |
+| `uses db, da` → names `TDup` | `got A` | `got A` |
+| `uses dc(→da), db` (transitive) | `B`, and `Touch` = 3 | same |
+| `uses db, dc(→da)` (transitive) | **refused**, `"A": no such member` | **refused** |
+
+Matches on all four **including the refusal**, which is the row that makes it a
+measurement rather than a coincidence of two green columns.
+
+So array order tracks uses order today and the later unit correctly hides the
+earlier, per FPC's rule. **That is an observed coincidence, not a guarantee the
+code states** — registration order happens to equal parse order happens to equal
+uses order. Recorded so whoever next changes template lookup knows what the
+behaviour was measured to be, rather than having to re-derive it or assume the
+ordering is load-bearing by design.

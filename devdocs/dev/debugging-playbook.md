@@ -4709,6 +4709,91 @@ one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
 Boundaries are where these live — check the smallest and the largest case, not a
 comfortable middle.
 
+### 2026-09-05/06: the rule has a DISCRIMINATOR, and a structural form that beats both
+
+Four instances arrived within a day, across three subsystems, and they refined
+the rule twice.
+
+**First refinement — inert-on-forget is sometimes RIGHT, and the discriminator is
+not the encoding.** `AliasEnumId` in `symtab.inc` deliberately stores *id + 1*,
+which reads like a violation of this section and is not: "not an enum alias" is
+the legitimate COMMON case there, so a caller that says nothing must be INERT.
+An owning-class column on the same table is the opposite population — a
+`Register*Alias` site that says nothing about its owner is a **bug**, not a
+silent majority — so it takes `-1` and loud. frankB's formulation, and it is the
+part to carry:
+
+> **If a caller saying nothing is a bug, be loud. If most callers legitimately
+> have nothing to say, bias the encoding so forgetting is inert.** Cite the
+> DISCRIMINATOR, never the precedent — the two prescriptions are opposite and
+> the encoding alone cannot tell you which you are in.
+
+Getting it backwards here would have produced a table reading *"owned by class
+0"* forever, **and class 0 is real.**
+
+**This is not a convention in this tree; it is a measured incident, in the same
+file.** `ResetDeclScopeSentinels`'s own header records what a `0` default already
+cost: the scope lives in BSS where the default is 0, which is a **valid UCls
+index — class 0 is `TGuid`**. A frontend that never ran the reset read as *"we
+are inside TGuid's body"*, `AddClassLikeType` registers a class-like type as
+nested in `ParsingClassBodyCi` whenever it is `>= 0`, and so **every top-level
+class in every imported unit became a nested type of TGuid** — silently, with a
+NilPy program binding `Text` to a class instead of the file record and still
+compiling. Cite that when someone argues a zero default is harmless.
+
+**Second refinement — the structural form, which removes the choice.** frankD's
+fix (`c01eb17a8`) makes `AliasCommit` stamp the owner column and do
+`Inc(AliasCount)` **as one operation**. A new `Register*Alias` that forgets to
+call it gets **no row at all** rather than an unstamped globally-visible one. So
+forgetting fails loudly *without* relying on anyone having picked the right
+sentinel. Where you can fuse the stamp with the row's creation, do that instead
+of choosing a marker — it is the same inversion as putting a visibility
+predicate behind an accessor rather than at six call sites, and it matters for
+the same reason: **the bug being fixed was a rule spelled per site failing by a
+missing copy.**
+
+**The family, so the shape is recognisable in a new costume.** All four are one
+animal — *the unset value collides with a legal value, so the guard cannot fail*
+— and each was found separately because each wore different clothes:
+
+| the unset / expected value | collides with | cost |
+| --- | --- | --- |
+| scope default `0` (BSS) | class 0 = `TGuid`, a real class | every imported class nested under TGuid; `Text` bound to a class |
+| owning class as `id + 1` | class 0 again, via the +1 | a table reading "owned by class 0" forever |
+| `f_same`: both pointees `Integer` | the correct pointee type | probe passes; wrong and right answers are one value |
+| `TypeStorageSize(tyUnknown)` = 4 | `sizeof(int)` = 4 | "nothing was recorded" reads as a correct size |
+
+And a fifth costume, which is the one to watch for because it is arithmetic
+rather than a marker: **`UsesRankOf` returns `2147483647` for a row in the
+current unit — a sentinel, not a count.** frankD added a scope bonus to it and
+the value overflowed, ranking the nested alias *last of everything*
+(`owner=-1 r=2147483647` against `owner=7 r=-2146483649`). **Nothing can be
+"larger than any rank" when the top of the range is already the sentinel.** The
+fix is two ordered keys, not a bigger number. Before adding anything to a rank,
+ask what that function returns for the trivial case.
+
+**Two negative results, recorded so nobody re-derives them.**
+
+frankD tried REBINDING — correcting the alias row once the nested type is finally
+knowable — and it converts a refusal into a **silent wrong value**: the field has
+already captured the stale pointee, so it compiles and prints `4265304` for a
+string. It built and passed three probes before the output was noticed to be
+garbage rather than absent. **A fixup pass that runs after consumers have read
+the thing it fixes is worse than the bug**, because it moves the failure from the
+diagnosable class to the undiagnosable one.
+
+And the template accessor added the same day was checked against this and is
+**not** exposed: `FindNameableTemplate` does no rank arithmetic and never calls
+`UsesRankOf`. It selects by array order, which was then measured against fpc
+3.2.2 on four probes — two units exporting the same interface template name in
+both uses orders, and the transitive case where parse order and uses order can
+diverge — and pxx matches fpc on all four **including the refusal**. Array order
+happens to track uses order here. That is a coincidence worth knowing about
+rather than a guarantee worth relying on, and it is written down so the next
+person changing template lookup knows what the current behaviour was measured to
+be.
+
+
 ## Reaching for the instrument is necessary and not sufficient — the FORMATTER is part of its aperture
 
 The section above is about choosing a sentinel the *program* cannot mistake for
