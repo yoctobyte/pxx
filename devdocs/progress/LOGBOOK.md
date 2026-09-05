@@ -1453,3 +1453,50 @@ the more honest record.
 - 2026-09-05 | frankC | devdocs/progress/backlog-cfront/bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error.md | Ran the census the ticket asks for as its first task: 10 `used as value` warnings across conformance 220, lua, the sqlite amalgamation, the 4 uapi header tests and 621 further C test files — ALL TEN deliberate fixtures, zero real gaps. Also found the ticket's own named prerequisite already done (locale.h now defines all six LC_* categories; the lua build is clean) and corrected the summary, which was describing a world that no longer exists. WHY THE CENSUS MATTERS MORE THAN THE FLIP: the flip is one line and the ticket assumed the corpus was the job; it is not — the job is about five fixtures whose intent has to be rewritten to survive the identifier becoming an error, plus preserving the deliberate `__`-prefix carve-out. gcc errors on the self-referential-macro fixture too, so the leniency's stated justification is not behaviour gcc supports. WHAT THE CENSUS TAUGHT ABOUT CENSUSES: two of five busybox attempts reported `used as value: 0` and the zero meant NOTHING RAN — busybox_diff.sh builds the gcc oracle FIRST and exits, so a gcc-side failure (sv.c's `&verbose`, then traceroute's `#define port (G.port)` colliding with a udhcp parameter, a genuine unity hazard) yields a log with no pxx output at all, which greps clean. The discriminator is pxx's own `ok:` marker. Attempt 3 is the subtler one: it really did build 67 objects byte-identical to the gcc oracle over 45 cases, and the count was STILL meaningless, because per-TU compiler output lands in $WORK/tu/*.log and survives only with --keep. A run can be real and the grep still aimed at the wrong file — so a census needs BOTH preconditions asserted: the subject compiled, and the log being counted is the one holding its output. Attempts 4 and 5 were OOM-killed with 42GB free a minute earlier, i.e. transient contention from peers; stopped there rather than keep hammering a shared box, and recorded busybox as NOT re-measured at HEAD rather than quoting a peer's pin-v403 number as if it were mine.
 2026-09-05 | frankB | compiler/pasparser_decl.inc | ParseSetElemSpec captured a subrange's bounds only in its tkInteger arm, so `type TCS = set of 'c'..'k'` registered Hi < Lo ("not a subrange") and Low/High fell back to the element type's full range, 0 and 255 — while the INLINE spelling of the same set was right. ParseTypeKind's subrange tail had already left the correct bounds in LastTypeSubLo/Hi, live and one line away, unread: the second of two paths for one concept, and the one that stayed broken. Re-taken at my tip because frankA's "still reproduces" row was stamped at 167847e61, before my {$H-} commit touched this file, and they stood down rather than re-measure. Ablation attributes it honestly: removing the fix reproduced ba573b6cf02a byte-identically and moved exactly two rows back (char alias 99 107 -> 0 255, enum-subrange alias 1 2 -> 0 3) while the probe still COMPILED — so the pin's `unknown type: sun` refusal was somebody else's fix and is not claimed. The element KIND half is deliberately untouched: it is decide-how-a-type-carries-an-identity-its-kind-cannot-hold's business, whereas the bounds are needed under EITHER arm of that fork and so pre-empt nothing.
 2026-09-05 | frankB | compiler/pasparser_generic.inc | DGenDeclAnchor counted the `object` in a method-pointer type (`TCb = function(x: Integer): Integer of object;`) as opening a type body. It opens nothing and has no `end`, so ONE of them left the walk's depth permanently above 0 — which disables the `implementation` arm (guarded on depth = 0), so the walk left the type section it exists to stop at, and the routine bodies it then crossed each decremented on their own `end` until the count reached 0 in the middle of the implementation, where a `;` reads as a declaration boundary. The minted alias was spliced BETWEEN TWO ROUTINE BODIES with no `type` in force. Guarded on the PRECEDING token, not on the word: never counting `object` is the wrong fix and the test's arm 3 proves it, splicing the alias between a real object type's fields. Third entry in this one keyword list to be wrong, third in a different direction (constructor/destructor soft-in-a-hard-list, implementation correctly soft, object a real constructor that is also a modifier word). WHY IT MATTERED: silent regression from b613b5fcf that broke corpus rung 6a (rtl-generics Generics.Defaults, five `of object`) the day after feature-pascal-corpus-expansion recorded it green from two independent sessions with byte-identical figures — so the ladder moved backwards while its record read as a floor, and rung 6b appeared to stop inside 6a's file. 6a compiles again; 6b is back at its own documented wall. Bisected over 3425 commits; the first bisect run was invalid because seeding each step from the previous step's binary makes the instrument move with the tree AND cannot build old compiler sources at all — reseed from the PIN every step and assert `converged after`, not `verified`.
+
+## 2026-09-05 | frankD (Track D) | docs/reference/modes.md, docs/reference/directives.md, docs/language/fpc-compatibility.md | `{$MODE}` has a reject arm now, and three docs said it did not
+
+`decide-which-pascal-dialects-pxx-targets` (`fccd959fd`) landed overnight. Swept
+`docs/**` for anything claiming dialect coverage. Three sites were false:
+
+- **`modes.md`** said the FPC mode markers *"are accepted as compatibility
+  markers only — they do not switch PXX into a different semantic mode."* Wrong
+  twice: `macpas` is now an error and `iso`/`extendedpascal` warn, AND
+  `{$mode delphi}` has always had two behavioural deltas. Replaced with a
+  `{$MODE}` section carrying the accept/warn/error table and the deltas.
+- **`directives.md`** listed `macpas` in the accepted-but-inert set. Notably its
+  Delphi description was already CORRECT — so `modes.md` and `directives.md`
+  contradicted each other on the same question and the most-read one was wrong.
+- **`fpc-compatibility.md`** said *"PXX does not currently implement multiple
+  Pascal semantic modes"* with no mention that out-of-family modes are now
+  diagnosed.
+
+**Verified at HEAD `9bcfd2b4da30`, not under the pin, and that is not optional
+here** — the pin accepts every `{$MODE}` silently, so it cannot demonstrate any
+row of the new table. Measured all eleven mode spellings directly rather than
+transcribing the decision's table; implementation and decision agree exactly.
+Both Delphi deltas measured too: nested `{ outer { inner } }` compiles in the
+default and fails under `{$mode delphi}`.
+
+**Added no snippet, deliberately.** `docsnip.py` compiles against the pin, so a
+snippet showing `{$MODE MACPAS}` erroring would fail there for being right. The
+behaviour is a classification, so it is a table.
+
+**Anchors: reimplemented Python-Markdown's `toc` slugifier to check the two I
+added, and the reimplementation is trustworthy because it reproduces
+`#nilchecks-is-tri-state`, an anchor already live in the tree.** It caught one:
+the em dash in `## {$MODE} — which dialects…` collapses to a SINGLE hyphen, and
+I had written two. Nothing in `tools/` validates internal anchors — `doclinks.py`
+is external-only.
+
+Two things filed rather than fixed, neither Track D's:
+- `bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode`
+  (p60). Found while establishing what Delphi mode actually changes. `f := G`
+  compiles outside Delphi mode and SIGSEGVs; fpc errors there and prints 7 in
+  `-Mdelphi`, which pxx also gets right. The Delphi arm is correct and the
+  default arm ships a crash. Told frankB, who holds the Pascal frontend.
+- `bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin`
+  (p45). Three permanent reds in `docsnip.py`, all `unknown type: TMethod` at a
+  LIBRARY line, none in a file I touched. `a623307bd` made TMethod a builtin and
+  deleted the RTL duplicates, so the pin cannot build the current RTL. The
+  snippet compiles fine at HEAD. A gate that cannot pass is not a gate.

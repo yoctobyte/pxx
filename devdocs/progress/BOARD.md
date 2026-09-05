@@ -365,10 +365,11 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (39)
+## backlog-pascal (40)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode | P | 60 | bug | `f := G;` where `f` is a procedural variable and `G` a function compiles OUTSIDE `{$mode delphi}` and segfaults at runtime. FPC rejects it there (`Incompatible types: got LongInt`) and accepts it only in Delphi mode, which pxx also gets right — so the Delphi arm is correct and the DEFAULT arm is the defect. Silent accept plus a crash is the worst of the three possible answers; erroring like FPC is the fix. | — |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-char-array-row-of-a-2d-array-is-not-a-string | P | 25 | bug | `a[0] := 'hi'` where `a: array[0..2] of array[0..15] of Char` is still refused as `cannot assign ShortString to Char`. ASTCharArrayCap now answers for AN_IDENT, AN_FIELD and AN_DEREF, which is every shape the synapse failure and its five siblings needed; the AN_INDEX row of a multi-dimensional Char array is the one left, and it needs a per-dimension extent the other three do not. Low prio on purpose: no measured program wants it — it is the residual named when the parent bug closed, not a report from real code. | — |
 | bug-p-a-char-array-typed-constant-cannot-be-initialised-from-a-string-literal | P | 35 | bug | A string literal standing in for the element list of an `array[..] of Char` typed constant is refused with `expected '(' before ''ABCD''`. It is ordinary Pascal and FPC accepts it. Nested one level down the same gap reads as `too many array initializer elements`, because the outer list expands the literal's characters at the WRONG level. Blocks conformance rows tarray3 and tforin12. | — |
@@ -514,12 +515,13 @@ _none_
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 
-## backlog-docs (3)
+## backlog-docs (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
+| bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin | D | 45 | bug | `tools/docsnip.py` compiles docs/** snippets against the PINNED compiler, and three of them now fail with `unknown type: TMethod` — inside lib/rtl, not inside the snippet. `a623307bd` made TMethod a builtin and deleted the RTL duplicates, so the pin's compiler cannot build the current RTL at all. Nothing is wrong with the three documents; Track D's only gate is red for every session until the next pin. | — |
 | feature-d-a-representation-contract-because-there-is-no-spec-to-appeal-to | D | 60 | feature | OWNER'S FRAMING, and it is the reason this is not ordinary doc work: *'there is no formal OOP specification. delphi just does as they see fit, FPC did the same, trying to emulate delphi.. and we take (most of) their design decisions as FPC is de-facto standard in 2026.'* So for representation questions THERE IS NOTHING TO APPEAL TO, and our documentation IS the specification for pxx. NOT starting from zero: `docs/language/types.md` (393 lines) already documents sets as a 32-byte bitset and `Real` per target — and the `Real` section is the MODEL to copy, because it states size, STRIDE and the file/wire consequence together. The gap is that the contract is scattered and never separates GUARANTEED from incidental. What to add: fixed strings (`cap+8` today, `cap+1` for `string[N<=255]` once the byte-prefix work lands — hence the blocker), plain `string` as a managed handle, record padding and packing (measured to match FPC exactly), and what `file of T` can blit versus must marshal. Plus a named list of deliberate divergences from FPC with the reason, since `known-incompat/` is internal and a user never sees it. | feature-p-implement-the-real-tyshortstring-byte-prefix-layout |
 
 ## backlog-esp (2)
@@ -1008,6 +1010,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [P] bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [U] decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park
 - [p 60] [U] decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision
@@ -1079,6 +1082,7 @@ _none_
 - [p 45] [C+S] bug-c-including-stdio-h-refuses-to-compile-for-xtensa
 - [p 45] [C] bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias
 - [p 45] [D] bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary
+- [p 45] [D] bug-d-the-docs-snippet-gate-cannot-pass-because-the-pin-predates-tmethod-becoming-a-builtin
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race

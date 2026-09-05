@@ -123,10 +123,40 @@ default serves the dialect; the strict flags and `--mimic-fpc` serve
 compatibility when you want it. That split is deliberate: you opt *into*
 FPC-parity strictness per rule, rather than opting out of it.
 
-Note that `{$mode objfpc}` / `-Mobjfpc` and the other FPC mode markers are
-accepted as compatibility markers only — they do **not** switch PXX into a
-different semantic mode. Strictness is controlled by the switches above, not by
-the mode marker.
+## `{$MODE}` — which dialects PXX targets
+
+PXX targets the **FPC and Delphi family**. Those modes are accepted as
+compatibility markers and map onto PXX's one dialect; strictness is controlled by
+the switches above, not by the mode marker. Dialects outside that family are not
+silently compiled as if they were in it.
+
+| `{$MODE …}` | Result | Why |
+| --- | --- | --- |
+| `objfpc` `fpc` `tp` `delphi` `delphiunicode` `pxx` | **accepted** | the family PXX targets |
+| `iso` `extendedpascal` | **warning** | not implemented; compiled as the default dialect |
+| `macpas` | **error** | not implemented, and compiling it as the default dialect produces a wrong binary rather than a diagnostic |
+| anything else | **error** | not a mode FPC accepts either |
+
+`{$mode macpas}` is an error rather than a warning because the failure is
+specific and silent: MacPas conditional directives (`{$setc}`, `{$ifc}`,
+`{$elsec}`, `{$endc}`) are not recognised, so **both arms of the conditional
+compile**. A program that announces `{$MODE MACPAS}` at the top is told there and
+then, rather than a few hundred lines later or not at all.
+
+Support for a dialect is **deferred, not refused** — it comes back when there is
+real code in active use that needs it.
+
+### `{$mode delphi}` is the one marker that changes behaviour
+
+The others are inert. Delphi mode has exactly two deltas:
+
+| | default (objfpc-ish) | `{$mode delphi}` |
+| --- | --- | --- |
+| Nested comments | on — `{ outer { inner } }` is one comment | off, as in Delphi |
+| Assigning a routine to a procedural variable | write the address: `f := @F` | `f := F` also binds the address |
+
+`-Mobjfpc` is the only mode marker with a command-line form, and it selects the
+default dialect.
 
 ## Next
 

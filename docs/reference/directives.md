@@ -154,7 +154,7 @@ Each takes `ON` / `OFF` and has a matching command-line flag — see
 
 | Directive | Effect | Default |
 | --- | --- | --- |
-| `{$mode delphi\|objfpc\|fpc\|tp\|macpas}` | Only `delphi` changes behavior (the `@`-optional procedural value, and no nested comments); the others are accepted but inert. | (no marker) |
+| `{$MODE name}` | Dialect marker. `objfpc` `fpc` `tp` `delphi` `delphiunicode` `pxx` accepted; `iso` / `extendedpascal` warn; `macpas` and unrecognised names are **errors**. Only `delphi` changes behavior (`@`-optional procedural value, and no nested comments); the rest are inert. See [modes](./modes.md#mode-which-dialects-pxx-targets). | (no marker) |
 | `{$PACKRECORDS N}` / `{$ALIGN N}` | Record field alignment: `normal`/`default` or `1`/`2`/`4`/`8`/`16`. | 8 |
 | `{$SCOPEDENUMS ON\|OFF}` | Enum members live only under the type scope (`TEnum.member`). | Off |
 | `{$NESTEDCOMMENTS ON\|OFF}` | Allow nested same-type comments. | On |

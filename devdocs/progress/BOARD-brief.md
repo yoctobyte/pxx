@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:15 unfinished:25 blocked:7 backlog:4 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:23 backlog-pascal:39 backlog-decide:39 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3309 rejected:76`
+`working:15 unfinished:25 blocked:7 backlog:4 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:23 backlog-pascal:40 backlog-decide:39 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:4 backlog-esp:2 experimental:20 rainy-day:46 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3309 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
@@ -63,7 +63,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 385, ranked
+## Ready — top 30 of 387, ranked
 
 - `[p 85] [T]` bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain (unblocks 2)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -96,4 +96,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
-_355 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_357 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

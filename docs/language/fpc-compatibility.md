@@ -15,8 +15,16 @@ command-line interface are out of scope by design.
 Small Pascal programs using ordinary declarations, routines, records, arrays,
 classes, basic generics, exceptions, and simple units are the best fit.
 
-`{$mode objfpc}` and `-Mobjfpc` are accepted as compatibility markers. PXX does
-not currently implement multiple Pascal semantic modes.
+`{$mode objfpc}` and `-Mobjfpc` are accepted as compatibility markers, as are
+`fpc`, `tp`, `delphiunicode` and `pxx` — PXX has one dialect and they all map
+onto it. `{$mode delphi}` is the one marker that changes behavior (two deltas,
+listed under [modes](../reference/modes.md#mode-delphi-is-the-one-marker-that-changes-behaviour)).
+
+Pascal dialects **outside the FPC/Delphi family are not compiled as if they were
+inside it**: `{$mode iso}` and `{$mode extendedpascal}` warn, `{$mode macpas}` is
+an error, and an unrecognised mode name is an error. Support for those is
+deferred rather than refused — see [modes](../reference/modes.md#mode-which-dialects-pxx-targets)
+for why MacPas is the one that errors.
 
 ## Porting checklist
 
