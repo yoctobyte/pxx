@@ -990,3 +990,27 @@ the fixedpoint never targets ESP, `quick` never links xtensa, and on x86-64
 every one of those symbols resolves from libc silently.
 
 **Still parked. Nothing here was worked past what the contradiction required.**
+
+### Ranking note, 2026-09-06 — the xtensa red is NOT an argument for this ticket
+
+frankZ's own framing, and it is right: a RED attached to a feature ticket
+distorts its ranking upward for the wrong reason, and this one would.
+
+- **The cheap fix for that red is not here.** It is almost certainly splitting
+  the ESP `platform_backend` so file I/O does not drag the socket surface in —
+  narrow, Track S/B, and it fixes the link without anyone porting a pass.
+- **This ticket should be ranked on the 73%-of-code number and the cross-target
+  size story**, which are worth more than one xtensa link and would still be
+  worth doing if that link went green tomorrow.
+- **Porting `--dce` to xtensa is a FEATURE, and a large one** — the pass cannot
+  re-patch that target's call shapes. It is not a step in this ticket and must
+  not be smuggled in as one because a red pointed at it.
+
+### And a test of the model rather than another datum
+
+`SIZE 0` on **every** symbol in the object, not only the two init/fini thunks
+(frankZ's third point). That **predicts** the 168-bytes-of-624888
+`--gc-sections` result recorded above rather than merely sitting beside it:
+with no extents there is nothing for the linker to garbage-collect, whatever the
+section layout. So step 2 needs SIZES as much as it needs per-function sections,
+and the 168 number stops being a puzzle.
