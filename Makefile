@@ -7006,6 +7006,20 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_nested_routine_reaches_all_its_classs_member_kinds \
 	  "$$($(TESTTMP)/test_nestmem26)" \
 	  "$$(cat test/test_a_nested_routine_reaches_all_its_classs_member_kinds.expected)"
+	@# A NESTED ROUTINE COULD NOT ASSIGN THE ENCLOSING FUNCTION'S RESULT BY
+	@# NAME. `Result := ...` from a nested routine always worked, so this was a
+	@# spelling that never reached a working mechanism rather than a missing
+	@# mechanism: for a free function the name reached FindSym and answered
+	@# `undefined variable`; for a METHOD it resolved to the method and gave two
+	@# diagnostics about a CALL, neither naming a result variable.
+	@# THE LAST ROW IS THE CONTROL AND IT CARRIES THE WHOLE RISK. Inside a
+	@# function the bare name is ALSO a recursive call, and only a following
+	@# `:=` separates the readings; `Recurse := Recurse(k - 1) + 1` has both in
+	@# one statement, so an unconditional rewrite prints 0 instead of failing.
+	@./$(COMPILER) test/test_a_nested_routine_assigns_the_enclosing_functions_result.pas $(TESTTMP)/test_nestres26
+	@tools/expect_same.sh test_a_nested_routine_assigns_the_enclosing_functions_result \
+	  "$$($(TESTTMP)/test_nestres26)" \
+	  "$$(cat test/test_a_nested_routine_assigns_the_enclosing_functions_result.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

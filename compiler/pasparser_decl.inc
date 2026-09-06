@@ -8835,6 +8835,20 @@ begin
   finalCur := cur;
 end;
 
+function UnqualifiedRoutineName(const n: AnsiString): AnsiString;
+{ `TPascalScanner.ReadNonPascalTillEndToken` -> `ReadNonPascalTillEndToken`.
+  Procs[].Name carries a method's OWNER prefix and the source that writes the
+  function's own name never does, so the two cannot be compared as they stand.
+  Returns n unchanged when there is no dot. }
+var k, cut: Integer;
+begin
+  cut := 0;
+  for k := 1 to Length(n) do
+    if n[k] = '.' then cut := k;
+  if cut = 0 then Result := n
+  else Result := Copy(n, cut + 1, Length(n) - cut);
+end;
+
 procedure ParseNestedRoutine;
 const MAX_NEST_REFS = 4096; MAX_NEST_CAPS = 64; MAX_NEST_DEPTH = 32;
       MAX_NEST_SKIPS = 64;
@@ -9058,6 +9072,42 @@ begin
       begin
         if nameCnt < MAX_NEST_REFS then begin namePos[nameCnt] := i; Inc(nameCnt); end;
         Inc(i); Continue;
+      end;
+      { The ENCLOSING function's name on the left of `:=` is that function's
+        RESULT VARIABLE, and Pascal lets a nested routine write it:
+
+          function ReadNonPascalTillEndToken(...): TToken;
+            function DoEndOfLine: boolean;
+            begin ReadNonPascalTillEndToken := tkLineEnding; ...
+
+        which fcl-passrc's pscanner.pp:3075 and :3082 both do. The scan had no
+        arm for it, so the name reached FindSym and answered `undefined
+        variable` for a free function -- and for a METHOD it resolved to the
+        METHOD and produced two diagnostics about a CALL (`wrong number of
+        parameters`, then `cannot assign to the result of a function call`),
+        neither of which mentions a result variable.
+
+        Rewritten to `Result`, which the capture path below already handles
+        correctly -- `Result := Result + 10` from a nested routine has always
+        worked, so this is a spelling that never reached a working mechanism
+        rather than a missing mechanism.
+
+        NARROW ON PURPOSE: only where the very next token is `:=`. Inside a
+        function the bare name is also a RECURSIVE CALL, and the two readings
+        are told apart by exactly this test -- the same discriminator the
+        own-name splice below already uses ("a genuine recursive CALL, not a
+        result-var write, detected by NOT being followed by :="). Widening it
+        would rewrite a recursion into a result read.
+        bug-p-a-nested-routine-cannot-assign-the-enclosing-functions-result }
+      if (CurProc >= 0) and (i + 1 < TokCount) and
+         (Tokens[i + 1].Kind = tkAssign) and
+         CaseEqual(nm, UnqualifiedRoutineName(Procs[CurProc].Name)) and
+         (FindSym('Result') >= 0) then
+      begin
+        Tokens[i].SOffset := NestStrOff('Result');
+        Tokens[i].SLen := 6;
+        TokSrcOff[i] := 0; TokSrcLen[i] := 0;   { synthesized spelling; see ShiftTokParallel }
+        nm := 'Result';
       end;
       if CaseEqual(nm, 'Self') then
       begin
