@@ -247,6 +247,26 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 #define _IOWR(type, nr, size) \
   _IOC(_IOC_READ | _IOC_WRITE, (type), (nr), (_IOC_TYPECHECK(size)))
 
+/* The two pty ioctls, SPELLED WITH THE MACROS ABOVE RATHER THAN AS NUMBERS.
+   The tty block near the top of this file says the _IOR/_IOW-shaped entries are
+   deliberately absent because "transcribing their expansion would bake in this
+   box's _IOC layout". These two are that shape, and this is not a reversal of
+   that rule -- it is the rule's own remedy: written as _IOW/_IOR they carry the
+   layout from the definitions above instead of a constant measured on one
+   machine, so a target that encoded differently would produce a different (and
+   correct) value rather than silently inheriting x86-64's.
+
+   Verified against glibc on this box: TIOCSPTLCK expands to 0x40045431 and
+   TIOCGPTN to 0x80045430, which is what <asm/ioctls.h> gives. That check is
+   what makes the spelling above a claim rather than a hope, and it is a real
+   check because a wrong _IOC layout produces a number, not an error.
+
+   They live here and not in the numeric block because they are computed; a
+   reader scanning the numeric list for them will not find one, which is the
+   point. feature-c-crtl-has-no-pty-family-at-all */
+#define TIOCGPTN    _IOR('T', 0x30, unsigned int)
+#define TIOCSPTLCK  _IOW('T', 0x31, int)
+
 /* Decoding, for code that inspects a request it was handed. */
 #define _IOC_DIR(nr)   (((nr) >> _IOC_DIRSHIFT)  & _IOC_DIRMASK)
 #define _IOC_TYPE(nr)  (((nr) >> _IOC_TYPESHIFT) & _IOC_TYPEMASK)

@@ -12811,6 +12811,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_array_typedef_dims.c $(TESTTMP)/c_arrtypedims26
 	gcc -std=gnu99 -o $(TESTTMP)/c_arrtypedims_gcc test/c_array_typedef_dims.c
 	tools/expect_same.sh c_arrtypedims26 "$$($(TESTTMP)/c_arrtypedims26)" "$$($(TESTTMP)/c_arrtypedims_gcc)"
+	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
+	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
+	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines
+	# HAVE_PTSNAME_R to 1 by default for a glibc-shaped libc and nothing
+	# undefines it -- so telnetd, script and microcom had no fallback arm to
+	# land in, only a compile error waiting for the config that reaches them.
+	# Row 8 is the one that matters and it is NOT a string test: every other
+	# row here passes for a ptsname_r that always answers "/dev/pts/0", because
+	# the failure mode of this family is a WELL-SHAPED WRONG NAME -- a path
+	# that exists and belongs to someone else's terminal. Row 8 opens the slave
+	# the name actually names and round-trips a byte; row 9 is its positive
+	# control, a second pair whose name must differ. Rows 1-2 print the two
+	# ioctl numbers, which are COMPUTED from the _IOC layout rather than
+	# transcribed, so a wrong layout gives a wrong number and not an error.
+	# Diffed whole against gcc, so no expected value is transcribed here.
+	# feature-c-crtl-has-no-pty-family-at-all
+	./$(COMPILER) test/c_pty_family.c $(TESTTMP)/c_pty26
+	gcc -D_GNU_SOURCE -std=gnu99 -o $(TESTTMP)/c_pty_gcc test/c_pty_family.c
+	tools/expect_same.sh c_pty26 "$$($(TESTTMP)/c_pty26)" "$$($(TESTTMP)/c_pty_gcc)"
 	tools/c_va_arg_every_target.sh
 	# C ON wasm32 REACHES `main`. The whole C x wasm32 cell of the goal's
 	# languages-x-platforms product was empty -- --target=wasm32 refused EVERY C

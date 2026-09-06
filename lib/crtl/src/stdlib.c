@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 
 extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
@@ -962,4 +963,119 @@ int clearenv(void) {
   pxx_env_loaded = 1;
   pxx_env_len = 0;
   return 0;
+}
+
+
+/* ---- pseudo-terminals -------------------------------------------------------
+ *
+ * ONE MECHANISM, FIVE NAMES, AND IMPLEMENTING ANY ONE ALONE IS USELESS: the
+ * caller gets a master fd it cannot turn into a slave path. On Linux the whole
+ * family is an open of /dev/ptmx plus two ioctls and some formatting.
+ *
+ * Written because busybox calls ptsname_r WITHOUT a guard -- its
+ * include/platform.h defines HAVE_PTSNAME_R to 1 by default for a glibc-shaped
+ * libc and nothing undefines it -- so there is no fallback arm for us to land
+ * in. It is latent rather than live today: the 141-applet configuration does
+ * not compile libbb/getpty.c, and telnetd, script and microcom are what reach
+ * it. feature-c-crtl-has-no-pty-family-at-all
+ */
+
+int posix_openpt(int flags)
+{
+	return open("/dev/ptmx", flags);
+}
+
+/* GRANTPT RETURNS 0 WITHOUT CHECKING ANYTHING, AND THAT IS CORRECT -- BUT THE
+ * ZERO IS NOT EVIDENCE ABOUT THE SLAVE'S OWNERSHIP.
+ *
+ * Historically grantpt ran a setuid helper (pt_chown) to chown/chmod the slave.
+ * On any kernel with devpts mounted -- which is every Linux pxx targets -- the
+ * mount's own `gid` and `mode` options do that job at allocation time, so there
+ * is nothing left for this call to perform and glibc's own implementation is
+ * effectively this one. Measured against glibc on this box: grantpt returns 0.
+ *
+ * The comment exists because "returns 0" and "the permissions were arranged"
+ * are different claims and this function can only make the first. A reader who
+ * takes the 0 as the second one has been told something we did not check. If a
+ * target ever appears without devpts, this is the function that has to grow a
+ * real body rather than the one that can stay silent.
+ */
+int grantpt(int fd)
+{
+	(void)fd;
+	return 0;
+}
+
+int unlockpt(int fd)
+{
+	int zero = 0;
+
+	/* TIOCSPTLCK takes a POINTER to the lock value, not the value. Passing 0
+	   directly compiles -- the request is variadic from ioctl's point of
+	   view -- and unlocks nothing, which shows up much later as a slave open
+	   failing with EIO for no visible reason. */
+	return ioctl(fd, TIOCSPTLCK, &zero);
+}
+
+/* Returns 0, or the ERROR NUMBER (not -1), and sets errno too -- glibc's
+   convention, measured rather than recalled; see the note in <stdlib.h>.
+
+   ERANGE RATHER THAN TRUNCATION when the buffer is too small. A truncated
+   "/dev/pts/1" for slave 17 is a path that EXISTS and belongs to another
+   session, so silently shortening it hands the caller someone else's terminal.
+   The length is therefore computed in full before anything is copied. */
+int ptsname_r(int fd, char *buf, size_t buflen)
+{
+	static const char pre[] = "/dev/pts/";
+	char digits[16];
+	unsigned int n;
+	size_t need, i, d;
+
+	if (buf == 0) {
+		errno = EINVAL;
+		return EINVAL;
+	}
+	if (ioctl(fd, TIOCGPTN, &n) < 0) {
+		/* errno is already set by ioctl -- ENOTTY for a fd that is not a
+		   pty master, which is the case a caller most often hits. */
+		return errno;
+	}
+
+	/* Format the number backwards into `digits`, so the length is known
+	   before a single byte reaches the caller's buffer. */
+	d = 0;
+	if (n == 0) {
+		digits[d++] = '0';
+	} else {
+		while (n > 0) {
+			digits[d++] = (char)('0' + (n % 10u));
+			n /= 10u;
+		}
+	}
+
+	need = (sizeof pre - 1) + d + 1;   /* prefix + digits + NUL */
+	if (need > buflen) {
+		errno = ERANGE;
+		return ERANGE;
+	}
+
+	for (i = 0; i < sizeof pre - 1; i++)
+		buf[i] = pre[i];
+	for (i = 0; i < d; i++)
+		buf[(sizeof pre - 1) + i] = digits[d - 1 - i];
+	buf[(sizeof pre - 1) + d] = '\0';
+	return 0;
+}
+
+/* The static-buffer face. 32 bytes holds "/dev/pts/" plus any unsigned int
+   ("/dev/pts/4294967295" is 19 characters), so the ERANGE arm above is
+   unreachable from here -- it is still checked rather than assumed, because
+   the two functions would otherwise have to agree by inspection. */
+char *ptsname(int fd)
+{
+	static char buf[32];
+
+	if (ptsname_r(fd, buf, sizeof buf) != 0)
+		return 0;
+	return buf;
 }

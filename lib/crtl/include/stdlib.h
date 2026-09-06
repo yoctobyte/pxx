@@ -120,4 +120,28 @@ unsigned short __pxx_builtin_bswap16(unsigned short x);
 unsigned int __pxx_builtin_bswap32(unsigned int x);
 unsigned long long __pxx_builtin_bswap64(unsigned long long x);
 
+/* ---- pseudo-terminals ------------------------------------------------------
+ *
+ * Declared HERE, not in a <pty.h>, because that is where glibc puts them and
+ * where callers include them from -- busybox's libbb/getpty.c calls ptsname_r
+ * with <stdlib.h> in scope and no guard, since include/platform.h defines
+ * HAVE_PTSNAME_R to 1 by default for a glibc-shaped libc and nothing undefines
+ * it. A <pty.h> would compile and would not be found by that include.
+ * (openpty/forkpty ARE <pty.h> functions and are not implemented here.)
+ *
+ * ptsname_r RETURNS THE ERROR NUMBER, NOT -1, and sets errno as well. Measured
+ * against glibc rather than recalled, because the two conventions are easy to
+ * mix up and both "look right" at a call site that only tests for zero:
+ *
+ *   ptsname_r ok          rc=0   errno=0
+ *   ptsname_r small buf   rc=34  errno=34   (ERANGE)
+ *   ptsname_r non-pty fd  rc=25  errno=25   (ENOTTY)
+ *
+ * feature-c-crtl-has-no-pty-family-at-all */
+int posix_openpt(int flags);
+int grantpt(int fd);
+int unlockpt(int fd);
+int ptsname_r(int fd, char *buf, size_t buflen);
+char *ptsname(int fd);
+
 #endif

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  608 functions across 63 headers. }
+  613 functions across 63 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -74,7 +74,7 @@ begin
       ' getservbyname:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
       ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
       ' getxattr:sys/xattr.h glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h ' +
-      ' gmtime_r:time.h ';
+      ' gmtime_r:time.h grantpt:stdlib.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +
       ' htons:netinet/in.h hypot:math.h ';
@@ -121,10 +121,10 @@ begin
       ' open:fcntl.h openat:fcntl.h opendir:dirent.h openlog:syslog.h ';
     'p': Result :=
       ' pause:unistd.h pclose:stdio.h perror:stdio.h personality:sys/personality.h pipe:unistd.h ' +
-      ' poll:poll.h popen:stdio.h posix_fallocate:fcntl.h pow:math.h powf:math.h ' +
-      ' prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h printf:stdio.h putc:stdio.h ' +
-      ' putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h putenv:stdlib.h ' +
-      ' puts:stdio.h pwrite:unistd.h pwritev:sys/uio.h ';
+      ' poll:poll.h popen:stdio.h posix_fallocate:fcntl.h posix_openpt:stdlib.h pow:math.h ' +
+      ' powf:math.h prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h printf:stdio.h ' +
+      ' ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
+      ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pwrite:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
@@ -176,8 +176,8 @@ begin
       ' tzset:time.h ';
     'u': Result :=
       ' umask:sys/stat.h umount:sys/mount.h umount2:sys/mount.h uname:sys/utsname.h ' +
-      ' ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h unshare:sched.h usleep:unistd.h ' +
-      ' utimensat:time.h utimes:sys/time.h ';
+      ' ungetc:stdio.h unlink:unistd.h unlockpt:stdlib.h unsetenv:stdlib.h unshare:sched.h ' +
+      ' usleep:unistd.h utimensat:time.h utimes:sys/time.h ';
     'v': Result :=
       ' vasprintf:stdio.h vdprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vfscanf:stdio.h ' +
       ' vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h vsprintf:stdio.h vsscanf:stdio.h ' +
@@ -213,7 +213,7 @@ begin
     'm': Result := 496;
     'n': Result := 352056;
     'o': Result := 208;
-    'p': Result := 108792;
+    'p': Result := 113400;
     'q': Result := 32;
     'r': Result := 8176;
     's': Result := 4620280;
