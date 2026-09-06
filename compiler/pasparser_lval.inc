@@ -4784,11 +4784,23 @@ begin
         variable spelling `pp^.f` goes through ParseLValueAST's copy and was
         fixed there separately.
 
-        ResolveNodeRec answers the pointee and gates on the declared DEPTH, so
-        a half-dereferenced pointer stays refused rather than resolving to the
-        ultimate record -- which is exactly how a wrong offset becomes a
-        plausible value. Nothing that resolves today moves: the arm only fires
-        when the pointee is a record that really has this member.
+        WHAT MAKES THIS ARM SAFE IS WHERE IT SITS, NOT WHAT IT ASKS, and the
+        distinction is measured rather than argued: frankS wrote the same arm
+        one loop earlier, in the cast suffix walk, calling the same
+        ResolveNodeRec on the same trial deref -- and `PPRec(pp).b` PASSED its
+        guard and got ONE dereference where the shape needs two, a wrong number
+        under a fix that looked right. ResolveNodeRec answers the ULTIMATE base,
+        so it cannot be the thing that keeps a half-dereferenced chain out. What
+        keeps it out is that by HERE the walker has already turned every
+        complete chain into a record, so an incomplete one never arrives with a
+        record in hand. Move this arm earlier and that property is gone even
+        though every line of it is unchanged.
+
+        Nothing that resolves today moves: the arm only fires when the pointee
+        is a record that really has this member, so a metaclass cast
+        (`TFooClass(fc).Create` -- a tyPointer whose pointee is a CLASS) is
+        declined by UClsIsRecord and keeps its own dispatch, which four existing
+        metaclass tests already assert.
         bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref
         bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped }
       if tk = tyPointer then
