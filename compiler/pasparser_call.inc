@@ -2751,6 +2751,34 @@ begin
      (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
     MatchArgArrayElemTk[i] := Syms[ASTIVal[node]].TypeKind;
 
+  { ...and the EIGHTH: an array argument's DYN DEPTH, which separates a named
+    dynamic array from an open one. Certainty discipline, so only a symbol that
+    records a depth and a call whose RESULT is a dynamic array set it -- an
+    element list, a fixed array and anything unrecognised stay 0 and remain
+    matchable against both, which is today's answer for them.
+    ProcRetIsDynArray answers "yes, dynamic" without a depth, so 1 stands for
+    "certainly dynamic, depth not carried here": the reader asks `> 0` and
+    never the value, because the question at a parameter door is which of two
+    PARAMETER SPELLINGS this is, not how deeply nested the array is.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  MatchArgDynDepth[i] := 0;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+     (ASTIVal[node] < SymCount) then
+    MatchArgDynDepth[i] := SymDynDepth[Integer(ASTIVal[node])]
+  else if (ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+          ProcRetIsDynArray[ASTIVal[node]] then
+    MatchArgDynDepth[i] := 1
+  else if ASTKind[node] = AN_ARRAY_CTOR then
+    MatchArgDynDepth[i] := ASTCtorDynDepth[node];
+  { ...and the mirror. An AN_ARRAY_CTOR in ARGUMENT position is one of exactly
+    two things -- the `[...]` list, or `TDynArr.Create(...)` -- and
+    ASTCtorDynDepth is what the second one stamps, so a zero here is the
+    ABSENCE OF A TYPE NAME rather than an unknown. The other retag callers
+    (assignment, Insert, the concatenation gate) never produce a node that
+    reaches a parameter door. }
+  MatchArgOpenCtor[i] := (ASTKind[node] = AN_ARRAY_CTOR) and
+                         (ASTCtorDynDepth[node] = 0);
+
   { ...and the sixth: a managed string's ELEMENT WIDTH, which the kind channel
     cannot carry because AnsiString, WideString and UnicodeString are all
     tyAnsiString. Derived through ASTStrElemTkOf rather than stamped, for the

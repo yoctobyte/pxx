@@ -7890,7 +7890,7 @@ begin
               LastTypeAlias through this path's own parameter loop.
               bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
             for i := 0 to MAX_PROC_PARAMS - 1 do mPAliases[i] := -1;
-            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPStrElemTk, mPPtrElemTk, mPArr, mPByRef, mPAliases);
+            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPStrElemTk, mPPtrElemTk, mPArr, mPByRef, mPAliases, mPDynA);
             if mpi < 0 then
             begin
               mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);

@@ -1,0 +1,4 @@
+fwd empty=1 lit=1 ctor=2 named=2
+rev empty=1 lit=1 ctor=2 named=2
+same len=2
+only-open candidate=4

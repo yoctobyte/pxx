@@ -7657,6 +7657,13 @@ begin
         RetagSetLitAsArrayCtor(CurASTNode,
                                IntToTypeKind(ArrTypeElemTk[dynCtorAi]),
                                ArrTypeDynDepth[dynCtorAi]);
+        { The NAMED type is the whole difference between this node and the
+          `[1, 2, 3]` spelling, and the retag above does not carry it: for
+          depth 1 it encodes ASTSOffset as 0, which is exactly what an
+          anonymous list gets. Stamped here because this is the only place that
+          still knows a type name was written.
+          bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+        ASTCtorDynDepth[CurASTNode] := ArrTypeDynDepth[dynCtorAi];
         Exit;
       end;
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and

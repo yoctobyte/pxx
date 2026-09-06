@@ -33,6 +33,7 @@ begin
   SetLength(ASTNilChk, n);
   SetLength(ASTPyUser, n);
   SetLength(ASTStrElemTk, n);
+  SetLength(ASTCtorDynDepth, n);
   SetLength(ASTNDRowSubs, n);
   ASTCapacity := n;
 end;
@@ -81,6 +82,9 @@ begin
   ASTStrElemTk[ASTNodeCount] := 0;
   { 0 = "an element, not a sub-array" -- correct for every node but the
     partial N-D index, which BuildPartialNDRowIndex stamps. }
+  { 0 = an anonymous element list, correct for every node but an AN_ARRAY_CTOR
+    the dynamic-array-type constructor arm stamps. }
+  ASTCtorDynDepth[ASTNodeCount] := 0;
   ASTNDRowSubs[ASTNodeCount] := 0;
   { Stamped on EVERY node, not on a chosen few: the sites that read it are call
     nodes and deref nodes, and tagging both lists here would be the second place
@@ -228,6 +232,7 @@ begin
   ASTNilChk[Result]   := ASTNilChk[node];
   ASTPyUser[Result]   := ASTPyUser[node];
   ASTStrElemTk[Result] := ASTStrElemTk[node];
+  ASTCtorDynDepth[Result] := ASTCtorDynDepth[node];
   ASTNDRowSubs[Result] := ASTNDRowSubs[node];
   { ...and the SEMANTIC IDENTITY, which was MISSING from this list. It is
     AST-indexed and AllocNode initialises it two lines below the ones copied

@@ -1671,7 +1671,7 @@ begin
       Next;
       Eat(tkSemicolon);
     end;
-    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
+    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias, pDynDepth);
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     if sawVarargs then ProcVariadic[procIdx] := True;
@@ -2133,7 +2133,7 @@ begin
     end;
     if (not PreScanPass) or (methOwnerCi < 0) then
     begin
-      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
+      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias, pDynDepth);
       if procIdx < 0 then
       begin
         if StrictOverload and (FindProc(name) >= 0) and not DialectIsPxx then
@@ -2286,7 +2286,7 @@ begin
   end;
 
   { Register or resolve }
-  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
+  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias, pDynDepth);
   if procIdx < 0 then
   begin
     if StrictOverload and (FindProc(name) >= 0) then

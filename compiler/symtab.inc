@@ -9383,7 +9383,7 @@ end;
   (bug-overload-resolution-record-identity). A rec id is only compared when
   both sides are known (<> REC_NONE), so registration paths that never stored
   ProcParamRecId keep matching as before. }
-function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const pstrelem: array of Integer; const pptrelem: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean; const paliases: array of Integer): Integer;
+function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const pstrelem: array of Integer; const pptrelem: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean; const paliases: array of Integer; const pdyn: array of Integer): Integer;
 var i, j: Integer; match: Boolean;
 begin
   { Hash-chain walk (FIFO = registration order) instead of the full Procs scan
@@ -9480,6 +9480,40 @@ begin
              (pptrelem[j] <> tyUnknown) and
              (ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j] <> Ord(tyUnknown)) and
              (Ord(pptrelem[j]) <> ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j]) then
+            match := False;
+          { ...and the FIFTH instance of the one shape, on ARRAY parameters:
+            `procedure P(a: array of LongInt)` and `procedure P(a: TDynArr)`
+            are two overloads in fpc and were ONE row here, because IsArray is
+            a single bit that is True for both and Params[].TypeKind holds the
+            ELEMENT kind for both. The second declaration was written into the
+            first's row, the caller warned `duplicate definition ... the later
+            body wins`, and every call to EITHER ran the later body -- with the
+            open-array calls answering 2 where fpc answers 1.
+
+            ProcParamDynDepth is not a missing fact. It is a PARTIALLY-CONSULTED
+            one: the column is written by every declaration-site parser, ir.inc
+            branches on it at the call site, and this comparison -- the thing
+            that decides whether two declarations are the same routine -- never
+            read it. An absence can be found by a set difference; a column one
+            consumer reads and another ignores cannot, and the only question
+            that surfaces it is "what distinguishes these two, and is that thing
+            consulted where they are distinguished".
+
+            THE GUARD IS THE POINTER ARM'S ONE FAMILY OVER, with one difference
+            that is deliberate: this splits (0, N) rather than requiring both
+            sides positive, because a dyn depth is only ever ASSERTED and never
+            denied, so 0 is not a sentinel here the way tyUnknown is there. What
+            keeps it from failing open is the pair of IsArray tests: a
+            NON-array parameter's 0 says nothing about arrays at all and must
+            never reach this comparison, and a declaration path that forgot to
+            write the column leaves 0 on BOTH sides of its own forward/body
+            pair, which is today's answer and no split.
+            THIS ARM AND THE ARGUMENT-SIDE MATCHER MUST AGREE, for the reason
+            the alias arm above gives in its own words.
+            bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+          if parr[j] and Procs[i].Params[j].IsArray and (j < MAX_PROC_PARAMS) and
+             ((pdyn[j] > 0) <>
+              (ProcParamDynDepth[i * MAX_PROC_PARAMS + j] > 0)) then
             match := False;
         end;
         if match then
@@ -9778,6 +9812,15 @@ begin
             ' rec=', ProcParamRecId[i * MAX_PROC_PARAMS + j], ' methodptrrec=', MethodPtrRecId,
             ' needslvalue=', ByRefArgNeedsLvalue(i, j), ' nilable=', ProcParamIsNilable(i, j));
   if ByRefArgNeedsLvalue(i, j) then Exit;
+  { An array parameter bails whatever its spelling, and that is NOT because a
+    named dynamic array has no nil state -- it has one, and FPC binds
+    `P(a: TDynArr)` given nil. It is because nothing reaches here for an array
+    parameter at all: measured 2026-09-06 with PXXDBG=a.nilarg, a nil argument
+    against an array parameter produces no trace line in either the one- or the
+    two-candidate program, so a refinement written here would be dead code that
+    reads as live. The nil ranking gap is recorded on
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature
+    with the phase still unidentified. }
   if Procs[i].Params[j].IsArray then Exit;
   Result := ProcParamIsNilable(i, j);
 end;
@@ -11176,6 +11219,60 @@ begin
      (ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j] <> Ord(tyUnknown)) and
      (Ord(MatchArgPtrElemTk[j]) <> ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j]) then
     Result := False;
+  { ...and the ARRAY twin, which is the argument half of the registration arm
+    in FindProcOverloadRec. `procedure P(a: array of LongInt)` and
+    `procedure P(a: TDynArr)` are now two rows; at kind level each exactly
+    matches the other's arguments, so without this the exact phase takes the
+    first candidate in the chain -- declaration order, the same failure the two
+    arms above describe, and the same one the registration side used to hide by
+    never splitting the rows at all.
+
+    EXACT PHASE ONLY, and this is the arm where that matters most: passing a
+    named dynamic array to an OPEN array parameter is ordinary Pascal, it is
+    what every `procedure Show(a: array of T)` call with a `TDynArr` variable
+    does, and blocking it would refuse an enormous amount of working code. What
+    FPC does not do is PREFER it when a depth-exact candidate exists. So this
+    ranks and never refuses: with only the open-array candidate present the
+    compatible phase still binds it.
+
+    ONE DIRECTION ONLY, and deliberately: an argument that certainly IS a
+    dynamic array stops exactly matching an OPEN parameter. The mirror -- an
+    element list refusing the named parameter -- is NOT written, because 0 in
+    this channel means "not certain" and not "certainly open", so the mirror
+    would read an absence as an assertion. That is the failure
+    MatchArgScalar/MatchArgArray split into two channels to avoid, and here
+    the open-array call reaches the right body anyway: with the dyn argument
+    ruled out of the open row, the two candidates no longer tie.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  if Result and MatchArgArrayValid and (j >= 0) and (j < MAX_PROC_PARAMS) and
+     Procs[i].Params[j].IsArray and
+     (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
+     (MatchArgDynDepth[j] > 0) and
+     (ProcParamDynDepth[i * MAX_PROC_PARAMS + j] = 0) then
+    Result := False;
+  { ...and the MIRROR, which the arm above does not imply and which a control
+    caught. An anonymous element list prefers the OPEN-array parameter. Without
+    it the element-list rows still tied and the exact phase took the first
+    candidate in the chain: writing the two overloads in the other order made
+    `Test([])` answer 2 where fpc answers 1, while every other row stayed
+    correct -- so the arm above reads as a complete fix on one source order and
+    is half of one. Two arms because the two facts have different evidence, the
+    same reason MatchArgScalar and MatchArgArray are two channels. }
+  if Result and MatchArgArrayValid and (j >= 0) and (j < MAX_PROC_PARAMS) and
+     Procs[i].Params[j].IsArray and
+     (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
+     MatchArgOpenCtor[j] and
+     (ProcParamDynDepth[i * MAX_PROC_PARAMS + j] > 0) then
+    Result := False;
+  { NO `nil` ARM HERE, AND THAT IS MEASURED RATHER THAN FORGOTTEN. FPC binds
+    `Test(Nil)` to the DYNAMIC overload (an open array is a (pointer, high)
+    pair with no nil state); pxx takes whichever is declared first -- 1 with the
+    open one first, 2 with the dynamic one first. An arm written here does not
+    fire: the call is resolved before this function sees it, in a phase not yet
+    identified, and MatchArgNilOk gets no trace line for an array parameter in
+    either program. Written down rather than guessed at, on
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature,
+    which is where the phase hunt belongs. }
 end;
 
 function ParamSpellingForReport(pi, j: Integer): AnsiString;

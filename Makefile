@@ -6325,6 +6325,20 @@ test-core: $(COMPILER)
 	# the elements carry coercion and managed-element ARC. Every lo=0 row was
 	# diffed against fpc 3.2.2; the lo=1 rows fpc REFUSES and their values are
 	# ours, which is not a defect.
+	# `procedure P(a: array of LongInt)` and `procedure P(a: TDynArr)` are two
+	# overloads in fpc and were ONE signature: IsArray is one bit that is True for
+	# both and Params[].TypeKind holds the ELEMENT kind for both, so the second
+	# declaration was written into the first's row and every call ran the later
+	# body. ProcParamDynDepth was written by every declaration parser and read by
+	# ir.inc, and never by the comparison that decides sameness.
+	# BOTH DECLARATION ORDERS are asserted: the first version of the fix ranked a
+	# dyn ARGUMENT away from the open parameter and was correct on every row of
+	# the ticket's own repro, while the reversed pair still answered 2 for the
+	# element lists. One source order cannot tell a rule from declaration order.
+	./$(COMPILER) test/test_an_open_array_and_a_named_dynamic_array_are_two_overloads.pas $(TESTTMP)/test_oadyn26
+	tools/expect_same.sh test_an_open_array_and_a_named_dynamic_array_are_two_overloads \
+	  "$$($(TESTTMP)/test_oadyn26)" \
+	  "$$(cat test/test_an_open_array_and_a_named_dynamic_array_are_two_overloads.expected)"
 	./$(COMPILER) test/test_a_static_array_is_copied_into_a_dynamic_array.pas $(TESTTMP)/test_statcp26
 	tools/expect_same.sh test_a_static_array_is_copied_into_a_dynamic_array \
 	  "$$($(TESTTMP)/test_statcp26)" \

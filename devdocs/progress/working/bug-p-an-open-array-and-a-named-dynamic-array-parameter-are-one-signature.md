@@ -1,11 +1,11 @@
 ---
 track: P
-prio: 45
+prio: 25
 type: bug
 blocked-by: []
-summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` are two overloads in fpc and ONE signature in pxx. `FindProcOverloadRec` compares `Params[j].IsArray`, a single bit, and never reads `ProcParamDynDepth` — the column that ALREADY records the difference and that ir.inc ALREADY branches on at the call site. So the second declaration is written into the first's row, pxx warns `duplicate definition ... the later body wins`, and every call to EITHER runs the later body. The registration side alone is not the fix: this arm and the argument-side matcher must agree, or a call is refused against a candidate list the right candidate was never in."
-status: backlog
-owner: unassigned
+summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` were ONE signature in pxx and are two overloads in fpc. FIXED for every binding fpc's own row exercises: `FindProcOverloadRec` now reads `ProcParamDynDepth` beside `Params[j].IsArray` (both sides must be array params; a dyn depth is only ever ASSERTED, so 0 on both sides of a forward/body pair is today's answer and no split), and the argument side gained two channels — `MatchArgDynDepth` (this argument is certainly a named dynamic array) and its MIRROR `MatchArgOpenCtor` (certainly an anonymous element list), read by `MatchParamExact` so they RANK and never refuse. tarrconstr6 burned. STILL OPEN, and measured: `Test(Nil)` takes whichever overload is declared FIRST (1 open-first, 2 dyn-first) where fpc always binds the dynamic one. Arms written in `MatchParamExact` and `MatchArgNilOk` did NOT fire and were removed — with PXXDBG=a.nilarg a nil argument against an array parameter produces no trace line in either the one- or the two-candidate program, so the phase that resolves it has not been identified yet."
+status: working
+owner: frankS
 ---
 
 # An open-array and a named dynamic-array parameter are one signature
@@ -145,3 +145,55 @@ reached in the first place. Neither fix moves the other.
 So the fix here is still exactly where the summary says: `FindProcOverloadRec`
 reading `ProcParamDynDepth` beside `Params[j].IsArray`, and the argument-side
 matcher agreeing with it.
+
+## Fixed 2026-09-06 (frankS) — three channels, and one control did the work
+
+Measured at compiler `630fb424c66c`. `tarrconstr6.pp` exits 0 with no
+`duplicate definition` warning; `test_an_open_array_and_a_named_dynamic_array_are_two_overloads`
+is byte-identical to fpc 3.2.2 on every row.
+
+**Registration.** `FindProcOverloadRec` gained a `pdyn` array and a fifth arm,
+after the record / string-width / alias / pointer four. It splits (0, N) rather
+than requiring both sides positive the way the pointer arm does, because a dyn
+depth is only ever ASSERTED and never denied — 0 is not a sentinel here the way
+`tyUnknown` is there. What keeps it from failing open is the pair of `IsArray`
+tests: a non-array parameter's 0 says nothing about arrays, and a declaration
+path that forgot the column leaves 0 on BOTH sides of its own forward/body pair.
+
+**Argument side, two channels and not one.** `MatchArgDynDepth` (certainly a
+named dynamic array) and `MatchArgOpenCtor` (certainly an anonymous element
+list) — two, for the reason `MatchArgScalar` and `MatchArgArray` are two: 0 in
+the first means "not certain", so reading its absence as an assertion would
+block an unrecognised shape from every candidate at once. Both read by
+`MatchParamExact`, so they RANK and never refuse: `OnlyOpen(la)` with a dyn
+argument and only an open candidate still binds, which is ordinary Pascal.
+
+**`TDynArr.Create(1,2,3)` and `[1,2,3]` are both an `AN_ARRAY_CTOR` by the time
+the matcher sees them**, and the retag loses the difference (depth 1 encodes
+`ASTSOffset` as 0, exactly what an anonymous list gets). New AST column
+`ASTCtorDynDepth`, stamped in the one arm that still knows a type name was
+written — its own column rather than a third meaning in the `ASTSOffset`/
+`ASTSLen` union, whose key was not chosen for that question.
+
+### The row that earned its place
+
+The first version ranked a dyn ARGUMENT away from the open parameter and was
+correct on **every row of the repro in this ticket**. Written the other way
+round, `Test([])` and `Test([1,2,3])` answered 2 where fpc answers 1: the
+element-list direction still tied and the exact phase took the first candidate
+in the chain. **One source order cannot tell a rule from an accident of
+declaration order**, and this ticket's own repro happened to be written in the
+order that hides half the bug. Both orders are now in the fixture, under two
+type names.
+
+### The `nil` residual, and why nothing was written for it
+
+fpc binds `Test(Nil)` to the dynamic overload — an open array is a
+(pointer, high) pair with no nil state. pxx takes whichever is declared first.
+Arms written in `MatchParamExact` and in `MatchArgNilOk` **both failed to
+fire**, and `PXXDBG=a.nilarg` shows no trace line for a nil argument against an
+array parameter in either the one- or the two-candidate program: the call is
+resolved in an earlier phase that has not been identified. Both arms were
+REMOVED rather than left in place — dead code that reads as live is worse than
+an open gap — and each site now carries a comment saying what was measured.
+Whoever takes this starts by finding that phase, not by writing a third arm.

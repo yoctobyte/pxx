@@ -3143,6 +3143,43 @@ var
     parameter: that conversion is real Pascal and `test_char_array_is_a_string`
     is built on it. tyUnknown when the argument is not an array. }
   MatchArgArrayElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  { ...and for an array argument, its DYN DEPTH: > 0 = certainly a named
+    dynamic array value, 0 = not certain and therefore unconstrained. The
+    EIGHTH channel, and it exists because `procedure P(a: array of LongInt)`
+    and `procedure P(a: TDynArr)` are two overloads in FPC while IsArray is one
+    bit that is True for both and argTypes carries the ELEMENT kind for both --
+    so the kind pair cannot tell an OPEN-array parameter from a named DYNAMIC
+    one, and both candidates matched exactly. Whichever was declared first won
+    every call.
+    GATED BY MatchArgArrayValid, NOT BY A FLAG OF ITS OWN. It is filled and
+    invalidated in exactly the places MatchArgArray is, and a channel/flag pair
+    that must be kept in step by hand at four sites is the shape that goes
+    wrong -- see MatchArgElemValid's own note, which shares one flag between
+    two channels for the same reason.
+    Read by MatchParamExact, so it narrows the EXACT phases only: a dyn-array
+    argument still binds an open-array parameter through the compatible phases
+    when that is the only candidate, which is ordinary Pascal and must not
+    regress. Same certainty discipline as MatchArgScalar/MatchArgArray -- only
+    a shape whose depth is beyond doubt sets it.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  MatchArgDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;
+  { ...and its MIRROR, the ninth: the argument is CERTAINLY an anonymous
+    element list (`[1, 2, 3]`), which prefers the OPEN-array parameter over the
+    named dynamic one. Its own channel and not `MatchArgDynDepth = 0`, for the
+    reason MatchArgScalar and MatchArgArray are two channels rather than each
+    other's negation: 0 there means "not certain", and reading an absence as an
+    assertion is how an unrecognised argument shape gets blocked from every
+    candidate at once. An AN_ARRAY_CTOR whose ASTCtorDynDepth is 0 is a
+    POSITIVE fact -- a constructor node with no type name written -- and that
+    is what this carries.
+    Measured need: without it the element-list rows still bound by DECLARATION
+    ORDER. With the two overloads written the other way round, `Test([])` and
+    `Test([1,2,3])` answered 2 where fpc answers 1, while every other row was
+    already right -- so the dyn-argument arm alone reads as a complete fix on
+    the source order the ticket happened to quote.
+    Gated by MatchArgArrayValid with the two above.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  MatchArgOpenCtor : array[0..MAX_PROC_PARAMS-1] of Boolean;
   MatchArgArrayValid : Boolean;
   { For a MANAGED-STRING argument (tyAnsiString), its ELEMENT WIDTH — Ord(tyChar)
     or Ord(tyWideChar); 0 when the argument is not a managed string. The SIXTH
@@ -5875,6 +5912,18 @@ var
     `var`/`out` were unaffected because they never form a copy and so take
     IRLowerAddress, which was right all along.
     bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
+  { For an AN_ARRAY_CTOR: the dyn depth of the NAMED array type it was
+    constructed through (`TDynArr.Create(1, 2, 3)`), 0 for an anonymous element
+    list (`[1, 2, 3]`). Its own column rather than a second meaning packed into
+    ASTSOffset/ASTSLen, which already carry a discriminated union keyed on
+    ASTSOffset's sign: extending that union would make the key answer a
+    question it was not chosen for, and this file records that failure often
+    enough. Read at the CALL DOOR only, where `Test(TDynArr.Create(1,2,3))`
+    must prefer the `TDynArr` overload and `Test([1,2,3])` the `array of T`
+    one -- both are an AN_ARRAY_CTOR by the time the matcher sees them and the
+    depth is the only thing that ever separated them.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  ASTCtorDynDepth : array of Integer;
   ASTNDRowSubs : array of Integer;
   ASTNodeCount : Integer;
   ASTCapacity : Integer;   { current allocated length of the per-node AST arrays (grown by EnsureASTCapacity) }
