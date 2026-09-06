@@ -627,10 +627,32 @@ function I386PrefixBefore(pos: Integer): Boolean;
   scanning backwards for a prefix cannot be made sound: the preceding byte may
   be the last byte of the previous instruction and merely LOOK like one. False
   refusals cost position-independence on a handful of 16-bit accesses; a false
-  acceptance costs a wrong-width memory access, which is silent. }
+  acceptance costs a wrong-width memory access, which is silent.
+
+  AND THE FALSE REFUSALS ARE NOT A HANDFUL OF 16-BIT ACCESSES. That estimate
+  assumed the trigger was a real prefix; the trigger is any byte in the set
+  turning up as DATA. Measured 2026-09-06: `Halt(code)` in PXXIoCheck emits
+  `8b 45 f0` (`mov -0x10(%ebp),%eax`) and then `a3 <moffs>`, and the `f0` of
+  the displacement reads as LOCK -- so `test-emit-obj` carried one absolute
+  .text relocation with nothing wrong. WORSE, THE COUNT MOVED WITH UNRELATED
+  CODE: one extra local in that routine takes `code` off -0x10 and the count
+  goes 1 -> 0, so the row flapped green and red as lib/rtl shifted stack
+  offsets, and a green reading meant only that no displacement happened to end
+  in a prefix byte that day.
+
+  X386InstrStart IS THE WAY OUT, and it is deliberately not the obvious one.
+  Announcing every PREFIX would be sound only if every prefix emission
+  announced -- and a missed one flips this to accept, which is the silent
+  wrong-width access above. Announcing the instruction's START inverts that: a
+  site that does not set it leaves an earlier, SMALLER offset, `pos` does not
+  match, and the byte test refuses exactly as before. Adoption is therefore
+  incremental and a miss costs only position-independence. }
 begin
   I386PrefixBefore := False;
   if pos < 1 then Exit;
+  { The call site said this instruction begins HERE, so there is nothing of it
+    in front of pos and the byte before belongs to the previous instruction. }
+  if pos = X386InstrStart then Exit;
   case Code[pos-1] of
     $66, $67, $F0, $F2, $F3,                { opsize, addrsize, lock, rep }
     $2E, $36, $3E, $26, $64, $65:           { segment overrides }
@@ -1294,6 +1316,27 @@ begin
   GlobFixPCRel[gfIdx] := True;
   GlobFixPicDelta[gfIdx] := GlobFix[gfIdx].CodePos - X386PicAnchor;
   EmitB($89); EmitB($20);           { mov [eax], esp }
+end;
+
+procedure EmitMovGlobAcc(op: Byte; bssOff: Integer);
+{ The moffs accumulator family -- A0/A1 (`mov al/eax, [glob]`) and A2/A3
+  (`mov [glob], al/eax`) -- emitted as ONE BYTE of opcode followed by the
+  moffs, which is the only form any i386 site here uses.
+
+  It exists to record X386InstrStart, not to save typing: this opcode IS the
+  first byte of its instruction, so I386PrefixBefore can stop guessing about
+  the byte in front of it and TryI386PcRelLoad/Store can do the conversion
+  that a displacement ending in $F0, $66 or $F3 was blocking.
+
+  The 16-bit store `66 A3` is NOT in this family and must not be routed here:
+  it has a prefix, and in EmitObjMode it never reaches the sniffer at all
+  because EmitMovGlobAx16 emits its whole PIC form itself. A site that leaves
+  `EmitB($A1); EmitGlobRef(x)` written out longhand still works and still
+  refuses -- that is the design, not an oversight. }
+begin
+  X386InstrStart := CodeLen;
+  EmitB(op);
+  EmitGlobRef(bssOff);
 end;
 
 procedure EmitMovGlobAx16(bssOff: Integer);

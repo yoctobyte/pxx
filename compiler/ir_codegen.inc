@@ -2925,9 +2925,9 @@ begin
     if withHeapArena then
     begin
       EmitMmapArena(HEAP_ARENA_SIZE);          { -> eax = base }
-      EmitB($A3); EmitGlobRef(BSS_HEAP_PTR);   { mov [BSS_HEAP_PTR], eax }
+      EmitMovGlobAcc($A3, BSS_HEAP_PTR);   { mov [BSS_HEAP_PTR], eax }
       EmitB($05); EmitI32(HEAP_ARENA_SIZE);    { add eax, ARENA }
-      EmitB($A3); EmitGlobRef(BSS_HEAP_END);   { mov [BSS_HEAP_END], eax }
+      EmitMovGlobAcc($A3, BSS_HEAP_END);   { mov [BSS_HEAP_END], eax }
     end;
     EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
     Exit;
@@ -14980,10 +14980,10 @@ begin
   if TargetArch = TARGET_I386 then
   begin
     EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE_386);           { sub esp, 32 }
-    EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                        { mov eax, [EXC_TOP] }
+    EmitMovGlobAcc($A1, BSS_EXC_TOP);                        { mov eax, [EXC_TOP] }
     EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
     EmitB($89); EmitB($E0);                                      { mov eax, esp }
-    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                        { mov [EXC_TOP], eax }
+    EmitMovGlobAcc($A3, BSS_EXC_TOP);                        { mov [EXC_TOP], eax }
     EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386);
     EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));
     EmitB($85); EmitB($C0);                                      { test eax, eax }

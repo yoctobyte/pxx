@@ -312,7 +312,7 @@ begin
   for i := 1 to count do
   begin
     EmitB($8B); EmitB($04); EmitB($24);                  { mov eax, [esp] }
-    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
+    EmitMovGlobAcc($A3, BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
     EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE_386);   { add esp, 32 }
   end;
 end;
@@ -401,9 +401,9 @@ begin
     __pxxSigCode is typed Integer (the field's true width), so one dword is the
     whole value. The siginfo pointer being nil is defensive only. }
   EmitB($8B); EmitB($45); EmitB($08);             { mov eax, [ebp+8]   sig }
-  EmitB($A3); EmitGlobRef(BSS_SIG_NUM);           { mov [num], eax }
+  EmitMovGlobAcc($A3, BSS_SIG_NUM);           { mov [num], eax }
   EmitB($8B); EmitB($45); EmitB($10);             { mov eax, [ebp+16]  ucontext* }
-  EmitB($A3); EmitGlobRef(BSS_SIG_CTX);           { mov [ctx], eax }
+  EmitMovGlobAcc($A3, BSS_SIG_CTX);           { mov [ctx], eax }
   EmitB($8B); EmitB($45); EmitB($0C);             { mov eax, [ebp+12]  siginfo* }
   EmitB($85); EmitB($C0);                         { test eax, eax }
   EmitB($0F); EmitB($84); jNoSi := CodeLen; EmitI32(0);   { jz .nosi }
@@ -494,14 +494,14 @@ begin
   EmitB($CD); EmitB($80);                         { int 0x80 }
   EmitB($5B);                                     { pop ebx               sig back }
   EmitCodeAbsToEax386(dispatchAt);                { eax = &dispatch (absolute) }
-  EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
+  EmitMovGlobAcc($A3, BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* — the
     fault CAUSE is unknowable without si_code (see BSS_SIG_CODE). It is ALSO
     what selects the rt signal frame, so it is inseparable from the restorer
     above: this constant, the 173, and the absent `pop eax` are one change. }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 4, $1C000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO|SA_ONSTACK }
   EmitCodeAbsToEax386(restorerAt);                { eax = &restorer (absolute) }
-  EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
+  EmitMovGlobAcc($A3, BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 12, 0);  { mask lo }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 16, 0);  { mask hi }
   EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch   act }
@@ -1803,7 +1803,7 @@ begin
           { Full 8-byte load -> edx:eax (edx = high dword). }
           if Syms[si].Kind = skGlobal then
           begin
-            EmitB($A1); EmitGlobRef(Syms[si].Offset);              { mov eax, [slot] }
+            EmitMovGlobAcc($A1, Syms[si].Offset);              { mov eax, [slot] }
             EmitB($8B); EmitB($15); EmitGlobRef(Syms[si].Offset + 4); { mov edx, [slot+4] }
           end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -1838,7 +1838,7 @@ begin
               begin EmitB($0F); EmitB($B7); EmitB($05); EmitGlobRef(Syms[si].Offset); end;
           end
           else
-            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;
+            begin EmitMovGlobAcc($A1, Syms[si].Offset); end;
         end
         else
         begin
@@ -2036,7 +2036,7 @@ begin
             EmitB($50);                                   { push new handle }
             { eax = old handle from slot }
             if Syms[si].Kind = skGlobal then
-              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end   { mov eax, [slot] }
+              begin EmitMovGlobAcc($A1, Syms[si].Offset); end   { mov eax, [slot] }
             else
               begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
             EmitB($50);                                   { push eax (arg0 = old) }
@@ -2046,7 +2046,7 @@ begin
             EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
             EmitB($58);                                   { pop eax (new handle) }
             if Syms[si].Kind = skGlobal then
-              begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end   { mov [slot], eax }
+              begin EmitMovGlobAcc($A3, Syms[si].Offset); end   { mov [slot], eax }
             else
               begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
           end;
@@ -2118,7 +2118,7 @@ begin
           si := IRA[node];
           IREmitNode386(IRB[node]);                              { eax = handle }
           if Syms[si].Kind = skGlobal then
-            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end  { mov [slot], eax }
+            begin EmitMovGlobAcc($A3, Syms[si].Offset); end  { mov [slot], eax }
           else
             begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
           Exit;
@@ -2162,7 +2162,7 @@ begin
           EmitNode64_386(IRB[node]);                  { value -> edx:eax }
           if Syms[si].Kind = skGlobal then
           begin
-            EmitB($A3); EmitGlobRef(Syms[si].Offset);                  { mov [slot], eax }
+            EmitMovGlobAcc($A3, Syms[si].Offset);                  { mov [slot], eax }
             EmitB($89); EmitB($15); EmitGlobRef(Syms[si].Offset + 4);  { mov [slot+4], edx }
           end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -2231,11 +2231,11 @@ begin
         if Syms[si].Kind = skGlobal then
         begin
           if sz = 1 then
-            begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
+            begin EmitMovGlobAcc($A2, Syms[si].Offset); end
           else if sz = 2 then
             begin EmitMovGlobAx16(Syms[si].Offset); end
           else
-            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
+            begin EmitMovGlobAcc($A3, Syms[si].Offset); end;
         end
         else
         begin
@@ -2287,7 +2287,7 @@ begin
             if InLValueWrite then
               begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end        { mov eax, slot addr }
             else
-              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;       { mov eax, [slot] }
+              begin EmitMovGlobAcc($A1, Syms[si].Offset); end;       { mov eax, [slot] }
           end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
@@ -2314,7 +2314,7 @@ begin
             if InLValueWrite then
               begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end        { mov eax, slot addr }
             else
-              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;       { mov eax, [slot] }
+              begin EmitMovGlobAcc($A1, Syms[si].Offset); end;       { mov eax, [slot] }
           end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { caller slot addr }
@@ -3359,7 +3359,7 @@ begin
           EmitB($81); EmitB($C4); EmitI32(4);
           EmitB($50);                    { push new }
           if Syms[si].Kind = skGlobal then
-            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end
+            begin EmitMovGlobAcc($A1, Syms[si].Offset); end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
@@ -3374,7 +3374,7 @@ begin
           EmitB($81); EmitB($C4); EmitI32(4);
           EmitB($58);                    { pop new }
           if Syms[si].Kind = skGlobal then
-            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+            begin EmitMovGlobAcc($A3, Syms[si].Offset); end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
@@ -3399,7 +3399,7 @@ begin
           end;
           if j = Ord(tkArgCount) then
           begin
-            EmitB($A1); EmitGlobRef(BSS_INITIAL_RSP); { mov eax, [initial_sp] }
+            EmitMovGlobAcc($A1, BSS_INITIAL_RSP); { mov eax, [initial_sp] }
             EmitB($8B); EmitB($00);                   { mov eax, [eax] argc }
             EmitB($83); EmitB($E8); EmitB($01);       { sub eax, 1 }
             Exit;
@@ -3425,7 +3425,7 @@ begin
               EmitArgvToAnsiString386;         { eax (index) -> eax = new handle }
               EmitB($50);                      { push new }
               if Syms[si].Kind = skGlobal then
-                begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end
+                begin EmitMovGlobAcc($A1, Syms[si].Offset); end
               else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
               begin
                 EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
@@ -3440,7 +3440,7 @@ begin
               EmitB($81); EmitB($C4); EmitI32(4);
               EmitB($58);                      { pop new }
               if Syms[si].Kind = skGlobal then
-                begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+                begin EmitMovGlobAcc($A3, Syms[si].Offset); end
               else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
               begin
                 EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
@@ -6027,10 +6027,10 @@ begin
         begin
           lblId := IRA[i];
           EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE_386); { sub esp, 32 }
-          EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                { mov eax, [BSS_EXC_TOP] }
+          EmitMovGlobAcc($A1, BSS_EXC_TOP);                { mov eax, [BSS_EXC_TOP] }
           EmitB($89); EmitB($04); EmitB($24);                  { mov [esp], eax }
           EmitB($89); EmitB($E0);                              { mov eax, esp }
-          EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
+          EmitMovGlobAcc($A3, BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
           EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386); { lea eax, [esp+EXC_JMP_OFFSET_386] }
           EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));  { call ExcSetJmpAddr }
           EmitB($85); EmitB($C0);                              { test eax, eax }
@@ -6059,10 +6059,10 @@ begin
           if IRA[i] <> -1 then
           begin
             IREmitNode386(IRA[i]);
-            EmitB($A3); EmitGlobRef(BSS_EXC_OBJ);
+            EmitMovGlobAcc($A3, BSS_EXC_OBJ);
             classIdx := Integer(IRIVal[i]);
             EmitB($B8); EmitI32(classIdx);
-            EmitB($A3); EmitGlobRef(BSS_EXC_CLS);
+            EmitMovGlobAcc($A3, BSS_EXC_CLS);
           end;
           EmitB($E8); EmitI32(ExcRaiseAddr - (CodeLen + 4));
         end;
@@ -6072,15 +6072,15 @@ begin
           si := IRA[i];
           tk := Syms[si].TypeKind;
           sz := TypeSlotSize(tk);
-          EmitB($A1); EmitGlobRef(IRExcStoreSlot(i)); { mov eax, [exc slot] }
+          EmitMovGlobAcc($A1, IRExcStoreSlot(i)); { mov eax, [exc slot] }
           if Syms[si].Kind = skGlobal then
           begin
             if sz = 1 then
-              begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
+              begin EmitMovGlobAcc($A2, Syms[si].Offset); end
             else if sz = 2 then
               begin EmitMovGlobAx16(Syms[si].Offset); end
             else
-              begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
+              begin EmitMovGlobAcc($A3, Syms[si].Offset); end;
           end
           else
           begin
@@ -6096,7 +6096,7 @@ begin
       IR_EXC_MATCH:
         begin
           lblId := IRA[i];
-          EmitB($A1); EmitGlobRef(BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
+          EmitMovGlobAcc($A1, BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
           EmitB($3D); EmitI32(Integer(IRIVal[i])); { cmp eax, imm32 }
           if LabelPositions[lblId] <> -1 then
           begin
@@ -6116,7 +6116,7 @@ begin
       IR_EXC_MATCH_HIT:
         begin
           lblId := IRA[i];
-          EmitB($A1); EmitGlobRef(BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
+          EmitMovGlobAcc($A1, BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
           EmitB($3D); EmitI32(Integer(IRIVal[i])); { cmp eax, imm32 }
           if LabelPositions[lblId] <> -1 then
           begin
@@ -6136,9 +6136,9 @@ begin
       IR_EXC_CLEAR:
         begin
           EmitB($31); EmitB($C0); { xor eax, eax }
-          EmitB($A3); EmitGlobRef(BSS_EXC_OBJ);
-          EmitB($A3); EmitGlobRef(BSS_EXC_CLS);
-          EmitB($A3); EmitGlobRef(BSS_EXC_ADDR);
+          EmitMovGlobAcc($A3, BSS_EXC_OBJ);
+          EmitMovGlobAcc($A3, BSS_EXC_CLS);
+          EmitMovGlobAcc($A3, BSS_EXC_ADDR);
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:

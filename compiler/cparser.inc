@@ -12098,7 +12098,7 @@ begin
     TARGET_I386:
     begin
       EmitB($89); EmitB($E0);                                  { mov eax, esp }
-      EmitB($A3); EmitGlobRef(BSS_INITIAL_RSP);                { mov [initial_sp], eax }
+      EmitMovGlobAcc($A3, BSS_INITIAL_RSP);                { mov [initial_sp], eax }
       { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
         argument registers, which is what makes the ordering constraint vanish:
         there is nothing live to save across the call yet, only the stack
@@ -12112,7 +12112,7 @@ begin
         EmitB($50);                                            { push eax (arg1 = initial sp) }
         EmitB($E8); initPatch := CodeLen; EmitI32(0);          { call __pxx_run_initializers }
         EmitB($83); EmitB($C4); EmitB($04);                    { add esp, 4 (cdecl caller-pops) }
-        EmitB($A1); EmitGlobRef(BSS_INITIAL_RSP);              { mov eax, [initial_sp] (call clobbered eax) }
+        EmitMovGlobAcc($A1, BSS_INITIAL_RSP);              { mov eax, [initial_sp] (call clobbered eax) }
       end;
       EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
       { PLAIN SysV cdecl: rightmost pushed FIRST, so argc ends up at [ebp+8] and
@@ -12843,6 +12843,7 @@ begin
     if EmitObjMode and (not EmitSharedMode) and (CodeLen = thunkBody) then
     begin
       CodeLen := thunkStart;
+      X386InstrStart := -1;   { a rewind can make a stale start coincide with a real one }
       InitThunkOff := -1;
     end
     else

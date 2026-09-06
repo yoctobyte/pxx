@@ -57,12 +57,12 @@ begin
     EmitB($53);                                                 { push ebx }
     EmitB($56);                                                 { push esi }
     EmitB($57);                                                 { push edi }
-    EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                       { mov eax, [BSS_EXC_TOP] }
+    EmitMovGlobAcc($A1, BSS_EXC_TOP);                       { mov eax, [BSS_EXC_TOP] }
     EmitB($50);                                                 { push eax }
     EmitB($89); EmitB($21);                                     { mov [ecx], esp }
     EmitB($8B); EmitB($22);                                     { mov esp, [edx] }
     EmitB($58);                                                 { pop eax }
-    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                       { mov [BSS_EXC_TOP], eax }
+    EmitMovGlobAcc($A3, BSS_EXC_TOP);                       { mov [BSS_EXC_TOP], eax }
     EmitB($5F);                                                 { pop edi }
     EmitB($5E);                                                 { pop esi }
     EmitB($5B);                                                 { pop ebx }

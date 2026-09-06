@@ -211,8 +211,8 @@ begin
     ExcRaiseAddr := CodeLen;
     { raise site = the return address the `call` pushed (see the x86-64 note) }
     EmitB($8B); EmitB($04); EmitB($24);                         { mov eax, [esp] }
-    EmitB($A3); EmitGlobRef(BSS_EXC_ADDR);                      { mov [BSS_EXC_ADDR], eax }
-    EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                        { mov eax, [BSS_EXC_TOP] }
+    EmitMovGlobAcc($A3, BSS_EXC_ADDR);                      { mov [BSS_EXC_ADDR], eax }
+    EmitMovGlobAcc($A1, BSS_EXC_TOP);                        { mov eax, [BSS_EXC_TOP] }
     EmitB($85); EmitB($C0);                                     { test eax, eax }
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
     EmitB($8D); EmitB($40); EmitB(EXC_JMP_OFFSET_386);          { lea eax, [eax+EXC_JMP_OFFSET_386] }
