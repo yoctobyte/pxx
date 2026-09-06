@@ -123,4 +123,4 @@ before burning was 386/0/114 — identical to the pre-fix baseline, which is the
 number that says the new refusal cost nothing.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 393fe0184.
