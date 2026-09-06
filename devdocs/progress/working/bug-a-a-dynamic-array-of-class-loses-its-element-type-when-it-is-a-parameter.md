@@ -3,10 +3,10 @@ slug: bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-paramet
 track: A
 type: bug
 prio: 80
-status: open
+status: working
 created: 2026-09-06
 found-by: frankD
-owner: frankD
+owner: frank-coord-core
 blocked-by: []
 title: "`A[i].Field` on a dynamic array of CLASS reads garbage when the array is a PARAMETER — silent for a field, a heap dump for `var`, and `no such member` for a method"
 summary: "A dynamic array whose ELEMENT is a class loses that element type when it arrives as a parameter. The same array as a global works. Records and scalars are unaffected. `A[0].Ext` returns a plausible wrong integer with NO diagnostic (by-value), reads arbitrary memory (`var`/open array), and `A[0].ClassName` errors `\"ClassName\": no such member on this record/class`. 20-line repro; fpc 3.2.2 prints the right answer for every row. Two of the three remaining errors on fcl-passrc `pparser.pp` (rung 7) are this one cause."
