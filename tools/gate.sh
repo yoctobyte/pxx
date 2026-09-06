@@ -188,6 +188,142 @@ stale_binary_hint() {
 # once (5.5s, and it would need no attribution on the healthy path) fails
 # unconditionally today on the two mimic_* units below, so it would fall
 # through to the sweep every run and cost strictly more.
+# ROOT DISCOVERY, shared by the two lib/rtl sweeps below. ONE copy, because the
+# two rows ask opposite questions over the SAME population and a second copy of
+# the discovery is how they would come to disagree about what the population is
+# -- devdocs/dev/normalise-dont-special-case.md, and the reason the caller that
+# came second exists at all.
+# A ROOT is a unit no other lib/rtl unit `uses`: sweeping the roots reaches every
+# unit transitively while compiling each dependency once.
+rtl_roots() {
+  local work=$1
+  LC_ALL=C ls lib/rtl/*.pas | sed 's|.*/||; s|\.pas$||' | LC_ALL=C sort > "$work/all.txt"
+  for f in lib/rtl/*.pas; do
+    sed -n '/^ *uses/I,/;/p' "$f" | tr 'A-Z' 'a-z' | tr ',' '\n' |
+      sed 's/uses//; s/;//; s/[^a-z0-9_]//g' | grep -v '^$'
+  done | LC_ALL=C sort -u > "$work/used.txt"
+  LC_ALL=C comm -23 "$work/all.txt" "$work/used.txt" > "$work/roots.txt"
+}
+
+# The probe runner, also shared: one unit, one compiler, a line on failure.
+# The probe must NOT be named after the unit it tests -- a file called
+# `strutils.pas` is read AS the unit strutils and shadows the real one on the
+# search path; all 54 rows failed identically that way while this was written.
+rtl_probe_script() {
+  cat > "$1" <<'ONE'
+#!/bin/sh
+u=$1; work=$2; cc=$3; tag=$4
+printf 'program probe;\nuses %s;\nbegin end.\n' "$u" > "$work/probe_$u.pas"
+out=$("$cc" --threadsafe -Fulib/rtl "$work/probe_$u.pas" "$work/${tag}_$u.bin" 2>&1) ||
+  echo "$u :: $(echo "$out" | grep -m1 -i error | cut -c1-100)"
+ONE
+  chmod +x "$1"
+}
+
+head_rtl_canary() {
+  # THE OTHER DIRECTION OF pinned_rtl_canary, AND IT IS NOT REDUNDANT WITH IT.
+  # That row sweeps the same 54 roots with the PIN and retries with
+  # compiler/pascal26 only for units the PIN FAILED, because its question is
+  # "does the pin lag HEAD" -- the frozen-builtin seam. So a unit the pin
+  # compiles and HEAD BREAKS is never handed to HEAD at all. One `if`, and the
+  # whole regression direction falls through it.
+  #
+  # Measured 2026-09-06, which is why this row exists: 393fe0184 added a
+  # frontend refusal that broke `uses syncobjs` for the entire fleet, and both
+  # of the author's gates were green. This sweep -- the identical population,
+  # run with HEAD -- fails 4 of 54 roots on that commit (syncobjs, atexit,
+  # palparallel, palpthread; only the first was reported, `make test` stopped
+  # there) and 0 of 54 on the fix that replaced it. `make test` found it hours
+  # later, on somebody else's machine, in somebody else's unrelated run.
+  #
+  # ARMED THE WAY THE FPC SEED CANARY IS, and for its reasons verbatim: against
+  # the MERGE-BASE, so it covers committed-but-unpushed. `git diff HEAD` sees
+  # only an uncommitted tree, and the loop this belongs to is as often
+  # edit -> commit -> gate -> push as edit -> gate -> commit. A clone whose
+  # compiler/ matches origin cannot be the one that broke lib/rtl, so it pays
+  # nothing; the sessions that CAN cause this pay ~11s.
+  local work="$LOGDIR/head-rtl"
+  local roots="$work/roots.txt" fails="$work/fails.txt"
+  local base
+  [ -x compiler/pascal26 ] || { say "gate: (no compiler/pascal26 to sweep with)"; return 0; }
+  [ -d lib/rtl ] || {
+    echo "^^ lib/rtl is not there at all -- a broken tree, not a configuration."
+    return 1
+  }
+  base=$(git merge-base origin/master HEAD 2>/dev/null) || base=HEAD
+  if git diff --quiet "$base" -- compiler/ 2>/dev/null; then
+    say "  SKIP  live lib/rtl builds at HEAD (compiler/ matches origin — this clone cannot be the cause)"
+    return 0
+  fi
+  mkdir -p "$work"
+  rtl_roots "$work"
+
+  # Same two guards the pin row carries, for the same reasons: a sweep that
+  # discovered nothing passes every unit it never compiled, and an invocation
+  # that is not reaching a compiler passes all 54 vacuously. Both BRANCH.
+  local n; n=$(wc -l < "$roots")
+  if [ "$n" -lt 20 ]; then
+    echo "^^ the HEAD lib/rtl sweep discovered only $n root units (expected >= 20)."
+    echo "   This is the DISCOVERY breaking, not lib/rtl shrinking."
+    return 1
+  fi
+  printf 'program probe;\nvar x: __pxx_gate_absent_type;\nbegin end.\n' > "$work/control.pas"
+  if ./compiler/pascal26 "$work/control.pas" "$work/control.bin" >/dev/null 2>&1; then
+    echo "^^ this row's own control COMPILED a program naming a type that does not"
+    echo "   exist, so the sweep below would report PASS without building a unit."
+    return 1
+  fi
+
+  rtl_probe_script "$work/one.sh"
+  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$(readlink -f compiler/pascal26)" head \
+    < "$roots" | LC_ALL=C sort > "$fails"
+  [ -s "$fails" ] || return 0
+
+  # A unit HEAD fails AND THE PIN FAILS TOO is not a regression -- it is
+  # whatever it already was. Sorting on the pin is what keeps this row able to
+  # PASS on a tree with pre-existing breakage; a gate that cannot pass is not a
+  # gate, and an exclusion list is the part that silently stops covering
+  # anything. Exactly the pin row's argument, pointed the other way.
+  local pin=stable_linux_amd64/default/pinned
+  local pinabs; pinabs=$(readlink -f "$pin" 2>/dev/null)
+  local regr="$work/regressed.txt" both="$work/both.txt"
+  : > "$regr"; : > "$both"
+  while IFS= read -r line; do
+    local u="${line%% ::*}"
+    if [ -x "$pin" ] &&
+       "$pinabs" --threadsafe -Fulib/rtl "$work/probe_$u.pas" \
+           "$work/pinchk_$u.bin" >/dev/null 2>&1; then
+      echo "$line" >> "$regr"
+    elif [ -x "$pin" ]; then
+      echo "$line" >> "$both"
+    else
+      # No pin to compare against: cannot tell the two apart, so report every
+      # failure as a regression rather than none. The direction that reports
+      # too much is the safe one for a row whose subject is a silent break.
+      echo "$line" >> "$regr"
+    fi
+  done < "$fails"
+
+  if [ -s "$both" ]; then
+    echo "note: $(wc -l < "$both") unit(s) fail under HEAD and under the PIN alike."
+    sed 's/^/     /' "$both"
+    echo "   Pre-existing, not this tree's compiler change. Owner is whoever owns"
+    echo "   that unit, not this row."
+  fi
+  [ -s "$regr" ] || return 0
+
+  echo "^^ compiler/pascal26 CANNOT COMPILE $(wc -l < "$regr") of $n lib/rtl root units that"
+  echo "   the PINNED binary compiles cleanly:"
+  sed 's/^/     /' "$regr"
+  echo "   Your compiler/ change broke live library code. This is the direction the"
+  echo "   pinned row cannot see -- it retries with HEAD only where the PIN failed."
+  echo "   The remedy is NOT a pin: the pin is the one that still works."
+  echo "   A refusal added on a true premise is the commonest cause here. The"
+  echo "   population that legitimately reaches a new diagnostic is enumerable in"
+  echo "   lib/rtl and is not enumerable by imagining it."
+  return 1
+}
+
 pinned_rtl_canary() {
   local pin=stable_linux_amd64/default/pinned
   local pinabs; pinabs=$(readlink -f "$pin" 2>/dev/null)
@@ -202,12 +338,7 @@ pinned_rtl_canary() {
   }
   mkdir -p "$work"
 
-  LC_ALL=C ls lib/rtl/*.pas | sed 's|.*/||; s|\.pas$||' | LC_ALL=C sort > "$work/all.txt"
-  for f in lib/rtl/*.pas; do
-    sed -n '/^ *uses/I,/;/p' "$f" | tr 'A-Z' 'a-z' | tr ',' '\n' |
-      sed 's/uses//; s/;//; s/[^a-z0-9_]//g' | grep -v '^$'
-  done | LC_ALL=C sort -u > "$work/used.txt"
-  LC_ALL=C comm -23 "$work/all.txt" "$work/used.txt" > "$roots"
+  rtl_roots "$work"
 
   # A sweep that discovered nothing passes every unit it never compiled, and
   # says PASS in less time than before -- which reads as the tree being fine.
@@ -232,22 +363,12 @@ pinned_rtl_canary() {
     return 1
   fi
 
-  # The probe must NOT be named after the unit it tests: a file called
-  # `strutils.pas` is read AS the unit strutils (`expected 'unit' before
-  # 'program'`) and shadows the real one on the search path. All 54 rows
-  # failed identically that way while this was being written.
   # --threadsafe so the units that genuinely require it (palthread*, cthreads)
   # compile in the mode they are really built in, rather than being excluded --
-  # an exclusion list is the part that silently stops covering anything.
-  cat > "$work/one.sh" <<'ONE'
-#!/bin/sh
-u=$1; work=$2; pin=$3
-printf 'program probe;\nuses %s;\nbegin end.\n' "$u" > "$work/probe_$u.pas"
-out=$("$pin" --threadsafe -Fulib/rtl "$work/probe_$u.pas" "$work/probe_$u.bin" 2>&1) ||
-  echo "$u :: $(echo "$out" | grep -m1 -i error | cut -c1-100)"
-ONE
-  chmod +x "$work/one.sh"
-  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$pinabs" < "$roots" |
+  # an exclusion list is the part that silently stops covering anything. The
+  # runner itself is rtl_probe_script, shared with head_rtl_canary below.
+  rtl_probe_script "$work/one.sh"
+  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$pinabs" pin < "$roots" |
     LC_ALL=C sort > "$fails"
 
   # A unit that fails under BOTH compilers is not this seam and never was: it
@@ -399,6 +520,13 @@ then
 else
   say "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
 fi
+
+# ...and the same population swept with THIS TREE's compiler, which the row
+# above structurally cannot do: it hands a unit to HEAD only when the PIN
+# already failed it. Self-arming (merge-base against origin/master, the seed
+# canary's rule), so a clone with no compiler/ change of its own pays nothing.
+step "live lib/rtl builds at HEAD" "$LOGDIR/head-rtl-canary.log" \
+     head_rtl_canary                                                  || RC=1
 
 # Literal short-jump displacements. CheckRel8 already guards the OVERFLOW class
 # and hard-errors; this is the other one -- a hand-counted displacement over a
