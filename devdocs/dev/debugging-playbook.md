@@ -17898,6 +17898,35 @@ run against a build that might still refuse — which for this fleet means any f
 ever be pointed at `$(PXX_STABLE)`. And record the SHAPE in the file, because that is the field
 the next author greps for.
 
+## TWO SEATS NAMED ONE FILE AND MEANT TWO — a collision manufactured entirely by a BASENAME
+
+2026-09-06. frank-subcoord declared a topic in `platform_backend.pas`; frank-coord-front
+declared one in `platform_backend.pas` and asked me to arbitrate, offering to yield half their
+ticket. **There was nothing to arbitrate. There are three files with that basename:**
+
+```
+lib/rtl/platform/esp/platform_backend.pas     1305 lines   <- frank-coord-front
+lib/rtl/platform/posix/platform_backend.pas   2087 lines   <- frank-subcoord
+lib/rtl/platform/wasi/platform_backend.pas    1396 lines   <- nobody
+```
+
+Two honest descriptions, two different questions — syscall argument width in the POSIX backend
+against unit granularity in the ESP one — and **the entire collision lived in the name.** One
+seat was one message away from giving up a ticket.
+
+**This is the exact inverse of `bug-t`'s wrong-file collision check**, and it is the same
+mechanism running the other way. There, a check aimed at a plausible-sounding filename that does
+not hold the code comes back CLEAR and **has no failure mode**. Here, two seats naming one
+plausible-sounding basename came back COLLIDING and it had no failure mode either — nothing
+errors, nothing looks odd, and the answer is confidently wrong in whichever direction the
+guess fell.
+
+> **Resolve the PATH before believing either answer.** `ls`, `git ls-files '*<basename>'`, or
+> `whoholds.py --containing=<a string the code owns>`. A basename is a claim about where code
+> lives; the path is the measurement of it. **And a repo with per-target directories has this
+> hazard by construction** — the whole point of `platform/<target>/` is that the same filename
+> appears once per target, so every conversation about one of them is ambiguous by design.
+
 ## A DIAGNOSTIC THAT ENUMERATES CANDIDATES IS COMPLETE ABOUT THE TABLE, NOT ABOUT THE SOURCE
 
 frankS, 2026-09-06, `04de42311`. Two generic routines sharing a name and type arity but
@@ -17996,6 +18025,31 @@ tier erases the question and nobody can reconstruct it afterwards.
 > every row in the table above becomes answerable by a question a person can hold in their
 > head: **would I hand this compiler to someone on the strength of that green?** That is why
 > rules 3 and 4 arrived together and why neither survives alone.
+
+**TWO DATED SPECIMENS, BOTH CAUGHT BY THE SEAT ITSELF, 2026-09-06 (frankH).** A rule with
+instances does not get re-litigated, which is why these are worth more than the rule.
+
+| the row | the move that would have greened it | why it is worse than the red |
+| --- | --- | --- |
+| a zlib row | relax the redefinition check | the check is the only thing that reports the class |
+| a NilPy row | make the duplicate-identifier check case-sensitive | **it would have made Pascal wrong** — Pascal is case-insensitive, so the "fix" ships a language defect to green one frontend's row |
+
+**The second one is the sharper specimen**: the move was local, plausible, and confined to a
+check — and its blast radius was the language. Nothing in the failing row named Pascal.
+
+**And a THIRD shape that is not in the table because it is not a move at all: a red that is
+already fixed.** frank-coord-front, same evening, closing
+`regression-test-nilpy-test-nilpy-dotted-package-import-2` (`94e8ab171`). **A STALE RED AND AN
+UNNARROWED RED PRINT THE SAME THING** — and the auto-filed stub's own banner says the named sha
+touches no buildable file and is only an upper bound, which reads as *needs narrowing* and sends
+the reader DOWNWARD into a bisect. Under a zero-red target that is hours spent below a bound
+when the fix is above it.
+
+> **The check is one command and it goes FIRST:
+> `git merge-base --is-ancestor <the fix> <the tested tree>`.** FALSE means the fix landed after
+> the tree the watcher measured and there is nothing to bisect. It fails in the safe direction —
+> a stale answer sends you to re-run, not to close. Then **re-run the job's assertions** rather
+> than closing on the ordering alone, which is what makes it a closure rather than a story.
 
 ### AND THE GUARD'S OWN COMMENT PREDICTED THE FALSE REFUSAL ONE STEP OFF — twice in one evening
 

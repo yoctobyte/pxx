@@ -224,6 +224,7 @@ def recent(path, minutes):
 
 
 _SEATS = None
+_CLAIMS = {}
 
 
 def seat_map():
@@ -272,10 +273,22 @@ def seat_map():
     if not root:
         return _SEATS
     parent = os.path.dirname(root)
+    # KEEP THE CLONES THAT SHARE OUR ORIGIN, not a name glob and not every
+    # sibling with a .git (frankH, 2026-09-06, merged in from whose_commit.sh).
+    # A `frank*` glob denied 4056 origin/master shas, because `~/pxx` and
+    # `~/trackt-watch` are this repo too and the watcher clone is where every
+    # auto-filed regression is authored -- "the T daemon, not a seat" is a real
+    # answer rather than an absence. A bare walk is wrong the other way:
+    # `~/pxx-website` is a DIFFERENT repository. Matching on the origin URL is
+    # self-configuring, so it does not go stale the way both name lists did.
+    mine = sh("git", "config", "--get", "remote.origin.url").strip()
     claims = collections.defaultdict(set)
     for name in sorted(os.listdir(parent)):
         d = os.path.join(parent, name)
         if not os.path.isdir(os.path.join(d, ".git")):
+            continue
+        if mine and sh("git", "-C", d, "config", "--get",
+                       "remote.origin.url").strip() != mine:
             continue
         out = subprocess.run(["git", "-C", d, "reflog", "--format=%H %gs"],
                              capture_output=True, text=True).stdout
@@ -288,7 +301,137 @@ def seat_map():
                 claims[sha].add(name)
     for sha, who in claims.items():
         _SEATS[sha] = sorted(who)[0] if len(who) == 1 else "ambiguous"
+    global _CLAIMS
+    _CLAIMS = {k: sorted(v) for k, v in claims.items()}
     return _SEATS
+
+
+def claim_sets():
+    """{sha -> [checkout, ...]} -- seat_map() before it collapses ambiguity.
+
+    seat_map() answers "which seat" and has to give ONE name or none, so it
+    flattens a two-claim sha to the string "ambiguous". --sha needs the names:
+    a sha claimed by two trees is a patch applied in two places, and WHICH two
+    is the whole content of that answer.
+    """
+    seat_map()
+    return _CLAIMS
+
+
+def session_id(sha):
+    """The Claude-Session id in the commit message, or "" if it has none.
+
+    A SECOND INSTRUMENT THAT FAILS DIFFERENTLY, which is the entire reason it is
+    printed beside the checkout rather than instead of it. The reflog answers
+    WHERE a commit was created and cannot see a cherry-pick or one session
+    applying another's patch; the trailer answers WHICH SESSION wrote the
+    message and cannot see a commit that has no trailer. frankH's case,
+    2026-09-06: a `tools/sync.sh` PENDING-COMMIT fill-in is authored in a real
+    checkout and is trailerless, so the reflog resolves it and the URL cannot.
+    Neither is the fallback for the other; they disagree in opposite directions.
+    """
+    body = sh("git", "log", "-1", "--format=%B", sha)
+    m = re.search(r"(session_[A-Za-z0-9]+)", body)
+    return m.group(1) if m else ""
+
+
+_HORIZON = None
+
+
+def _reflog_horizon():
+    """Unix time of the OLDEST surviving reflog entry across the scanned clones.
+
+    A commit older than this cannot be claimed by any reflog no matter who
+    wrote it, which is the only honest way to tell "nobody authored it here"
+    from "the instrument does not reach back that far".
+    """
+    global _HORIZON
+    if _HORIZON is not None:
+        return _HORIZON
+    root = sh("git", "rev-parse", "--show-toplevel").strip()
+    parent = os.path.dirname(root)
+    mine = sh("git", "config", "--get", "remote.origin.url").strip()
+    oldest = None
+    for name in sorted(os.listdir(parent)):
+        d = os.path.join(parent, name)
+        if not os.path.isdir(os.path.join(d, ".git")):
+            continue
+        if mine and sh("git", "-C", d, "config", "--get",
+                       "remote.origin.url").strip() != mine:
+            continue
+        out = sh("git", "-C", d, "reflog", "--date=unix", "--format=%gd")
+        for line in reversed(out.splitlines()):
+            m = re.search(r"\{(\d+)\}", line)
+            if m:
+                t = int(m.group(1))
+                oldest = t if oldest is None else min(oldest, t)
+                break
+    _HORIZON = oldest or 0
+    return _HORIZON
+
+
+def by_sha(shas):
+    """Name the checkout that CREATED each sha. Exit 1 if ANY is unresolved.
+
+    Both failure shapes are non-zero and neither is silent: nobody claims it,
+    and two claim it. A tool that names one seat confidently when two trees
+    claim the object is worse than one that refuses -- a name gets believed.
+    """
+    claims = claim_sets()
+    rc = 0
+    for want in shas:
+        # `rev-parse` WITHOUT --verify ECHOES BACK AN UNRESOLVABLE ARGUMENT and
+        # sh() keeps only stdout, so a typo would sail through as a 40-char
+        # "sha" and be reported as NO CHECKOUT CLAIMS IT -- a wrong answer
+        # wearing the shape of a real one, and the shape this tool exists to
+        # refuse. --verify makes it fail instead. Caught by the deadbeef row.
+        full = sh("git", "rev-parse", "--verify", "--quiet", want + "^{commit}").strip()
+        if not full:
+            print("%-12s UNKNOWN-SHA -- not a commit in this repo" % want)
+            rc = 1
+            continue
+        short = full[:9]
+        who = claims.get(full, [])
+        sid = session_id(full) or "no-session-id"
+        if len(who) == 1:
+            print("%s  %-18s %s" % (short, who[0], sid))
+        elif not who:
+            # SEPARATE THE TWO UNCLAIMED SHAPES -- they have different answers
+            # and printed one message until frankH asked, 2026-09-06. "Nobody
+            # authored it here" is a finding; "the reflog no longer goes back
+            # that far" is the instrument admitting it cannot see, and reading
+            # the second as the first is how a normal old commit becomes a
+            # mystery. Discriminated by DATE, not by guessing: if the commit
+            # predates the oldest surviving reflog entry in every clone, no
+            # reflog could have held it whatever happened.
+            when = int(sh("git", "log", "-1", "--format=%ct", full).strip() or 0)
+            if _reflog_horizon() and when and when < _reflog_horizon():
+                print("%s  BEFORE EVERY REFLOG WINDOW   %s" % (short, sid))
+                print("      -> older than the oldest surviving reflog entry, so")
+                print("         no clone COULD claim it. Not evidence about who")
+                print("         wrote it; the instrument does not reach. Use the")
+                print("         session id, which does not expire.")
+            else:
+                print("%s  NO CLONE CLAIMS IT   %s" % (short, sid))
+                print("      -> inside the reflog window and unclaimed: authored")
+                print("         outside %s, or in a FRESH CLONE (whose reflog"
+                      % os.path.dirname(sh("git", "rev-parse",
+                                           "--show-toplevel").strip()))
+                print("         holds one `clone:` entry and claims nothing).")
+            rc = 1
+        else:
+            print("%s  AMBIGUOUS: %s   %s" % (short, " ".join(who), sid))
+            print("      -> one patch applied in two trees. The session id is the")
+            print("         tiebreak, and it is printed for exactly this case.")
+            rc = 1
+    if shas:
+        print("")
+        print("  This says WHERE a commit was authored, never WHO authored it. A")
+        print("  cherry-pick, a rebase that re-creates someone else's commits, or")
+        print("  one session applying another's patch all put the wrong tree's")
+        print("  reflog behind the sha. The session id fails differently -- hold")
+        print("  both, and distrust a row where they disagree.")
+    return rc
 
 
 def report(paths, minutes):
@@ -414,6 +557,11 @@ if __name__ == "__main__":
         print("--containing= needs a string the code owns, not an empty one.",
               file=sys.stderr)
         sys.exit(2)
+    if "--sha" in sys.argv:
+        if not args:
+            print("--sha needs at least one commit-ish.", file=sys.stderr)
+            sys.exit(2)
+        sys.exit(by_sha(args))
     if "--hot" in sys.argv:
         hot(mins)
     elif needle is not None:
@@ -423,4 +571,4 @@ if __name__ == "__main__":
     else:
         print(__doc__.split("\n\n")[0])
         print("usage: tools/whoholds.py <file>... | --containing=STRING [pathspec...]"
-              " | --hot [--window=MIN]")
+              " | --sha <commit-ish>... | --hot [--window=MIN]")
