@@ -323,3 +323,39 @@ expensive.
 **Untried. Not started here**, because it is bigger than the tail of a session
 and this ticket is not blocking anything. Recorded so the next attempt starts
 from the sharpened version rather than re-deriving it.
+
+## 2026-09-06 — the row that used to assert the wall no longer does, and nothing replaced it
+
+Measured at `eb8f1bb1c` (`compiler/pascal26` = `2945de63e58b5f23`, srchash
+`8e4a68cd94d88acf` matching the tree, real `converged after 1 round(s)`).
+
+`f49c0e11f` fixed the epilogue case, correctly said "NOT A COMPLETE FIX", and
+added `test_xtensa_finalizer_call_reach` for what it fixed. What it did not do
+is notice that the **existing** `xt_bigcall` row asserted the refusal it had
+just made unreachable. That row has failed the full tier ever since
+(`test-xtensa#147`, red in every report from 2026-09-05 19:48 onward).
+
+`xt_bigcall` generates 5000 straight-line `s := s + 1;` statements. **The only
+over-512 KiB forward call a program of that shape makes is the exit path's call
+to `__pxx_run_finalizers`** — precisely the call `f49c0e11f` now reserves the
+long form for unconditionally. The refusal could never fire there again.
+
+The generator was never the limit, which is worth recording because the row's
+own comment guessed the other way ("a program that no longer crosses the
+bound"): at 40000 statements it emits **3.9 MB of code, 7.4x the bound, and
+still builds clean and runs correctly with no flag**, output identical to the
+native build.
+
+**The residual, and it is this ticket's.** A forward call between two ordinary
+procs more than 512 KiB apart still refuses — `XtensaCallReaches` still carries
+the `Error` naming `--xtensa-long-calls` — and **no row anywhere reaches it
+now**. The sharper half: the old row never reached it either. It was hitting
+the epilogue call the whole time and being read as the general case, so the
+coverage this ticket believed it had was already the narrow case before
+`f49c0e11f` removed it. Constructing the general shape needs two ordinary
+bodies placed that far apart, which is emission-order knowledge the generator
+does not have.
+
+The row is repaired into its inverse (build with no flag, run, compare against
+the native build), so it now guards `f49c0e11f` against regression — strictly
+more than it guarded before, but not the same thing.

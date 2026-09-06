@@ -23670,18 +23670,35 @@ test-xtensa: $(COMPILER)
 	  for(k=0;k<5000;k++) print "  s := s + 1;"; \
 	  print "  Writeln(\"s=\", s);"; print "end."}' \
 	  | tr '"' "'" > $(TESTTMP)/xt_bigcall.pas
-	# THE POSITIVE CONTROL, and it asserts the REMEDY as well as the refusal: a
-	# wall nobody can find the flag for is barely better than a wall. If this
-	# ever builds clean the row fails here rather than silently testing a
-	# program that no longer crosses the bound.
-	@out=$$(./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall 2>&1 || true); \
-	  case "$$out" in \
-	    *--xtensa-long-calls*) ;; \
-	    *) echo "xt_bigcall: expected a forward-call refusal naming --xtensa-long-calls, got:"; echo "$$out"; exit 1;; \
-	  esac
+	# THIS WAS A REFUSAL ROW UNTIL f49c0e11f AND IS NOW ITS INVERSE, because the
+	# wall it asserted was fixed for exactly this program shape. The row did what
+	# its old comment promised -- it went red rather than silently testing a
+	# program that no longer crosses the bound -- but the cause was the opposite
+	# of the one anticipated: the PROGRAM still crosses 512 KiB (this generator
+	# emits 3.9 MB of code at 40000 statements and still builds), what changed is
+	# that the COMPILER no longer has the bound here. The only over-512 KiB
+	# forward call a straight-line program like this makes is the exit path's call
+	# to __pxx_run_finalizers, emitted last, and f49c0e11f reserves the long form
+	# for FiniRunnerProc unconditionally. So the refusal could not fire again.
+	#
+	# Asserting the refusal's absence is weaker than asserting the fix, so this
+	# now asserts the fix: build with NO flag and RUN it, compared against the
+	# same program built natively so the row carries no per-target constant.
+	# That would catch a regression of f49c0e11f, which the old row could not.
+	#
+	# WHAT IS NO LONGER COVERED BY ANY ROW, and it is not fixed: a forward call
+	# between two ORDINARY procs more than 512 KiB apart still refuses and still
+	# names --xtensa-long-calls (symtab.inc, XtensaCallReaches). f49c0e11f says so
+	# itself -- "NOT A COMPLETE FIX and must not be read as one" -- and no
+	# generator here produces that shape, because this one only ever reached the
+	# epilogue call. Reaching it needs two ordinary bodies placed that far apart,
+	# which is emission-order knowledge this row does not have.
+	# feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_nf
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_w
 	./$(COMPILER) $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_x64
+	tools/expect_same.sh xtensa/xt_bigcall-noflag "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall_nf; echo "exit=$$?")" "$$($(TESTTMP)/xt_bigcall_x64; echo "exit=$$?")"
 	tools/expect_same.sh xtensa/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall)" "$$($(TESTTMP)/xt_bigcall_x64)"
 	tools/expect_same.sh xtensa-windowed/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall_w)" "$$($(TESTTMP)/xt_bigcall_x64)"
 	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
