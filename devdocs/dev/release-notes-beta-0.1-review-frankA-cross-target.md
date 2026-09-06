@@ -145,3 +145,28 @@ The ESP rows (four configurations, 29 emulator assertions) — no ESP hardware o
 emulator run from here, and the draft's own numbers came from a seat that had
 one. The `xtensa` and `wasm32` columns above are absences, not failures: this
 host cannot run either, which is the same reason the draft gives.
+
+---
+
+## SCOPE NOTE — these rows are about pin v406, and the pin has since moved
+
+Added the same evening. **Pin v407 landed at `51901941e`** (binary sha256
+`095ef4811a5b`, tree `04559b9d6`) after every measurement above was taken.
+
+Nothing here is retracted: each row names its instrument — `4bfd73d70588`, the
+v406 binary the draft itself cites — so every claim is still true about the
+build it was taken against, which is the build the draft's own numbers came
+from. **What it is NOT is a statement about v407.** None of these rows has been
+re-taken at the new pin.
+
+This note exists because the review will be read by someone who does not know
+the pin moved twenty minutes later, and an unlabelled measurement inherits the
+currency of whatever it sits beside. If any of it is quoted after a further pin,
+re-take it — the rows are cheap, which is the point of choosing relations and
+hello-world programs as the probes.
+
+The v407 grade is worth carrying alongside: `quick GREEN, full tier NOT RUN at
+this tree`, recorded in those words rather than rounded up. **So the
+cross-target matrix is unmeasured at v407** — which is precisely the axis this
+review is about, and precisely the reason a green quick tier is not the claim a
+reader assumes it is.
