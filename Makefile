@@ -6843,6 +6843,21 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_array_of_const_in_a_procedural_type_is_refused.pas $(TESTTMP)/test_aocproctype26 2>&1 \
 	  | grep -q 'unknown type: const' \
 	  || { echo 'test_array_of_const_in_a_procedural_type_is_refused: FAIL - array of const in a procedural type compiled, or refused for another reason'; exit 1; }
+	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
+	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
+	@# Next` that discarded any unrecognised token in silence: a class body
+	@# accepted `42 43 44;` and a record body `42 43;`, both compiled and ran,
+	@# and fpc 3.2.2 refuses both. Censused over 2276 files before narrowing --
+	@# class 6287 fires (6283 tkSemicolon, 4 tkVar), record 11 (8 tkVar, 3
+	@# tkClass, no semicolons) -- so the skip lists below are the whole of the
+	@# live traffic. The error string is asserted so neither row can pass by
+	@# refusing for some other reason.
+	@./$(COMPILER) test/test_a_stray_token_in_a_class_or_record_body_is_refused.pas $(TESTTMP)/test_straycls26 2>&1 \
+	  | grep -q 'this token is not a class member' \
+	  || { echo 'test_a_stray_token_in_a_class_or_record_body_is_refused: FAIL - a stray token in a class body compiled, or refused for another reason'; exit 1; }
+	@./$(COMPILER) test/test_a_stray_token_in_a_record_body_is_refused.pas $(TESTTMP)/test_strayrec26 2>&1 \
+	  | grep -q 'this token is not a record member' \
+	  || { echo 'test_a_stray_token_in_a_record_body_is_refused: FAIL - a stray token in a record body compiled, or refused for another reason'; exit 1; }
 	@# A BARE ROUTINE NAME INTO A PROCEDURAL SLOT, all four spellings in one
 	@# compile. Outside {$$mode delphi} the name is a CALL, so the Integer RESULT
 	@# went into a function-pointer slot and calling it jumped through 7 --

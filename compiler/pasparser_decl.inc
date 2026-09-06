@@ -5176,8 +5176,26 @@ begin
         and r.i:=x; r.c read 0.) }
       curFieldOff := ParseRecordVariantPart(ci, isPackedRecord, curFieldOff,
         classAlign)
+    else if (CurTok.Kind = tkSemicolon) or (CurTok.Kind = tkVar) or
+            (CurTok.Kind = tkClass) then
+      { The SECTION KEYWORDS, skipped deliberately and named so. `var` reopens a
+        field list after a nested `type` section and `class` introduces
+        `class var`; the members themselves are picked up by the arms above, so
+        all that is needed here is to step over the keyword. Both are verified
+        against fpc 3.2.2 -- `class var` in a record stays shared across
+        instances and is excluded from SizeOf, exactly as fpc has it -- so this
+        skip demotes nothing.
+
+        THIS USED TO BE A BARE `else Next`, i.e. a catch-all that discarded ANY
+        token, and a record body therefore accepted `42 43;` and ran. Censused
+        over 2276 files before narrowing: 11 fires, tkVar x8 and tkClass x3, and
+        no others -- so this list is the whole of the live traffic and the
+        `Error` below cannot reach a construct the corpus uses.
+        bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
+      Next
     else
-      Next;
+      Error('this token is not a record member: expected a field, method, ' +
+            'property, a var/class/type/case section, or end');
   end;
   ParsingClassBodyCi := savedPCB;
   UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
@@ -7445,8 +7463,29 @@ begin
             ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False, False,
                                curPublished, curVis);
           end
+          else if (CurTok.Kind = tkSemicolon) or (CurTok.Kind = tkVar) then
+            { A stray `;`, and `var` reopening a field list after a nested
+              `type` section. Skipped deliberately; the members are read by the
+              arms above. `class` is NOT in this list and must not be added --
+              a class body has real arms for class members, so `class` reaching
+              here would mean one of them failed, and that is worth an error.
+              (The record body's copy of this arm DOES allow `class`, because a
+              record body has no such arm. The two lists are different on
+              purpose.)
+
+              THIS USED TO BE A BARE `else Next`. A class body accepted
+              `42 43 44;`, `+ - * ;` and `'oops';` and compiled them away in
+              silence, and it was where a property's `default <value>` operand
+              went before that clause was parsed properly -- which is why
+              `default 16` looked supported for as long as it did. Censused over
+              2276 files before narrowing: 6287 fires, 6283 tkSemicolon and 4
+              tkVar, no others.
+              bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
+            Next
           else
-            Next;
+            Error('this token is not a class member: expected a field, ' +
+                  'method, property, a visibility section, var/class/type, ' +
+                  'or end');
         end;
         Expect(tkEnd, 'end');
         ParsingClassBodyCi := savedPCB;
