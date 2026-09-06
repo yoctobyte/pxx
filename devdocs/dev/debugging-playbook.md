@@ -17901,6 +17901,20 @@ four parsers represented. **It was not unreachable, it was unrun.**
 any commit that touches a parser, which is what a per-fix loop that cannot see
 `test-core` otherwise leaves to Track T's ~8-commit sampling window.
 
+> **WHAT IT CERTIFIES IS NARROWER THAN "THE ROW PASSES" (frankD).** Five
+> fixtures run through it at ~6.5s each, all green, nothing found — and the
+> useful reading is: *it confirms a fixture I have already diffed against fpc by
+> hand is WIRED AND REACHABLE.* That is exactly what `d51037cf2` lacked, a
+> reproducer that existed and had never been run. **A wired-and-run fixture and
+> a driven library are different claims, and `--job` only makes the first one
+> cheap.** Same day, same seat: `program rung7b; uses pastree; begin end.`
+> printed `ok:` with a code size and a proc count for a 5947-line unit, and the
+> unit was nearly logged done on it — **the empty-driver trap, eight hours after
+> the same seat wrote it up, in a file they wrote themselves.** A real driver
+> (construct the types, print `GetDeclaration`, AddRef/Release to zero) matched
+> fpc byte for byte; the compile probe would have said the same thing if the
+> library printed nothing at all.
+>
 > **AND THE POINT IS NOT THAT IT FINDS MORE.** frankS ran all four of their
 > retag-dependent rows through it and **it caught nothing their hand-diff had
 > missed** — they had been generating each `.expected` from fpc and diffing by
@@ -17958,3 +17972,70 @@ EVERY array parameter as the open-array placeholder. `Kind <> skParam` is the
 real discriminator. frankS found it only because the positive control had been
 written as a **must-COMPILE row** rather than reasoned about — and then nearly
 lost it again to the stale binary above.
+
+## A FALSE REJECT CAN BE LOAD-BEARING — "we refuse this legal construct" is not a bounded cost
+
+**Two defects, and the first was keeping the second off every instrument we
+own.** Neither is provable alone.
+
+Measured 2026-09-06 (frankD), in fcl-passrc's `pastree.pp`. `Fields := nil` on an
+`array of <record>` FIELD was refused by the assignment kind check — the field
+typed as its ELEMENT, the certifying-funnel shape again. Fixing that false
+reject was correct and the program then **SEGFAULTED**: `ASTNodeIsWholeArray`
+only ever answered for the `AN_IDENT` spelling, so the same statement took the
+*record-shaped destination `:= nil`* arm and **zeroed four bytes over an
+eight-byte array handle.**
+
+**The refusal was the only thing standing between the corpus and that
+lowering.** Nothing had ever reached it, so nothing could ever have reported it:
+not a test, not a corpus rung, not a differential probe. The bad arm was not
+untested — it was **unreachable**, by a defect.
+
+> **THE GENERAL SHAPE: a ticket that says "we refuse this legal construct" is
+> quoting a cost it cannot know.** The visible cost is the refusal. The invisible
+> one is however much lowering sits behind it that has never executed — and that
+> quantity is not estimable from the refusal, because the refusal is exactly what
+> stopped anyone measuring it.
+
+**Consequences worth acting on:**
+
+- **Ranking.** A false-reject ticket is routinely filed low because "it only
+  refuses something rare". That rank is a claim about the refusal, never about
+  what is behind it. Ask instead: *when this is allowed, what code runs for the
+  first time?*
+- **Fixing.** Do not close a false-reject fix on "it compiles now". **Run the
+  construct**, in each spelling, and expect the first execution of a path that
+  has never run. `AN_IDENT` versus every other node shape is the sibling-spelling
+  rule pointed at the lowering rather than at the parser.
+- **Corpus reading.** A rung that stops at a refusal has measured one wall and
+  says nothing about the next; two of frankD's four `pscanner.pp` walls were
+  invisible until the one in front fell, and this is the same fact with a crash
+  behind the door instead of another diagnostic.
+
+## A ZERO IN THE ONE COORDINATE FIELD ERASES THE WHOLE LOCATING APPARATUS AT ONCE
+
+`ASTLine` is 0 for nodes from an appended (`uses`d) unit — a **correct** DWARF
+decision, since the RTL must contribute no line-table rows. It was also serving
+as the coordinate for `ErrorAt` / `ErrorAtRecover`, and `ErrorPrintAt` drives the
+`pascal26:<n>:` prefix, the `in: <file>` line **and** the `near:` window off that
+single number.
+
+**So a zero does not degrade a diagnostic; it removes every part of it that says
+where.** Measured both ways in one run: `r := p` for a record `r` reports
+`pascal26:30:` in a program and `pascal26:0:` from a unit.
+
+**Why this is a fleet-wide reading hazard and not just a bug:** **corpus work is
+entirely used units.** Anyone on a corpus rung has been reading location-less
+semantic errors for as long as this has been true, and the natural reading of a
+missing coordinate is *"the compiler cannot say where"* — an accepted limitation
+— rather than *"one field is overloaded and the other four outputs are derived
+from it"*. Fixed by splitting: the line is always stamped, and `ASTFile = 0`
+carries "not in the line table".
+
+**The positive control for that split is the number to remember**, because both
+directions are silent: with the new guard removed, an **eight-line program's line
+table went from 6 rows to 3663**, carrying line numbers up to **6290** — the
+RTL's own — every one attributed to the user's file. `readelf` does not complain
+and gdb resolves happily to the wrong text. It is a row in `tools/dwarf_smoke.sh`
+now, which is the right disposal: a defect whose only two states are "no
+locations" and "3662 wrong locations" cannot be guarded by reading output.
