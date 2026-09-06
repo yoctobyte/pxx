@@ -88,3 +88,44 @@ non-x86-64 row above is a crash today.
 Seven further frontends refuse identically (`aparser`, `fparser`, `lparser`,
 `gparser`, `wparser`, plus `bparser` and the stackful-generator backend); this
 ticket covers only the three whose tail is measured to be x86-64 machine code.
+
+## 2026-09-06 (frankA) — the seam, read out of the code rather than guessed
+
+Sized before editing, because the first estimate ("route the tail through
+`EmitExitReg`") was too small. What each driver's entry stub actually owes:
+
+| step | who owns it | already shared? |
+| --- | --- | --- |
+| save sp to `BSS_INITIAL_RSP` | every frontend | **no** — the slot is allocated by `EmitProgramPrologue` (`frontend_prologue.inc:73`), the WRITE is per-driver |
+| `call __pxx_run_initializers(sp)` | C only, today | mechanism generic, caller C-only |
+| load argc/argv into arg registers | **C only** | n/a — Rust/Zig `main` takes none |
+| `call main`, patchable forward | every frontend | emit **no**, patch **YES** (`CPatchStubCall`, cparser.inc:11917, all six targets) |
+| finalizer runner around the retval | every frontend | call **YES** (`EmitCallProc` is target-independent); the retval save/restore is per-target |
+| `exit_group(retval)` | every frontend | **YES** — `EmitExitReg` (`emit.inc:1610`) already does exactly this on all six |
+
+**So two of the six steps already have shared owners and the drivers do not use
+them.** `EmitExitReg`'s own header says it exists because the rule *"was
+previously restated by hand in each backend's AN_HALT arm, six copies of one
+concept, and TWO of them drifted"* — these are copies seven and eight, and they
+were uncounted because a refusal made them unreachable.
+
+**The minimal correct increment**, and it is smaller than the full extraction:
+add a shared `EmitEntryCallMainSlot(var callPatch, callAnchor)` — the per-arch
+mirror of the `CPatchStubCall` that already exists — then each of the three
+drivers becomes `EmitEntryCallMainSlot(...)` + `EmitExitReg`, with
+`CPatchStubCall(...)` at the end. Four hand-written x86-64 instructions leave
+three files and no new case is added anywhere. `cparser.inc` can adopt the same
+slot emitter afterwards; it must not be in the same commit, because its arms
+also carry the argc/argv and initializer steps and mixing the two makes the diff
+unreadable.
+
+**A SECOND LATENT DEFECT IN THE SAME PLACE, found while sizing this.** Nothing
+in the skeleton drivers writes `BSS_INITIAL_RSP` at all — `EmitProgramPrologue`
+allocates the slot for every program *"whether or not it reads its arguments"*,
+and only a per-arch entry stub writes it. C and Pascal write it; Rust, Zig and
+Erlang do not, on ANY target including x86-64. So `ParamCount`/`ParamStr`
+reached from those frontends read an unwritten slot. **Not measured** — this is
+a code reading, and the x86-64 case may be masked by BSS starting at zero, which
+is exactly the shape that reads correct until it does not
+([[an-uninitialised-read-is-usually-correct]]). Measure before claiming it; it
+is listed here so the entry-stub work does not walk past it.
