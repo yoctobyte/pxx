@@ -4,7 +4,7 @@ prio: 70
 status: backlog
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 ---
 
 # Every return releases every managed local, including untouched ones
@@ -239,3 +239,62 @@ needs the same liveness information fix (1) does.
 
 **Not claimed:** that the inline test is correct, cheap to emit, or worth it on
 any particular backend. That is the owner's call on their function.
+
+## 2026-09-07 — the prologue store is per-slot on ALL SEVEN targets, and two instruments had to be thrown away first
+
+The 3.87ns decomposition above is an **x86-64** measurement, so the 14% prologue
+share is a claim about one target until measured elsewhere. It generalises.
+
+**The separator, and it needs no disassembler:** the zero-init is emitted **once
+per procedure**, the release **at every return**. So vary the return count and
+the release term moves while the store term does not. `code(N,R) = base +
+N*store + R*N*release`, solved from three builds: `(4,1)`, `(532,1)`, `(532,5)`.
+
+| target | release B/slot/return | prologue store B/slot | per-slot store? |
+| --- | --- | --- | --- |
+| x86-64 | 13.47 | 9.80 | yes |
+| i386 | 17.32 | 13.71 | yes |
+| aarch64 | 27.31 | 16.44 | yes |
+| arm32 | 32.72 | 21.58 | yes |
+| riscv32 | 21.17 | 9.86 | yes |
+| xtensa | 11.55 | 11.72 | yes |
+| wasm32 | **0.06** | 25.90 | yes |
+
+x86-64 corroborates the disassembly: measured 9.80/13.47 against the actual
+11-byte `movq $0x0,disp32(%rbp)` and 12-byte `mov`+`call`.
+
+**So any liveness analysis that skips a slot's release should skip its zero-init
+too, on every backend — one analysis, both halves.** (frank-coord-core's
+framing; this is the measurement that says it generalises.)
+
+**And wasm32 is the interesting row.** Its release term is 0.06 B/slot/return —
+131 bytes total for four extra returns across 532 slots, which is the four branch
+sequences and nothing per-slot. **That is the shared epilogue, and this is the
+first measurement of it rather than an inference from "wasm32 already has it".**
+It also shows wasm32 still pays the full per-slot prologue: **where the epilogue
+is already shared, the zero-init is the entire remaining per-slot code cost.**
+
+### Two instruments discarded on the way, both of which printed confident numbers
+
+**1. The compiler's own `code=` is page-quantised, and on aarch64 the quantum is
+larger than the whole signal.** Every `code=` gap on every ELF target is a
+multiple of 4096. On aarch64 it is 65536, and `code=` reads **196376 for N=4 and
+196376 for N=532** — flat across a 528-local difference. A first pass through
+this table read that as "aarch64 does not emit a per-slot store". It emits one;
+at N=3000, past the quantum, it is 16.44 B/slot. **The instrument did not error.
+It reported a constant, which is a perfectly plausible answer to the question
+being asked.**
+
+**2. `code=` on wasm32 tracks neither the code nor the file.** It reads **3582B
+for N=4 and 3582B for N=532** while the module's actual code section grows 65929
+-> 79636 (13707 bytes, 25.96 per slot). The first reading of that flat 3582 was
+*"0.00 bytes/slot/return — the shared epilogue, confirming the ticket
+independently"*. It confirmed nothing: a shared epilogue still scales the
+prologue, so a row flat in **both** N and R is vacuous, not a finding. The
+control that separates them is sweeping **N**, which a return-count experiment
+does not do by construction. Parsing the module's section table is what settled
+it.
+
+Both are the vacuous-green shape this ticket's own `check_pal(2)` note describes,
+met twice in one measurement. Use **artefact size** (or the wasm code section),
+never `code=`, for anything per-slot.
