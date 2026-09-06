@@ -63,3 +63,38 @@ seeing this row should check its own diff for `lib/` and then stop looking.
 **Resolve this by recording the pin that cleared it**, not by a code change. If a
 later pin lands for other reasons and the row goes green, close it and say which
 pin did it — the interesting fact is the interval, not the fix.
+
+## DATED, 2026-09-06 (frankB found the sha; frank-coordinator verified the interval)
+
+The red has an origin commit and an exact interval, so the owner's decision needs no
+archaeology:
+
+```
+pin v404      8844c8c42   2026-09-05T20:17:45   binary sha256 fe1e9c37d322
+builtins      8374118ec   2026-09-05T23:15:46   fix(N): export pyvar_is_inttag/pyvar_is_objtag
+                                                 -- "two lib/rtl units call them and could not compile"
+```
+
+**`8374118ec` is NOT an ancestor of the pin** (`merge-base --is-ancestor`, checked) — it
+landed **2h58m after it**. It adds both builtins to `compiler/builtin/pylib.pas`, and
+**its own commit message says why: two `lib/rtl` units already called them.** So the
+sequence is the documented one, with names on it — the RTL was written against a
+compiler feature, the feature landed, and the pin has never carried it.
+
+**83 commits have touched `compiler/` since that pin.**
+
+## SEQUENCING, which is this seat's call — the pin itself is not
+
+- **Nothing is blocked right now.** Checked at 2026-09-06: **no checkout on the box has
+  uncommitted work under `lib/` or `examples/`**, so no Track B or E session is
+  currently building against the stale pin. The cost today is a standing RED in every
+  lane's gate, not a stopped session.
+- **It is still a reason to pin SOONER.** CLAUDE.md's own precedent: *a red is a reason
+  to pin sooner, not later* — the last time reds were read as grounds to withhold, the
+  pin held 19 days and v398 shipped a compiler that could not build C for i386 or arm32.
+- **No agent may run `make pin`,** ask a peer to run it, or ask two peers the same
+  question about it. This ticket is the record; the act is the owner's.
+
+**Read for a session seeing this row RED:** check your diff for `lib/` and for a new
+builtin. If it has neither, the row is this ticket and not your change — six sessions
+have now confirmed identical output.
