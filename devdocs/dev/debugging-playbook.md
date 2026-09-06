@@ -20748,3 +20748,83 @@ worth keeping is procedural rather than technical.
 **"This claim is fine" is a deliverable.** A silent reviewer and a reviewer who
 found nothing are indistinguishable, which is the same silence problem as a
 skipped row and a passing one.
+
+## THE OUTER MEMBER: A GUARD THAT IS NEVER REACHED
+
+This file already has two members of the family. Here is the third, and
+frankwasm's ordering of them is the right one:
+
+> *"A guard that cannot fail, one whose expected value collides with its failure
+> value, and now one that is never reached. **The first two at least run.**"*
+
+Measured 2026-09-06, found by re-measuring a count rather than reading it. In
+`test/wasm/`, the file count and the PASS count disagreed by exactly one: **42
+`check_*.sh` files excluding `check_all.sh`, 41 named in the loop.**
+
+**`check_nilpy_objlocal.sh` existed and was invoked from NOWHERE** — not
+`check_all.sh`, not the Makefile, not any script. It was the census guard for
+the wasm32 object-local leak that had been fixed hours earlier, **so the leak's
+own regression test never ran** — inside a suite that is itself in no continuous
+tier. Invisible twice over. Nothing was red. **A green suite was one check
+smaller than its own directory, and nothing in the world reports that.**
+
+**The guard itself was excellent, and that is the point.** It asserted the SLOPE
+rather than a count, per the relations rule. Its positive control was actually
+run — the arm reverted in-tree, the compiler rebuilt, the guard printing
+`FAIL wasm32 live grew 1900 -> 7815` and exiting 1 with its other three rows
+still passing. It carried a third precondition most authors would not think to
+add: **allocs must SCALE with N**, because a compiler that stopped allocating
+gives a flat live count and passes a leak assertion vacuously.
+
+**Every one of those defends against the TEST lying. None of them can defend
+against the test not being CALLED**, which is a property of the harness and not
+of the file. That is what makes this the outer member: **the guard's own quality
+is entirely irrelevant to the outcome.**
+
+**The check that catches it is one `ls` against one grep** — assert that no
+`check_*.sh` in the directory is unreferenced — and it is the same shape as this
+file's existing rule to assert that your loop RAN. A directory listing is the
+denominator; the harness's own loop is the numerator; **if they differ, the
+difference is silent by construction.**
+
+**And note which instrument found it:** not a red, not a tier, not a review of
+the guard. A count of files disagreeing with a count of results, noticed by
+somebody re-measuring a number for an unrelated reason.
+
+## WHEN THE OUTPUT CHANNEL IS THE THING UNDER TEST, `ok:` FROM THE COMPILER CANNOT BE A ROW
+
+The existing rule says match the assertion class to the defect class, and gives
+the leak as the clean case: a leak does not corrupt, so every output assertion
+still passes. **This is the inverse, and it closes the pair.**
+
+Measured 2026-09-06 (frank-coord-front), on the ESP bare profile. The fix under
+test was a minimal `Assert` for a profile where no program containing an
+assertion could previously be built. **The first version reused a body ending in
+`writeln`.** It compiled on both chips, passed every check the author had, and
+**printed NOTHING when the assertion fired** — a silent `Halt(227)`, strictly
+less informative than the compile error it replaced. `writeln` is an intentional
+no-op on that profile and the docs had said so all along.
+
+The author's own summary of what went wrong is the reusable part:
+
+> *"I had written 'AnsiString, concat, WriteLn and Halt all work on bare,
+> measured'. What I had measured was `ok:` from the compiler."*
+
+**And the generalisation is NOT "test on hardware":**
+
+> *"It passed everything BECAUSE the assertion I had was a compile check on a
+> profile whose only evidence of running is what reaches a wire. When the OUTPUT
+> CHANNEL is the thing under test, `ok:` from the compiler cannot be a row."*
+
+**The defect is IN the output channel, so no assertion carried on that channel
+can observe it** — which is precisely why the compiler's own success gets used
+as the assertion, being the only signal left. A leak is invisible to every
+output assertion because it does not affect output; this is invisible to every
+output assertion because the output does not arrive. Same blindness, opposite
+cause, and both are why *"my repro passed"* is a different claim from *"the
+thing works"*.
+
+Caught on the device, not in review — **which is the only place it was
+catchable**, and worth saying plainly: a fix that is worse than the defect and
+passes every instrument you own is not found by looking harder at the
+instruments.
