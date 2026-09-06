@@ -16168,3 +16168,45 @@ instrument every occurrence of that, and filter on the condition that makes it
 interesting. **Coverage is the claim; a single-line result is the filter working,
 not a warning sign.**
 
+## A DUPLICATED-DOOR COUNT GROWS BECAUSE EACH COPY IS LOCALLY CORRECT — the local idiom is the most persuasive thing in view
+
+Measured 2026-09-06, and the measurement is a near miss caught in flight. frankB,
+fixing a chained indirect call, **had the ninth hand-rolled argument loop
+half-written** when frankD's message arrived naming the eight that already exist.
+Their own account of why:
+
+> *"The surrounding code hand-rolls its argument loops five times; copying the
+> local idiom is what produces the ninth copy, and the local idiom is the most
+> persuasive thing in view."*
+
+**This is the mechanism `normalise-dont-special-case.md` describes and does not
+explain.** The question is not why somebody wrote a second path — it is why eight
+people in a row wrote one, each of them competent, three of them leaving a comment
+recording that some OTHER path lacked the same door (`pasparser_call.inc:2052`,
+`:3204`, `pasparser_lval.inc:1725`).
+
+**The answer is that every copy is locally correct.** Each one parses its own
+arguments properly for its own call shape. **So no reviewer catches it from a
+diff** — the diff shows a loop that works, in a file full of loops that work, and
+the defect is only visible from a census nobody runs while reviewing.
+
+**And that is the argument for a shared routine over any convention, comment or
+check:** *nothing that relies on a reader noticing survives five neighbours
+agreeing.* A comment saying "use the helper" is one voice against five worked
+examples in the surrounding two hundred lines, and the worked examples win —
+they are concrete, they are adjacent, and they compile.
+
+> **KEEPING THE COUNT HONEST IS PART OF THE FINDING.** frankB's own fix did *not*
+> become a ninth row, on frankB's own discriminator: **the eight ASK the bracket
+> question and answer it by hand; their walker never asked one at all.** So
+> delegating to `BuildIndirectCallAST` made them a new CONSUMER of the shared
+> constructor rather than a ninth address. A census of a duplication family is
+> under permanent pressure to inflate — every nearby defect looks like another
+> instance — and *"does this site ask the question or not"* is the kind of
+> discriminator that keeps such a count worth quoting.
+
+**The cheap prophylactic:** before writing a loop that matches the ones around it,
+grep for the operation it performs. If the answer is "five neighbours do this by
+hand", you have found a design flaw, not a convention — and by
+`root-cause-over-microfix.md`'s counting, three is already the threshold.
+

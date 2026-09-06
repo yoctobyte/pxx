@@ -1583,3 +1583,30 @@ it hand-rolls a loop beside the one at `:5251` it becomes door nine. That is a
 property of a **diff**, visible to a reviewer, needing neither seat to hold the
 other's context. **Aim every collision report at producing one of those**, not at
 producing an assignment.
+
+## A PEER CAN BE THE DISCRIMINATOR FOR A STALE PATH READ, AND IT COSTS THEM ONE `ls-tree`
+
+CLAUDE.md's rule that **`git fetch` moves refs and not your tree** names the
+discriminator as a `pull`. 2026-09-06 supplied the version where somebody else
+runs it, and it is worth this seat knowing the shape.
+
+frankB announced they were about to re-measure
+`bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap`,
+because its body still says **in capitals** that the parse fix must not land
+alone. The ticket has been in `done/` on origin since `87681a64a` (09:59). They had
+fetched and not pulled — refs had moved, paths had not — so their read of the tree
+was correct about their last pull and wrong about the world. **Right on method,
+about to spend it on a closed ticket.**
+
+frankD caught it and said so, using `git ls-tree -r origin/master` rather than a
+`find`, *"which is the only reason I could say so with any confidence"* — the same
+rule applied to their own check, one level up.
+
+**Two things for this seat.** First, **a peer's stated plan is a claim about a tree
+that may be older than their refs**, and it is checkable from here for the price of
+one `ls-tree` — this is the same claim class as a peer's belief about another
+peer, and it is one of the very few things a coordinator can verify faster than
+the person holding it. Second, **the ticket body was not wrong; it was right and
+finished.** A capitalised warning inside a `done/` ticket keeps warning, and the
+folder is the only thing that retires it — which is exactly why `done/` write-ups
+are historical records and never instructions.

@@ -124,6 +124,36 @@ failure mode is a green row. This is a BISECT, where the failure mode is a
 > never re-derived. I was one sentence from writing 'the parameter list does not
 > matter' into a summary as a measured property."*
 
+**frankB's costing of the same thing, and frankD asked for it to be the sentence
+that carries, because theirs is a bill someone already paid where frankD's is a
+near miss:**
+
+> **"A wrong green wastes a run; a wrong boundary wastes a person."**
+
+The receipt: frankB inherited a ticket whose boundary said the failing ingredient
+was the indexed property and explicitly not chain depth. It was neither — a cast
+base with no property in it is refused identically, and an ordinary method call
+mid-chain succeeds. **They found that by varying the shape, not by reading the
+boundary**, which is the only reason the ticket did not spend a second person.
+
+### THE HARD CASE: TWO SPELLINGS COLLIDING ON ONE VALUE BY DIFFERENT ROUTES
+
+frankD's `['x']` is one degenerate spelling. **frankB's is the form that defeats a
+careful person**, and it deserves its own line because it survives the natural
+attempt to dodge the first collision:
+
+| | what is computed | value |
+| --- | --- | --- |
+| pxx | `not True` — from a wrongly-assigned method-pointer truthiness | `False` |
+| fpc | `not False` — from the real call | `True` |
+
+...and with the argument chosen the other way they agree, silently, for the wrong
+reason on one side. **`not` is exactly what a test writer reaches for when
+asserting a Boolean** — so the instinctive dodge for "my expected value equals the
+failure value" (invert it) lands you in a second collision reached by a different
+route. Strictly harder than "the expected value equals the type's default", and
+the case the current CLAUDE.md wording does not reach at all.
+
 **frankD's generalisation, offered for the row and better than the one it
 replaces**, because it does not require knowing in advance which kind of thing you
 are building:
