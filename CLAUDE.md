@@ -443,7 +443,10 @@ not exist** — shards clearing in two groups reads exactly like one job flappin
 that falls out of a hypothesis.**
 
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
-SECTION.** 279KB, ~70k tokens, 72 sections; `grep '^## '` lists them free.
+SECTION.** 905KB, ~225k tokens, 237 sections — it has TRIPLED since this line
+first quoted 279KB/72, so treat any size in a pointer as a lower bound with a
+date on it. `grep '^## '` lists the sections for a few thousand tokens, which is
+cheap, not free.
 
 ## "You are the coordinator"
 
@@ -629,12 +632,18 @@ the tree for the error string — if the source lacks it, the compiler that prin
 it is not the one you think you are running. When seeding from outside, `touch`
 the sources after the copy.
 
-**GATE BEFORE YOU COMMIT, NOT AFTER.** `gate.sh quick`'s FPC seed canary only
-runs while `compiler/**` has **UNCOMMITTED** changes; on a clean tree it prints
-`SKIP` and you get no FPC coverage at all. PXX prescans headers and FPC is
-single-pass, so a whole defect class — declaration order, a duplicate forward
-across two `.inc` files — passes `make compiler/pascal26` AND `--tier quick`, and
-the canary is the only thing that catches it (live case `a057789bc`).
+**GATE BEFORE OR AFTER THE COMMIT — the canary no longer cares, and this rule
+used to say it did.** PXX prescans headers and FPC is single-pass, so a whole
+defect class — declaration order, a duplicate forward across two `.inc` files —
+passes `make compiler/pascal26` AND `--tier quick`, and `gate.sh quick`'s FPC
+seed canary is the only thing that catches it (live case `a057789bc`). It arms
+against the **MERGE-BASE**, so committed-but-unpushed is covered, and it arms a
+second way when origin/master's `compiler/` has moved past the last sha THIS
+CLONE proved. **The old rule here — "the canary only fires on an UNCOMMITTED
+tree" — was true when written and is now false**; `tools/gate.sh` says so in its
+own comment, calling it *"a footgun worth not copying"*. It was obeyed literally
+by at least two sessions after it went stale. What still holds: a clean tree is
+not a reason to skip the gate, and FPC being absent is a SKIP, never a pass.
 
 **`tools/gate.sh quick` (~30s) is OPTIONAL per fix, REQUIRED before a pin.**
 Background it and **grep the log for the verdict** — a backgrounded gate's
@@ -685,11 +694,33 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   The tree survives on disk, but the NEXT session has no idea it is there and is
   told by this file to distrust a diff it cannot explain. Push, or it is a diff
   nobody dares touch.
+  **PUSH BEFORE A MEASUREMENT STARTS, NEVER DURING ONE — this is where "push
+  often" and "do not touch the instrument while it is measuring" collide, and
+  the answer is ORDERING, not precedence.** `tools/sync.sh` pulls before it
+  pushes, so a sync during a sweep moves the population under your own harness.
+  Measured 2026-09-06: two syncs during a 2276-file census changed 4 files
+  mid-sweep. **Banking your work does not FEEL like touching the instrument, and
+  it is** — which is why nobody scanning for instrument hazards looks under
+  "push often". The collision window only exists if you start a measurement with
+  work already unpushed, so push first, let the pull settle, rebuild on the
+  settled tree, then start. **Residual, for a sweep of hours:** a restart does
+  not wait for it. `git commit` alone does not move the tree — only the pull
+  does — so commit locally and push when it ends; the exposure is the sweep's
+  length and there is no fully safe option, only a bounded one. A sweep reading
+  a `git archive HEAD` snapshot instead of the tree would close it — untested,
+  and it silently omits untracked files and the compiler binary.
+  **And a corrupted measurement that happens to survive the question you ended
+  up asking is indistinguishable from a clean one** — that census was salvaged
+  only because the eventual claim was about the distribution and not the count.
 - **Park held work as a PATCH or a STASH. Never a file copy.** Unconditionally.
   A patch goes through a merge and can therefore CONFLICT; `cp` has no merge step
   to fail at, so a restored copy silently reverts everything that landed while it
   sat there — as a clean commit no track letter sees. **Guard the REVERT, not the
-  edit**: `git checkout -- <file>` is the safe restore.
+  edit**: `git checkout HEAD -- <file>` is the safe restore. **NOT
+  `git checkout -- <file>`**, which restores from the INDEX — so after anything
+  that staged content (a `claim`, a partial `add`, a sha-form checkout) it
+  faithfully re-applies the very state you are trying to back out of, and
+  reports nothing.
 - **NEVER issue `rm` as a Bash tool call with a VARIABLE or a GLOB in the path.**
   `rm -rf "$T/$n"`, `rm -rf $WORK/*` — these trip Claude Code's built-in
   dangerous-`rm` prompt, and **that prompt STALLS YOUR SESSION until the owner
@@ -704,8 +735,15 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   do that, and do not ask a peer or the owner to run it for you — a guard you
   route around is a guard the owner no longer has.
   **You almost never need the `rm` at all.** `mktemp -d` already yields a
-  disposable directory the OS reaps; **leaving it costs nothing and deleting it
-  buys nothing.** Write scratch under it, or under the session scratchpad, and
+  disposable directory the OS reaps; **leaving it is nearly always right and
+  deleting it interactively buys nothing.** Nearly: /tmp is a real 94G
+  filesystem, not a tmpfs, and on 2026-09-06 it hit 99% — 48% of the volume was
+  ONE orphaned session scratchpad, 159,442 files from an A/B loop that wrote a
+  binary and a `.map` per iteration. The reaper was set to 10 days and the box
+  filled in two, so it never got a turn. It is 6h now
+  (`/etc/tmpfiles.d/tmp.conf`), which is what makes walking away safe — **a loop
+  writing per-iteration artefacts should still clean up after ITSELF, inside the
+  loop, which is not the same thing as deleting the directory.** Write scratch under it, or under the session scratchpad, and
   walk away. If cleanup genuinely matters, it belongs in a **committed script**
   with a `trap ... EXIT` — reviewed once, run as a unit — which is what
   `tools/*.sh` already do and why they never trip this. If you must delete
