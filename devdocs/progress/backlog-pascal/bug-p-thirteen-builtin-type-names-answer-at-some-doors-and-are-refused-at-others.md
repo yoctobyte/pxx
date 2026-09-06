@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "FIVE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High`/`Low` of ByteBool, LongBool and WordBool, and a cast to Variant/OleVariant stored in its declared type. Every one DECLARES fine, casts fine and answers SizeOf, so nothing about the name looks broken from any single door. WideChar/UnicodeChar/UCS4Char (26742a0ca) and the five string types (this ticket's second update) were the same shape and are FIXED. The sized booleans are the hard remainder: they map to tyUInt8/tyInteger/tyUInt16 on purpose to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
+summary: "THREE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High` and `Low` of ByteBool, LongBool and WordBool. They map to tyUInt8/tyInteger/tyUInt16 ON PURPOSE, to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE -- they need a kind carrying a width AND boolean bounds, which no current table can express, and that is why they are the remainder rather than the next one-liner. The other ten were fixed on 2026-09-06 (26742a0ca, 86f935479, b6815e5b8); the count is the probe's own clean re-run at b6815e5b8, 51 names, 327 cells agreeing and 10 differing. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
 status: new
 owner: ""
 ---
@@ -30,7 +30,7 @@ Measured at `1df943481` over all 51 names in the union of `OrdinalNameToTk` and
 | ~~`WideChar` `UnicodeChar` `UCS4Char`~~ | ~~`High` `Low`~~ | **FIXED** — see below |
 | `ByteBool` `LongBool` `WordBool` | `High` `Low` | `TRUE` / `FALSE` |
 | ~~`AnsiString` `RawByteString` `UnicodeString` `UTF8String` `WideString`~~ | ~~`Low`~~ | **FIXED** — see below |
-| `Variant` `OleVariant` | the cast (`x := Variant(y)`) | accepts |
+| ~~`Variant` `OleVariant`~~ | ~~the cast~~ | **FIXED** — and it was a SEGFAULT, not a refusal |
 
 **The sized booleans are the interesting one and they are NOT a one-liner.**
 They map to `tyUInt8` / `tyInteger` / `tyUInt16` on purpose, to keep their C-ABI
@@ -132,8 +132,9 @@ legacy overloaded frozen kind — so `Low(string)` answered 0 while
 `ParseTypeKind`, the way a declaration does, and the test keeps that row beside
 its variable twin: apart, neither can show the disagreement.
 
-**Five left, all of them the sized booleans and the Variant cast** — and that
-five is the probe's own re-run at this tree, not thirteen minus eight:
+**Five left at the time of writing** — superseded by the entry below, which is
+the clean re-run. The numbers in this block came from a run whose binary moved
+underneath it; kept because the contamination is the lesson, not the counts:
 
 ```
 bytebool    refused at: high low
@@ -154,3 +155,39 @@ bounds through `Ord()`, and only those names: `Ord()` as a UNIFORM printer
 would introduce a second phantom, since `Ord(q)` for a QWord answers -1 in pxx
 against fpc's 18446744073709551615, which is intermediate-overload latitude and
 not a defect.
+
+
+## 2026-09-06 (frankA) — the Variant rows were a SEGFAULT, and three are left, measured
+
+**`Variant(x)` was not merely refused at the cast door — it crashed.**
+`v := Variant(y)` for `y: LongInt` segfaulted at run time while `v := y` on the
+line above printed 233. The cast built an `AN_PTR_CAST` retagging the integer AS
+a variant record, so the assignment saw an RHS already typed `tyVariant`,
+skipped the boxing it does for the implicit form, and copied 16 bytes from
+beside a 4-byte local. It yields the operand now and lets the assignment box it
+(`b6815e5b8`). The probe could only see this as `PXX-REFUSES` because its cast
+row stores and does not print; **a sweep's severity resolution is whatever its
+assertion can observe.**
+
+**The clean re-run, on a settled tree at `b6815e5b8`, binary `0207010e859c`
+identified before and after the sweep:**
+
+```
+bytebool   refused at: high low
+longbool   refused at: high low
+wordbool   refused at: high low
+names=51  cells-agree=327  cells-differ=10
+```
+
+Thirteen at filing, three now. The ten remaining differing cells are not
+defects: `SizeOf(Extended)` 8 vs 10 and `SizeOf(Variant)` 16 vs 24 are
+representational choices, which CLAUDE.md records as CHOSEN — each compiler
+reporting its own representation faithfully — and `Extended`/`ValReal` casts are
+`pxx-only`, us accepting what fpc rejects.
+
+**The probe now identifies the compiler at the START and END of the sweep and
+ABORTS if it moved.** The run before this one was contaminated by my own
+rebuild, and the failure does not look like noise: the sweep runs in name order,
+so it partitions cleanly along the ALPHABET, and it reported `olevariant`
+broken and `variant` fixed — two spellings of one type, mapping to one kind,
+separated by nothing but where the rebuild landed between them.

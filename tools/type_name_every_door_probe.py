@@ -33,7 +33,7 @@ Positive controls, both branched on:
 Without the first, a probe where every program fails to build reports a clean
 "agree" on every row.
 """
-import os, re, subprocess, sys, tempfile
+import hashlib, os, re, subprocess, sys, tempfile
 
 # The repo root is derived from this file's location so the committed copy in
 # tools/ needs no configuration -- but a copy run from a scratch directory would
@@ -129,9 +129,41 @@ def ask(src, d):
         res['fpc'] = out.decode('latin-1').strip() if rc == 0 else None
     return res
 
+def artefact_id():
+    """sha256 of the compiler under test, or None if it is not there."""
+    if not os.path.exists(PXX):
+        return None
+    h = hashlib.sha256()
+    with open(PXX, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()[:12]
+
+
 def main():
     if not os.path.exists(PXX):
         print('no compiler at %s -- build it first' % PXX); return 2
+    # The artefact is identified at the START and again at the END, and a
+    # change between them is an ERROR rather than a finding.
+    #
+    # A mid-sweep rebuild is not random corruption: the sweep runs in name
+    # order, so every row before the swap used the old compiler and every row
+    # after used the new one, and the output is a CLEAN PARTITION along the
+    # alphabet. Measured 2026-09-06 -- a run said `olevariant` was still broken
+    # and `variant` was fixed, two spellings of the same type mapping to the
+    # same kind, and the only thing separating them was that the rebuild landed
+    # between them alphabetically. It reads exactly like a real per-name
+    # difference, which is why it needs a guard and not a warning.
+    #
+    # Verified by injecting the fault, and the FIRST attempt could not fire:
+    # `cp` onto the running compiler is refused with "Text file busy", so the
+    # swap never happened and the guard had nothing to detect -- a control that
+    # cannot be CONSTRUCTED is not a control that passed. `mv` works, and it is
+    # also the faithful reproduction: make writes a new file and renames, which
+    # is exactly how the real contamination arrives.
+    started_at = artefact_id()
+    print('compiler under test: %s' % started_at)
+
     rows, agree, differ, asym = [], 0, 0, []
     # --- positive controls, both branched on ---
     with tempfile.TemporaryDirectory() as d:
@@ -169,8 +201,17 @@ def main():
                 asym.append((name, refused_here))
             rows.append('%-16s %s' % (name, '  '.join(cells)))
     print('\n'.join(rows))
+    ended_at = artefact_id()
+    if ended_at != started_at:
+        print()
+        print('ABORT: the compiler changed under the sweep (%s -> %s).' % (started_at, ended_at))
+        print('Every row before the swap measured the old binary and every row after')
+        print('measured the new one, so the results partition along the ALPHABET and')
+        print('not along anything about the names. Re-run on a settled tree.')
+        return 1
     print()
-    print('names=%d  cells-agree=%d  cells-differ=%d' % (len(ALL_NAMES), agree, differ))
+    print('names=%d  cells-agree=%d  cells-differ=%d  (compiler %s throughout)'
+          % (len(ALL_NAMES), agree, differ, started_at))
     if asym:
         print()
         print('ASYMMETRIC -- accepted at some doors, refused at others, fpc accepts:')
