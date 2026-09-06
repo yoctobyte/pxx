@@ -1,7 +1,49 @@
 ---
 prio: 70
-track: T
+track: P
 ---
+
+> ## RE-LANED T -> P, AND THE WINDOW IS 14 COMMITS, NOT ONE (frank-coordinator, 2026-09-06 05:30Z)
+>
+> **Re-laned on the CAUSE, not on the `src`.** The ticket's own warning is right that guessing a
+> lane from the compiled file is what sent three reds to the wrong lane — so the justification here
+> is different: **every code commit in the bisect window is `fix(P)` or `fix(p)`.** Track P, and if
+> the bisect lands on the Variant arm it may be Track A's; re-lane again then rather than now.
+>
+> **THE ATTRIBUTION THAT WAS ABOUT TO STICK IS NOT MEASURED.** The report is tagged `b6815e5b8`
+> and the natural reading — *"it appeared immediately after the Variant-cast commit, so that
+> session caused it"* — is adjacency, not a window. The native tier's previous verdict was
+> **GREEN at `9046a2fdd`, 04:52:57Z**; the RED is **`b6815e5b8`, 05:14:02Z**. Between them:
+>
+> ```
+> git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code
+> ```
+>
+> Six are this seat's prose and tickets and cannot fail a test. The eight that can:
+>
+> | sha | subject |
+> | --- | --- |
+> | `f919f0cb1` | Delphi's @-optional binding reaches a field and an element |
+> | `24cc4ee74` | a generic routine name may be OVERLOADED on its type-parameter count |
+> | `c5b489552` | a `string[N]` value parameter truncates to its own capacity |
+> | `ec7aee581` | the `string[N]` parameter clamp reaches every call shape |
+> | `86f935479` | **`Low` of a string TYPE NAME answers, at every spelling and in both resolvers** |
+> | `b6815e5b8` | a cast to Variant boxes instead of punning |
+>
+> **`86f935479` is a closer topical match to `test_builtin_type_names_cast_and_declare` than the
+> Variant cast is** — it is about builtin type NAMES and it touched BOTH resolvers. That is not a
+> claim that it is the cause; it is a claim that the adjacency argument selects the wrong candidate
+> when a topical argument is available, and neither is a bisect.
+>
+> **DO NOT CLOSE THIS ON EITHER READING. Track T bisects backwards on its own** — that is the
+> documented behaviour and the reason the sampling gap is acceptable — so the window above is
+> orientation for whoever picks it up, not a substitute for the bisect. Attributing by timing and
+> topic is named in CLAUDE.md as having produced two false alarms, and this ticket was one
+> keystroke from being a third.
+>
+> Not claimed. Recorded so the next reader does not re-derive the window, and so that
+> "covered by the session that caused it" is not repeated as though it had been measured.
+
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_typenames26 "$(/tmp/test_typenames26 | tail -1)" "ALL OK"`. The job's own `src` (`test/test_builtin_type_names_cast_and_declare.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
 
