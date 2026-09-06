@@ -22,6 +22,31 @@
 # which is why that row asserts a value it could only get by RUNNING).
 set -eu
 
+# TWO APERTURES THIS CHECK HAS, RECORDED RATHER THAN IMPLIED (frankwasm, 2026-09-06).
+#
+# 1. THE EXIT CODE IS THE ONLY CHANNEL, AND IT IS THE ONE OBSERVABLE WHERE
+#    "never ran" AND "succeeded" ARE THE SAME BYTE. That is not a design choice
+#    -- freestanding C on wasm32 has no stdio yet, so there is no output to diff
+#    against an oracle. A check that compares OUTPUT catches "instantiated but
+#    ran nothing" by construction, because a module that never ran writes an
+#    empty file and an empty file fails a diff against a non-empty oracle. This
+#    one has to catch it by intent, which is why every expectation below is
+#    nonzero and why that rule is asserted rather than trusted. When
+#    bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-... is done and printf
+#    works, MOVE these assertions to output diffing; the exit-code rows then
+#    become a redundant second reading instead of the only one.
+#
+# 2. EVERY DESTINATION IT TOUCHES IS PRISTINE. Each subject is built into a
+#    fresh mktemp -d and run once, on a zeroed shadow stack with freshly
+#    PXXAlloc'd blocks. A defect with two arms selected by the destination's
+#    PRIOR STATE -- quiet on pristine memory, loud on live memory -- shows this
+#    check only its quiet arm, and it would report PASS with exactly the
+#    confidence it has now. Measured instance of that shape on this very target:
+#    721f8d534 (a Variant stored through a pointer on wasm32; pristine gave a
+#    silent None/0, live overwrote a tag and trapped on a LATER read). NOT fixed
+#    here -- stated, so nobody reads a green from this script as coverage of
+#    that class.
+
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COMPILER="$ROOT/compiler/pascal26"
 WORK=$(mktemp -d)
