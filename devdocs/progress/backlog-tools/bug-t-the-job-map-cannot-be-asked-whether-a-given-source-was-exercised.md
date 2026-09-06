@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source. RAISED 50->65 on 2026-09-05: two MEASURED wrong readings during one night of live tier triage, both with attributable cost — one key standing for six unrelated targets (sqlite-threads x4, uforth, emit-obj) so the tier's red DENOMINATOR was unknown until settled by hand, and one job's history SPLIT ACROSS TWO KEYS when its recipe changed, which made test-uforth look like it had never run and pointed at a ~6.5 week bisect window instead of the true 234 commits. The key is derived from the recipe's TEXT rather than from the job's subject, so it is both too coarse and too brittle."
+summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source. RAISED 50->65 on 2026-09-05: two MEASURED wrong readings during one night of live tier triage, both with attributable cost — one key standing for six unrelated targets (sqlite-threads x4, uforth, emit-obj) so the tier's red DENOMINATOR was unknown until settled by hand, and one job's history SPLIT ACROSS TWO KEYS when its recipe changed, which made test-uforth look like it had never run and pointed at a ~6.5 week bisect window instead of the true 234 commits. The key is derived from the recipe's TEXT rather than from the job's subject, so it is both too coarse and too brittle. 2026-09-06 adds the third and worst failure mode, SILENT REPOINTING: test/test_cross_record.pas occurs SIX times inside the single test-xtensa target as three different ABIs plus their x64 controls, so `@3` does not mean 'the third mention', it means `--xtensa-abi=windowed` and nothing in the key says so. Delete or insert one earlier compile line for that source and `@3` still resolves, still names a real row, and now names Call0 -- the verdict history stays attached to a key whose SUBJECT changed underneath it, with no error, no gap and no split to notice. The subject is (target, abi, source) and all three are already in the recipe."
 ---
 
 # The job map cannot be asked whether a given source was exercised
@@ -146,3 +146,53 @@ property of the text including its instability.
 
 Raising prio: filed on a plausible gap, now carries two measured failures with
 attributable cost in one triage session.
+
+## 2026-09-06 — the BRITTLE half, where `@N` is the only thing naming the ABI
+
+Measured at `874e55d0b` (`compiler/pascal26` = `6cd631730cf470e8`, srchash
+`426da166f0f1e3b3`, matching the tree) while clearing
+`test-xtensa#src:test/test_cross_record.pas@3`.
+
+`test/test_cross_record.pas` appears **six times inside the single `test-xtensa`
+target**, and the occurrences are not repetitions — they are three different
+ABIs, each with its x64 control:
+
+| occ | Makefile | what it actually is |
+| --- | --- | --- |
+| 1 / 2 | 22954 / 22955 | default (Call0) ABI + control |
+| 3 / 4 | 23385 / 23386 | `--xtensa-abi=windowed` + control |
+| 5 / 6 | 23518 / 23520 | the `movsp` decode probe, windowed vs Call0 |
+
+So for this job the **occurrence index is the only thing that names the
+subject.** `@3` does not mean "the third time we happened to mention this file";
+it means *windowed ABI*, and nothing in the key says so.
+
+**The failure mode this adds is silent REPOINTING.** The two costs already
+recorded here are a key standing for six unrelated targets (too coarse) and a
+history split across two keys when a recipe changed (too brittle in the
+*forward* direction — the key moves and the job looks new). This is the
+*backward* direction and it is worse, because nothing looks new at all: insert
+or delete one earlier compile line for this source and `@3` keeps resolving,
+keeps naming a real row, and now names **Call0 instead of windowed**. The
+verdict history stays attached to a key whose subject changed underneath it.
+No error, no gap, no split — the archive simply starts describing a different
+ABI under the old name.
+
+`@N` over recipe text is an index into a list nobody promised to keep stable,
+used as the identity of the thing at that index. The subject here is
+`(target, abi, source)`, and all three are recoverable from the recipe that
+already exists.
+
+### Status of the row that produced this
+
+Not reproducible at `874e55d0b`. All six occurrences measured green, including
+the `movsp` pair with its positive control asserted and branched on
+(windowed 14 `movsp`, Call0 0, both `-d in_asm` logs non-empty at 3689 / 3987
+lines). Value and rc slots both green on occurrences 1-4.
+
+**This is an exculpation, so it names its owner for the residual question:** I
+cannot say whether the row was ever red, because `tstate/` is not in this
+checkout (it lives on seven) and the key reached me through a report, not a
+run of my own. Whoever holds the tier verdict owns "was it red, and what fixed
+it" — from here the only defensible claim is that it is green now, at that
+tree, with that binary.
