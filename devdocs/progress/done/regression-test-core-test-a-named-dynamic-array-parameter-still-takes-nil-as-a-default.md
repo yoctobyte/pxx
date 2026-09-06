@@ -37,3 +37,6 @@ pascal26:40: error: a parameter of an open-array or fixed-array type cannot have
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-core#src:test/test_a_named_dynamic_array_parameter_still_takes_nil_as_a_default.pas` passes at 6d72805b066c (tier native); it was red at fc43936b00d9. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
