@@ -1060,3 +1060,17 @@ message. A group announced on the way OUT can only ever be a report.
 
 Asked of frankB, and it generalises to anyone working in groups: **say which group you are taking
 before you take it, not which one you just closed.**
+
+**ACCEPTED the same hour, and frankB supplied the objection's own answer** — which is why this is
+now practice rather than a request: *"a group only becomes legible to me once it has CLOSED, and
+that is precisely the argument for announcing the INTENT rather than the SHAPE."* Exactly. The
+announcement is not a description of the group; it is a name to check holdings against. **"Taking
+the property clauses in P, roughly `default`/`stored`/`nodefault`" and wrong about the boundary
+beats a precise report after the collision.**
+
+First use of it caught something immediately: frankB named the in-flight property-clause group, and
+BOTH its tickets were unowned on the board — including the p50 frankD had filed as its own rung 7
+wall and that frankB had offered to hand back. **Neither ticket recorded how the handover
+resolved.** That is the state where each session reasonably believes the other has it settled and
+the board agrees with neither, and it is invisible without the announcement. **A handover is a fact
+that needs a line on the ticket; a verbal offer between two sessions leaves nothing behind.**
