@@ -40,6 +40,7 @@ program test_low_high_and_length_of_a_partial_subscript_answer_the_remaining_dim
   Every row is byte-identical to fpc 3.2.2. }
 
 type
+  TCharRow = array[0..2] of Char;
   TFlat = array[5..9, 2..3] of LongInt;
   TNest = array[5..9] of array[2..3] of LongInt;
   TDeep = array[5..9, 2..3, 7..10] of LongInt;
@@ -47,6 +48,9 @@ type
 var
   fails: Integer;
   acc, j: LongInt;
+  rows: array[0..1] of TCharRow;
+  cr: TCharRow;
+  seen: Integer;
   f: TFlat;
   n: TNest;
   d: TDeep;
@@ -113,6 +117,31 @@ begin
   acc := 0;
   for j := Low(f[5]) to High(f[5]) do acc := acc + f[5, j];
   Check('16: the bounds drive a loop that runs', acc, 33);
+
+  { 17..19: THE OTHER WRITER OF ASTNDRowSubs, which the new reader keys on and
+    did not construct. BuildForInArrayLoop stamps `ASTNDRowSubs := 1` on the
+    element access a for-in loop reads each row through (frankS, `1f66c4eb4`),
+    so it is the one such node in the tree that BuildPartialNDIndex did not
+    build. The stamp is honest -- one leading subscript really is consumed --
+    and these rows record what was MEASURED rather than which path was taken:
+    the three intrinsics answer the row's own bounds inside the loop, matching
+    fpc 3.2.2 exactly, and the loop still yields whole rows.
+    A cross-track row on purpose: a reader keyed on a column gains every writer
+    of that column, including the ones added after it. }
+  rows[0][0] := 'a'; rows[0][1] := 'b'; rows[0][2] := 'c';
+  rows[1][0] := 'd'; rows[1][1] := 'e'; rows[1][2] := 'f';
+  seen := 0;
+  acc := 0;
+  for cr in rows do
+  begin
+    seen := seen + 1;
+    Check('17: Length of a for-in row variable', Length(cr), 3);
+    Check('18: High of a for-in row variable', High(cr), 2);
+    for j := Low(cr) to High(cr) do acc := acc + Ord(cr[j]);
+  end;
+  Check('19: ...and the loop yielded whole rows, not first elements',
+        acc, 97 + 98 + 99 + 100 + 101 + 102);
+  Check('19b: both rows were visited', seen, 2);
 
   WriteLn('fails=', fails);
   if fails = 0 then WriteLn('PARTIALSUBBOUNDS OK');
