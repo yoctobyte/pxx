@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished
+- **Status:** unfinished — recon done 2026-07-13 night (rungs 1+2 are green: fpcunit
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].

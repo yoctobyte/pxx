@@ -12,7 +12,7 @@ summary: "ATTEMPTED 2026-09-01, RE-MEASURED 2026-09-05 -- premise CURRENT, two o
 - **Type:** feature / investigation (real-world compat target + feature)
 - **Track:** P (Pascal frontend) — rung of [[feature-pascal-corpus-expansion]]
 - **Status:** backlog
-- **Owner:** opus-p
+- **Owner:** opus-p — (**Track B** — libraries; uses `$(PXX_STABLE)`, never rebuilds the
   compiler. Compiler gaps it surfaces → Track A tickets.)
 - **Opened:** 2026-06-26
 - **Upstream:** `github.com/remobjects/pascalscript` — pure Object Pascal,
