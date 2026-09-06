@@ -319,6 +319,114 @@ def t_a_skipped_advisory_job_renders_as_skip():
     return "a skipped advisory job prints SKIP, not NOTICE"
 
 
+# --------------------------------------------- break E: the classifier and
+#                                                the emitters disagreed --
+
+def t_every_emitted_skip_reason_is_classified():
+    """Every harness-originated skip reason is a NAMED constant. (break E)
+
+    THE POPULATION IS THE EMITTERS, not the classifier, because the classifier
+    is where the answer was already wrong. Measured on
+    `20260906T183724Z-6d04b14-seven.md`: 7 skips in three reason groups,
+    `skip_holes: 2`. The five uncounted were `host dev dependency absent:` —
+    the gtk jobs — because the classifier listed `tool absent:` while the
+    emitter said `host tool absent:`, and listed nothing resembling `host dev
+    dependency absent:` at all. Both uncounted emitters print, in their own
+    prose, "That is coverage this box is not providing". The report published
+    the disagreement: "COVERAGE: 2 job(s) DID NOT RUN (of 7 skipped)", three
+    lines above a list naming all seven.
+
+    A guard that re-listed the prefixes would be a THIRD copy and could go
+    stale the same way, so this one reads testmgr.py's source and requires
+    every `skip_reason =` to assign from a `SKIP_*` constant. Adding an emitter
+    with a bare literal fails here; adding a constant forces a decision about
+    whether it is a hole, because it must appear in SKIP_HOLE_PREFIXES or in
+    the named not-a-hole set below.
+    """
+    src = open(os.path.join(HERE, "testmgr.py"), encoding="utf-8").read()
+    lines = src.splitlines()
+    # The two assignments that are deliberately not a literal reason, named so
+    # an exemption is a decision and not a silence.
+    exempt = {'self.skip_reason = ""': "the field's initialiser",
+              "job.skip_reason = why": "the recipe's OWN SKIP line, which "
+                                       "carries the target name and is the "
+                                       "recipe's business, not the harness's"}
+    bad = []
+    for i, ln in enumerate(lines, 1):
+        st = ln.strip()
+        if "skip_reason" not in st or "=" not in st:
+            continue
+        if not st.split("=")[0].strip().endswith("skip_reason"):
+            continue
+        if st in exempt:
+            continue
+        rhs = st.split("=", 1)[1].strip().lstrip("(").strip()
+        if not rhs:                       # continued on the next line
+            rhs = lines[i].strip() if i < len(lines) else ""
+        if not rhs.startswith("SKIP_"):
+            bad.append("%s:%d  %s" % ("testmgr.py", i, st[:70]))
+    assert not bad, ("skip_reason assigned from a bare literal — the emitter "
+                     "and the classifier can now disagree silently:\n  "
+                     + "\n  ".join(bad))
+
+    # ...and every named constant is classified one way or the other.
+    names = [n for n in dir(tm)
+             if n.startswith("SKIP_") and n != "SKIP_HOLE_PREFIXES"
+             and isinstance(getattr(tm, n), str)]
+    not_holes = {"SKIP_INSTRUMENTED_BUILD"}
+    unclassified = [n for n in names
+                    if getattr(tm, n) not in tm.SKIP_HOLE_PREFIXES
+                    and n not in not_holes]
+    assert not unclassified, (
+        "skip reason constant(s) neither counted as a coverage hole nor named "
+        "as deliberately not one: %s" % ", ".join(sorted(unclassified)))
+    return "%d emitter constant(s), %d counted as holes" % (
+        len(names), len(tm.SKIP_HOLE_PREFIXES))
+
+
+def t_the_five_reasons_the_report_showed_are_all_holes():
+    """The exact seven skips of the 18:37Z report count as seven. (break E)
+
+    A REGRESSION CONTROL WITH REAL DATA, not a synthetic one: these are the
+    reason strings that report printed, in its three groups, and the answer it
+    gave was 2. If this ever answers 2 again the classifier has drifted back
+    off the emitters.
+    """
+    jobs = [_J("test-zlib#00", "skip", "corpus absent: library_candidates/zlib"),
+            _J("test-core#1228", "skip",
+               "host capability absent: rdrand — this CPU does not implement "
+               "RDRAND/RDSEED (Intel Ivy Bridge 2012 and later), so the job "
+               "cannot pass on this box and a red would be permanent")]
+    for n in (1819, 1820, 1821, 1822, 1824):
+        jobs.append(_J("test-core#%d" % n, "skip",
+                       "host dev dependency absent: compiler/gtk.h — this box "
+                       "does not have it, so the job cannot pass here and a "
+                       "red would be a statement about the box rather than "
+                       "about the tree"))
+    got = tm.skip_summary(jobs)
+    assert got["count"] == 7, got
+    assert got["coverage_holes"] == 7, (
+        "the 18:37Z report's seven skips counted as %d holes; it published 2"
+        % got["coverage_holes"])
+    return "7 skips, 7 holes (the report published 2)"
+
+
+def t_a_recipe_self_skip_is_still_not_a_hole():
+    """Widening the prefixes must NOT sweep in a recipe's own SKIP. (break E)
+
+    The negative control for the fix above, and it is the one that keeps this
+    from becoming the seven-week "(corpus absent)" bug in the other direction.
+    `_self_skipped` returns the whole line, which starts with the target name,
+    so it cannot match a prefix by construction — asserted here rather than
+    left to construction, because construction is what the classifier was
+    relying on when it was wrong.
+    """
+    got = tm.skip_summary([_J("test-zlib#00", "skip",
+                              "test-zlib: SKIP gcc oracle not found")])
+    assert got["count"] == 1 and got["coverage_holes"] == 0, got
+    return "a recipe's own SKIP line is a skip and not a hole"
+
+
 TESTS = [t_summary_is_present_when_empty,
          t_a_skipped_advisory_job_renders_as_skip,
          t_report_header_carries_the_counts,
@@ -339,7 +447,10 @@ TESTS = [t_summary_is_present_when_empty,
          t_a_paragraph_is_bounded,
          t_missing_log_is_not_a_skip,
          t_report_json_carries_skips,
-         t_final_count_is_recomputed_after_the_run]
+         t_final_count_is_recomputed_after_the_run,
+         t_every_emitted_skip_reason_is_classified,
+         t_the_five_reasons_the_report_showed_are_all_holes,
+         t_a_recipe_self_skip_is_still_not_a_hole]
 
 
 def main():

@@ -1540,10 +1540,10 @@ def apply_host_tool_skips(jobs, absent):
             continue
         names = ", ".join(absent[a] for a in hit)
         j.status = "skip"
-        j.skip_reason = ("host tool absent: %s — this box has no %s on PATH, so "
-                         "the job cannot run here and a red would say nothing "
-                         "about the tree; install it with tools/install_qemu.sh"
-                         % (names, names))
+        j.skip_reason = (SKIP_HOST_TOOL_ABSENT + " %s — this box has no %s on "
+                         "PATH, so the job cannot run here and a red would say "
+                         "nothing about the tree; install it with "
+                         "tools/install_qemu.sh" % (names, names))
         n += 1
     if n:
         print("testmgr: %d job(s) SKIPPED — no %s on PATH. That is coverage this "
@@ -1847,7 +1847,8 @@ def apply_host_lib_skips(jobs):
         what, pkg = need
         j.status = "skip"
         j.skip_reason = (
-            "host dev dependency absent: %s — this box does not have it, so "
+            SKIP_HOST_DEV_ABSENT +
+            " %s — this box does not have it, so "
             "the job cannot pass here and a red would be a statement about "
             "the box rather than about the tree%s"
             % (what, "; install %s" % pkg if pkg else ""))
@@ -2558,8 +2559,50 @@ def step_sources(line):
 # counted separately and the second is never silently folded into the first,
 # which is what the single hardcoded "(corpus absent)" label did to the FPC
 # canary skips for seven weeks.
-SKIP_HOLE_PREFIXES = ("corpus absent:", "tool absent:",
-                      "host capability absent:")
+#
+# THE PREFIXES ARE NAMED CONSTANTS AND THE EMITTERS USE THEM, because the
+# version that spelled them twice was wrong for as long as it existed. Measured
+# 2026-09-06 on `20260906T183724Z-6d04b14-seven.md`: seven skips, three reason
+# groups, `skip_holes: 2`. The two counted were `corpus absent:` (one job) and
+# `host capability absent:` (one job). The five NOT counted were
+# `host dev dependency absent:` — test-core#1819..1822 and #1824, the gtk jobs —
+# because the classifier looked for `tool absent:` and the emitter said
+# `host tool absent:`, and looked for nothing at all resembling `host dev
+# dependency absent:`. Both uncounted emitters print, in their own words, "That
+# is coverage this box is not providing, not a verdict on the tree." The
+# emitter said hole, the classifier said not-a-hole, and the report printed
+# both: "COVERAGE: 2 job(s) DID NOT RUN on this box (of 7 skipped)" three lines
+# above a reason list naming all seven.
+#
+# The undercount is SILENT and always downward, and `skip_holes` is the number
+# a pin manifest publishes and a release bar is read against. Nothing errored.
+# A second copy of a string list is a name standing in for the thing it names;
+# there is now one copy and the emitters reference it.
+#
+# NOT in this tuple, deliberately: a recipe's OWN `<target>: SKIP` line. That
+# is the case the paragraph above is about — the recipe's business, not the
+# harness's — and `_self_skipped` returns the whole line, which starts with the
+# target name, so it cannot match any prefix here by construction. That is the
+# design, not a second instance of this bug. Whether a recipe that self-skips
+# for a coverage reason (`gcc oracle not found`) should be able to SAY so is a
+# real question and a separate one; it needs a channel from the recipe, not a
+# looser match here.
+SKIP_CORPUS_ABSENT = "corpus absent:"
+SKIP_TOOL_ABSENT = "tool absent:"
+SKIP_HOST_TOOL_ABSENT = "host tool absent:"
+SKIP_HOST_DEV_ABSENT = "host dev dependency absent:"
+SKIP_HOST_CAP_ABSENT = "host capability absent:"
+# ...and one that is deliberately NOT a hole, named anyway so the choice is
+# visible and a future reader does not have to guess whether it was considered.
+# A hole is coverage THE BOX is not providing. An instrumented build is
+# coverage THE RUN deliberately excluded: the fixedpoint's premise is void by
+# construction under PXXFLAGS, not unsatisfied by this machine, and counting it
+# would make every instrumented sweep report a hole it chose.
+SKIP_INSTRUMENTED_BUILD = "instrumented build:"
+
+SKIP_HOLE_PREFIXES = (SKIP_CORPUS_ABSENT, SKIP_TOOL_ABSENT,
+                      SKIP_HOST_TOOL_ABSENT, SKIP_HOST_DEV_ABSENT,
+                      SKIP_HOST_CAP_ABSENT)
 
 
 def skip_summary(jobs):
@@ -6117,7 +6160,7 @@ def main():
         for j in jobs:
             if j.target == "fpc-bootstrap":
                 j.status = "skip"
-                j.skip_reason = "tool absent: %s is not on PATH" % FPC_BIN
+                j.skip_reason = SKIP_TOOL_ABSENT + " %s is not on PATH" % FPC_BIN
     # self-skip jobs whose corpus tree is absent (twatch-setup contract:
     # "corpus jobs self-skip"); recipes with their own guard never get here
     absent, nabsent = {}, 0
@@ -6133,7 +6176,7 @@ def main():
             # Name the tree(s), not just the fact. "corpus absent" sends the
             # reader to the setup docs; "corpus absent: external/c-testsuite"
             # sends them to the one command that fixes it.
-            j.skip_reason = "corpus absent: %s" % ", ".join(
+            j.skip_reason = SKIP_CORPUS_ABSENT + " %s" % ", ".join(
                 "%s/%s" % (root, m) for root, m in missing)
             nabsent += 1
             for key in missing:
@@ -6172,7 +6215,7 @@ def main():
             if j.target == "selfhost-fixedpoint" and j.status != "skip":
                 j.status = "skip"
                 j.skip_reason = (
-                    "instrumented build: PXXFLAGS=%s — a byte-identity "
+                    SKIP_INSTRUMENTED_BUILD + " PXXFLAGS=%s — a byte-identity "
                     "fixedpoint against the uninstrumented `pinned` seed "
                     "cannot hold by construction, so this job's premise is "
                     "void rather than violated" % instrumented)
@@ -6185,7 +6228,7 @@ def main():
                 continue
             if any(rx.search(ln) for ln in j.lines):
                 j.status = "skip"
-                j.skip_reason = ("host capability absent: %s — this CPU does "
+                j.skip_reason = (SKIP_HOST_CAP_ABSENT + " %s — this CPU does "
                                  "not implement %s, so the job cannot pass on "
                                  "this box and a red would be permanent"
                                  % (cap, human))
