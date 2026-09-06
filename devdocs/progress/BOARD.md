@@ -85,7 +85,7 @@ _none_
 | regression-test-core-test-fpc-compat-batch2-2 | P | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas at 7b287013d34a in step 8/3, `fglsrc=""; \ if [ -f library_candidates/fpc-rtl/rtl/objpas/fgl.pp ]; then fglsrc=library_candidates/fpc-rtl/rtl/objpas;…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
-| regression-test-fgl-compiler-srchash | T | 70 | regression | regression: test-fgl#src:tools/compiler_srchash.sh at 3b13f585f5f4 in step 2/2, `tools/run_fgl_corpus.sh ./compiler/pascal26 library_candidates/fpc-rtl/rtl/objpas` (auto-filed by twatch) | — |
+| regression-test-fgl-compiler-srchash | P | 70 | regression | regression: test-fgl#src:tools/compiler_srchash.sh at 3b13f585f5f4 in step 2/2, `tools/run_fgl_corpus.sh ./compiler/pascal26 library_candidates/fpc-rtl/rtl/objpas` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-args-ctor | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_args_ctor.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_args_ctor.npy /tmp/test_nilpy_star_args_ctor26` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
@@ -1018,7 +1018,7 @@ _none_
 - [p 70] [P] regression-test-core-test-fpc-compat-batch2-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
-- [p 70] [T] regression-test-fgl-compiler-srchash
+- [p 70] [P] regression-test-fgl-compiler-srchash
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-star-args-ctor [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5

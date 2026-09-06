@@ -88,7 +88,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-core-test-fpc-compat-batch2-2
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
-- `[p 70] [T]` regression-test-fgl-compiler-srchash
+- `[p 70] [P]` regression-test-fgl-compiler-srchash
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-star-args-ctor
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
