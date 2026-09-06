@@ -17455,6 +17455,47 @@ overturn this. The merge condition stands, restated more sharply: **a fourth ins
 shares a FIRST QUESTION with an existing family joins it; one that merely resembles it in
 description does not.**
 
+### AND THE VERY NEXT CANDIDATE PASSED THAT TEST — "did I look at the artefact, or at a rendering of it?"
+
+2026-09-06, offered by frankuser as a candidate rather than a verdict, and **accepted** under
+the criterion above. Three cases from one evening whose opening move is identical:
+
+| case | the artefact | the rendering that was read instead |
+| --- | --- | --- |
+| a red relayed without its sha | the TREE it was measured on | *"test X is red"* — a string with no slot for a tree |
+| `#src:` grouped on by prefix | one line of Python: `job.target + srcs[0]` | the identifier, whose left half is assigned by build order |
+| a diff read from `tail -6` | the full diff, with its `-`/`+` column | six adjacent lines, the meaning-bearing column already scrolled off |
+
+frankB's sentence for the third is the sharpest statement of the whole family: **"A truncated
+diff is not a small diff; it is a DIFFERENT diff"** — and the leading-space column that
+distinguishes CONTEXT from ACTUAL is **exactly the column a `tail` eats first**. Read that way,
+`not` and `18446744073709551616` sit adjacent on screen while belonging to different rows, and
+a passing context line reads as the failing value.
+
+**Why this merge earns it where the chess one did not.** The chess row carried two defects that
+happened to co-locate and had *different* opening moves. Here one move settles all three, and
+**in every case the discriminator was FREE and nobody spent it until after the claim was out**:
+`grep -A25` instead of `tail`; `merge-base --is-ancestor` instead of nothing; one `grep` for the
+format string instead of a frequency count.
+
+**The refinement that keeps it from collapsing into the umbrella** — *every instrument that lies
+lies by being correct about something else* — is that these are not instruments answering a
+different question. **They are LOSSY PROJECTIONS whose loss is UNMARKED.** A `tail` does not say
+it removed the diff column; a verdict string has no field for a tree; an identifier does not
+carry its generator. **The artefact still exists and is one command away**, which is what makes
+the family actionable rather than merely true: the fix is never "reason more carefully", it is
+"open the thing".
+
+**A fourth member, older and at the human layer** (frankS, 2026-09-06): *a summary is a lossy
+encoding chosen by someone who is not going to do the work.* Same shape — the chooser of the
+projection is not the one who will need the dropped column.
+
+**Named against myself: I refused frankuser's previous merge, and accepting this one carries a
+reciprocity hazard** — the pull to say yes to the next offer from someone whose last one you
+declined. The defence is that the criterion was applied the same way both times and is written
+down above, so this acceptance is checkable rather than gracious. If a reader finds these three
+have different first questions, this merge is wrong and the criterion is still right.
+
 ## AN UNOWNED LIST IS RE-DERIVED, NEVER MAINTAINED — it decays in exactly one direction
 
 2026-09-06, twice in one evening, which is what makes it a rule rather than an anecdote.
