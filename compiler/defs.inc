@@ -2716,6 +2716,20 @@ var
     in the other direction -- removing one is as impossible as adding one. }
   GenericFuncParams  : array[0..MAX_GENERIC_FUNCS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   GenericFuncNParams : array[0..MAX_GENERIC_FUNCS-1] of Integer;
+  { How many VALUE parameters the template declares -- the second half of a
+    generic routine's identity, and the half that had no column. NParams above
+    counts TYPE parameters, so `Add<T>(a, b: T)` and `Add<T>(a: T)` were
+    indistinguishable: same name, same type arity, and both mangle to
+    `Add_LongInt`. The first template swept the uses, the second found the name
+    taken and emitted nothing, and the call with one argument was told
+    `no overload of Add_LongInt matches these arguments` -- a true statement
+    about a program whose second overload had been dropped on the floor
+    (tgenfunc8.pp). The two are ordinary OVERLOADS once both bodies exist, which
+    is what SpecializeInlineGenericFuncUses now emits; this column is how it
+    tells "already emitted from THIS template" from "emitted from a sibling".
+    0 for a parameterless template. Parallel array, not a record field, for the
+    fixedpoint reason stated above. }
+  GenericFuncNValParams : array[0..MAX_GENERIC_FUNCS-1] of Integer;
   { Concrete type arguments a generic METHOD was asked for, keyed by the METHOD
     NAME rather than by the class. A use site (`t.Add<Integer>(..)`) names a
     method and a receiver whose type the token stream cannot resolve, so the

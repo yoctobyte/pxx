@@ -4214,11 +4214,47 @@ end;
   Called from ParseGenericFunc, so the scan sees the whole rest of the unit and
   a routine used before it is declared is refused as it always was.
   compat-pascal-inline-generic-specialization }
+function SpecFuncAlreadyEmitted(const nm: AnsiString; nValParams: Integer): Boolean;
+{ Is a routine called `nm` taking exactly `nValParams` parameters already
+  registered AND VISIBLE FROM HERE? The guard on materialising a generic
+  routine's specialization, and it has to answer both halves.
+
+  THE ARITY HALF is why this is not plain FindProc, which answers about the NAME
+  alone. That was right while one template owned a mangled name and is wrong now
+  that siblings share one: `Add<T>(a, b: T)` and `Add<T>(a: T)` both mangle to
+  `Add_LongInt`, and a name-only guard let the first template's body suppress
+  the second's, leaving the one-argument call to fail against the two-argument
+  signature.
+
+  THE VISIBILITY HALF is why it is not a plain scan of Procs[] either, and the
+  first cut was exactly that. A specialization emitted for an IN-UNIT use lands
+  in that unit's implementation section, where the importing program cannot see
+  it -- so the program's own use must emit its own copy, which is what FindProc
+  answering -1 across that boundary had always arranged. A raw scan finds the
+  invisible one, reports "already there", emits nothing, and the program is told
+  `undefined variable (GB_Integer)` about a routine that exists.
+  test_generic_body_end_counting caught it, and it is the arm of that test whose
+  whole point is that the specializing use lives in the PROGRAM body.
+
+  So: the same visibility gate FindProc applies, asked over the whole same-named
+  SET rather than about its representative. }
+var i: Integer;
+begin
+  SpecFuncAlreadyEmitted := False;
+  for i := 0 to ProcCount - 1 do
+    if CaseEqual(Procs[i].Name, nm) and (Procs[i].ParamCount = nValParams) and
+       DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, nm) then
+    begin
+      SpecFuncAlreadyEmitted := True;
+      Exit;
+    end;
+end;
+
 procedure SpecializeInlineGenericFuncUses(gfi: Integer);
 const MAX_INLINE_SPECS = 64;
-var i, k, q, j, nSpec, nArg, base: Integer;
+var i, k, q, j, nSpec, nArg, base, sweepEnd, sg: Integer;
     fname, specName: AnsiString;
-    seen, hasKw, isDecl, matched: Boolean;
+    seen, hasKw, isDecl, matched, isLast: Boolean;
     argNm: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
     argKd: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
     { one ROW per specialization, MAX_TEMPLATE_PARAMS wide -- a routine's
@@ -4242,6 +4278,7 @@ begin
     forward from TokPos: an overload declared BEFORE this one is as real as one
     declared after. bug-p-... (see the skip row for tgenfunc8.pp) }
   for q := 0 to MAX_TEMPLATE_PARAMS do declArity[q] := False;
+  sweepEnd := TokCount;
   i := 0;
   while i + 2 < TokCount do
   begin
@@ -4259,13 +4296,37 @@ begin
       end;
       if (j < TokCount) and (Tokens[j].Kind = tkGt) and
          (k >= 1) and (k <= MAX_TEMPLATE_PARAMS) then
+      begin
         declArity[k] := True;
+        { …and WHERE the next sibling at THIS arity is declared, which is where
+          this template's claim on the token stream ends.
+
+          A use written after a sibling's declaration belongs to the overload
+          SET, not to whichever template happened to be declared first -- and
+          the sweep is destructive: it collapses `specialize Add<String>('x')`
+          to the identifier `Add_String`, so the sibling declared ten lines
+          later sweeps a stream in which its own uses no longer exist. That is
+          how tgenfunc8's third overload came to emit nothing at all while its
+          call site reported a mismatch against the FIRST overload's signature.
+
+          Uses BEFORE the sibling stay with this template alone, which is
+          ordinary Pascal scope: nothing declared below is a candidate yet. So
+          the bound is a real boundary and not a workaround for the sweep
+          order. }
+        if (k = GenericFuncNParams[gfi]) and (i - 1 >= TokPos) and
+           ((i - 1) < sweepEnd) then
+          sweepEnd := i - 1;
+      end;
     end;
     Inc(i);
   end;
+  { The LAST sibling at this arity is the one that sees the whole rest of the
+    stream, and it is the one that must emit a body for EVERY sibling -- the
+    others have already had their turn and consumed only what preceded it. }
+  isLast := sweepEnd >= TokCount;
   nSpec := 0;
   i := TokPos;
-  while i + 4 < TokCount do
+  while i + 4 < sweepEnd do
   begin
     { Two surfaces for the same use. `specialize F<C>(` is the objfpc spelling
       and is accepted for any generic routine. `F<C>(` -- no keyword -- is the
@@ -4429,36 +4490,59 @@ begin
       TokSrcOff[i] := 0;   { it says F_C now -- see the note in ExpandGenericMethod }
       TokSrcLen[i] := 0;
       RemoveTokens(i + 1, j - i);
+      { The bound is an INDEX into the same array RemoveTokens just shortened,
+        so it moves with it. Left unadjusted it would walk forward past the
+        sibling declaration by exactly the number of tokens collapsed so far --
+        silently, since every index in range still reads a real token. }
+      sweepEnd := sweepEnd - (j - i);
     end;
     Inc(i);
   end;
 
   for k := 0 to nSpec - 1 do
   begin
-    { A name already taken means the DECLARATION form got here first (its
-      auto-generated name is the same one) — one specialization is what we
-      want, so leave that one alone. }
-    if FindProc(specNames[k]) >= 0 then Continue;
-    SpecializeTemplateName := GenericFuncs[gfi].Name;
-    { The substitution set, one entry per type parameter. The engine has always
-      been MAX_TEMPLATE_PARAMS wide -- this site simply never filled more than
-      slot 0. }
-    SpecSubCount := specNArgs[k];
-    for q := 0 to SpecSubCount - 1 do
+    { ONE MANGLED NAME, ONE BODY PER TEMPLATE THAT ANSWERS TO IT. `Add_LongInt`
+      names an overload SET when several templates share a name and a type
+      arity, exactly as the un-specialized `Add` does in the source -- so the
+      last sibling emits a body from each of them and ordinary overload
+      resolution picks by argument count at the call. FPC reaches the same place
+      by never mangling at all; we mangle and then let the set re-form.
+
+      Only the last sibling does this (see isLast): the earlier ones have
+      already emitted for the uses that preceded the later declaration, and
+      re-emitting for those would collide. }
+    for sg := 0 to GenericFuncCount - 1 do
     begin
-      SpecSubNames[q]  := GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + q];
-      SpecSubValues[q] := specArgs[k * MAX_TEMPLATE_PARAMS + q];
-      SpecSubKinds[q]  := specArgKinds[k * MAX_TEMPLATE_PARAMS + q];
+      if not CaseEqual(GenericFuncs[sg].Name, fname) then Continue;
+      if GenericFuncNParams[sg] <> GenericFuncNParams[gfi] then Continue;
+      if (sg <> gfi) and (not isLast) then Continue;
+      { A name already taken AT THIS PARAMETER COUNT means this body is already
+        here -- the DECLARATION form (`specialize Max<Integer> as MaxInt`) got
+        here first, or an earlier sweep of this same template did. Asked on the
+        PAIR and not on the name, because with siblings the name alone is
+        exactly what cannot tell those apart from a sibling's body. }
+      if SpecFuncAlreadyEmitted(specNames[k], GenericFuncNValParams[sg]) then Continue;
+      SpecializeTemplateName := GenericFuncs[sg].Name;
+      { The substitution set, one entry per type parameter. The engine has always
+        been MAX_TEMPLATE_PARAMS wide -- this site simply never filled more than
+        slot 0. }
+      SpecSubCount := specNArgs[k];
+      for q := 0 to SpecSubCount - 1 do
+      begin
+        SpecSubNames[q]  := GenericFuncParams[sg * MAX_TEMPLATE_PARAMS + q];
+        SpecSubValues[q] := specArgs[k * MAX_TEMPLATE_PARAMS + q];
+        SpecSubKinds[q]  := specArgKinds[k * MAX_TEMPLATE_PARAMS + q];
+      end;
+      { SpecializeStream splices at TokPos, and CurTok is holding the token AT
+        TokPos-1 — so step back, splice in front of it, and the `Next` below reads
+        the first spliced token. When ParseSubroutine finishes, CurTok is back on
+        the token it was holding, which is what the caller expects. }
+      Dec(TokPos);
+      SpecializeStream(GenericFuncs[sg].TokStart, GenericFuncs[sg].TokCount,
+                       specNames[k]);
+      Next;
+      ParseSubroutine;
     end;
-    { SpecializeStream splices at TokPos, and CurTok is holding the token AT
-      TokPos-1 — so step back, splice in front of it, and the `Next` below reads
-      the first spliced token. When ParseSubroutine finishes, CurTok is back on
-      the token it was holding, which is what the caller expects. }
-    Dec(TokPos);
-    SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
-                     specNames[k]);
-    Next;
-    ParseSubroutine;
   end;
 end;
 
@@ -4690,7 +4774,7 @@ procedure ParseGenericFunctionDef;
   feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
 var isFunc, isDelphi, moreParams: Boolean; funcName: AnsiString;
     paramNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
-    nParam, gfi, j, cur, finalCur, depth: Integer;
+    nParam, nValParam, gfi, j, cur, finalCur, depth: Integer;
 begin
   isDelphi := not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic'));
   if not isDelphi then Next; { consume 'generic' }
@@ -4737,10 +4821,47 @@ begin
   Expect(tkGt, '>');
   { CurTok = '(' of param list, or ';' / ':' if no params }
 
+  { The VALUE-parameter count, counted here because here is the one place the
+    list is still in front of us as tokens and has not yet been buffered into
+    the template pool.
+
+    INDIVIDUAL PARAMETERS, NOT GROUPS -- both separators count. `(a, b: T)` is
+    TWO and `(a: T; b: S)` is two as well; no `(` at all is 0. The first draft
+    counted only `;` and answered 1 for `(aLeft, aRight: T)`, which is the
+    number of type GROUPS and not the number Procs[].ParamCount holds -- so the
+    "already emitted" guard below asked about a signature that did not exist,
+    declined to match, and emitted the template a second time. It surfaced as
+    `duplicate definition of 'Add_LongInt' with the same parameter types`, which
+    is the compiler's own warning doing exactly the job it is there for.
+
+    Depth-tracked, so a default value containing a call or a set literal cannot
+    be miscounted: a separator only counts at depth 1. }
+  nValParam := 0;
+  if CurTok.Kind = tkLParen then
+  begin
+    nValParam := 1;
+    j := TokPos - 1;   { index of the '(' CurTok is holding }
+    depth := 0;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind in [tkLParen, tkLBrack] then Inc(depth)
+      else if Tokens[j].Kind in [tkRParen, tkRBrack] then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end
+      else if (depth = 1) and
+              ((Tokens[j].Kind = tkSemicolon) or (Tokens[j].Kind = tkComma)) then
+        Inc(nValParam);
+      Inc(j);
+    end;
+  end;
+
   if GenericFuncCount >= MAX_GENERIC_FUNCS then Error('too many generic functions');
   gfi := GenericFuncCount;
   GenericFuncs[gfi].Name     := funcName;
   GenericFuncNParams[gfi]    := nParam;
+  GenericFuncNValParams[gfi] := nValParam;
   for j := 0 to nParam - 1 do
     GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + j] := paramNames[j];
   GenericFuncs[gfi].IsFunc   := isFunc;
