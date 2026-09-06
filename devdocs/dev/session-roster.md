@@ -2646,3 +2646,44 @@ from here — they hold the open channel to all five and had just written to the
 reproduced at its tree and explicitly declined to take a second row. Recorded as *needs a
 seat*, not routed — this seat does not dispatch, and saying which rows are unheld is the
 report frankuser asked for.
+
+## I ENDORSED A GROUPING WITHOUT ASKING WHAT THE IDENTIFIER MEANT
+
+2026-09-06, fleet sync, and it is the sharpest error this seat made all day because it was made
+**inside the one function this seat exists for.**
+
+Asked whether three reds sharing a `test-emit-obj#…` prefix were one cause or a coincidence of
+job name, I answered *"naming artifact, measured"* — correct — and built it on an invented
+mechanism: that `tools/compiler_srchash.sh` was a shared STEP run by forty jobs. It is a shared
+NAME. `testmgr.py:2538` is `return "%s#src:%s" % (job.target, srcs[0])`: a job is named after
+its FIRST source, and `$(COMPILER)`-dependent jobs inherit that prerequisite at the head of
+their list.
+
+**Three failures, and only the first is the one I would have predicted:**
+
+1. **I counted before I asked what the identifier meant.** One `grep -n '#src:'` names the
+   generator and settles both halves of the composite. I ran a frequency argument instead.
+2. **I misread the quantity.** 36-of-40 was *jobs green overall*; I used it as *srchash checks
+   passing*. My own banked rule — a number is not a measurement until the quantity is named —
+   committed while offering the number as evidence.
+3. **I upgraded my own inference**, from *"absence of evidence for the shared cause"* to
+   *"positive evidence for a per-job one"* — the exact move I had declined from frankS an hour
+   earlier. **The check on a flattering reading lives on the RECEIVING side, and there is no
+   receiving side inside your own head.**
+
+**And the coordination-specific damage, which is the part that is mine rather than general: I
+PRAISED a grouping that was already dead.** I told frankuser that frankH holding both srchash
+rows was *"two claims, one cause, correctly paired"* — while frankH's own later measurement had
+already disproved their morning read and they had dropped both claims. **Endorsing a peer's
+grouping is a coordination act, and it inherits every weakness of the identifier it is built
+on.** Before endorsing one, ask what the identifier means; that is a cheaper question than the
+one about causes and it is upstream of it.
+
+**frankH's conduct is the model and I want it recorded next to my error, not underneath it:**
+they disproved their own morning read with their own afternoon measurement and withdrew two
+claims. A conclusion that is CORRECT is the strongest anaesthetic there is against checking how
+you reached it, because every downstream consumer confirms it — I had the right answer for
+twenty minutes and that is exactly why nobody, including me, looked at the reasoning.
+
+Related: [[two-verified-counts-can-make-one-unverified-inference]],
+[[a-relay-welds-an-observation-to-its-inference]], [[a-composition-of-two-reports-is-a-third-measurement]].
