@@ -14148,8 +14148,101 @@ begin
             (not Syms[symIdx].IsArray) and (not Syms[symIdx].IsRef);
 end;
 
+{ ---- THE ONE SCOPE-EXIT RELEASE CLASSIFICATION ---------------------------
+
+  Which release a managed local needs at scope exit, and with what operands.
+  ONE answer for all seven emitters.
+
+  WHY THIS EXISTS. The nine-arm chain below was written out SEVEN times --
+  symtab.inc (x86-64), five arms in ir_codegen.inc (i386, arm32, aarch64,
+  xtensa, riscv32) and WasmEmitManagedLocals in ir_codegen_wasm32.inc -- and
+  measured 2026-09-06 the five register arms were decision-for-decision
+  identical. That is not the absolution it reads as: they agree because people
+  keep re-syncing them BY HAND, and the copy that drifts is never the one
+  anyone measures. It has already cost real defects. wasm32 had no tyClass arm
+  at all, so every NilPy object bound to a local leaked once per call on that
+  target and no other (d58828d8c); i386 and arm32 once released element ZERO of
+  a static array of strings while riscv32 skipped the case entirely, three
+  behaviours for one concept, recorded in the i386 arm's own comment.
+
+  THE DISEASE IS NOT THE DUPLICATION, IT IS A DISTINCTION THAT LIVES ONLY IN
+  PROSE. ResolveNodeRec opens by calling the RecName/ElemRecName split "a
+  recurring landmine throughout this codebase", and on 2026-09-06 the parameter
+  path stepped on that exact landmine anyway -- documented at the reader,
+  violated at the writer, a silent wrong value for `array of SomeClass`
+  (86852f93a). A rule spelled per copy fails by an ABSENT arm rather than a
+  divergent one, so the copies that are wrong agree perfectly with each other
+  and reading them against one another finds nothing.
+
+  WHAT IS DELIBERATELY *NOT* HERE. The outer guards stay at each call site --
+  SymSkipScopeExitRelease, `Kind = skLocal`, `i <> retSymIdx`, and wasm32's
+  extra `not IsRef`. Folding those in would make converting a backend change
+  its guard behaviour as a side effect, and the whole point of doing this one
+  backend per commit is that each step is independently correct. wasm32's
+  `not IsRef` is a real difference from the other six and is an OPEN QUESTION,
+  not something to normalise away silently while moving code.
+
+  Operands, by action:
+    SXR_INTF    a1 = interface id                       (slot ADDRESS)
+    SXR_ARRIMM  a1 = element count, a2 = base kind,
+                a3 = when a2 = 3 the element's UClass index, to be emitted as a
+                     DATA REFERENCE; otherwise a plain immediate
+                                                        (slot ADDRESS)
+    SXR_STR                                             (slot VALUE)
+    SXR_VAR                                             (slot ADDRESS)
+    SXR_OBJ                                             (slot VALUE)
+    SXR_PROMO                                           (slot ADDRESS)
+    SXR_DYNARR  the emitter allocates its own RTTI       (slot VALUE)
+    SXR_RECORD  a1 = record id, a2 = 1 when it has COM interface fields
+                                                        (slot ADDRESS)
+
+  GetOrAllocSymRTTI is deliberately left to the emitter: it ALLOCATES, and a
+  classifier that a caller may consult without emitting must not have side
+  effects. }
+function ScopeExitReleaseAction(i: Integer; var a1, a2, a3: Integer): Integer;
+var mek: Integer;
+begin
+  a1 := 0; a2 := 0; a3 := 0;
+  if SymIsComInterface(i) then
+  begin
+    a1 := SymTR[i].RecId - REC_UCLASS_BASE;
+    ScopeExitReleaseAction := SXR_INTF;
+  end
+  else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+          (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+  begin
+    mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+    a1 := Syms[i].ArrLen;
+    a2 := mek;
+    if mek = 3 then a3 := SymTR[i].ElemRec - REC_UCLASS_BASE
+    else a3 := ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+    ScopeExitReleaseAction := SXR_ARRIMM;
+  end
+  else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+    ScopeExitReleaseAction := SXR_STR
+  else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+    ScopeExitReleaseAction := SXR_VAR
+  else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+          NilPyUserCode and PyClassSymArcEligible(i) then
+    ScopeExitReleaseAction := SXR_OBJ
+  else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+    ScopeExitReleaseAction := SXR_PROMO
+  else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+    ScopeExitReleaseAction := SXR_DYNARR
+  else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+          RecordHasManagedFields(SymTR[i].RecId) then
+  begin
+    a1 := SymTR[i].RecId;
+    if RecordHasComIntfFields(SymTR[i].RecId) then a2 := 1;
+    ScopeExitReleaseAction := SXR_RECORD;
+  end
+  else
+    ScopeExitReleaseAction := SXR_NONE;
+end;
+
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
+    act, a1, a2, a3: Integer;
     recSz, q, pRecZero: Integer;
 begin
   if CurProc < 0 then Exit;
@@ -14190,7 +14283,8 @@ begin
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
     begin
-      if SymIsComInterface(i) then
+      act := ScopeExitReleaseAction(i, a1, a2, a3);
+      if act = SXR_INTF then
       begin
         { COM/ARC interface local: _Release the held reference (nil-safe). }
         procIdx := FindProc('PXXIntfRelease');
@@ -14199,8 +14293,7 @@ begin
         x64_mov_reg_imm(8, rRSI, SymTR[i].RecId - REC_UCLASS_BASE);  { rsi = interface id }
         EmitCallProc(procIdx);
       end
-      else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-              (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+      else if act = SXR_ARRIMM then
       begin
         { STATIC array with MANAGED ELEMENTS: release EVERY element.
 
@@ -14240,7 +14333,7 @@ begin
           x64_mov_reg_imm(8, rRCX, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
         EmitCallProc(procIdx);
       end
-      else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+      else if act = SXR_STR then
       begin
         { A SCALAR AnsiString local. The `not IsArray` guard is load-bearing and
           was missing: an array's TypeKind IS its element kind, so a local
@@ -14255,7 +14348,7 @@ begin
         x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);   { mov rax, [rbp+off] }
         IREmitCodeCall(AnsiStrReleaseAddr);
       end
-      else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+      else if act = SXR_VAR then
       begin
         { The `not IsArray` guard is the AnsiString arm's, for the same reason
           and eight lines further down: an array's TypeKind IS its element kind,
@@ -14269,9 +14362,7 @@ begin
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
       end
-      else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-              NilPyUserCode and
-              PyClassSymArcEligible(i) then
+      else if act = SXR_OBJ then
       begin
         { NilPy-user class local: drop the binding's ref at scope exit — the
           trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14284,7 +14375,7 @@ begin
           EmitCallProc(procIdx);
         end;
       end
-      else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+      else if act = SXR_PROMO then
       begin
         { `not IsArray` for the reason the Variant arm above and the AnsiString
           arm below carry it: an array of promo ints was claimed here and got
@@ -14301,14 +14392,13 @@ begin
           EmitCallProc(procIdx);
         end;
       end
-      else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+      else if act = SXR_DYNARR then
       begin
         { mov rax, [rbp + Offset] }
         x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitDynArrayReleaseForSym(i);
       end
-      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-              RecordHasManagedFields(SymTR[i].RecId) then
+      else if act = SXR_RECORD then
       begin
         { Record value local with managed fields (AnsiString, dynamic-array,
           nested record, COM interface): rbx = record address.

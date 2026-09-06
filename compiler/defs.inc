@@ -483,6 +483,21 @@ const
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
 
+  { Scope-exit release ACTIONS -- what ScopeExitReleaseAction (symtab.inc)
+    answers, and the one classification all seven release emitters share. The
+    operand meaning per action is documented at that function; it is stated
+    ONCE, there, rather than beside each constant, because a second copy of an
+    operand table is exactly the drift this set exists to end. }
+  SXR_NONE   = 0;   { nothing to release }
+  SXR_INTF   = 1;   { PXXIntfRelease }
+  SXR_ARRIMM = 2;   { PXXArrayReleaseImmediate }
+  SXR_STR    = 3;   { PXXStrDecRef }
+  SXR_VAR    = 4;   { PXXVarClear }
+  SXR_OBJ    = 5;   { PXXObjRelease }
+  SXR_PROMO  = 6;   { PXXPromoClear }
+  SXR_DYNARR = 7;   { PXXDynArrayRelease }
+  SXR_RECORD = 8;   { PXXRecordReleaseIntf (when a2=1) then PXXRecordRelease }
+
   { Member visibility levels (UFldVis/UMthVis). Enforced only under
     StrictVisibility; parsed always. private/protected are UNIT-scoped (the whole
     declaring unit sees them, FPC semantics); the strict variants are TYPE-scoped. }
