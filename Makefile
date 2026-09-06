@@ -16584,6 +16584,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_varinitaddr26 "$$($(TESTTMP)/test_varinitaddr26)" "$$(cat test/test_a_var_section_initialiser_can_hold_an_address.expected)"
 	./$(COMPILER) test/test_two_generic_routine_overloads_at_one_type_arity.pas $(TESTTMP)/test_genovlarity26
 	tools/expect_same.sh test_genovlarity26 "$$($(TESTTMP)/test_genovlarity26)" "$$(cat test/test_two_generic_routine_overloads_at_one_type_arity.expected)"
+	./$(COMPILER) test/test_routine_local_specialization.pas $(TESTTMP)/test_rtlocalspec26
+	tools/expect_same.sh test_rtlocalspec26 "$$($(TESTTMP)/test_rtlocalspec26)" "$$(cat test/test_routine_local_specialization.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

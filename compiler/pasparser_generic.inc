@@ -800,14 +800,51 @@ begin
     RTL file for an error on line 2074 of the corpus unit.
     bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
   AdjustSrcRanges(at, subCount);
-  { …and NOT AdjustPass2Spans, unlike InsertTokens, which calls both. That is
-    correct here, not an omission: no splice site can be reached while
-    Pass2Active is true, so the span adjustment would be a no-op.
+  { AND AdjustPass2Spans, exactly as InsertTokens does. It used to be omitted
+    here, with the argument below that no splice site is reachable while
+    Pass2Active is true. THE ARGUMENT IS FALSE, and the enumeration two
+    paragraphs down is where it goes wrong: `ParseSpecialization <-
+    ParseTypeSection` is written as though ParseTypeSection had one caller.
+    ParseSubroutine's own declaration loop calls it too (pasparser_proc.inc,
+    the `tkVar/tkConst/tkType/...` loop), for a ROUTINE-LOCAL `type` section --
+    and that loop runs during the BODY pass, because pass 1 only records the
+    routine's span. So
 
-    Pass 2 replays recorded DeclItem spans through ParseSubroutine and nothing
-    else. Every caller of this splice is a DECLARATION parser:
+        function Test: Integer;
+        type TTest_Word = specialize TTest<Word>;   { splice, Pass2Active }
+        begin Result := SizeOf(t.f); end;
 
-      ParseSpecialization                 <- ParseTypeSection
+    spliced N tokens in front of Pass2BodyTok and every later DeclItem without
+    moving any of them. Measured 2026-09-06 with a probe at this line: `splice
+    at 31 delta 7 while Pass2Active, Pass2BodyTok=38`. Pass2BodyTok stayed 38,
+    so the driver re-entered the program body 7 tokens early -- inside the
+    routine it had just left -- and the diagnostic was `undefined variable
+    (Result)` at the program's `begin`: A DEFECT IN AN INDEX REPORTED AS A
+    SCOPE ERROR, seven tokens from the splice and nowhere near it.
+
+    WHY THE ORIGINAL MEASUREMENT MISSED IT, because it was a real measurement
+    and it is worth not repeating. `if Pass2Active then Error(...)` was put at
+    all five sites and a full self-host fixedpoint, gate.sh quick, 346 Pascal
+    conformance tests, 220 C conformance tests and the fgl corpus all passed.
+    Every one of those populations EXCLUDES the case: the compiler writes no
+    routine-local specialization, and the conformance files that do -- tgeneric94
+    and tgeneric95 -- were in test/pascal-conformance/pxx.skip at the time, so
+    the suite could not run them. A guard drawn from a population the defect is
+    absent from passes, and certifies the reasoning that chose the population.
+    The probe was aimed correctly and the sample was the wrong one.
+
+    The call below costs nothing where the old argument WAS right:
+    AdjustPass2Spans returns immediately unless Pass2Active, so the
+    (routine-local-specialization-free) compiler self-build is byte-identical.
+
+    The rest of the original note stands and is why only ONE of the five sites
+    is affected. Pass 2 replays recorded DeclItem spans through ParseSubroutine
+    and nothing else, and the other four callers are declaration parsers that
+    pass 1 runs to completion:
+
+      ParseSpecialization                 <- ParseTypeSection  <- ParseProgram /
+                                             ParseUnit ...AND ParseSubroutine's
+                                             local decl loop, which is pass 2
       FlushPendingClassSpecializations    <- ParseTypeSection
       SpecializeInlineGenericFuncUses     <- ParseGenericFunctionDef
       ParseOperatorDef                    <- ParseProgram / ParseUnit
@@ -819,23 +856,26 @@ begin
     would double-buffer and corrupt the token stream", which is a stronger
     statement than this one and already relied upon.
 
-    A `specialize` written INSIDE a routine body does not splice from the body:
-    it resolves a declaration-level specialization, which is why the hoisting
-    SpecializeInlineGenericFuncUses does for the function form is the same shape
-    the class form has always had.
+    A `specialize` written INSIDE a routine BODY still does not splice from the
+    body: it resolves a declaration-level specialization, which is why the
+    hoisting SpecializeInlineGenericFuncUses does for the function form is the
+    same shape the class form has always had. That sentence survives the
+    correction above intact -- a routine-local `type` SECTION is not the body,
+    and it is the section, not the body, that reaches this splice in pass 2.
 
-    Measured 2026-08-27 as well as argued: with `if Pass2Active then Error(...)`
-    at all five sites, a full self-host fixedpoint, gate.sh quick, 346 Pascal
-    conformance tests, 220 C conformance tests and the fgl corpus all passed;
-    and with a Warn instead, the sites demonstrably ARE reached (five times in a
-    program written to put a specialization and an operator desugar inside
-    routine bodies), every time with Pass2Active false.
-    bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans }
+    The 2026-08-27 measurement (the `if Pass2Active then Error(...)` sweep and
+    the `Warn` variant that reported five reaches, every one with Pass2Active
+    false) is the one the WHY-IT-MISSED-IT paragraph above dissects. It is
+    reported here as it was made, and its conclusion -- "the sites are never
+    reached in pass 2" -- is now known to be false about this site.
+    bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans
+    bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse }
   { ...and the pasted region's own provenance, which the adjustment above cannot
     supply: these tokens are the TEMPLATE's, not this file's. Without it the
     specialized body's diagnostics carried fgl.pp's line numbers under the
     program's file name. }
   PasSpliceTokFile(at, subCount, TemplateSrcKeyOfTok(tokStart));
+  AdjustPass2Spans(at, subCount);
   SpecializeStreamAt := subCount;
 end;
 
