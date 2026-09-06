@@ -6546,121 +6546,26 @@ begin
             mechanism. tyPointer is excluded explicitly because TypeIsOrdinal
             INCLUDES it (the trap IRLowerCallArg's promo arms document), and a
             pointer alias must keep the reinterpret below. }
-          { A VARIANT-typed alias BOXES, exactly as the builtin `Variant(x)`
-            spelling does -- and it must be asked BEFORE the ordinal arm below,
-            because TypeIsOrdinal answers True for tyVariant and that arm then
-            called VariantCastToTemp with tyVariant as its TARGET. Measured:
-            `type TV = Variant; v := 41; w := TV(v)` printed 1 -- the variant
-            record's TAG word -- while `w := Variant(v)` on the line above it
-            printed 41. That is the same defect the builtin door fixed in
-            bug-p-a-cast-to-variant-segfaults-instead-of-boxing, whose own
-            write-up records that exempting an ALREADY-variant operand
-            "preserved exactly the one shape that had no reason to be
-            preserved"; here the alias door was never taught the rule at all.
-            An unconditional box is what that fix landed on and is what this
-            mirrors. }
-          if IntToTypeKind(AliasTk[aliasIdx]) = tyVariant then
-          begin
-            vcNode := VariantBoxToTemp(CurASTNode);
-            if vcNode >= 0 then CurASTNode := vcNode;
-            LastExprTk := tyVariant;
-            Exit;
-          end;
-          { ...and an `operator Explicit` on a record or class operand is the
-            conversion CALL here too. Asked before the ordinal and float arms
-            for the same reason the builtin door asks it before them: an
-            overload naming this exact target type is the more specific answer,
-            and the arms below would otherwise reinterpret the record's bytes.
-            See TryExplicitOpCast. }
-          eoNode := TryExplicitOpCast(CurASTNode, IntToTypeKind(AliasTk[aliasIdx]));
-          if eoNode >= 0 then
-          begin
-            CurASTNode := eoNode;
-            LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
-            Exit;
-          end;
-          if TypeIsOrdinal(IntToTypeKind(AliasTk[aliasIdx])) and
-             (IntToTypeKind(AliasTk[aliasIdx]) <> tyPointer) then
-          begin
-            { demote a promotable operand BEFORE narrowing, or the cast
-              truncates the SLOT ADDRESS — see PromoDemoteToInt64, and the
-              identical line at every sibling cast site. }
-            CurASTNode := PromoDemoteToInt64(CurASTNode);
-            { a VARIANT operand converts rather than reinterpreting its record,
-              exactly as the builtin-named spellings do. See VariantCastToTemp. }
-            vcNode := VariantCastToTemp(CurASTNode, IntToTypeKind(AliasTk[aliasIdx]));
-            if vcNode >= 0 then CurASTNode := vcNode;
-            node := AllocNode(AN_PTR_CAST);
-            ASTLeft[node] := CurASTNode;
-            ASTIVal[node] := -1;
-            ASTTk[node]   := AliasTk[aliasIdx];
-            { an alias OF AN ENUM keeps the enum identity, or WriteLn prints the
-              ordinal — the same line the builtin-cast arm carries.
+          { ONE BODY FOR THE ARMS THAT ARE NOT ABOUT WHICH DOOR YOU CAME IN
+            THROUGH. This was four transcriptions of the builtin-name door's
+            arms -- a variant target boxing, an `operator Explicit`, an ordinal
+            narrowing with its enum identity, a float converting through a temp
+            -- and every one of them arrived here late and separately, which is
+            the seven defects this ticket recorded on 2026-09-06. The enum id
+            comes from the alias table's own column rather than from a name
+            lookup or a kind test; see TryScalarNamedCast for why it is a
+            parameter.
 
-              THE ALIAS TABLE'S OWN COLUMN IS THE ANSWER, not a name lookup.
-              `FindEnumType(name)` asks whether the ALIAS NAME is itself an enum
-              type, which it is not: `type TE = TMyEnum; TE(1)` printed 1 where
-              `TMyEnum(1)` printed eB. AliasEnumId is the column that exists for
-              exactly this (stored +1 so an unwritten row reads as NONE), and
-              the two High/Low resolvers in pasparser_lval.inc already read it
-              this way -- their comment says the two spellings must not drift,
-              and the cast door was the third spelling that had.
-              bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
-            { NOT GUARDED ON tyInteger, and the sibling door's comment predicted
-              exactly the bug that guard causes: "the identity guard used to read
-              `castTk = tyInteger` -- which was a correct test only while every
-              enum WAS tyInteger. Narrowing the kind without moving that guard
-              would have made `TSmall(i)` under {$PACKENUM 1} lose its enum
-              identity and print an ordinal, with nothing failing."
-
-              I wrote the tyInteger form here anyway, hours after reading that,
-              and it did exactly what the comment said: under {$PACKENUM 1} an
-              enum's storage kind is tyUInt8, the guard was false, and
-              `type TS2 = TSmall; TS2(1)` printed 1 where `TSmall(1)` printed sB.
-              The row set that cleared the first half of this fix varied the DOOR
-              and held the PACKENUM setting at its default, so no row in it could
-              see the second half.
-
-              The id is captured from the alias table's own column, which answers
-              "is this an enum" without asking anything about the kind -- so this
-              arm cannot be re-broken by narrowing a kind again. }
-            aliasEtid := -1;
-            if AliasEnumId[aliasIdx] <> 0 then
-              aliasEtid := AliasEnumId[aliasIdx] - 1
-            else if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
-              aliasEtid := FindEnumType(name);
-            if aliasEtid >= 0 then ASTEnumId[node] := aliasEtid;
-            CurASTNode := node;
-            LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
-            Exit;
-          end;
-          { FLOAT-typed alias cast — `type TaD = double; TaD(d)`. The sibling of
-            the ordinal arm above, and it was broken the same way and found by
-            looking rather than by a second report: the pointer fall-through
-            yielded the operand's raw IEEE bits, so `TaD(3.75)` printed
-            4615626668101337088.
-
-            NOT Track F. The subject is the CAST mechanism, and the fact that
-            the target is a float is incidental — "rank the mechanism, never the
-            datatype" (CLAUDE.md). A float alias cast that answers a bit pattern
-            is the same defect as an ordinal one that answers an unnarrowed int.
-
-            A float cast is a real CONVERSION rather than a reinterpret
-            (int->float, or double->single narrowing), so this mirrors the
-            `Single(expr)`/`Double(expr)` keyword arm exactly: a hidden temp of
-            the CAST's type, the ordinary store into it (which coerces), and the
-            temp read as the value. Building it any other way reintroduces
-            bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting,
-            which is why the temp's kind comes from the alias table and never
-            from LastExprTk. }
-          if TypeIsFloat(IntToTypeKind(AliasTk[aliasIdx])) then
-          begin
-            castTk := IntToTypeKind(AliasTk[aliasIdx]);
-            fcNode := FloatCastToTemp(CurASTNode, castTk);
-            if fcNode >= 0 then CurASTNode := fcNode;
-            LastExprTk := castTk;
-            Exit;
-          end;
+            The arms below this line are the ones that GENUINELY differ by
+            door -- an indexed string alias, a pointer alias walking with
+            AliasElemTk -- and TryScalarNamedCast declines those targets so they
+            still reach their own code. }
+          aliasEtid := -1;
+          if AliasEnumId[aliasIdx] <> 0 then
+            aliasEtid := AliasEnumId[aliasIdx] - 1
+          else if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
+            aliasEtid := FindEnumType(name);
+          if TryScalarNamedCast(IntToTypeKind(AliasTk[aliasIdx]), aliasEtid) then Exit;
           if strAliasIdx then
           begin
             { INDEXED string-alias cast — `TAlias(s)[1]`, and the `[1]` was being
@@ -6970,55 +6875,22 @@ begin
             Expect(tkLParen, '(');
             ParseExpr;
             Expect(tkRParen, ')');
-            { `Variant(x)` / `OleVariant(x)` is the BOXING conversion, and it is
-              the same conversion the implicit `v := x` already performs -- so
-              yield the operand and let the assignment box it, rather than
-              building an AN_PTR_CAST that retags an integer AS a variant
-              record. The pun SEGFAULTED: `v := Variant(y)` for `y: LongInt`
-              died at run time while `v := y` on the line above it printed 233,
-              which is the tell -- one spelling of a conversion crashing while
-              the other, doing strictly more work, is fine.
-
-              UNCONDITIONAL, including when the operand is ALREADY a variant.
-              The first version of this fix exempted that case on the reasoning
-              that `Variant(v)` was "the identity it already is" -- and it was
-              not: `w := Variant(v)` segfaulted too, by the same pun, and the
-              exemption preserved exactly the one shape that had no reason to
-              be preserved. Measured, not reasoned: the row was in the test
-              before the fix was written, and it is the row that failed.
-
-              This makes the expression's static type the OPERAND's rather than
-              tyVariant. That is CLAUDE.md's implementation latitude -- the test
-              is the value stored in its DECLARED type, and `v := Variant(y)`
-              now stores 233 exactly as fpc 3.2.2 does. `WriteLn(Variant(y))`
-              prints 233 on both, by the integer route here and the variant
-              route there.
-              bug-p-a-cast-to-variant-segfaults-instead-of-boxing }
-            if castTk = tyVariant then
-            begin
-              vcNode := VariantBoxToTemp(CurASTNode);
-              if vcNode >= 0 then CurASTNode := vcNode;
-              LastExprTk := tyVariant;
-              Exit;
-            end;
-            { a promotable operand demotes before the pun — see
-              PromoDemoteToInt64.
-
-              NOT for `Pointer(n)`: TypeIsOrdinal INCLUDES tyPointer (the same
-              trap IRLowerCallArg's promo arms document), and `Pointer(n)` on a
-              promotable int is the deliberate spelling for its SLOT ADDRESS —
-              it is how `PXXPromoToStr(Pointer(n))` reaches the runtime. Demoting
-              it handed the runtime a value where it expects an address, which
-              segfaulted. }
-            if TypeIsOrdinal(castTk) and (castTk <> tyPointer) then
-              CurASTNode := PromoDemoteToInt64(CurASTNode);
-            { ...and on a promotable int that spelling IS `@n`, so make it one.
+            { THE SHARED CONSTRUCTION HALF -- see TryScalarNamedCast, which
+              this door's own arms were the model for. It answers for a variant
+              target, an `operator Explicit`, an ordinal narrowing (carrying the
+              enum identity captured above) and a float conversion, and DECLINES
+              tyPointer and the string kinds, whose continuations below are
+              genuinely this door's own. }
+            if TryScalarNamedCast(castTk, castEtid) then Exit;
+            { ...and on a promotable int, `Pointer(n)` IS `@n`, so make it one.
               Punning the operand worked for a LOCAL, whose rvalue already is
               its slot address, and CRASHED for a by-ref PARAMETER, whose cell
               holds the address instead — one spelling, two meanings, with a
               segfault on the side that a line earlier had worked. AN_ADDR is
               right for both: it resolves through the parameter cell exactly as
-              `@n` does. }
+              `@n` does. Not shared: TypeIsOrdinal INCLUDES tyPointer (the trap
+              IRLowerCallArg's promo arms document), and the alias door routes a
+              pointer alias through the suffix walk instead. }
             if (castTk = tyPointer) and
                TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
             begin
@@ -7029,40 +6901,15 @@ begin
               LastExprTk := tyPointer;
               Exit;
             end;
-            { A VARIANT operand converts rather than reinterpreting the record —
-              the named-type spellings (`Int64(v)`, `Cardinal(v)`, `AnsiString(v)`,
-              an enum cast) reach the cast here, and every one of them used to
-              read the tag word. See VariantCastToTemp. `Pointer(v)` is excluded
-              there and stays a reinterpret. }
+            { A VARIANT operand converts rather than reinterpreting the record.
+              Reached here only for the kinds TryScalarNamedCast declined --
+              `AnsiString(v)` and the pointer spellings; the ordinal targets ask
+              it inside that routine. `Pointer(v)` is excluded there and stays a
+              reinterpret. }
             vcNode := VariantCastToTemp(CurASTNode, castTk);
             if vcNode >= 0 then
             begin
               CurASTNode := vcNode;
-              LastExprTk := castTk;
-              Exit;
-            end;
-            { `operator Explicit(a: TFoo): Integer` — a value cast of a
-              record/class operand with a matching Explicit overload is the
-              conversion CALL, not a reinterpret (toperator11's Integer(a)). }
-            eoNode := TryExplicitOpCast(CurASTNode, castTk);
-            if eoNode >= 0 then
-            begin
-              CurASTNode := eoNode;
-              LastExprTk := castTk;
-              Exit;
-            end;
-            { ...and a FLOAT target converts rather than reinterpreting, the
-              same as the alias door and the `Double(x)` keyword arm. Asked
-              AFTER the Explicit overload, which is a more specific answer for
-              a record or class operand, and after VariantCastToTemp, which
-              owns the variant operand. See FloatCastToTemp: without this,
-              `Currency(i)` for `i: LongInt = 7` handed a Double consumer
-              3.4584595208887258E-323 -- the integer's bits -- while its own
-              alias spelling `TCur(i)` answered 7. }
-            if TypeIsFloat(castTk) then
-            begin
-              fcNode := FloatCastToTemp(CurASTNode, castTk);
-              if fcNode >= 0 then CurASTNode := fcNode;
               LastExprTk := castTk;
               Exit;
             end;
@@ -8783,6 +8630,115 @@ begin
   ASTRight[vcNd] := vcRd;
   ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
   VariantCastToTemp := vcNd;
+end;
+
+function TryScalarNamedCast(castTk: TTypeKind; enumId: Integer): Boolean;
+{ THE SHARED CONSTRUCTION HALF OF A NAMED-TYPE SCALAR CAST — the arms that must
+  mean the same thing however the type NAME was recognised.
+
+  `SomeName(expr)` reaches a cast through several recognition rules in
+  ParseFactorCore, and this ticket exists because they build the node separately
+  and drift: SEVEN defects on 2026-09-06 alone, every one of them an arm one
+  door had and its sibling did not (a float target reinterpreting, an enum alias
+  losing its identity, a variant alias reading the tag word, an
+  `operator Explicit` answering at one door only, and the enum fix being half a
+  fix under {$PACKENUM 1}). Each is a case this routine could not have had.
+
+  IT ANSWERS FOR EXACTLY THE TARGETS WHOSE CONTINUATION IS DOOR-INDEPENDENT, and
+  declines the rest by returning False so each caller keeps its own arms. It
+  declines tyPointer (the builtin door turns `Pointer(n)` on a promotable int
+  into AN_ADDR and then may take a `^`; the alias door routes a pointer alias
+  through the suffix walk with AliasElemTk) and it declines the string kinds
+  (the builtin door hands `AnsiString(r)[2]` to the selector walk; the alias
+  door has its own indexed-string-alias path). Those two are the real
+  differences between the doors; everything above them was duplication.
+
+  THE ORDER IS THE BUILTIN DOOR'S AND IT IS NOT ARBITRARY. Explicit before the
+  ordinal and float arms, because an overload naming this exact target is the
+  more specific answer for a record or class operand and the arms below would
+  reinterpret its bytes. The two arms whose relative order looks load-bearing
+  and is not: PromoDemoteToInt64 is a no-op on a record or class, so Explicit
+  may sit on either side of it, and VariantCastToTemp declines a non-variant
+  operand, so it may sit on either side of Explicit. Measured before merging
+  rather than reasoned about: a variant narrowed to ShortInt answers 44 through
+  both doors and under fpc 3.2.2, which is the row where the two orders would
+  have differed.
+
+  refactor-p-five-dispatch-sites-for-one-named-type-cast }
+var scNode, scTmp: Integer;
+begin
+  TryScalarNamedCast := False;
+  if castTk = tyPointer then Exit;
+  { `Variant(x)` is the BOXING conversion, not a retag of an integer AS a
+    variant record. See VariantBoxToTemp -- unconditional, including an operand
+    that is ALREADY a variant, which is the one shape an earlier exemption
+    preserved and had no reason to. }
+  if castTk = tyVariant then
+  begin
+    scTmp := VariantBoxToTemp(CurASTNode);
+    if scTmp >= 0 then CurASTNode := scTmp;
+    LastExprTk := tyVariant;
+    TryScalarNamedCast := True;
+    Exit;
+  end;
+  scTmp := TryExplicitOpCast(CurASTNode, castTk);
+  if scTmp >= 0 then
+  begin
+    CurASTNode := scTmp;
+    LastExprTk := castTk;
+    TryScalarNamedCast := True;
+    Exit;
+  end;
+  if TypeIsOrdinal(castTk) then
+  begin
+    { demote a promotable operand BEFORE narrowing, or the cast truncates the
+      SLOT ADDRESS -- see PromoDemoteToInt64. }
+    CurASTNode := PromoDemoteToInt64(CurASTNode);
+    { A VARIANT operand converts rather than reinterpreting its record — and
+      the conversion ALREADY YIELDS A TEMP OF THE TARGET TYPE, so it returns
+      here rather than falling through to be wrapped in an AN_PTR_CAST as well.
+
+      That was the one behavioural difference between the two doors' copies of
+      this block, and the BYTE-IDENTITY control is what found it: the builtin
+      door exited here, the alias door wrapped, and 14 of 15 corpus files came
+      out byte-identical across the merge while
+      test_a_variant_cast_to_widechar_converts_like_char changed. Its OUTPUT was
+      unaffected and so was every other test's — the extra node is a no-op cast
+      from a kind to itself — so no value assertion anywhere could have seen it,
+      and the merge would have silently added a redundant node to every
+      variant-to-ordinal cast in the tree. Exiting is both the smaller code and
+      the behaviour the door with the most traffic already had. }
+    scTmp := VariantCastToTemp(CurASTNode, castTk);
+    if scTmp >= 0 then
+    begin
+      CurASTNode := scTmp;
+      LastExprTk := castTk;
+      TryScalarNamedCast := True;
+      Exit;
+    end;
+    scNode := AllocNode(AN_PTR_CAST);
+    ASTLeft[scNode] := CurASTNode;
+    ASTIVal[scNode] := -1;   { the width-truncating value cast }
+    ASTTk[scNode]   := Ord(castTk);
+    { the enum identity comes in as a PARAMETER, from whichever table the caller
+      asked -- FindEnumType at the builtin door, the alias table's AliasEnumId
+      column at the alias door -- and is never re-derived from the kind here. A
+      guard on the layout kind is a bet the layout kind never narrows, and
+      {$PACKENUM 1} is that bet losing. }
+    if enumId >= 0 then ASTEnumId[scNode] := enumId;
+    CurASTNode := scNode;
+    LastExprTk := castTk;
+    TryScalarNamedCast := True;
+    Exit;
+  end;
+  if TypeIsFloat(castTk) then
+  begin
+    scTmp := FloatCastToTemp(CurASTNode, castTk);
+    if scTmp >= 0 then CurASTNode := scTmp;
+    LastExprTk := castTk;
+    TryScalarNamedCast := True;
+    Exit;
+  end;
 end;
 
 function TryExplicitOpCast(n: Integer; castTk: TTypeKind): Integer;

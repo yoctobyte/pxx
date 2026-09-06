@@ -144,6 +144,7 @@ function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, 
 {$endif}
 function VariantCastToTemp(n: Integer; target: TTypeKind): Integer; forward;   { a typecast of a VARIANT is the CONVERSION, not a reinterpret of the record; defined beside PromoDemoteToInt64 }
 function VariantBoxToTemp(n: Integer): Integer; forward;
+function TryScalarNamedCast(castTk: TTypeKind; enumId: Integer): Boolean; forward;   { the shared CONSTRUCTION half of a named-type scalar cast: variant box, Explicit overload, ordinal narrow + enum identity, float conversion. Declines tyPointer and the string kinds, whose continuation is door-specific }
 function TryExplicitOpCast(n: Integer; castTk: TTypeKind): Integer; forward;   { `operator Explicit` on a record/class operand is the conversion CALL, not a reinterpret; shared by both name doors }
 function FloatCastToTemp(n: Integer; castTk: TTypeKind): Integer; forward;   { a cast to a FLOAT type is a conversion through a hidden temp, not a reinterpret; shared by the alias door and the builtin-name door }   { the mirror: `Variant(x)` boxes into a tyVariant temp, so the expression has a TYPE without the store punning }
 function PromoDemoteToInt64(n: Integer): Integer; forward;   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
