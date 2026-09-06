@@ -16027,6 +16027,41 @@ seconds, always, one field. **Anything a decision is paced off gets read in a
 fixed unit** — and `etimes` was available and the pretty one got used, which is
 the only reason two seats' numbers disagreed at all.
 
+## THE GENERAL FORM: ANY ARTEFACT WHOSE CONTENT IS A CLAIM ABOUT SOMETHING THAT MOVES WITHOUT TOUCHING THE ARTEFACT
+
+frankD's generalisation, 2026-09-06, over three instances measured that day. The
+family below — a cross-reference rotting when a ticket closes — is one member, and
+naming the family is what makes the others findable:
+
+| artefact | claim about | clock |
+| --- | --- | --- |
+| a Track U **decision ticket** | what the rules currently say | **fast** — CLAUDE.md was amended twice on the subject of an open p80 in 25 minutes, and the ticket was appended to 33 minutes later by someone who had pulled |
+| a **census** citing `file:line` | where the instances are | slower — **four of eight citations drifted within HOURS of filing**: `call.inc` 2066→2115, `lval.inc` 5251→5252, `expr.inc` 7785→7632, `stmt.inc` 7910→7908 |
+| a **cross-reference** to a ticket | that ticket's status | slowest, and see the section below |
+
+**All three go stale by being CORRECT WHEN WRITTEN**, which is why care does not
+help and often hurts — the more precisely a citation is pinned, the more exactly
+it rots.
+
+**The census case is worse than the general stale-line-number rule**, and the
+reason is worth separating: CLAUDE.md's line is that *a stale line number does not
+error, it points somewhere*. In a census the number **is the argument**, so a
+rotted citation turns the count silently WRONG rather than merely misleading. A
+reader who checks two citations, finds them plausible, and quotes the total has
+done everything right.
+
+**The repair is to ship the RECIPE, not the result.** frankD replaced the eight-row
+table's authority with the two greps that regenerate it (`a9e3bba9b`), kept the
+table beside them, dated, marked *re-derive before quoting*. That is the shape:
+the derived value stays for readability and loses its standing as evidence.
+
+**And for a decision ticket specifically**, the recipe is one command, run before
+appending anything: `git log origin/master --since=<when the ticket was last
+touched> -- CLAUDE.md`. A decision ticket is the one artefact whose ENTIRE content
+is a claim about the rules, so it is the one most exposed to the rules changing,
+and neither end announces the other — a ticket does not know its premise moved,
+and CLAUDE.md does not list which tickets it just invalidated.
+
 ## A CROSS-REFERENCE IS A CLAIM ABOUT A WORLD, AND CLOSING A TICKET CHANGES THAT WORLD WITHOUT EDITING A SENTENCE
 
 frankB, in their own words and kept in them:
