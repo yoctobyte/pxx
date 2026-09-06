@@ -157,3 +157,63 @@ One missing mechanism, opposite failure modes, and C is where `errno` lives
 (`bug-a-errno-is-one-global-across-all-threads-...` is one instance of exactly
 this absence). A reader can act on that difference: on the Pascal side they are
 told, on the C side they are not.
+
+# What the C lane's cross-target coverage actually rests on
+
+Added 2026-09-06 after frankZ's finding that five gtk jobs were skipped as "host
+dev dependency absent" on a box that has gtk installed. **A FALSE SKIP IS WORSE
+THAN A FALSE RED — a red is loud, a skip is silent** — and the C-lane form is
+specific: *a target that is skipped rather than red reads as covered.* Under a
+release advertising target coverage, the skip count deserves the scrutiny the
+red count gets.
+
+## The numbers, run at the time of writing
+
+| check | says |
+| --- | --- |
+| `tools/c_va_arg_every_target.sh` | `6 built, 1 refused at a named wall, 7 examined` |
+| `tools/c_wasm32_entry.sh` | 5 rows + the premise control, all green |
+
+So the honest release statement is **varargs verified against the gcc oracle on
+six targets — x86-64, i386, arm32, riscv32, aarch64, xtensa — and refused with a
+named diagnostic on the seventh.** Not "seven targets supported".
+
+## Why those scripts carry a DENOMINATOR, and the instance that earned it
+
+`examined` is asserted at exactly 7 and `built` has a floor of 6. Neither is
+decoration. **This lane has already produced frankZ's exact failure, and it went
+undetected for a day.**
+
+The script gave every target its DEFAULT profile. xtensa's default is the ESP
+one, which has no standalone entry stub by design, so xtensa refused and the row
+printed `refuses — outside this check by construction`. That reads as *covered
+and legitimately excluded*. It was false: with `--platform=posix` the same
+subject builds, `qemu-xtensa` runs it, and it matches gcc exactly. A target
+capable of passing was recorded as structurally exempt, and the row that said so
+was green.
+
+What caught it was not the row — it was carrying `built` and `examined` as
+separate numbers and asking why they differed. **A check that reports only
+"pass" has no place to notice that its population shrank.**
+
+## The absent-runtime path is a RED, not a skip — verified, not assumed
+
+`tools/c_wasm32_entry.sh` exits 2 when wasmtime is missing, and `make` treats
+any nonzero as failure, so a host gap surfaces as a failing target rather than a
+quiet pass. Measured by running it with wasmtime off `PATH`: exit 2.
+
+`tools/run_target.sh`'s `runner_absent` prints to **stdout as well as stderr**,
+deliberately, so a `$(...)` capture compares a `RUNNER-ABSENT: ...` string
+against the oracle and MISMATCHES. An absent emulator therefore cannot pass as
+an empty match — which is the same defect in the other direction, and the reason
+that echo is not stderr-only.
+
+## What remains genuinely uncovered, stated as a gap rather than a skip
+
+wasm32 runs **freestanding** C only. Hosted C — anything including `<stdio.h>`,
+`<stdlib.h>`, `<unistd.h>` or `<math.h>` — refuses at the `environ` wall, and
+`va_arg` sits behind that. Tracked in
+`bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse`.
+Both are refusals with diagnostics, so they belong to the class a beta may ship —
+but "wasm32 is a C target" without the word *freestanding* would be the same
+overclaim this section is about.
