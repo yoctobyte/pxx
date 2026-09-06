@@ -2353,22 +2353,31 @@ begin
   StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; StrConstDeclImpl[StrConstCount] := DeclInImplNow; Inc(StrConstCount);
 end;
 
-{ True when some argument in the call's parenthesised list STARTS with '[' at
-  bracket depth 0 -- an `array of const` literal (`TC.Log(fmt, ['answer', 42])`)
-  or an open-array constructor. Purely token-level: the real parse needs a
+{ WHICH arguments in the call's parenthesised list START with '[' at bracket
+  depth 0 -- an `array of const` literal (`TC.Log(fmt, ['answer', 42])`) or an
+  open-array constructor. Bit j is argument j, 0-based over the EXPLICIT
+  arguments; arguments past 31 are not represented (see the caller, which only
+  narrows on the bits it has). Purely token-level: the real parse needs a
   parameter to bind against before it can tell either from a SET literal, and
-  the speculative probe below has no parameter. lp is the index of the '('. }
-function ArgListHasBracketElem(lp: Integer): Boolean;
-var i, depth: Integer; atElemStart: Boolean; tk: TTokenKind;
+  the speculative probe below has no parameter. lp is the index of the '('.
+
+  Returns a MASK rather than a Boolean because the caller has to know the SLOT.
+  Told only "somewhere in this call", it could do nothing but abandon type-aware
+  selection entirely, and first-declared then won -- silently, and for a call
+  that has exactly one right answer.
+  bug-p-a-bracket-argument-turns-off-method-overload-selection }
+function ArgListBracketElemMask(lp: Integer): LongWord;
+var i, depth, slot: Integer; atElemStart: Boolean; tk: TTokenKind;
 begin
-  Result := False;
+  Result := 0;
   if lp < 0 then Exit;
-  depth := 0; atElemStart := True; i := lp + 1;
+  depth := 0; atElemStart := True; i := lp + 1; slot := 0;
   while i < TokCount do
   begin
     tk := Tokens[i].Kind;
     if tk = tkEOF then Exit;
-    if (tk = tkLBrack) and (depth = 0) and atElemStart then begin Result := True; Exit; end;
+    if (tk = tkLBrack) and (depth = 0) and atElemStart and (slot < 32) then
+      Result := Result or (LongWord(1) shl slot);
     if (tk = tkLParen) or (tk = tkLBrack) then Inc(depth)
     else if (tk = tkRBrack) then Dec(depth)
     else if tk = tkRParen then
@@ -2377,6 +2386,7 @@ begin
       Dec(depth);
     end;
     atElemStart := (tk = tkComma) and (depth = 0);
+    if atElemStart then Inc(slot);
     Inc(i);
   end;
 end;
@@ -2723,7 +2733,9 @@ var
   pj: Integer;                                        { argument j's parameter slot }
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
-  ok: Boolean;
+  nBr, brOnly: Integer;
+  bmask: LongWord;
+  ok, okBr, vetoed: Boolean;
   lo, name2: AnsiString;
 begin
   Result := -1;
@@ -2824,7 +2836,8 @@ begin
     Exit;
   end;
 
-  if ArgListHasBracketElem(lp) then
+  bmask := ArgListBracketElemMask(lp);
+  if bmask <> 0 then
   begin
     ok := False;
     for c := 0 to nCand - 1 do
@@ -2835,6 +2848,45 @@ begin
     end;
     if ok then
     begin
+      { Narrow on the bracket SLOTS before giving up on types. A candidate is
+        viable here only if EVERY bracketed argument lands on an array
+        parameter of its own; `Skip: Boolean` at that slot does not become
+        legal because the overload set contains an array somewhere else.
+
+        A tySet parameter at a bracket slot VETOES the narrowing outright --
+        the `[...]` really may be a set there, and the same veto is what
+        ParamIsVarRecArray applies on the parse side, so the two decisions
+        cannot disagree about which spelling won.
+
+        With exactly one survivor that is the answer, and it is the answer FPC
+        gives. With none or several, fall through to the arity behaviour these
+        calls had before the probe existed -- unchanged, deliberately: the
+        probe still cannot PARSE a bracket argument, so it cannot rank one. }
+      nBr := 0; brOnly := -1; vetoed := False;
+      for c := 0 to nCand - 1 do
+      begin
+        pi := UMthProc_[cand[c]];
+        okBr := True;
+        for j := 0 to nExplicitArgs - 1 do
+          if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
+          begin
+            pj := 1 + j;
+            if (pj >= MAX_PROC_PARAMS) or (pj >= Procs[pi].ParamCount) then
+              okBr := False
+            else
+            begin
+              if (not Procs[pi].Params[pj].IsArray) and
+                 (Procs[pi].Params[pj].TypeKind = tySet) then vetoed := True;
+              if not Procs[pi].Params[pj].IsArray then okBr := False;
+            end;
+          end;
+        if okBr then begin Inc(nBr); brOnly := cand[c]; end;
+      end;
+      if (nBr = 1) and not vetoed then
+      begin
+        Result := brOnly;
+        Exit;
+      end;
       Result := FindUMethArity(ci, name, nExplicitArgs);
       Exit;
     end;

@@ -6890,6 +6890,18 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_an_array_of_const_literal_at_a_bare_self_method_call \
 	  "$$($(TESTTMP)/test_bareself26)" \
 	  "$$(cat test/test_an_array_of_const_literal_at_a_bare_self_method_call.expected)"
+	@# A BRACKET ARGUMENT USED TO TURN OFF METHOD OVERLOAD SELECTION. The
+	@# speculative probe in FindUMethOverloadAhead cannot parse `[...]` -- it
+	@# has no parameter to bind against -- so the whole call fell back to ARITY
+	@# and the first-declared candidate won. DoLog's two overloads both accept
+	@# three explicit arguments (each has a trailing default), so arity cannot
+	@# separate them: `['']` bound to `Skip: Boolean` as TRUE, a wrong value
+	@# with no diagnostic. Rows assert the SELECTED BODY by name, not just a
+	@# clean compile -- a refusal-only row was green while the wrong body ran.
+	@./$(COMPILER) test/test_a_bracket_argument_still_selects_a_method_overload.pas $(TESTTMP)/test_brkovl26
+	@tools/expect_same.sh test_a_bracket_argument_still_selects_a_method_overload \
+	  "$$($(TESTTMP)/test_brkovl26)" \
+	  "$$(cat test/test_a_bracket_argument_still_selects_a_method_overload.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

@@ -1,0 +1,6 @@
+plain n=1 plainform skip=FALSE
+varrec n=2 withargs cnt=1 skip=FALSE
+varrec n=3 withargs2 cnt=2 skip=FALSE
+str n=4 s=plain
+varrec n=5 selfform cnt=3 skip=FALSE
+qvr n=6 cnt=1
