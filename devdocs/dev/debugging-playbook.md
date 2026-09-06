@@ -17212,6 +17212,92 @@ carefully.
 > would break the correct callers. The ticket carries an incremental order that
 > lands green.
 
+### A SECOND INSTANCE, TWO HOURS LATER, WITH A BLAST RADIUS OF EVERY PROGRAM IN THE TREE
+
+frankD, 2026-09-06. **`SoftIntrinsicOpen` is a Boolean, and it is asked BEFORE
+any argument is parsed.** So a same-named routine anywhere in scope closes the
+intrinsic for **every argument shape, including ones it could never bind**.
+
+The cost is not one overload set. `lib/rtl/sysutils.pas` declares
+`Delete(var s: AnsiString; index, count)` and `Insert(const src; var dst; index)`
+— **two routines fpc keeps in `system`, not in `sysutils`** — so a single
+`uses sysutils` has been taking **dynamic-array `Delete` and `Insert` away from
+essentially every program in this tree**, with a diagnostic that names the string
+overload as the only candidate. Twenty-line repro; `uses sysutils` is the whole
+difference.
+
+**Same shape as the bracket door and a different order of magnitude**, which is
+the argument for treating *whether/which* as a class rather than as one ticket:
+a Boolean cannot express "closed for THIS argument", so the only answer it can
+give is the widest one. **Look for a predicate consulted before the information
+that would narrow it** — the timing is the tell, independent of what it returns.
+
+### AND THE FIX FOR IT WAS A REGRESSION UNTIL TWO PROBES POINTING OPPOSITE WAYS BOTH RAN
+
+frankD's first repair reopened the intrinsic whenever the argument was a dynamic
+array. **That hijacks a user-declared `Delete(var a: TA; ...)`** — fpc runs the
+user routine there (`a0=777`, length unchanged) and so did pxx before the change.
+The repair now reads the shadow's **parameter type**, not its existence.
+
+**Both fpc probes matter and they point in opposite directions:**
+
+| shadow | fpc | consequence for the fix |
+| --- | --- | --- |
+| user **array** `Delete` | runs the user routine | the fix must NOT reopen the intrinsic |
+| user **string** `Delete` | **REFUSES** a dyn-array argument outright | we accept it — the benign direction |
+
+**A fix validated by either probe alone is wrong or unverified.** The first says
+"do not reopen"; the second says "reopening is not what fpc does either, but our
+divergence there is harmless". Only together do they define the narrow behaviour.
+**When a repair changes a resolution rule, probe the oracle on BOTH sides of the
+rule** — the case the change must not break, and the case it deliberately leaves
+diverging.
+
+**And both spellings live in ONE test file, separated by scope alone** — a nested
+`Delete` inside one routine, the intrinsic in the main body — for a reason worth
+copying: **two files would each print a plausible number.** A split fixture turns
+one comparison into two independent readings, and neither one is anomalous on its
+own.
+
+## PUT BOTH READINGS IN ONE STATEMENT, SO THE WRONG ONE PRINTS A WRONG NUMBER INSTEAD OF FAILING TO BUILD
+
+frankD, 2026-09-06, `f45be9b78` — a nested routine assigning the enclosing
+function's result by NAME (`ReadNonPascalTillEndToken := tkLineEnding;` inside a
+nested `function DoEndOfLine`).
+
+**Inside a function the bare name is also a recursive call, and only a following
+`:=` separates the readings.** So the control row is:
+
+```pascal
+Recurse := Recurse(k - 1) + 1;
+```
+
+**Both readings in one statement.** An unconditional rewrite — treat every bare
+name as the result variable — prints **0** there: a wrong NUMBER, not a build
+failure. That is the whole design. A fixture that separates the two readings into
+two statements gets a compile error from the broken version, and a compile error
+is a different signal that a reader debugs differently; a wrong number is the
+signal this defect class actually produces in the field.
+
+**The general rule: when a change narrows an ambiguity, write the control so that
+the OVER-broad version stays legal and answers wrongly.** If the wrong version
+cannot compile your control, the control is testing the parser, not the rule.
+
+### AND PROBE THE MECHANISM BEFORE YOU BUILD ONE
+
+Same commit, and it decided the disposition. frankD ran `Result := Result + 10`
+from a nested routine **before touching anything**; it already matched fpc. **So
+this was a SPELLING that never reached a working mechanism, not a missing
+mechanism** — and the fix rewrites the token and lets the existing lift path do
+the work.
+
+Same family as *a "not supported" message about a shape the compiler supports*:
+in both, the refusal is about how the source is written and the capability is
+already there. **The probe that separates them costs one file and runs before any
+design decision**: express the same intent in the neighbouring spelling and see
+whether it works. If it does, the job is a rewrite, not a feature.
+
+
 ## THE COMMENT SYNTAX IS NOT A PROPERTY OF THE LANGUAGE, IT IS A PROPERTY OF A DIRECTIVE IN THE FILE — `{$NESTEDCOMMENTS ON}` and what it does to any tool that scans `compiler/**`
 
 Written down at frankD's request, because it was learned once and lived only in a
