@@ -336,3 +336,72 @@ has, which this ticket understates:** `platform.pas` is a facade that re-exports
 the net surface, so taking the sockets out of the graph means splitting the
 FACADE too, and its interface is shared by the `esp`, `posix` and `wasi`
 backends — three files, not one.
+
+## 2026-09-06 (frankF) — the split, MEASURED into a plan, and why I did not land it tonight
+
+I took option (S/B) and measured it before writing any of it. The design is
+settled and the payoff is exact; what changed my mind about the timing is the
+blast radius, which this ticket described as *"narrower"* and is not.
+
+### The payoff is exact: 20 ESP-IDF imports become 2
+
+Only **22** of the ESP backend's 114 entry points reference lwIP, and they are
+cleanly all-net:
+
+    PalBackendSocket SetSocketReuseAddr SetSockOpt GetSockOpt SetSocketNonBlocking
+    BindIpv4 ConnectIpv4 Listen Accept AcceptIpv4 Recv Send Shutdown SocketClose
+    SendToIpv4 RecvFromIpv4 Poll PollSet GetSockError GetSockNameIpv4
+    GetPeerNameIpv4 Ioctl
+
+Exactly **two** routines reference the other ESP-IDF imports —
+`PalBackendMonotonicMillis` and `PalBackendYield`, for `vTaskDelay` and
+`esp_timer_get_time` — and those must stay, because any program may ask the
+clock. So the ratchet this ticket installed at `<= 20` becomes **2**, and the
+`<= 20` line moves with the fix as its author asked.
+
+### And the cost, which is the part that was not measured
+
+| | |
+| --- | --- |
+| backends needing the split | **3** — esp, posix, wasi, at **114 entry points each** |
+| facade `platform.pas` | 119 entry points, **27** of them net |
+| files outside the PAL calling the net facade | **34** |
+| of those, RTL layer rather than tests | 13 — `sockets` `net` `asyncnet` `http` `dns_*` (5) `tls13_native` `tls13_ktls` `netconnect` `pxxcio` |
+
+The three backends are symmetric (114 each), so this is not an ESP change with
+some tidying: `platform.pas` is one facade over all three, and taking the net
+wrappers out of it means `platform_net` + `platform_backend_net` in every
+backend directory, or the unit name fails to resolve on posix and wasi. There is
+no smaller correct version — I looked for one. Splitting only the ESP backend
+leaves `platform.pas` referencing the moved routines; splitting only the facade
+leaves it referencing a backend that still carries them.
+
+### Why it is banked rather than landed
+
+**It fixes no red.** This row is green today — the ratchet sits at the measured
+number by design. The defect is real and the object is 18 imports too fat, but
+nothing is failing on it.
+
+**And it would land unverifiable.** It is a wide change to the networking layer
+of `lib/rtl/**`, which is a compiler build input and half of the pin/RTL pair,
+on a night whose newest full tier is `6d04b14cd88d` from 18:37Z — the one
+requested full published a verdict with no manifest. `make lib-test` and
+`gate.sh quick` would catch a missing `uses` (the change is mechanical and the
+compiler is loud about unresolved names), but neither covers the cross-target
+matrix, and that is exactly where a PAL split can go wrong.
+
+CLAUDE.md's own line for this: *destabilising work goes behind a flag or lands
+incrementally.* There is no flag here and the increments are not independently
+correct — the facade and the three backends have to move together or the tree
+does not compile. **That is the argument for doing it deliberately with a tier
+underneath it, not for doing it at 22:00 before a beta.**
+
+### What the next seat does not have to redo
+
+The inventory above, the two-routines-must-stay finding, the per-unit retention
+measurement earlier in this ticket, and the consumer list. The remaining work is
+mechanical and the shape is: `platform_backend_net.pas` in each of the three
+backend directories carrying those 22 (and their posix/wasi equivalents),
+`platform_net.pas` over them carrying the 27 facade wrappers, and `uses
+platform_net` added to the 13 RTL consumers. **Move the ratchet from 20 to 2 in
+the same commit**, which is what this ticket already asks of whoever fixes it.
