@@ -3,7 +3,7 @@ slug: bug-t-the-pinned-rtl-canary-only-asks-one-of-its-two-directions
 track: T
 prio: 55
 type: bug
-status: backlog
+status: done
 blocked-by: []
 owner: ""
 summary: "`gate.sh quick`'s `pinned_rtl_canary` sweeps all 54 lib/rtl root units, but only with the PIN; `compiler/pascal26` is invoked ONLY on units that already failed under the pin. So a unit the pin compiles and the TIP breaks is never handed to the tip at all, and the row is green. Measured 2026-09-06: `393fe0184` (a new `^T` refusal) broke `uses syncobjs` and went red fleet-wide; `syncobjs` is one of the 54 roots and the probe the sweep already generates for it is byte-for-byte the failing program, so a HEAD-side pass would have caught it on the row. Cost of the missing direction measured at 12.4s / 13.6s on two runs (-P 8, 54 roots, 0 failures at d11b8a1a9, compiler f555ef556761 built `converged after 2 round(s)`). NOT wired in by the filer: adding ~13s to every lane's quick gate is a widening of the per-fix loop and is not a tooling seat's call. RECOMMENDED SHAPE: gate it on `compiler/**` having uncommitted changes, the way the FPC seed canary in the same file already is -- a session with a clean `compiler/**` cannot be the one that broke the RTL, so it costs 13s to exactly the sessions that can cause this and nothing to anyone else."
@@ -76,24 +76,33 @@ filed rather than left in a message because the author of the incident is
 mid-re-land and a recommendation delivered by message has no reader once that
 lands.
 
-## A SIBLING PROPOSAL ARRIVED THE SAME DAY — price them together, not one at a time
+## RESOLVED by frankS, `ef96b48f8` — `gate(T): sweep lib/rtl with HEAD's compiler, the direction the pinned row cannot see`
 
-`tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is a second standalone
-check written the same afternoon, deliberately NOT wired into `gate.sh` for the
-same reason this one is not: a new fleet-wide gate step is Track T's to price.
-It finds AST kinds whose value arm is a pass-through but which have no arm in
-`IRLowerAddress` — the shape that made `v := Variant(y)` segfault, where a
-consumer asking for an address silently gets contents. It runs standalone, exits
-1, has two branched-on controls, and wiring it is one line.
+Landed as its own commit, separate from the fix that occasioned it, and wired
+better than this ticket asked for:
 
-**Recorded here so the two are priced as a pair.** Two agents each declining to
-add a gate step on the way past is correct discipline and produces a predictable
-failure: two good rows sitting unwired, each waiting for a decision nobody knows
-they are holding, and each re-proposed in a fortnight by someone who did not find
-the first. Whoever prices this row should look at that one in the same pass — the
-budget question is *"how much may `quick` grow, and what buys the most"*, and it
-cannot be answered one candidate at a time.
+- **Armed off the MERGE-BASE with origin/master**, not `git diff HEAD` — the FPC
+  seed canary's rule verbatim, so committed-but-unpushed is covered. The loop is
+  as often edit→commit→gate→push as edit→gate→commit.
+- **Failures are sorted against the pin instead of against an exclusion list**:
+  fails-under-both prints as a note, only fails-under-HEAD-but-not-the-pin is
+  RED. That is this ticket's own argument pointed the other way, and it means the
+  row can never rot the way a maintained exclusion list does.
+- **`rtl_roots` and `rtl_probe_script` are now shared helpers**, so the two rows
+  asking opposite questions cannot disagree about what the population is.
+- Both guards carried and branched on: discovery >= 20 roots, and an absent-type
+  control that must fail to compile.
 
-Both share the recommended shape: gate on `compiler/**` having uncommitted
-changes, as the FPC seed canary already does, so the cost lands only on sessions
-that can cause the defect.
+**And it ships with the control this ticket could not supply.** With
+`DrainPendingPtrTargets` removed from `ParseUnit` and everything else kept, the
+row goes **RED in 15s naming exactly `atexit`, `palparallel`, `palpthread`,
+`syncobjs`**; restored, 0 of 54. A canary shown failing on the real defect, by
+ablation, which is the whole subject of the incident that produced this ticket.
+
+Cost: **0s** on a clone that did not touch `compiler/`, **~11-15s** on one that
+did — which prices it out of the objection this ticket was filed to avoid, and is
+why the fleet-wide question the filer declined to answer did not need answering.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- **The change that resolves this is `ef96b48f8` (frankS), not the resolve commit above** — verified `git merge-base --is-ancestor ef96b48f8 origin/master` TRUE. The sibling half is NOT resolved and moved to [[task-t-two-standalone-checks-are-written-and-unwired-price-them-together]] so frankA's `c1961bc63` does not die inside a closed ticket.

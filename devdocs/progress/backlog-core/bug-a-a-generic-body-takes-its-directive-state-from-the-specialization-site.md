@@ -7,7 +7,7 @@ status: backlog
 owner: ""
 created: 2026-09-06
 found-by: frankS
-blocked-by: []
+blocked-by: [feature-dynamic-compiler-tables]
 title: "A generic body takes its {$R}/{$Q}/{$I}/… state from the SPECIALIZATION SITE, not from where the template was written"
 summary: "A generic method body is compiled under whatever directive state is in force where it is SPECIALIZED, discarding the state its own source wrote. Both directions measured with an isolating control: an identical body in a PLAIN class in the same unit raises correctly, so it is generics and not units. Missing-check direction — a body wrapping `field:=l` in {$R+}, specialized under {$R-}, drops the check and stores 1234 as 210 (fpc-testsuite tgeneric7.pp, whose own comment calls it 'checks proper saving of compiler state'). FALSE-REFUSAL direction, the worse half — a body under {$R-} specialized under {$R+} GAINS a check it never asked for, so a library that deliberately turned checking off is overridden by its consumer. Cause is NOT range-check code: ShiftTokParallel fills a splice gap from the token before it (right for a synthesized token, wrong for a specialization's verbatim template copies), and the specializer already overwrites TokSrcOff/TokSrcLen right after the shift for exactly that reason while leaving the NINE directive states behind. ShiftTokParallel's own comment predicted this caller class and the sibling channel was never carried. NOT reachable through pxx's own RTL today — neither collections.pas nor p256field.pas contains a directive, and both compile and run correctly under a {$R+} consumer — so this is latent here and live for FPC-shaped library code."
 ---
@@ -80,6 +80,19 @@ the Specialize trio: `count` can exceed 65536, six arrays get written at
 All six move together, with an explicit Spec guard added in the same change.
 Anyone adding columns here inherits that constraint. See
 [[feature-dynamic-compiler-tables]].
+
+> **The `blocked-by` edge was added later, and its absence is the finding**
+> (frank-coordinator, 2026-09-06). This ticket carried `blocked-by: []` while its
+> own body said *"Land this AFTER that conversion, not before"* and gave a
+> mechanism — the implicitly-bounded `Specialize` trio — for why the order is
+> load-bearing rather than tidy. **Sequencing stated only in prose is invisible to
+> every instrument that ranks work.** `ready`/`next` would have handed this out as
+> unblocked; the ranker would not have carried its prio up to the conversion that
+> gates it; and the one reader who needs the constraint is whoever picks it up
+> without reading down this far. The edge now says it. Class filed as
+> [[bug-t-a-ranked-ticket-that-blocks-itself-in-prose-is-invisible-to-every-check]] —
+> `tools/progress.py check` has no matcher for *"land after"*-shaped language, so
+> nothing flags the gap.
 
 Ten new columns, and that is the reason this is ranked rather than landed:
 `MAX_TEMPLATE_TOKENS` pools are still fixed `array[0..N-1]` tables, and
