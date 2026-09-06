@@ -14465,3 +14465,27 @@ labels the conclusion as a judgement so nobody later cites the 5096 as its evide
 **The general form: when a null and an observed instance seem to disagree, do not adjudicate the
 number — check whether the two are about the same EVENT.** Usually they are not, and usually both
 parties are correct.
+
+### The transmission half: a wrong reason outruns the verdict it was attached to, because it is the part that sounds measured
+
+The exchange above produced a third observation, from the session doing the retracting, and it is
+the one with the widest reach. **Three retractions in one night, all the same shape:** a "44%" that
+was one `CaseEqual` of 122; a git mechanism ("`&&` still commits") that was wrong in the direction
+that defames the thing protecting you; and "the census is evidence it is CAUGHT". **Every one was a
+CORRECT VERDICT WITH A WRONG REASON ATTACHED, and in every one the reason travelled further than
+the verdict.**
+
+That is the missing half of *"a wrong REASON under a RIGHT verdict survives indefinitely, because
+nobody re-reads a disposition they agree with"*. That rule is about STORAGE — the wrong reason sits
+in a `wontfix` nobody revisits. This is about TRANSMISSION: **a reason propagates faster than its
+verdict because it is the quotable part and it is the part that sounds measured.** "Avoid `&&`" is
+portable, actionable and memorable; "the ticket is correctly closed" is not. A number is the most
+portable form of all, which is why a wrong reason carrying one is the worst case.
+
+The tell, in all three: **the number looked strongest at the moment it meant least, and the caveat
+that voids it was already written down beside it** — "both of mine were amends" was stated as a
+footnote in the same message as the conclusion it destroys. **When you write a caveat, check
+whether it is a qualification or a refutation before you file it under "caveat".**
+
+And when relaying: split the sentence. Send the verdict and the reason as two claims with their own
+evidence, because the receiver will keep the reason.
