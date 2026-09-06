@@ -3,7 +3,7 @@ type: bug
 track: A
 prio: 40
 tags: [emit-obj, elf, i386, pic, rtl]
-summary: "RESOLVED cd4af7824. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and `gcc -m32 -pie -Wl,-z,text` goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (`push imm32`, `mov [reg],imm32`) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 I/O unlock stub's hand-counted `jnz` landed inside the store family's wrapper, popped the caller's return address into eax, stored through it and returned to garbage."
+summary: "RESOLVED cd4af7824, AND THE `0` IS NOT A STABLE PROPERTY -- see the 2026-09-06 correction at the foot and [[bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix]]; test-emit-obj is red again at 1 relocation without any of this work regressing. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and `gcc -m32 -pie -Wl,-z,text` goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (`push imm32`, `mov [reg],imm32`) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 I/O unlock stub's hand-counted `jnz` landed inside the store family's wrapper, popped the caller's return address into eax, stored through it and returned to garbage."
 status: done
 owner: frankA
 ---
@@ -149,3 +149,44 @@ was about my change; the answer that mattered was about the guard's coverage.
 
 Nothing from this ticket. [[meta-a-pxx-produces-linkable-code]] listed i386
 position independence as one of its two remaining gaps; that line is closed.
+
+## CORRECTION 2026-09-06 (frankA) — the `0` was a measurement, not a property
+
+`test-emit-obj` is red again, at **1** absolute `.text` relocation, and nothing
+in this ticket regressed. The correction belongs here because this ticket's own
+acceptance is what a reader will check against, and its first bullet —
+*"emits an i386 object with **0** `R_386_32` in `.rel.text`"* — reads as an
+invariant the fix established. It is not one.
+
+The surviving relocation is in `PXXIoCheck`, and it is refused by the guard
+rather than missed by an emitter:
+
+    28f22:  8b 45 f0        mov  -0x10(%ebp),%eax
+    28f25:  a3 b8 92 00 00  mov  %eax,0x92b8        <- R_386_32
+
+`TryI386PcRelStore` handles `A3`. Its `I386PrefixBefore(CodeLen-1)` guard reads
+the byte before the opcode — here the `f0` of the displacement `-0x10` — and
+takes it for a LOCK prefix.
+
+**The count is data-dependent, which is the part this ticket could not have
+known and the next reader needs to.** One unrelated extra local in `PXXIoCheck`
+moves `code` off `-0x10` and the count goes 1 -> 0; removing it restores the 1.
+So 62 -> 0 was true at `cd4af7824` and is a fact about the frame offsets that
+existed that day, not about position-independence. 46 commits have touched
+`lib/rtl` since and one of them put a local at `-0x10` in a routine that stores
+to a global.
+
+Note the shape: this ticket's own resolution warns against recognising a family
+by *"sniffing the end of the code buffer"* and lists thirteen call sites that
+carry the intent explicitly for exactly that reason. The prefix guard is the
+remaining sniffer, and it has now failed in the direction the resolution
+predicted for the other one.
+
+Diagnosed and filed, not fixed:
+[[bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix]]. The
+fix shape is the same one this ticket already argued for — announce from the
+call site — and it is a wider change than it looks, because a missed
+announcement turns a conservative refusal into a silent wrong-width access.
+
+This ticket stays `done`. The work in it is correct and the acceptance was met
+when it was measured; what is corrected is the claim that the number stays put.
