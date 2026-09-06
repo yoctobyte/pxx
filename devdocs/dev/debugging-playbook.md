@@ -17148,3 +17148,77 @@ carefully.
 > **many legitimately want the element kind**. Each site is a judgement; a sweep
 > would break the correct callers. The ticket carries an incremental order that
 > lands green.
+
+## THE COMMENT SYNTAX IS NOT A PROPERTY OF THE LANGUAGE, IT IS A PROPERTY OF A DIRECTIVE IN THE FILE — `{$NESTEDCOMMENTS ON}` and what it does to any tool that scans `compiler/**`
+
+Written down at frankD's request, because it was learned once and lived only in a
+tool's comments. **Any script that reads `compiler/**` and needs to tell prose
+from code hits this first, and every naive version returns a plausible number.**
+
+`compiler/compiler.pas:11` says **`{$NESTEDCOMMENTS ON}`**. That single directive
+decides what a comment IS in every file included below it, so a scanner written
+against "Pascal" rather than against this tree is **correct about a different
+dialect** — and it does not error, it answers.
+
+**Five versions, measured on `pyparser.inc`, all wrong in the same direction —
+swallowing CODE as comment, silently:**
+
+| version | result |
+| --- | --- |
+| `\{[^}]*\}\|\(\*.*?\*\)\|//[^\n]*` under `re.S` | the string literal `'(**mapping) is not supported'` opened a comment from line 9154 to 18918 — **446,638 characters, 9,764 lines of code read as prose** |
+| drop the `(* *)` form | count looks right, and **nine real comments in `pyparser.inc` stop being scanned** |
+| consume string literals first | `(**kw)` written in PROSE opens **34,840 characters** |
+| scanner, non-nesting braces | same span: `{ … g(**{"a":1,"b":2}) … }` ends at the INNER brace, hands the rest of the prose back as code, and the `(*` in `def g(**kw)` opens 793 lines |
+| scanner, `(*` nests inside braces (what the directive's wording invites) | one **1,984,041-character** comment |
+
+**What is correct here: braces NEST, and `(*` is NOT an opener inside them.** The
+second half was settled by an observable, not by documentation — **the file
+compiles**, so the real lexer does not treat a `(*` inside a brace comment as a
+delimiter either. That is the discriminator to reach for whenever a dialect
+question has no clear answer: the tree builds, so any reading under which it
+would not build is wrong.
+
+**The codebase already knows this from the other side.** `pyparser.inc:1140`
+spells braces out in prose on purpose, because *"a literal brace inside a
+brace-delimited comment desyncs the self-host lexer"*, and names it
+`project_nested_comment_brace_selfhost_landmine`.
+
+**The general rule, and it is why this has its own section:** every one of those
+five versions produced a NUMBER, none produced an error, and four of the five
+numbers were wrong by 3x to 30x. A tool that scans this tree for anything —
+citations, identifiers, TODOs, coverage — is a comment scanner first, whether its
+author thought about that or not. **Get the spans right, print how many you
+found, and sanity-check the LONGEST one**: a 400,000-character comment is the
+tell, and it is invisible in any output that only reports totals.
+`tools/ghost_names.py` carries a working scanner and its own ablation.
+
+## A DIAGNOSTIC WITH THE RIGHT LINE AND THE WRONG TOKEN — a lift desyncs every later syntax error in the file
+
+frankD, 2026-09-06, `b150704ad`, and **it is not theirs alone: it fires on any
+file containing a capturing nested routine**, so anyone bisecting a parse error in
+such a file is being lied to by the error message.
+
+The line number is RIGHT. The token NAME and the `near:` window are **eleven
+tokens early**. So the message is precise, self-consistent, and points at a
+construct that is not the problem — it named an identifier **128 lines from the
+defect**, and four repro attempts went to the construct the message pointed at
+before the mechanism was even suspected. **An hour, on a nine-line repro.**
+
+**This is the worst configuration of the instrument-lies family**, because the
+half that is usually the check — a line number agreeing with what you see — is
+the half that is correct. A reader who cross-checks the line finds it consistent
+and trusts the name.
+
+**The discriminator is one run: `PXXDBG=a.expect:*`.** It settled it immediately
+where four repro attempts had not. **If you are reducing a syntax error in a file
+that contains a nested routine capturing anything, run that before you trust the
+token name** — and treat the reported identifier as a claim about a token INDEX,
+which has moved, rather than about the source.
+
+The ticket is filed with the mechanism explicitly UNSETTLED, which is the right
+disposition: the nested stash/flush is a third token mover that
+`ShiftTokParallel`'s audit never covered, but the repro's failing token was never
+stashed, so that explanation does not obviously cover it and frankD did not reason
+past the measurement. **It also names the quiet half nobody has measured:** the
+seven directive-state channels are in the same gap, so a lifted body may run under
+the directive state at its APPENDED index rather than where it was written.

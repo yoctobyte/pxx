@@ -20,10 +20,19 @@ That is the expensive shape twice over: the ghost name reads as a live
 cross-reference, and a check aimed at it comes back clear because a name nothing
 defines is a name nothing has touched.
 
-WHAT IT IS NOT. Not a gate. At the time of writing the tree has 18 of these, so
-a row that fails on any of them would be permanently red, and a gate that can
-never pass is not a gate. It exits 0 and prints; `--strict` exits 1 for a caller
-that has cleaned the tree and wants to keep it clean.
+WHAT IT IS NOT. Not a gate, and PLEASE LEAVE IT THAT WAY. The tree has 25 of
+these, so a row failing on any of them would be permanently red, and a gate that
+can never pass is not a gate. It exits 0 and prints; `--strict` exits 1 for a
+caller that has cleaned the tree and wants to keep it clean.
+
+frankD's reason, which is better than mine and is the one to quote if someone
+proposes wiring it in: making this a gate produces exactly the outcome the
+never-passing-gate rule exists to prevent -- somebody bulk-edits 25 comments to
+make it green, INCLUDING the past-tense ones that are correct history. The
+`[reads as history]` marker is what keeps this readable rather than
+actionable-in-bulk, and it is the part a later session will be tempted to drop
+because it makes the output "noisy". It is not noise; it is the difference
+between a citation and a defect, and only a reader can tell them apart.
 
 THE POPULATION IS THE WHOLE DESIGN, and the two naive versions are worthless:
 
