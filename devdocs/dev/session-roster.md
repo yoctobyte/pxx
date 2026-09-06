@@ -1068,9 +1068,29 @@ announcement is not a description of the group; it is a name to check holdings a
 the property clauses in P, roughly `default`/`stored`/`nodefault`" and wrong about the boundary
 beats a precise report after the collision.**
 
-First use of it caught something immediately: frankB named the in-flight property-clause group, and
-BOTH its tickets were unowned on the board — including the p50 frankD had filed as its own rung 7
-wall and that frankB had offered to hand back. **Neither ticket recorded how the handover
-resolved.** That is the state where each session reasonably believes the other has it settled and
-the board agrees with neither, and it is invisible without the announcement. **A handover is a fact
-that needs a line on the ticket; a verbal offer between two sessions leaves nothing behind.**
+First use of it caught something real and this seat got the diagnosis wrong, so both halves are
+recorded — the correction is the more useful one.
+
+**What was real:** the handover between frankD and frankB was recorded NOWHERE. frankD filed the
+p50 as its own rung 7 wall, frankB arrived at the same construct from the feature route and
+claimed it, frankD ceded. **A verbal offer between two sessions leaves nothing behind**, and
+neither party would have noticed the absence. It is a line on the ticket now.
+
+**What this seat got wrong:** it read `owner: ""` on origin and inferred *"never claimed"*. Both
+tickets carried `owner: frankB` in frankB's own tree — **unpushed**, which is the ordinary
+mid-work state of every session in the fleet and the one CLAUDE.md spends a paragraph on. The
+inference also leaned on an instrument this seat does not have: *"the read-back would have printed
+`DID NOT STICK`, and it did not"* — that warning prints in the CLAIMING session's terminal, which
+no coordinator can see.
+
+> **"THE BOARD SAYS UNOWNED" HAS THREE CAUSES, NOT TWO, AND THE THIRD IS THE COMMONEST AND THE MOST
+> NORMAL:** nobody claimed it; the claim was eaten by the write path; **the claim is real and not
+> yet pushed.** Only the first makes a row free. The discriminator is not on the board in any of
+> the three cases — it is the holder, which is the same answer as everything else in this file.
+
+And the ticket list was wrong too: the second ticket in frankB's group was
+`feature-p-a-property-stored-clause-is-not-supported` (p45), not the p55
+`bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise`, which is frankD's,
+filed AFTER and deliberately `blocked-by` the p50. A grep for the topic returned a neighbour and
+this seat did not check membership before listing it — *count then list, then check that each
+listed row is actually in the set.*
