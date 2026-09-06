@@ -3,7 +3,7 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-blocked-by: [bug-p-at-over-a-class-base-consumes-only-one-selector]
+blocked-by: [bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve]
 summary: "RE-MEASURED 2026-09-06 at d4fe6ede3 / compiler e7d85ae887d9 -- premise CURRENT, and THREE of the four recorded walls are now down. uPSUtils still compiles CLEAN. (1) missing PByteArray -- fixed. (2) a value cast to a string alias dropped a following INDEX -- fixed 9339d6661. (3) THE STRING-ALIAS-CAST-OVER-A-POINTER-SLOT WALL IS FIXED and this summary said otherwise: [[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]] is in done/, and verified by RUNNING it rather than by reading the folder -- `t(p) := 'abc'; writeln(t(p))` now prints `abc` (was `4261104`), Length answers 3 (was the pointer), SetLength answers `ab` (was a hard refusal), all four rows byte-identical to fpc 3.2.2. (4) A NEW WALL WAS FOUND AND FIXED IN THE SAME SESSION: uPSCompiler catches `EZeroDivide` and stopped at `on: unknown exception class`, because pxx had NO float exception family at all -- EInvalidOp descended from Exception, EZeroDivide/EOverflow/EUnderflow did not exist, and three FLOAT runtime errors raised INTEGER classes, so `on E: EMathError` caught nothing. Fixed in lib/rtl/sysutils.pas at d4fe6ede3, all 7 hierarchy rows and 10 test lines identical to fpc, guarded by test/lib_math_exception_tree.pas. uPSCompiler's wall has therefore moved 2753 -> 3776 -> 5031, and the CURRENT one is `@Func.Attributes.Items[i].AType.OnApplyAttributeToProc`: `@` over a CLASS base consumes only ONE selector, filed as [[bug-p-at-over-a-class-base-consumes-only-one-selector]] and now this ticket's blocked-by. AND THE uPSRuntime CLAIM WAS STALE TOO: this summary said uPSRuntime `stops earlier on a {$IF} comparison`. With `--mimic-fpc` that wall is gone -- it now parses to line 3049 and stops on `function read(var Data; Len: Cardinal): Boolean`, a nested helper, because `read`/`write`/`readln`/`exit`/`halt` cannot be DECLARED as user routines here while fpc accepts all five (`writeln` we refuse and so does fpc -- that row is parity). Filed as [[bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines]]. So the two remaining walls are both compiler-lane, both located, both with reduced repros, and NEITHER is a library gap. NOT vendored -- probed against a shallow clone outside the repo (44 units in Source/)."
 ---
 
@@ -478,3 +478,28 @@ the fix being "un-reserve the builtins".
 
 Both remaining walls are **Track P compiler gaps with reduced repros**, and
 neither is a library gap. Nothing here needs `lib/` work to proceed.
+
+## 2026-09-06 (frankH), later — the `@` wall closed and bought TWO LINES
+
+[[bug-p-at-over-a-class-base-consumes-only-one-selector]] landed hours after it
+was filed. Verified by running the eight shapes against this binary
+(`3bc524a975bd`) rather than by reading `done/` — all eight now compile,
+including the four that failed.
+
+uPSCompiler's wall moved **5031 -> 5033**. Two lines, and the new one is the
+same construct read the other way:
+
+```pascal
+if @Func.Attributes.Items[i].AType.OnApplyAttributeToProc <> nil then   { 5031, fixed }
+  if not Func.Attributes.Items[i].AType.OnApplyAttributeToProc(          { 5033, open }
+       Self, Func, Func.Attributes.Items[i]) then
+```
+
+Taking the address and calling are one construct; only the address arm moved.
+Filed as [[bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve]]
+and now this ticket's `blocked-by`. The failing ingredient is the **indexed
+property**, not the chain — `o.R.Ev(1)` through a record field compiles.
+
+**Worth carrying to whoever fixes it:** the statement-position diagnostic is
+`o is not a procedure or function`, naming the BASE for a callee four selectors
+away, so the message sends a reader to the wrong end of the expression.
