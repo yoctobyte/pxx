@@ -429,6 +429,151 @@ end;
   regression-test-core-test-record-nested-type-section }
 function ParseTypeKindInner: TTypeKind; forward;
 
+procedure RecordPendingPtrTarget(const nm: AnsiString);
+{ Park one pointee name the PtrElemDepth hatch is about to let through, so the
+  end of the parse can ask whether it ever became a type. The hatch has to
+  tolerate an unknown name -- `PNode = ^TNode;` above TNode is how every linked
+  node in Pascal is spelled -- but it tolerated it FOREVER, and that is the
+  defect: `PNever = ^TNeverDeclared` compiled clean and `SizeOf(p^)` answered 4,
+  which is TypeStorageSize(tyUnknown) rather than any size at all. 4 is also
+  sizeof(Integer), so the collision is the one CLAUDE.md names -- a blank answer
+  wearing a plausible value.
+
+  DEDUPED on the name, and not for speed: `PNode = ^TNode` in a unit included by
+  forty others records the same unresolved name once per parse of the include,
+  and the cap below would then be a function of include depth rather than of how
+  many distinct names a program leaves open.
+
+  The class scope goes with it because ParseTypeKindInner's own lookup asks
+  FindNestedType against ParsingClassBodyCi and MethImplOwnerCi before it asks
+  the flat table, and a drain that did not carry them would re-ask a NARROWER
+  question than the one that failed -- i.e. would refuse a nested type that
+  resolves perfectly well. }
+var i: Integer;
+begin
+  if PendPtrCount >= MAX_PENDING_PTRTARGETS then Exit;
+  for i := 0 to PendPtrCount - 1 do
+    if (PendPtrClassCi[i] = ParsingClassBodyCi) and
+       (PendPtrMethCi[i] = MethImplOwnerCi) and
+       CaseEqual(GetTokenStrFromRaw(PendPtrNOff[i], PendPtrNLen[i]), nm) then Exit;
+  PendPtrNOff[PendPtrCount]    := TokCharLen;
+  PendPtrNLen[PendPtrCount]    := Length(nm);
+  PendPtrLine[PendPtrCount]    := CurTok.Line;
+  PendPtrTok[PendPtrCount]     := TokPos - 1;
+  PendPtrClassCi[PendPtrCount] := ParsingClassBodyCi;
+  PendPtrMethCi[PendPtrCount]  := MethImplOwnerCi;
+  for i := 1 to Length(nm) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := nm[i];
+    Inc(TokCharLen);
+  end;
+  Inc(PendPtrCount);
+end;
+
+function PendingPtrTargetResolved(i: Integer): Boolean;
+{ Did the parked name become a type by the end of the parse? Every arm here is
+  one ParseTypeKindInner asks for an identifier in type position, in the same
+  order, and the set is deliberately WIDER than what ResolvePendingPointerAliases
+  can repair: that pass only fixes classes, records, named arrays and pointer or
+  record aliases, while a forward `^T` to an ENUM, a SUBRANGE or a plain scalar
+  alias is legal, compiles and runs today and is repaired by nobody -- it simply
+  never needed repairing. Measured 2026-09-06 against fpc 3.2.2: all three of
+  those spellings print the same value under both compilers. Asking "was this
+  row repaired" instead of "is this name a type" would have refused all three.
+
+  The builtin scalar names are absent on purpose: they resolve far above the
+  hatch, so a row carrying one cannot exist. }
+var nm: AnsiString;
+begin
+  nm := GetTokenStrFromRaw(PendPtrNOff[i], PendPtrNLen[i]);
+  PendingPtrTargetResolved := True;
+  if (PendPtrClassCi[i] >= 0) and (FindNestedType(PendPtrClassCi[i], nm) >= 0) then Exit;
+  if (PendPtrMethCi[i] >= 0) and (FindNestedType(PendPtrMethCi[i], nm) >= 0) then Exit;
+  if IsClassType(nm) then Exit;
+  if FindUClass(nm) >= 0 then Exit;
+  if IsRecordType(nm) <> REC_NONE then Exit;
+  if FindTypeAlias(nm) >= 0 then Exit;
+  if FindEnumType(nm) >= 0 then Exit;
+  if FindArrayType(nm) >= 0 then Exit;
+  if FindCTypedef(nm) >= 0 then Exit;
+  PendingPtrTargetResolved := False;
+end;
+
+procedure DrainPendingPtrTargets(fromIdx: Integer);
+{ Called at the closing `end.` of EACH COMPILATION UNIT -- ParseUnit passes the
+  mark it took on entry, ParseProgram passes 0 -- beside the goto-label check,
+  which is the same shape of question: a name the parse was allowed to defer and
+  nobody ever supplied.
+
+  NOT at the end of the type section, where ResolvePendingPointerAliases and
+  DrainPendingConstraints run, and the two reasons are both measured:
+    - `var p: ^TRec` and `const P: ^TRec = nil` are not inside a type section at
+      all. They are how tgeneric83 and tgeneric85 write it, so a type-section
+      drain would not see the rows this exists for.
+    - `type PRec = ^TRec;` in one type section with `TRec` in the NEXT one is
+      refused by fpc (`Forward type not resolved`) and compiles and prints the
+      right answer under pxx. Accepting what fpc rejects is not a defect, so a
+      section-end drain would be a regression bought for nothing.
+
+  AND NOT ONCE, AT THE PROGRAM'S END, WHICH IS HOW THIS SHIPPED THE FIRST TIME
+  AND HAD TO BE REVERTED (393fe0184 -> d11b8a1a9). That asks the name question
+  from the PROGRAM's scope, and a type declared in a unit reached only
+  transitively is not visible there: `uses syncobjs` was refused over palsync's
+  `PMutex = ^TMutex;` sitting four lines above its own record, while `uses
+  palsync` directly compiled. The argument for end-of-parse quoted above is
+  about ORDER and is correct; the thing that actually varies is SCOPE, and a
+  drain point decides both. `fromIdx` makes the pair stack-disciplined, which is
+  what nested `uses` needs -- ParseUnit recurses, so an inner unit's rows are
+  parked above the outer unit's mark and drain in the inner unit's own scope.
+
+  ErrorAt, not Error: the parser is standing on a closing `end.`, so the `near:`
+  window would splice that unit's last tokens onto a message about a declaration
+  hundreds of lines up. The same reason ConstraintError exists. THE FILE IS IN
+  THE MESSAGE TEXT because ErrorAt prints a line and no file, and a parked
+  diagnostic naming a line without its file points at a REAL line in the WRONG
+  file: `pascal26:26` here meant palsync.pas:26 and was read against
+  syncobjs.pas:26, which is inside a comment block. }
+var i: Integer; nm, whence: AnsiString;
+begin
+  for i := fromIdx to PendPtrCount - 1 do
+    if not PendingPtrTargetResolved(i) then
+    begin
+      nm := GetTokenStrFromRaw(PendPtrNOff[i], PendPtrNLen[i]);
+      { A GENERIC's bare name is the interesting half of this population and it
+        deserves its own sentence: `PTest = ^TTest` where TTest is a template is
+        not a typo and not a missing declaration, so "never declared as a type"
+        would send the reader looking for something that is right there. This is
+        the tgeneric83/84/85 shape, and fpc says the same thing in its own words
+        ("Generics without specialization cannot be used as a type").
+        THE BARE NAME INSIDE THE TEMPLATE'S OWN BODY MEANS THE CURRENT
+        INSTANTIATION, is legal, and must stay legal -- `generic TNode<T> =
+        record next: ^TNode; end` is how a generic linked node is spelled, and it
+        compiles and runs under both compilers (measured 2026-09-06). It does not
+        reach here, and the reason is NOT that the template registers its bare
+        name: it does not, which is exactly why the arm above fires for a use
+        OUTSIDE the body even when the template is specialized elsewhere. It is
+        that SpecializeTemplate REWRITES the template's own name inside the body
+        to the specialization's name before that body is ever parsed (the
+        `CaseEqual(s, SpecializeTemplateName)` arm in pasparser_generic.inc), so
+        by the time the hatch could see it the token says `TNode$LongInt`.
+        An UNSPECIALIZED template's body is never parsed at all, so a bad pointee
+        in one is not diagnosed here either -- fpc does diagnose that; we do not,
+        and that is the template model, not this list. }
+      whence := PasSrcOfTok(PendPtrTok[i]);
+      if Length(whence) > 0 then whence := ' (in ' + whence + ')' else whence := '';
+      if FindNameableTemplate(nm, -1) >= 0 then
+        ErrorAt(PendPtrLine[i], '`' + nm + '` is a generic and cannot be used as '
+                + 'a type on its own -- `^' + nm + '` needs a specialization'
+                + whence)
+      else
+        ErrorAt(PendPtrLine[i], 'forward type not resolved: `' + nm +
+                '` is used as the target of a `^` and is never declared as a type'
+                + whence);
+    end;
+  PendPtrCount := fromIdx;
+end;
+
 function ParseTypeKind: TTypeKind;
 var savedQTO: Integer; savedDistinct: Boolean;
 begin
@@ -1295,11 +1440,26 @@ begin
               else if LastTypeEnumId >= 0 then
                 Result := EnumStorageTypeKind(LastTypeEnumId)   { width per {$PACKENUM} }
               else if PtrElemDepth > 0 then
+              begin
                 { A `^` ELEMENT may name a type that does not exist yet — `PNode = ^TNode;`
                   before TNode is the classic forward reference, and
                   ResolvePendingPointerAliases fixes the element up afterwards, BY NAME.
-                  This is the one case the old catch-all fallback ever legitimately served. }
-                Result := tyInteger
+                  This is the one case the old catch-all fallback ever legitimately served.
+
+                  TOLERATED IS NOT THE SAME AS ACCEPTED, and until 2026-09-06 this
+                  arm made them the same thing: nothing ever came back to ask
+                  whether the name showed up. `PNever = ^TNeverDeclared` compiled
+                  clean, and `SizeOf(p^)` answered 4 -- TypeStorageSize(tyUnknown),
+                  which happens to equal sizeof(Integer), so the blank could not be
+                  told from a real answer. fpc says `Forward type not resolved`.
+                  Park the name; DrainPendingPtrTargets re-asks at the closing
+                  `end.` OF THE UNIT THAT WROTE IT, when "not declared yet" is no
+                  longer a possible reading and the scope is still the one the
+                  question was asked in.
+                  bug-p-an-unspecialized-generic-name-used-as-a-type-is-accepted-and-sized-as-nothing }
+                RecordPendingPtrTarget(lo);
+                Result := tyInteger;
+              end
               else if FindCTypedef(lo) >= 0 then
                 { A C-imported typedef (`typedef void* PGtkWidget;`) lives in the C
                   typedef table, which the Pascal type lookups above do not consult. The

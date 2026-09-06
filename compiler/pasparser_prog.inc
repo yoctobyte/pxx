@@ -784,6 +784,7 @@ begin
   PendingInitCount := 0;
   PIPathCount := 0;
   ArrTypeCount := 0;
+  PendPtrCount := 0;   { deferred `^T` pointee names; reset with the rest of the type tables }
   StrConstCount := 0;
   SetConstCount := 0;
   ClassConstCount := 0;
@@ -1944,6 +1945,13 @@ begin
       if Syms[i].Kind = skGlobal then DbgRecordVar(-1, i, True);
   Expect(tkEnd, 'end');
   Eat(tkDot);
+
+  { ...and every `^T` whose T the PtrElemDepth hatch let through unresolved and
+    that no unit already claimed. From 0: each used unit drained its own rows at
+    its own `end.` (see DrainPendingPtrTargets), so what is left here is the
+    program's, asked in the program's scope -- which is the only scope that can
+    answer for them. }
+  DrainPendingPtrTargets(0);
 
   { Verify all forward goto fixups were resolved }
   for i := GotoLabelBase to GotoLabelCount - 1 do

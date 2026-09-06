@@ -5874,7 +5874,9 @@ var
   uname: AnsiString;
   savedInterface, savedUnitImpl, doneImp, savedPreScan, savedPass2Active: Boolean;
   savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
+  savedPendPtr: Integer;   { this unit's mark in the deferred `^T` list }
 begin
+  savedPendPtr := PendPtrCount;
   { A used unit parses in its own normal (single-pass) mode: its interface is
     already forward-visible, so the enclosing program's pre-scan must not leak in
     and make ParseSubroutine skip the unit's bodies. }
@@ -6153,6 +6155,15 @@ begin
   InInterface := savedInterface;
   InUnitImpl := savedUnitImpl;
   PreScanPass := savedPreScan;
+
+  { Every `^T` this unit parked and nobody supplied. HERE, not at the program's
+    end: a type declared in a unit reached only transitively is not visible from
+    the program's scope, so the once-at-the-end version refused palsync's
+    ordinary `PMutex = ^TMutex;` the moment it was reached through syncobjs
+    rather than directly (393fe0184, reverted d11b8a1a9). Down to the mark taken
+    on entry, so nested `uses` -- this procedure recurses -- each answer for
+    their own rows in their own scope. }
+  DrainPendingPtrTargets(savedPendPtr);
 
   Expect(tkEnd, 'end');
   Expect(tkDot, '.');

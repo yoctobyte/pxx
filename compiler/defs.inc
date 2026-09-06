@@ -2325,6 +2325,7 @@ const
                                at the cap. }
   MAX_PENDING_SPECS = 256;
   MAX_PENDING_CONSTRAINTS = 256;   { deferred generic-constraint checks; see PendCon* }
+  MAX_PENDING_PTRTARGETS  = 512;   { deferred `^T` pointee names; see PendPtr*. Overflow STOPS RECORDING rather than erroring -- a capacity limit must never manufacture a refusal, so a program past the cap degrades to the silent acceptance that was the behaviour everywhere before this list existed. }
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;
   MAX_GENERIC_METHOD_SPECS = 256;   { see GMSpecMeth }
@@ -2670,6 +2671,48 @@ var
   PendConLine      : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
   PendConCount     : Integer;
   PendConCurLine   : Integer;   { >0 only while draining: the line a deferred constraint error belongs to, since the parser is nowhere near it }
+  { The pointee names the PtrElemDepth hatch let through, re-asked once the whole
+    program is parsed. `PNode = ^TNode;` above TNode is ordinary Pascal, so the
+    hatch has to tolerate an unknown name -- but until 2026-09-06 it tolerated
+    it FOREVER: nothing ever re-asked, so `PNever = ^TNeverDeclared` compiled
+    clean and `SizeOf(p^)` answered 4, which is TypeStorageSize(tyUnknown) and
+    not a size at all. fpc says `Forward type not resolved "TNeverDeclared"`.
+
+    Drained PER COMPILATION UNIT -- at each `unit`'s closing `end.` and at the
+    program's -- and not at the end of the type section where
+    ResolvePendingPointerAliases and DrainPendingConstraints run. Not at the
+    section end because the inline `var p: ^TRec` / `const P: ^TRec = nil`
+    spellings are not in a type section at all (they are how tgeneric83 and
+    tgeneric85 write it), and because a forward `^T` resolved by a LATER type
+    section -- which fpc rejects and pxx accepts and runs correctly today --
+    must keep working, since accepting what fpc rejects is not a defect.
+
+    PER UNIT RATHER THAN ONCE AT THE END, AND THIS IS THE PART THAT WAS WRONG
+    THE FIRST TIME (393fe0184, reverted d11b8a1a9). Draining once at the
+    program's final `end.` asks the name question FROM THE PROGRAM SCOPE, and a
+    type declared in a unit reached only TRANSITIVELY is not visible there --
+    so `uses syncobjs` stopped compiling for the whole fleet over palsync's
+    entirely ordinary `PMutex = ^TMutex;`, four lines above its record.
+    Minimal repro: with `unit udeep` declaring the pair and `unit umid` doing
+    nothing but `uses udeep`, a program that `uses udeep` compiles and a
+    program that `uses umid` is refused, on identical declarations.
+    THE FIRST VERSION'S REASONING WAS ABOUT *WHEN* AND THE THING THAT VARIES
+    IS *WHERE*: choosing a drain point is choosing the scope the lookup runs
+    in, and the order argument above -- which is correct -- answers only half
+    of that. The mark/drain pair below is stack-disciplined so nested `uses`
+    (ParseUnit recurses) each drain their own rows in their own scope.
+
+    Names live in TokChars rather than as AnsiStrings for the same BSS reason as
+    PendCon* above. The owner columns carry the class scope the name was written
+    in, so the drain can ask FindNestedType the same question ParseTypeKind
+    asked. bug-p-an-unspecialized-generic-name-used-as-a-type-is-accepted-and-sized-as-nothing }
+  PendPtrNOff      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrNLen      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrLine      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrTok       : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;   { …and the token, so PasSrcOfTok can name the FILE: a parked diagnostic that carries a line and not a file points at a real line in the WRONG file, which is worse than pointing nowhere. Measured 2026-09-06: `pascal26:26` was palsync.pas:26 and was read against syncobjs.pas:26, which is inside a comment. }
+  PendPtrClassCi   : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;   { ParsingClassBodyCi at the hatch, else -1 }
+  PendPtrMethCi    : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;   { MethImplOwnerCi at the hatch, else -1 }
+  PendPtrCount     : Integer;
   PendingSpecTi    : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecIdx   : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecCount : Integer;
