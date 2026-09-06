@@ -127,4 +127,4 @@ is why the ticket's own "pre-existing: identical on pin v404" was true of the
 VALUE and false of the REFUSAL.
 
 ## Log
-- 2026-09-06 — resolved; the third row of the depth table.
+- 2026-09-06 — resolved; the third row of the depth table, commit 287b1eb36.
