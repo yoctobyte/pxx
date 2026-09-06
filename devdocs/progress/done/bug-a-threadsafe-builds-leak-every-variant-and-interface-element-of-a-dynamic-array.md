@@ -127,3 +127,5 @@ per-site discipline that arm (a) exists to delete.
 the bottom of this ticket. Same shape, should fall the same way, deliberately
 left for a change that can measure it on its own rather than riding in on a
 commit whose control is about elements.
+
+- 2026-09-06 — resolved, commit 3bb71fd79 (the fix and the close are one commit).

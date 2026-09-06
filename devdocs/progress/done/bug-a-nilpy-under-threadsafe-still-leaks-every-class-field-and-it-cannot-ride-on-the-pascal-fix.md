@@ -327,3 +327,5 @@ a program that no longer does it.
 This is a compiler-side change with a `lib/**` consumer (`builtinheap.pas` is a
 compiler build input), so `$(PXX_STABLE)` consumers do not get it until the next
 pin. Not waiting for one — landing forward and saying so, per the pin rules.
+
+- 2026-09-06 — resolved, commit 3bb71fd79 (the fix and the close are one commit).
