@@ -892,3 +892,65 @@ promising to be careful twenty times.
   family.
 - **`UCls*` (`MAX_UCLASS`)** — not scouted.
 - **`Procs`** — deliberately fixed, unchanged.
+
+## 2026-09-06 (frankH) — MAX_UCLASS scouted: it is a NUMBERING constant, not a bound
+
+Counted, and it stops harder than `MAX_IR`. **51 arrays, 76 references, 2048
+slots.** Two of its uses put it in a different category from every constant this
+ticket has deleted:
+
+**1. It partitions a record-id space.** `symtab.inc`:
+
+```pascal
+if (rec < REC_UCLASS_BASE) or (rec - REC_UCLASS_BASE >= MAX_UCLASS) then Exit;
+Result := UClsIsInterface[rec - REC_UCLASS_BASE];
+```
+
+`MAX_UCLASS` is the WIDTH OF A RANGE inside an encoded id, not the size of an
+array. `cparser.inc` reserves the top slot too (`UClsCount >= MAX_UCLASS - 1`).
+Growing the arrays does not make the encoding admit more classes — the id space
+has to be re-partitioned first, and every consumer of `REC_UCLASS_BASE`
+arithmetic is a consumer of that decision.
+
+This is worth stating plainly because it is the exact distinction that came up
+tonight when frankS asked whether the constants I was deleting participate in a
+numbering scheme. The four I deleted (`MAX_CPREP_CHARS`, `MAX_DATA`,
+`MAX_STRS`, `MAX_FIXUPS`) were independent size bounds — nothing was defined in
+terms of them and nothing counted from them. **`MAX_UCLASS` is the one in this
+file that is not**, and a session working down the REMAINING list without
+checking would find that out after the conversion rather than before.
+
+**2. Four uses are INFINITE-LOOP GUARDS.** `pasparser_generic.inc` (three) and
+`pyparser.inc` (one):
+
+```pascal
+while (c >= 0) and (guard < MAX_UCLASS) do
+```
+
+The cap is being used as *a number this walk can never legitimately exceed* —
+which is precisely the reading the ticket's worked example warns about, except
+here it is load bearing rather than latent: **deleting the constant deletes the
+termination guarantee** of four ancestor walks. They would need their own bound,
+and choosing it is a separate question from how the tables are stored.
+
+**3. 51 arrays indexed by class id**, which would be the fixup family's lockstep
+problem times seventeen.
+
+### Status of the group after tonight
+
+Every remaining family is now scouted with numbers, and none of them is "grow
+the array":
+
+| family | why it is not next |
+| --- | --- |
+| `TokChars` (`STRING_CAP`) | the constant also sizes the SHORTSTRING TYPE — split it first |
+| `MAX_IR` | 10 unrelated tables, 20 cap sites, 7 validity predicates |
+| `MAX_UCLASS` | a range width inside an encoded record id, plus 4 loop guards |
+| `Procs` | deliberately fixed |
+
+**All three live ones need a constant SPLIT or an encoding change before any
+storage change, and that is a different kind of work from what this ticket has
+been doing.** The mechanical conversions are done. What is left should be filed
+and ranked as its own piece rather than continued as the sixth, seventh and
+eighth item in a rhythm — the rhythm is exactly how a `while guard < MAX_UCLASS`
+gets deleted by someone who has converted five tables successfully.
