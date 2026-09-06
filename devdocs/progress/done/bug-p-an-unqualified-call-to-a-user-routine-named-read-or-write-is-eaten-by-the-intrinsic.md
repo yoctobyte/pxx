@@ -1,15 +1,15 @@
 ---
 slug: bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic
-title: "PARTLY FIXED — a GLOBAL routine still cannot be NAMED Read/Write; the expression-position call is done"
+title: "DONE — a GLOBAL routine may be named Read/Write/Readln/Writeln, and the call reaches it"
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankB
 owner: ""
-blocked-by: [feature-writeln-as-library]
-summary: "EXPRESSION-POSITION HALF IS FIXED (c7632de85): an unqualified Read/Write naming a METHOD of the enclosing class now resolves in expression position, through one predicate shared with the statement arm. WHAT REMAINS is row 6 of the table below -- a GLOBAL (non-method) routine cannot be NAMED Read/Write/Readln/Writeln at all: `function Read(var B; C: Longint): Longint;` is refused at the DECLARATION with `expected name`, because IsMethodNameKind in pasparser_name.inc admits these tokens in METHOD-name position and the routine-name path never got the same predicate. FPC accepts it -- `read` is not a reserved word there, which is the premise pasparser_name.inc is already written around. Ranked BELOW the fixed half on evidence rather than on shape: the FPC compiler corpus wanted the METHOD spelling, and no unit in it declares a global routine by these names, so nothing measured is blocked on this today."
+blocked-by: []
+summary: "ROW 6 IS DONE (2026-09-06, frankS) AND SO IS THIS TICKET. The expression-position half landed 2026-09-05 (c7632de85); the remaining row -- a GLOBAL routine cannot be NAMED Read/Write/Readln/Writeln at all, refused at the DECLARATION -- is fixed at top level and nested, with the call reaching it in statement and expression position. Route: a shadow predicate (IntrinsicNamesGlobalRoutineHere, the global sibling of IntrinsicNamesSelfMethodHere) plus the token rewrite ParseFactorCore already did for the method case, NOT the lexer conversion this ticket was blocked-by feature-writeln-as-library to wait for. The block was over-scoped: the rewrite is conditioned on a user routine of that name EXISTING, so an unshadowed write(x:8:2) keeps tkwrite and its statement arm untouched, and the :width:prec / file-first-variadic parsing is never entered differently. frankD's actual constraint -- the declaration and the call move TOGETHER or the name is declared and silently never called -- is met. Corpus: fpc testsuite tforin26/tforin27 burned. Positive controls run by ablation, all three RED with the guard removed: no arity gate and the file's own writeln(str) binds the 3-parameter user Writeln; no CallFirstArgIsIOHandle and Write(f, text) binds a user routine; no declaration widening and it does not compile."
 ---
 
 # The measurement — the FPC compiler-source march, re-run 2026-09-05
@@ -252,3 +252,6 @@ no edit at all — `pasparser_proc.inc:664` is `if CurTok.Kind <> tkIdent then
 Error('expected name')` and it simply started passing once the lexer stopped
 producing a dedicated kind. That is the whole fix for row 6 too, and it is why
 it cannot be done ahead of the call side.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

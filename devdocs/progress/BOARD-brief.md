@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:21 blocked:7 backlog:11 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:42 backlog-pascal:28 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3421 rejected:79`
+`working:20 unfinished:21 blocked:6 backlog:11 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:42 backlog-pascal:27 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3423 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,11 +54,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
-- `bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names` [P] — blocked-by: feature-writeln-as-library
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody

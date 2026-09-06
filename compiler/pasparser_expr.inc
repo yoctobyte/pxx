@@ -635,7 +635,12 @@ begin
     body encloses this token, so a re-parse of the same position (a generic
     body compiled per specialization) asks the same question of the same class
     and gets the same answer. }
-  if IntrinsicNamesSelfMethodHere then
+    { ...and the same rewrite for a GLOBAL routine of one of those four names,
+      through the same two lines rather than a second arm. The method question
+      is asked FIRST: an unqualified name inside a method means the member, and
+      `Self.` is not what disambiguates AWAY from a global -- it is what
+      disambiguates TOWARDS the member, so the member has to win here. }
+  if IntrinsicNamesSelfMethodHere or IntrinsicNamesGlobalRoutineHere then
   begin
     CurTok.Kind := tkIdent;
     if (TokPos - 1) >= 0 then Tokens[TokPos - 1].Kind := tkIdent;

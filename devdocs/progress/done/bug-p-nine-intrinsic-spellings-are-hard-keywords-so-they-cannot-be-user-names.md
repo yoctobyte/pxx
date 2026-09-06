@@ -2,16 +2,16 @@
 prio: 30
 track: P
 type: bug
-status: blocked
+status: done
 owner: "frankD"
-blocked-by: [feature-writeln-as-library]
-summary: "SEVEN OF NINE DONE 2026-09-05 (5f177b181): SysOpen/SysRead/SysWrite/SysClose/SysFchmod and ArgCount/ParamCount, ArgStr/ParamStr are soft keywords -- declarable as routine/param/local/field/method names, intrinsics unchanged unshadowed, System.X escape, test/test_soft_keyword_sysargs.pas 20 rows positive-controlled against pin v404. WHAT IS LEFT is Read/Write/ReadLn/WriteLn ONLY, and it is deliberately not this ticket's to do: those four carry the `:width:prec` format specifiers and the file-first variadic form, so their parsing belongs with feature-writeln-as-library phase 2 (frankH) -- blocked-by it now rather than racing it. The blast-radius section below is CORRECTED in three places by the work: no codegen site keys on a token kind (all use -Ord(tkXxx) call ids), pyparser.inc's five arms are proven-dead rather than a second copy, and pasparser_prog.inc's range test was not an ORDER hazard but a SILENT one -- it stopped matching and a wasm32 module lost its WASI imports with a clean `ok:`."
+blocked-by: []
+summary: "ALL NINE ARE DONE. Seven landed 2026-09-05 (5f177b181) by the lexer route -- SysOpen/SysRead/SysWrite/SysClose/SysFchmod, ArgCount/ParamCount, ArgStr/ParamStr became soft keywords. THE LAST FOUR -- Read/Write/ReadLn/WriteLn -- landed 2026-09-06 (frankS) by a DIFFERENT route, and that is why this ticket is no longer blocked on feature-writeln-as-library. THE BLOCK WAS OVER-SCOPED, not wrong: those four do carry :width:prec and the file-first variadic form, but the fix does not touch that parsing at all. A shadow predicate (IntrinsicNamesGlobalRoutineHere, the global sibling of the method predicate that already existed) rewrites the token to tkIdent ONLY when a user routine of that name is in scope with a matching arity and no file handle first -- so an unshadowed write(x:8:2) keeps tkwrite and reaches the same statement arm it always did. The format parsing is never entered differently because it is never reached differently. What was genuinely required is frankD's other rule and it is met: the DECLARATION and the CALL move together, or the name is declared and silently never called. Declaration widened at both header sites through one IsMemberNameKind predicate with three entry points; call dispatched at ParseFactorCore's entry and before ParseStatementAST's case, into the tkIdent arm that already asks overload and arity. NESTED TOO, which needed the lift's three rename sites to drop the intrinsic KIND along with the spelling (write$13 is not an intrinsic spelling) and NestIsRoutineDecl to stop asking tkIdent for 'is there a name here'. Tests: test/test_a_global_routine_may_be_named_read_or_write.pas, both directions, three ablation controls run. fpc testsuite tforin26/tforin27 burned."
 ---
 
 # Nine intrinsic spellings are hard keywords, so none can be a user name
 
 - **Type:** bug — Track P (Pascal frontend); the lexer half is shared with A
-- **Status:** blocked on `feature-writeln-as-library` phase 2 for the last four spellings; the other seven landed 2026-09-05 as `5f177b181`
+- **Status:** DONE. Seven landed 2026-09-05 (`5f177b181`, lexer route); the last four landed 2026-09-06 by the shadow-predicate route, which the block did not anticipate — see the closing section.
 - **Found:** 2026-09-05 (frankB), from frankS's reading during the P staleness pass
 
 ## What was measured
@@ -263,3 +263,39 @@ frankA's nilpy carve-out, so nothing here is racing a seat that is present. The
 decision is frankD's (this ticket) and whoever holds phase 2.
 
 Relayed to frankS, frankD and frankH.
+## 2026-09-06 (frankS) — the last four, and why the block did not apply
+
+`Read` / `Write` / `ReadLn` / `WriteLn` are declarable and callable as user
+routines, top level and nested. **They are still hard keywords in the lexer.**
+That is the whole point: the deferral here assumed the four could only be freed
+by converting them, which would have moved `:width:prec` and the file-first
+variadic form into name dispatch — phase 2's job, correctly deferred.
+
+They can be freed without touching the lexer, because the question is not "is
+this token an intrinsic" but **"is one shadowed HERE"**, and that is answerable
+at the two dispatch points from the symbol table:
+
+    IntrinsicNamesGlobalRoutineHere:
+      the token is one of the four
+      AND the next token is `(`            -- a bare console Writeln is untouched
+      AND the first argument is not a file handle
+      AND FindProcArity(name, argsAhead) >= 0
+
+False on every tree that existed before this change, by construction: no unit
+could DECLARE such a routine, so nothing could match. **An unshadowed
+`write(x:8:2)` keeps `tkwrite` and reaches the same statement arm it always
+did.** The format-specifier parsing is not entered differently because it is not
+reached differently.
+
+**What was genuinely load-bearing is frankD's other sentence, and it held:** the
+declaration and the call move together, or the name is declared and then silently
+never called. Landing the declaration alone reproduced exactly that — the four
+names started declaring and the nested call then failed with `expected
+expression`, in the middle of this session, which is how the rule got tested
+rather than quoted.
+
+Not in this ticket and left open: `exit := x` inside `function exit(...)` —
+own-name result assignment on a soft-keyword intrinsic, a third defect at a
+third position. See
+[[bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines]], now
+rescoped to exactly that.

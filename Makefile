@@ -7290,6 +7290,28 @@ test-core: $(COMPILER)
 	@# breaks the one-level case cannot hide behind the two-level one passing.
 	@$(TESTTMP)/test_fp2u26 | diff -u test/test_a_forward_pointer_two_units_deep_still_resolves.expected - \
 	  || { echo 'test_a_forward_pointer_two_units_deep_still_resolves: FAIL - a forward pointer in a transitively-used unit stopped resolving'; exit 1; }
+	./$(COMPILER) test/test_a_global_routine_may_be_named_read_or_write.pas $(TESTTMP)/test_gblrw26
+	@# Read/Write/Readln/Writeln are INTRINSICS RESOLVED BY CONTEXT, not reserved
+	@# words -- fpc lets a user declaration shadow them and pxx refused all four at
+	@# the DECLARATION, top level and nested alike. BOTH DIRECTIONS in one program,
+	@# which is the whole point: a test that only proved the four are declarable
+	@# would pass over a compiler that had stopped writing to the console.
+	@# The three console rows are the controls and each one fails a different way:
+	@# drop the ARITY gate and `Write('con','sole',' ')` binds to the 2-parameter
+	@# user Write; drop CallFirstArgIsIOHandle and the two `file` rows lose their
+	@# text to a user routine that returns a number; drop the decl widening and it
+	@# does not compile at all. The user Writeln takes THREE parameters on purpose
+	@# -- a one-parameter one would shadow every writeln in the file, correctly,
+	@# and the test would assert nothing about the console while looking like it did.
+	@# fpc cannot run this file whole: its shadowing is TOTAL, so once a global
+	@# Write exists it makes `Write(f,x)` and a wrong-arity console Write hard
+	@# errors, where we fall through to the intrinsic. Accepting what fpc rejects
+	@# is not a defect, and the fall-through is the direction that keeps every
+	@# existing console call in every existing tree meaning what it meant.
+	@# The fpc-comparable subset (the four declarations, and tforin26/tforin27
+	@# from the fpc testsuite) was diffed against fpc 3.2.2 separately.
+	@$(TESTTMP)/test_gblrw26 | diff -u test/test_a_global_routine_may_be_named_read_or_write.expected - \
+	  || { echo 'test_a_global_routine_may_be_named_read_or_write: FAIL - the four intrinsic names are not shadowable, or the intrinsic stopped winning'; exit 1; }
 	./$(COMPILER) test/test_prefetch_is_a_hint.pas $(TESTTMP)/test_pfh26
 	@# .expected is fpc 3.2.2's own output. Prefetch is a CACHE HINT, so an empty
 	@# body is the specification rather than a stub and there is deliberately no

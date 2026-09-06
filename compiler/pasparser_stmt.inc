@@ -5730,6 +5730,26 @@ begin
     StmtIChecks := TokIChecks[TokPos - 1];
   if (TokPos > 0) and (TokPos <= TokCount) then
     StmtNChecks := Integer(TokNChecks[TokPos - 1]);
+  { A GLOBAL user routine named Read/Write/Readln/Writeln, called unqualified as
+    a STATEMENT. Rewritten to tkIdent here, before the dispatch, so it lands in
+    the ordinary tkIdent call arm -- exactly what ParseFactorCore does for the
+    method case, and for that arm's stated reason: the tkIdent path already asks
+    the overload and arity questions correctly, and a fresh copy of it beside
+    the intrinsic arm is the copy that drifts.
+    devdocs/dev/normalise-dont-special-case.md
+
+    ASKED AFTER THE METHOD PREDICATE, which the tkwrite/tkRead arm below still
+    owns: inside a method, an unqualified name means the member. And gated on a
+    following `(` inside the predicate, so the own-name result assignment
+    (`Write := x`, handled in that arm) and every bare console `Writeln` are
+    untouched -- `:=` `.` `[` `^` are disjoint from `(`.
+    bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines }
+  if IntrinsicNamesGlobalRoutineHere and not IntrinsicNamesSelfMethodHere then
+  begin
+    CurTok.Kind := tkIdent;
+    if (TokPos - 1) >= 0 then Tokens[TokPos - 1].Kind := tkIdent;
+  end;
+
   node := -1;
   case CurTok.Kind of
     tkInteger:

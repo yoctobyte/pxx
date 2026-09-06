@@ -3157,6 +3157,42 @@ begin
                                  CountCallArgsAhead) >= 0;
 end;
 
+{ The same question about a GLOBAL routine: does a user-declared `Read` / `Write`
+  / `Readln` / `Writeln` at unit or program level shadow the console intrinsic
+  here? FPC's rule is plain shadowing -- measured against fpc 3.2.2, a program
+  declaring `function Write(const s: string): Integer` has `Write('abcd')`
+  return 4, the user routine, not a console write.
+
+  SIBLING OF IntrinsicNamesSelfMethodHere ABOVE, carrying its three gates
+  verbatim and for its reasons:
+
+    * a following `(`, so a bare console `Write` / `Writeln` is untouched;
+    * NOT a file handle in first position -- `Write(f, x)` is the intrinsic
+      whatever a routine's arity says, which is
+      bug-p-a-two-argument-write-to-a-text-file-inside-a-class-with-a-write-member-silently-writes-nothing
+      pointed at free routines;
+    * ARITY, so a console `Write(a, b, c)` in a program that also declares a
+      one-argument `Write` still reaches the intrinsic instead of binding to a
+      routine that cannot take it.
+
+  THIS PREDICATE IS FALSE ON EVERY TREE THAT EXISTS TODAY, which is why the
+  declaration widening in pasparser_proc.inc can land beside it: no unit in
+  lib/rtl or the compiler can DECLARE such a routine (the header was refused),
+  so FindProcArity cannot match one until somebody writes it. The behaviour
+  change is scoped to source that is refused outright today.
+
+  The METHOD predicate is asked first at both dispatch sites: an unqualified
+  name inside a method means the member, and a global of the same name is what
+  `Self.` exists to disambiguate away from -- the same precedence FPC has. }
+function IntrinsicNamesGlobalRoutineHere: Boolean;
+begin
+  Result := False;
+  if not (CurTok.Kind in [tkRead, tkwrite, tkReadln, tkwriteln]) then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen) then Exit;
+  if CallFirstArgIsIOHandle then Exit;
+  Result := FindProcArity(CurTok.SVal, CountCallArgsAhead) >= 0;
+end;
+
 { Does ANY constructor of class ci take an `array of const` / open array at explicit argument
   position argIdx (0-based, Self excluded)? The `TFoo.Create(args)` path parses its arguments
   BEFORE it picks the overload -- it has to, since it ranks the overloads by argument type --

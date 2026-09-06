@@ -8284,10 +8284,19 @@ function NestIsRoutineDecl(idx: Integer): Boolean;
 { True for a routine DECLARATION at idx. A procedural TYPE (`= procedure(x: T)`,
   `: procedure of object`) never has an identifier straight after the keyword,
   which is exactly what separates the two here. }
+{ IsMemberNameKind rather than tkIdent, because the question this asks is
+  "is there a NAME here", and Read/Write/Readln/Writeln are names -- they merely
+  lex to their own kinds. With the bare tkIdent test a nested `function Write`
+  was not recognised as a routine declaration at all, so NestBodyBeginAt walked
+  INTO its body instead of over it and the ENCLOSING routine lost its own scope:
+  `function f(k: LongInt)` with a nested `Write` reported `undefined variable
+  (Result)` and `undefined variable (k)` about f's own body. The nested routine
+  still got lifted -- the decl-part loop that finds it does not go through this
+  predicate -- which is what made the damage land on the parent. }
 begin
   NestIsRoutineDecl := (idx + 1 < TokCount) and
                        ((Tokens[idx].Kind = tkProcedure) or (Tokens[idx].Kind = tkFunction)) and
-                       (Tokens[idx + 1].Kind = tkIdent);
+                       IsMemberNameKind(Tokens[idx + 1].Kind);
 end;
 
 function NestRoutineEndAt(startIdx: Integer): Integer; forward;
@@ -8472,7 +8481,10 @@ var
 begin
   nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
   nameTokIdx := nestedStart + 1;
-  if Tokens[nameTokIdx].Kind <> tkIdent then Error('nested routine: expected name');
+  { Same widening as the top-level header in pasparser_proc.inc: a NESTED
+    `function write(...)` is legal in FPC too, and the name is already read out
+    of the token pool below, so it needs no second convention. }
+  if not IsMemberNameTokAt(nameTokIdx) then Error('nested routine: expected name');
   nestedName := GetTokenStrFromRaw(Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen);
 
   NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);
@@ -8593,6 +8605,26 @@ begin
     { our own declaration part carries no references to classify — only the
       inner routines inside it (handled above) and our body do }
     if (i < bodyBegin) and (shTop = 0) then begin Inc(i); Continue; end;
+    { A token spelled Read/Write/Readln/Writeln carries its own kind, not
+      tkIdent, so this scan walked straight past a nested routine's own name
+      when the routine was called one of those -- the result-var write and the
+      self-recursive call never got mangled, and the routine was declared and
+      then unreachable.
+
+      DELIBERATELY NARROWER THAN THE tkIdent ARM: an intrinsic-kinded token is
+      only ever interesting here as the routine's OWN name. Letting it fall into
+      the classification below would put a plain console `Write(...)` inside a
+      nested routine through the field/method probe, and in a method of a class
+      that HAS a `Write` member (lib/rtl/configparser.pas is written that way)
+      that probe answers yes and prefixes `Self.` -- turning a console write
+      into a method call. So: own name, or nothing. }
+    if IsMemberNameKind(Tokens[i].Kind) and (Tokens[i].Kind <> tkIdent) then
+    begin
+      if ((i = 0) or (Tokens[i-1].Kind <> tkDot)) and
+         CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) then
+        if nameCnt < MAX_NEST_REFS then begin namePos[nameCnt] := i; Inc(nameCnt); end;
+      Inc(i); Continue;
+    end;
     if Tokens[i].Kind = tkIdent then
     begin
       if (i > 0) and (Tokens[i-1].Kind = tkDot) then begin Inc(i); Continue; end;
@@ -8705,6 +8737,14 @@ begin
   mOff := NestStrOff(mangled); mLen := Length(mangled);
   Tokens[nameTokIdx].SOffset := mOff;
   Tokens[nameTokIdx].SLen := mLen;
+  { AND ITS KIND. A nested `function write(...)` arrives here as tkwrite, and
+    the rename only moves SOffset/SLen -- so without this the token still says
+    "I am the write intrinsic" while spelling `write$13`, and every later reader
+    dispatches on the kind, not on the text. `write$13` is not an intrinsic
+    spelling by construction, so tkIdent is not a widening here, it is the
+    truth. Same at the two body/call rename sites below, which is why all three
+    say it. }
+  Tokens[nameTokIdx].Kind := tkIdent;
   { Body refs to the own name (result var / recursion) are handled below,
     AFTER the field-prefix inserts (needSelf block) -- a self-referencing
     call may need the same extra actuals (Self/captures) a sibling call
@@ -8854,6 +8894,7 @@ begin
   begin
     Tokens[namePos[k]].SOffset := mOff;
     Tokens[namePos[k]].SLen := mLen;
+    Tokens[namePos[k]].Kind := tkIdent;   { see the header rename above }
     if (nact > 0) and (Tokens[namePos[k] + 1].Kind <> tkAssign) then
     begin
       if Tokens[namePos[k] + 1].Kind = tkLParen then
@@ -8941,11 +8982,18 @@ begin
       skipped := False;
       for sk := 0 to skipCount - 1 do
         if (i >= skipLo[sk]) and (i < skipHi[sk]) then begin skipped := True; Break; end;
-      if (not skipped) and (Tokens[i].Kind = tkIdent) and
+      { IsMemberNameKind, not tkIdent: a nested routine may be NAMED Read /
+        Write / Readln / Writeln, and the call to it in the parent's body then
+        carries that intrinsic kind. The CaseEqual against nestedName is what
+        keeps this narrow -- a console `Writeln` in the parent is only touched
+        when the nested routine is itself called Writeln, which is exactly when
+        FPC says the name means the routine. }
+      if (not skipped) and IsMemberNameKind(Tokens[i].Kind) and
          CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
          ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
       begin
         Tokens[i].SOffset := mOff; Tokens[i].SLen := mLen;   { rename call -> mangled }
+        Tokens[i].Kind := tkIdent;                           { see the header rename above }
         if nact > 0 then
         begin
           if Tokens[i+1].Kind = tkLParen then

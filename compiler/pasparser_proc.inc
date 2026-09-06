@@ -664,7 +664,28 @@ begin
   end;
   isFunc := CurTok.Kind = tkFunction;
   Next;
-  if CurTok.Kind <> tkIdent then Error('expected name');
+  { Read/Write/Readln/Writeln lex as dedicated intrinsic tokens (paslexer.inc),
+    so a plain tkIdent test refused `function Write(const Args: array of const)`
+    at the DECLARATION -- `expected name`, before the name ever reached the
+    symbol table. FPC accepts all four; they are intrinsics resolved by context
+    at the CALL site, not reserved words, which is the premise
+    pasparser_name.inc is already written around and the reason member- and
+    method-name position have admitted them for a long time.
+
+    THE DECLARATION AND THE CALL MOVE TOGETHER. Widening this test alone would
+    give a routine that is declared and then silently never called, which is
+    worse than today's refusal -- so the shadow test in pasparser_call.inc
+    (IntrinsicNamesGlobalRoutineHere) and its two dispatch sites land in the
+    same commit. Nothing existing changes behaviour: no unit can DECLARE such a
+    routine today, so the predicate is False everywhere until someone writes one.
+    bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines }
+  if not IsMemberNameTok then Error('expected name');
+  { CurTok.SVal, unchanged: paslexer.inc sets it for every WORD token, keywords
+    included (`CurTok.SVal := s` right after `Keyword(s)`), so the four
+    intrinsic kinds carry their text here. The "keyword tokens carry no SVal"
+    note on the property-name sites is about the RAW Tokens[] array, which
+    stores SOffset/SLen and no string at all -- a different structure, not a
+    different rule for the same one. }
   name := CurTok.SVal; Next;
 
   { Check for ClassName.MethodName pattern }

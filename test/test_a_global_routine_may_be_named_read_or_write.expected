@@ -1,0 +1,9 @@
+read     yes
+readln   42
+write    70
+writeln  35
+nested   43
+console 3-arg
+fmt          3.14
+file     to-file
+file     and-more

@@ -26,15 +26,34 @@
   (and plain identifiers) where a member/method NAME is expected, so e.g.
   TStream.Read / TStream.Write can be declared. The token's SVal carries the
   text, so name capture is unchanged. }
-function IsMemberNameTok: Boolean;
+{ ONE list with three entry points, the same shape IsMethodNameKind already has
+  below and for the same reason: the routine-name sites need this question asked
+  at the CURRENT token and at an INDEX, and a second hand-written copy of the
+  set is the thing that drifts. }
+function IsMemberNameKind(k: TTokenKind): Boolean;
 begin
   { ParamCount/ParamStr are no longer here: they lex as tkIdent since
     bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names,
     so the first arm already covers the FPC-custapp member-name case this list
     was widened for -- and covers it in every OTHER name position too, which a
     per-site token list could never do. }
-  IsMemberNameTok := (CurTok.Kind = tkIdent) or (CurTok.Kind = tkRead) or
-    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln);
+  IsMemberNameKind := (k = tkIdent) or (k = tkRead) or
+    (k = tkwrite) or (k = tkReadln) or (k = tkwriteln);
+end;
+
+function IsMemberNameTok: Boolean;
+begin
+  IsMemberNameTok := IsMemberNameKind(CurTok.Kind);
+end;
+
+{ Index-addressed twin, for the nested-routine header, which reads its name out
+  of the token array rather than from CurTok. Read the name with GetTokenStr /
+  GetTokenStrFromRaw: these four DO carry SVal, but the index sites already read
+  the pool and there is no reason for two conventions. }
+function IsMemberNameTokAt(idx: Integer): Boolean;
+begin
+  IsMemberNameTokAt := (idx >= 0) and (idx < TokCount) and
+                       IsMemberNameKind(Tokens[idx].Kind);
 end;
 
 { Predefined routines are not reserved words. In declaration-name position they
