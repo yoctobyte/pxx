@@ -3225,6 +3225,25 @@ def set_field(path: Path, marker: str, value: str) -> None:
 # enough context to judge a match, so the cost of this is one prompt to them.
 # bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance
 
+# DO NOT REACH FOR THIS METRIC TO FIND A TOPIC COLLISION. Measured 2026-09-06,
+# after the coordinator found one topic (`fcl-passrc`) with TWO open tickets that
+# both read as free -- the ladder rung being climbed and an older standalone
+# ticket sitting in backlog-pascal/ that `ready --track P` hands out. The obvious
+# tool is "score every held ticket against every free one and report the close
+# pairs". It does not work, and the number says why:
+#
+#   22 held x 444 free = 9768 pairs, median 0.0354, p99 0.1281, max 0.4676
+#   THE PAIR THAT MOTIVATED IT: 0.099 -- RANK 395 OF 9768
+#
+# A threshold low enough to catch it catches four hundred pairs. And the cause is
+# an ANTI-CORRELATION, not merely weak signal: `_ticket_head` is slug + title +
+# summary, the passrc ticket has no `summary:` key at all, and cosine's length
+# penalty then puts a thin head far from a thick one. THE TICKETS MOST LIKELY TO
+# BE A STALE SECOND DOOR -- old, never worked, never re-summarised -- ARE EXACTLY
+# THE ONES WITH THE THINNEST HEADS, so the metric is least able to see the case
+# it would be built for. What DID find it was a peer naming a topic and a grep of
+# the backlogs for the TOPIC rather than for the ticket they named.
+
 # Buckets that still describe project state. A duplicate can sit in any of them
 # — float/ and experimental/ are unranked, not closed, and a ticket parked there
 # is exactly the one a filer will not have seen.
