@@ -2941,6 +2941,42 @@ def set_prio_auto(path: Path, value: int) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _bullet_value_continues(text: str, marker: str) -> bool:
+    """Does `- **Marker:** ...`'s value wrap onto an indented continuation line?
+
+    A continuation is an INDENTED, non-blank line that is not itself a bullet,
+    table row or quote. That is the only shape `set_field` cannot overwrite
+    without destroying text, because the regex that writes the bullet is
+    single-line and the value is not.
+    """
+    pat = re.compile(
+        rf"^[^\S\n]*-?[^\S\n]*\*\*{re.escape(marker)}:\*\*[^\S\n]*.*$",
+        re.I | re.M)
+    m = pat.search(text)
+    if not m:
+        return False
+    rest = text[m.end():]
+    if not rest.startswith("\n"):
+        return False
+    nxt = rest[1:].split("\n", 1)[0]
+    if not nxt.startswith((" ", "\t")) or not nxt.strip():
+        return False
+    return not nxt.lstrip().startswith(("-", "*", "|", ">", "#"))
+
+
+def _ensure_fm_key(path: Path, text: str, fm, key: str, value: str) -> None:
+    """Write `key: value` into the frontmatter, creating key or block as needed."""
+    line = f"{key}: {value}"
+    if fm and re.search(rf"(?mi)^{re.escape(key)}:.*$", fm.group(1)):
+        block = re.sub(rf"(?mi)^{re.escape(key)}:.*$", line, fm.group(1), count=1)
+        text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
+    elif fm:
+        text = text.replace(fm.group(0), f"---\n{fm.group(1)}\n{line}\n---\n", 1)
+    else:
+        text = f"---\n{line}\n---\n\n" + text
+    path.write_text(text, encoding="utf-8")
+
+
 def set_field(path: Path, marker: str, value: str) -> None:
     """Write `<marker>: <value>` in whichever form the ticket already uses.
 
@@ -2995,6 +3031,28 @@ def set_field(path: Path, marker: str, value: str) -> None:
     pat = re.compile(
         rf"^([^\S\n]*-?[^\S\n]*\*\*{re.escape(marker)}:\*\*[^\S\n]*).*$",
         re.I | re.M)
+    # AND THE THIRD DEFECT, THE ONE WITH SIXTY VICTIMS: `.*` IS SINGLE-LINE AND
+    # A BULLET'S VALUE IS NOT. `- **Status:** backlog -- found 2026-07-09, once
+    # the segfault was fixed (b30ccf88)` wrapped onto an indented second line;
+    # `resolve` wrote `done` and DELETED the first line's text, leaving
+    # `  and duktape actually ran JS.` hanging under it. Not the newline bug --
+    # this one is older than both of tonight's fixes and neither addressed it.
+    # Censused 2026-09-06: 67 bullets board-wide carry an orphaned continuation
+    # under a Status/Owner value that only `set_field` writes, confirmed against
+    # git history on a sample of three, all three truncated by a `resolve`.
+    #
+    # There is no safe TRUNCATION here and no format worth inventing: the trailing
+    # clause is provenance somebody wrote, and both "delete it" and "keep it beside
+    # a value it no longer describes" lose. So when the bullet's value continues,
+    # the bullet is LEFT ALONE and the frontmatter key -- authoritative since
+    # f1758c6f4, created here if absent -- carries the write. Nothing is lost, no
+    # judgement is made, and the file says so out loud rather than quietly.
+    if _bullet_value_continues(text, marker):
+        _ensure_fm_key(path, text, fm, key, value)
+        print(f"  NOTE: {path.name}: `- **{marker}:**` wraps onto a continuation "
+              f"line, so the bullet was left as-is and `{key}:` was written in the "
+              f"frontmatter. Reconcile the prose by hand if it now reads wrong.")
+        return
     if has_fm_key:
         # frontmatter first (authoritative), then the bullet if the body has one,
         # so the two forms cannot drift apart.

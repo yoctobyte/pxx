@@ -62,6 +62,30 @@ CASES = {
         lambda out: "owner: someone-else" in out
         and out.startswith("---\ntrack: T\nowner: claude@xeon\n---"),
     ),
+    # THE THIRD DEFECT, AND THE ONE WITH SIXTY VICTIMS. `.*` is single-line and
+    # a bullet's VALUE is not. Confirmed against git on
+    # done/bug-c-duktape-double-formatting.md: the bullet read
+    # `- **Status:** backlog -- found 2026-07-09, once the segfault was fixed
+    # (b30ccf88)` wrapping onto `  and duktape actually ran JS.`, and `resolve`
+    # wrote `done` over the first line, DELETING it and orphaning the second.
+    # Older than both 2026-09-06 fixes and neither addressed it. There is no safe
+    # truncation, so the bullet is left alone and the frontmatter takes the write.
+    "wrapped-value-is-not-truncated-frontmatter-takes-the-write": (
+        "---\ntrack: T\n---\n\n# t\n\n"
+        "- **Owner:** frankB -- took it 2026-08-02 while settling\n"
+        "  the link-libc profile / loader-vs-link decision\n",
+        lambda out: "took it 2026-08-02 while settling" in out
+        and "the link-libc profile / loader-vs-link decision" in out
+        and "owner: claude@xeon" in out
+        and "- **Owner:** claude@xeon" not in out,
+    ),
+    # CONTROL. The guard must not fire on an adjacent BULLET, or every claim on
+    # an ordinary ticket stops updating the bullet and the two forms drift apart
+    # again -- which is the defect f1758c6f4 had just fixed.
+    "an-adjacent-bullet-is-not-a-continuation": (
+        "---\ntrack: T\n---\n\n# t\n\n- **Owner:** \n- **Track:** T\n",
+        lambda out: "- **Owner:** claude@xeon" in out and "- **Track:** T" in out,
+    ),
 }
 
 
