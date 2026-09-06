@@ -14409,3 +14409,59 @@ finally:
 positive control is a deliberately broken version of that code, not another input.** Inputs cannot
 reach it. And keep the negative control in the same function — a check that fires on the working
 case is as empty as one that never fires, and it is the version people disable.
+
+## "ZERO ESCAPES" — THREE SESSIONS AGREED ON A NUMBER AND MEANT THREE DIFFERENT EVENTS BY IT, AND THE CAVEAT THAT WAS TRUE UNDER ONE READING WAS FATAL UNDER ANOTHER
+
+**A rate is a count divided by a population, and a report almost never names the population.** When
+it does not, every reader supplies their own — and the disagreement is invisible, because everyone
+is looking at the same number and it is correct.
+
+Measured 2026-09-06, in a three-way exchange about a git fault (a `claim` stages a ticket rename;
+a later `git add` names the pre-rename path, fails, and a commit whose message describes a compiler
+fix carries only the rename). The coordinator censused origin/master over 7 days, two apertures:
+**37 renames-only commits of 5096** and **31 code-prefixed commits touching no source file of
+1011**, every one of them a legitimate ticket record. Zero bad commits. Then it wrote:
+
+> escape rate zero, occurrence rate at least two in one night — the gap is the finding, people
+> catch it locally
+
+Three readings of "escape" were live at once, and each made a different sentence true:
+
+| reading | what the census says |
+| --- | --- |
+| a bad commit **reached origin/master** | genuinely ZERO, and this is what the apertures observe |
+| a bad commit **was created at all** | SILENT — an amend before push never reaches the scan |
+| the fault **was caught rather than shipped** | SILENT — a catch leaves no artefact anywhere |
+
+The reviewer's objection was that the two observed instances were amends, so *"the blind spot and
+the observed population are the same set"* and the zero is silence. **That is right under readings
+2 and 3 and wrong under reading 1** — an amended commit did not escape, it was never pushed. The
+author's caveat ("both apertures ask about commits AS PUSHED") was *true*, and under reading 1 it
+is harmless while under readings 2 and 3 it destroys the claim. **A caveat cannot do its job when
+the term it qualifies has not been pinned down.**
+
+**And the conclusion survived all three readings while the justification survived one.** "A habit,
+not a checker" was right the whole time; what was wrong was the reason offered for it, which is the
+half that gets quoted. A future reader takes "zero over 5096 commits" as the reason nothing was
+built, and that number has far more authority than it earned because it is real and it is about a
+different question.
+
+### What to write instead
+
+**Name the EVENT the instrument can observe, not the population it scanned.** "5096 commits" is a
+population and it invites the reader to think the question was answered for all of them. The honest
+form:
+
+> No bad commit is on origin/master today — that is measured, by an aperture with demonstrated
+> sensitivity (it fires on 31 commits, so it is not a dead check). How often the fault OCCURS is
+> unmeasured; the only evidence there is two instances in one session, both caught by their author
+> before push. So "caught every time" is an n=2 anecdote and not a rate, and not building a checker
+> is a judgement about cost, not a conclusion from data.
+
+Three things that make that version survive re-reading: it says what the zero IS about, it gives
+the instrument's sensitivity so the zero is not confused with a check that cannot fire, and it
+labels the conclusion as a judgement so nobody later cites the 5096 as its evidence.
+
+**The general form: when a null and an observed instance seem to disagree, do not adjudicate the
+number — check whether the two are about the same EVENT.** Usually they are not, and usually both
+parties are correct.
