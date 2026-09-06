@@ -57,14 +57,54 @@ procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
   { the ONE postfix `^ / .field / [i]` walker — every opener with a suffix ends here }
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
+function TryParseBracketArgForSlot(procIdx, slotIdx: Integer): Integer;
+{ THE ONE PLACE THAT DECIDES WHETHER A `[...]` ARGUMENT IS A LITERAL VECTOR OR
+  A SET. Returns the parsed node, or -1 for "not mine, parse it normally".
+
+  The decision has to be made BEFORE overload resolution -- ParamIsVarRecArray's
+  own note says why: the parser cannot even parse `[...]` without knowing which
+  it is. It was asked on the DIRECT call path only, so an indirect call through
+  a procedural type parsed every bracket as a set:
+
+    TCb = procedure(const A: array of Integer);
+    c := @Show;  c([7,8,9]);   -> Length(A) = 263845145632
+    o := @s.M;   o([7,8,9]);   -> Length(A) = 0        (`of object`)
+
+  against fpc 3.2.2's 3 for both, while the same callee called DIRECTLY, and the
+  same indirect call passing a VARIABLE, were correct. Four of six rows agreed,
+  and the wrong value was self-identifying once read: A[0] came back 896, which
+  is the set bitmask for {7,8,9}. The program was printing its own misparse.
+
+  A FUNCTION RATHER THAN A SECOND COPY. The direct site had grown four
+  behaviours here -- the two below plus TryDelphiBareProcArg and SetLitCheckArg
+  -- and the indirect site had none. Copying the block would have made the
+  second copy that drifts; those last two arrived after this hole opened and are
+  exactly what a copy loses. Only the bracket question is shared, because only
+  it is common to both: each caller keeps its own default arm.
+  bug-p-an-open-array-literal-loses-its-length-through-a-procedural-type-call }
+begin
+  Result := -1;
+  if CurTok.Kind <> tkLBrack then Exit;
+  if ParamIsVarRecArray(procIdx, slotIdx) then
+    Result := ParseVarRecLiteralAST
+  else if ParamIsOpenArrayScalar(procIdx, slotIdx) then
+    Result := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
+      OpenArrayCtorRowLen(procIdx, slotIdx),
+      ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx]);
+end;
+
 function BuildIndirectCallAST(calleeNode, sigPi: Integer; isMethodPtr: Boolean): Integer;
-var argsHead, lastArg, argSeq, nArgs, callIndNode: Integer;
+var argsHead, lastArg, argSeq, nArgs, callIndNode, argNode: Integer;
 begin
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; nArgs := 0;
   while CurTok.Kind <> tkRParen do
   begin
-    ParseExpr;
+    { A signature row IS a Procs[] index, so the bracket question is answerable
+      here with what this function already holds -- the same argument this
+      file's suffix handoff makes forty lines down. nArgs is the slot. }
+    argNode := TryParseBracketArgForSlot(sigPi, nArgs);
+    if argNode >= 0 then CurASTNode := argNode else ParseExpr;
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := CurASTNode;
     if argsHead = -1 then argsHead := argSeq

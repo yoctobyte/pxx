@@ -6858,6 +6858,16 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_a_stray_token_in_a_record_body_is_refused.pas $(TESTTMP)/test_strayrec26 2>&1 \
 	  | grep -q 'this token is not a record member' \
 	  || { echo 'test_a_stray_token_in_a_record_body_is_refused: FAIL - a stray token in a record body compiled, or refused for another reason'; exit 1; }
+	@# AN OPEN-ARRAY LITERAL THROUGH A PROCEDURAL-TYPE CALL. Six matrix cells,
+	@# four of which were already correct -- so a test probing any single one, or
+	@# only that it compiles, passed throughout. `c([7,8,9])` answered
+	@# Length = 263845145632 and the `of object` spelling answered 0 (a LEGAL
+	@# length: a caller looping to Length-1 does nothing, quietly), because the
+	@# bracket was parsed as a SET at an indirect call site. Every row reads an
+	@# ELEMENT as well as the length -- a length alone cannot tell a correct
+	@# vector from a set reinterpreted as one.
+	@./$(COMPILER) test/test_an_open_array_literal_through_a_procedural_type.pas $(TESTTMP)/test_oaproctype26
+	@tools/expect_same.sh test_oaproctype26 "$$($(TESTTMP)/test_oaproctype26)" "$$(cat test/test_an_open_array_literal_through_a_procedural_type.expected)"
 	@# A BARE ROUTINE NAME INTO A PROCEDURAL SLOT, all four spellings in one
 	@# compile. Outside {$$mode delphi} the name is a CALL, so the Integer RESULT
 	@# went into a function-pointer slot and calling it jumped through 7 --

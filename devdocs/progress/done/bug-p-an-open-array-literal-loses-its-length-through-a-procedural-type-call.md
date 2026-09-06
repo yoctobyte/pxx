@@ -3,7 +3,7 @@ slug: bug-p-an-open-array-literal-loses-its-length-through-a-procedural-type-cal
 track: P
 prio: 60
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankD
@@ -172,3 +172,6 @@ should not be approached from the declaration end.
   field behaves the same.
 - Whether the `0` and the garbage are two bugs or one — they are different
   wrong answers from two spellings of the same shape.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

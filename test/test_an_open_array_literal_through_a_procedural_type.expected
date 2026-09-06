@@ -1,0 +1,6 @@
+literal direct  : len=3 [0]=7
+var     direct  : len=3 [0]=7
+literal indirect: len=3 [0]=7
+var     indirect: len=3 [0]=7
+ofobj   lit ind : len=3 [0]=7
+ofobj   var ind : len=3 [0]=7

@@ -78,3 +78,54 @@ marshalling, not the declaration.
 
 Reached from [[feature-pascal-corpus-expansion]] rung 7. The first wall of that
 rung was `resourcestring` ending a const section, fixed in `c4036925a`.
+
+
+## 2026-09-06 (frankD) — the blocker is down and this is CLOSER but still not landable
+
+`bug-p-an-open-array-literal-loses-its-length-through-a-procedural-type-call`
+is fixed: the bracket decision is now shared between the direct and indirect
+argument loops, so an open-array literal through a procedural type keeps its
+length.
+
+With that in, the three-line declaration fix **works on its own terms for the
+first time**. Applied on top, the full six-row `array of const` matrix matches
+fpc 3.2.2 byte-for-byte — plain procedural type, `of object`, function result,
+element `VType` reads, and the empty vector:
+
+```
+A plain len=3      B func len=3       C kinds 2 0 1
+D method len=3     A plain len=0      F done=1
+```
+
+That is the first time this fix has produced a correct number rather than
+`Length=4025888`, and it confirms the reason it was reverted twice: it was
+never the wrong fix, it was a fix in front of a blocker.
+
+**It still does not land, and the reason is new.** With the declaration fix
+applied, `uses pscanner` produces three fresh errors that are not there without
+it:
+
+```
+pascal26:0: error: incompatible types: cannot assign Integer to record
+pascal26:0: error: incompatible types: cannot assign record to Integer
+pascal26:0: error: incompatible types: cannot assign Integer to record
+```
+
+Revert-controlled: stashing `pasparser_decl.inc` alone, keeping the bracket
+fix, removes all three (and brings 575 back). So they are this change's.
+
+**Two hypotheses tested and REFUTED**, recorded so nobody spends the same
+half-hour:
+
+- *`LastTypeRecId` leaks into the RETURN type* — `TF = function(const Args:
+  array of const): Integer` through an indirect call answers 2 correctly.
+- *…or into the FOLLOWING parameter* — `function(const Args: array of const;
+  K: Integer): Integer` answers 12 correctly.
+
+The leak, if it is one, needs pscanner's actual shape. `line 0` means no
+position was attached, so the next step is to find which declaration produces
+it rather than to reason about which could.
+
+**Wall 575 is therefore still open, and it is now the ONLY thing between here
+and the next pscanner wall.** After the bracket fix, `uses pscanner` reports
+575 and 1994 and nothing else.

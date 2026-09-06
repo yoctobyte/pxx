@@ -7687,11 +7687,8 @@ begin
           { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }
           kwIdx := PyKwArgIndex(procIdx, 0);
           if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
-          if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
-            CurASTNode := ParseVarRecLiteralAST
-          else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
-            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
-              OpenArrayCtorRowLen(procIdx, slotIdx), ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+          node := TryParseBracketArgForSlot(procIdx, slotIdx);
+          if node >= 0 then CurASTNode := node
           else
           begin
             node := TryDelphiBareProcArg;
