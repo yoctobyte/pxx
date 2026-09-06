@@ -9,10 +9,17 @@ md that names it is missing for ~8% of runs".  That argument applies word for
 word to the skips that are NOT holes, and they were left unnamed -- so on
 6d04b14cd88d (seven, full) the archive named 2 of 7.
 
+Naming is INDEPENDENT of classification, which is the point.  Whether a skip is
+a coverage hole is the classifier's judgement and it changes -- frankB found
+that five of that run's seven were uncounted through a prefix mismatch, not
+through being self-skips at all.  Whether it is RECORDED should not depend on
+that judgement being right, because the whole reason to record it is so a wrong
+judgement is visible afterwards.
+
 A self-skipping recipe is correctly not a coverage hole; SKIP_HOLE_PREFIXES is
 deliberate and the harness does not get to overrule a recipe's own guard.  This
-is not about reclassifying them.  It is that "not the harness's fault" was
-being read as "need not be recorded".
+file does not reclassify anything, and asserts no hole COUNT that a legitimate
+widening of that tuple would break.
 """
 
 import json
@@ -37,20 +44,46 @@ def _archive_skip_jobs(report):
 
 
 def case_names_every_skip_not_only_holes():
-    # The shape of the real run: two holes, five self-skips.
-    jobs = [_J("test-zlib#00", "skip", "corpus absent: library_candidates/zlib"),
-            _J("test-core#1228", "skip", "tool absent: fpc is not on PATH"),
-            _J("lib-test#87", "skip", "lib-test: SKIP - no gtk3 on this host"),
-            _J("demos#00", "skip", "demos: SKIP - esp toolchain absent"),
-            _J("test-fgl#00", "skip", "test-fgl: SKIP - no FPC RTL source"),
-            _J("test-tk#00", "skip", "test-tk: SKIP - no X display"),
-            _J("test-esp#00", "skip", "test-esp: SKIP - xtensa gcc absent"),
+    """Drawn from the REAL run, 6d04b14cd88d on seven, not from invented ones.
+
+    The first fixture here guessed that the five uncounted skips were recipe
+    self-skips.  They were not: frankB established that all seven are
+    harness-originated, and the five are `host dev dependency absent:` (gtk),
+    uncounted because that prefix was in no classifier list at all.  The
+    guessed population passed this test and would have passed it whatever the
+    classifier did, which is a control drawn from the wrong population --
+    exactly what it was written to guard against.
+
+    Hole COUNTS are deliberately not asserted here.  They are the classifier's
+    property, they are frankB's to change, and pinning them in this file would
+    make a correct widening of SKIP_HOLE_PREFIXES fail somebody else's test.
+    What is asserted is the property this field exists for: every skip is
+    NAMED, whatever it is classified as.
+    """
+    jobs = [_J("test-zlib#00", "skip",
+               "corpus absent: library_candidates/zlib."),
+            _J("test-core#1228", "skip",
+               "host capability absent: rdrand - this CPU does not have it"),
+            _J("test-core#1819", "skip",
+               "host dev dependency absent: compiler/gtk.h - this box does "
+               "not have it, so that is coverage this box is not providing"),
+            _J("test-core#1820", "skip",
+               "host dev dependency absent: compiler/gtk.h - this box does "
+               "not have it, so that is coverage this box is not providing"),
+            _J("test-core#1821", "skip",
+               "host dev dependency absent: compiler/gtk.h - this box does "
+               "not have it, so that is coverage this box is not providing"),
+            _J("test-core#1822", "skip",
+               "host dev dependency absent: compiler/gtk.h - this box does "
+               "not have it, so that is coverage this box is not providing"),
+            _J("test-core#1824", "skip",
+               "host dev dependency absent: compiler/gtk.h - this box does "
+               "not have it, so that is coverage this box is not providing"),
             _J("test-core#0001", "pass", None)]
     summary = testmgr.skip_summary(jobs)
     report = {"skips": summary}
 
     assert summary["count"] == 7, summary["count"]
-    assert summary["coverage_holes"] == 2, summary["coverage_holes"]
 
     named = _archive_skip_jobs(report)
     assert len(named) == 7, "archive named %d of 7: %s" % (len(named), named)
