@@ -206,6 +206,79 @@ def t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin():
     return "reproduces the original `undefined variable` shape, exit %d" % rc
 
 
+def t_the_red_names_its_ticket_and_the_lookup_actually_resolves():
+    """A permanent expected-RED trains a fleet to skim gate output.
+
+    Three sessions re-diagnosed this row from scratch in one night
+    (2026-09-06) and each independently reached the conclusion the row's own
+    log already printed. So the seam branch now looks up the open ticket(s)
+    whose FRONTMATTER names this row, instead of hardcoding a slug -- a slug in
+    a script is a stale imperative the tooling keeps obeying after the ticket
+    closes.
+
+    The failure mode that matters is NOT a wrong slug, it is a BROKEN PIPELINE
+    falling through to "NO OPEN TICKET NAMES THIS ROW", which tells the next
+    session to file a duplicate. So the assertion is a differential: run the
+    shell pipeline exactly as gate.sh spells it, and compare it against an
+    independent scan written in Python. Two implementations that fail
+    differently; agreement is the control.
+    """
+    with open(GATE) as f:
+        src = f.read()
+    fn = src.split("pinned_rtl_canary() {", 1)[1].split("\n}", 1)[0]
+    assert "NO OPEN TICKET NAMES THIS ROW" in fn, (
+        "the seam branch no longer tells the reader to file a ticket when none "
+        "exists -- that branch is the whole point of the lookup")
+    assert "OWNER-ONLY" in fn, (
+        "the seam branch no longer says `make pin` is owner-only; a session "
+        "that reads 'the remedy is a pin' and can run it is the failure this "
+        "line prevents")
+
+    m = re.search(r'tix=\$\((.*?)\)\n', fn, re.S)
+    assert m, "the ticket lookup is gone from the seam branch"
+    pipeline = m.group(1)
+    out = subprocess.run(["sh", "-c", pipeline], cwd=REPO,
+                         capture_output=True, text=True)
+    assert out.returncode == 0, (
+        "the ticket lookup pipeline itself failed (rc=%d): %s"
+        % (out.returncode, out.stderr[-300:]))
+    got = set(out.stdout.split())
+
+    # The independent scan. Frontmatter only, open folders only -- done/ is
+    # globbed by `devdocs/progress/*/` and a CLOSED ticket named here would be
+    # worse than naming none.
+    want = set()
+    prog = os.path.join(REPO, "devdocs", "progress")
+    for d in sorted(os.listdir(prog)):
+        if not (d.startswith("backlog") or
+                d in ("working", "urgent", "blocked", "unfinished")):
+            continue
+        dd = os.path.join(prog, d)
+        if not os.path.isdir(dd):
+            continue
+        for name in sorted(os.listdir(dd)):
+            if not name.endswith(".md"):
+                continue
+            with open(os.path.join(dd, name), errors="replace") as f:
+                text = f.read()
+            parts = text.split("\n---", 2)
+            head = parts[0] if len(parts) > 1 else ""
+            if "pinned builds live lib/rtl" in head:
+                want.add(name[:-3])
+
+    assert got == want, (
+        "the shell lookup and an independent scan disagree.\n"
+        "  shell : %s\n  python: %s\n"
+        "One of them is wrong and the shell one is what the fleet reads."
+        % (sorted(got) or ["(none)"], sorted(want) or ["(none)"]))
+    if not want:
+        return ("no open ticket names this row today -- lookup agrees with an "
+                "independent scan, and the gate says so rather than staying "
+                "silent")
+    return "lookup resolves %d open ticket(s): %s" % (len(want),
+                                                      ", ".join(sorted(want)))
+
+
 def main():
     rc = 0
     for fn in (t_the_gate_still_has_the_canary,
@@ -213,7 +286,8 @@ def main():
                t_make_pin_verifies_the_binary_it_just_blessed,
                t_the_fixture_exists_so_the_skip_is_not_permanent,
                t_the_canary_is_green_on_a_sound_tree,
-               t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin):
+               t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin,
+               t_the_red_names_its_ticket_and_the_lookup_actually_resolves):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going

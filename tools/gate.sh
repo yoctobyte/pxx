@@ -296,6 +296,42 @@ ONE
       echo "   coherent, self-hosts, and breaks every \$(PXX_STABLE) build until"
       echo "   someone pins. The change is usually RIGHT and the remedy is a pin,"
       echo "   not a revert."
+      # NAME THE TICKET, and LOOK IT UP rather than hardcoding a slug -- a slug
+      # in a script is a stale imperative the tooling keeps obeying after the
+      # ticket closes. Three sessions re-diagnosed this exact red from scratch
+      # in one night (2026-09-06) and each independently concluded "not mine,
+      # the remedy is a pin", which is the whole diagnosis this row already
+      # printed. The cost of an unattributed known red is one measurement per
+      # session per run, and worse: a permanent expected-RED trains a fleet to
+      # skim gate output.
+      #
+      # Open folders only. `devdocs/progress/*/` globs done/ too, and a closed
+      # ticket named here would be worse than naming none.
+      #
+      # Match the FRONTMATTER only, not the body. A ticket ABOUT this row says so
+      # in its title or summary; a ticket that merely quotes a gate log mentions
+      # the string somewhere below. Body-wide matching returned three tickets
+      # where one was the subject, and a pointer that names three things is
+      # nearly as useless as naming none. Say what was matched, so the reader
+      # can discount it: this is a NAME LOOKUP, not a diagnosis.
+      local tix
+      tix=$(grep -rl -- 'pinned builds live lib/rtl' \
+              devdocs/progress/backlog*/ devdocs/progress/working/ \
+              devdocs/progress/urgent/ devdocs/progress/blocked/ \
+              devdocs/progress/unfinished/ 2>/dev/null |
+            xargs -r awk 'FNR==1{n=0;d=0} /^---$/{n++;next}
+                          n==1&&!d&&index($0,"pinned builds live lib/rtl"){print FILENAME;d=1}' |
+            sed 's|.*/||; s|\.md$||' | LC_ALL=C sort -u)
+      if [ -n "$tix" ]; then
+        echo "   OPEN TICKET(S) WHOSE FRONTMATTER NAMES THIS ROW -- read before"
+        echo "   you diagnose; one of them is probably already this:"
+        echo "$tix" | sed 's/^/     /'
+      else
+        echo "   NO OPEN TICKET NAMES THIS ROW. File one before moving on, or the"
+        echo "   red lives only in whichever session last ran the gate."
+      fi
+      echo "   \`make pin\` IS OWNER-ONLY (CLAUDE.md). Do not attempt it and do"
+      echo "   not ask a peer to; report the red and carry on."
       return 1
     fi
   fi
