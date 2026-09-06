@@ -12572,13 +12572,24 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_pal_time26 "$$($(TESTTMP)/c_pal_time26 1)" "$$(cat test/c_cross_time_and_exit_through_the_pal.expected)"
 	$(TESTTMP)/c_pal_time26 1; tools/expect_same.sh c_pal_time26-rc "$$?" "7"
 	@$(TESTTMP)/c_pal_time26 0 >/dev/null 2>&1; tools/expect_same.sh c_pal_time26-mustfail "$$?" "1"
+# riscv32's carve-out here is GONE, not flipped to another constant: it existed
+# only to encode bug-b-palnanosleep-...-rv32-has-no-nanosleep-syscall, and that
+# bug is fixed (677e75495 -- rv32 is time64-only and now issues clock_gettime64
+# (403) with a 64-bit timespec). The test predicted its own retirement in its
+# header: "when that bug is fixed the Makefile row flips to 1 and this test says
+# so." It did say so, arriving as a NEW-RED reading `got 1 want 0` -- the row
+# working, not breaking. Every target is now e=1/o=0 and the _noclock expected
+# file is deleted rather than left orphaned.
+# NOTE FOR THE NEXT EDITOR: do NOT put a `#` comment inside the backslash-
+# continued loop below. make hands the whole logical line to the shell, which
+# joins it before parsing, so a `#` there comments out the REST OF THE LOOP and
+# the recipe silently stops testing anything.
 	@overall=0; ran=0; want=0; \
 	for t in i386 aarch64 arm32 riscv32; do \
 	  want=$$((want+1)); \
 	  case $$t in i386) q=qemu-i386;; aarch64) q=qemu-aarch64;; arm32) q=qemu-arm;; riscv32) q=qemu-riscv32;; esac; \
 	  if ! command -v $$q >/dev/null 2>&1; then echo "  c_pal_time: SKIP $$t ($$q absent, NOT verified)"; continue; fi; \
-	  case $$t in riscv32) e=0; o=1; x=test/c_cross_time_and_exit_through_the_pal_noclock.expected;; \
-	             *)       e=1; o=0; x=test/c_cross_time_and_exit_through_the_pal.expected;; esac; \
+	  e=1; o=0; x=test/c_cross_time_and_exit_through_the_pal.expected; \
 	  if ! ./$(COMPILER) --target=$$t test/c_cross_time_and_exit_through_the_pal.c $(TESTTMP)/c_pal_time_$$t >$(TESTTMP)/c_pal_time_$$t.err 2>&1; then \
 	    echo "  c_pal_time: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_pal_time_$$t.err; overall=1; ran=$$((ran+1)); continue; \
 	  fi; \

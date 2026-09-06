@@ -121,11 +121,34 @@ begin
   RunOnce(POnceControl(ctl)^, proc);
 end;
 
-{ clock_gettime(CLOCK_MONOTONIC) via raw syscall, per-arch numbers mirroring
-  pxxcio's SysClockGettimeNr (riscv32 deliberately 0-stubbed there too). }
+{ clock_gettime(CLOCK_MONOTONIC) via raw syscall, per-arch numbers.
+
+  This unit deliberately depends on nothing above palfutex/palsync/palthread --
+  it is pulled into a C compile whenever <pthread.h> meets --threadsafe -- so it
+  carries its own number rather than calling PalClockGetTime. That is the same
+  trade palfutex makes two units over, and the same one that let riscv32 sit
+  0-stubbed here: it was left out because rv32's time ABI was untested, and a
+  silent 0 is what a missing entry produces.
+
+  riscv32 IS NOT THE LEGACY NUMBER. rv32 is time64-only: 113 does not exist
+  there and answers -ENOSYS, so this needs clock_gettime64(403) AND a 64-bit
+  timespec, which is 8-byte fields on a 4-byte-word machine. See PAL_TIME64 in
+  platform_backend.pas for the same rule stated once, and palfutex's
+  PalFutexWaitTimeout for the same local shape.
+
+  NOT EXERCISED ON riscv32 TODAY, and said so rather than implied: `--threadsafe`
+  refuses on rv32 ("the heap/ARC/I-O locks are not implemented"), so nothing can
+  reach this unit there yet. 403 is not a guess for all that -- it is the same
+  number measured working in platform_backend on this box, under qemu-riscv32,
+  end to end. This is a landmine removed ahead of the target that will step on
+  it, not a fix with a passing row behind it. }
 function __pxx_pmonotonic_ns: Int64;
 var
+{$ifdef CPU_RISCV32}
+  ts: array[0..1] of Int64;       { __kernel_timespec: 64-bit even here }
+{$else}
   ts: array[0..1] of NativeInt;   { kernel timespec: sec, nsec (word-wide) }
+{$endif}
   n: Integer;
   r: Int64;
 begin
@@ -135,6 +158,7 @@ begin
   {$ifdef CPU_I386}  n := 265; {$endif}
   {$ifdef CPU_AARCH64} n := 113; {$endif}
   {$ifdef CPU_ARM32} n := 263; {$endif}
+  {$ifdef CPU_RISCV32} n := 403; {$endif}   { clock_gettime64 }
   if n = -1 then Exit;
   r := __pxxrawsyscall(n, 1, Int64(@ts[0]), 0, 0, 0, 0);   { 1 = CLOCK_MONOTONIC }
   if r = 0 then

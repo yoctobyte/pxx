@@ -478,7 +478,14 @@ end;
   defect: the PAL's own riscv32 clock is -ENOSYS
   (bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall,
   measured across the whole time family). Two silences stacked, and removing
-  this one makes the other reachable. riscv32 answers 0 either way today.
+  this one made the other reachable -- which is exactly what happened: the PAL's
+  riscv32 time family was fixed on 2026-09-06 (677e75495, rv32 is time64-only
+  and needs the *_time64 numbers with a 64-bit timespec), and BECAUSE the bodies
+  here route through PalClockGetTime rather than through a local table, C's
+  clock_gettime and time() on riscv32 went from rc=-1/sec=0 to correct with no
+  change in this file. Measured both sides. The sentence that used to end this
+  paragraph -- "riscv32 answers 0 either way today" -- was true when written and
+  is not any more.
 
   The explicit `Int64(ts.Sec)` casts that were here are gone rather than fixed:
   PalClockGetTime hands back Int64 out-parameters, so there is no NativeInt to

@@ -22,6 +22,18 @@ begin
   pid := __pxxrawsyscall(20);                        { getpid }
   p := __pxxrawsyscall(192, 0, 4096, 3, 34, -1, 0);  { mmap2 }
 {$endif}
+{$ifdef CPU_RISCV32}
+  { rv32 is asm-generic, the same slots aarch64 uses: getpid 172, mmap 222.
+    Read off lib/rtl/platform/posix/platform_backend.pas's riscv32 block rather
+    than recalled. 222 is plain mmap (a BYTE offset), not mmap2, so the last
+    argument is 0 exactly as the 64-bit arms pass it -- this is not the i386/
+    arm32 mmap2 shape despite rv32 being 32-bit. MAP_PRIVATE|MAP_ANONYMOUS is
+    34 here, the generic value, not xtensa's $802.
+    Without this arm the program left pid and p at zero and printed 0/0/-1,
+    which is a test with no target arm and reads exactly like a failing one. }
+  pid := __pxxrawsyscall(172);                       { getpid }
+  p := __pxxrawsyscall(222, 0, 4096, 3, 34, -1, 0);  { mmap }
+{$endif}
 {$ifdef CPUXTENSA}
   { xtensa linux has its own numbering, neither asm-generic nor i386's. Both
     values are the MEASURED ones from lib/rtl/platform/posix/platform_backend.pas
