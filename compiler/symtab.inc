@@ -15960,39 +15960,35 @@ begin
   Result := True;
 end;
 
+{ THE EXTENT OF `p^`'s POINTEE -- dim 0's count, dim 0's low bound, and the
+  FLAT element count. Its two-spelling switch is gone: DerefPtrArrayShape above
+  resolves the pointer symbol and the ArrType row once, and this function reads
+  the shape it filled. That switch existed twice in this file and once more in
+  DerefPtrArrayElem, three functions over the same two arms each answering a
+  different subset -- which is Group 28's whole subject.
+
+  flatCount IS THE PRODUCT OF THE SPANS AND THAT WAS MEASURED, NOT ASSUMED.
+  The symbol arm used to read SymPtrElemArrLen and the ArrType arm
+  ArrTypeHi-ArrTypeLo+1, both of which are the FLAT length by construction
+  (ParseVarDecl sets VDArrHi := flatLen - 1 for a multi-dim array), and a
+  2-D and a rank-1 pointee were both compared against fpc through
+  Length(p^), the index chain and a copying parameter before this landed.
+  A DYNAMIC pointee still refuses: it is an array without a compile-time
+  EXTENT, and this predicate exists to report one. DerefPtrArrayDynDepth is
+  the arm that answers for it. }
 function DerefPtrArrayInfo(node: Integer;
                            var elemCount, lowBound, flatCount: Integer): Boolean;
-var dpaSi, dpaAi: Integer;
+var dpaD: Integer;
 begin
   Result := False;
   elemCount := 0;
   lowBound := 0;
   flatCount := 0;
-  dpaSi := DerefPtrArraySym(node);
-  if dpaSi >= 0 then
-  begin
-    flatCount := SymPtrElemArrLen[dpaSi];
-    lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
-    if SymPtrElemNDims[dpaSi] >= 2 then
-      elemCount := SymArrDimSpan[dpaSi * MAX_ARR_DIMS]
-    else
-      elemCount := flatCount;
-    Result := True;
-    Exit;
-  end;
-  dpaAi := DerefPtrElemArrAi(node);
-  if dpaAi < 0 then Exit;
-  { A DYNAMIC pointee has no compile-time extent -- ArrTypeLo/Hi are never
-    written for one -- so it is an array without an EXTENT and this predicate,
-    which exists to report one, must keep saying no. DerefPtrArrayDynDepth below
-    is the arm that answers for it. }
-  if ArrTypeIsDyn[dpaAi] then Exit;
-  flatCount := ArrTypeHi[dpaAi] - ArrTypeLo[dpaAi] + 1;
-  lowBound := ArrTypeLo[dpaAi];
-  if ArrTypeNDims[dpaAi] >= 2 then
-    elemCount := ArrTypeDimSpan[dpaAi * MAX_ARR_DIMS]
-  else
-    elemCount := flatCount;
+  if not DerefPtrArrayShape(node) then Exit;
+  lowBound := NDInfoLo[0];
+  elemCount := NDInfoSpan[0];
+  flatCount := 1;
+  for dpaD := 0 to NDInfoNDims - 1 do flatCount := flatCount * NDInfoSpan[dpaD];
   Result := True;
 end;
 
@@ -16098,12 +16094,26 @@ end;
   the same fingerprint for the field, array-element and nested spellings while
   the plain one was correct.
   bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
-function DerefPtrArrayNDInfo(node: Integer): Boolean;
+{ ANY RANK, ONE INCLUDED -- the general shape of `p^`'s pointee.
+  DerefPtrArrayNDInfo below is this function plus a `>= 2` refusal, so there is
+  ONE switch over the two deref spellings and two contracts named after what
+  each answers.
+
+  A RANK-1 POINTEE HAS NO DIMENSION ROW TO READ AND ITS DIM 0 IS SYNTHESISED
+  HERE. That is the whole reason the sibling ticket's fix sketch -- "drop the
+  `>= 2` tests to `>= 1`" -- could not work: SymPtrElemNDims and ArrTypeNDims
+  are 0 for a rank-1 array, not 1, so `>= 1` is False on exactly the arrays it
+  was meant to admit and the change is a NO-OP. The rank-1 extent lives in
+  SymPtrElemArrLen / ArrTypeLo..ArrTypeHi, and the low bound in
+  SymArrDimLo[sym*MAX+0] -- which IS filled for a rank-1 pointee, because
+  DerefPtrArrayInfo has always read it there.
+  refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array }
+function DerefPtrArrayShape(node: Integer): Boolean;
 var dpnSi, dpnAi, dpnD, dpnBase: Integer;
 begin
   Result := False;
   { The element triple is cleared HERE and not at each arm's exit, because a
-    False return must leave no stale element behind either: NodeArrNDInfo asks
+    False return must leave no stale element behind either: NodeArrShape asks
     this arm FIRST and falls through to its own two when it declines, and a
     reader that trusted a leftover NDInfoElemSize from a previous node would
     get a plausible wrong stride. Cleared, never defaulted -- 0 means NOT
@@ -16114,13 +16124,27 @@ begin
   dpnSi := DerefPtrArraySym(node);
   if dpnSi >= 0 then
   begin
-    if SymPtrElemNDims[dpnSi] < 2 then Exit;
-    NDInfoNDims := SymPtrElemNDims[dpnSi];
+    { The ND arm is UNCHANGED and the rank-1 one is an else beside it, never a
+      tightened condition over it -- see NodeArrShape's note on why a widening
+      must not be written as a stricter conjunction. }
     dpnBase := dpnSi * MAX_ARR_DIMS;
-    for dpnD := 0 to NDInfoNDims - 1 do
+    if SymPtrElemNDims[dpnSi] >= 2 then
     begin
-      NDInfoLo[dpnD] := SymArrDimLo[dpnBase + dpnD];
-      NDInfoSpan[dpnD] := SymArrDimSpan[dpnBase + dpnD];
+      NDInfoNDims := SymPtrElemNDims[dpnSi];
+      for dpnD := 0 to NDInfoNDims - 1 do
+      begin
+        NDInfoLo[dpnD] := SymArrDimLo[dpnBase + dpnD];
+        NDInfoSpan[dpnD] := SymArrDimSpan[dpnBase + dpnD];
+      end;
+    end
+    else
+    begin
+      { rank 1, synthesised -- DerefPtrArraySym has already established the
+        pointee is a named FIXED array (it refuses when SymPtrElemArrLen <= 0),
+        so the extent is real and not a default. }
+      NDInfoNDims := 1;
+      NDInfoLo[0] := SymArrDimLo[dpnBase];
+      NDInfoSpan[0] := SymPtrElemArrLen[dpnSi];
     end;
     NDInfoElemTk := Ord(Syms[dpnSi].PtrElemTk);
     NDInfoElemRec := Syms[dpnSi].PtrElemRec;
@@ -16130,19 +16154,46 @@ begin
   end;
   dpnAi := DerefPtrElemArrAi(node);
   if dpnAi < 0 then Exit;
+  { A DYNAMIC pointee still refuses. This function reports an EXTENT and a
+    dynamic array has none at compile time -- the same refusal DerefPtrArrayInfo
+    states in its own words, and widening the RANK is not a licence to widen
+    that. }
   if ArrTypeIsDyn[dpnAi] then Exit;
-  if ArrTypeNDims[dpnAi] < 2 then Exit;
-  NDInfoNDims := ArrTypeNDims[dpnAi];
   dpnBase := dpnAi * MAX_ARR_DIMS;
-  for dpnD := 0 to NDInfoNDims - 1 do
+  if ArrTypeNDims[dpnAi] >= 2 then
   begin
-    NDInfoLo[dpnD] := ArrTypeDimLo[dpnBase + dpnD];
-    NDInfoSpan[dpnD] := ArrTypeDimSpan[dpnBase + dpnD];
+    NDInfoNDims := ArrTypeNDims[dpnAi];
+    for dpnD := 0 to NDInfoNDims - 1 do
+    begin
+      NDInfoLo[dpnD] := ArrTypeDimLo[dpnBase + dpnD];
+      NDInfoSpan[dpnD] := ArrTypeDimSpan[dpnBase + dpnD];
+    end;
+  end
+  else
+  begin
+    NDInfoNDims := 1;
+    NDInfoLo[0] := ArrTypeLo[dpnAi];
+    NDInfoSpan[0] := ArrTypeHi[dpnAi] - ArrTypeLo[dpnAi] + 1;
+    if NDInfoSpan[0] <= 0 then Exit;
   end;
   NDInfoElemTk := ArrTypeElemTk[dpnAi];
   NDInfoElemRec := ArrTypeElemRec[dpnAi];
   NDInfoElemSize := TypeStorageSize(IntToTypeKind(ArrTypeElemTk[dpnAi]), ArrTypeElemRec[dpnAi]);
   Result := True;
+end;
+
+function DerefPtrArrayNDInfo(node: Integer): Boolean;
+begin
+  Result := DerefPtrArrayShape(node);
+  { AND THE REFUSAL CLEARS NDInfoNDims. Every caller of the ND contract reads
+    the Boolean, but a rank-1 shape left in the globals under a False return is
+    a plausible answer sitting where there used to be a stale one -- and this
+    family's failure mode is always a plausible wrong stride, never a crash. }
+  if Result and (NDInfoNDims < 2) then
+  begin
+    NDInfoNDims := 0;
+    Result := False;
+  end;
 end;
 
 { "Is `p^` an array at all" -- either half. The one question IsNodeArray and the

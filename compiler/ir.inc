@@ -4464,6 +4464,7 @@ function StaticArraySourceInfo(argAST: Integer; var cnt: Integer;
                                var elemTk: TTypeKind; var elemRec: Integer;
                                var elemSz: Integer): Boolean;
 var sasSym, sasRec, sasCap: Integer; sasField: AnsiString;
+    sasDTk, sasDRec: Integer;   { `p^`: the deref element accessor's other two outs, wanted only for the capacity }
     sasSliceBase: Integer;   { `a[lo..hi]`: the base under the slice's `base[lo]` node }
     sasSliceLo, sasSliceHi: Int64;   { `a[lo..hi]`: the folded bounds -- Int64 because ASTConstIntValue answers in the constant's own width, and the SLICE LENGTH is what narrows to Integer, not the bounds }
 begin
@@ -4500,6 +4501,39 @@ begin
   else if ASTKind[argAST] = AN_INDEX then
   begin
     if not NDRowSourceInfo(argAST, cnt, elemTk, elemRec) then Exit;
+    Result := True;
+  end
+  { `p^` WHERE p POINTS AT A NAMED FIXED ARRAY. The fifth shape, and it
+    SEGFAULTED: `Take(p1^)` on `PA1 = ^array[3..7] of LongInt` given to a
+    `const array of LongInt` parameter fell past every arm above to the scalar
+    tail and the callee received the pointer's own bytes where the array's
+    address belonged. Measured against fpc 3.2.2, which prints the five
+    elements; pxx printed the callee's `[` and died. The 2-D ROW through the
+    same deref (`p2^[1]`) was already right, because that reaches the AN_INDEX
+    arm one line above -- so the deref spelling worked for a SUBSCRIPT of the
+    pointee and not for the pointee itself, which is why nobody had hit it.
+
+    ASKED THROUGH DerefPtrArrayShape rather than through a fourth private
+    switch over the two deref spellings, which is the whole reason that reader
+    was widened to rank 1: this arm is its first caller.
+    `NDInfoNDims <> 1` refuses a multi-dim pointee here for the same reason the
+    ident arm above tests `SymArrNDims <= 1` -- an open array is one
+    dimension, and a rank-2 pointee needs a decision this function is not the
+    place for.
+    The frozen-string CAPACITY comes from DerefPtrArrayElem, which is honest
+    about serving only the deref spelling; it is deliberately not an NDInfo
+    column, because two of that reader's four arms have no element-capacity
+    column to fill and a half-filled one is worse than none.
+    bug-p-a-pointer-to-a-fixed-array-segfaults-as-a-copying-open-array-argument }
+  else if ASTKind[argAST] = AN_DEREF then
+  begin
+    if not DerefPtrArrayShape(argAST) then Exit;
+    if NDInfoNDims <> 1 then Exit;
+    if NDInfoElemTk = Ord(tyUnknown) then Exit;
+    elemTk := IntToTypeKind(NDInfoElemTk);
+    elemRec := NDInfoElemRec;
+    cnt := NDInfoSpan[0];
+    if not DerefPtrArrayElem(argAST, sasDTk, sasDRec, sasCap) then sasCap := 0;
     Result := True;
   end
   { `a[lo..hi]` -- A SLICE IS ITS BASE WITH TWO NUMBERS CHANGED, so it is answered

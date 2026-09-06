@@ -5775,6 +5775,23 @@ test-core: $(COMPILER)
 	@# refactor-p-nodearrndinfo-yields-spans-but-not-the-element
 	./$(COMPILER) test/test_a_partial_nd_row_reaches_a_copying_parameter_through_every_base_spelling.pas $(TESTTMP)/test_ndrowbases26
 	tools/expect_same.sh test_ndrowbases26 "$$($(TESTTMP)/test_ndrowbases26 | tail -n 2)" "$$(printf 'fails=0\nNDROWBASES OK')"
+	@# THE FIFTH SHAPE, and it was a SEGFAULT rather than a wrong value.
+	@# StaticArraySourceInfo -- the one resolver both the by-value/const arm and
+	@# the var/out arm ask "what static array is behind this argument" -- knew a
+	@# plain identifier, a record field, a partial N-D row and a slice, and not
+	@# the deref. `Take(p^)` on `^array[3..7] of LongInt` fell past all four to
+	@# the scalar tail and the callee got the pointer's own bytes.
+	@# THE NEIGHBOUR THAT WORKED IS WHY NOBODY HIT IT: `p2^[1]`, a ROW of a 2-D
+	@# pointee, reaches the AN_INDEX arm and was always right, so the deref
+	@# spelling worked for a subscript OF the pointee and not for the pointee
+	@# ITSELF -- and every existing probe used the subscripted form. Row 6 is
+	@# that neighbour, kept as the boundary.
+	@# The arm asks DerefPtrArrayShape rather than opening a fifth private switch
+	@# over the two deref spellings; that reader answered only for rank >= 2
+	@# until this landed, and this arm is its first caller.
+	@# bug-p-a-pointer-to-a-fixed-array-segfaults-as-a-copying-open-array-argument
+	./$(COMPILER) test/test_a_pointer_to_a_fixed_array_is_a_copying_open_array_argument.pas $(TESTTMP)/test_ptrarrarg26
+	tools/expect_same.sh test_ptrarrarg26 "$$($(TESTTMP)/test_ptrarrarg26 | tail -n 2)" "$$(printf 'fails=0\nPTRARRARG OK')"
 	    tools/expect_same.sh $$arch/test_ndsub_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_ndsub_$$arch)" "ND SUBARRAY OK" \
 	      || { echo "cross N-D sub-array param FAIL on $$arch"; exit 1; }; \
 	  done; echo "cross N-D sub-array param ok: i386 aarch64 arm32 riscv32"; \

@@ -692,7 +692,33 @@ end;
   one dimension: `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12`. Silent, exit
   0, and reading three elements past the row it was asked for.
   bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent }
-function NodeArrNDInfo(node: Integer): Boolean;
+{ ANY RANK, ONE INCLUDED. NodeArrNDInfo below is this function plus a `>= 2`
+  refusal, so there is ONE switch over the four spellings and two contracts
+  named after what each answers -- rather than a reader that says False to a
+  rank-1 array and forces every caller wanting one to keep its own
+  AN_IDENT/AN_FIELD pair beside the call, which is the duplication this whole
+  family exists to delete.
+
+  THE SIBLING TICKET'S FIX SKETCH WAS A NO-OP AND THAT IS THE MEASURED PART.
+  It said to drop the `>= 2` tests to `>= 1`. SymArrNDims and UFldArrNDims are
+  **0** for a rank-1 array, not 1 -- read off every writer: ParseVarDecl sets
+  VDIsArrND only when VDNdCnt <> 1 and SymArrNDims is otherwise left at the 0
+  AllocArray stamps, and the field side writes UFldArrNDims only `if fNDims >= 2`
+  (RecFieldArrLo's own comment says so in as many words: "UFldArrNDims stays
+  0/1 so nothing that dispatches on the N-D shape changes"). So `>= 1` is False
+  on exactly the arrays the change was meant to admit, and the whole edit does
+  nothing.
+
+  A RANK-1 ARRAY HAS NO DIMENSION ROW; ITS DIM 0 IS SYNTHESISED HERE, from the
+  columns that actually hold it -- Syms[].ConstVal and .ArrLen for an
+  identifier, UFldArrDimLo and UFldArrLen for a record field. The field low
+  bound is in dim 0 of the N-D table even for 1-D fields, which is not an
+  accident: it was put there by
+  bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds,
+  whose symptom was `r.c[i]` on `array[1..3]` writing one element past its
+  extent into the next field.
+  refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array }
+function NodeArrShape(node: Integer): Boolean;
 var baseRec, fIdx, sym, d, base: Integer; fname: AnsiString;
 begin
   Result := False;
@@ -704,15 +730,37 @@ begin
     first and the pointee's ArrType row second, so the identifier spelling
     takes byte-for-byte the path it did.
     bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
-  if DerefPtrArrayNDInfo(node) then
+  if DerefPtrArrayShape(node) then
     Result := True
-  else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2) then
+  { THE ND CONDITION IS THE FIRST DISJUNCT AND IS UNCHANGED, deliberately. The
+    rank-1 admission is an OR beside it, never an extra AND over it: a widening
+    written as a stricter conjunction is a NARROWING wearing a widening's
+    commit message, and the ND contract's callers would have paid for it
+    silently. }
+  else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+          ((SymArrNDims[ASTIVal[node]] >= 2) or
+           (Syms[ASTIVal[node]].IsArray and (SymDynDepth[ASTIVal[node]] = 0) and
+            (Syms[ASTIVal[node]].ArrLen > 0))) then
   begin
     sym := ASTIVal[node];
-    NDInfoNDims := SymArrNDims[sym];
     base := sym * MAX_ARR_DIMS;
-    for d := 0 to NDInfoNDims - 1 do
-    begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
+    if SymArrNDims[sym] >= 2 then
+    begin
+      NDInfoNDims := SymArrNDims[sym];
+      for d := 0 to NDInfoNDims - 1 do
+      begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
+    end
+    else
+    begin
+      { rank 1, synthesised. ArrLen is the extent and ConstVal is the low
+        bound -- the same pair the Low/High folds read for a whole 1-D static
+        array, so this arm reports what those already agree on rather than a
+        new rule. A DYNAMIC array is excluded above: it has no compile-time
+        extent, which is the same refusal the deref half makes. }
+      NDInfoNDims := 1;
+      NDInfoLo[0] := Syms[sym].ConstVal;
+      NDInfoSpan[0] := Syms[sym].ArrLen;
+    end;
     { The element, where the symbol is already in hand. Every caller that
       needed it used to re-open the spelling question one line after this
       function answered it -- see the NDInfoElem* declarations for the three C
@@ -729,12 +777,26 @@ begin
     begin
       fname := GetASTIdentName(node);
       fIdx := FindUField(baseRec - REC_UCLASS_BASE, fname);
-      if (fIdx >= 0) and (UFldArrNDims[fIdx] >= 2) then
+      if (fIdx >= 0) and
+         ((UFldArrNDims[fIdx] >= 2) or
+          (UFldIsArray[fIdx] and (UFldDynDepth[fIdx] = 0) and (UFldArrLen[fIdx] > 0))) then
       begin
-        NDInfoNDims := UFldArrNDims[fIdx];
         base := fIdx * MAX_ARR_DIMS;
-        for d := 0 to NDInfoNDims - 1 do
-        begin NDInfoLo[d] := UFldArrDimLo[base + d]; NDInfoSpan[d] := UFldArrDimSpan[base + d]; end;
+        if UFldArrNDims[fIdx] >= 2 then
+        begin
+          NDInfoNDims := UFldArrNDims[fIdx];
+          for d := 0 to NDInfoNDims - 1 do
+          begin NDInfoLo[d] := UFldArrDimLo[base + d]; NDInfoSpan[d] := UFldArrDimSpan[base + d]; end;
+        end
+        else
+        begin
+          { rank 1, synthesised -- see the header. UFldArrLen is the extent and
+            UFldArrDimLo[fi*MAX] holds the low bound even for a 1-D field,
+            which RecFieldArrLo already reads from exactly there. }
+          NDInfoNDims := 1;
+          NDInfoLo[0] := UFldArrDimLo[base];
+          NDInfoSpan[0] := UFldArrLen[fIdx];
+        end;
         { ...and the FIELD half, which is the one that was missing at every
           caller's own second switch. Asked through RecFieldType/RecFieldRecId,
           the same pair the field spelling is asked everywhere else. }
@@ -745,6 +807,22 @@ begin
         Result := True;
       end;
     end;
+  end;
+end;
+
+{ MULTI-DIM ONLY -- what every existing caller of this name means, unchanged.
+  It is NodeArrShape plus a refusal, so the four-spelling switch is written
+  once. The refusal CLEARS NDInfoNDims: a rank-1 shape left in the globals
+  under a False return would be a plausible answer sitting where a stale one
+  used to sit, and this family's failure mode is always a plausible wrong
+  stride rather than a crash. }
+function NodeArrNDInfo(node: Integer): Boolean;
+begin
+  Result := NodeArrShape(node);
+  if Result and (NDInfoNDims < 2) then
+  begin
+    NDInfoNDims := 0;
+    Result := False;
   end;
 end;
 { A PARTIAL fixed N-D subscript -- `pa[0]` on `array[0..2] of TG`, `r2.rows[0]`,
