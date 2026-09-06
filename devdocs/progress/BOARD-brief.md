@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:147 backlog-nilpy:97 backlog-tools:48 backlog-pascal:36 backlog-decide:43 backlog-libs:22 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3508 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:149 backlog-nilpy:97 backlog-tools:48 backlog-pascal:36 backlog-decide:43 backlog-libs:22 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3508 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,10 +65,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 428, ranked
+## Ready — top 30 of 430, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
+- `[p 80] [A]` refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies (unblocks 1)
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [T]` bug-t-the-named-rollback-target-cannot-build-the-tree-it-would-roll-back-to
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -96,6 +97,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
-- `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 
-_398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

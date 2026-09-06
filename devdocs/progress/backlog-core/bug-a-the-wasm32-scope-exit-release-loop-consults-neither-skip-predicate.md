@@ -4,7 +4,7 @@ prio: 30
 type: bug
 blocked-by: []
 status: backlog
-summary: "wasm32's WasmEmitManagedLocals is the SEVENTH copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease -- so the `except V as e` binder skip that fixes a use-after-free on the other six is absent there. Still not reachable, but the reason CHANGED on 2026-09-04: the PAL wall is gone and a .npy program now COMPILES for wasm32, so what blocks it is that such a module is not yet RUNNABLE (IR_ZERO_SYM and a rejected encoding). The stackless half was TESTED and is FINE -- a Pascal stackless generator holding an AnsiString across a yield prints sum=15 on wasm32, matching x86-64 -- so this is one gap and not two."
+summary: "wasm32's WasmEmitManagedLocals is the SEVENTH copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease -- so the `except V as e` binder skip that fixes a use-after-free on the other six is absent there. TWO PREMISES OF THIS TICKET ARE NOW STALE and are corrected below: (1) it is REACHABLE -- a .npy program compiles AND RUNS on wasm32 today, measured 2026-09-06 under wasmtime; (2) `this is one gap and not two` was wrong -- the same loop also had NO tyClass arm at all, an unconditional object-local leak, fixed in d58828d8c and guarded by test/wasm/check_nilpy_objlocal.sh. The skip-predicate half remains open and the naive patch for it is KNOWN to regress two generator rows for a reason nobody has explained."
 ---
 
 # wasm32's release loop consults neither skip predicate
@@ -87,3 +87,65 @@ and the loop would ask `SymSkipScopeExitRelease(i)`. Two lines. It was not done
 in the commit that added the predicate because it is untestable from here today
 and the file has an active owner; a blind edit to an unreachable path in someone
 else's working file is the worse trade.
+
+
+## 2026-09-06 — two premises corrected, and one half of this closed (frank-coord-core)
+
+**REACHABILITY: this ticket said the blocker was that a .npy module "is not yet
+RUNNABLE (IR_ZERO_SYM and a rejected encoding)". That is no longer true.**
+Measured at `9ae328993`, under wasmtime on this host:
+
+```
+$ cat objloc.npy
+class Box:
+    def __init__(self, v): self.v = v
+def hold(n):
+    b = Box(n)
+    return b.v
+print(hold(7))
+$ pascal26 --target=wasm32 objloc.npy objloc.wasm && wasmtime run objloc.wasm
+7
+```
+
+Compiles, validates, runs, prints the right answer. So every claim in this
+ticket is now measurable at runtime rather than by reading, and the ranking
+should reflect that: an unchecked path on a target nobody can run is a different
+thing from an unchecked path on a target that runs.
+
+**"ONE GAP AND NOT TWO" WAS WRONG, AND THE SECOND GAP WAS THE BIGGER ONE.**
+This ticket correctly identified the missing skip predicates. It did not notice
+that `WasmEmitManagedLocals` was also missing an entire release row: the
+`tyClass` arm that all six other copies carry. `PXXObjRelease` appeared nowhere
+in `ir_codegen_wasm32.inc`. Every NilPy object bound to a local leaked once per
+call on wasm32 and on no other target:
+
+| target | N=2000 | N=8000 | slope |
+| --- | --- | --- | --- |
+| x86-64 | live=1 | live=1 | flat |
+| wasm32 before | live=1900 | live=7815 | ~1 block/call |
+| wasm32 after | live=2 | live=2 | flat |
+
+Fixed `d58828d8c`, guarded `223127f86` (`test/wasm/check_nilpy_objlocal.sh`,
+positive control run against the reverted arm). **How it hid from this ticket:**
+this ticket was written by comparing wasm32 against the register arms on the
+question it was already asking — the skip predicates — and a missing arm answers
+that question the same way a present-but-unguarded arm does. Asking "does it
+consult the predicate" cannot see "there is nothing here to consult it".
+
+**WHAT REMAINS OPEN IS EXACTLY THE ORIGINAL CLAIM,** and it is untouched by the
+above: the loop consults neither `SymSkipScopeExitRelease` nor
+`StacklessPersistentSlotSym`.
+
+**DO NOT APPLY THE OBVIOUS PATCH.** frankwasm already did, with the CORRECT
+predicate at the CORRECT granularity, in the shape the six right arms use
+(recorded diff `0819a7f5f`), and it regressed two passing generator rows —
+`yield 1; yield 2` started printing only `1`. Two explanations were offered and
+both were refuted against the recorded diff: it was not `f891bbe8e`'s
+blanket-exit mistake, and it was not the wrong predicate. **The wasm32 copy
+depends on the release it currently performs, in a way nobody has named.** Name
+that before patching, and see
+[[refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies]] for
+why the seven copies are the real subject.
+
+Positive control for anyone who picks this up, verified at `cc18bc028`:
+`yield 1; yield 2` prints both on native and on wasm32.
