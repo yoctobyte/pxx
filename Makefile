@@ -15378,6 +15378,21 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_paramless_fn_as_const_variant_arg.pas $(TESTTMP)/test_plessarg26
 	tools/expect_same.sh test_plessarg26 "$$($(TESTTMP)/test_plessarg26)" "$$(cat test/test_paramless_fn_as_const_variant_arg.expected)"
+	# ...AND THE METHOD SPELLING OF THE CALLEE NAME, one scope out from the row
+	# above and the same defect. `FE.MC(Cur)` -- a bare parameterless METHOD of
+	# the ENCLOSING class, as an argument to a call on a QUALIFIED receiver --
+	# was `undefined variable (Cur)`, while `q := Cur`, `Own(Cur)`, `Free1(Cur)`,
+	# `Cur.Row` and `FE.MC(Self.Cur)` all compiled. The real instance is
+	# fcl-passrc pparser.pp's `Engine.CreateElement(..., CurSourcePos, ...)`.
+	# The gate above had been enumerating const TYPES one defect at a time
+	# (`const Variant`, then `const array of T`, then `const <record>`); the
+	# predicate now asks `const`, which is the rule all three were spelling out.
+	# THE PRECEDENCE ROW IS LOAD-BEARING AND LOOKS REDUNDANT: TFar declares its
+	# own `Cur` too, so a fix that resolved the bare name on the RECEIVER would
+	# pass every other row here and print 99 where fpc prints 7.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_paramless_method_as_const_byref_arg.pas $(TESTTMP)/test_plessmeth26
+	tools/expect_same.sh test_plessmeth26 "$$($(TESTTMP)/test_plessmeth26)" "$$(cat test/test_paramless_method_as_const_byref_arg.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out
@@ -15570,6 +15585,12 @@ test-core: $(COMPILER)
 	# text: the message here is still the imperfect `undefined variable`, and
 	# pinning that wording would freeze a wart we would rather fix.
 	! ./$(COMPILER) test/test_paramless_fn_as_var_arg_refused.pas $(TESTTMP)/test_plessvar26 >/dev/null 2>&1
+	# ...and the same guard for the METHOD spelling, which is a SEPARATE row and
+	# not decoration: widening the predicate from `const Variant` to `const` is
+	# only safe while `var`, `out` and untyped stay outside it, and this is the
+	# row that says so. Same "does not compile" assertion and the same reason --
+	# the message is still `undefined variable`, and pinning it freezes the wart.
+	! ./$(COMPILER) test/test_paramless_method_as_var_arg_refused.pas $(TESTTMP)/test_plessmethvar26 >/dev/null 2>&1
 	# A VIRTUAL CLASS METHOD called through a metaclass receiver in STATEMENT
 	# position: `q.Emit(1);` was refused with `Expected: :=` while the same call
 	# as an expression worked. "is this statement a call?" was written five times

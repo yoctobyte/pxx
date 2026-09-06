@@ -18,6 +18,16 @@ program test_paramless_fn_as_const_variant_arg;
   a record method, and an ALL-DEFAULTED function, which is paramless at the
   call site.
 
+  GENERALISED LATER, and the second file is where the rule finally got stated:
+  test_paramless_method_as_const_byref_arg.pas is the same defect with the
+  callee name spelled as a METHOD and the parameter a `const <record>`. The
+  gate here was ParamBindsAnExpression, which enumerated const TYPES one defect
+  at a time -- `const Variant`, then `const array of T`, then `const <record>`
+  -- and now asks `const`, which is the rule all three were spelling out. Read
+  the two files together; neither is redundant, because this one covers the
+  free-function lookup and that one covers the implicit-Self method lookup, and
+  they are two clauses.
+
   bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument
   .expected IS fpc 3.2.2's own output on this source. }
 {$mode objfpc}

@@ -4149,11 +4149,25 @@ function ParamBindsAnExpression(pi, slot: Integer): Boolean;
   meaning two things. Left alone deliberately: correcting it would change
   behaviour in pyparser.inc for no measured reason. }
 begin
-  Result := ParamIsConstVariant(pi, slot) or
-            ((pi >= 0) and (slot >= 0) and (slot < MAX_PROC_PARAMS) and
-             (slot < Procs[pi].ParamCount) and
-             Procs[pi].Params[slot].IsArray and
-             ProcParamIsConst[pi * MAX_PROC_PARAMS + slot]);
+  { THE UNION WAS TWO NAMED INSTANCES OF ONE RULE, and the rule is `const`.
+    A `const` parameter takes a VALUE; the by-ref transport underneath it is an
+    ABI decision the language does not expose, so an expression may always bind
+    there. Only `var`, `out` and untyped are genuine var-binding targets, and
+    those are exactly what this still answers False for -- the gate the clause
+    in ByRefArgStartsExpression calls load-bearing is unchanged in the direction
+    that matters (a call RESULT must not bind to a `var` parameter).
+
+    The third instance is what forced it: `const p: TRec` -- by-ref because a
+    record is, const because it is written const -- was neither a Variant nor an
+    open array, so `FE.MC(CurPos)` reached the bare-lvalue arm and reported
+    `undefined variable (CurPos)` for a perfectly good parameterless method,
+    while `FE.MC(Self.CurPos)` and the identical call to a FREE routine both
+    compiled. Enumerating const TYPES one defect at a time was going to keep
+    producing this; the predicate now asks the question its own name asks.
+    bug-p-a-parameterless-method-is-undefined-as-a-by-ref-argument }
+  Result := (pi >= 0) and (slot >= 0) and (slot < MAX_PROC_PARAMS) and
+            (slot < Procs[pi].ParamCount) and
+            ProcParamIsConst[pi * MAX_PROC_PARAMS + slot];
 end;
 
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean;
@@ -4249,6 +4263,37 @@ begin
       begin
         Result := True;
         Exit;
+      end;
+      { ...AND THE METHOD SPELLING OF THE SAME NAME, which the clause above
+        cannot see: a bare parameterless METHOD inside its own class body names
+        no SYMBOL and no free PROC, so both lookups miss and the argument fell
+        to the bare-lvalue arm. Same defect, same diagnostic, one scope out --
+        `Engine.CreateElement(..., CurSourcePos, ...)` in fcl-passrc's
+        pparser.pp is the real instance, and the reduced form is
+        `FE.Make(Cur)` where `Cur` is a parameterless function method of the
+        ENCLOSING class. Measured boundary: every other spelling of the same
+        call already worked (`q := Cur`, `Own(Cur)`, `Free1(Cur)`, `Cur.Row`,
+        `FE.Make(Self.Cur)`), so only the argument list of a call on a
+        QUALIFIED receiver was affected -- the one path with no implicit-Self
+        arm anywhere on it.
+
+        Self is Params[0] on a method, so parameterless is ParamCount = 1 and
+        the all-defaulted form starts at slot 1. SelfMemberCi is the same
+        lookup order the bare-name paths use (a class HELPER in front of the
+        extended class, for names the helper declares), so this cannot resolve
+        a name those paths would resolve differently.
+        bug-p-a-parameterless-method-is-undefined-as-a-by-ref-argument }
+      if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
+      begin
+        bd := FindUMeth(SelfMemberCi(CurTok.SVal), CurTok.SVal);
+        if bd >= 0 then bd := UMthProc_[bd];
+        if (bd >= 0) and Procs[bd].IsFunc and (Procs[bd].ParamCount >= 1) and
+           ((Procs[bd].ParamCount = 1) or
+            ProcParamHasDefault[bd * MAX_PROC_PARAMS + 1]) then
+        begin
+          Result := True;
+          Exit;
+        end;
       end;
     end;
   end;

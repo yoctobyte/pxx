@@ -13,6 +13,11 @@ program test_paramless_fn_as_var_arg_refused;
   ByRefArgStartsExpression answering False to force the bare-lvalue parse. So
   ungated, this program COMPILED and a call result bound to a var parameter.
 
+  TWIN: test_paramless_method_as_var_arg_refused.pas is this row for the METHOD
+  spelling of the callee name. Both must stay red -- the predicate they guard
+  was widened from `const Variant` to `const`, and that is only safe while
+  `var`, `out` and untyped stay outside it.
+
   KNOWN WART, deliberately not asserted: our message here is still
   `undefined variable (zero)`, which names a defined function undefined. It is
   wrong wording on a correct refusal, and it predates the fix — the const arm
