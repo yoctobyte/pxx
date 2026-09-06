@@ -5756,7 +5756,7 @@ begin
 end;
 
 procedure ParseRustProgram;
-var callPatch, mainIdx, jmpPatch: Integer; wantStr: Boolean;
+var callPatch, callAnchor, mainIdx, jmpPatch: Integer; wantStr: Boolean;
 begin
   { Rust IS CASE-SENSITIVE, and nothing said so. The same hole ParseCProgram
     had: DeclCaseSensitive (symtab.inc) is written for exactly this split and
@@ -5788,18 +5788,27 @@ begin
   wantStr := RNeedsStringRuntime;
   EmitProgramPrologue(False, wantStr, True, jmpPatch);
 
-  { Rust's "body" is three instructions, and this driver writes them itself
-    rather than getting them from a parse: call main(), then
+  { Rust's "body" is a call and an exit -- not a parse, and since the shared
+    pair below, not a hand-assembled sequence either: call main(), then
     exit_group(main's i32 return). println!/process::exit are out of scope
     (sub-ticket 12), so the trivial test programs this skeleton targets report
     their result via exit code, same convention as a hosted C `int main()`.
     The prologue's jump lands HERE, which is why the patch is taken first --
     the stubs it emitted sit between the ELF entry and this point. }
   PatchProgramEntryJump(jmpPatch);
-  EmitB($E8); callPatch := CodeLen; EmitI32(0);   { call main }
-  EmitB($89); EmitB($C7);            { mov edi, eax }
-  EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
-  EmitB($0F); EmitB($05);            { syscall }
+  { The shared entry stub, both halves. This driver used to write four x86-64
+    instructions here by hand, with no `case TargetArch of` around them, and
+    patch them with a hand-written rel32 formula -- so it emitted an x86-64
+    program tail whatever the target said, and the refusal above is the only
+    reason that never shipped as a wrong binary. EmitEntryStubCall and
+    PatchEntryStubCall (symtab.inc) are one mirror pair covering all six
+    targets, and EmitExitReg (emit.inc) already owned exit_group on all six --
+    it was extracted because the rule had been restated by hand six times and
+    two copies had drifted; these were copies seven and eight, uncounted
+    because a refusal made them unreachable.
+    bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
+  EmitEntryStubCall(callPatch, callAnchor);   { call main }
+  EmitExitReg;                               { exit_group(main's return value) }
 
   { The string runtime's SHIMS are emitted machine code (above, inside the
     prologue); their BODIES ship in builtinheap, and StrInt -- the int->text
@@ -5858,5 +5867,5 @@ begin
   end;
 
   EmitProgramEpilogue;
-  Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
+  PatchEntryStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 end;

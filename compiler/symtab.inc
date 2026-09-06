@@ -15985,6 +15985,124 @@ begin
     xtensa_callx0(rTgt);
 end;
 
+{ Patch one entry-stub call site with a body address. There are several -- the
+  call to `main` from each of five frontend drivers, and the C driver's call to
+  its pre-main initializer runner -- and the encoding table is per target, so it
+  lives here once rather than being written out per driver. x86 family: E8 rel32 = target - (patch+4). arm32: BL imm24
+  = (target - (patch+8)) div 4 (pc is 8 ahead of the BL). aarch64: BL imm26.
+  riscv32: the auipc+jalr pair, both words.
+
+  IT MOVED HERE FROM cparser.inc, WHERE ITS `C` PREFIX WAS ACCURATE AND ITS
+  LOCATION WAS NOT. cparser.inc is included before rparser/zparser/eparser, so
+  the Rust, Zig and Erlang drivers could always have called it -- but only until
+  someone builds with PXX_NO_CFRONT, which the compiler supports and reports on
+  (compiler.pas:2242). A shared routine reachable only while an unrelated
+  frontend is compiled in is not shared; it is borrowed. }
+procedure PatchEntryStubCall(patchPos, anchorPc, bodyAddr, procIdx: Integer);
+{ The entry stub's forward call, aimed once its callee has a body.
+
+  `procIdx` is not used to compute anything -- bodyAddr already is
+  Procs[procIdx].BodyAddr at every call site. It is here so the patch can SAY
+  what it aimed at: this displacement is written by hand rather than through
+  CallFix, so the call graph has no edge for it, and a reachability pass reads
+  the callee as unreachable. See RecordEntryRoot. }
+var rvHi, rvLo: Integer;
+begin
+  RecordEntryRoot(procIdx);
+  { XTENSA aims a REACH-INDEPENDENT long call, so what is patched is a 32-bit
+    .text-offset DELTA in a literal, not a displacement in the instruction --
+    which is why this is the one target that needs `anchorPc`. The anchor is
+    the runtime PC the delta is added to, and xtensa has no instruction that
+    yields a PC: EmitXtensaLongCallSlot gets one from CALL0's side effect of
+    leaving PC+3 in a0, so the anchor is a value only that emitter knows and
+    the site has to carry it here. A plain CALL0 would have fitted the existing
+    one-position signature and reaches +-512KB; the long form is used anyway
+    because `main` sits past every crtl body and the entry jump is already the
+    one xtensa distance that has been measured to overflow
+    (bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb, 262591 bytes
+    against a 128KB reach). Costing a literal here to not re-measure that.
+    bug-cfront-no-entry-stub-for-xtensa }
+  if TargetArch = TARGET_XTENSA then
+    Patch32(patchPos, bodyAddr - anchorPc)
+  else if TargetArch = TARGET_ARM32 then
+    Patch32(patchPos, Integer($EB000000) or
+      (((bodyAddr - (patchPos + 8)) div 4) and $00FFFFFF))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(patchPos, Integer($94000000) or
+      (((bodyAddr - patchPos) div 4) and $03FFFFFF))
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    RISCVPcrelSplit(bodyAddr - patchPos, rvHi, rvLo);
+    Patch32(patchPos, EncodeRISCVAuipc(reg_t0, rvHi));
+    Patch32(patchPos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
+  end
+  else
+  begin
+    { ...and on the rel32 targets, the SITE moves too when a pass compacts the
+      code between here and the body. That is exactly what CodeRef records, and
+      its patch formula (target - (pos+4)) is this same one. }
+    RecordCodeRefAt(patchPos, bodyAddr);
+    Patch32(patchPos, bodyAddr - (patchPos + 4));
+  end;
+end;
+
+
+procedure EmitEntryStubCall(var patchPos: Integer; var anchorPc: Integer);
+{ The entry stub's forward CALL, with its displacement left at zero, reporting
+  the position PatchEntryStubCall must later write -- the exact mirror of that
+  routine, target for target, and it is deliberately the line above it so the
+  two cannot drift apart unnoticed.
+
+  ONLY THE PATCH HALF WAS EVER SHARED, and that asymmetry is what let three
+  drivers stay wrong. rparser.inc, zparser.inc and eparser.inc each wrote
+  `EmitB($E8); ...; EmitI32(0)` inline -- an x86-64 encoding, unconditionally,
+  with no `case TargetArch of` around it -- and then patched it with a
+  hand-written rel32 formula rather than calling the shared patcher. cparser.inc
+  wrote its emit half inline too, but inside a per-target case, which is why C
+  crosses and the other three could not. The refusal at the top of each of those
+  three drivers ("only the x86-64 target is supported by the skeleton") is what
+  kept that from being a live bug, so lifting a refusal without coming through
+  here first produces a clean compile and a binary that dies before its first
+  syscall -- measured, on i386/aarch64/arm32, all three frontends.
+  bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it
+
+  `anchorPc` is meaningful on xtensa alone and is set to -1 elsewhere, rather
+  than left untouched: a caller passing an uninitialised variable would then
+  hand PatchEntryStubCall a garbage anchor on the one target that reads it, and
+  -1 makes that a wrong ADDRESS rather than a plausible one. See
+  PatchEntryStubCall for why xtensa needs it at all.
+
+  What this does NOT emit, on purpose: nothing about arguments. C's stub loads
+  argc and argv into the first two argument registers because a hosted C `main`
+  takes them; Rust, Zig and Erlang `main` here take none. Folding that in would
+  hand three frontends a C prologue, and the whole reason the layout defect next
+  door existed was one routine answering a question its callers had not asked. }
+begin
+  anchorPc := -1;
+  if TargetArch = TARGET_XTENSA then
+    EmitXtensaLongCallSlot(patchPos, anchorPc)
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    patchPos := CodeLen; EmitI32($EB000000);            { bl <patched> }
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    patchPos := CodeLen; EmitI32($94000000);            { bl <patched> }
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { auipc+jalr (full range), not JAL (+/-1MB): main can sit past 1MB in a
+      large image. Both words are patched. Same choice as the C driver's arm,
+      which is where this encoding came from. }
+    patchPos := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
+  end
+  else
+  begin
+    EmitB($E8); patchPos := CodeLen; EmitI32(0);        { call <patched> }
+  end;
+end;
+
+
 procedure EmitXtensaLongCall(target: Integer);
 var litPos, anchorPc: Integer;
 begin

@@ -11908,64 +11908,10 @@ begin
     (s = '__asm__') or (s = '__asm');
 end;
 
-{ Patch one entry-stub call site with a body address. There are two of them now
-  -- the call to `main` and the call to the pre-main initializer runner -- and
-  the encoding table is per target, so it lives here once rather than being
-  written out twice. x86 family: E8 rel32 = target - (patch+4). arm32: BL imm24
-  = (target - (patch+8)) div 4 (pc is 8 ahead of the BL). aarch64: BL imm26.
-  riscv32: the auipc+jalr pair, both words. }
-procedure CPatchStubCall(patchPos, anchorPc, bodyAddr, procIdx: Integer);
-{ The entry stub's forward call, aimed once its callee has a body.
-
-  `procIdx` is not used to compute anything -- bodyAddr already is
-  Procs[procIdx].BodyAddr at every call site. It is here so the patch can SAY
-  what it aimed at: this displacement is written by hand rather than through
-  CallFix, so the call graph has no edge for it, and a reachability pass reads
-  the callee as unreachable. See RecordEntryRoot. }
-var rvHi, rvLo: Integer;
-begin
-  RecordEntryRoot(procIdx);
-  { XTENSA aims a REACH-INDEPENDENT long call, so what is patched is a 32-bit
-    .text-offset DELTA in a literal, not a displacement in the instruction --
-    which is why this is the one target that needs `anchorPc`. The anchor is
-    the runtime PC the delta is added to, and xtensa has no instruction that
-    yields a PC: EmitXtensaLongCallSlot gets one from CALL0's side effect of
-    leaving PC+3 in a0, so the anchor is a value only that emitter knows and
-    the site has to carry it here. A plain CALL0 would have fitted the existing
-    one-position signature and reaches +-512KB; the long form is used anyway
-    because `main` sits past every crtl body and the entry jump is already the
-    one xtensa distance that has been measured to overflow
-    (bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb, 262591 bytes
-    against a 128KB reach). Costing a literal here to not re-measure that.
-    bug-cfront-no-entry-stub-for-xtensa }
-  if TargetArch = TARGET_XTENSA then
-    Patch32(patchPos, bodyAddr - anchorPc)
-  else if TargetArch = TARGET_ARM32 then
-    Patch32(patchPos, Integer($EB000000) or
-      (((bodyAddr - (patchPos + 8)) div 4) and $00FFFFFF))
-  else if TargetArch = TARGET_AARCH64 then
-    Patch32(patchPos, Integer($94000000) or
-      (((bodyAddr - patchPos) div 4) and $03FFFFFF))
-  else if TargetArch = TARGET_RISCV32 then
-  begin
-    RISCVPcrelSplit(bodyAddr - patchPos, rvHi, rvLo);
-    Patch32(patchPos, EncodeRISCVAuipc(reg_t0, rvHi));
-    Patch32(patchPos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
-  end
-  else
-  begin
-    { ...and on the rel32 targets, the SITE moves too when a pass compacts the
-      code between here and the body. That is exactly what CodeRef records, and
-      its patch formula (target - (pos+4)) is this same one. }
-    RecordCodeRefAt(patchPos, bodyAddr);
-    Patch32(patchPos, bodyAddr - (patchPos + 4));
-  end;
-end;
-
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
-    callAnchor, initAnchor: Integer;   { xtensa only -- see CPatchStubCall }
+    callAnchor, initAnchor: Integer;   { xtensa only -- see PatchEntryStubCall }
     xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
     needInit: Boolean;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
@@ -12351,7 +12297,7 @@ begin
       end;
       xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0); { a2 = argc = [sp] }
       xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 4); { a3 = argv = sp+4 }
-      { The long form, not a bare CALL0: see CPatchStubCall. It clobbers a0,
+      { The long form, not a bare CALL0: see PatchEntryStubCall. It clobbers a0,
         a9 and a10 only, so argc and argv survive it. }
       EmitXtensaLongCallSlot(callPatch, callAnchor);
       { Run registered finalizers before exiting, so a plain `return` from main
@@ -12936,7 +12882,7 @@ begin
   end;
 
   { Patch the entry stub's call-to-main with main's body address. }
-  CPatchStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
+  PatchEntryStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 
   { ... and the pre-main initializer call, the same way. The stub emitted it as
     a forward because the shell's body lives in crtl, which is not pulled until
@@ -12951,7 +12897,7 @@ begin
     if initIdx < 0 then
       Error('internal: the entry stub asked for a pre-main initializer phase ' +
             'but __pxx_run_initializers was never pulled');
-    CPatchStubCall(initPatch, initAnchor, Procs[initIdx].BodyAddr, initIdx);
+    PatchEntryStubCall(initPatch, initAnchor, Procs[initIdx].BodyAddr, initIdx);
   end;
 end;
 

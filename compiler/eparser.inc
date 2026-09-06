@@ -519,7 +519,7 @@ begin
 end;
 
 procedure ParseEProgram;
-var callPatch, mainIdx, jmpPatch: Integer;
+var callPatch, callAnchor, mainIdx, jmpPatch: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Erlang frontend: only the x86-64 target is supported by the skeleton (feature-erlang-frontend-scoping)');
@@ -534,16 +534,25 @@ begin
     --threadsafe I/O lock stubs and the System intrinsics.
 
     Erlang's body is not straight-line code at the entry point — it is a `call
-    main` followed by exit — so what the entry jump lands on is that three-line
-    trampoline rather than a statement list. Same two halves as every other
+    main` followed by exit — so what the entry jump lands on is that trampoline
+    rather than a statement list. Same two halves as every other
     driver, just with a shorter thing on the far side of the jump.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   EmitProgramPrologue(False, False, True, jmpPatch);
   PatchProgramEntryJump(jmpPatch);
-  EmitB($E8); callPatch := CodeLen; EmitI32(0);   { call main }
-  EmitB($31); EmitB($FF);            { xor edi, edi — exit 0 }
-  EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
-  EmitB($0F); EmitB($05);            { syscall }
+  { The shared entry stub, both halves. This driver used to write four x86-64
+    instructions here by hand, with no `case TargetArch of` around them, and
+    patch them with a hand-written rel32 formula -- so it emitted an x86-64
+    program tail whatever the target said, and the refusal above is the only
+    reason that never shipped as a wrong binary. EmitEntryStubCall and
+    PatchEntryStubCall (symtab.inc) are one mirror pair covering all six
+    targets, and EmitExitReg (emit.inc) already owned exit_group on all six --
+    it was extracted because the rule had been restated by hand six times and
+    two copies had drifted; these were copies seven and eight, uncounted
+    because a refusal made them unreachable.
+    bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
+  EmitEntryStubCall(callPatch, callAnchor);   { call main }
+  EmitExit(0);                               { the skeleton reports no status }
 
   while CurTok.Kind <> tkEOF do
   begin
@@ -560,5 +569,5 @@ begin
   end;
 
   EmitProgramEpilogue;   { the __pxx_run_finalizers body, then the fixups that aim the Halt-site calls at it }
-  Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
+  PatchEntryStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 end;

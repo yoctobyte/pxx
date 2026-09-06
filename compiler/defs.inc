@@ -3541,7 +3541,7 @@ var
   { Procs an ENTRY STUB reaches by a hand-patched call rather than through
     CallFix. There is no edge to find: the C frontend emits its stub before
     `main` has a Procs[] row at all, patches the displacement afterwards with
-    CPatchStubCall, and nothing in the graph ever says the stub called anything.
+    PatchEntryStubCall, and nothing in the graph ever says the stub called anything.
     A reachability pass reading only CallFix therefore concludes a C program's
     `main` is unreachable and deletes it -- measured, 43 of 792 bodies live and
     a SIGSEGV. Registered by RecordEntryRoot at the patch point, so a future

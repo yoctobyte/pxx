@@ -129,3 +129,70 @@ a code reading, and the x86-64 case may be masked by BSS starting at zero, which
 is exactly the shape that reads correct until it does not
 ([[an-uninitialised-read-is-usually-correct]]). Measure before claiming it; it
 is listed here so the entry-stub work does not walk past it.
+
+## 2026-09-06 (frankA) — LANDED: one mirror pair, and what the refusal was hiding
+
+`EmitEntryStubCall` / `PatchEntryStubCall` now sit as adjacent routines in
+`symtab.inc`, and `rparser.inc`, `zparser.inc` and `eparser.inc` call them plus
+`EmitExitReg` / `EmitExit`. Twelve hand-written x86-64 bytes and three
+hand-written rel32 patch formulas left three files, and no new `case TargetArch
+of` was added anywhere.
+
+**`PatchEntryStubCall` MOVED, and the move is the load-bearing half.** It was
+`CPatchStubCall` in `cparser.inc`, which is included BEFORE the other three
+drivers — so they could always have called it, right up until someone builds
+with `PXX_NO_CFRONT`, which the compiler supports and reports on
+(`compiler.pas:2242`). A shared routine reachable only while an unrelated
+frontend is compiled in is borrowed, not shared. Also renamed: the `C` prefix
+was accurate where it lived and would have been a lie afterwards.
+
+### x86-64 is behaviour-identical and NOT byte-identical, deliberately
+
+The four spot fixtures print exactly what the Makefile rows expect
+(`test_rust_else_if` rc=20, `test_rust_advanced`, `test_zig_skeleton`,
+`test_erlang_skeleton`). The BYTES differ, because `EmitExitReg` emits
+`48 89 C7` (`mov rdi,rax`) where the hand-written tail emitted `89 C7`
+(`mov edi,eax`) — the same exit status, since the kernel takes the low byte.
+Recorded rather than smoothed over: anyone byte-comparing an x86-64 Rust or Zig
+binary across this commit should expect a diff in the entry stub and nowhere
+else.
+
+**Two behaviour changes come free with the shared patcher, and both are fixes.**
+`PatchEntryStubCall` calls `RecordEntryRoot(procIdx)` and, on the rel32 targets,
+`RecordCodeRefAt`. The three drivers did neither: their `call main` had no
+call-graph edge (so a reachability pass reads `main` as unreachable — the exact
+thing `RecordEntryRoot`'s comment says it exists for) and no `CodeRef` (so the
+site would not be re-aimed if a pass compacted the code between the stub and the
+body). Neither was reachable as a live bug today; both were one pass away.
+
+### What the refusal was hiding — measured, with the refusal temporarily lifted
+
+Same experiment as the one that filed this ticket, re-run on the adopted
+compiler. Before: every non-x86-64 binary died before its first syscall.
+After:
+
+| | i386 | aarch64 | arm32 | riscv32 |
+| --- | --- | --- | --- | --- |
+| Rust `else_if` (exit 20) | **rc 20** | **rc 20** | **rc 20** | **rc 20** |
+| Rust `advanced` (4 lines) | **identical** | **identical** | **identical** | compile fail |
+| Zig `skeleton` (8 lines) | **identical** | **identical** | **identical** | compile fail |
+| Erlang `skeleton` | SIGSEGV | SIGILL | SIGILL | compile fail |
+
+"identical" is against the native run's output, compared whole, not eyeballed.
+
+**So the entry stub was the whole of it for Rust and Zig, and it is NOT the whole
+of it for Erlang.** The Erlang binary now REACHES `main` and prints — i386 gets
+`fact(5) is 1` (native: `120`) and part of the next line before it faults, which
+is a wrong value and then a crash INSIDE the body. That is a different defect
+and it is only visible now that the tail stopped hiding it: with the old tail
+the program died before its first syscall on every target, so nothing it printed
+could be observed. **The two riscv32 compile failures are frontend-level and
+also newly visible** for the same reason — the refusal ran before either could
+be reached.
+
+**Narrowing the refusals is the next commit and is deliberately not this one.**
+It changes what the compiler ACCEPTS, so it wants its own test rows; and the
+honest narrowing is per frontend, not one edit repeated three times — Rust to
+five targets, Zig to four (riscv32 excluded, compile failure), Erlang to x86-64
+alone with the ticket for the body defect filed beside it. Rewriting all three
+refusals identically is what produced this ticket in the first place.
