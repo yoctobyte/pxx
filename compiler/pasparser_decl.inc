@@ -7583,6 +7583,19 @@ begin
                 mPDefault[i] := mPDefault[i-1];
                 mPDefaultVal[i] := mPDefaultVal[i-1];
                 mPDefaultIsStr[i] := mPDefaultIsStr[i-1];
+                { ...AND the float flag, which this loop alone forgot. The
+                  INTERFACE-method shift loop in this same file copies all six
+                  default channels; this one copied five, so a class method's
+                  `d: Double = 2.5` moved one slot right with its IEEE-bits
+                  value and a stale IsFloat beside it. I could not construct a
+                  program that reads the wrong value -- the defaults that reach
+                  a call come from the IMPLEMENTATION row, so the declaration
+                  row's flag is not consulted on any path I could reach -- and
+                  it is fixed anyway, because the loop's contract is "shift the
+                  row" and a sibling loop twenty lines of file away shows what
+                  the row is. An omission that is currently unreachable is still
+                  an omission, and the next path to read this row inherits it. }
+                mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1];
                 mPDefaultIsSet[i] := mPDefaultIsSet[i-1];
                 mPDefaultSOff[i] := mPDefaultSOff[i-1];
                 mPDefaultSLen[i] := mPDefaultSLen[i-1];

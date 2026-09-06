@@ -3376,7 +3376,34 @@ begin
             end;
             ExpectCallRParen(mpi, mlastArg);
           end
-          else CheckMethodCallArity(mpi);
+          else
+          begin
+            { NO PARENS AT ALL -- `i.M;` where every parameter has a default.
+              CheckMethodCallArity ACCEPTS that (it exits quietly when
+              parameter 1 carries a default), and nothing then filled the
+              arguments, so the call node went out with none and the callee read
+              its parameter off whatever was in the register: compiled clean,
+              segfaulted at run time, with `i.M(3)` on the same reference in the
+              same file printing 3 and fpc printing the default for both.
+
+              THE ARITY CHECK AND THE DEFAULT FILL ARE ONE DECISION AND THIS ARM
+              HAD ONLY HALF OF IT. Accepting a short call BECAUSE the missing
+              parameters have defaults, and then not supplying them, is not a
+              partial implementation -- it is a guard whose whole justification
+              is the thing it does not do. The class-method arm
+              (pasparser_call.inc, `else if CanFillDefaultsFrom`) has both
+              halves and always did.
+
+              Measured 2026-09-06 across eight receiver shapes -- free routine,
+              instance method, class method, metaclass, record method, selector
+              chain, implicit Self, and this one -- with fpc 3.2.2 answering the
+              default for all eight and pxx answering it for seven.
+              bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults }
+            if ParamsDefaultedFrom(mpi, 1) then
+              FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
+            else
+              CheckMethodCallArity(mpi);
+          end;
           { Continue the selector loop rather than exiting, so a trailing
             `.field` / `.M2(...)` / `[i]` on the RESULT is parsed -- the same
             call the class-method and instance-method arms below make. Exiting
@@ -3588,8 +3615,7 @@ begin
             PyBindKwArgs(mpi, mselfArg, mlastArg, mnArgs);
             ASTLeft[mcallNode] := mselfArg;
           end
-          else if (Procs[mpi].ParamCount > 1) and (1 < MAX_PROC_PARAMS) and
-                  ProcParamHasDefault[mpi * MAX_PROC_PARAMS + 1] then
+          else if ParamsDefaultedFrom(mpi, 1) then
             { NO parentheses at all on a method whose parameters are ALL
               defaulted: `d.Foo;` against `procedure Foo(a: Integer = 3);`.
               The empty-parens spelling `d.Foo()` two hundred lines up already
@@ -3611,7 +3637,11 @@ begin
               really "the argument list ENDS HERE and the rest can default".
               With no parentheses at all CurTok is `;`, and it answers False for
               a method whose parameters plainly do have defaults. Two questions
-              wearing one name; this arm needs only the second half.
+              wearing one name; this arm needs only the second half -- which is
+              now SPELLED as ParamsDefaultedFrom rather than written out here,
+              because three other arms had the same hole and would have copied
+              this line rather than found this reasoning
+              (bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults).
               bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults }
             FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
           else
@@ -5366,6 +5396,15 @@ begin
           ASTTk[callN] := Ord(Procs[mpi].RetType);
           lastA := -1;
           Next; { consume method name }
+          { PARENLESS `(i).M;` IS FILLED HERE AND NOT IN AN `else` BELOW, and the
+            position is the point. The `else` arm of the paren test is ~95 lines
+            down past a nested argument loop; a fill written there did not run for
+            this shape, and the four builds it took to establish that are the
+            argument for putting the decision where the token is READ rather than
+            where the block happens to close.
+            bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults }
+          if (CurTok.Kind <> tkLParen) and ParamsDefaultedFrom(mpi, 1) then
+            FillDefaultArgs(mpi, 1, callN, lastA);
           if CurTok.Kind = tkLParen then
           begin
             Next;

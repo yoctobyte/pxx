@@ -1104,13 +1104,35 @@ begin
   end;
 end;
 
+{ HALF of CanFillDefaultsFrom, and the half a PARENLESS call needs.
+
+  `CanFillDefaultsFrom` asks two questions under one name: *the argument list
+  ends here* AND *the rest can default*. With no parentheses at all there is no
+  list and CurTok is `;`, so it answers False for a method whose parameters
+  plainly do have defaults -- and a caller who reaches for the obvious-looking
+  helper gets a guard that silently declines. That is not hypothetical: it is
+  how `i.M;` through an INTERFACE reference came to emit a call with no
+  arguments at all, compile clean, and segfault, while `i.M(3)` on the same
+  reference in the same file was correct.
+
+  Split out rather than left as a hand-spelled `ProcParamHasDefault[mpi *
+  MAX_PROC_PARAMS + 1]` at each parenless arm, because that spelling was already
+  written out once (the instance-method arm in ParseLValueAST, which found this
+  bug first) and copying it is how the interface arms would have got their
+  fourth copy instead of their first fix.
+  bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults }
+function ParamsDefaultedFrom(mpi, nextIdx: Integer): Boolean;
+begin
+  Result := (mpi >= 0) and (nextIdx <= Procs[mpi].ParamCount - 1) and
+            (nextIdx < MAX_PROC_PARAMS) and
+            ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
+end;
+
 { True when the arg list may stop here: next token is `)` and every remaining
   param (nextIdx..) carries a declared default. }
 function CanFillDefaultsFrom(mpi, nextIdx: Integer): Boolean;
 begin
-  Result := (CurTok.Kind = tkRParen) and (nextIdx <= Procs[mpi].ParamCount - 1) and
-            (nextIdx < MAX_PROC_PARAMS) and
-            ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
+  Result := (CurTok.Kind = tkRParen) and ParamsDefaultedFrom(mpi, nextIdx);
 end;
 
 { Would CALLING this method already produce the method pointer the context

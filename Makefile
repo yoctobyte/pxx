@@ -10321,6 +10321,19 @@ test-core: $(COMPILER)
 	  || { echo "imt-arity: the RESOLUTION CLAUSE spelling compiled where the plain one refused -- the two paths have diverged"; exit 1; }
 	grep -q 'no matching implementation for interface method "M" found (the class method is "MyM")' $(TESTTMP)/imtarity_clause.log \
 	  || { echo "imt-arity: the clause refusal must name the INTERFACE method and then the class method:"; cat $(TESTTMP)/imtarity_clause.log; exit 1; }
+	@# bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults.
+	@# `o.M;` with NO parentheses, every parameter defaulted, at eleven receiver
+	@# shapes. Two questions live under one name: CanFillDefaultsFrom asks *the
+	@# list ends here* AND *the rest can default*, so with no parens CurTok is `;`
+	@# and it declines for a method whose parameters plainly do have defaults;
+	@# CheckMethodCallArity alone ACCEPTS the short call -- because the missing
+	@# parameters have defaults -- and then supplies none. The call went out with
+	@# no arguments and the callee read its parameter off the register.
+	@# THE ELEVEN SHAPES ARE THE ASSERTION: when this was found, ten of them were
+	@# already correct and only `i.M;` through an interface crashed, so a fixture
+	@# holding one shape would have been green on any nine of them.
+	./$(COMPILER) test/test_a_parenless_call_to_an_all_defaulted_method_fills_its_defaults_at_every_receiver_shape.pas $(TESTTMP)/test_parenlessdefault26
+	tools/expect_same.sh test_parenlessdefault26 "$$($(TESTTMP)/test_parenlessdefault26 | tail -n 2)" "$$(printf 'fails=0\nPARENLESSDEFAULT OK')"
 	@# bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path.
 	@# `[1, 2, x]` at an argument position is a SET to the grammar and an
 	@# open-array / array-of-const LITERAL to the callee, and only the PARAMETER

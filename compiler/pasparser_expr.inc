@@ -1519,6 +1519,9 @@ begin
               end;
               ExpectCallRParen(mpi, mlastArg);
             end
+            else if ParamsDefaultedFrom(mpi, 1) then
+              { parenless `(iface-expr).M;` -- see ParamsDefaultedFrom }
+              FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
             else CheckMethodCallArity(mpi);
             node := mcallNode;
           end
@@ -1614,6 +1617,9 @@ begin
                 Python packs *args itself (PyPackStarArgs) anyway. }
               ExpectCallRParen(mpi, -1);
             end
+            else if ParamsDefaultedFrom(mpi, 1) then
+              { parenless `(o as T).M;` -- see ParamsDefaultedFrom }
+              FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
             else CheckMethodCallArity(mpi);
             { result type for chaining (e.g. (o as T).GetChild.M) }
             if (Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord) then
