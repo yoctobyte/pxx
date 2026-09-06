@@ -4,6 +4,7 @@ track: A
 prio: 5
 summary: under --threadsafe a dynamic array of Variants or of COM interfaces never releases its elements — 3848 live blocks per 1000 trips against 4 in a default build; deliberate (it prevents a deadlock) and correct as a choice, but the residual leak had no ticket and no number
 tags: [memory-leak, threadsafe, variant, interfaces, dynarray]
+blocked-by: [feature-a-make-the-heap-lock-reentrant]
 ---
 
 ## Measured

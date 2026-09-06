@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: [decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock]
+blocked-by: [feature-a-make-the-heap-lock-reentrant]
 summary: "NilPy under --threadsafe on x86-64 leaks every managed field of every reclaimed instance: 7672 kB -> 399524 kB on 200k constructions (re-measured 2026-09-02 at 94075d508), same shape and same size as the Pascal leak fixed 2026-08-31. THE FIX IS BUILT AND MEASURED AND CANNOT LAND YET. The ticket's own premise -- that there is no single place to put the acquire -- was wrong: HeapLockedCallProcIdx1 keys on the CALLEE, so removing the {$ifndef PXX_TS_HARDLOCK} at builtinheap.pas:4245, stamping that global once per compilation and deleting the Free desugar's now-duplicate second emission takes the leak to 7844 kB and keeps the three Pascal threadsafe finalize rows green 3/3. It also DEADLOCKS on a twelve-line program: a class whose field is a class instance, one instance, one thread, Runtime error 212. Only a class-instance field does it -- int, string, list and dict fields all release cleanly, and the same shape in Pascal runs rc=0, so the recursion is exactly PXXClassFinalizeManaged re-entering itself through kind 6 via PyObjFinalize. Reverted, not landed: a deadlock is worse than a leak. The way out is a fork (reentrant lock, which the owner parked, vs deferring the nested release), filed as decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, which now blocks this."
 status: backlog
 owner: frankS

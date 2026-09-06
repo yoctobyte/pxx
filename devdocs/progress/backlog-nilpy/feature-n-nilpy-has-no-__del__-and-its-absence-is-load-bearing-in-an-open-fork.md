@@ -8,7 +8,7 @@ status: backlog
 owner: ""
 created: 2026-09-06
 found-by: owner (asked directly), measured by frankuser
-blocked-by: [decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock]
+blocked-by: [feature-a-make-the-heap-lock-reentrant]
 summary: "`grep -rn __del__ compiler/ lib/ test/` is EMPTY at da2fea0fd — no lexer token, no parser arm, no runtime call, no test, and no entry in nilpy-semantics-divergences.md, so it is an unrecorded gap rather than a chosen divergence. That is a hole in an otherwise near-complete protocol family: __init__, __enter__/__exit__, __iter__/__next__, __getattr__, __getitem__/__setitem__/__delitem__, __call__, __bool__, __len__, __contains__, __repr__/__str__, __index__, every arithmetic operator with its reflected and in-place forms, and the six comparisons are all present. THE REASON IT IS NOT MERELY MISSING: decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock argues option (b) -- defer the nested release -- on the ground that its observable finalizer-ORDERING change is 'a cost against a feature nobody has built'. That is true today and it stops being true the moment this lands, so implementing __del__ under (b) reintroduces exactly the cost (b) was costed as not having. Under (a), a reentrant lock, a user finalizer can allocate and the ordering question does not arise. So this is not independent work: it should be built on whichever arm the owner picks, and it is an argument for (a). Siblings, also absent and also unrecorded, filed here as a note rather than as tickets: __new__, __slots__, __format__."
 ---
 
