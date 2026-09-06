@@ -2,7 +2,7 @@
 track: P
 prio: 80
 type: bug
-summary: "FIXED 2026-09-06 -- `ReadLn(f, s)` where `f: Text` and `s: ShortString` (or any `string[N]`) SEGFAULTS. A plain `s: string` in the same program on the same line works, which is the whole discriminator: the target's declared type decides between a correct read and a crash. Cause: ParseTextReadRest routed every string-ish target to `TextReadStrTo(var f: Text; var s: AnsiString)`, handing an inline `[len][chars]` slot to a routine that writes an 8-byte managed handle through it. Reproduces at HEAD AND on pin v405, so it is not a regression from the sized-boolean work it was found beside. Fixed at the AST level -- read into an AnsiString temp, then AN_ASSIGN into the frozen target -- so the truncation-to-capacity comes free and all six backends are covered by one change."
+summary: "FIXED 2026-09-06 (7a79ff1d2) -- `ReadLn(f, s)` where `f: Text` and `s: ShortString` (or any `string[N]`) SEGFAULTS. A plain `s: string` in the same program on the same line works, which is the whole discriminator: the target's declared type decides between a correct read and a crash. Cause: ParseTextReadRest routed every string-ish target to `TextReadStrTo(var f: Text; var s: AnsiString)`, handing an inline `[len][chars]` slot to a routine that writes an 8-byte managed handle through it. Reproduces at HEAD AND on pin v405, so it is not a regression from the sized-boolean work it was found beside. Fixed at the AST level -- read into an AnsiString temp, then AN_ASSIGN into the frozen target -- so the truncation-to-capacity comes free and all six backends are covered by one change."
 status: done
 ---
 
@@ -59,3 +59,5 @@ a double case, grepped for the sibling, found it.
 
 Test: `test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas`,
 `.expected` copied from fpc's own output, wired into the Makefile.
+
+Fixed in `7a79ff1d2`.

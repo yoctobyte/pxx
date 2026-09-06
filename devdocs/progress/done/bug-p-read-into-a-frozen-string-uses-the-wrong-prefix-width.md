@@ -2,7 +2,7 @@
 track: P
 prio: 80
 type: bug
-summary: "FIXED 2026-09-06 -- `ReadLn(s)` from stdin where `s: ShortString` silently stores the WRONG VALUE: a QWORD length is written at [rdi] and the characters at rdi+8, i.e. the word-prefix layout, into a byte-prefix slot. `Length(s)` came back right BY ACCIDENT (the low byte of the qword, little-endian only) while the characters sat at s[8..10], so the length agreed with the source and the text did not. A plain `s: string` works. No capacity clamp either. Reproduces at HEAD AND on pin v405. Sibling of bug-p-readln-from-a-text-file-into-a-frozen-string-segfaults -- same defect, other door, one crashes and one lies. Fixed at the AST level in ParseReadArgsAST (AnsiString temp in the ARG chain, AN_ASSIGN chained after), so all six backends are covered by one change."
+summary: "FIXED 2026-09-06 (7a79ff1d2) -- `ReadLn(s)` from stdin where `s: ShortString` silently stores the WRONG VALUE: a QWORD length is written at [rdi] and the characters at rdi+8, i.e. the word-prefix layout, into a byte-prefix slot. `Length(s)` came back right BY ACCIDENT (the low byte of the qword, little-endian only) while the characters sat at s[8..10], so the length agreed with the source and the text did not. A plain `s: string` works. No capacity clamp either. Reproduces at HEAD AND on pin v405. Sibling of bug-p-readln-from-a-text-file-into-a-frozen-string-segfaults -- same defect, other door, one crashes and one lies. Fixed at the AST level in ParseReadArgsAST (AnsiString temp in the ARG chain, AN_ASSIGN chained after), so all six backends are covered by one change."
 status: done
 ---
 
@@ -48,3 +48,5 @@ the semantic-identity work in flight beside it.
 
 Test: `test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas`, fed
 `printf 'abc\nlonger-than-four\n77\n'`, `.expected` copied from fpc.
+
+Fixed in `7a79ff1d2`.
