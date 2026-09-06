@@ -195,3 +195,35 @@ at all — zero sources, so its cell is unmeasured rather than clean.
 `lib/` units that no fixture reaches are still unmeasured, for the reason
 frankA's case-pair census records about the same population: a unit nothing
 imports contributes nothing and is indistinguishable here from a clean one.
+
+### Was the census population the tree it claims? Asked and answered from the reflog
+
+Raised by frank-coordinator, and it is the right question to ask of any number a
+narrowing was landed on: CLAUDE.md's mid-sweep hazard is that a pull moves the
+population under a running harness, and **a corrupted measurement that survives
+the question you happened to ask is indistinguishable from a clean one.**
+
+The checkout's reflog settles it, and it is the instrument that fails
+differently from a file mtime:
+
+| | |
+| --- | --- |
+| HEAD moved to `a0fef585c` (the instrument's sync) | 19:00:34 |
+| census run 1 — the 49 false refusals | 19:02:32 → 19:05:13 |
+| census run 2 — the 1445 / refuse=0 | 19:08:44 → 19:11:59 |
+| next HEAD move (`f8c2bbf72`, a LOCAL commit, no pull) | 19:16:32 |
+| next PULL (`rebase (start)`) | 19:24:58 |
+
+**No pull, no rebase, no HEAD move inside either window** — the nearest one is
+eight minutes before the first and thirteen minutes after the last. Corroborated
+independently: every mtime under the test and example trees newer than 18:55 is
+19:25:48, the rebase, so nothing in the population moved while it was being
+read.
+
+**What the census tree is NOT is the tree the fix landed on.** Six corpus files
+changed between `a0fef585c` and the fix — four of them other agents' — so the
+number is honest about `a0fef585c` and silent about the delta. That is a real
+gap and it is cheap to close, so it was: re-run over exactly those six,
+`seen=16 keep=16 refuse=0`. The only REFUSE lines in it are the four from this
+ticket's own refusal fixture, which is the file that must not compile, and it is
+also why five of the six reach a TOTAL rather than all six.
