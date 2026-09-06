@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 7d4h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `5a08811f33bc` | 2026-09-06T14:59:52Z | RED (native) | 168.7s | `851f170cb454` RED |
+| seven | `0dd59f05cc3a` | 2026-09-06T15:04:20Z | RED (native) | 175.3s | `851f170cb454` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `851f170cb454` on seven, 2026-09-06T14:46:29Z (13m ago).**
+**Newest full tier in the fleet: `851f170cb454` on seven, 2026-09-06T14:46:29Z (17m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `851f170cb454` | RED | 13m | — (newest) |
+| seven | `851f170cb454` | RED | 17m | — (newest) |
 | plexus | `27424c927b65` | RED | 7d4h | 7d4h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -124,6 +124,11 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-core#src:test/test_cross_float_const.pas** — test/test_cross_float_const.pas tools/expect_same.sh (seven): bad `74526018b122`, last good `47aac577a587`, 1 commit(s) in range
 - **test-core#src:test/test_cross_global_init.pas** — test/test_cross_global_init.pas tools/expect_same.sh (seven): bad `74526018b122`, last good `47aac577a587`, 1 commit(s) in range
 - **test-core#src:test/test_single_const_value.pas** — test/test_single_const_value.pas tools/expect_same.sh (seven): bad `74526018b122`, last good `47aac577a587`, 1 commit(s) in range
+- **test-core#src:test/cfloat_global_array_implicit_len_b386.c** — test/cfloat_global_array_implicit_len_b386.c tools/expect_same.sh (seven): bad `0dd59f05cc3a`, last good `5a08811f33bc`, 1 commit(s) in range
+- **test-core#src:test/test_signal_sp_rewrite.pas** — test/test_signal_sp_rewrite.pas tools/expect_same.sh (seven): bad `0dd59f05cc3a`, last good `5a08811f33bc`, 1 commit(s) in range
+- **test-core#src:test/test_stack_overflow_raise.pas** — test/test_stack_overflow_raise.pas tools/expect_same.sh (seven): bad `0dd59f05cc3a`, last good `5a08811f33bc`, 1 commit(s) in range
+- **test-threads#src:test/test_critsec_once.pas** — test/test_critsec_once.pas tools/expect_same.sh (seven): bad `0dd59f05cc3a`, last good `5a08811f33bc`, 1 commit(s) in range
+- **test-threads#src:test/test_parallel_for_private.pas** — test/test_parallel_for_private.pas tools/expect_same.sh +1 (seven): bad `0dd59f05cc3a`, last good `5a08811f33bc`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
