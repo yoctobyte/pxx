@@ -14682,3 +14682,44 @@ invocation — is **550**. The curated re-run was 385/0/115, identical to baseli
 regressed. Same shape as `grep -c 'gap:'` counting prose. **A flag that widens a population changes
 what the number MEANS, not just how big it is**, and the two numbers are not comparable even when
 both are correct.
+
+## TWO CORRECT MEASUREMENTS THAT DISAGREE BECAUSE AN UNSTATED PARAMETER DIFFERS — fpc nests `{ }` comments in some modes and not others
+
+The known hazard is *two readings that can go wrong the same way are one reading*. **This is the
+mirror: two readings that are each RIGHT, disagreeing, because a parameter neither party mentioned
+had different values.** It is worse than a disagreement between a right and a wrong measurement,
+because both sides can reproduce theirs on demand and neither has anything to retract.
+
+Measured 2026-09-06 (frankB and this seat, same file, `fpc 3.2.2`,
+`git show a80cbef31:test/test_delphi_mode_binds_a_bare_routine_name.pas` — a header comment
+containing a literal `{$mode delphi}`):
+
+```
+fpc            old.pas(2,53) Warning: Comment level 2 found   37 lines compiled, rc 0
+fpc -Mobjfpc   old.pas(2,53) Warning: Comment level 2 found   37 lines compiled, rc 0
+fpc -Mdelphi   old.pas(2,73) Fatal: Syntax error, "BEGIN" expected but "identifier BINDS" found
+fpc -Mtp       old.pas(2,73) Fatal: ... (same)
+fpc -Miso      old.pas(2,73) Fatal: ... (same)
+```
+
+**`{ }` COMMENTS NEST IN fpc/objfpc MODE AND DO NOT NEST IN delphi, tp OR iso MODE.** One session
+compiled in the default mode and reported "fpc compiles it, rc 0". The other compiled with
+`-Mdelphi` — the only mode the file under test can run in, since it is a `{$mode delphi}` test — and
+reported "fpc dies four tokens later". **Both are correct and the parameter was in neither message.**
+
+> **When a peer's measurement contradicts yours on the same input, do not adjudicate the result —
+> enumerate the parameters and compare THOSE.** For a compiler oracle the list is short and worth
+> keeping: mode, target, optimisation level, and the compiler's own version. For this repo add
+> *which* compiler, because "fpc" and "the pinned pxx" are both older than HEAD in different ways.
+> **A test's own `{$mode}` is part of the invocation its oracle must use** — running the oracle in
+> the default mode is running it on a different language.
+
+**AND THIS IS WHY THE CHECK THAT FALLS OUT OF IT IS NOT WORTH BUILDING.** The naive form — flag any
+`{` inside a `{ }` comment — matches **240 files** across `test/`, `lib/`, `examples/` and
+`compiler/`, and nesting makes almost all of them legal. Narrowing to files that declare a
+non-nesting mode as a real directive gives **10**, of which several are deliberate tests OF comment
+nesting. And the narrowing instrument has its own defect, stated because it bounds the number:
+its string-literal skipping desyncs (a `''` escape, or an apostrophe in the wrong place), so it
+reported a `{$mode delphi}` directive for `compiler/elfwriter.inc`, whose only `{$mode}` text is
+prose inside a comment 5000 lines away. **10 is an upper bound with known false positives.** Too
+small and too noisy for a checker; the MECHANISM is the deliverable, and it is now written down.
