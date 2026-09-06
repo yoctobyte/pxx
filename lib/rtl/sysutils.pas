@@ -90,12 +90,30 @@ type
     HERE IS NOT WHERE FPC PUTS IT — FPC declares it in the SYSTEM unit, so it is
     ambient and visible with no `uses` at all. pxx has no lib/rtl/system.pas;
     its ambient types are compiler-side, which would make that a Track A change.
-    SysUtils is the closest reachable equivalent and it covers every real
-    consumer, because in FPC everything sees TArray through System anyway and
-    code using generic collections uses SysUtils regardless — all seven files in
-    the rtl-generics corpus that name TArray<> also use SysUtils, checked rather
-    than assumed. The residual gap is exact and worth knowing: a unit that names
-    TArray<T> WITHOUT `uses SysUtils` compiles under FPC and not here. }
+    SysUtils is the closest reachable place to put it, and the residual gap is
+    exact: a unit naming TArray<T> WITHOUT `uses SysUtils` compiles under FPC
+    and not here.
+
+    THE "IT COVERS EVERY REAL CONSUMER" CLAIM THAT USED TO STAND HERE WAS
+    MEASURED AND IS WRONG, and the way it is wrong is worth more than the fact.
+    It rested on "all seven files in the rtl-generics corpus that name TArray<>
+    also use SysUtils, checked rather than assumed" — which is TRUE, and was
+    checked. Re-measured 2026-09-06 against the OTHER corpus: of the six
+    fpc-testsuite files naming TArray<>, **ZERO** use SysUtils (trtti12,
+    trtti16, tarray12, tarray18, tarrconstr5, ttbitconverter). Not a shortfall
+    in the check — an inversion between two populations, 7/7 against 0/6, and
+    the sentence generalised from the one it had.
+
+    The reason the two corpora differ is structural rather than accidental:
+    rtl-generics code uses generic COLLECTIONS, which need SysUtils for other
+    reasons, so TArray arrives free. Testsuite files exercise TArray ITSELF and
+    deliberately carry no more `uses` than the feature requires — so they are
+    exactly the population that cannot get it here, and they are the population
+    a conformance run is made of.
+
+    Fixing it properly means an AMBIENT TArray, which is compiler-side and
+    therefore Track A:
+    bug-a-tarray-is-not-ambient-so-a-unit-that-names-it-without-uses-sysutils-is-refused }
   TArray<T> = array of T;
 
   { `type TProc0 = procedure;` is a one-line workaround, but every FPC example

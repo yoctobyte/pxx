@@ -3,7 +3,7 @@ slug: bug-p-a-generic-specialisation-suffix-on-an-unknown-name-is-dropped-in-fie
 track: P
 prio: 45
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankD
@@ -76,3 +76,48 @@ Read that as twelve fires over the **803 files the probe actually reached** —
 1491 never got there (`{ %FAIL }` rows and units, which pxx cannot compile
 standalone), and a construct appearing only in those is invisible to this run.
 See [[a-file-that-fails-early-is-an-absence-not-a-zero]].
+
+
+## 2026-09-06 — RE-MEASURED: the defect is gone in all three positions; what is left is a different ticket
+
+Tree `9341b19ac`, compiler `8b2d6f26c7b2`, fpc 3.2.2 `-Mdelphi`. Group 23 took
+this and measured before reading, which is how the split below was found.
+
+**The stated defect does not reproduce.** `A: TNope<Byte>;`:
+
+| position | pxx now | the ticket's claim |
+| --- | --- | --- |
+| record field | `unknown type: TNope` | three tokens dropped, silent |
+| var | `unknown type: TNope` | `unknown type: ` with an EMPTY name |
+| class field | `unknown type: TNope` | (not measured then) |
+
+All three refuse **by name**, which is exactly this ticket's own *Done when*:
+*"one type-reference path that recognises `ident <` as a specialisation attempt
+and refuses it BY NAME in both positions."* And a specialisation whose template
+IS resolvable still compiles and runs (`TArr<T>` declared locally: field read
+and written, `9 1`).
+
+### What is left is NOT this defect, and it needs its own owner
+
+The corpus rows this ticket was found through — `trtti12.pp`, `trtti16.pp` —
+still fail, on a different cause: **`TArray<T>` lives in SysUtils here and in
+the SYSTEM unit in FPC**, so a file naming it without `uses SysUtils` is refused
+by name, correctly, for a type that ought to be ambient. Filed as
+`bug-a-tarray-is-not-ambient-so-a-unit-that-names-it-without-uses-sysutils-is-refused`
+(Track A — pxx has no `lib/rtl/system.pas` and its ambient types are
+compiler-side, so it is not a lib move).
+
+**And the population claim that put TArray in SysUtils is inverted between two
+corpora**, measured while checking: 7 of 7 rtl-generics files naming `TArray<>`
+use SysUtils; **0 of 6** fpc-testsuite files do. Structural rather than luck —
+rtl-generics code uses generic COLLECTIONS, which need SysUtils anyway, so
+`TArray` arrives free; testsuite files exercise `TArray` itself and carry no
+more `uses` than the feature requires. The comment in `lib/rtl/sysutils.pas` is
+corrected in the same commit, since it asserted the opposite.
+
+Closing: the parse defect is fixed, the residual is filed with an owner and a
+measurement, and leaving this open would attach a fixed diagnosis to a live
+symptom.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
