@@ -21741,7 +21741,22 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_classof "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classof)" "$$($(TESTTMP)/test_i386_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_rtti.pas $(TESTTMP)/test_i386_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_i386_rtti_x64
-	tools/expect_same.sh i386/test_i386_rtti "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_i386_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/expect_same.sh i386/test_i386_rtti "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rtti | grep -v '^##METRIC')" "$$($(TESTTMP)/test_i386_rtti_x64 | grep -v '^##METRIC')"
+	# NO width-delta row for i386, and the reason is a CORRECT answer rather than a
+	# gap. TChild holds four pointer-width slots (VMT, FCaption, and FOnClick which
+	# is two), so the 64->32 delta is 4*4=16: InstanceSize is 64 on arm32, riscv32
+	# and xtensa against 80 native. i386 answers 60 -- a delta of 20, one word more
+	# than its pointers can account for -- and that word is real. PXXDBG=a.reclayout
+	# shows FAligns (a set, 32-byte slot, salign=8) taking falign=4 on i386 and
+	# falign=8 on arm32/riscv32, so it sits at offset 20 there and 24 everywhere
+	# else, carrying FOnClick from 52 to 56. That IS the i386 System V rule: an
+	# 8-byte member aligns to 4. Checked against gcc, which fails differently from
+	# us: `struct { char a; long long b; }` is 12 under `gcc -m32` and 12 under pxx
+	# --target=i386, against 16 on arm32 and riscv32. All four targets are right
+	# about their own ABI. The delta relation simply does not span an ABI that
+	# aligns 8-byte members differently, so i386 gets the body comparison (which is
+	# byte-identical, unfiltered) and no width row. Wiring it with nptrslots=5
+	# would go green while asserting a number nobody derived.
 	./$(COMPILER) --target=i386 test/test_streaming.pas $(TESTTMP)/test_i386_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_i386_streaming_x64
 	tools/expect_same.sh i386/test_i386_streaming "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_streaming)" "$$($(TESTTMP)/test_i386_streaming_x64)"
@@ -22803,7 +22818,11 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_aarch64_classof "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classof)" "$$($(TESTTMP)/test_aarch64_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_rtti.pas $(TESTTMP)/test_aarch64_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_aarch64_rtti_x64
-	tools/expect_same.sh aarch64/test_aarch64_rtti "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_aarch64_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/expect_same.sh aarch64/test_aarch64_rtti "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rtti | grep -v '^##METRIC')" "$$($(TESTTMP)/test_aarch64_rtti_x64 | grep -v '^##METRIC')"
+	# No width-delta row for aarch64: it is 64-bit, so SizeOf(Pointer) and
+	# InstanceSize both MATCH the oracle and assert_instance_size_delta.sh would
+	# correctly refuse the pair on its must-differ control. The delta rows live on
+	# the 32-bit targets, where there is a difference to be right about.
 	./$(COMPILER) --target=aarch64 test/test_streaming.pas $(TESTTMP)/test_aarch64_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_aarch64_streaming_x64
 	tools/expect_same.sh aarch64/test_aarch64_streaming "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_streaming)" "$$($(TESTTMP)/test_aarch64_streaming_x64)"
@@ -23530,9 +23549,11 @@ test-riscv32: $(COMPILER)
 	# "passed" and none of this would mean anything.
 	#
 	# Compared against the SAME program built natively rather than a literal, so
-	# no row here carries a per-target constant. test_rtti is deliberately NOT in
-	# this batch: it prints raw addresses and InstanceSize, so it has no
-	# cross-target oracle by construction and needs a relation-based assertion.
+	# no row here carries a per-target constant. test_rtti was NOT in this batch
+	# for that reason -- it printed raw addresses and InstanceSize, so it had no
+	# cross-target oracle by construction. It is wired now, further down, because
+	# the program changed rather than the argument: the width-dependent values are
+	# on ##METRIC lines and the relation between them IS the assertion.
 	# chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
 	./$(COMPILER) --target=riscv32 test/test_arm32_virtual_wide.pas $(TESTTMP)/test_rv32_arm32_virtual_wide
 	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_rv32_arm32_virtual_wide_x64
@@ -23862,7 +23883,22 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_class_of.pas $(TESTTMP)/test_rv32_class_of
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_rv32_class_of_x64
 	tools/expect_same.sh riscv32/class_of "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_class_of)" "$$($(TESTTMP)/test_rv32_class_of_x64)"
-	# SKIP test/test_rtti.pas on riscv32: SKIP IS RIGHT, REASON WAS WRONG: this prints raw ADDRESSES and InstanceSize, which differ per target BY CONSTRUCTION, so it can never match an x86-64 oracle. It builds and runs fine on riscv32. Needs relation-based assertions (cross-target DELTA, stride, ordering), not an oracle -- see the ticket above
+	# test_rtti on riscv32. It was skipped as "no cross-target oracle by
+	# construction" -- half true: the body printed raw ADDRESSES and InstanceSize,
+	# so it could never match an x86-64 oracle. Those moved to ##METRIC lines. What
+	# is left (class names, parent chain, PropCount, property values, and three
+	# structural invariants over the property table) is byte-identical on x86_64,
+	# i386, aarch64, arm32, riscv32 and xtensa, so it compares UNFILTERED. The
+	# width that genuinely differs is now asserted as a RELATION rather than thrown
+	# away: see tools/assert_instance_size_delta.sh, whose must-differ control is
+	# the one that would catch this batch's own stated fear -- a harness running
+	# the host binary while believing it ran the target.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_rtti.pas $(TESTTMP)/test_rv32_rtti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_rv32_rtti_x64
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_rtti > $(TESTTMP)/test_rv32_rtti.raw
+	$(TESTTMP)/test_rv32_rtti_x64 > $(TESTTMP)/test_rv32_rtti_x64.raw
+	tools/expect_same.sh riscv32/rtti "$$(grep -v '^##METRIC' $(TESTTMP)/test_rv32_rtti.raw)" "$$(grep -v '^##METRIC' $(TESTTMP)/test_rv32_rtti_x64.raw)"
+	tools/assert_instance_size_delta.sh riscv32/rtti-width $(TESTTMP)/test_rv32_rtti.raw $(TESTTMP)/test_rv32_rtti_x64.raw 4
 	./$(COMPILER) --target=riscv32 test/test_streaming.pas $(TESTTMP)/test_rv32_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_rv32_streaming_x64
 	tools/expect_same.sh riscv32/streaming "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_streaming)" "$$($(TESTTMP)/test_rv32_streaming_x64)"
@@ -25299,11 +25335,14 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset_x64
 	tools/expect_same.sh xtensa/test_streaming_enumset "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming_enumset; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_streaming_enumset_x64; echo "exit=$$?")"
-	# test_rtti prints raw ADDRESSES and a pointer-width InstanceSize, so the
-	# three lines that cannot agree across a 32/64-bit boundary are filtered --
-	# the same filter i386, arm32 and aarch64 already use for this program. The
-	# rest of it (class names, parent chain, PropCount, property values) is a
-	# real differential and it matches.
+	# test_rtti no longer prints an address or a width in its body -- InstanceSize
+	# and SizeOf(Pointer) moved to ##METRIC lines, which are stripped here and then
+	# asserted as a cross-target RELATION on the row below. The rest (class names,
+	# parent chain, PropCount, property values, three structural invariants over
+	# the property table) is a real differential and it matches byte for byte.
+	# The old three-shape filter (pointer:|RTTI value:|InstanceSize:) was carried
+	# identically on i386, arm32 and aarch64 and matched NOTHING after that change;
+	# all four now strip ##METRIC instead, which is a line the program still emits.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti_x64
 	# This row's output is FILTERED, so the exit capture cannot simply be
@@ -25314,7 +25353,8 @@ test-xtensa: $(COMPILER)
 	# its status while it is still the last command, then filter the file. The
 	# status line therefore comes FIRST here; both sides are built the same way,
 	# so the comparison is unaffected.
-	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti > $(TESTTMP)/test_rtti_xt.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_xt.raw)" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 > $(TESTTMP)/test_rtti_n.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_n.raw)"
+	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti > $(TESTTMP)/test_rtti_xt.raw; echo "exit=$$?"; grep -v '^##METRIC' $(TESTTMP)/test_rtti_xt.raw)" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 > $(TESTTMP)/test_rtti_n.raw; echo "exit=$$?"; grep -v '^##METRIC' $(TESTTMP)/test_rtti_n.raw)"
+	tools/assert_instance_size_delta.sh xtensa/test_rtti-width $(TESTTMP)/test_rtti_xt.raw $(TESTTMP)/test_rtti_n.raw 4
 	# +2: IR_CLASSREF. It reported `unsupported node in IR codegen: unknown`,
 	# not `classref` -- IROpName has no entry for seven of the 75 declared ops.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of
@@ -26464,7 +26504,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_classof "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classof)" "$$($(TESTTMP)/test_arm32_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_rtti.pas $(TESTTMP)/test_arm32_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_arm32_rtti_x64
-	tools/expect_same.sh arm32/test_arm32_rtti "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_arm32_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rtti > $(TESTTMP)/test_arm32_rtti.raw
+	$(TESTTMP)/test_arm32_rtti_x64 > $(TESTTMP)/test_arm32_rtti_x64.raw
+	tools/expect_same.sh arm32/test_arm32_rtti "$$(grep -v '^##METRIC' $(TESTTMP)/test_arm32_rtti.raw)" "$$(grep -v '^##METRIC' $(TESTTMP)/test_arm32_rtti_x64.raw)"
+	tools/assert_instance_size_delta.sh arm32/test_arm32_rtti-width $(TESTTMP)/test_arm32_rtti.raw $(TESTTMP)/test_arm32_rtti_x64.raw 4
 	./$(COMPILER) --target=arm32 test/test_streaming.pas $(TESTTMP)/test_arm32_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_arm32_streaming_x64
 	tools/expect_same.sh arm32/test_arm32_streaming "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_streaming)" "$$($(TESTTMP)/test_arm32_streaming_x64)"
