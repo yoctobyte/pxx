@@ -16372,3 +16372,30 @@ shared cause is not a wasted group: the value was context and ordering, and the
 negative — *"a gate row keyed on either would catch nothing of the other"* — is
 what stops someone building one row and believing it covers both.
 
+## A BROAD SWEEP IS NO COMFORT WHEN THE DEFECT NEEDS A SHAPE THE CORPUS DOES NOT CONTAIN
+
+frankA, 2026-09-06, on the ordering rule that `FindTypeAlias` must be consulted
+before the builtin lookup:
+
+> *"The only shape where the order is observable at all is a name that is BOTH a
+> live user alias AND a builtin. **A corpus without a shadowing alias in it stays
+> green through the bug**, which is why a broad sweep is no comfort here."*
+
+**Size is not coverage when the defect requires a coincidence.** The order can only
+be wrong about a name both tables claim, so every program in which no user
+declaration shadows a builtin passes identically under the correct and the inverted
+order — and almost every program is one of those. A 2000-file green sweep and a
+one-file green sweep say the same thing here, and the large one says it more
+convincingly.
+
+**The instrument that does discriminate is a single named test**, and naming it is
+the useful act: `test_a_named_cast_asks_the_alias_before_the_builtin`, whose two
+rows are exactly that coincidence. **Tell a successor which file can fail on a rule,
+not that the suite is green** — the second is true of a suite that cannot see it.
+
+**Generalises to any rule about PRECEDENCE between two lookups**: the observable
+is confined to the intersection of the two tables, so coverage is measured in
+intersection members, not in files. Ask *"how many inputs in my population are
+claimed by both sides?"* before quoting a sweep, and if the answer is zero the
+sweep is silent rather than reassuring.
+

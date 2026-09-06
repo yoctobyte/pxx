@@ -107,3 +107,32 @@ carries the load-bearing constraint an implementer would not otherwise have:
 declaration outranks a builtin and `symtab.inc:6215` documents that inverting it
 silently breaks the compiler — and the natural spelling is builtin-first, which is
 how it came to be wrong once already (`4be17cb8f`).
+
+### AND THE EDGES ARE NOT ALL THE SAME STRENGTH — frankA, `9341b19ac`, measured after the annotation above
+
+**The fork is no longer the only route to a defensible state for part of this
+family**, and nobody could see that because nobody had asked the second spelling.
+
+`High(ByteBool)` is **REFUSED** at the direct door — deliberately, because
+`ByteBool`/`WordBool`/`LongBool` map to `tyUInt8`/`tyUInt16`/`tyInteger` to keep
+their C-ABI width, so answering `High` from the kind would give an ordinal. **The
+alias spelling has no such scruple:** `type b = ByteBool; High(b)` answers **255**
+(WordBool 65535, LongBool 2147483647). fpc answers `TRUE` for both spellings.
+
+**So there are two repairs and only one of them is behind this fork:**
+
+| repair | needs the fork? |
+| --- | --- |
+| make them answer **`TRUE`** | **yes** — the kind must carry width and boolean bounds together |
+| make the two spellings **AGREE** | **no** — the alias path can refuse exactly as the direct path does, today, and that is strictly smaller than the fork |
+
+**A refusal is loud; a wrong bound is silent, and the ACCEPTED spelling is the
+worse of the two.** The direct door is declining a question it cannot answer
+correctly and the sibling answers it wrongly.
+
+**Consequence for whoever closes this fork:** a `blocked-by` edge records that
+*some* repair needs the blocker, and reads as though *every* repair does. The three
+consumers on this one are not equivalent — `feature-p-the-booleannn-family-...` is
+code that cannot be written correctly at any spelling available today, while part
+of the sized-boolean family has a smaller, unblocked route to a defensible state.
+**Say which repair an edge is about when the ticket admits more than one.**
