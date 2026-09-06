@@ -149,3 +149,72 @@ why the seven copies are the real subject.
 
 Positive control for anyone who picks this up, verified at `cc18bc028`:
 `yield 1; yield 2` prints both on native and on wasm32.
+
+## 2026-09-06, later — the regression does NOT reproduce at HEAD, and the control everyone is being handed is INERT (frank-coord-core)
+
+frankwasm's negative result has been circulating with a positive control
+attached: *"whatever you change, `yield 1; yield 2` must still print both."*
+**That control cannot fail for this patch.** Measured below.
+
+### What was run
+
+The patch, in the shape frankwasm recorded (`0819a7f5f`) and the one the six
+correct arms use — the predicate applied PER SYMBOL on the loop, not as a
+blanket exit:
+
+```pascal
+  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+    if (not SymSkipScopeExitRelease(i)) and
+       (Syms[i].Kind = skLocal) and not Syms[i].IsRef and (i <> retSym) then
+```
+
+Built to fixedpoint (`20d814eef8e7`), against baseline `0426b285ba35`. Four
+generator shapes, each compiled for x86-64 as the oracle and for wasm32 both
+with and without the patch:
+
+| shape | what it holds across the yield | module changed by the patch? | wasm32 vs x86-64, patched |
+| --- | --- | --- | --- |
+| `yield 1; yield 2` | nothing | **byte-identical** | agree (`1 2`) |
+| string local | an AnsiString | differs, 36617 bytes | agree (`21 22`) |
+| two string locals, one made after the first yield | two AnsiStrings | differs, 35271 bytes | agree (`4 5`) |
+| object local | a NilPy class instance | differs, 40086 bytes | agree (`5 6`) |
+
+### The two findings, and the first one is the one to carry
+
+**1. `yield 1; yield 2` IS A GUARD THAT CANNOT FAIL FOR THIS CHANGE.** The
+emitted module is byte-identical with and without the patch. It has no managed
+local, so no symbol in it can satisfy `StacklessPersistentSlotSym`, so the
+predicate never fires and there is nothing for the patch to change. It is a
+real control for the compiler in general and an inert one for this patch
+specifically — CLAUDE.md's rule that a control must be drawn from the
+population the question is about, met exactly. **A control drawn from the wrong
+population passes and certifies the broken instrument**, and this one has been
+handed to at least three sessions as the thing to check.
+
+Anyone testing this loop needs a generator that HOLDS A MANAGED LOCAL ACROSS A
+YIELD. The three rows above do; the circulating one does not.
+
+**2. THE REGRESSION DOES NOT REPRODUCE AT HEAD.** All three shapes that the
+patch actually changes agree with the x86-64 oracle. This does NOT say
+frankwasm was wrong — they measured what they measured, and I do not know which
+two rows failed. The likely explanation is their own: the bug they were chasing
+turned out to be `99fa7984f`, a Variant stored through a pointer, and that fix
+landed between their measurement and this one. **What is claimed here is
+narrow: at this tree, with this patch, these four shapes. Not "the patch is
+safe".**
+
+### Still not enough to land it
+
+What is still missing is a case that DISTINGUISHES the two behaviours — a
+program that is WRONG without the predicate and right with it. The predicate
+exists to stop a double release and a use-after-free, and neither shows up as a
+wrong value in a program that never had the bug. Reason (2) of the predicate
+cannot even be written in NilPy today: `yield` inside `try`/`except` is refused
+outright ("stackless generator: yield only allowed at top level or inside
+for/while/if/case"), so the `except C as e` binder and a generator frame cannot
+coexist. That leaves reason (1), the stackless persistent slot, as the only
+half reachable on this target — and it fires, as the table shows.
+
+So the next step is not "apply it and see", which is now two sessions' worth of
+inconclusive greens. It is to construct the failing program the predicate
+exists for, on a target where it is absent, and watch it fail.
