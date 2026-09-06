@@ -605,3 +605,4 @@
 2026-09-06T19:55:22Z	seven	c543b335fb2fd97de3457a88e4f637011db157e5	would NOT pin c543b335fb2f — 2 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:test/lib_sysutils_delphi_exceptions.pas, test-debug-g#src:tools/compiler_srchash.sh
 2026-09-06T21:06:17Z	seven	51b5e535298adc4f9762782eecf319b40aa7439a	would-pin PENDING 51b5e535298a — qualifies, streak 1/2
 2026-09-06T21:40:51Z	seven	1f8c2b3a2534ed6f9ff4fd72d42cae4f3923fd1f	WOULD PIN 1f8c2b3a2534 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 2/2
+2026-09-06T21:58:59Z	seven	e8d8ad082bb407d384c387bdd1f1b902ecd7a19a	WOULD PIN e8d8ad082bb4 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 3/2
