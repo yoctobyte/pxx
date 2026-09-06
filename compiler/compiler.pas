@@ -2407,8 +2407,25 @@ begin
       Fixups[i].DataOff := drTarget
     else if drStatus = DATAREF_DROP then
     begin
+      { THE TWO PARALLEL ARRAYS MOVE WITH THE RECORD. FixupPCRel and
+        FixupPicDelta are parallel to Fixups BY INDEX, so shifting the record
+        alone hands every surviving fixup past i the relocation flags of
+        whoever used to sit at its new index -- a wrong address with no
+        diagnostic. FixupPCRel is False per entry and set True on the i386 PIC
+        path, so it is genuinely heterogeneous inside one build.
+
+        This was the ONLY compaction of Fixups that did not move them. The
+        other one, DceCompactFixups in dce.inc, does, and states the rule in a
+        comment -- but that comment is in the function that OBEYS the rule, and
+        compiler.pas named neither array anywhere, so from inside this file
+        there was nothing to notice: not a stale comment, not a wrong name, an
+        ABSENCE. The rule is restated here for that reason. }
       for j := i to FixCount - 2 do
-        Fixups[j] := Fixups[j + 1];
+      begin
+        Fixups[j]        := Fixups[j + 1];
+        FixupPCRel[j]    := FixupPCRel[j + 1];
+        FixupPicDelta[j] := FixupPicDelta[j + 1];
+      end;
       Dec(FixCount);
       continue;
     end

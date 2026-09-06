@@ -746,11 +746,37 @@ path, so it is genuinely heterogeneous within one build; `FixupPicDelta` carries
 a per-site anchor delta. After a drop, every surviving fixup past `i` reads its
 neighbour's relocation flags — wrong addresses, silently.
 
-**Honest scope: found by inspection and by the sibling's own comment, not by a
-failing program.** Exposure needs a `DATAREF_DROP` (common — a module with no
-RTTI registry or no resource table) *and* a `FixupPCRel = True` entry after it,
-which is i386 PIC. That is precisely the defect class this repo's default
-instruments cannot see, because the dev loop, `gate.sh quick` and the pin all
-run on x86-64. Fixing it next; it is two lines and the invariant is not in
-question — the disagreement is between a comment that states it and code that
-does not honour it, and the comment is the one that is right.
+**Scope, corrected after probing — this is a LATENT invariant repair, not a bug
+with a demonstrated victim.** The violation is certain: `compiler.pas` shifts the
+record and not the two arrays, and `dce.inc` states the rule. What is NOT
+established is that the arm ever runs.
+
+I first wrote "common" here, sourced from `emit.inc`'s comment calling a
+table-less sentinel *"a documented answer, not a defect: a module that publishes
+no classes has no registry."* **That is a statement about design, and I read it
+as one about frequency.** Measured since:
+
+- minimal program, `p := __rttireg` → resolves to a real address, registry present
+- same with `__resources` → resolves, table present
+- `EmitDataRef` writes `EmitI32(0)`, so a dropped fixup would leave **nil** —
+  which makes "non-nil" a sound discriminator, and it says both tables exist even
+  in a program that does nothing
+- `EmitResources` does `if ResPendCount = 0 then Exit` leaving
+  `ResourceTableOff = -1`, so by inspection it *should* drop with no `{$R}` and
+  empirically it does not. That contradiction is unresolved and is the thread to
+  pull if anyone wants the reachability answer.
+
+Exposure would additionally need a `FixupPicDelta`-bearing entry after the
+dropped index — i386 PIC, the class this repo's default instruments cannot see,
+since the dev loop, `gate.sh quick` and the pin all run on x86-64.
+
+**And the first repro was a comparison whose inputs did not exist:** both
+compiles failed with *"this object would define no linkable symbol"*, no `.o` was
+written, and `cmp` on two absent files printed DIFFERS. It was one step from
+being reported as the proof. The existence assertion is what caught it — the
+second repro built two 120972-byte objects, compared IDENTICAL, and *then* the
+precondition check showed the drop had not fired in it either, so that identity
+says nothing about the bug in both directions.
+
+Fixing it anyway: two lines, no cost, and the comment-vs-code disagreement
+resolves cleanly in the comment's favour. Just not on a claim it cannot carry.

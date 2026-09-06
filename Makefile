@@ -14421,6 +14421,13 @@ test-core: $(COMPILER)
 	# pointer variable, so a chain that is wrong for everyone cannot pass.
 	./$(COMPILER) test/test_call_result_suffix_after_a_field.pas $(TESTTMP)/test_callsuffix26
 	tools/expect_same.sh test_callsuffix26 "$$($(TESTTMP)/test_callsuffix26)" "$$(cat test/test_call_result_suffix_after_a_field.expected)"
+	# InternStr dedups through a hash index, so two distinct literals can share a
+	# bucket. 'aar' and 'ac0' both hash to 8936569 under djb2-masked-to-24-bits.
+	# The row exists because the index is new: only the full comparison decides
+	# identity, and with it removed this prints `aar aar aar aar` (run, not
+	# assumed -- and such a compiler cannot self-host either).
+	./$(COMPILER) test/test_intern_hash_collision.pas $(TESTTMP)/test_ihc26
+	tools/expect_same.sh test_ihc26 "$$($(TESTTMP)/test_ihc26)" "$$(cat test/test_intern_hash_collision.expected)"
 	# `TRec(ptr)` is `PRec(ptr)` without a declared PRec, and its own arm says it
 	# mirrors the alias path. For `[i]` it did not: the cast node's ASTIVal was
 	# stamped 0 for "plain reinterpret", and ir.inc reads that field as an ALIAS
