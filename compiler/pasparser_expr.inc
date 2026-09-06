@@ -770,6 +770,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
     rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
+    rcNm: AnsiString;   { the record method's name, captured before the cursor moves past it }
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
@@ -7554,12 +7555,46 @@ begin
          (FindUMeth(IsRecordType(name) - REC_UCLASS_BASE, GetTokenStr(TokPos+1)) >= 0) then
       begin
         rcCi := IsRecordType(name) - REC_UCLASS_BASE;
-        rcMmi := FindUMeth(rcCi, GetTokenStr(TokPos+1));
-        rcPi := UMthProc_[rcMmi];
+        rcNm := GetTokenStr(TokPos+1);
 
         Next; { record type name }
         Next; { dot }
         Next; { method name }
+
+        { OVERLOAD-AWARE, exactly as the class path two arms down already is.
+          This was a bare FindUMeth -- FIRST DECLARED WINS, whatever the call
+          looks like -- and the class arm beside it has used
+          FindUMethOverloadAhead all along. The sibling nobody exercised is the
+          one that stayed broken (normalise-dont-special-case.md).
+
+          What it cost, measured 2026-09-07 against fpc 3.2.2 on three
+          `constructor Create` overloads in one record:
+
+            TRec.Create(2)      -> ran Create(dummy: Boolean), printing 10 20
+                                   where fpc prints 10 2. A SILENT WRONG VALUE.
+            TRec.Create(1, 2)   -> SEGFAULT: the 1-argument body was entered
+                                   with two arguments pushed.
+
+          and reordering the declarations moved the crash to whichever call did
+          NOT match the first-declared one, which is what proves it is the
+          lookup and not the bodies. The identical program with `class` instead
+          of `record` is correct on all three rows.
+
+          It has to sit AFTER the three Next calls above: CountCallArgsAhead
+          wants CurTok on the call name with '(' at TokPos, and before them
+          CurTok is the record TYPE name with '.' at TokPos, where it would
+          count zero and quietly hand back the first overload again -- the same
+          answer this is here to stop giving. Hence rcNm, captured above.
+
+          Falls back to the bare lookup when no arity matches, so a call that is
+          simply wrong still reports against a real row rather than -1.
+          Regression assertion: test/test_record_constructor_overload.pas, whose
+          row 6 is the FIRST-DECLARED overload -- so if a later change flips the
+          lookup to last-match, rows 1-3 stay green and only that one goes red.
+          No ticket: fixed on sight, logged in LOGBOOK.md. }
+        rcMmi := FindUMethOverloadAhead(rcCi, rcNm, CountCallArgsAhead);
+        if rcMmi < 0 then rcMmi := FindUMeth(rcCi, rcNm);
+        rcPi := UMthProc_[rcMmi];
 
         if (UClsHelperTk[rcCi] >= 0) or UMthIsStatic[rcMmi] then
         begin

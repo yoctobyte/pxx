@@ -16659,6 +16659,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_rtlocalspec26 "$$($(TESTTMP)/test_rtlocalspec26)" "$$(cat test/test_routine_local_specialization.expected)"
 	./$(COMPILER) test/test_routine_local_name_scoping.pas $(TESTTMP)/test_rtlocalscope26
 	tools/expect_same.sh test_rtlocalscope26 "$$($(TESTTMP)/test_rtlocalscope26)" "$$(cat test/test_routine_local_name_scoping.expected)"
+	./$(COMPILER) test/test_record_constructor_overload.pas $(TESTTMP)/test_recctorovl26
+	tools/expect_same.sh test_recctorovl26 "$$($(TESTTMP)/test_recctorovl26)" "$$(cat test/test_record_constructor_overload.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
