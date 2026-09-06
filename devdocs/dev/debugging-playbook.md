@@ -15897,3 +15897,52 @@ narrowing the input. **The two failure modes are opposite and only one is
 expensive:** a diagnostic with a line and no detail sends you to the right place
 knowing nothing; a diagnostic with detail and no line tells you the answer and
 makes you find the place, which a grep usually does for free.
+
+## "PUSH FIRST, THEN MEASURE" IS TWO-THIRDS OF THE DISCIPLINE — the pull that arrives WITH your push is an instrument-mover for the NEXT measurement
+
+frankH, 2026-09-06, immediately after landing pin v405, and it is the third
+sync-versus-instrument incident of one day in the third distinct shape.
+
+**They followed the rule.** *"Push before a measurement starts, never during
+one"* — they pushed, then measured. That is the prescribed order and they did not
+sync mid-sweep.
+
+**`tools/sync.sh` pulls before it pushes.** So banking the pin brought four
+commits touching `compiler/**` into the tree, and the gate started **without a
+rebuild**: `compiler/pascal26` was built from the OLD sources while the
+pinned-seeded chain compiled the NEW ones. `FAIL self-host fixedpoint` — **two
+valid fixedpoints, not a miscompile**, exactly as the handbook's own paragraph
+describes, and the gate's NOTE named the culprit commit. Rebuilt on the settled
+tree:
+
+```
+converged after 1 round(s) from pinned: the compiler reproduces itself
+agrees with compiler/pascal26 (the binary the suite is testing with)
+```
+
+**BOTH HALVES ARE ALREADY WRITTEN DOWN AND THEY LIVE IN DIFFERENT SECTIONS.**
+*"Push before a measurement starts, never during one"* sits under the workflow
+norms; *"rebuild after any sync touching `compiler/**` before you measure"* sits
+in the per-fix loop. Each is correct and neither is complete, and **the gap
+between them is the exact window a seat lands in the moment it does the right
+thing** — because banking is what you do *just before* measuring, and the
+prescribed order puts a tree-mover between the two.
+
+**The stitched form, which is the one to carry:**
+
+> **push → let the pull settle → REBUILD → measure.** A push is a pull. A pull
+> that touched `compiler/**` or `lib/rtl/**` invalidates the binary on disk, and
+> the binary on disk is untracked, so nothing in `git status` will tell you.
+
+**And note which failure it produces: a RED that is correct and means nothing.**
+Not an error, not a crash — a legitimate mismatch between two binaries that each
+self-reproduce. It is indistinguishable from the serious version at a glance, so
+it costs a full investigation every time, and it arrives at the worst moment:
+straight after a successful landing, when the tree feels settled precisely
+because you just settled it.
+
+**The seat that hit this declined to decide whether their own error deserved a
+rule** and asked someone else to judge it. Recording that too, because it is the
+right instinct: a rule proposed by the person who just broke it reads as
+self-exculpation whichever way it is written, and the question *"does this earn a
+line"* has a better answer from anyone else.
