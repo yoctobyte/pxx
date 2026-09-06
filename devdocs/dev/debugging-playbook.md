@@ -13339,3 +13339,67 @@ supplying the premise.
 through every substitution site"*; `SpecSubNames/Values/Kinds` are already `MAX_TEMPLATE_PARAMS`
 wide and generic **classes** have always filled them. **Three sites wrote `SpecSubCount := 1`
 and read slot 0.** The expected-large change was three assignments.
+
+### THE GENERAL FORM — a slug is a claim every reader sees and nobody dates, so repairing ANY of them converts a dated claim into an undated one
+
+frankA, handing the number rule back generalised, 2026-09-06. **It is not about numbers.**
+
+A slug asserts a fact: a **count** (`...-92-arm-name-chain-...`), a **cause**
+(`...-because-the-alias-index-is-negative`), an **impossibility** (`...-cannot-be-done-...`).
+Every reader sees it; **nothing anywhere carries the date it was true.**
+
+> **Repairing a slug in place does not correct the record — it destroys the only evidence that
+> the claim was ever wrong.** The reader of a repaired slug sees a current-looking assertion
+> with no history; the reader of a stale one sees a claim they will check.
+
+So the disposition for **any** refuted slug is the same as for a refuted number: **leave the
+wrong string in the name, put the series in the body, dated.** `## A SLUG IS FROZEN AT FILING
+AND THE TICKET KEEPS BEING WORKED` says the residual lives in the summary; this is the reason
+it must: **the slug cannot be safely updated at all**, so the summary is not merely the better
+place, it is the only one.
+
+### AGREEMENT AND DISAGREEMENT ARE BOTH EMPTY WHEN THE QUANTITY IS NOT PINNED — and the thing that carried information was a BEHAVIOUR
+
+The other half frankA handed back, and it completes a pair this file only had one side of.
+
+`## TWO VERIFIED COUNTS CAN MAKE ONE UNVERIFIED INFERENCE` covers agreement: two counts
+matching certifies the count and never the sentence around it. **The mirror was missing.**
+92 against 25 **disagreed**, and the disagreement was **equally uninformative**, because the
+two counts had no shared unit.
+
+> **A comparison of two numbers tells you nothing at all until the quantity is pinned.
+> Matching and differing are both artefacts of the unit, not of the world.**
+
+**And what actually carried the information was not a measurement.** It was frankD writing
+*"I cannot reproduce this"* and **declining to reconcile** — refusing to produce the sentence
+that would have made two unrelated quantities look like one disputed one.
+
+> **The informative act was a REFUSAL, and refusals leave no artefact.** A reconciliation
+> would have produced a number, a commit and a tidy paragraph. Declining produced a question.
+> **Nothing in a repo records that somebody chose not to reconcile**, which is why it has to
+> be written down as a behaviour to imitate rather than a result to cite.
+
+### AND A CORRECTION FROM THE SAME SESSION THAT CUTS AGAINST ITS OWN NOTE: "NO FPC PROGRAM REACHES THIS" IS NOT "NO PROGRAM REACHES THIS"
+
+frankA, correcting the denominator note above before anyone could over-apply it.
+
+It planted a canary in the **record-cast `tkLBrack` arm** of `ParseFactorCore` **expecting to
+find it dead. It fires** — on a **deliberate pxx extension** with a committed test and **no
+fpc oracle by construction.**
+
+> **Inside a frontend that deliberately accepts more than its reference implementation, "no
+> fpc program reaches this" and "no program reaches this" are different sentences — and a
+> DELETION needs the second one.** A differential against fpc is silent on every extension by
+> design, so an arm that exists *because* we accept what fpc rejects is exactly the arm a
+> differential cannot see.
+
+**This is the sample-frame family again and frankA scoped it correctly rather than leaving the
+generalisation to a reader:** frankD's 11 arms are `NilPyUserCode`-guarded and its corpus is
+`.npy`, **so its population is right**; frankA's was not. **The denominator note is not a
+licence to reason about reach from a differential** — that is the author of a note fencing it
+against its own most likely misuse, which is rarer and more valuable than the note.
+
+CLAUDE.md's *us accepting what FPC rejects is not a defect* is the policy; **this is its
+instrument-level consequence**, and it bites hardest exactly where the policy is being
+exercised. Before deleting an arm as dead, ask **which oracle would have to be silent for the
+evidence to look like this**, and whether that oracle is silent by construction.

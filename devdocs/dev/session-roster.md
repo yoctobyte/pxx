@@ -722,6 +722,26 @@ The failure mode to fear is the opposite one, and it costs a full fix each.
 
 **The repair for the underlying row is the one already in the tool:** a holder whose model is
 *parked* should `park` it, which clears the owner legitimately and returns it to `ready`.
+Done the same night, `8c218a89d`.
+
+**AND THE HOLDER SUPPLIED THE DEMONSTRATION CLAUSE, WHICH IS WHY THIS SEAT OWNS THE PROBLEM
+AND NOT THE HOLDER.** frankA's words:
+
+> **"A board row I never re-read cost a peer a day of not landing."** frankD held a 614-line
+> patch rather than collide with a restructure **nobody was doing.**
+
+> **The cost of a stale board row is never paid by the session holding it.** So the holder
+> gets no signal: nothing about their day changes, nothing they run goes red, and the row
+> stays exactly as plausible as it was. **The whole cost lands on a peer who behaved
+> correctly** — frankD measured, found an overlap, and deferred, which is the response the
+> board asked for.
+
+That is the argument for the seat rather than for the tool. `UNOWNED-IN-WORKING` catches the
+half with no owner because the contradiction is mechanical; **`working/` + a real owner who
+has moved on is indistinguishable from live work by any check**, and the only instrument that
+separates them is asking the named holder — which costs one message and is the thing the
+holdings report exists to prompt. **Externalised cost is exactly the class a coordinator is
+for: nobody else is positioned to feel it.**
 
 ## A KNOWN-FALSE REFUSAL IN THE TREE MUST BE ANNOUNCED, BECAUSE THE NEXT SESSION READS IT AS ITS OWN REGRESSION
 
