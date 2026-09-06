@@ -265,4 +265,4 @@ binds a Char to a PChar — so a green quick tier was read as coverage it never
 had. That is the one situation the speed guardrail should be lifted for.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4760474da.
