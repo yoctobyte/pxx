@@ -13709,12 +13709,23 @@ test-core: $(COMPILER)
 	# invariant that never runs. The fixture header carries both divergences.
 	./$(COMPILER) test/test_mgmt_operators_global_array.pas $(TESTTMP)/test_mgmt_op_garr_ok26
 	$(TESTTMP)/test_mgmt_op_garr_ok26 | diff -u test/test_mgmt_operators_global_array.expected -
+	# ...and `class operator Copy`, the ASSIGNMENT lifetime event, at its three
+	# lowering paths: a plain local, an ARRAY ELEMENT destination and a FIELD of
+	# another record. The fixture's operator assigns NEITHER field on purpose --
+	# Copy REPLACES the copy, so the destination must come out holding its OWN
+	# values, and an operator that dutifully copies them cannot tell "ran
+	# instead of the copy" from "ran as well as the copy". .expected is fpc
+	# 3.2.2's, byte for byte; it is refused outright on the pin.
+	./$(COMPILER) test/test_mgmt_operators_copy.pas $(TESTTMP)/test_mgmt_op_copy26
+	$(TESTTMP)/test_mgmt_op_copy26 | diff -u test/test_mgmt_operators_copy.expected -
 	# ...and the five shapes that are REFUSED rather than silently skipped: a
 	# DYNAMIC array of a managed record and a MULTI-DIMENSIONAL one (two clauses
 	# of one predicate, so neither row can stand in for the other -- a 2-D array
 	# has a fixed ArrLen), a record holding one in an ARRAY field, a CLASS
-	# holding one in a field, and Copy/AddRef
-	# (recognised, but the copy event is not dispatched yet). Each must name its
+	# holding one in a field, and AddRef
+	# (recognised, but the by-value parameter copy is a separate slice from Copy,
+	# which IS dispatched -- measured, they are disjoint sites and neither ever
+	# displaces the other). Each must name its
 	# follow-up ticket, because a declared invariant that never runs is worse
 	# than a program that does not compile.
 	#
@@ -13733,8 +13744,8 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a class holding a managed record in a field compiled -- fpc runs those at Create/Free, not at scope"; exit 1; \
 	fi
-	if ./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 >/dev/null 2>&1; then \
-	  echo "FAIL: class operator Copy compiled while nothing dispatches it"; exit 1; \
+	if ./$(COMPILER) test/test_mgmt_operators_addref_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
+	  echo "FAIL: class operator AddRef compiled while nothing dispatches the by-value parameter copy"; exit 1; \
 	fi
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
@@ -13744,7 +13755,7 @@ test-core: $(COMPILER)
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
-	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
+	./$(COMPILER) test/test_mgmt_operators_addref_refused.pas $(TESTTMP)/test_mgmt_op_ar26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"

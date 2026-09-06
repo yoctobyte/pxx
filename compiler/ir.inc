@@ -7898,6 +7898,48 @@ begin
     -1, count * elemSize, Ord(tyRecord));
 end;
 
+function IRRecCopyOpCall(recId, dstAddr, srcAddr: Integer): Integer;
+{ `class operator Copy(constref src: TFoo; var dst: TFoo)` -- the ASSIGNMENT
+  lifetime event. Returns the call node, or -1 when the record declares no Copy
+  operator and the caller should emit its ordinary bulk copy.
+
+  MEASURED against fpc 3.2.2 before this was written, because two of the three
+  things it had to get right were not what the ticket predicted:
+
+  1. COPY REPLACES THE COPY. It is not a notification emitted alongside the
+     bytes. An operator body that assigns neither field leaves the destination
+     holding its OLD values -- verified with exactly that operator: after
+     `b := a`, `b.n` was still b's own. So this returns the call INSTEAD of
+     IR_COPY_REC, never in addition to it.
+  2. THE DESTINATION IS NOT FINALIZED FIRST. `dst` arrives holding its previous
+     value (printed it), so there is no release-then-copy here the way
+     IR_COPY_REC_MANAGED does for ARC fields. The operator owns whatever that
+     means for the record.
+  3. COPY AND ADDREF ARE DISJOINT SITES, not two operators competing for one
+     event. Copy is the assignment; AddRef is the by-value PARAMETER copy and
+     only that. With both declared, each site still runs its own -- neither ever
+     displaces the other. AddRef is therefore NOT consulted here, and is still
+     refused at its declaration:
+     feature-pascal-management-operators-copy-and-addref
+
+  Both parameters cross by reference and this passes two ADDRESSES: `var` is
+  by-ref, and a `const` record parameter is forced by-ref too (see
+  ParseParamList -- by value it would truncate to one qword), so this holds for
+  a small record as well as a large one. }
+var cpIdx, a0, a1, callN: Integer;
+begin
+  IRRecCopyOpCall := -1;
+  if recId = REC_NONE then Exit;
+  cpIdx := FindOpOverload(OPK_COPY, Ord(tyRecord), recId);
+  if cpIdx < 0 then Exit;
+  a0 := IRAppend(IR_ARG, srcAddr, -1, -1, 0, Ord(tyPointer));
+  a1 := IRAppend(IR_ARG, dstAddr, -1, -1, 0, Ord(tyPointer));
+  IRB[a0] := a1;
+  callN := IRAppendCall(cpIdx, a0, -1, Ord(tyNativeInt));
+  IRIVal[callN] := 1;   { statement: emit for effect }
+  IRRecCopyOpCall := callN;
+end;
+
 procedure IRWidenOrdinalFloatBinop(node: Integer; wantTk: TTypeKind);
 { Re-type a float-producing binop whose operands supply NO float depth, so it
   yields what the assignment target asked for. ESP-only in effect: elsewhere
@@ -12811,15 +12853,21 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           right := IRLowerAddress(ASTRight[node])
         else
           right := IRLowerAST(ASTRight[node]);
-        if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
-          { ARC-correct copy: retain source managed fields, release the old
-            destination ones, then bulk-copy. }
-          Result := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
-                             ResolveNodeRec(ASTLeft[node]),
-                             RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord))
-        else
-          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                             RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
+        { `class operator Copy` REPLACES the copy: when one is declared, no bytes
+          move here at all. Measured against fpc 3.2.2 -- see IRRecCopyOpCall. }
+        Result := IRRecCopyOpCall(ResolveNodeRec(ASTLeft[node]), leftAddr, right);
+        if Result < 0 then
+        begin
+          if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
+            { ARC-correct copy: retain source managed fields, release the old
+              destination ones, then bulk-copy. }
+            Result := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
+                               ResolveNodeRec(ASTLeft[node]),
+                               RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord))
+          else
+            Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                               RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
+        end;
       end
       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
               ((ASTKind[ASTLeft[node]] = AN_IDENT) and
@@ -13220,13 +13268,18 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               { feature-a-typeref-migrate-consumers lane 1: read via SymTR[varIdx].RecId
                 (kept in sync with Syms[varIdx].RecName by SymSyncTypeRef) instead of
                 the old parallel field directly. }
-              if RecordHasManagedFields(SymTR[varIdx].RecId) then
-                last := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
-                                 SymTR[varIdx].RecId,
-                                 RecSize(SymTR[varIdx].RecId), Ord(tyRecord))
-              else
-                last := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                                 RecSize(SymTR[varIdx].RecId), Ord(tyRecord));
+              { `class operator Copy` replaces the copy -- see IRRecCopyOpCall }
+              last := IRRecCopyOpCall(SymTR[varIdx].RecId, leftAddr, right);
+              if last < 0 then
+              begin
+                if RecordHasManagedFields(SymTR[varIdx].RecId) then
+                  last := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
+                                   SymTR[varIdx].RecId,
+                                   RecSize(SymTR[varIdx].RecId), Ord(tyRecord))
+                else
+                  last := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                                   RecSize(SymTR[varIdx].RecId), Ord(tyRecord));
+              end;
             end
             else if Syms[varIdx].TypeKind = tyVariant then
             begin

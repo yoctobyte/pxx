@@ -1,0 +1,24 @@
+init n=1
+init n=2
+-- plain local, before: a.n=1 b.n=2
+copy src.n=1 dst.n(before)=2
+-- after b := a: b.n=2 b.m=102
+fin n=1 m=101
+fin n=2 m=102
+init n=3
+init n=4
+init n=5
+-- array element, before: arr[1].n=5
+copy src.n=3 dst.n(before)=5
+-- after arr[1] := a: arr[1].n=5
+fin n=3 m=103
+fin n=4 m=104
+fin n=5 m=105
+init n=6
+init n=7
+-- record field, before: h.f.n=7
+copy src.n=6 dst.n(before)=7
+-- after h.f := a: h.f.n=7 tag=9
+fin n=6 m=106
+fin n=7 m=107
+done

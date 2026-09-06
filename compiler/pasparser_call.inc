@@ -411,15 +411,41 @@ begin
     OperandTypeKindRec(rightName, rightTk, rightRec);
   { Arity: conversion/unary named operators take exactly ONE parameter —
     FPC rejects `operator :=(S1, S2: String)` (tassignmentoperator1 %fail). }
-  { Copy/AddRef are recognised so the spelling is not a syntax error, but they
-    fire on a value COPY, which nothing dispatches yet — accepting one silently
-    would give a record whose invariant simply never runs, which is worse than
-    not compiling. Refuse loudly and name the ticket instead.
-    feature-pascal-class-management-operators }
-  if (opKey = OPK_ADDREF) or (opKey = OPK_COPY) then
-    Error('operator Copy/AddRef is recognised but not dispatched yet — the copy '
-          + 'lifetime event is a separate slice '
+  { AddRef is recognised so the spelling is not a syntax error, and still
+    refused: accepting one silently would give a record whose invariant simply
+    never runs, which is worse than not compiling.
+
+    COPY IS DISPATCHED NOW and AddRef is not, which is not an arbitrary split.
+    Measured against fpc 3.2.2 with three programs differing only in which
+    operators are declared: the two fire at DISJOINT SITES and neither ever
+    displaces the other. Copy is the ASSIGNMENT event (`b := a`, `b := Mk`,
+    `arr[0] := a`) and hooks the record-assignment lowering, which already had
+    the branch to hang it on. AddRef is the BY-VALUE PARAMETER copy and ONLY
+    that -- a `const` or `var` parameter runs neither -- so it is a different
+    hook in a different pass, and the ticket's old framing of one event with a
+    precedence rule between two operators described a choice that has no site
+    at which it could arise.
+    feature-pascal-management-operators-copy-and-addref }
+  if opKey = OPK_ADDREF then
+    Error('operator AddRef is recognised but not dispatched yet — it fires on '
+          + 'the by-value parameter copy, which is a separate slice from Copy '
           + '(feature-pascal-management-operators-copy-and-addref)');
+  if opKey = OPK_COPY then
+  begin
+    { `class operator Copy(constref src: TFoo; var dst: TFoo)` — FPC's shape.
+      Both parameters cross by reference, which the emitter relies on: it hands
+      the operator two ADDRESSES. `var` is by-ref and a `const` record parameter
+      is forced by-ref as well, so this holds for a small record too. }
+    if Procs[procIdx].ParamCount <> 2 then
+      Error('class operator Copy must take exactly two parameters '
+            + '(constref source, var destination)');
+    if Procs[procIdx].IsFunc then
+      Error('class operator Copy must be a procedure (no result)');
+    if recId = REC_NONE then
+      Error('class operator Copy needs a record operand type');
+    if not Procs[procIdx].Params[1].IsRef then
+      Error('class operator Copy takes its destination as a var parameter');
+  end;
   if (opKey = OPK_INITIALIZE) or (opKey = OPK_FINALIZE) then
   begin
     { `class operator Initialize(var a: TFoo)` — exactly one VAR parameter of

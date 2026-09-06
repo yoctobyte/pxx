@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: frankA
 blocked-by: []
-summary: "`class operator Copy` and `AddRef` PARSE and register, and the compiler then refuses at the use site rather than compiling them silently: `operator Copy/AddRef is recognised but not dispatched yet`. Initialize/Finalize landed in slice 3 and WORK, including a nested managed FIELD at any depth and every element of a FIXED array (2026-09-06). THIS TICKET'S OWN `What FPC does` SECTION WAS WRONG AND IS CORRECTED IN PLACE: it said Copy `replaces` AddRef and that both fire wherever a record value is duplicated. Measured against fpc 3.2.2 with three programs differing only in which operators are declared, they are DISJOINT SITES and neither ever displaces the other -- Copy is the ASSIGNMENT event (`b := a`, `b := Mk`, `arr[0] := a`), AddRef is the BY-VALUE PARAMETER event and only that, and a `const` or `var` parameter runs neither. With Copy declared and AddRef absent the by-value copy runs NO operator at all while its slot is still Finalized, so the two halves do not share a site and CAN LAND INDEPENDENTLY. Swept -O1..-O3, identical. CORPUS EVIDENCE, measured 2026-09-06 at 88a0b3d93835: fpc testsuite tmoperator8 stops on exactly this refusal at line 63, and it is the ONLY one of the six live tmoperator rows that does -- it declares all four operators. The refusal is deliberate and must stay until the dispatch lands: a record whose declared invariant simply never runs is a plausible wrong value far from the cause, which is the expensive shape here."
+summary: "COPY IS DONE 2026-09-06 (frankA); ADDREF REMAINS. `class operator Copy(constref src; var dst)` now dispatches at the record-assignment lowering and matches fpc 3.2.2 byte for byte at three sites -- a plain local, an ARRAY ELEMENT destination and a FIELD of another record (test_mgmt_operators_copy, refused outright on the pin). COPY REPLACES THE COPY, measured: an operator body that assigns neither field leaves the destination holding its OWN values, so the hook returns the call INSTEAD of IR_COPY_REC, never alongside it; and the destination arrives UNFINALIZED, holding its previous value, so there is no release-then-copy the way IR_COPY_REC_MANAGED does for ARC fields. THIS TICKET'S OWN `What FPC does` SECTION WAS WRONG AND IS CORRECTED IN PLACE: it said Copy `replaces` AddRef and that both fire wherever a record value is duplicated. Measured with three programs differing only in which operators are declared, they are DISJOINT SITES and neither ever displaces the other -- Copy is the ASSIGNMENT event, AddRef is the BY-VALUE PARAMETER event and only that, and a const or var parameter runs neither. That is why Copy could land alone. STILL REFUSED: AddRef, by name, at its declaration; test_mgmt_operators_copy_refused expired the day Copy landed and was re-aimed as test_mgmt_operators_addref_refused. CORPUS: tmoperator8 still stops at line 63, now on the AddRef refusal rather than the Copy one -- it declares all four operators, so the row does not clear and is not claimed to. NOT ESTABLISHED: whether the two assignment arms hooked are the whole population (78 IR_COPY_REC mentions), and whether a record with a genuinely managed FIELD alongside the operators routes its copy through a different helper."
 ---
 
 # `class operator Copy` / `AddRef` are recognised but never dispatched
@@ -119,3 +119,58 @@ does. Measured at `88a0b3d93835`; the other five split two-and-three onto
 
 That reason is only two-thirds true and is corrected in the same commit:
 Initialize and Finalize work. The row is blocked on Copy/AddRef alone.
+
+## 2026-09-06 (frankA) — Copy lands; AddRef is the remainder
+
+`class operator Copy` dispatches. The hook is `IRRecCopyOpCall` in `ir.inc`,
+consulted at both record-assignment arms — the general `AN_ASSIGN` one and the
+inline-var-decl one — ahead of the existing `RecordHasManagedFields` choice
+between `IR_COPY_REC_MANAGED` and `IR_COPY_REC`. It returns the call node or
+-1, so the two call sites read one predicate rather than each re-deciding.
+
+### Three measurements the implementation depended on, none of them guessed
+
+**Copy REPLACES the copy.** Not a notification emitted alongside the bytes. The
+probe operator assigns neither field; after `b := a`, `b.n` was still b's own
+value under fpc, and is under pxx. So the hook returns the call INSTEAD of the
+bulk copy. The fixture keeps that operator for exactly this reason: one that
+dutifully copies the fields cannot distinguish "ran instead of the copy" from
+"ran as well as the copy", because both print the same thing.
+
+**The destination is NOT finalized first.** `dst` arrives holding its previous
+value — the operator prints it. There is no release-then-copy here the way
+`IR_COPY_REC_MANAGED` does for ARC fields; the operator owns whatever that
+means for the record.
+
+**Both parameters cross by reference, including for a small record.** `var` is
+by-ref, and a `const` record parameter is forced by-ref in `ParseParamList`
+(by value it would truncate to one qword). So passing two addresses is correct
+for a 4-byte record as well as a large one — which mattered, because the
+size-based by-ref rule alone would not have covered it.
+
+### Why AddRef did not land with it
+
+They are disjoint sites (the corrected section above). AddRef fires on the
+BY-VALUE PARAMETER copy and only that, which is a different hook in a different
+pass — `IRLowerCallArg`'s private temp, not the assignment lowering. Nothing in
+the Copy work brings it closer, and nothing in it blocks AddRef either.
+
+### What is NOT established
+
+- **Whether the two arms hooked are the whole assignment population.** There are
+  78 `IR_COPY_REC` mentions in `compiler/`. A call-site census is open-world, so
+  the honest statement is that three source-level sites were measured against
+  fpc and matched, not that every path was found. A `with`-scoped destination, a
+  `Copy` on a record reached through a pointer deref, and an assignment
+  synthesised by another desugar are the shapes to try next.
+- **A record with a genuinely managed FIELD (ansistring, interface) alongside a
+  Copy operator.** fpc might route that copy through a different helper, and the
+  measurement table above did not include one. Ours currently gives Copy
+  priority over `IR_COPY_REC_MANAGED`, which means the operator becomes
+  responsible for the ARC fields — plausible, and unmeasured.
+
+### The corpus row still does not clear
+
+`tmoperator8` stops at line 63 as before, now on the AddRef refusal instead of
+the Copy one. It declares all four operators. Advancing the refusal by one
+operator is not clearing the row and is not recorded as such.
