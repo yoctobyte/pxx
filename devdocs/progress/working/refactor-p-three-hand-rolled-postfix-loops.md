@@ -875,3 +875,37 @@ reconciliation of two 200-line bodies. **Split it the way `e40274490` /
 Step 1 needs rows for what the two absent helpers do; the probe does not have
 them yet, and adding them BEFORE step 1 is what makes its red rows readable
 rather than alarming.
+
+### MERGED. Both call-side-only helpers were measured, and neither had to be ported
+
+Correcting the note above: it predicted "the cast loop PLUS two arms". Measured,
+it is the cast loop PLUS NOTHING.
+
+- **`DerefPtrArrayElemPtr` re-aimed a running state the shared walker does not
+  keep.** After `f()^[i]` the call loop's `[` arm did not set its moved-off bit,
+  so the next `^` still answered from the CALL's constants and needed the elem
+  pointer re-derived. The cast loop's `[` arm DOES set `pcMovedOff`, so the next
+  `^` asks `ResolveDerefShape`. Measured on the exact `^array of PInteger`
+  shape, three routes in one program: call `10 20`, variable `10 20`, cast
+  `10 20`, fpc `10 20`.
+- **`RequireRecMember` at the old `:5906` could not fire.** The escape guard
+  three lines above it is its exact negation — same `recId`, same token. Proved
+  with a REACH canary and a FIRE canary rather than by reading: the valid-field
+  control reaches the site twice (`peek=a name=a`, `peek=b name=b`,
+  `uclass=TRUE`, so the gate was open), and `GetP^.nosuchfield` reaches the
+  GUARD and never the site — refused by `ParseClassRecordSelectors` with the
+  same wording. FIRE never fired, including across a whole `gate.sh quick`.
+
+**What actually made the merge possible was the SEED, and it had to widen.**
+`aliasIdx < 0` already meant "no alias row, the caller knows the answer", and
+for both cast openers that answer is exact at depth one. A call result is the
+third opener with no alias row and it is NOT depth one — a `^PChar` result
+carries remaining levels and an ultimate base (`ProcRetPtrDepth/BaseTk/BaseRec`).
+So the seed went from a PAIR to a SHAPE, the cast callers pass
+`0 / tyUnknown / REC_NONE`, and the walker's own arm is the triple the call loop
+carried privately.
+
+Result: **231 lines deleted**, `call_result_suffix_probe.py` `rc=0` with zero
+route mismatches (`defprop` and `frozen-str` were the two reds), and
+`cast_suffix_walk_probe.py` byte-identical across the change — which is the
+point of a refactor that must not move one route.

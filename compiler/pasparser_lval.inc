@@ -49,6 +49,12 @@
   injects Data as Self and calls Code; ASTSLen carries the flag, as it did in
   both originals.
   bug-p-cannot-call-directly-through-a-procedural-type-cast }
+procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
+                                 var recName: Integer;
+                                 aliasIdx: Integer;
+                                 seedTk: TTypeKind; seedRec: Integer;
+                                 seedDepth, seedBaseTk, seedBaseRec: Integer); forward;
+  { the ONE postfix `^ / .field / [i]` walker — every opener with a suffix ends here }
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
 function BuildIndirectCallAST(calleeNode, sigPi: Integer; isMethodPtr: Boolean): Integer;
@@ -5655,12 +5661,9 @@ end;
 
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
-    mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
-    arrAi, tmpSym, ndD, nIdx, ndFlat: Integer; isND, ndIsND: Boolean;
-    remDepth, ptrBaseTk, ptrBaseRec: Integer;
-    dpeTk, dpeRec, dpeCap: Integer;            { `f()^[i]` element, from DerefPtrArrayElem }
-    epDepth, epBaseTk, epBaseRec: Integer;     { …and that element's OWN pointer levels }
-    movedOffCall: Boolean;                     { has the walk left the call node? }
+    mcCi, mcallNode: Integer; mcFin: Boolean;
+    arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
+    remDepth, ptrBaseTk, ptrBaseRec: Integer;  { the RESULT's pointer shape — now the walker's seed }
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -5736,238 +5739,35 @@ begin
 
   if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
   begin
-    movedOffCall := False;
-    while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
-    begin
-      if CurTok.Kind = tkCaret then
-      begin
-        Next;
-        sub := AllocNode(AN_DEREF);
-        ASTLeft[sub] := node;
-        { EVERY `^` in this loop used to be answered from elemTk/elemRec -- the
-          CALL's own pointee, captured once before the loop. That is right for
-          the first `^`, which really does deref the returned pointer, and wrong
-          for every later one, because by then `node` is a FIELD or an ELEMENT
-          and has a pointee of its own. `GetP^.pc^` printed 90 instead of 'Z'
-          (the Char came back as the call's element kind, so it rendered as an
-          ordinal) and `GetP^.pi^ := 9` was refused outright with "cannot assign
-          Integer to record" -- the store's target node was stamped with the
-          record the call points AT. Both correct through the same chain off a
-          plain variable (`vp^.pc^`, `vp^.pi^ := 7`), which is what says the
-          opener is the variable and not the shape.
+    { ONE POSTFIX WALKER. This loop and ParseCastPostfixSuffix had the same
+      three arms and the same terminator set, and every arm the cast one gained
+      -- FindDefaultProp on `[`, the frozen-string element, the metaclass member
+      tail, ResolveDerefShape after the walk has moved off the opener -- this one
+      had to be given by hand or went without. Two of them it never got, and the
+      call/variable differential is red on exactly those two rows.
 
-          This is the same defect ResolveDerefShape already fixed in the
-          pointer-alias copy in pasparser_expr.inc, where the private loop
-          answered every `^` from the CAST's alias. Fifth copy of the postfix
-          walk, same hole, found by the escape census in
-          refactor-p-three-hand-rolled-postfix-loops rather than by a report:
-          this was the one loop of five reaching neither ResolveDerefShape nor
-          ParseClassRecordSelectors.
+      The seed is what made the merge possible: `aliasIdx < 0` already meant "no
+      alias row, the caller knows the answer", and widening that answer from a
+      PAIR to a SHAPE (levels + ultimate base) is precisely the ProcRetPtrDepth
+      triple this loop carried privately.
 
-          Scoped to the walked case on purpose. The entry-time alias stays the
-          answer for the first `^` -- that is the shape it was measured on, and
-          the ticket asks for this loop to be converged one arm at a time. }
-        if movedOffCall then
-        begin
-          StampDerefFromShape(sub, node, tk, recId);
-          Continue;
-        end;
-        tk := IntToTypeKind(elemTk); recId := elemRec;
-        if remDepth > 0 then
-        begin
-          Dec(remDepth);
-          { the same tags the main deref chain writes on its own AN_DEREF nodes:
-            levels REMAINING in ASTSOffset, the ultimate base in ASTSLen/ASTIVal.
-            IsNodePChar's arm 7 and IRPointerStride both read them, and this
-            fourth copy of the pointer walk stamped neither -- which is why
-            `WriteLn(GetQ^)` printed the address while `c := GetQ^; WriteLn(c)`
-            printed the string. }
-          ASTSOffset[sub] := remDepth;
-          ASTSLen[sub] := ptrBaseTk;
-          if ptrBaseRec > 0 then ASTIVal[sub] := ptrBaseRec;
-          if remDepth >= 1 then
-          begin
-            tk := tyPointer; recId := ptrBaseRec;
-          end
-          else if ptrBaseTk <> Ord(tyUnknown) then
-          begin
-            tk := IntToTypeKind(ptrBaseTk); recId := ptrBaseRec;
-          end;
-        end;
-        ASTTk[sub] := StrValTk(tk);
-        node := sub;
-      end
-      else if CurTok.Kind = tkLBrack then
-      begin
-        Next;
-        sub := AllocNode(AN_INDEX);
-        ASTLeft[sub] := node;
-        ParseExpr;
-        ndFlat := ParseNDSubscriptTail(sub, node, ndIsND);
-        if ndFlat >= 0 then
-          ASTRight[sub] := ndFlat
-        else
-        begin
-          { A single subscript on a fixed N-D array names a whole ROW; scale it to
-            that row's first-element flat index, exactly as ParseLValueAST does. }
-          if ndIsND then BuildPartialNDRowIndex(sub, CurASTNode)
-          else ASTRight[sub] := CurASTNode;
-          Expect(tkRBrack, ']');
-        end;
-        { The FOURTH site minting an AN_INDEX over a deref, and the one the
-          three-site census missed: `GetP^[3]` read lo[4] and `GetP^[2] := 77`
-          wrote lo[3] for `array[1..5]`. Found by the escape census this
-          refactor asks for -- four of the five postfix loops were missing an
-          arm the fifth had -- not by anyone hitting it.
-          bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
-        FoldDerefArrayLowBound(sub, ndIsND, ndFlat);
-        { THE `^` ARM'S OWN GUARD, ONE ARM OVER. `elemTk`/`elemRec` and the
-          remDepth triple are the CALL's constants, captured once before the
-          loop. They are right for `f()^[i]`, which really does index the
-          returned pointer, and wrong the moment the walk has moved onto a
-          FIELD, whose element is its own: `GetP(raw)^.arr[1] := 44` was refused
-          with `incompatible types: cannot assign Integer to record`, because
-          the store's target had been re-stamped with the record the call points
-          AT. The same store through every other opener is accepted, and so is
-          the READ of the identical chain -- which is what says this is the arm
-          and not the shape.
-
-          The `^` arm three screens up took exactly this fix (`if movedOffCall
-          then ... ResolveDerefShape ... Continue`) when the escape census found
-          it. The two arms sit in one loop and only one of them got it: fixing
-          one arm of a double case and not grepping for the sibling, in the
-          routine whose ticket is about that habit. Found by an opener x chain
-          differential rather than by a report -- 45 rows, 5 openers, one red.
-          refactor-p-three-hand-rolled-postfix-loops }
-        if movedOffCall then
-        begin
-          ASTTk[sub] := StrValTk(tk);
-          node := sub;
-          Continue;
-        end;
-        tk := IntToTypeKind(elemTk); recId := elemRec;
-        { `f()[i]` spends a level exactly as `f()^` does -- indexing a `^PChar`
-          result yields a PChar, not another `^PChar`. }
-        if remDepth > 0 then
-        begin
-          Dec(remDepth);
-          if remDepth >= 1 then
-          begin
-            tk := tyPointer; recId := ptrBaseRec;
-          end
-          else if ptrBaseTk <> Ord(tyUnknown) then
-          begin
-            tk := IntToTypeKind(ptrBaseTk); recId := ptrBaseRec;
-          end;
-        end;
-        { …and when the thing indexed is `f()^` over a pointer to an ARRAY, the
-          element is the ARRAY's, not the RESULT's pointee, and the loop's
-          running elemTk/remDepth must be re-aimed at it. They were not: every
-          later suffix kept answering from the PROC's constants, so the second
-          `^` of `GetP^[0]^` over a `^array of PInteger` typed the load as the
-          pointee of the RESULT (8 bytes) instead of an Integer (4) -- and it
-          read 8: 47244640266 = (nums[1] shl 32) or nums[0]. Silent, exit 0,
-          and only in a VALUE position: `v := GetP^[0]^` narrows on the store
-          and printed 10, so the bug was invisible to every spelling that
-          assigns before it prints.
-          DerefPtrArrayElem / DerefPtrArrayElemPtr are the shared readers for
-          exactly this pair of facts (symtab.inc), so this asks them rather than
-          growing a fifth private notion of what a `^` yields.
-          (DerefPtrArrayElemPtr had no caller at all before this one.) }
-        if DerefPtrArrayElem(ASTLeft[sub], dpeTk, dpeRec, dpeCap) then
-        begin
-          tk := IntToTypeKind(dpeTk); recId := dpeRec;
-          elemTk := dpeTk; elemRec := dpeRec;
-          remDepth := 0; ptrBaseTk := Ord(tyUnknown); ptrBaseRec := REC_NONE;
-          if DerefPtrArrayElemPtr(ASTLeft[sub], epDepth, epBaseTk, epBaseRec) and
-             (epDepth > 0) then
-          begin
-            remDepth := epDepth; ptrBaseTk := epBaseTk; ptrBaseRec := epBaseRec;
-            if epDepth >= 2 then
-            begin
-              elemTk := Ord(tyPointer); elemRec := epBaseRec;
-            end
-            else
-            begin
-              elemTk := epBaseTk; elemRec := epBaseRec;
-            end;
-          end;
-        end;
-        ASTTk[sub] := StrValTk(tk);
-        node := sub;
-      end
-      else { tkDot — field of the pointed-at record }
-      begin
-        { THE CALL-RESULT OPENER IS THE ONE THE SHARED WALKER'S NEW ARM CANNOT
-          REACH, in both directions, and both are this arm's doing.
-
-          `recId` starts REC_NONE and only the `^` arm above fills it from the
-          call's own elemRec, so a chain that OPENS on a dot arrived here with
-          nothing: `GetP.a`, where GetP returns a `^TRec`, delegated to nobody,
-          built an AN_FIELD over the call node and answered `IR_UNSUPPORTED ...
-          could not lower AST node (kind 8)` -- an INTERNAL error for source fpc
-          3.2.2 compiles and runs. Seeded from elemRec, which is the same value
-          the `^` arm one screen up already uses.
-
-          ...and a `.` while the value is STILL A POINTER was kept on the
-          hand-rolled builder below, exactly as the C4 cast loop kept it until
-          ad001bef0: `GetPP^.a` printed 4306192 and `.b` printed 0 where fpc
-          prints 11 and 22, because the explicit `^` spends one level and leaves
-          a `^TRec` that the builder then treated as the record. The implicit
-          deref lives in the shared walker now, so this arm hands the name over
-          rather than growing a third copy of the rule.
-
-          Every other spelling of these chains was right throughout -- `GetP^.a`,
-          `GetPP^^.a`, `p.a`, `pp^.a` -- which is what says the opener is the
-          axis. Both identical on pin v404.
-          bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref }
-        { A METHOD or a property is not a field, and the builder below can only
-          make AN_FIELD -- RequireRecMember rejects the name outright, so
-          `GetP^.Doubled` and `GetP^.Bump(1)` answered
-          `"Doubled": no such member on this record/class` while the same member
-          on the same record through every OTHER opener was fine: `a.Doubled`,
-          `vp^.Doubled`, `PRec(q)^.Doubled` and `TRec(a).Doubled` all return 42
-          and fpc 3.2.2 accepts all five. Four openers as the negative control.
-
-          The record id in hand is NOT the problem -- a plain field through the
-          same chain (`GetP^.value`) has always resolved correctly, which it
-          could not if ProcRetPtrElemRec were empty here. What was missing is
-          only the escape: members that are not fields are what
-          ParseClassRecordSelectors resolves, and this loop was the one of five
-          that never reached it (devdocs/dev/normalise-dont-special-case.md).
-
-          Peeked with GetTokenStr(TokPos) BEFORE consuming the dot, because the
-          shared walker's own loop starts on tkDot -- same idiom as the
-          pointer-alias loop in pasparser_expr.inc.
-          refactor-p-three-hand-rolled-postfix-loops }
-        if (tk = tyPointer) or
-           ((recId >= REC_UCLASS_BASE) and
-            (FindUField(recId - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0)) then
-        begin
-          node := ParseClassRecordSelectors(node, recId, tk);
-          recId := ResolveNodeRec(node);
-          if CurTok.Kind <> tkCaret then Break;
-          movedOffCall := True;
-          Continue;
-        end;
-        Next;
-        if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
-          Error('expected field name after .');
-        prevTok := TokPos - 1;
-        fieldName := GetTokenStr(prevTok);
-        RequireRecMember(recId, fieldName);
-        sub := AllocNode(AN_FIELD);
-        ASTLeft[sub] := node;
-        ASTSOffset[sub] := Tokens[prevTok].SOffset;
-        ASTSLen[sub] := Tokens[prevTok].SLen;
-        tk := RecFieldType(recId, fieldName);
-        recId := RecFieldRecId(recId, fieldName);
-        ASTTk[sub] := Ord(tk);
-        Next;
-        node := sub;
-        movedOffCall := True;
-      end;
-    end;
+      The two helpers only this loop called are not lost:
+        - DerefPtrArrayElemPtr re-aimed the running elem/depth after `f()^[i]`
+          so a following `^` was right. The cast loop reaches the same answer a
+          different way -- its `[` arm sets pcMovedOff, so the next `^` asks
+          ResolveDerefShape instead of the opener's constants. Measured on the
+          exact `^array of PInteger` shape: call, variable and cast routes all
+          print 10 20 against fpc's 10 20.
+        - RequireRecMember could not fire. The escape guard three lines above it
+          is its exact negation on the same recId and the same token -- proved
+          with a reach canary and a fire canary: the valid-field control reaches
+          the site twice (peek=a name=a, peek=b name=b), and `GetP^.nosuchfield`
+          reaches the GUARD and never the site, refused by
+          ParseClassRecordSelectors with the same wording.
+      refactor-p-three-hand-rolled-postfix-loops }
+    ParseCastPostfixSuffix(node, tk, recId, -1,
+                           IntToTypeKind(elemTk), elemRec,
+                           remDepth, ptrBaseTk, ptrBaseRec);
   end
   else if (tk = tyPointer) and (CurTok.Kind = tkCaret) then
   begin
@@ -8613,7 +8413,17 @@ end;
 procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
                                  var recName: Integer;
                                  aliasIdx: Integer;
-                                 seedTk: TTypeKind; seedRec: Integer);
+                                 seedTk: TTypeKind; seedRec: Integer;
+                                 seedDepth, seedBaseTk, seedBaseRec: Integer);
+{ THE SEED IS A SHAPE, NOT A PAIR. `aliasIdx < 0` means "no alias row to ask, the
+  caller already knows the answer", and for the two CAST openers that answer is
+  exact at depth one: a record-name cast is a pointer to the named record and
+  nothing else. A CALL RESULT is the third opener with no alias row and it is
+  NOT depth one -- a `^PChar` result carries remaining levels and an ultimate
+  base, in ProcRetPtrDepth/BaseTk/BaseRec, and answering it as a pair typed
+  `WriteLn(GetQ^)` as the address. So the seed carries the levels too, and the
+  cast callers pass 0/tyUnknown/REC_NONE, which is the arm they already had.
+  refactor-p-three-hand-rolled-postfix-loops }
 var
   pcMovedOff: Boolean;
   indexNode, fieldNode, prevTok, i: Integer;
@@ -8687,6 +8497,27 @@ begin
         ASTIVal[indexNode] := seedRec;
         tk := seedTk; recName := seedRec;
         ASTTk[indexNode] := Ord(seedTk);
+        { …and when the seed carries LEVELS, spend one here and stamp the same
+          three fields the main deref chain writes, exactly as the call-result
+          loop did with its ProcRetPtrDepth triple. seedDepth is 0 for both cast
+          openers, so this is unreachable from them and they are unchanged.
+          bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+        if seedDepth > 0 then
+        begin
+          Dec(seedDepth);
+          ASTSOffset[indexNode] := seedDepth;
+          ASTSLen[indexNode]    := seedBaseTk;
+          if seedBaseRec > 0 then ASTIVal[indexNode] := seedBaseRec;
+          if seedDepth >= 1 then
+          begin
+            tk := tyPointer; recName := seedBaseRec;
+          end
+          else if seedBaseTk <> Ord(tyUnknown) then
+          begin
+            tk := IntToTypeKind(seedBaseTk); recName := seedBaseRec;
+          end;
+          ASTTk[indexNode] := StrValTk(tk);
+        end;
         node := indexNode;
         Continue;
       end;

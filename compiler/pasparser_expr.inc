@@ -6283,7 +6283,8 @@ begin
           seed below is the exact and complete answer instead: a record-name cast
           is a pointer to that record, at depth one, and nothing else.
           test_record_name_cast_strides_by_its_record }
-        ParseCastPostfixSuffix(node, tk, recName, -1, tyRecord, baseRec);
+        ParseCastPostfixSuffix(node, tk, recName, -1, tyRecord, baseRec,
+                               0, Ord(tyUnknown), REC_NONE);
         CurASTNode := node;
         LastExprTk := tk;
         Exit;
@@ -6737,7 +6738,8 @@ begin
             refactor-p-three-hand-rolled-postfix-loops }
           ParseCastPostfixSuffix(node, tk, recName, aliasIdx,
                                  IntToTypeKind(AliasElemTk[aliasIdx]),
-                                 AliasElemRec[aliasIdx]);
+                                 AliasElemRec[aliasIdx],
+                                 0, Ord(tyUnknown), REC_NONE);
           CurASTNode := node;
           LastExprTk := tk;
           Exit;
