@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d13h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `3b13f585f5f4` | 2026-09-06T00:11:13Z | RED (native) | 156.2s | `5daad03f50d7` RED |
+| seven | `3b13f585f5f4` | 2026-09-06T00:21:24Z | RED (full) | 585.6s | `3b13f585f5f4` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `5daad03f50d7` on seven, 2026-09-06T00:03:20Z (7m ago).**
+**Newest full tier in the fleet: `3b13f585f5f4` on seven, 2026-09-06T00:21:24Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `5daad03f50d7` | RED | 7m | — (newest) |
+| seven | `3b13f585f5f4` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 6d13h | 6d13h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -121,6 +121,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-nilpy#src:test/test_nilpy_star_args_ctor.npy** — test/test_nilpy_star_args_ctor.npy test/test_nilpy_star_args_ctor.expected (seven): bad `18f97d8f5f1f`, last good `81a10ecb3dba`, 5 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy tools/expect_same.sh (seven): bad `18f97d8f5f1f`, last good `81a10ecb3dba`, 5 commit(s) in range
 - **test-core#src:test/test_fpc_compat_batch2.pas** — test/test_fpc_compat_batch2.pas tools/expect_same.sh +2 (seven): bad `7b287013d34a`, last good `5daad03f50d7`, 4 commit(s) in range
+- **test-fgl#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (seven): bad `3b13f585f5f4`, last good `5daad03f50d7`, 5 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
