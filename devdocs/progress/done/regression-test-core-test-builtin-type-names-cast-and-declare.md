@@ -223,7 +223,7 @@ The session trailer `session_017JQMYrELfziEkCq3rod2Ny` also authored `217e530a0`
 `b3b7214a9`, `63a7f55d4` and `5c65ae3d9` — the postfix-walker merge and the
 every-door probe — so whoever holds THAT arc is the person who can read the
 29 lines in one pass.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5d29f9cd7.
 
 ## Resolved — b531be20a
 
