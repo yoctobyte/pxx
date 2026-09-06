@@ -18054,6 +18054,10 @@ test-core: $(COMPILER)
 	# .expected is FPC 3.2.2's own output; the no-overload rows are the controls.
 	./$(COMPILER) test/test_an_explicit_operator_answers_at_the_alias_door_too.pas $(TESTTMP)/test_an_explicit_operator_answers_at_the_alias_door_too26
 	tools/expect_same.sh test_an_explicit_operator_answers_at_the_alias_door_too26 "$$($(TESTTMP)/test_an_explicit_operator_answers_at_the_alias_door_too26)" "$$(cat test/test_an_explicit_operator_answers_at_the_alias_door_too.expected)"
+	# ...and the same alias door at the OTHER value of the packed-enum axis,
+	# which is file-scoped and so cannot share a program with the default one.
+	./$(COMPILER) test/test_a_packed_enum_alias_cast_keeps_its_identity.pas $(TESTTMP)/test_a_packed_enum_alias_cast_keeps_its_identity26
+	tools/expect_same.sh test_a_packed_enum_alias_cast_keeps_its_identity26 "$$($(TESTTMP)/test_a_packed_enum_alias_cast_keeps_its_identity26)" "$$(cat test/test_a_packed_enum_alias_cast_keeps_its_identity.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"

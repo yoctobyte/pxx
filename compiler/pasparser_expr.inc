@@ -529,6 +529,7 @@ procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
     eoNode: Integer;     { TryExplicitOpCast's result — an `operator Explicit` on a record/class operand, at both name doors }
+    aliasEtid: Integer;  { the enum identity of an alias cast target — from the alias table's column, never from the kind }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
@@ -6605,13 +6606,30 @@ begin
               this way -- their comment says the two spellings must not drift,
               and the cast door was the third spelling that had.
               bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
-            if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
-            begin
-              if AliasEnumId[aliasIdx] <> 0 then
-                ASTEnumId[node] := AliasEnumId[aliasIdx] - 1
-              else
-                ASTEnumId[node] := FindEnumType(name);
-            end;
+            { NOT GUARDED ON tyInteger, and the sibling door's comment predicted
+              exactly the bug that guard causes: "the identity guard used to read
+              `castTk = tyInteger` -- which was a correct test only while every
+              enum WAS tyInteger. Narrowing the kind without moving that guard
+              would have made `TSmall(i)` under {$PACKENUM 1} lose its enum
+              identity and print an ordinal, with nothing failing."
+
+              I wrote the tyInteger form here anyway, hours after reading that,
+              and it did exactly what the comment said: under {$PACKENUM 1} an
+              enum's storage kind is tyUInt8, the guard was false, and
+              `type TS2 = TSmall; TS2(1)` printed 1 where `TSmall(1)` printed sB.
+              The row set that cleared the first half of this fix varied the DOOR
+              and held the PACKENUM setting at its default, so no row in it could
+              see the second half.
+
+              The id is captured from the alias table's own column, which answers
+              "is this an enum" without asking anything about the kind -- so this
+              arm cannot be re-broken by narrowing a kind again. }
+            aliasEtid := -1;
+            if AliasEnumId[aliasIdx] <> 0 then
+              aliasEtid := AliasEnumId[aliasIdx] - 1
+            else if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
+              aliasEtid := FindEnumType(name);
+            if aliasEtid >= 0 then ASTEnumId[node] := aliasEtid;
             CurASTNode := node;
             LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
             Exit;

@@ -1,0 +1,5 @@
+value builtin sB
+value alias   sB
+size  builtin 1
+size  alias   1
+size  decl    1
