@@ -33,7 +33,22 @@ program test_libwriteln_parity;
   the empty string for a tag nobody had added an arm for. The below-2^63 row is
   what went red and caught it; this row would not have, since it was absent.
   A negative assertion expires when the feature it denies lands, and the way to
-  notice is to re-read the reason, not the row. }
+  notice is to re-read the reason, not the row.
+
+  THE TWO QWord ROWS FAIL DIFFERENTLY AND BOTH ARE NEEDED. Measured on this
+  file by breaking the fix two ways rather than one:
+
+    no arm for vtQWord at all      -> BOTH rows render '' (the `else` arm)
+    arm present, read through a
+    ^Int64 instead of a ^QWord     -> the small row still renders 9000000000
+                                      and ONLY `qwordbig` diverges, to
+                                      -446744073709551616
+
+  So the below-2^63 row cannot see a wrong POINTER TYPE -- signed and unsigned
+  readings of those eight bytes are equal, which is the whole reason the tag
+  divergence was quiet for as long as it was -- and the above-2^63 row is the
+  only thing in this file that can. Deleting either row leaves a defect class
+  with nothing watching it. }
 uses libwriteln;
 var
   i: Integer;
