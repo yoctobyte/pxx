@@ -77,3 +77,67 @@ that lives only in a commit message and a code comment has no reader. The third
 count is theirs; the enum sibling is a reading of the tree by this seat, so **the
 count above is three by my reading and two by theirs** — if the procedural check
 turns out to be a different animal, it is still two, and two is still a smell.
+
+## The fourth instance exists (frankD, 2026-09-06, `12af8ef60`) — and it splits the group in two
+
+The condition this ticket set for attempting it is met. The fourth is **not** a
+fourth sibling beside the funnel; it is on the authority predicate, and finding
+it changes the fix shape.
+
+**THE PREDICATE THIS TICKET PROPOSES ALREADY EXISTS AND IS CALLED
+`AssignSideKind`.** "A predicate asking whether the kind is authoritative here,
+consulted BEFORE the comparison" describes what it does today: returning `False`
+IS the third value, and the AN_IDENT arm carries five bails that each say so in
+their own comment — `IsArray`, `IsRef`, `SymProcSig`, `SymCellPtr`,
+`RecIsReferenceShaped`. The funnel does not need a third value added. It has
+one.
+
+**What it has instead is that predicate implemented TWICE, per node shape, with
+the copies drifted.** The AN_INDEX/AN_FIELD/AN_DEREF arm, added later, had two
+bails where the identifier arm had five, and the missing one was the FIRST:
+`IsArray`. So `array of <record>` as a FIELD typed as its element and
+`Fld := nil` was refused as `cannot assign Pointer to record`, while the
+identical type as a VARIABLE took the arm that bails. One question, two answers,
+selected by spelling. Fixed by adding `NodeDynDepth(node) > 0` to the second arm
+(`bug-a-a-nil-assignment-to-a-dynamic-array-field-is-lowered-as-a-record-zero`).
+
+### The axis: PER-SIDE authority vs PAIRWISE identity — the three siblings are not one group
+
+| | fact about | can a per-side predicate express it? |
+| --- | --- | --- |
+| `AssignSideKind`'s five bails + the new dyn-array bail | ONE side | **yes** — this is what it already is |
+| enum identity (`:12346`) | the two sides TOGETHER | no |
+| fixed → dynamic array (`:12420`) | the two sides TOGETHER | no |
+
+"These two enums are different types" and "a static array is going into a
+dynamic handle" are facts about a PAIR. No predicate consulted per-side before
+the comparison can absorb either, so the unification this ticket proposes
+reaches the first row and not the other two. **The honest shape is two changes:**
+collapse the per-side authority list so it is answered once regardless of node
+shape, and leave the pairwise checks pairwise — ideally behind one
+`AssignPairIdentityMismatch` instead of three inline arms. Putting all five
+behind one predicate would be the tidy answer and would file a pairwise fact in
+a per-side slot.
+
+This ticket's *"a discriminator bolted alongside is a fourth special case in
+disguise"* is right about the pairwise group and does not reach the per-side one.
+
+### A fifth SITE, not a fifth instance, and they disagree
+
+"Is this node a whole array?" is now answered in four places with four lists:
+`Syms[].IsArray` (AssignSideKind, ident arm), `NodeDynDepth` (its field arm, as
+of `12af8ef60`), `NodeDynDepth` + `Syms[].Kind <> skParam` (the fixed→dyn
+sibling), and `ASTNodeIsWholeArray` (the LOWERING, widened from AN_IDENT-only in
+the same commit — it was answering False for a dyn-array field and sending the
+store down the record-zero path).
+
+**Measured, not assumed:** they disagree for a STATIC array field —
+`ASTNodeIsWholeArray` answers True (via `RecFieldIsArray`) and `NodeDynDepth`
+answers 0. Nothing is broken there today: `c.SA := b` on an
+`array[0..2] of TR` field matches fpc for both the whole assignment and the
+per-element loop. But the dyn-array fix is **complete for dynamic arrays and
+silent about static ones**, and that is a stated gap rather than a discovered
+one.
+
+Unscheduled by frankD too — rung 7 has `pparser.pp` next. The per-side half can
+be handed over with the two arms and the measured disagreement.
