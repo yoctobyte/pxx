@@ -123,3 +123,74 @@ frankB has `Low`/`High` loaded from `557d06627` (the ordinal-identity work:
 `TrySetTypeBound`, `TryConstHighLowValue`, `TryFoldHighLowType`), which is the
 reason it is cheaper there than here.
 
+
+## RESOLVED 2026-09-06 — and the central question came back NO
+
+**They were not one defect.** The ticket asked for where each site gives up to be
+established before a shared fix was assumed. It was, by experiment:
+
+1. `EatQualifiedTypePrefix` (new, `pasparser_class.inc`) landed first and was
+   wired into `TryConstHighLowValue` / `TryFoldHighLowType` only. Measured
+   immediately after: `Low(TTest.TRange)` answered **1**, and
+   `TTest.TP.Make` still answered **`class method not found (TP)`**, byte for
+   byte the same message as before.
+2. So the bounds half and the constructor half share the *emitter* and nothing
+   else. `ErrorRecover('class method not found')` is where anything unresolved
+   lands; a refusal names the position and never the reason.
+
+The bounds sites never STRIPPED the qualifier at all. The two constructor sites
+stripped it correctly and then asked the wrong table. Different failures, one
+message. Had one patch fixed all three, that would not have been evidence they
+were one defect either — the asymmetry is not in the fix count.
+
+### The constructor half is TWO sites, not one, and the ticket named only one
+
+`pasparser_expr.inc:7855` (`.Create`) was in the ticket. `pasparser_lval.inc`'s
+nested-scope walk — the **named**-constructor spelling, `TTest.TP.Make` — was
+not, and it is a separate `while … FindNestedType(ci, fieldName) >= 0` loop in a
+different file. Both now call `FindNestedClassLikeCi`.
+
+### THE TABLE THE TICKET NAMED IS NOT THE TABLE THE ROW IS IN
+
+The "Where" note said to fall back to *the alias table*. The first
+implementation did exactly that — `AliasTk`, `AliasElemRec`, `REC_UCLASS_BASE` —
+built cleanly, self-hosted, and **resolved nothing**, because
+`type TP = TThing` where TThing is a class never reaches `RegisterGeneralAlias`
+at all: `ParseTypeSection`'s `IsClassType` arm routes it to
+`RegisterUClassAlias`, a THIRD table (`UClsAlias*`, three columns, no owner).
+
+Every field name in the wrong version was real and every fact checked about it
+was true. What was never checked was **which registrar the declaration actually
+reached**. Reading `RegisterGeneralAlias`'s two call sites is what created the
+confidence — a census of the function I had already decided on. The measurement
+that broke it was a dump of the whole alias table: fourteen rows, all builtins,
+no `TP`. **Ask which registrar ran, not which columns look like they would hold
+the answer.**
+
+So the family is not two tables answering "what may follow `TOuter.`" — it is
+**three**, and the ticket's residual ("two tables is the shape that predicts a
+fifth site") was right about the shape and short by a table.
+
+### Scoping, stated rather than assumed
+
+`FindNestedClassLikeCi`'s alias lookup is **not** owner-scoped, because the
+declaration path is not either: measured, `var x: TOther.TP` compiles today for
+a `TP` declared in `TTest`'s body, since `UClsAlias*` has no owner column. The
+construction path now matches that exactly and is no looser. Scoping both is a
+separate change with a new column in it.
+
+### Landed
+
+- `compiler/symtab.inc` — `FindUClassAliasCi`, extracted from `FindUClass`'s own
+  tail so there is one loop, not two.
+- `compiler/pasparser_class.inc` — `EatQualifiedTypePrefix` (bounds half),
+  `FindNestedClassLikeCi` (constructor half).
+- `compiler/pasparser_lval.inc` — `TryConstHighLowValue` / `TryFoldHighLowType`
+  split into wrapper + `…Inner` so `QualTypeOwnerCi` is restored across nine
+  exit points and any tenth added later; the named-ctor walk taught the alias.
+- `compiler/pasparser_expr.inc` — the `.Create` walk taught the alias, and it now
+  carries the RESOLVED class's own name past the walk instead of the spelling
+  that named it (the `IsClassType(name)` gate below refused `TP`).
+- `test/test_a_qualified_nested_alias_is_a_type_and_a_scope.{pas,expected}` —
+  fpc 3.2.2 oracle, byte-identical, wired in the Makefile. Rows A–D are the
+  controls and were green before the fix.

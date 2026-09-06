@@ -177,6 +177,49 @@ begin
   end;
 end;
 
+function FindNestedClassLikeCi(ci: Integer; const nm: AnsiString): Integer;
+{ The UClass row a `TOwner.<nm>` hop denotes: a nested CLASS or RECORD (a
+  registry row, walking own -> ancestors exactly as FindNestedType does) or a
+  class-name ALIAS declared in a class body's `type` section.
+
+  TWO TABLES ANSWER "WHAT MAY FOLLOW `TOwner.`" AND THE QUALIFIED WALK ONLY EVER
+  ASKED ONE. `var o: TTest.TP` resolves and compiles; `TTest.TP.Create` and
+  `TTest.TP.Make` walked FindNestedType alone, got -1 because a class alias is
+  not a nested-type row, fell through to the class-MEMBER lookup and reported
+  `class method not found (TP)` -- a message about methods, for a TYPE that
+  exists two lines above. The declaration path and the construction path
+  disagreed about what a hop may be, and only the declaration path had been
+  taught.
+
+  THE TABLE IS UClsAlias*, NOT Alias*, AND THAT IS THE PART READING DOES NOT
+  TELL YOU. `type TP = TThing` where TThing is a class never reaches
+  RegisterGeneralAlias: ParseTypeSection's IsClassType arm routes it to
+  RegisterUClassAlias. The first cut of this function consulted
+  AliasTk/AliasElemRec, built cleanly, and resolved nothing -- every field name
+  in it was real and the FUNCTION was the wrong one. What caught it was a
+  dump of the alias table showing fourteen rows, all of them builtins and none
+  of them TP; nothing at the call site or in the columns says which registrar
+  ran. Ask which registrar the DECLARATION reached, never which columns look
+  like they would hold the answer.
+
+  Measured 2026-09-06 against fpc 3.2.2 and against the Aug 29 pin, which
+  refuses `TTest.TP.Create` identically -- a pre-existing gap, not a regression.
+  An UNQUALIFIED alias to a class (`TQ = TThing; TQ.Create`) has always worked,
+  and so has a nested CLASS through both spellings (`TTest.TInner.Create` and
+  `.Make`), which is what pins the defect to the qualified walk over an alias
+  rather than to aliases or to nesting.
+
+  The alias lookup is NOT owner-scoped, because the rows carry no owner column
+  and the declaration path is not scoped either -- `var x: TOther.TP` compiles
+  today for a TP declared in TTest. Matching it here makes the two paths agree,
+  which is this ticket's whole claim; scoping both is a separate change with an
+  extra column in it. bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+begin
+  Result := FindNestedType(ci, nm);
+  if Result >= 0 then Exit;
+  Result := FindUClassAliasCi(ULower(nm));
+end;
+
 function NestedOwnerCi(const nm: AnsiString): Integer;
 { The UClass row a `TOuter.TInner` qualifier names as its OUTER scope — a class
   OR a record. A record body now claims its nested types the same way a class
@@ -250,6 +293,59 @@ begin
   NestedTypeName[NestedTypeCount]  := nm;
   NestedTypeCi[NestedTypeCount]    := ci;
   Inc(NestedTypeCount);
+end;
+
+function EatQualifiedTypePrefix(var name: AnsiString): Boolean;
+{ Consume a `TOwner.` (or `TOuter.TMid.`) qualifier standing in front of a TYPE
+  name, leaving CurTok on the final member and `name` holding its spelling.
+  False when there is nothing to eat, and then NOTHING is consumed, so a caller
+  can use it as the test as well as the strip.
+
+  ONE COPY OF A RULE THAT HAD THREE AND WAS ABOUT TO HAVE FOUR. `var r:
+  TTest.TRecord` had the strip (ParseTypeKindInner), `SizeOf(TTest.TRecord)`
+  grew its own, and `Default()` never learned it at all until tdefault8
+  segfaulted at runtime over it. `Low`/`High` are the fourth site and had no
+  copy either -- `Low(TTest.TRange)` answered `class method not found (TRange)`,
+  which is the error from the class-MEMBER walk, because a bound helper that
+  never strips the qualifier hands `TTest` to a name lookup and the expression
+  parser takes over from there.
+
+  A rule spelled per call site fails by an ABSENT copy, and absent copies agree
+  with each other perfectly, so reading the three that existed against one
+  another could not have produced the fourth. It was found by a probe drawn
+  from the GRAMMAR -- the intrinsics that take a type name -- rather than from
+  any helper's call graph, which by construction only returns sites that
+  already reach the helper.
+
+  QualTypeOwnerCi IS SET HERE AND NOT RESTORED HERE, deliberately: it must
+  survive into whatever lookup the caller then performs, because that is the
+  channel telling FindTypeAlias which owner's rows are admissible. Callers that
+  route into ParseTypeKind get the restore for free (its wrapper saves and
+  restores); a caller that does its own lookup -- TryFoldHighLowType and
+  TryConstHighLowValue do -- must save and restore around it, or a class's
+  private alias stays visible to the next unqualified name in the file.
+  bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+var qtpCi, qtpHops, qtpI: Integer; qtpLast: AnsiString;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if NestedOwnerCi(name) < 0 then Exit;
+  if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
+  qtpCi := ScanNestedTypeRun(name, qtpLast, qtpHops);
+  { The registry resolves a nested CLASS or RECORD; a nested subrange, enum or
+    array is not a UClass row and answers -1, and then the OWNER is still the
+    thing the lookup needs to be told about. }
+  if qtpCi >= 0 then QualTypeOwnerCi := qtpCi
+  else QualTypeOwnerCi := NestedOwnerCi(name);
+  if qtpHops = 0 then qtpHops := 1;   { bare-name strip, one qualifier }
+  for qtpI := 1 to qtpHops do
+  begin
+    Next;   { past the owner name — CurTok is now '.' }
+    Next;   { past '.'            — CurTok is now the nested type name }
+  end;
+  name := CurTok.SVal;
+  Result := True;
 end;
 
 function FindClassConst(ci: Integer; const nm: AnsiString): Integer;

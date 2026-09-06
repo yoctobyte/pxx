@@ -1404,6 +1404,35 @@ begin
   ClassRowVisibleHere := DeclVisibleSect(UClsUnitIdx[ci], UClsDeclImpl[ci], IMPLTAB_UCLS, ci);
 end;
 
+{ The class row a CLASS-NAME ALIAS denotes (`TOptionList = TList;`), or -1.
+
+  A THIRD TABLE ANSWERS "WHAT IS A TYPE NAME", AND IT IS THE ONE NOBODY LOOKS
+  FOR. `type T = <a class>` does not reach RegisterGeneralAlias at all --
+  ParseTypeSection's IsClassType arm routes it to RegisterUClassAlias, so the
+  row lives here and NOT in the Alias* columns, which is where a reader who has
+  just checked `AliasTk`/`AliasElemRec` will look and find nothing. Extracted
+  from FindUClass's tail so the qualified-member walk can ask the same question
+  without a second copy of the loop; FindUClass still calls it last, so its
+  answer is unchanged.
+
+  UNSCOPED, DELIBERATELY, because the declaration path is: the rows carry a
+  name and a ci and no owner column, so an alias declared inside a class body
+  is a global name. Measured 2026-09-06: `var x: TOther.TP` compiles today
+  where TP was declared in TTest's body. A caller that wants owner scoping must
+  add the column, and that is a wider change than any qualified-walk fix needs.
+  bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+function FindUClassAliasCi(const lo: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to UClsAliasCount - 1 do
+    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
+    begin
+      Result := UClsAliasCi[i];
+      Exit;
+    end;
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
@@ -1471,12 +1500,7 @@ begin
   end;
   if Result >= 0 then Exit;
   { class-name alias (`TOptionList = TList;`) — resolve to the target row }
-  for i := 0 to UClsAliasCount - 1 do
-    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
-    begin
-      Result := UClsAliasCi[i];
-      Exit;
-    end;
+  Result := FindUClassAliasCi(lo);
 end;
 
 procedure RegisterUClassAlias(noff, nlen, ci: Integer);

@@ -1307,9 +1307,17 @@ begin
             nested class could be named in a declaration and never constructed —
             a half-working feature. Loops, because nesting does.
             bug-a-duplicate-class-name-check-is-scope-blind }
-          while (CurTok.Kind = tkDot) and (FindNestedType(ci, fieldName) >= 0) do
+          { FindNestedClassLikeCi, not FindNestedType: a nested type ALIAS
+            (`type TP = TThing;` inside TTest) is a legal scope too, and it is
+            invisible to the registry. `TTest.TP.Make` asked TTest for a METHOD
+            called `TP` and answered `class method not found (TP)` while
+            `var o: TTest.TP` compiled -- the declaration path already consulted
+            both tables and this walk consulted one. The nested-CLASS spelling
+            (`TTest.TInner.Make`) has always worked, which is what localises it.
+            bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+          while (CurTok.Kind = tkDot) and (FindNestedClassLikeCi(ci, fieldName) >= 0) do
           begin
-            ci := FindNestedType(ci, fieldName);
+            ci := FindNestedClassLikeCi(ci, fieldName);
             Expect(tkDot, '.');
             if not IsMethodNameTok then Error('expected class method name');
             fieldName := GetTokenStr(TokPos - 1);
@@ -7883,7 +7891,28 @@ begin
   Result := (elemTk <> 0) and OrdinalTypeBound(IntToTypeKind(elemTk), wantHigh, v);
 end;
 
+function TryConstHighLowValueInner(wantHigh: Boolean; var v: Int64): Boolean; forward;
+
+{ Wrapper, and it exists only to save and restore QualTypeOwnerCi -- exactly
+  what ParseTypeKind's wrapper does and for exactly the same reason, stated in
+  its header: the global must survive INTO the lookup (that is the channel that
+  tells FindTypeAlias which owner's rows are admissible) and must NOT survive
+  OUT (it widens alias visibility, so a value left behind lets a later
+  unqualified name see some class's private alias).
+
+  A WRAPPER RATHER THAN A RESTORE BEFORE EACH `Exit`: the inner body has nine
+  exit points and a tenth added later would silently leak the widened scope --
+  a rule spelled per exit is the same absent-copy shape this whole ticket is
+  about, one scope down. }
 function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
+var savedQTO: Integer;
+begin
+  savedQTO := QualTypeOwnerCi;
+  TryConstHighLowValue := TryConstHighLowValueInner(wantHigh, v);
+  QualTypeOwnerCi := savedQTO;
+end;
+
+function TryConstHighLowValueInner(wantHigh: Boolean; var v: Int64): Boolean;
 { Value twin of TryFoldHighLowType for the constant evaluator: CurTok sits on
   the (candidate) type name inside High(...)/Low(...); on success the bound is
   in v and the type name is consumed (bug-pascal-high-low-in-const-expr —
@@ -7912,6 +7941,10 @@ begin
   end;
   if CurTok.Kind <> tkIdent then Exit;
   nm := CurTok.SVal;
+  { The const-context twin of the strip in TryFoldHighLowType, and duplicated
+    here for the same reason its subrange and enum-alias arms are: these two are
+    one concept in two places and they change together. Same save/restore. }
+  EatQualifiedTypePrefix(nm);
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then
   begin
@@ -7990,7 +8023,19 @@ begin
   end;
 end;
 
+function TryFoldHighLowTypeInner(wantHigh: Boolean; var outNode: Integer): Boolean; forward;
+
+{ Expression twin of TryConstHighLowValue's wrapper, same save/restore, same
+  reason -- see its header. }
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
+var savedQTO: Integer;
+begin
+  savedQTO := QualTypeOwnerCi;
+  TryFoldHighLowType := TryFoldHighLowTypeInner(wantHigh, outNode);
+  QualTypeOwnerCi := savedQTO;
+end;
+
+function TryFoldHighLowTypeInner(wantHigh: Boolean; var outNode: Integer): Boolean;
 var btk: TTypeKind; bv: Int64; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
@@ -8011,6 +8056,15 @@ begin
   nm := CurTok.SVal;
   { An array variable takes the variable path; a type name does not. }
   if FindSym(nm) >= 0 then Exit;
+
+  { `Low(TOuter.TNested)` — the fourth site of the qualifier strip and the one
+    that had no copy. Saved and restored around every exit below, because
+    EatQualifiedTypePrefix leaves QualTypeOwnerCi set for the lookup that
+    follows and this function does its own lookups rather than routing through
+    ParseTypeKind, which would restore it. A value left behind widens alias
+    visibility for the next unqualified name in the file.
+    bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+  EatQualifiedTypePrefix(nm);
 
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then

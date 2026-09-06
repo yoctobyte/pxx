@@ -6665,6 +6665,23 @@ test-core: $(COMPILER)
 	@# The three lines pxx warns on are the three fpc warns on, measured.
 	@$(TESTTMP)/test_setdomain26 | diff -u test/test_a_set_element_outside_the_domain_is_diagnosed.expected - \
 	  || { echo 'test_a_set_element_outside_the_domain_is_diagnosed: FAIL - the values under the diagnostic moved'; exit 1; }
+	./$(COMPILER) test/test_a_qualified_nested_alias_is_a_type_and_a_scope.pas $(TESTTMP)/test_qualnestedalias26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROWS A..D WERE GREEN BEFORE THE FIX AND ARE THE BOUNDARY, not decoration:
+	@# an UNQUALIFIED alias constructor, a nested CLASS through both `.Create`
+	@# and a named constructor, and unqualified subrange bounds. They are what
+	@# localise the defect to the QUALIFIED walk over an ALIAS -- neither
+	@# aliases nor nesting nor Low/High was broken, and a file containing only
+	@# the red rows cannot say that.
+	@# ROWS E/F AND G/H/I ARE TWO DEFECTS, NOT ONE, and this file is the record
+	@# of it. All three sites emitted `class method not found (<the type name>)`
+	@# -- the place anything unresolved lands, which names the position and never
+	@# the reason. The bounds half was fixed first and measured: `Low(TTest.
+	@# TRange)` answered 1 while `TTest.TP.Make` still failed identically. One
+	@# error string across N sites is not evidence of one cause, and one fix
+	@# covering N sites would not have been evidence either.
+	@$(TESTTMP)/test_qualnestedalias26 | diff -u test/test_a_qualified_nested_alias_is_a_type_and_a_scope.expected - \
+	  || { echo 'test_a_qualified_nested_alias_is_a_type_and_a_scope: FAIL - a TOwner.TNested spelling means different things in different positions'; exit 1; }
 	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
 	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
 	@# RELATION, never a byte count: the absolute numbers are allocator- and

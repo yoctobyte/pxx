@@ -7884,7 +7884,7 @@ begin
       if (idx < 0) and (procIdx < 0) and (NestedOwnerCi(name) >= 0) and
          (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-         (FindNestedType(NestedOwnerCi(name), GetTokenStr(TokPos+1)) >= 0) then
+         (FindNestedClassLikeCi(NestedOwnerCi(name), GetTokenStr(TokPos+1)) >= 0) then
       begin
         { Walk the whole `. nested . nested ...` run, then require `Create` after
           it. This was a FIXED three-token lookahead, so exactly one level of
@@ -7898,9 +7898,9 @@ begin
         nestDepth := 0;
         while (nestScanPos + 1 < TokCount) and (Tokens[nestScanPos].Kind = tkDot) and
               (Tokens[nestScanPos+1].Kind = tkIdent) and
-              (FindNestedType(nestScanCi, GetTokenStr(nestScanPos+1)) >= 0) do
+              (FindNestedClassLikeCi(nestScanCi, GetTokenStr(nestScanPos+1)) >= 0) do
         begin
-          nestScanCi := FindNestedType(nestScanCi, GetTokenStr(nestScanPos+1));
+          nestScanCi := FindNestedClassLikeCi(nestScanCi, GetTokenStr(nestScanPos+1));
           Inc(nestDepth);
           nestScanPos := nestScanPos + 2;
         end;
@@ -7914,7 +7914,14 @@ begin
             Next;   { the enclosing class name }
             Next;   { '.' — CurTok is now the next nested type name }
           end;
-          name := GetTokenStr(TokPos - 1);
+          { The RESOLVED class's own name, not the spelling that named it. For a
+            nested CLASS the two are identical, which is why the token worked; for
+            a nested type ALIAS the spelling is `TP` and no class of that name
+            exists, so the `IsClassType(name)` gate below refused the very hop
+            this walk had just resolved. Taking the name off the ci makes the
+            alias case take the same road the registry case already takes.
+            bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+          name := GetTokenStrFromRaw(UClsNOff[nestCtorCi], UClsNLen[nestCtorCi]);
         end;
       end;
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
