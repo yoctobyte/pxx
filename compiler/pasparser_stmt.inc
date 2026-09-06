@@ -5993,6 +5993,7 @@ var
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
+  insSplice: Boolean;   { …and whether this call IS the splice — true for a named source array AND for a retagged element list, which has no symbol }
   savedErrCount: Integer;   { recovered-diagnostic watermark, for statement resync }
   assertPosNode: Integer;   { synthesised ' (file.pas, line N)' literal for __pxxAssert, or -1 }
   assertMsgLit, assertArg: Integer;   { the empty-message literal a 1-arg Assert needs, and the AN_ARG carrying either }
@@ -7081,7 +7082,37 @@ begin
             FPC prints `10 90 91 11 12`. Silent wrong output, so a source array
             whose element type does NOT match is refused rather than left to
             mean something plausible. }
+          { …and the SAME SPLICE reached by the other spelling of a source array:
+            an ELEMENT LIST. `Insert([1, 3, 5], t, 0)` gave Length 1 holding an
+            ADDRESS where fpc gives 1 3 5 -- the identical garbage-address
+            signature the note above records for the named-array form, because
+            `[...]` is an AN_SET_LIT of depth 0 until something names its element
+            type, so it fell through to the one-element insert and stored the set
+            handle. The sibling of a fixed double case (tarray12).
+
+            THE DESTINATION IS ARGUMENT TWO AND IT NAMES THE ELEMENT TYPE, which
+            is why this is a FIX and not the refusal its cousin got: nothing in
+            `Concat([1,2,3],[6,8,10])` names an element type, that one has no
+            destination to ask, and it is refused by name pending a
+            destination-type channel into expression parsing. Here the context is
+            LOCAL and already parsed, so no channel is needed and this must NOT
+            be read as precedent for guessing an element type where nothing names
+            one. Fourth caller of RetagSetLitAsArrayCtor, after the assignment,
+            `TDynArr.Create(...)` and the concatenation gate -- still no second
+            answer to "what is a dynamic-array literal".
+
+            A retagged list needs no temp: an AN_ARRAY_CTOR lowers to a real
+            dyn-array temp and yields its HANDLE, which is exactly what the
+            splice path passes, so the node goes straight through. A destination
+            whose element is a fixed ROW is excluded -- a row is bytes inside the
+            outer block, not a handle, and the ctor has nothing to build (the
+            same limit tarray15 records). }
+          if (ASTKind[exprNode] = AN_SET_LIT) and (NodeDynDepth(exprNode) = 0) and
+             SetLitElemsArePlain(exprNode) and (NodeDynElemRowLen(valNode) = 0) then
+            RetagSetLitAsArrayCtor(exprNode, NodeDynBaseTk(valNode),
+                                   NodeDynDepth(valNode));
           insSrcSym := -1;
+          insSplice := False;
           if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
              Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
           begin
@@ -7098,10 +7129,17 @@ begin
               insSrcSym := -1
             else if SymDynDepth[insSrcSym] <> NodeDynDepth(valNode) then
               Error('Insert: the source array''s nesting differs from the destination''s');
-          end;
+            insSplice := insSrcSym >= 0;
+          end
+          { A retagged element list has no SYMBOL, so "is this a splice" cannot
+            stay spelled as `insSrcSym >= 0` -- one predicate, both spellings,
+            because the three readers below must agree about the same call. }
+          else if (ASTKind[exprNode] = AN_ARRAY_CTOR) and
+                  (NodeDynDepth(exprNode) = NodeDynDepth(valNode)) then
+            insSplice := True;
           { A nested destination's elements are sub-array handles, so a plain
             scalar/record value cannot be one of them. }
-          if (NodeDynDepth(valNode) > 1) and (insSrcSym < 0) and
+          if (NodeDynDepth(valNode) > 1) and (not insSplice) and
              not ((ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
                   Syms[ASTIVal[exprNode]].IsArray) then
             Error('Insert: a nested dynamic array takes a sub-ARRAY as the inserted value');
@@ -7114,10 +7152,10 @@ begin
           Expect(tkRParen, ')');
           if FindProc('PXXDynInsFill') < 0 then
             Error('Insert: dynamic-array helper unavailable (needs the builtin unit; not on ESP)');
-          if (insSrcSym >= 0) and (FindProc('PXXDynInsArrFill') < 0) then
+          if insSplice and (FindProc('PXXDynInsArrFill') < 0) then
             Error('Insert: array-splice helper unavailable (needs the builtin unit; not on ESP)');
           stepsNode := AllocNode(AN_DYN_INSERT);
-          if insSrcSym >= 0 then ASTIVal[stepsNode] := 1 else ASTIVal[stepsNode] := 0;
+          if insSplice then ASTIVal[stepsNode] := 1 else ASTIVal[stepsNode] := 0;
           ASTLeft[stepsNode] := valNode;
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;   { value }
           lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode;   { index }

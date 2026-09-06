@@ -1,0 +1,8 @@
+named  len=2: 7 8
+scalar len=1: 9
+list   len=2: 7 8
+mid    len=8: 0 1 1 3 5 2 3 4
+empty  len=5: 0 1 2 3 4
+below  len=8: 1 3 5 0 1 2 3 4
+above  len=8: 0 1 2 3 4 1 3 5
+chars  len=2: b d

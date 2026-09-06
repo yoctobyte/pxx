@@ -6304,6 +6304,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_named_set_constant_iterates_like_the_other_two_spellings \
 	  "$$($(TESTTMP)/test_setconstin26)" \
 	  "$$(cat test/test_a_named_set_constant_iterates_like_the_other_two_spellings.expected)"
+	# `Insert([1,3,5], t, i)` -- an ELEMENT LIST as the inserted value, wrong in
+	# the exact way this intrinsic's own comment records fixing for the NAMED
+	# source array: it stored the source's HANDLE as one element, so a nil
+	# destination came back `Length: 1` holding an address where fpc gives 1 3 5.
+	# All three source spellings are in the file and the first two already
+	# worked, because the claim is that a list inserts the SAME WAY a named array
+	# does. Every row prints CONTENTS: the defect produced a plausible LENGTH and
+	# only the value gave it away.
+	./$(COMPILER) test/test_insert_takes_an_element_list_like_a_named_array.pas $(TESTTMP)/test_inslist26
+	tools/expect_same.sh test_insert_takes_an_element_list_like_a_named_array \
+	  "$$($(TESTTMP)/test_inslist26)" \
+	  "$$(cat test/test_insert_takes_an_element_list_like_a_named_array.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
