@@ -90,22 +90,30 @@ begin
     unit compiled into the same program — recorded at birth because the unit
     context is gone by IR lowering (see ASTPyUser in defs.inc) }
   ASTPyUser[ASTNodeCount]  := NilPyUserCode;
-  { DWARF -g: stamp the line for nodes from the main source file, and for any
-    MARKED source whose token range was recorded with DbgMarkTokFile (an
-    imported `.py` module). Everything else — the Pascal RTL, pylib, the unit
-    bodies nobody wants to step through — still gets line 0 and contributes no
-    rows, which is what keeps the whole runtime out of the line table. }
+  { THE LINE IS ALWAYS STAMPED; `ASTFile = 0` IS WHAT KEEPS A NODE OUT OF THE
+    LINE TABLE. These are two different questions and one field used to answer
+    both, which is how every SEMANTIC diagnostic reported through ASTLine lost
+    its coordinate inside a `uses`d unit.
+
+    The DWARF rule is unchanged and is the reason line 0 existed here: the
+    Pascal RTL, pylib and the unit bodies nobody wants to step through must
+    contribute no rows, or the whole runtime lands in the line table. But
+    ErrorAt/ErrorAtRecover take the same field, and `ErrorPrintAt` drives the
+    `pascal26:<n>:` prefix, the `in: <file>` line AND the `near:` window off it
+    — so a zero does not degrade a diagnostic, it erases its entire locating
+    apparatus at once. Measured 2026-09-06: the same statement (`r := p` for a
+    record `r`) reports `pascal26:7:` with a file and a token window in a
+    program, and `pascal26:0:` with neither from a unit. Corpus work is
+    ENTIRELY used units, so this hit every semantic error in every one of them.
+
+    The marked-source check stays first because C's header tokens sit BELOW
+    DbgMainTokEnd — the preprocessor inlines them, so they are not "appended"
+    the way a NilPy import or a Pascal unit is.
+    bug-a-a-semantic-diagnostic-in-a-used-unit-has-no-location-at-all }
+  ASTLine[ASTNodeCount] := CurTok.Line;
   ASTFile[ASTNodeCount] := DbgFileOfTok(TokPos);
-  if ASTFile[ASTNodeCount] > 1 then
-    { a MARKED source: real line, its own file entry. Checked before the
-      main-file bound because C's header tokens sit BELOW DbgMainTokEnd — the
-      preprocessor inlines them, so they are not "appended" the way a NilPy
-      import or a Pascal unit is. }
-    ASTLine[ASTNodeCount] := CurTok.Line
-  else if TokPos <= DbgMainTokEnd then
-    ASTLine[ASTNodeCount] := CurTok.Line
-  else
-    ASTLine[ASTNodeCount] := 0;
+  if (ASTFile[ASTNodeCount] <= 1) and (TokPos > DbgMainTokEnd) then
+    ASTFile[ASTNodeCount] := 0;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;

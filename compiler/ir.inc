@@ -269,6 +269,28 @@ begin
       begin
         nk := IntToTypeKind(ASTTk[node]);
         if nk = tyUnknown then Exit;
+        { AN ARRAY-VALUED NODE TYPES AS ITS ELEMENT, and this arm had no bail
+          for it while the AN_IDENT arm above has had one from the start
+          (`if Syms[si].IsArray then Exit; { the kind is the ELEMENT's }`). So a
+          dyn-array FIELD read as its element kind, and `Fields := nil` on an
+          `array of <record>` field was refused as `cannot assign Pointer to
+          record` -- the element's kind, described as the destination. Legal
+          Pascal, refused, and the same statement on a plain VARIABLE of the
+          same type compiles, because that spelling takes the arm that bails.
+
+          THIS IS THE FALSE-REJECT DIRECTION AND THIS FUNCTION'S OWN HEADER
+          NAMES IT AS THE WORSE ONE: "a false REJECT of working code is a worse
+          defect than the false accept being fixed here". It is also the fourth
+          thing this arm has needed for one reason -- the arm exists because
+          five of six lvalue shapes were unchecked, and each widening has found
+          another property the NODE's kind does not carry.
+
+          NodeDynDepth is the shared answer rather than a fresh walk: it already
+          types AN_FIELD, AN_INDEX and AN_DEREF (and calls, and Copy, and array
+          constructors), and a second derivation here would be a second answer
+          to a question already answered.
+          bug-a-a-nil-assignment-to-a-dynamic-array-field-is-refused }
+        if NodeDynDepth(node) > 0 then Exit;
         rec := ResolveNodeRec(node);
         if RecIsReferenceShaped(rec) then Exit;
         tk := nk;
@@ -17122,7 +17144,12 @@ end;
 procedure DbgRecordRow(i: Integer);
 begin
   if not DebugInfo then Exit;
-  if (IRLine[i] = 0) or (IRLine[i] = DwarfLastLine) then Exit;
+  { IRFile = 0 is "this node is not in the line table" — the Pascal RTL, pylib
+    and every unmarked appended unit. It used to be spelled as IRLine = 0,
+    which cost every semantic diagnostic in a used unit its coordinate; the
+    line is stamped for real now and the exclusion moved here, where it is the
+    only thing it affects. See AllocNode in ast_arena.inc. }
+  if (IRLine[i] = 0) or (IRFile[i] = 0) or (IRLine[i] = DwarfLastLine) then Exit;
   if DwarfProcFirstRow and (CurProc >= 0) and (DwarfRowCount < MAX_DWARF_ROWS) then
   begin
     DwarfRowAddr[DwarfRowCount] := Procs[CurProc].BodyAddr;

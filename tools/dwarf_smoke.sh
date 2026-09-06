@@ -196,4 +196,62 @@ if command -v gdb >/dev/null 2>&1; then
     || { echo "dwarf-g: FAIL — cannot read through the type cycle (expected 7)"; echo "$MLOG"; exit 1; }
 fi
 
+# ---------------------------------------------------------------------------
+# T5  THE LINE TABLE DESCRIBES THE USER'S FILE AND NOTHING ELSE.
+#
+# `ASTLine` used to be zero for every node in a `uses`d unit, and that zero was
+# doing two unrelated jobs: keeping the RTL out of the line table, and standing
+# in as the coordinate for SEMANTIC diagnostics. The second job made every
+# `ErrorAt`/`ErrorAtRecover` inside a unit print `pascal26:0:` with no file and
+# no `near:` window, so the split landed in 2026-09-06: the line is always
+# stamped and `ASTFile = 0` (IRFile) now carries "not in the line table".
+#
+# THIS ROW IS THE HALF THAT CAN REGRESS SILENTLY. A diagnostic losing its line
+# is loud the first time someone hits it; the RTL leaking into the line table
+# is not visible at all unless you count. Measured when the guard was removed
+# on purpose: this eight-line program went from 6 rows to 3663, carrying line
+# numbers up to 6290 -- the RTL's own -- all attributed to the user's file, so
+# every `break <file>:<n>` and every backtrace would resolve to the wrong text.
+# The bound is deliberately loose: what it must catch is a flood, and any
+# threshold near the true count would be a maintenance tax on a legitimate
+# extra row.
+USRC="$TMP/dbgunit.pas"
+UMAIN="$TMP/dbgumain.pas"
+UEXE="$TMP/dbgumain"
+cat > "$USRC" <<'EOU'
+unit dbgunit;
+interface
+function Twice(x: Integer): Integer;
+implementation
+function Twice(x: Integer): Integer;
+begin
+  Twice := x * 2;
+end;
+end.
+EOU
+cat > "$UMAIN" <<'EOU'
+program dbgumain;
+uses dbgunit;
+var a: Integer;
+begin
+  a := Twice(21);
+  writeln('u=', a);
+end.
+EOU
+"$PXX" -g "-Fu$TMP" "$UMAIN" "$UEXE" >/dev/null 2>&1   || { echo "dwarf-g: FAIL — a program using a unit does not build under -g"; exit 1; }
+UOUT="$("$UEXE")"
+[ "$UOUT" = "u=42" ] || { echo "dwarf-g: FAIL — unit sample output wrong (got: $UOUT)"; exit 1; }
+if command -v readelf >/dev/null 2>&1; then
+  ULINES="$(readelf --debug-dump=decodedline "$UEXE" 2>/dev/null)"
+  UROWS="$(echo "$ULINES" | grep -cE '0x[0-9a-f]+')"
+  # the program is 7 lines long; anything past a couple of dozen rows means the
+  # RTL's own lines are in the table, mislabelled as this file's
+  [ "$UROWS" -gt 0 ] || { echo "dwarf-g: FAIL — no line rows at all for a unit-using program"; exit 1; }
+  [ "$UROWS" -lt 40 ]     || { echo "dwarf-g: FAIL — $UROWS line rows for a 7-line program: the RTL is in the line table"; exit 1; }
+  # ...and no row may claim a line the file does not have
+  UMAX="$(echo "$ULINES" | grep -E '0x[0-9a-f]+' | awk '{print $2}' | grep -E '^[0-9]+$' | sort -n | tail -1)"
+  [ -n "$UMAX" ] && [ "$UMAX" -le 20 ]     || { echo "dwarf-g: FAIL — line table claims line $UMAX in a 7-line file"; exit 1; }
+  echo "dwarf-g: line table describes the user's file only ($UROWS rows, max line $UMAX)"
+fi
+
 echo "dwarf-g: OK"

@@ -7202,6 +7202,43 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_receiverless_free_inside_a_method \
 	  "$$($(TESTTMP)/test_bareselffree26)" \
 	  "$$(cat test/test_a_receiverless_free_inside_a_method.expected)"
+	@# `Fld := nil` ON A DYNAMIC-ARRAY FIELD -- two defects, the first hiding the
+	@# second. AssignSideKind typed the field as its ELEMENT (an array's TypeKind
+	@# IS the element's), so `array of <record>` was REFUSED as `cannot assign
+	@# Pointer to record`; with that gone it SEGFAULTED, because
+	@# ASTNodeIsWholeArray answered only for the AN_IDENT spelling and the field
+	@# took the "record-shaped destination := nil" arm, zeroing RecSize(ELEMENT)
+	@# = 4 bytes over the 8-byte array handle. ACCIDENTAL COVER: nothing reached
+	@# the bad lowering while the refusal stood, so neither is provable alone.
+	@# The `int` and `out` rows already worked and are here so the file cannot
+	@# read "arrays now work" as "records now work". THE `mp` ROW MUST NOT MOVE:
+	@# a method-pointer field is record-SHAPED and `OnHit := nil` must keep the
+	@# zero-fill arm -- widening the whole-array predicate is exactly what could
+	@# steal it.
+	@./$(COMPILER) test/test_nil_assigned_to_a_dynamic_array_field.pas $(TESTTMP)/test_dynfieldnil26
+	@tools/expect_same.sh test_nil_assigned_to_a_dynamic_array_field \
+	  "$$($(TESTTMP)/test_dynfieldnil26)" \
+	  "$$(cat test/test_nil_assigned_to_a_dynamic_array_field.expected)"
+	@# A SEMANTIC DIAGNOSTIC IN A `uses`d UNIT MUST NAME A LINE. ASTLine was 0
+	@# for every node in an appended unit -- a correct DWARF decision (the RTL
+	@# must contribute no line-table rows) doing a second job it was never suited
+	@# for, since ErrorPrintAt drives the `pascal26:<n>:` prefix off the same
+	@# field. Every semantic error inside a unit printed `pascal26:0:`, and
+	@# corpus work is entirely used units: fcl-passrc's pastree.pp reported a
+	@# real defect with no coordinate at all in 5947 lines.
+	@# THE ASSERTION IS THE COORDINATE, NOT THE MESSAGE -- the text was correct
+	@# throughout the defect, so a row asserting it passed the whole time. Both
+	@# positions run here: line 18 of the unit and line 30 of the main file, the
+	@# second being the control that the fix did not hardcode anything. The other
+	@# half of the split (the RTL staying OUT of the line table) is asserted by
+	@# tools/dwarf_smoke.sh T5, which counted 6 rows with the guard and 3663
+	@# without.
+	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.unit \
+	  "$$(./$(COMPILER) -Futest/pascal_units test/pascal_units/driver_a_semantic_error_in_a_unit.pas $(TESTTMP)/test_unitdiagline26 2>&1 | head -1)" \
+	  "pascal26:18: error: incompatible types: cannot assign Pointer to record"
+	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.main \
+	  "$$(./$(COMPILER) test/test_a_semantic_diagnostic_in_a_used_unit_has_a_line.pas $(TESTTMP)/test_maindiagline26 2>&1 | head -1)" \
+	  "pascal26:30: error: incompatible types: cannot assign Pointer to record"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

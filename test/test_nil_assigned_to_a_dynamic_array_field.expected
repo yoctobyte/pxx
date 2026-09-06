@@ -1,0 +1,8 @@
+int  before=3
+int  after =0
+rec  before=3 last=5
+rec  after =0
+out  before=2
+out  after =0
+mp   assigned=TRUE hits=4
+mp   detached=TRUE hits=4

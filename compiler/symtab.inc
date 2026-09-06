@@ -2885,23 +2885,6 @@ begin
   end;
 end;
 
-function ASTNodeIsWholeArray(node: Integer): Boolean;
-{ True iff this lvalue node denotes a WHOLE array rather than one element.
-
-  An array's TypeKind IS its element kind, so any pass that decides what an
-  assignment means from the type kind alone cannot tell `arr := other` from
-  `arr[i] := other` — and for an array of interfaces that mistake lowered the
-  whole-array copy into an ARC interface assign over the array HANDLE.
-  bug-a-assigning-a-dynamic-array-of-interfaces-is-lowered-as-an-interface-assign }
-begin
-  Result := False;
-  if node < 0 then Exit;
-  { An index or a deref has already selected an ELEMENT. }
-  if ASTKind[node] <> AN_IDENT then Exit;
-  Result := (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) and
-            Syms[ASTIVal[node]].IsArray;
-end;
-
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
 var fi, i, cnt: Integer; field2: AnsiString;
 begin
@@ -16623,6 +16606,49 @@ begin
   else
     Result := REC_NONE;
 end;
+
+function ASTNodeIsWholeArray(node: Integer): Boolean;
+{ True iff this lvalue node denotes a WHOLE array rather than one element.
+
+  An array's TypeKind IS its element kind, so any pass that decides what an
+  assignment means from the type kind alone cannot tell `arr := other` from
+  `arr[i] := other` — and for an array of interfaces that mistake lowered the
+  whole-array copy into an ARC interface assign over the array HANDLE.
+  bug-a-assigning-a-dynamic-array-of-interfaces-is-lowered-as-an-interface-assign
+
+  THE FIELD ARM IS THE SECOND SPELLING AND IT WAS MISSING, which made this
+  function's own opening sentence false for half the lvalues that reach it. A
+  dynamic-array FIELD is a whole array; it answered False, so `RA := nil` on an
+  `array of <record>` field took the "record-shaped destination := nil" arm in
+  ir.inc and zeroed RecSize(ELEMENT) bytes over the array HANDLE — four bytes of
+  a pointer — and the next `Length(RA)` read a truncated address and SIGSEGV'd.
+  The same statement on a plain VARIABLE of the same type is correct, because
+  that spelling is the one this function knew.
+
+  IT WAS INVISIBLE BECAUSE A SECOND DEFECT REFUSED THE PROGRAM FIRST:
+  AssignSideKind typed the same field as its ELEMENT and the assignment check
+  rejected `cannot assign Pointer to record` before lowering ever ran. Fixing
+  the false reject is what exposed the miscompile underneath it — accidental
+  cover, and the reason the two go in together.
+  bug-a-a-nil-assignment-to-a-dynamic-array-field-is-lowered-as-a-record-zero
+
+  MOVED here from the top of this file in 2026-09-06: the field arm needs
+  ResolveNodeRec and GetASTIdentName, both defined above, and this function's
+  only caller is in ir.inc, included after all of it. }
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    Result := (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) and
+              Syms[ASTIVal[node]].IsArray;
+    Exit;
+  end;
+  { An index or a deref has already selected an ELEMENT; a FIELD has not. }
+  if ASTKind[node] <> AN_FIELD then Exit;
+  Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+end;
+
 
 { The named pointer ALIAS a pointer-valued node's type came from, or -1 when the
   node is not pointer-valued, or is but was declared inline rather than through
