@@ -1,0 +1,7 @@
+empty len=0
+expr: 7 14 8
+str: Alpha yz Delta
+nest: (1 2 ) (3 4 5 )
+set: a b c z
+set empty: FALSE
+byteset: 3 10

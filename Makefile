@@ -6198,6 +6198,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_class_reference_in_array_of_const_is_vtclass \
 	  "$$($(TESTTMP)/test_aoc_vtclass26)" \
 	  "$$(cat test/test_a_class_reference_in_array_of_const_is_vtclass.expected)"
+	# `a := [1,2,3]` on a DYNAMIC ARRAY: the bracket literal parses as a set --
+	# nothing at the bracket knows the target -- and the 32-byte mask was stored
+	# into the handle slot (len=435728179526, then a segfault). Retagged at the
+	# one place every syntactic assignment funnels through. The set rows and the
+	# `1 + 2` / `'y' + 'z'` element rows are the controls: sets must stay sets,
+	# and the folded fast paths used to eat one token of a compound element.
+	./$(COMPILER) test/test_a_bracket_literal_assigned_to_a_dynamic_array.pas $(TESTTMP)/test_brklit_dynarr26
+	tools/expect_same.sh test_a_bracket_literal_assigned_to_a_dynamic_array \
+	  "$$($(TESTTMP)/test_brklit_dynarr26)" \
+	  "$$(cat test/test_a_bracket_literal_assigned_to_a_dynamic_array.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

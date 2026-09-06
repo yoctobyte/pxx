@@ -3649,6 +3649,57 @@ end;
   exactly these two shapes for the assignment check; this is the same pair read
   for the tag, kept beside it deliberately so the two cannot drift.
   feature-pascal-corpus-fpc-testsuite (tarray2 row) }
+{ Does every element of this set literal read as a plain array element? A set
+  admits `lo..hi`, which parses to AN_PAIR and has no array meaning, so a
+  literal carrying one is left as a set — the array retag below is for the
+  shape both forms genuinely share. }
+function SetLitElemsArePlain(node: Integer): Boolean;
+var item: Integer;
+begin
+  Result := False;
+  if (node < 0) or (ASTKind[node] <> AN_SET_LIT) then Exit;
+  item := ASTLeft[node];
+  while item <> -1 do
+  begin
+    if (ASTLeft[item] < 0) or (ASTKind[ASTLeft[item]] = AN_PAIR) then Exit;
+    item := ASTRight[item];
+  end;
+  Result := True;
+end;
+
+{ Retag a set literal as an open-array constructor over `elemTk`, `depth`
+  levels of `array of` deep. Both nodes hold an AN_ARG chain of element
+  expressions in Left, so nothing is rebuilt; what changes is the kind and the
+  three fields AN_ARRAY_CTOR's lowering reads. ASTSOffset carries
+  OpenArrayCtorRowLen's encoding — 0 for a scalar element, negative for a
+  dyn-array element of that depth — so `array of array of T` builds a temp one
+  level deeper whose slots hold handles rather than base scalars. }
+procedure RetagSetLitAsArrayCtor(node: Integer; elemTk: TTypeKind; depth: Integer);
+var item: Integer;
+begin
+  { A nested literal is an ELEMENT of this one and is a set by the same accident
+    the outer one was: `m := [[1, 2], [3, 4, 5]]` over `array of array of T`.
+    Retagging only the outer node leaves each row lowering as a 32-byte mask
+    stored into a handle slot -- the original defect, one level down. }
+  if depth >= 2 then
+  begin
+    item := ASTLeft[node];
+    while item <> -1 do
+    begin
+      if (ASTLeft[item] >= 0) and (ASTKind[ASTLeft[item]] = AN_SET_LIT) and
+         SetLitElemsArePlain(ASTLeft[item]) then
+        RetagSetLitAsArrayCtor(ASTLeft[item], elemTk, depth - 1);
+      item := ASTRight[item];
+    end;
+  end;
+  ASTKind[node]    := AN_ARRAY_CTOR;
+  ASTIVal[node]    := Ord(elemTk);
+  ASTTk[node]      := Ord(elemTk);
+  ASTSLen[node]    := 0;
+  if depth >= 2 then ASTSOffset[node] := -(depth - 1)
+  else ASTSOffset[node] := 0;
+end;
+
 function IsNodeClassRef(node: Integer): Boolean;
 var symId: Integer;
 begin
@@ -8455,6 +8506,12 @@ begin
 
     AN_SET_LIT:
     begin
+      { A literal carrying a STRING element reaches here only if it was NOT
+        retagged as an array constructor -- i.e. it really is being used as a
+        set. The parser used to refuse at the element and that made
+        `s := ['Alpha', 'Beta']` unparseable; the refusal lives here instead, on
+        the one consumer that cannot use it. Same message as before. }
+      if ASTSLen[node] = 1 then Error('set item must be one character');
       { An all-constant set literal is baked into a 32-byte Data[] blob (the
         original fast path, kept byte-identical). The parser leaves a constant
         element as an AN_INT_LIT (a constant range as an AN_PAIR of two of them);
@@ -11628,6 +11685,27 @@ begin
         if (ASTCharArrayCap(ASTRight[node]) >= 0) and
            (IntToTypeKind(ASTTk[ASTLeft[node]]) in [tyString, tyAnsiString]) then
           ASTRight[node] := WrapCharArrayToStringExpr(ASTRight[node]);
+
+        { `a := [1, 2, 3]` where a is a DYNAMIC ARRAY. `[...]` parses as a set
+          literal — it has to, nothing at the bracket knows the target — and the
+          set's 32-byte MASK was then stored into the array's handle slot. It
+          compiled clean, printed `len=435728179526`, and segfaulted; fpc 3.2.2
+          accepts the same three lines and prints 1 2 3. Rewritten HERE for the
+          reason the char-array arms above give: there are two dozen places that
+          build an AN_ASSIGN and exactly one that lowers it.
+
+          AN_SET_LIT and AN_ARRAY_CTOR already hold the SAME thing — an AN_ARG
+          chain of element expressions — so this is a retag, not a rebuild, and
+          the open-array ctor lowering (heap temp, SetLength, per-element store
+          with coercion and ARC) is reached unchanged. A `lo..hi` element is an
+          AN_PAIR and means nothing to an array, so those keep the old path and
+          the set diagnostics that go with it. }
+        if (ASTKind[ASTRight[node]] = AN_SET_LIT) and
+           (NodeDynDepth(ASTLeft[node]) >= 1) and
+           SetLitElemsArePlain(ASTRight[node]) then
+          RetagSetLitAsArrayCtor(ASTRight[node],
+                                 IntToTypeKind(ASTTk[ASTLeft[node]]),
+                                 NodeDynDepth(ASTLeft[node]));
       end;
 
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is

@@ -3928,6 +3928,18 @@ begin
   Result := node;
 end;
 
+function SetElemEndsAtNextTok: Boolean;
+{ Is the token AFTER the current one an element terminator? The three folded
+  arms below consume exactly one token and return, so `['y' + 'z']` and
+  `[1 + 2]` came back to the literal loop mid-expression and died on
+  `expected ']' before '+'`. Folding is a fast path for a WHOLE element, not a
+  way to read one; ask whether the element really ends here before taking it.
+  `..` counts, because a range bound is an element too. }
+begin
+  SetElemEndsAtNextTok := (TokPos < TokCount) and
+    (Tokens[TokPos].Kind in [tkComma, tkRBrack, tkDotDot]);
+end;
+
 function ParseSetElementAST: Integer;
 { One set-literal element. A compile-time constant (integer / 1-char string /
   const identifier — exactly what ParseSetConst accepts) folds to an AN_INT_LIT
@@ -3935,22 +3947,23 @@ function ParseSetElementAST: Integer;
   Anything else (a variable, a computed expression) is parsed as a full
   expression for a runtime element; the lowering then builds the set at runtime
   with Include/range loops. }
-var n, sci, savEnum: Integer; savMixed, savPlain: Boolean;
+var n, sci, savEnum: Integer; savMixed, savPlain, savNonSet: Boolean;
 begin
-  if CurTok.Kind = tkInteger then
+  if (CurTok.Kind = tkInteger) and SetElemEndsAtNextTok then
   begin
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := CurTok.IVal; ASTTk[n] := Ord(tyInteger); Next;
     SetLitNoteElem(-1, ASTIVal[n]);
     Result := n;
   end
-  else if CurTok.Kind = tkString then
+  else if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) and
+          SetElemEndsAtNextTok then
   begin
-    if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := Ord(CurTok.SVal[1]); ASTTk[n] := Ord(tyChar); Next;
     SetLitNoteElem(-1, ASTIVal[n]);
     Result := n;
   end
-  else if (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) >= 0) and
+  else if (CurTok.Kind = tkIdent) and SetElemEndsAtNextTok and
+          (FindSym(CurTok.SVal) >= 0) and
           (Syms[FindSym(CurTok.SVal)].Kind = skConst) then
   begin
     sci := FindSym(CurTok.SVal);
@@ -3965,8 +3978,10 @@ begin
     { Runtime element: a variable or an arbitrary expression. The expression may
       itself contain a `[...]`, whose tally must not overwrite ours. }
     savEnum := SetLitEnumId; savMixed := SetLitMixed; savPlain := SetLitHasPlain;
+    savNonSet := SetLitNonSet;
     ParseExpr;
     SetLitEnumId := savEnum; SetLitMixed := savMixed; SetLitHasPlain := savPlain;
+    SetLitNonSet := savNonSet;
     { An enum-typed expression carries its identity on the symbol, so it can be
       tallied exactly. A BOOLEAN one can be tallied as plain: an enum-typed
       variable is tyInteger here, never tyBoolean, so this cannot mistake one
@@ -3979,6 +3994,13 @@ begin
       SetLitNoteEnum(NodeEnumIdOf(CurASTNode))
     else if (CurASTNode >= 0) and (IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) then
       SetLitHasPlain := True;
+    { A STRING element (more than one character -- one is a Char and folded
+      above) cannot be a set member in any dialect, but it is exactly what a
+      dynamic-array constructor is made of. Note it and let the SET lowering be
+      the thing that refuses; see SetLitNonSet. }
+    if (CurASTNode >= 0) and
+       (IntToTypeKind(ASTTk[CurASTNode]) in [tyString, tyAnsiString]) then
+      SetLitNonSet := True;
     Result := CurASTNode;
   end;
 end;
@@ -4027,6 +4049,10 @@ begin
     assignment to a set variable. }
   if SetLitMixed then
     Error('set literal mixes elements from two different enum types');
+  { Carried on the node rather than checked here: at the `]` nothing yet knows
+    whether this is a set or an array constructor, and only one of the two
+    consumers has a problem with a string element. }
+  if SetLitNonSet then ASTSLen[node] := 1 else ASTSLen[node] := 0;
   Result := node;
 end;
 

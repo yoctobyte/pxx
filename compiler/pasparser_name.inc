@@ -421,6 +421,7 @@ begin
   SetLitEnumId := -1;
   SetLitMixed := False;
   SetLitHasPlain := False;
+  SetLitNonSet := False;
 end;
 
 procedure SetLitNoteEnum(eid: Integer);

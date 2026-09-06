@@ -6230,6 +6230,15 @@ var
   SetLitEnumId   : Integer;
   SetLitMixed    : Boolean;
   SetLitHasPlain : Boolean;
+  { …and one element that CANNOT be a set member at all: a string longer than a
+    character. `[...]` has to parse before anything knows the target, and the
+    same brackets spell a dynamic-array constructor -- `s := ['Alpha','Beta']`
+    is FPC-legal and is what fpc-testsuite tarray15/16 declare. Refusing at the
+    element (the old `set item must be one character`) made a legal array
+    literal unparseable, so the element is kept as an expression and the
+    refusal moves to the SET lowering, which is the consumer that actually
+    cannot use it. AN_SET_LIT carries the flag in ASTSLen. }
+  SetLitNonSet   : Boolean;
   LastTypeSetElemTk : Integer;  { set by ParseTypeKind for set types: element TTypeKind ordinal }
   LastTypeSetElemLo : Int64;    { …and the element subrange bounds, when it is one (Hi < Lo = none) }
   LastTypeSetElemHi : Int64;
