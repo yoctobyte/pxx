@@ -12844,6 +12844,25 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_scheduler_exc26 "$$($(TESTTMP)/test_scheduler_exc26)" "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
 	./$(COMPILER) test/test_costack.pas $(TESTTMP)/test_costack26
 	tools/expect_same.sh test_costack26 "$$($(TESTTMP)/test_costack26)" "$$(printf 'w1:55\nw2:210\nw3:465\nw1:55\nw2:210\nw3:465\nall done')"
+	# THREE OVERFLOW SHAPES AND TWO DIFFERENT MESSAGES, which is the assertion:
+	# the canary (a WORD at the low end) and the sp range check have different
+	# apertures, and a change that collapsed them into one would still pass a
+	# test that only asserted "it aborts". So both messages are pinned by text.
+	# `safe` is the negative control and passes before and after the guard
+	# work; `grad` and `leap` both FAIL against the pre-change scheduler (rc
+	# 139, no message), which is what makes the other two rows mean anything.
+	# The band this closed: on an 8 KB stack, frames of 10/12/14 KB all exited
+	# 0 having written below the stack base while an 8 KB frame faulted -- a
+	# LARGER overflow caught LESS often than a smaller one, because what
+	# decided it was heap layout. Now monotonic.
+	./$(COMPILER) test/test_costack_guard.pas $(TESTTMP)/test_costack_guard26
+	tools/expect_same.sh test_costack_guard26-safe "$$($(TESTTMP)/test_costack_guard26 safe)" "$$(printf 'body-in\nbody-tail 5\nbody-out\nguard-ok')"
+	set +e; $(TESTTMP)/test_costack_guard26 grad > $(TESTTMP)/costack_grad.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_costack_guard26-grad-rc "$$rc" "217" || exit 1; \
+	  tools/expect_same.sh test_costack_guard26-grad-msg "$$(tail -n 1 $(TESTTMP)/costack_grad.log)" "fatal: coroutine stack overflow (canary clobbered)"
+	set +e; $(TESTTMP)/test_costack_guard26 leap > $(TESTTMP)/costack_leap.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_costack_guard26-leap-rc "$$rc" "217" || exit 1; \
+	  tools/expect_same.sh test_costack_guard26-leap-msg "$$(tail -n 1 $(TESTTMP)/costack_leap.log)" "fatal: coroutine stack overflow (sp below its stack base)"
 	./$(COMPILER) test/test_async.pas $(TESTTMP)/test_async26
 	tools/expect_same.sh test_async26 "$$($(TESTTMP)/test_async26)" "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_async_sl26

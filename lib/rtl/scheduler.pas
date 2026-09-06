@@ -133,6 +133,40 @@ const
   CLOCK_MONOTONIC = 1;
   TFD_NONBLOCK    = $800;
 
+  { --- the guard region below every coroutine stack ---------------------
+    PROT_NONE, so it costs ADDRESS SPACE and zero physical memory: the pages
+    are never touched, so nothing is ever committed for them.
+
+    WHY A REGION AND NOT A PAGE. The canary at the low end is ONE WORD, so it
+    only catches a write that lands ON it -- a single frame larger than the
+    remaining stack moves sp straight PAST it and corrupts whatever sits
+    below, leaving the canary intact and the yield-time check silent.
+    Measured 2026-09-06 on this file, three coroutines with 8 KB stacks and one
+    12 KB frame touching its lowest slot: rc 0, every line of expected output,
+    and a write ~4 KB below the stack base. A 4 KB guard is leapt by exactly
+    that frame; 64 KB is not, and costs the same one mprotect.
+    It is a WIDER NET, NOT A PROOF: a frame that clears 64 KB in one step still
+    escapes, and only stack probing closes that. feature-tls-provider-abstraction }
+  CO_GUARD      = 65536;
+  { WRITABLE SLACK BETWEEN THE CANARY AND THE GUARD, and it exists because the
+    guard REGRESSED the canary without it. The canary sits at the low end of
+    the usable stack, so a coroutine that recurses gently clobbers it and the
+    VERY NEXT frame lands in PROT_NONE -- it dies on the spot and never reaches
+    the yield where the scheduler would have read the canary and said
+    `fatal: coroutine stack overflow (canary clobbered)`. Measured on this file
+    before the slack existed: three 8 KB stacks at recursion depth 7/9/12 went
+    from rc 217 WITH that message to a bare rc 139 with none.
+    So the two mechanisms cover different overflows and must not be stacked
+    directly: gradual growth trips the canary and keeps CO_RED bytes of real
+    memory to run on until its next yield; a single frame that leaps the canary
+    hits the guard. Past CO_RED of gradual growth the guard takes it too, with
+    no message -- honest limit, and still better than corrupting a neighbour. }
+  CO_RED        = 8192;
+  PAGE_SIZE     = 4096;
+  PROT_NONE     = 0;
+  PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
+  MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
+
 { Per-arch Linux syscall numbers (verified against the FPC RTL sysnr tables).
   aarch64 / arm32 have no epoll_wait — they use epoll_pwait (two extra args:
   sigmask, sigsetsize, both 0 here). }
@@ -146,6 +180,9 @@ const
   SYS_close           = 3;
   SYS_timerfd_create  = 283;
   SYS_timerfd_settime = 286;
+  SYS_mmap            = 9;
+  SYS_mprotect        = 10;
+  SYS_munmap          = 11;
 {$endif}
 {$ifdef CPU_I386}
 const
@@ -157,6 +194,11 @@ const
   SYS_close           = 6;
   SYS_timerfd_create  = 322;
   SYS_timerfd_settime = 325;
+  { mmap2 (192): its last arg is a PAGE offset, not bytes -- we pass 0, so
+    the call is identical to x86-64's mmap. }
+  SYS_mmap            = 192;
+  SYS_mprotect        = 125;
+  SYS_munmap          = 91;
 {$endif}
 {$ifdef CPU_AARCH64}
 const
@@ -168,6 +210,9 @@ const
   SYS_close           = 57;
   SYS_timerfd_create  = 85;
   SYS_timerfd_settime = 86;
+  SYS_mmap            = 222;
+  SYS_mprotect        = 226;
+  SYS_munmap          = 215;
 {$endif}
 {$ifdef CPU_ARM32}
 const
@@ -179,6 +224,10 @@ const
   SYS_close           = 6;
   SYS_timerfd_create  = 350;
   SYS_timerfd_settime = 353;
+  { mmap2, page offset, 0 here -- see the i386 note. }
+  SYS_mmap            = 192;
+  SYS_mprotect        = 125;
+  SYS_munmap          = 91;
 {$endif}
 { riscv32 is an ASM-GENERIC port, so its numbers are aarch64's and NOT arm32's,
   which is the mistake the shape of this file invites -- the two are both 32-bit
@@ -195,6 +244,9 @@ const
   SYS_close           = 57;
   SYS_timerfd_create  = 85;
   SYS_timerfd_settime = 86;
+  SYS_mmap            = 222;
+  SYS_mprotect        = 226;
+  SYS_munmap          = 215;
 {$endif}
 
 type
@@ -255,7 +307,8 @@ const
 type
   TReactor = record
     coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
-    coStk   : array[0..MAX_CO-1] of Int64;       { heap stack base (for FreeMem) }
+    coStk   : array[0..MAX_CO-1] of Int64;       { usable stack base -- the canary lives here }
+    coStkMap: array[0..MAX_CO-1] of Int64;       { full mmap length, 0 = GetMem'd (no guard) }
     coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
     coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
     coArg   : array[0..MAX_CO-1] of Pointer;
@@ -402,7 +455,7 @@ begin
 end;
 
 procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
-var id, i2: Integer; stk, top: Int64; r: PReactor;
+var id, i2: Integer; stk, top, mapLen, mapBase, usable, ignoreRc: Int64; r: PReactor;
 begin
   r := CurR;
   { reuse a freed slot (state 0) before growing — bounds coCount so a program
@@ -413,7 +466,34 @@ begin
   if id < 0 then begin id := r^.coCount; Inc(r^.coCount); end;
   if id >= MAX_CO then
   begin writeln('fatal: scheduler out of coroutine slots (MAX_CO)'); Halt(216); end;
-  stk := Int64(GetMem(stackBytes));
+  { A GUARDED MAPPING WHERE THE KERNEL OFFERS ONE, GetMem WHERE IT DOES NOT.
+    The fallback is not a degraded mode to be ashamed of -- it is what every
+    target without these five syscall numbers gets, and the canary below still
+    runs there. mmap failing is handled the same way, because a coroutine that
+    runs is what the caller asked for and there is no channel to report
+    "your stack is unguarded". }
+  stk := 0;
+  mapLen := 0;
+  { [ CO_GUARD PROT_NONE ][ CO_RED slack ][ canary ][ ...usable stack... ] top }
+  usable := ((stackBytes + PAGE_SIZE - 1) div PAGE_SIZE) * PAGE_SIZE;
+  mapBase := __pxxrawsyscall(SYS_mmap, 0, usable + CO_GUARD + CO_RED, PROT_RW,
+                             MAP_ANON_PRIV, -1, 0);
+  if mapBase > 0 then
+  begin
+    { Fail CLOSED, not open: if the region cannot be made PROT_NONE then this
+      mapping has no guard and is worth nothing over the heap, so give it back
+      rather than keep a stack that merely LOOKS protected. }
+    if __pxxrawsyscall(SYS_mprotect, mapBase, CO_GUARD, PROT_NONE, 0, 0, 0) = 0 then
+    begin
+      mapLen := usable + CO_GUARD + CO_RED;
+      stk := mapBase + CO_GUARD + CO_RED;
+      stackBytes := usable;
+    end
+    else
+      ignoreRc := __pxxrawsyscall(SYS_munmap, mapBase, usable + CO_GUARD + CO_RED,
+                                  0, 0, 0, 0);
+  end;
+  if stk = 0 then stk := Int64(GetMem(stackBytes));
   PW(stk)^ := CO_CANARY;          { overflow guard at the low end of the stack }
   top := stk + stackBytes;
   top := top - (top mod 16);   { 16-align down }
@@ -472,6 +552,7 @@ begin
 {$endif}
   r^.coSp[id]    := top;
   r^.coStk[id]   := stk;
+  r^.coStkMap[id]:= mapLen;
   r^.coState[id] := 1;
   r^.coEntry[id] := entry;
   r^.coArg[id]   := arg;
@@ -606,6 +687,7 @@ end;
 procedure RunUntilDone;
 var i, anyRunnable, anyBlocked: Integer;
     n, k, cid: Integer;
+    freeRc: Int64;
     evs: array[0..MAX_CO-1] of TEpollEvent;
     r: PReactor;
 begin
@@ -645,9 +727,33 @@ begin
           writeln('fatal: coroutine stack overflow (canary clobbered)');
           Halt(217);
         end;
+        { AND THE SAME QUESTION ASKED OF THE STACK POINTER, because the canary
+          is a WORD and this is a RANGE. A single frame larger than the
+          remaining stack steps over the canary without touching it -- the
+          canary reads correct and the write went below the base. One compare,
+          no memory traffic, and it needs no guard page, so it covers the
+          GetMem fallback too.
+          It is not a superset of the canary and does not replace it: this sees
+          only where sp SITS at the yield, so a deep frame that returns before
+          yielding is invisible here and visible there. Two instruments, two
+          apertures. Measured 2026-09-06: a 12 KB frame on an 8 KB stack, which
+          the canary passes clean. }
+        if (r^.coState[i] <> 2) and (r^.coSp[i] <> 0) and
+           (r^.coSp[i] < r^.coStk[i]) then
+        begin
+          writeln('fatal: coroutine stack overflow (sp below its stack base)');
+          Halt(217);
+        end;
         if r^.coState[i] = 2 then
         begin
-          FreeMem(Pointer(r^.coStk[i]));
+          { munmap releases the guard region with the stack; the base is CO_GUARD
+            BELOW the usable base recorded in coStk. }
+          if r^.coStkMap[i] <> 0 then
+            freeRc := __pxxrawsyscall(SYS_munmap, r^.coStk[i] - CO_GUARD - CO_RED,
+                                      r^.coStkMap[i], 0, 0, 0, 0)
+          else
+            FreeMem(Pointer(r^.coStk[i]));
+          r^.coStkMap[i] := 0;
           r^.coState[i] := 0;   { free the slot for reuse by a later Spawn }
         end;
       end;
