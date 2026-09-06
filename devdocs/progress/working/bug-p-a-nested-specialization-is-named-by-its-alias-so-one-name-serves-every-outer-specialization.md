@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-06
-summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, not under a name carrying the type argument, and `NestedSpecKnown` tests only that name. So `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically."
+summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, so `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically. MECHANISM CORRECTED 2026-09-06 BY MEASUREMENT: not ScanRangeForNestedSpecs and not NestedSpecKnown, which are not on this path -- the mint trace is EMPTY. The rename that would fix it ALREADY EXISTS and already computes the right names (`TI$TEnumSpec`, `TS$TEnumSpec`); it is unreachable behind two gates, HoistUsed being settable only from NestedSpecArg (a nested name used as a type ARGUMENT, never as a return/field/var type) and EmitHoistedDecls being called only from the DEFERRAL arm. Parked: lifting either gate renames every nested type in every generic class, fgl and rtl-generics included, so it wants a full tier."
 ---
 
 # The shape
@@ -53,7 +53,79 @@ pascal26:15: warning: duplicate definition of 'TEnumSpec.GetCurrent' with the sa
 **Legal code is refused.** One instantiation alone compiles and runs; adding a
 second with a different type argument breaks the first.
 
-# Mechanism
+# MECHANISM — CORRECTED 2026-09-06 (frankS), the section below it was WRONG
+
+**I wrote the section below from reading and it names the wrong routine.**
+`ScanRangeForNestedSpecs` is not on this path at all. Measured at
+`c41acdb80137` with two temporary probes, and the mint trace settles it in one
+line: `PXXDBG=p.mint:*` on the repro prints **nothing**. Nothing is minted
+through `EmitSpecDecl` here, so no guard of its can be the cause.
+
+What actually happens, from a probe on the hoist registration and on the class
+stream:
+
+```
+PROBE hoistcand  nm=TEnumSpec full=TI$TEnumSpec
+PROBE streamclass spec=TI         hoistCount=1
+PROBE streamclass spec=TEnumSpec  hoistCount=0     <- the mint, under the ALIAS
+PROBE hoistcand  nm=TEnumSpec full=TS$TEnumSpec
+PROBE streamclass spec=TS         hoistCount=1
+PROBE streamclass spec=TEnumSpec  hoistCount=0     <- again, same name
+```
+
+**The machinery to fix this already exists, is already correct, and is never
+reached.** `CollectHoistCandidates` registers `TEnumSpec` once per outer
+specialization with a name that ALREADY carries the distinction —
+`TI$TEnumSpec` and `TS$TEnumSpec`. The names are right. Nothing asks for them.
+
+Two gates stand between the candidate and the rename, and each is enough on its
+own:
+
+1. **`HoistUsed` is reachable from exactly one place** — `HoistedNameFor`, called
+   only from `NestedSpecArg`, i.e. when the nested name appears as a type
+   ARGUMENT of another specialization. A nested type used as a RETURN type (this
+   repro), a field type or a variable type never marks itself used.
+2. **`EmitHoistedDecls` is called from exactly one place** — inside the
+   DEFERRAL arm of `ParseSpecialization`, behind `if hoistPending`. A
+   specialization that does not defer never emits a hoisted declaration however
+   used its candidates are.
+
+So `TEnumSpec = specialize TEnum<T>` inside the outer body is streamed with
+`T` substituted and its LHS untouched, and `ParseSpecialization` mints the class
+under the alias as written — once per outer specialization, same name both times.
+
+**Hoisting is scoped to the deferral path.** It was built for the case where a
+nested type is NAMED AS A GENERIC ARGUMENT and therefore has to exist at top
+level before the specialization that mentions it can be emitted. This ticket is
+the same naming problem arriving through a path that has no reason to defer.
+
+# What a fix has to do, now that the path is known
+
+Not "mint under a different name" alone — that was measured to be insufficient.
+The rename has to be applied CONSISTENTLY to three things, and the third is why
+this is not a small edit:
+
+1. the alias declaration's own LHS, so the class is minted as `TI$TEnumSpec`;
+2. every reference in the CLASS BODY, which streams with `HoistActive` true;
+3. every reference in the METHOD BODIES, which stream **separately and with
+   `HoistActive` false** — the comment at the one `HoistActive := True` site says
+   method bodies deliberately need no collapse because "they refer to the nested
+   type by NAME, and the name is still declared in the class, now as an alias".
+   That reasoning holds only while the in-class alias survives, so renaming the
+   LHS invalidates it.
+
+Keeping the in-class alias (`TEnumSpec = TI$TEnumSpec`) preserves (3) and is what
+the existing hoist design does — which means the real fix is to reach the
+existing machinery from the ordinary path, not to write new naming.
+
+**Blast radius is why I parked it rather than pushing on.** Both gates are load-
+bearing for the case hoisting was built for, and lifting either changes the
+naming of every nested type in every generic class — fgl and rtl-generics
+included, both corpus rungs. That wants a full tier, not a quick one.
+
+# ORIGINAL MECHANISM SECTION — SUPERSEDED, kept because the reasoning about KEYS still holds
+
+
 
 `ScanRangeForNestedSpecs` registers the prerequisite under
 `aliasNm := NestedSpecAlias(...)` — the alias as written — and both guards are
