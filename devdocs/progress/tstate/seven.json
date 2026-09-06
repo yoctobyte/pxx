@@ -15028,21 +15028,23 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-06T08:19:39Z",
+  "date": "2026-09-06T19:43:25Z",
   "red": [
-   "lib-test#src:tools/crtl_reachability.py",
-   "test-emit-obj#src:tools/compiler_srchash.sh",
-   "test-emit-obj#src:test/c_obj_data_dup_a.c",
-   "test-emit-obj#src:test/test_emit_obj.pas@3",
-   "test-zlib#src:tools/compiler_srchash.sh",
+   "test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1",
+   "test-nilpy#src:test/test_nilpy_dotted_package_import.npy@2",
+   "test-emit-obj#src:test/c_obj_data_import.c",
    "test-fpjson#src:tools/install_lib_candidates.sh",
-   "tools-devtest#00",
-   "size-canary#src:tools/size_canary.py"
+   "tools-devtest#00"
   ],
-  "sha": "36eb642d624059572f80acb9f05d41740894c2e4",
+  "sha": "1b903c1ddaf29931876cca6ff1d559dff174ed6f",
   "tier": "full",
-  "ver": "v405",
-  "verdict": "RED"
+  "ver": "v406",
+  "verdict": "RED",
+  "why": {
+   "test-emit-obj#src:test/c_obj_data_import.c": "ok: $TMP  [code=112511B  data=1432B  bss=38720B  procs=488] | ok: $TMP  [code=183472B  data=1360B  bss=38420B  procs=490] | ok: $TMP  [code=112365B  data=1432B  bss=38708B  procs=487] | /usr/bin/x86_6",
+   "test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1": "note: reportlab_pdfgen -> mimic_reportlab_pdfgen (shim, subset) | note: reportlab_lib_colors -> mimic_reportlab_lib_colors (shim, subset) | pascal26:16: error: duplicate identifier \"letter\": Pascal is",
+   "test-nilpy#src:test/test_nilpy_dotted_package_import.npy@2": "note: reportlab_pdfgen -> mimic_reportlab_pdfgen (shim, subset) | note: reportlab_lib_colors -> mimic_reportlab_lib_colors (shim, subset) | pascal26:16: error: duplicate identifier \"letter\": Pascal is"
+  }
  },
  "toolchain": {
   "fp": "b926fcc528d9",
