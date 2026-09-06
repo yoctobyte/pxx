@@ -7,7 +7,7 @@ blocked-by: []
 status: backlog
 found: 2026-08-30
 found-by: frankS
-summary: "test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script -- only test-xtensa is enrolled. Re-verified 2026-09-05, and the suite was then EXECUTED for the first time: it immediately caught bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare, a profile-wide compiler defect present indefinitely. The assertion count in the original body is WRONG (see the 2026-09-05 note): 27 sites in test-esp-bare and 2 in test-esp-softfloat, and on a box WITH the Espressif qemu builds NONE of them skip -- so the '92% skip, maybe split the 2 hosted rows out' advice is a property of the measuring box, not of the target. Post-fix clean run: rc=0, 26 distinct assertions all ok, 0 skipped. Enrolment is still Track T's, in tools/testmgr.py, untouched here."
+summary: "THREE ESP suites, not two: test-esp-bare, test-esp-softfloat AND test-esp-idf appear in ZERO testmgr tiers and in no script -- only test-xtensa is enrolled. Re-verified 2026-09-05, and the suite was then EXECUTED for the first time: it immediately caught bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare, a profile-wide compiler defect present indefinitely. The assertion count in the original body is WRONG (see the 2026-09-05 note): 27 sites in test-esp-bare and 2 in test-esp-softfloat, and on a box WITH the Espressif qemu builds NONE of them skip -- so the '92% skip, maybe split the 2 hosted rows out' advice is a property of the measuring box, not of the target. Post-fix clean run: rc=0, 26 distinct assertions all ok, 0 skipped. Enrolment is still Track T's, in tools/testmgr.py, untouched here. 2026-09-06: test-esp-idf added to this ticket -- it ran ONE of the nine examples/esp32 projects (timer-c3, for both chips), so gpio-c3, net-c3, dns-c3 and fs-c3 were executed by nothing at all and all four PASS; wired into the target this session, enrolment still open."
 ---
 
 # The ESP bare-metal suite is enrolled nowhere
@@ -245,3 +245,61 @@ Not fixed here — `twatch.py` is Track T's file and frankB is in it. If T wants
 it, the ESP system emulators are a two-entry addition to `RUNNER_BINARIES`
 resolved at the Espressif path rather than on PATH, and they would make this
 ticket's open half readable from the archive instead of by measurement.
+
+
+## 2026-09-06 (frank-coord-front) — there is a THIRD ESP suite, and it was worse
+
+`test-esp-idf` belongs in this ticket's table and was never in it. It is the
+FreeRTOS/lwIP route — an IDF project, real sockets, real DNS — and it is the
+route the owner calls the more interesting one, so its absence costs more than
+the bare suite's.
+
+| | tiers | scripts | in `.PHONY` list at Makefile:160 |
+| --- | --- | --- | --- |
+| `test-esp-bare` | 0 | 0 | yes |
+| `test-esp-softfloat` | 0 | 0 | yes |
+| **`test-esp-idf`** | **0** | **0** | **no — its own line, 137** |
+
+Same enrolment gap, one worse detail: it is not even in the shared `.PHONY`
+block, so a reader scanning that line for the ESP suites finds two of three.
+
+### What the target actually ran, which is the finding
+
+`examples/esp32/` holds **nine** projects. Before today, `test-esp-idf` compiled
+exactly **one source** — `timer-c3/main/main.pas` — and it compiled that same
+source for BOTH chips in its `for chip in esp32c3 esp32s3` loop. So:
+
+- `gpio-c3`, `net-c3`, `dns-c3`, `fs-c3` were executed by **nothing at all** —
+  no Makefile target, no script, no tier.
+- `timer-s3/` was executed by nothing either. The s3 row does exercise xtensa
+  codegen, but it does it from `timer-c3`'s file; `diff` of the two sources is
+  **one line, the program name**, so nothing was lost — and nothing was gained
+  by shipping the directory.
+- `hello-c3`/`hello-s2`/`hello-s3` are `esp_run.sh`'s host project, so they are
+  built constantly as scaffolding and asserted never.
+
+**All four unwatched examples PASS.** That is the point rather than a relief:
+this is working functionality nobody was watching, and an absence no count
+reports is worse than a red — a red at least prints.
+
+Wired in this session (Makefile `test-esp-idf`): gpio-c3, net-c3 and dns-c3
+through `esp_run.sh`, fs-c3 through its own `build.sh qemu-assert`.
+
+### Two instrument notes the next author needs
+
+**Assert the SMOKE LINE, not the whole output.** `net-c3` prints an EPHEMERAL
+peer port (`peer-port=64169` on one run) and `gpio-c3`'s pin reads differ
+between qemu and silicon *by design* — its own verdict string is
+`qemu-delivers-NO-gpio-edges`. A full-output diff would make both rows flap for
+reasons that are not defects, and a flapping row gets deleted.
+
+**`fs-c3` cannot go through `esp_run.sh`, and neither one is at fault.**
+`esp_run.sh` builds every program inside the `hello-c3`/`hello-s3` project;
+fs-c3 ships its own `partitions.csv` (a `storage` FAT partition) and an
+`sdkconfig.defaults` selecting it. Routed through the stock table it fails with
+`undefined reference to esp_vfs_fat_spiflash_mount_rw_wl` — **a symbol that IS
+present in ESP-IDF v6.0.1**, so the two obvious readings (an API removal; a pxx
+defect) are both wrong. Run its own `build.sh qemu-assert` and branch on that
+rc. Its verdict: `OK fs-c3 -- ESP PAL file I/O works on target`.
+
+Enrolment itself is still Track T's and still open — for three targets now.

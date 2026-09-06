@@ -29728,6 +29728,57 @@ test-esp-bare: $(COMPILER)
 # calls into C, so nothing there could have caught it.
 test-esp-idf: $(COMPILER)
 	@[ -f $$HOME/esp/esp-idf/export.sh ] || { echo "ESP-IDF not installed; test-esp-idf skipped"; exit 0; }
+	@# THE OTHER IDF EXAMPLES, WHICH NOTHING RAN UNTIL NOW. Nine projects live
+	@# under examples/esp32; before this row, `timer-c3` was the only source any
+	@# Makefile, script or tier executed -- and this recipe used it for BOTH
+	@# chips, so `timer-s3` was dead too (its source differs from timer-c3's only
+	@# in the program name, so nothing was lost, but nothing was gained either).
+	@# gpio-c3, fs-c3, net-c3 and dns-c3 were run by nothing at all.
+	@#
+	@# All four PASS today, which is the point: this is unwatched WORKING
+	@# functionality on the route the owner calls the more interesting one --
+	@# real sockets and real DNS through lwIP under FreeRTOS, not a bare-metal
+	@# UART poke. An absence no count reports is worse than a red, so wire it.
+	@#
+	@# ASSERT THE SMOKE LINE, NOT THE WHOLE OUTPUT. net-c3 prints an EPHEMERAL
+	@# peer port (peer-port=64169 on one run) and gpio-c3's pin reads differ
+	@# between qemu and silicon by design; diffing everything would make these
+	@# rows flap for reasons that are not defects.
+	@for e in gpio-c3 net-c3 dns-c3; do \
+	  case $$e in gpio-c3) want='PROBE: VERDICT qemu-delivers-NO-gpio-edges';; \
+	              net-c3)  want='PXX-net-smoke status=0';; \
+	              dns-c3)  want='PXX-dns-smoke status=0';; esac; \
+	  echo "--- esp32c3 $$e"; \
+	  ESP_RUN_TIMEOUT=40 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip esp32c3 examples/esp32/$$e/main/main.pas > $(TESTTMP)/test_esp_idf_$$e.out 2>/dev/null || true; \
+	  if grep -qF "$$want" $(TESTTMP)/test_esp_idf_$$e.out; then echo "esp32c3 $$e ok ($$want)"; \
+	  else echo "esp32c3 $$e MISMATCH -- wanted: $$want"; sed -n '1,12p' $(TESTTMP)/test_esp_idf_$$e.out; exit 1; fi; \
+	done
+	@# fs-c3 CANNOT go through esp_run.sh and that is not a defect in either.
+	@# esp_run.sh builds every program inside the hello-c3/hello-s3 project;
+	@# fs-c3 ships its own partitions.csv adding a `storage` FAT partition and an
+	@# sdkconfig.defaults selecting it, and its README says the stock table "has
+	@# nowhere to mount". Routed through the wrong project it fails with
+	@# `undefined reference to esp_vfs_fat_spiflash_mount_rw_wl` -- a symbol that
+	@# IS present in ESP-IDF v6.0.1, so the obvious reading (an API removal, or a
+	@# pxx defect) is wrong twice. Its own build.sh already asserts a baseline and
+	@# exits nonzero when it moves, so run THAT and trust its verdict.
+	@echo "--- esp32c3 fs-c3 (own project: needs its FAT partition table)"
+	@# BRANCH ON build.sh's OWN rc, not on a pipeline's. `./build.sh qemu-assert
+	@# | tail -1` takes tail's exit status, so a failed assertion would print its
+	@# own failure text and the row would still pass -- a guard that cannot fail.
+	@# EXPLICIT bash, and the log created BEFORE anything can fail. ESP-IDF's
+	@# export.sh is a bash script and make's shell is /bin/sh, so sourcing it
+	@# died before the redirect existed -- the row then reported FAILED and its
+	@# own error path died too, on `tail` of a file that had never been created.
+	@# A failure branch that assumes its evidence exists is the same defect as a
+	@# comparison whose inputs were never proven to exist.
+	@: > $(TESTTMP)/test_esp_idf_fs.out
+	@if bash -c 'cd examples/esp32/fs-c3 && . "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && ./build.sh qemu-assert' \
+	    > $(TESTTMP)/test_esp_idf_fs.out 2>&1; then \
+	  tail -1 $(TESTTMP)/test_esp_idf_fs.out; \
+	else \
+	  echo "esp32c3 fs-c3 FAILED"; tail -15 $(TESTTMP)/test_esp_idf_fs.out; exit 1; fi
 	@for chip in esp32c3 esp32s3; do \
 	  echo "--- $$chip esp_timer callback"; \
 	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \

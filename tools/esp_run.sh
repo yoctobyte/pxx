@@ -70,11 +70,32 @@ ar rcs main/libpxx_app.a main/main.o
 # does NOT track for content changes -- so force a relink by removing the app
 # image, or a stale binary from a previous program would boot instead. Build
 # errors (e.g. an undefined external) must abort, not silently run the old image.
+#
+# KEEP THE BUILD OUTPUT ON FAILURE. `>/dev/null` here threw away the only thing
+# that says WHY, and `esp_run: build failed` is a verdict with no evidence --
+# the same defect the comment above records for the COMPILE step, one step
+# later. Measured 2026-09-06: examples/esp32/fs-c3 reported exactly that bare
+# line, and the discarded text said `undefined reference to
+# esp_vfs_fat_spiflash_mount_rw_wl`, which is what identifies it in one read as
+# a project-config mismatch rather than a compiler defect. Without it the
+# obvious inference is a pxx bug, and it is not one.
+BLOG="$(mktemp)"
+build_failed() {
+  echo "esp_run: build failed -- last 30 lines of the build log:" >&2
+  tail -30 "$BLOG" >&2
+  echo "esp_run: (full log: $BLOG)" >&2
+  echo "esp_run: NOTE -- every program is built inside the $PROJ project. An" >&2
+  echo "         example needing its own partition table or sdkconfig (fs-c3" >&2
+  echo "         adds a storage FAT partition) will fail HERE and build fine" >&2
+  echo "         under its own build.sh. That is this runner's limit, not the" >&2
+  echo "         program's." >&2
+  exit 1
+}
 if [ -f build/build.ninja ]; then
   rm -f build/*.elf build/*.bin
-  ninja -C build >/dev/null || { echo "esp_run: build failed" >&2; exit 1; }
+  ninja -C build >"$BLOG" 2>&1 || build_failed
 else
-  idf.py set-target "$CHIP" >/dev/null && idf.py build >/dev/null || { echo "esp_run: build failed" >&2; exit 1; }
+  { idf.py set-target "$CHIP" && idf.py build; } >"$BLOG" 2>&1 || build_failed
 fi
 
 cd build
