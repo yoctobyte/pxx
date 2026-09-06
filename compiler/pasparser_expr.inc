@@ -6906,7 +6906,9 @@ begin
               bug-p-a-cast-to-variant-segfaults-instead-of-boxing }
             if castTk = tyVariant then
             begin
-              LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+              vcNode := VariantBoxToTemp(CurASTNode);
+              if vcNode >= 0 then CurASTNode := vcNode;
+              LastExprTk := tyVariant;
               Exit;
             end;
             { a promotable operand demotes before the pun — see
@@ -8689,6 +8691,52 @@ begin
   ASTRight[vcNd] := vcRd;
   ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
   VariantCastToTemp := vcNd;
+end;
+
+function VariantBoxToTemp(n: Integer): Integer;
+{ THE MIRROR OF VariantCastToTemp, and the reason `Variant(x)` can be a boxing
+  conversion AND still have a type.
+
+  `Variant(x)` yielded the OPERAND node so the assignment would box it, which
+  fixed the segfault (b6815e5b8) and made the expression's static type the
+  operand's. SizeOf reads the NODE's tk (`szExprTk := IntToTypeKind(ASTTk[..])`,
+  not LastExprTk), so `SizeOf(Variant(x))` answered a scalar width -- 8 against
+  `SizeOf(vov)`'s 16 for `vov: OleVariant`. Stamping tyVariant on the operand
+  node is not available: IRLowerBoxOperand takes the SOURCE kind from that same
+  field, so the store would copy 16 bytes out of a 4-byte integer, which is the
+  pun the fix removed.
+
+  A TEMP separates the two readings. The assignment's RHS is still the operand,
+  carrying its own scalar kind, so the box is the one `v := x` already performs;
+  the expression handed back is a READ of a tyVariant temp, so every consumer
+  that asks what this expression IS gets the right answer.
+
+  I recorded the lost static type as CLAUDE.md's implementation latitude in
+  b6815e5b8's own comment. It is not: that clause is about an intermediate's
+  type differing from FPC's, and the row that failed
+  (test_builtin_type_names_cast_and_declare) never mentions FPC -- it asserts
+  that OUR OleVariant and OUR Variant(x) agree with EACH OTHER. A relation
+  between two of our own answers is the assertion shape CLAUDE.md prefers, and
+  no parity clause reaches it. A caveat gets believed rather than re-tested,
+  which is exactly what happened here for a day.
+  regression-test-core-test-builtin-type-names-cast-and-declare }
+var vbTmp, vbAsg, vbLhs, vbRd, vbNd: Integer;
+begin
+  VariantBoxToTemp := -1;
+  if n < 0 then Exit;
+  vbTmp := AllocVar('', tyVariant);
+  vbNd  := AllocNode(AN_STR_FROM_CHAR);
+  vbLhs := AllocNode(AN_IDENT);
+  ASTIVal[vbLhs] := vbTmp; ASTTk[vbLhs] := Ord(tyVariant);
+  vbAsg := AllocNode(AN_ASSIGN);
+  ASTLeft[vbAsg] := vbLhs; ASTRight[vbAsg] := n;
+  ASTTk[vbAsg] := Ord(tyVariant);
+  ASTLeft[vbNd] := vbAsg;
+  vbRd := AllocNode(AN_IDENT);
+  ASTIVal[vbRd] := vbTmp; ASTTk[vbRd] := Ord(tyVariant);
+  ASTRight[vbNd] := vbRd;
+  ASTTk[vbNd] := Ord(tyVariant);
+  VariantBoxToTemp := vbNd;
 end;
 
 { Apply PromoWidenToDouble to both operands of a float-typed binop, in place. }

@@ -2254,6 +2254,20 @@ begin
   { Address of an address-of: `&(&x)`. In valid C this only arises from array
     decay (`&arr` where arr is an array yields arr's address), so the address of
     that is the operand's own address. Collapse one level. }
+  { A SEQUENCING NODE'S ADDRESS IS ITS RESULT'S ADDRESS. AN_STR_FROM_CHAR is
+    `Left = the store into a hidden temp, Right = the read of that temp`, and
+    the VALUE arm already lowers it exactly that way. Without the same arm HERE
+    the node was value-only, so any consumer needing an ADDRESS -- the
+    variant-to-variant store, which calls IRLowerAddress for an lvalue RHS --
+    got the temp's CONTENTS where it wanted its address.
+    regression-test-core-test-builtin-type-names-cast-and-declare }
+  if ASTKind[node] = AN_STR_FROM_CHAR then
+  begin
+    IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
+    Result := IRLowerAddress(ASTRight[node]);
+    Exit;
+  end;
+
   if ASTKind[node] = AN_ADDR then
   begin
     Result := IRLowerAddress(ASTLeft[node]);
@@ -12342,7 +12356,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       rhsIsLValue := (ASTKind[ASTRight[node]] = AN_IDENT) or
                      (ASTKind[ASTRight[node]] = AN_FIELD) or
                      (ASTKind[ASTRight[node]] = AN_INDEX) or
-                     (ASTKind[ASTRight[node]] = AN_DEREF);
+                     (ASTKind[ASTRight[node]] = AN_DEREF) or
+                     { …and a sequencing node, whose result IS one — see the arm
+                       added to IRLowerAddress. A hidden temp materialised by a
+                       conversion (`Variant(x)`) reaches a record or variant
+                       store as an AN_STR_FROM_CHAR, and the whole point of those
+                       stores is that an lvalue RHS is copied WHOLE rather than
+                       through an 8-byte load. }
+                     (ASTKind[ASTRight[node]] = AN_STR_FROM_CHAR);
       if ASTKind[ASTRight[node]] = AN_METHODREF then
       begin
         { @obj.method assigned to a TMethod target: write the two pointers

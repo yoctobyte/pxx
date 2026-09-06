@@ -375,6 +375,7 @@ AN_ASSIGN Left tmpIdent
 AN_ASSIGN Left tmpN
 AN_ASSIGN Left vaIdent
 AN_ASSIGN Left valNode
+AN_ASSIGN Left vbLhs
 AN_ASSIGN Left vcLhs
 AN_ASSIGN Left vrIndex
 AN_ASSIGN Left wIdent

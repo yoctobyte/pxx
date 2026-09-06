@@ -10,4 +10,5 @@ round  int    233
 round  double 1.50
 round  string abc
 inline        233
+sizeof same   TRUE
 VARIANT CAST OK

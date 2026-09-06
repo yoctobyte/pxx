@@ -55,5 +55,15 @@ begin
   v := Variant(s);    sback := string(v);    WriteLn('round  string ', sback);
 
   WriteLn('inline        ', Variant(y));
+  { AND THE EXPRESSION HAS A TYPE. Yielding the operand so the assignment boxes
+    it left `Variant(y)` with the OPERAND's static type, and SizeOf reads the
+    node's tk -- so `SizeOf(Variant(y))` answered a scalar width while
+    `SizeOf(v)` answered 16, which is what
+    regression-test-core-test-builtin-type-names-cast-and-declare caught one
+    file away. Asserted as a RELATION between two of our own answers, so it
+    carries no platform width and is true wherever a Variant is whatever it is
+    here. The row belongs in THIS file too: the builtin-names file found it, but
+    the behaviour is the Variant cast's. }
+  WriteLn('sizeof same   ', SizeOf(Variant(y)) = SizeOf(v));
   WriteLn('VARIANT CAST OK');
 end.
