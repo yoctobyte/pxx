@@ -67,4 +67,4 @@ passes for its author and fails for everyone else.** Anything conveyed by make's
 syntax rather than the shell's — `-`, `@`, a `$(MAKE)` recursion, a line
 continued into the next — is invisible to a harness that extracts lines. Where a
 row deliberately ignores an rc, ignore it in the shell.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fb87d1ea0.
