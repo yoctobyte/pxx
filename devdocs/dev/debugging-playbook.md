@@ -12864,6 +12864,98 @@ work" and it runs over the code, not over the ticket. Companion to
 fix that does nothing; this one is about a fix that does something to strangers. **Both are
 invisible to a repro-driven loop and both are found by leaving the reproducer.**
 
+## WHEN A FIX CHANGES A RESOLUTION RULE, THE POPULATION IS ENUMERABLE — SO INSTRUMENT THE DIFFERENCE, NOT THE OUTCOME
+
+Measured 2026-09-06 (frankB, `99c416b54`). **This is the method for the problem the section
+above states**, and the two landed a day apart from one seat: *when the fix is "add a
+preference", the regression population is every other pair the same preference now reorders,
+and that population is not in the ticket.* Here is how to get it.
+
+`FindSym` made **two full walks** of the hash chain — exact-case, then case-insensitive —
+under a comment claiming *"innermost scope out (preserves shadowing)"*. True WITHIN a walk,
+false across two of them: **case-exactness outranked scope depth**, so an exact match in ANY
+visible scope beat a case-insensitive match in a NEARER one.
+
+    var counter: LongInt;
+    procedure Bump(Counter: Integer);
+    begin counter := 55; end;
+
+wrote the GLOBAL and left the parameter at 7. fpc writes the parameter. Both halves wrong, in
+opposite directions, silent, on reads, writes and by-ref intrinsics alike, and
+`--strict-case` did not fire.
+
+**The fix broke uforth, and the instrument that found out why was not a test.** It was a
+temporary print of every binding the new disjunct CHANGED. One compile, and it named the
+entire population as two lines:
+
+    NEWBIND Cur -> cur  kind=skLocal
+    NEWBIND Src -> src  kind=skParam
+
+Both real Pascal collisions in `compiler/builtin/pyeval.pas` — a local `cur: Variant` beside
+the unit's `Cur: Integer` token cursor, and a parameter `src` beside the unit's `Src`, so
+`pyclosure_src_new` was restoring the interpreter's source buffer to the closure's body text.
+The same instrument over the corpus: **13 files, three real**, including
+`lib/rtl/strutils.pas` declaring a PARAMETER `N` and a LOCAL `n` in one routine, three times,
+reading them as two variables — which **fpc rejects outright as a duplicate identifier**.
+
+**THE RULE. A test suite tells you SOMETHING broke. A print of every binding that changed
+tells you every place that COULD break, including the ones no test covers, and it costs one
+compile.** A resolution, lookup, dispatch or overload rule has a **finite, computable
+changed-answer set**, and the fix is sitting right next to it — you already have both the old
+predicate and the new one in the same function. Emit the delta before you delete the old arm.
+
+**The tell that you are in this class:** your change is a *disjunct*, an *ordering*, or a
+*tie-break* inside a lookup, and you are about to justify it with "the suite is green".
+Green is a statement about the rows someone wrote; the delta is a statement about the
+program. **Instrument the difference, not the outcome.**
+
+**And read the delta for what it says about the TREE, not only about your fix.** Neither
+`pyeval.pas` nor `strutils.pas` was made wrong by this change: **both were already wrong, and
+the old order was the only thing making them work.** A delta print over a corpus is therefore
+a defect census for free — the changed bindings are exactly the places where two names that
+Pascal says are one name were being read as two. Do not classify a delta row as "my fix broke
+this" until you have asked which compiler was right.
+
+Benign rows exist and must be **checked, not assumed**: `Pos -> pos` in five TLS devtests is
+inert because the call path does not use `FindSym`'s answer, verified with a probe, and fpc
+refuses those programs entirely.
+
+## A FIX SKETCH IN A TICKET IS THE LINE WITH THE MOST AUTHORITY AND THE LEAST VERIFICATION — second instance in one day, and this time on the author's own ticket
+
+Measured 2026-09-06 (frankB, `99c416b54`), one hour after they filed the ticket it corrects.
+The sketch they had written as the recommended shape — *"the fix is per enclosing block,
+innermost outward"* — **was built, and the fixture still failed 7 rows.**
+
+**Because `SymBlockId` is not what its name says.** It models only `--lazy-var` `begin`/`end`
+blocks (`ParseBlockAST` is its only writer), so **a parameter and a program global sit in the
+SAME block.** A reader sees `SymBlockId` and supplies "scope"; the field supplies something
+much narrower, and nothing in the name marks the gap. The 80%-accurate identifier from
+CLAUDE.md's own *the name is not the thing*, in the one place where being wrong costs a
+rebuild: the fix sketch of a ticket about scoping.
+
+What actually makes ONE walk correct is a mechanism the sketch never named: **`SymRollbackTo`
+unhashes every symbol a routine declared when that routine exits**, so the chain holds only
+in-scope symbols and its newest-first order **IS** scope depth. The second walk was then
+deleted rather than kept, because its predicate is strictly implied by the first's second
+disjunct under identical gates.
+
+**This is the second instance the same day and the pair is the finding.** The first was the
+rank-1 sketch *"drop `>= 2` to `>= 1`"*, a NO-OP because the dims are 0 rather than 1 — read
+by three seats, confirmed non-stale by two, both correct and neither testing the sketch. The
+second was caught by its own author, at a cost of one build.
+
+**Why it survives:** a ticket's diagnosis is measured, its citations get checked, its summary
+gets audited — and the fix sketch is the one line that is a **HYPOTHESIS wearing the
+author's finished-work voice.** It is read as a conclusion because everything around it is
+one. Nobody applies the citation rule to it, because it has no citation to open.
+
+**Operationally, for both readers and writers:** mark a sketch as a sketch (*"untested
+shape"*), and — the part that actually works — **name the MECHANISM the sketch depends on and
+check that the mechanism models what you think.** Both failures here were a mechanism that
+exists under a name that oversells it (`SymBlockId`) or a premise about a value that was
+never read (the dims are 0). Neither is found by re-reading the ticket. Companion:
+`## A PREMISE CHECK IS NOT A CHECK THAT THE PROPOSED FIX DOES ANYTHING`.
+
 ## THE FIFTH INSTRUMENT IS THE ROW YOU DID NOT ADD — a file-scoped `--job` is correct about the recipe line it names and blind to the loop it was pasted into
 
 Measured 2026-09-06 (frankB, `ebc0dcb4f`/`ce5a257d9` → fixed `ca6b96843`). Group 28's five

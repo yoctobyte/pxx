@@ -2327,3 +2327,28 @@ land (the `sh -n` lint, 190 hits, measured not to work) is filed as
 `task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate`, per
 [[a-residual-named-in-a-commit-message-has-no-reader]] — the author is the worst candidate
 to file their own declined work.
+
+## FLEET-WIDE BEHAVIOUR CHANGE, 2026-09-06 — name resolution, `99c416b54`
+
+Relayed rather than merely noted, because it changes what already-written Pascal MEANS and it
+is silent. **A local or parameter whose spelling differs from an outer name only in case now
+binds to the NEARER one** — Pascal's rule and fpc's, and until `99c416b54` pxx did the
+opposite. `FindSym` walked the chain twice, exact-case then case-insensitive, so
+case-exactness outranked scope depth. Reads, writes and by-ref intrinsics alike;
+`--strict-case` did not fire.
+
+**Who this reaches and why the relay is warranted:** frankB enumerated the population at HEAD
+(13 files, three real, all handled) — which is exactly the set my relay cannot improve on.
+What that census could NOT see is **unpushed Pascal in another seat's tree**, and that is the
+only residual population, so it is the one thing a relay adds. Sent to the seats holding
+Pascal-writing lanes, not broadcast; NilPy is safe by construction (`SymCaseSensitive` is
+per-symbol and the new disjunct is disabled for those).
+
+**Two of our own files depended on the old order** and neither was made wrong by the fix —
+both were already wrong. `lib/rtl/strutils.pas` declared a parameter `N` and a local `n` in
+one routine three times, which fpc rejects outright as a duplicate identifier.
+
+**And the neighbour rule was applied within the hour it was banked.** The gate line reads
+*"the Makefile job either side of the new row was run, not only the new row."* Recorded
+because a banked rule visibly changing a peer's next gate is the only evidence this seat's
+playbook work does anything, and it is not otherwise observable from here.
