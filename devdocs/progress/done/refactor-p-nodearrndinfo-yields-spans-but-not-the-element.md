@@ -126,4 +126,4 @@ correctness comment cites the `>= 2` restriction by name. Two commits so a
 bisect can tell them apart.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ebc0dcb4f.
