@@ -20569,6 +20569,51 @@ correct about the queue and wrong about the evidence: **it was satisfied by a
 thin row.** So "satisfied" has looked exactly like this before, and everyone
 walked past it.
 
+### TESTED AND NARROWED: IT IS A REQUEST-PATH DETECTOR, NOT A THIN-ROW DETECTOR
+
+The proposed discriminator was *"does a report `.md` exist for this sha"* rather
+than *"does the row say satisfied"* — the same move as matching a commit subject
+instead of a rebased id. It was relayed as a thin-row detector. **A seat tested
+it instead of adopting it, and it is not one.** Measured across all 415 full
+rows:
+
+- **398 of 398 normal rows have a report — and so do 9 of 18 thin ones.** It
+  does not separate thin from healthy.
+- **10 of 10 requested-verify rows have NO report at any sha.** It separates the
+  REQUEST PATH cleanly, and that is a good detector: it is precisely the check
+  that would have stopped `1d8db8667267` being reported to the fleet as
+  satisfied.
+
+**And "neither path writes a report" — relayed by two seats including this
+file's author — is false. Pin-verify writes one.** All 8 pin-verify (10-key)
+rows have a report at their sha whose own `tier:` is `full` and whose timestamp
+matches the row **to the second**, every delta +0.0 min. v406's own
+(`20260906T194325Z-1b903c1-seven.md`) carries `skips: 7`, `skip_holes: 2`, the
+coverage banner, the by-reason list, NEW-RED and STILL-RED. **For pin-verify the
+manifest is written and only the ARCHIVE ROW is short — a queryability gap, not
+a missing answer.**
+
+**How that error was made is the ticket's own defect one level up**, in the
+finder's words: the evidence was the log line `twatch: verifying PIN v406 … at
+full` with no `report=`, and **that line announces the START of a verify, not
+its publication.** A log line about one event read as evidence about a different
+one — which is exactly what the ticket accuses the harness of doing to its
+readers.
+
+**AND THE CONFOUND, WHICH NEARLY BANKED THE WRONG ANSWER TWICE IN TEN MINUTES.**
+`1d8db8667267` looks like an exception because it HAS a report — **from a NATIVE
+run at the same sha.** A report is named by SHA, and a sha can be tested by more
+than one tier, so *"is there a report for this sha"* is not *"did this run write
+one"*. **Matching the report's own `tier:` AND its timestamp is what separates
+them.**
+
+The general form, and it is why "tested rather than adopted" is the operative
+phrase: **a detector proposed for a class and validated on one instance will be
+adopted for the class.** The instance here (the 19:32Z requested full) is a real
+member of both sets, so it could not discriminate between the two readings — and
+the only thing that separated them was running the detector over the whole
+population and counting both ways.
+
 ### AND A GREEN FULL TIER HAS NEVER BEEN RECORDED ON SEVEN
 
 Same census, and nobody had said it out loud. Verdicts across the whole archive:
