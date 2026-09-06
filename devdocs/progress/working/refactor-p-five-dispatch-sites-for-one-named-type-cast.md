@@ -142,7 +142,8 @@ method-pointer, pointer) keep their own arms, because those genuinely build
 different nodes; this is about the scalar path only.
 
 Order matters and is load-bearing: `FindTypeAlias` must be consulted **first**
-(a source declaration outranks a builtin — `symtab.inc:6215` documents that
+(a source declaration outranks a builtin — search `symtab.inc` for
+"consulted BEFORE the builtin", which documents that
 inverting it silently breaks the compiler), and the builtin pointer names are
 registered lazily *after* it misses for the same reason.
 
@@ -368,7 +369,8 @@ silently means "in `ParseFactorCore`", and none of them says so.
     const A = LongInt(4294967296 + 5);   ->  5             (builtin door, 4 bytes)
     var b: LongInt; b := LongInt(...);   ->  4294967301    (alias door, 8 bytes)
 
-`symtab.inc:6215` documents that a source declaration must outrank a builtin and
+`symtab.inc` documents that a source declaration must outrank a builtin — search it for
+"consulted BEFORE the builtin" rather than a line number — and
 that inverting it breaks the compiler outright; the builtin POINTER names are
 registered lazily for exactly that reason. This door had it backwards. The
 realistic spelling is a portability shim (`type PtrInt = LongInt;`,
@@ -498,3 +500,44 @@ check is to run it against a binary that HAS the defect, which costs one
 
 **Any collapse lands against this probe**, both families, plus the six tests
 this session added. That is now a real gate rather than "nothing moved".
+
+## 2026-09-06 — THE ORDERING CITATION WAS STALE, IT HAD BEEN COPIED FIVE TIMES, AND I RELAYED IT WITHOUT OPENING IT
+
+`symtab.inc:6215` appeared in this ticket twice and was quoted as the authority for
+the alias-before-builtin rule. **At HEAD that line is inside `AddConst`** —
+`Syms[SymCount].Kind := skConst` — and documents nothing about ordering. Caught by
+frankuser while relaying the constraint to frankH, and verified here independently
+before this edit.
+
+**The rule is real and better documented than the citation suggested.** It is at
+two sites in `symtab.inc`, both of which record the same casualty:
+
+> *"`FindTypeAlias` is consulted BEFORE the builtin-name chain — deliberately, so
+> a user's own declaration wins — and a leaked implementation-section alias is
+> indistinguishable there from a user's own. builtinheap's private
+> `PWord = ^NativeInt` therefore outranked the builtin `PWord = ^UInt16` in every
+> program that touched the heap, so `PWord(p)^ := x` **WROTE eight bytes where the
+> source said two, silently, at every `-O` level.**"*
+
+**A rule with that attached does not get re-derived by instinct**, which is exactly
+why the citation mattered and why a line number was the wrong way to carry it. The
+live citations here are now the SEARCH STRING `"consulted BEFORE the builtin"`,
+which cannot rot, plus `FindTypeAlias` itself as the symbol.
+
+**Two things worth more than the repair.**
+
+**It had been copied five times** — twice here, once on the identity fork, and
+**twice in a `done/` ticket**. Each copy reads as independently sourced, and none
+of them is: they are one lookup made once. **A stale citation does not merely rot;
+it PROPAGATES**, and the copies are what a later reader finds when they check.
+The `done/` pair is deliberately left alone — CLAUDE.md says resolved write-ups are
+historical records and are not to be maintained — which means **the propagation
+source stays live and the only defence is that the working copies no longer carry a
+number.**
+
+**And I relayed it to two seats without opening it**, on the same day I wrote a
+playbook section about census citations drifting within hours of being filed. I
+verified the CLAIM — the ordering rule is true, and I said so from the ticket's own
+strength — and never checked whether the pointer resolved. That is the exact gap
+between *"is this true"* and *"what would this be if it were false"*: the rule
+being true is what made me not look.

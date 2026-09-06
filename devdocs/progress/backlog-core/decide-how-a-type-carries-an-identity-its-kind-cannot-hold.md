@@ -104,7 +104,7 @@ being asked separately"* — **the alias table's READ door, while this implement
 registration door and side channels.** Flagged to both seats. The ticket also
 carries the load-bearing constraint an implementer would not otherwise have:
 `FindTypeAlias` must be consulted **before** the builtin lookup, because a source
-declaration outranks a builtin and `symtab.inc:6215` documents that inverting it
+declaration outranks a builtin and `symtab.inc` documents that inverting it
 silently breaks the compiler — and the natural spelling is builtin-first, which is
 how it came to be wrong once already (`4be17cb8f`).
 
