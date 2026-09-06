@@ -10129,6 +10129,23 @@ test-core: $(COMPILER)
 	@# clear or a short copy fails. G is the row that separates a correct sizer
 	@# from one that is right by coincidence: above 255 the wrong kind and the
 	@# right kind have the same eight-byte prefix.
+	@# bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve
+	@# `o.Items[0].Fn(1)` and `TR(o).R.Fn(1)` were refused while `o.Ev(1)`,
+	@# `o.R.Fn(1)` and `o.GetI(0).Fn(1)` compiled. NOT the indexed property --
+	@# the cast base contains no property at all; the ingredient is which walker
+	@# parsed the chain. ParseClassRecordSelectors built no indirect call at any
+	@# point, its state being (node, tk, recId) with a SIGNATURE the fourth fact
+	@# it never carried, so a `(` ended the walk and was left in the stream.
+	@# EVERY ROW PASSES A NEGATIVE ARGUMENT AND ASSERTS THE RETURNED VALUE. The
+	@# refusals were the loud half: in assignment position the same chain
+	@# COMPILED, discarded the argument list and assigned the method pointer's
+	@# truthiness, answering True for every argument. A row asserting these
+	@# merely compile passes over that, and so does a row asserting `Fn(5)` --
+	@# True is both the right answer and the failure value. Rows G/H carry the
+	@# positive argument so the file cannot be read as asserting "always False".
+	@# Every row is fpc 3.2.2 -Mdelphi's own output for the same program.
+	./$(COMPILER) test/test_a_procedural_member_is_callable_through_a_selector_chain.pas $(TESTTMP)/test_chaincall26
+	tools/expect_same.sh test_chaincall26 "$$($(TESTTMP)/test_chaincall26 | tail -n 2)" "$$(printf 'fails=0\nCHAINCALL OK')"
 	./$(COMPILER) test/test_sizeof_through_a_pointer_to_a_string_n.pas $(TESTTMP)/test_sizeof_deref_strn26
 	tools/expect_same.sh test_sizeof_deref_strn26 "$$($(TESTTMP)/test_sizeof_deref_strn26 | tail -n 2)" "$$(printf 'fails=0\nSIZEOFDEREFSTRN OK')"
 	@# bug-p-the-conditional-evaluator-cannot-answer-sizeof-...

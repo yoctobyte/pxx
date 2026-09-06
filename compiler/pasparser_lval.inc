@@ -4889,6 +4889,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     thNode: Integer;   { a chained type-helper call on the value so far }
     mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
     dpsTk, dpsRec, dpsCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
+    fldSig: Integer;   { a chained member's PROCEDURAL signature — see the call arm below }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
     pyparser.inc), split out 2026-08-09 by
@@ -5411,10 +5412,48 @@ begin
       ASTSLen[sub] := Tokens[prevTok].SLen;
       EnforceFieldVis(recId, fieldName);   { --strict-visibility member access control }
       tk := RecFieldType(recId, fieldName);
+      { BEFORE recId moves off the owning record — the signature and the field
+        have to be read out of the same record, and one line further down this
+        is the wrong record. }
+      fldSig := RecFieldProcSig(recId, fieldName);
       recId := RecFieldRecId(recId, fieldName);
       ASTTk[sub] := Ord(tk);
       Next;
       node := sub;
+
+      { A PROCEDURAL member CALLED right here: `TR(o).R.Fn(1)`,
+        `o.Items[0].Fn(1)`. This loop's state is (node, tk, recId) and a
+        SIGNATURE is a fourth fact it never carried, so a `(` simply ended the
+        walk and was left in the stream for whatever came next to misreport.
+        THE ERROR TEXT THEREFORE NAMES THE FOLLOWING TOKEN AND NEVER THE
+        DEFECT: `expected 'then' before '('` in a condition, `expected ')'
+        before '('` in an argument, and `o is not a procedure or function` in
+        statement position — which blames the BASE identifier for a callee four
+        selectors away.
+
+        The position that PARSED is the one that was dangerous. As an
+        assignment RHS the argument list was DISCARDED and the method pointer's
+        own truthiness was assigned, so `b := TR(o).R.Fn(-5)` answered TRUE for
+        every argument, with no diagnostic. Proven with a body that can only
+        return False: it still printed TRUE. A probe with a positive argument
+        cannot see it — `Fn(5)` is correctly TRUE and wrongly TRUE — and
+        neither can `not <chain>(x)`, which agrees with fpc by accident.
+
+        DELEGATED, NOT HAND-ROLLED. BuildIndirectCallAST is the arity check
+        whose absence is exactly what let the arguments vanish; it also carries
+        the bracket-arg path and the suffix-on-the-result handoff, so
+        `chain.Fn(1)^.x` falls out rather than needing a second fix. This is
+        its sixth CALLER, not a fifth AllocNode(AN_CALL_IND).
+        bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve }
+      if (CurTok.Kind = tkLParen) and (fldSig >= 0) then
+      begin
+        node := BuildIndirectCallAST(node, fldSig, tk = tyRecord);
+        tk := Procs[fldSig].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[fldSig]
+        else recId := REC_NONE;
+        outTk := tk;
+        Continue;
+      end;
     end
     else { tkLBrack — a DEFAULT PROPERTY on a class value, else index the array just selected }
     begin
