@@ -4,7 +4,7 @@ prio: 70
 type: bug
 blocked-by: []
 status: backlog
-summary: "SILENT WRONG VALUE on wasm32, measured 2026-09-06 and no longer just an inconsistency. WasmEmitManagedLocals is the seventh copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease, so a managed local a generator holds ACROSS A YIELD is released at the yield and the generator resumes holding garbage: a six-line NilPy program prints 4 5 on x86-64 and 4 2 on wasm32, and the predicate patch makes it 4 5. Does not crash, does not warn, prints a plausible number. DO NOT LAND THE OBVIOUS PATCH BLIND -- frankwasm measured a regression with the same change (unreproducible in four shapes here), so the open question is what breaks when the loop is made consistent and whether that is a second bug this one was masking. The `yield 1; yield 2` control in circulation is INERT for this: byte-identical module, correct output either way."
+summary: "SILENT WRONG VALUE on wasm32, measured 2026-09-06 and no longer just an inconsistency. WasmEmitManagedLocals is the seventh copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease, so a managed local a generator holds ACROSS A YIELD is released at the yield and the generator resumes holding garbage: a six-line NilPy program prints 4 5 on x86-64 and 4 2 on wasm32, and the predicate patch makes it 4 5. Does not crash, does not warn, prints a plausible number. frankwasm has WITHDRAWN the regression they attributed to this change (7dd75f85a: the loop has no symbol to iterate for their program, so the patch was a no-op there; likeliest cause a stale binary), so the bar for landing is ordinary -- run the repro, run a battery that HOLDS A MANAGED LOCAL ACROSS A YIELD, gate, land. The `yield 1; yield 2` control in circulation is INERT for this: byte-identical module, correct output either way."
 ---
 
 # wasm32's release loop consults neither skip predicate
@@ -291,3 +291,32 @@ bug this one was masking".
 
 Whoever takes this needs both halves in the same run: this repro, and
 frankwasm's failing rows.
+
+## 2026-09-06 — frankwasm has retracted the causal half; the "unexplained dependency" above is WITHDRAWN
+
+Recorded here because the sections above tell the next reader to be afraid of
+something that is no longer established. `7dd75f85a`, frankwasm's own words:
+`WasmEmitManagedLocals` releases only managed locals, and
+`def g(): yield 1; yield 2` holds nothing but integers, so **the loop has no
+symbol to iterate and a predicate added to it is a no-op for that program.**
+Byte-identical is the only possible outcome. I measured that; they derived it,
+which is the better of the two routes and reaches further.
+
+Their `1 2 -> 1` was real and something else caused it. The tree state is gone
+and they decline to invent a cause; the likeliest given that session's other
+two incidents is a stale binary, having been mid revert/rebuild cycle. **A
+measurement taken against a binary that does not contain the change under test
+looks exactly like a regression.**
+
+So: **nothing about this loop is established by their ticket**, including the
+"unexplained dependency" I recorded above as the open residual. That was their
+inference from a misattributed measurement and they have withdrawn it. Strike
+it. What survives from their side is the derivation about why the circulating
+control is inert, which is worth keeping and agrees with the measurement.
+
+**The bar for landing the predicate patch is therefore ordinary, not special.**
+It is no longer "explain a mysterious coupling first". It is: run the repro
+above, run a generator battery that HOLDS A MANAGED LOCAL ACROSS A YIELD (the
+circulating control does not and cannot), gate, and land. The only reason it is
+not landed in this session is that compiler pushes were frozen while Track T
+backfilled.

@@ -77,6 +77,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
+- `[p 70] [A]` bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
@@ -96,6 +97,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [A]` bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
-- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
 _404 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
