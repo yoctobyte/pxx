@@ -102,3 +102,8 @@ before.
 Resolves the `test-zlib#src:tools/compiler_srchash.sh` row, which is a job
 NAMING artefact (testmgr names a job after its first source); the srchash guard
 passed and the job died later.
+
+## Log
+
+- 2026-09-06 | frankH | fixed in the test recipe (tagged header + the five
+  includers), commit 2523453c4. Closed by the same commit. No compiler change.
