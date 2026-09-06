@@ -10245,7 +10245,9 @@ begin
     ASTRight[isArg] := isArg2;
     LastExprTk := tyBoolean;
     CurASTNode := isNode;
-    Exit;
+    { no Exit: the class-REFERENCE `is` is the third arm of the same relational
+      level, and leaving it out would have made `E is cr = b` the one spelling
+      still refused. }
   end;
 
   { NOT under PyExprMode for `is`: Pascal's `E is TClass` is a TYPE test, but
@@ -10286,7 +10288,7 @@ begin
       else ASTTk[node] := Ord(tyClass);
     end;
     CurASTNode := node;
-    Exit;
+    { no Exit: `is` and `as` are relational-level too -- see the `in` arm. }
   end;
   if (CurTok.Kind = tkIn) and not PyExprMode then
   begin
@@ -10307,9 +10309,26 @@ begin
       ASTTk[node] := Ord(tyBoolean);
       CurASTNode := node;
     end;
-    Exit;
+    { FALLS THROUGH to the comparison level below, and used to Exit. `in` is a
+      RELATIONAL operator in Pascal, at the same precedence as `=`, so
+      `MS in CurrentModeSwitches = Enable` means `(MS in ...) = Enable` --
+      fcl-passrc pscanner.pp:3806 writes exactly that and we answered
+      `expected 'then'`. Exiting here made `in` a precedence level of its own
+      that nothing could follow, and the same Exit was on the `is`/`as` arm
+      above (`o is TB = b`, equally legal, equally refused).
+      bug-p-a-relational-operator-cannot-follow-in-is-or-another-comparison }
   end;
-  if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+  { WHILE, not IF: the Pascal comparison level is LEFT-ASSOCIATIVE, so
+    `i < 2 = b` is `(i < 2) = b` and `i = 1 = b` is `(i = 1) = b`. fpc 3.2.2
+    compiles both and prints TRUE. The comment on the Python chaining loop at
+    the bottom of this arm says "Pascal has no chained comparison (`a < b < c`
+    is a type error there)" -- wrong about the language, and wrong when
+    written: it is a type error only where the third operand is not Boolean.
+    Pascal's chain is plain left association and NOT Python's conjunction
+    desugar, which is why this is a loop around the whole arm rather than a
+    widening of that loop's guard. In PyExprMode the inner loop consumes the
+    chain first and this one re-tests to nothing. }
+  while CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] do
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;
@@ -10678,8 +10697,12 @@ begin
       be desugared by repeating the token text — `a < f() < b` would call f
       twice (feature-nilpy-comparison-chaining). Anything but a plain
       ident/literal is bound to a hidden local first: an IR value node is a
-      SUBTREE, so referencing one twice RE-EMITS it. Pascal has no chained
-      comparison (`a < b < c` is a type error there), so this is PyExprMode-only. }
+      SUBTREE, so referencing one twice RE-EMITS it. PyExprMode-only because
+      Pascal's chain means something DIFFERENT -- plain left association,
+      `(a < b) < c` -- and is handled by the `while` around this whole arm.
+      This comment used to say "Pascal has no chained comparison (`a < b < c`
+      is a type error there)"; that is true only where the third operand is not
+      Boolean, and fpc compiles `i < 2 = b`. }
     while PyExprMode and (CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) do
     begin
       if (ASTKind[right] = AN_IDENT) or (ASTKind[right] = AN_INT_LIT) or

@@ -6970,6 +6970,18 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_setdirseparators_and_isvalidident \
 	  "$$($(TESTTMP)/test_dirsep26)" \
 	  "$$(cat test/test_setdirseparators_and_isvalidident.expected)"
+	@# THE RELATIONAL LEVEL IS ONE LEVEL AND IT IS LEFT-ASSOCIATIVE. `in`, `is`
+	@# and `as` each had a precedence level of their own that nothing could
+	@# follow, and two comparisons never chained: `MS in Switches = Enable`
+	@# (fcl-passrc pscanner.pp:3806) answered "expected 'then' before '='".
+	@# r4 is the row that pins associativity rather than the parse -- an
+	@# all-Boolean chain cannot, because = and <> over Booleans are XNOR/XOR
+	@# and both associative, so every grouping prints the same value. `i < 2 =
+	@# b` separates them and the wrong reading is a wrong VALUE under pxx.
+	@./$(COMPILER) test/test_a_relational_operator_can_follow_in_is_and_a_comparison.pas $(TESTTMP)/test_relchain26
+	@tools/expect_same.sh test_a_relational_operator_can_follow_in_is_and_a_comparison \
+	  "$$($(TESTTMP)/test_relchain26)" \
+	  "$$(cat test/test_a_relational_operator_can_follow_in_is_and_a_comparison.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
