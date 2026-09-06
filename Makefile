@@ -18050,6 +18050,10 @@ test-core: $(COMPILER)
 	# output; the ordinal and string rows are controls on the varied axis.
 	./$(COMPILER) test/test_the_alias_cast_door_answers_like_the_builtin_one.pas $(TESTTMP)/test_the_alias_cast_door_answers_like_the_builtin_one26
 	tools/expect_same.sh test_the_alias_cast_door_answers_like_the_builtin_one26 "$$($(TESTTMP)/test_the_alias_cast_door_answers_like_the_builtin_one26)" "$$(cat test/test_the_alias_cast_door_answers_like_the_builtin_one.expected)"
+	# ...including an `operator Explicit`, which was the builtin door's arm only.
+	# .expected is FPC 3.2.2's own output; the no-overload rows are the controls.
+	./$(COMPILER) test/test_an_explicit_operator_answers_at_the_alias_door_too.pas $(TESTTMP)/test_an_explicit_operator_answers_at_the_alias_door_too26
+	tools/expect_same.sh test_an_explicit_operator_answers_at_the_alias_door_too26 "$$($(TESTTMP)/test_an_explicit_operator_answers_at_the_alias_door_too26)" "$$(cat test/test_an_explicit_operator_answers_at_the_alias_door_too.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"

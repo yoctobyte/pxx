@@ -528,6 +528,7 @@ end;
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
+    eoNode: Integer;     { TryExplicitOpCast's result — an `operator Explicit` on a record/class operand, at both name doors }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
@@ -6564,6 +6565,19 @@ begin
             LastExprTk := tyVariant;
             Exit;
           end;
+          { ...and an `operator Explicit` on a record or class operand is the
+            conversion CALL here too. Asked before the ordinal and float arms
+            for the same reason the builtin door asks it before them: an
+            overload naming this exact target type is the more specific answer,
+            and the arms below would otherwise reinterpret the record's bytes.
+            See TryExplicitOpCast. }
+          eoNode := TryExplicitOpCast(CurASTNode, IntToTypeKind(AliasTk[aliasIdx]));
+          if eoNode >= 0 then
+          begin
+            CurASTNode := eoNode;
+            LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
+            Exit;
+          end;
           if TypeIsOrdinal(IntToTypeKind(AliasTk[aliasIdx])) and
              (IntToTypeKind(AliasTk[aliasIdx]) <> tyPointer) then
           begin
@@ -7012,22 +7026,12 @@ begin
             { `operator Explicit(a: TFoo): Integer` — a value cast of a
               record/class operand with a matching Explicit overload is the
               conversion CALL, not a reinterpret (toperator11's Integer(a)). }
-            if ((IntToTypeKind(ASTTk[CurASTNode]) = tyRecord) or
-                (IntToTypeKind(ASTTk[CurASTNode]) = tyClass)) then
+            eoNode := TryExplicitOpCast(CurASTNode, castTk);
+            if eoNode >= 0 then
             begin
-              sci := FindOpOverload(OPK_EXPLICIT, ASTTk[CurASTNode], ResolveNodeRec(CurASTNode));
-              if (sci >= 0) and (Procs[sci].RetType = castTk) then
-              begin
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := CurASTNode;
-                node := AllocNode(AN_CALL);
-                ASTIVal[node] := sci;
-                ASTTk[node] := Ord(castTk);
-                ASTLeft[node] := argSeq;
-                CurASTNode := node;
-                LastExprTk := castTk;
-                Exit;
-              end;
+              CurASTNode := eoNode;
+              LastExprTk := castTk;
+              Exit;
             end;
             { ...and a FLOAT target converts rather than reinterpreting, the
               same as the alias door and the `Double(x)` keyword arm. Asked
@@ -8761,6 +8765,37 @@ begin
   ASTRight[vcNd] := vcRd;
   ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
   VariantCastToTemp := vcNd;
+end;
+
+function TryExplicitOpCast(n: Integer; castTk: TTypeKind): Integer;
+{ `operator Explicit(a: TFoo): Integer` — a value cast of a RECORD or CLASS
+  operand that has a matching Explicit overload is the conversion CALL, not a
+  reinterpret. Answers -1 for every other operand and whenever no overload
+  returns the cast's type, so a caller can ask unconditionally.
+
+  SHARED BECAUSE THE ALIAS DOOR NEVER HAD IT. `type TInt = Integer; TInt(f)`
+  answered 4 -- the record's raw first field -- where `Integer(f)` answered 40
+  and fpc 3.2.2 answers 40 for both. Same shape as FloatCastToTemp beside it:
+  the builtin-name door grew the arm, the user-alias door three hundred lines
+  above kept falling through to AN_PTR_CAST, and nothing connects the two but a
+  reader noticing.
+  refactor-p-five-dispatch-sites-for-one-named-type-cast }
+var eoSci, eoArg, eoNd: Integer;
+begin
+  TryExplicitOpCast := -1;
+  if n < 0 then Exit;
+  if (IntToTypeKind(ASTTk[n]) <> tyRecord) and
+     (IntToTypeKind(ASTTk[n]) <> tyClass) then Exit;
+  eoSci := FindOpOverload(OPK_EXPLICIT, ASTTk[n], ResolveNodeRec(n));
+  if eoSci < 0 then Exit;
+  if Procs[eoSci].RetType <> castTk then Exit;
+  eoArg := AllocNode(AN_ARG);
+  ASTLeft[eoArg] := n;
+  eoNd := AllocNode(AN_CALL);
+  ASTIVal[eoNd] := eoSci;
+  ASTTk[eoNd]   := Ord(castTk);
+  ASTLeft[eoNd] := eoArg;
+  TryExplicitOpCast := eoNd;
 end;
 
 function FloatCastToTemp(n: Integer; castTk: TTypeKind): Integer;

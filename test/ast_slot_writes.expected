@@ -660,6 +660,7 @@ AN_CALL Left domArg
 AN_CALL Left dself
 AN_CALL Left elemNode
 AN_CALL Left enArg0
+AN_CALL Left eoArg
 AN_CALL Left excFoldA
 AN_CALL Left flArg1
 AN_CALL Left flArg2
