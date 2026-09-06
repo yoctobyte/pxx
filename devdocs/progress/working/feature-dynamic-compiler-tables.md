@@ -842,3 +842,53 @@ of the two numbers.
 the shortstring type it also sizes (`ast_syminfer.inc:151`, `ir.inc:2703`).
 `LabelFixupPos`/`LabelFixupTarget` (`MAX_IR`), `UCls*` (`MAX_UCLASS`), and
 `Procs` deliberately.
+
+## 2026-09-06 (frankH) — MAX_IR scouted and DELIBERATELY NOT converted
+
+The next family by the old REMAINING list is `LabelFixupPos`/`LabelFixupTarget`
+(`MAX_IR`). **Counted before choosing how to convert it, which is the step the
+fixup family taught, and the count says do not start.**
+
+| | `MAX_FIXUPS` (converted) | `MAX_IR` |
+| --- | --- | --- |
+| arrays sized by it | 3, all parallel | **10**, several unrelated |
+| cap-check sites | **1** | **20** for `LabelFixupCount` alone (arm32 5, x86-64 8, aarch64 7) |
+| uses that are not array bounds | 0 | **7** |
+| total references | 5 | **54** |
+
+Three reasons this is a different job, not the next one in the rhythm:
+
+1. **`MAX_IR` sizes ten tables that are not parallel to each other** —
+   `LabelFixupPos`, `LabelFixupTarget`, `LabelFixupAnchor`, `LabelAddrFixPos`,
+   `LabelAddrFixTarget`, `LabelPositions`, `WasmLabelBlock`, `WasmLabelStamp`,
+   `WasmExcSlot`, `XtWideLabel`. That is the `STRING_CAP` shape (one constant
+   sizing two unrelated things) at five times the scale. **The constant has to
+   be split before anything is converted**, and the split is the work.
+2. **Seven uses are VALIDITY PREDICATES, not bounds** — `if (lblId >= 0) and
+   (lblId < MAX_IR)` in six backends plus wasm. Those ask *is this label id
+   plausible*, and deleting the constant deletes the question. This is exactly
+   the ticket's own worked example: four sites had taken `MAX_X` to mean "a
+   number the count can never reach", one of them an out-of-bounds stack write
+   in `IRVerify`. Here there are seven and they are spread across every backend.
+3. **The structural answer is unavailable.** Twenty cap sites means twenty
+   `Ensure` calls, so lockstep between `LabelFixupPos` and `LabelFixupTarget`
+   would be **discipline at twenty sites** rather than one procedure — the
+   property the fixup family got for free because its old code had one check.
+
+**The cap-site count is knowable before the conversion and it decides whether
+the structural answer exists.** `Fixups` had one check and its three columns
+could only be grown together; `Data` had 23 and needed 23 `DataEnsure` calls;
+`MAX_IR` has 20 across six backends *and* seven non-bound uses. Counting first
+is cheap and it is the difference between inheriting the good answer and
+promising to be careful twenty times.
+
+### Remaining, with the reason each is not next
+
+- **`TokChars` (`STRING_CAP`)** — blocked on splitting that constant from the
+  shortstring type it also sizes (`ast_syminfer.inc:151`, `ir.inc:2703`). That
+  change touches how a `string` is SIZED, not how a pool grows: different blast
+  radius, its own piece of work.
+- **`MAX_IR`** — above. Split the constant first; the ten tables are not one
+  family.
+- **`UCls*` (`MAX_UCLASS`)** — not scouted.
+- **`Procs`** — deliberately fixed, unchanged.
