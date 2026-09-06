@@ -3,7 +3,7 @@ slug: bug-p-the-conditional-evaluator-cannot-answer-sizeof-so-eleven-corpus-rows
 track: P
 type: bug
 prio: 40
-status: working
+status: done
 owner: frankB
 created: 2026-09-06
 found-by: frankS (measured), filed by frank-coordinator
@@ -134,3 +134,6 @@ Every row therefore asserts a RELATION and carries no width: that the
 preprocessor's answer agrees with the compiler's own `SizeOf`. That is the only
 property a second source of size truth could break, and it holds on every
 target.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
