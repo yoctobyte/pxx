@@ -72,3 +72,6 @@ or `/usr/share/fpcsrc/3.2.2/rtl/objpas` and **runs nothing at all when neither e
 **Measured earlier tonight across 28 checkouts: 6 can reach the fpc corpus, 5 have
 `library_candidates/` without it, 17 have neither.** Whoever takes this must confirm
 `fglsrc` resolves in their tree **before** trusting either a red or a green.
+
+## Log
+- 2026-09-06 — the seven watcher saw `test-core#src:test/test_fpc_compat_batch2.pas` GREEN at ef03a6282980 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-fpc-compat-batch2-2`, not `regression-test-core-test-fpc-compat-batch2`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
