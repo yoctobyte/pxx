@@ -28,6 +28,20 @@ An unbounded read of arbitrary memory, silently, on plain ASCII. `Ord(pw[0])`
 answers 4 and `Ord(pw[1])` 0 against fpc's 97 and 98, so the pointer is not even
 at the literal's text.
 
+**4261104 IS NOT DATA AND MUST NOT BE READ AS A WRONG LENGTH** (frankD's
+correction, and it is the right one). It is where an unbounded scan happened to
+meet a 2-byte zero, so it varies with whatever is in memory. It survives
+eyeballing precisely because it is a plausible integer — the same trap as a
+narrowing that returns a believable value. Do not try to explain the number;
+there is nothing in it to explain.
+
+**One thing to rule out cheaply before a long hunt** (also frankD): `10e670503`
+moved `NormalizeWideUnsignedLiteral` to the literal's CREATION site, so every
+decimal in [2^63, 2^64) is now tagged `tyUInt64` unconditionally. If a fix here
+keys off the literal's TAG rather than its text, that band will behave
+differently from either side of it. Unmeasured and not a claim — a one-line
+probe settles it.
+
 ## The part that matters for ranking
 
 **`{$define PXX_WIDE_PAYLOAD}` does NOT fix it** — measured on both sides of the
