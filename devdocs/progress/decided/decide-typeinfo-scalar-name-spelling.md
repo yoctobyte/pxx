@@ -120,3 +120,40 @@ FPC's aliasing as though it were our type system.
 Gating gets both and costs two lines, because the underlying type already
 matches. That is the cheapest possible resolution and it was not on the ticket's
 list.
+
+## 2026-09-06 (frankA) — one supporting sentence is falsified; the DECISION is not
+
+The decision above stands and is not reopened. This corrects a claim used to
+dismiss option 3:
+
+> option 3 ... buys nothing here — the observable behaviour is already identical
+> and only the RTTI label differs.
+
+**Measured at `4d0642bfa917`: the label is identical and the behaviour differs.**
+
+    type TMyInt = Integer;
+    TypeInfo(TMyInt)  name=Integer kind=1
+    TypeInfo(Integer) name=Integer kind=1
+    TypeInfo(TMyInt) = TypeInfo(Integer)  ->  DIFFER      (fpc 3.2.2: SAME)
+
+Two RTTI blobs describing one type, agreeing on name and on kind and differing
+in identity — so the standard dispatch idiom `if p = TypeInfo(Integer)` takes
+the fall-through arm for a variable declared through the alias, silently, while
+every name-based inspection says it should have matched.
+
+Filed as
+[[bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses]].
+
+**Why this does not touch the decision.** That defect reproduces WITHIN one
+kind — `TMyInt` and `Integer` are both `tyInteger` and both named `Integer` —
+so it is not the `tyInteger`/`tyInt32` question option 3 is about, and
+collapsing those kinds would not fix it. The name-spelling call, and the
+gating that implements it, are unaffected.
+
+**What is worth keeping is why the sentence read as safe.** Its table swept
+`SizeOf` and `^.Name` — the two things a scalar type is usually asked about —
+and both agreed, so "already identical" was true of everything measured. RTTI
+IDENTITY was not in the table, and it is the one property TypeInfo exists to
+provide. The observables a premise happens to enumerate become the definition of
+"observable" for every later reader, which is why the dismissal survived two
+re-reads of this ticket, including one of mine.
