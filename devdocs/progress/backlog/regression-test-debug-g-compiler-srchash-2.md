@@ -277,3 +277,4 @@ Nothing here is a defect in `job_reason` — the tail is the right thing for it 
 return, and the untruncated 400-char form in `tstate/<host>.json` may well
 contain the error line that the 200-char bullet cut. The failure is entirely in
 the READING, which is why the fix is this paragraph and not a patch.
+- 2026-09-06 — the seven watcher saw `test-debug-g#src:tools/compiler_srchash.sh` GREEN at 50ca24994647 (tier native) and did NOT close this: this is a repeat stub (`regression-test-debug-g-compiler-srchash-2`, not `regression-test-debug-g-compiler-srchash`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
