@@ -2,7 +2,7 @@
 track: P
 prio: 80
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frankO
 summary: "FIXED. The cause is NOT what this ticket said. It is not nesting, not the class-ref, not the selector parse, and not a regression: `ResolvePendingPointerAliases` repaired forward pointee aliases in ONE FORWARD PASS, so `PP = ^P` written ABOVE `P = ^T` (rtl-generics' own spelling) gave PP the lower alias index, and the loop reached PP while P was still unrepaired, copied P's REC_NONE base, and never came back. Proven by ORDER ALONE: swapping just the two pointer rows makes the identical program correct. Now iterated to a bounded fixedpoint. The ticket's `nested AND double pointer` conjunction was an artefact of a probe that could not fail -- its `works` rows called a CLASS function, which is resolved off the static class type and never touches the pointer chain, so `r=42` arrived through a path the bug cannot reach. Reading two different INTEGER fields separated them and exposed a far more reachable form with no class anywhere: `pp^^.b` READ BACK `pp^^.a` (11 where fpc prints 22). Same on pin v404, so long-standing, which also retires the `c01eb17a8` provenance and the whole bisect-with-`170e7aee1`-carried apparatus. One row remains and is NOT this bug -- `PP(x)^.field` needs an implicit second deref, is wrong in BOTH declaration orders, and is split to its own ticket."
@@ -352,3 +352,6 @@ not the alias table.
 `generics.defaults.pas:1865` and its fifteen siblings go through
 `PPExtendedEqualityComparerVMT(Self)^.__ClassRef` — the **cast** spelling, so
 rung 6a needs the split ticket too, not this one alone.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:21 blocked:7 backlog:9 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:40 backlog-pascal:25 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3390 rejected:78`
+`working:21 unfinished:21 blocked:7 backlog:9 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:40 backlog-pascal:26 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3391 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read` [P] — owner: frankO
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -66,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 391, ranked
+## Ready — top 30 of 392, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -80,6 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
+- `[p 70] [P]` bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
@@ -97,6 +97,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
-- `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 
-_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
