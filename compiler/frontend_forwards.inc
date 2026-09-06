@@ -54,6 +54,7 @@ procedure EmitAnsiStringRuntime; forward;
 function TryDelphiBareProcArg: Integer; forward;
 procedure EmitVariantBlobs; forward;   { emitted at EmitAnsiStringRuntime's tail; defined after the two bodies it splices }
 procedure EmitHeapLockSlowStub; forward;
+procedure EmitHeapLockStubs; forward;   { the reentrant owner+depth layer; planted by EmitHeapLockSlowStub so every driver gets both }
 procedure EmitDiv0Stub; forward;
 procedure EmitFpcFloatErrStub; forward;
 procedure EmitFpcMemErrStub; forward;

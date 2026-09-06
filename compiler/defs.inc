@@ -5330,6 +5330,29 @@ var
   BSS_HEAP_END    : Integer;
   BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }
   BSS_HEAP_LOCK   : Integer;  { spinlock for heap allocations }
+  { REENTRANCY, added 2026-09-06 (feature-a-make-the-heap-lock-reentrant, owner
+    decision arm (a)). BSS_HEAP_OWNER holds the OWNING THREAD'S tid, 0 = free,
+    and it is the lock word -- the same shape BSS_IO_OWNER has had since the I/O
+    statement lock landed. BSS_HEAP_LOCK above is what it replaced and is now
+    read by nothing on the acquire path; it stays allocated because the deadlock
+    diagnosis stub still spins on it for the NON-reentrant fallback.
+
+    WHY AN OWNER AND NOT A DEPTH COUNTER AT THE CALLER: a wrapper-local counter
+    still deadlocks, measured -- the nested PXXClassFinalize runs its kind-4
+    pass whose FreeMem takes the lock at a DIFFERENT codegen site, so no single
+    caller can see the nesting. Reentrancy has to live in the primitive.
+
+    AND WHY THE TID IS NOT ENOUGH ON ITS OWN -- this is the part everyone
+    re-derives: `gs:[0]` is INHERITED across clone, so a thread this program did
+    not create (glibc pthread_create) reads the block of whoever created it and
+    would take that thread's cached tid as its own, i.e. answer "the lock is
+    already mine" for a lock it does not hold. Recording the tid harder at
+    thread start does not help and is already done (TLS_SLOT_TID): a foreign
+    thread has no thread-start of OURS at which to record anything. The
+    stack-bounds check is not a cheaper way to get the id -- IT IS THE ONLY WAY
+    TO DETECT THAT THE RECORDED ID IS NOT YOURS. See TLS_SLOT_STACK_LO/_HI. }
+  BSS_HEAP_OWNER  : Integer;  { --threadsafe heap lock: owning thread id (gettid), 0 = free }
+  BSS_HEAP_DEPTH  : Integer;  { that owner's nesting depth; released at 0 }
   HeapLockedCallProcIdx1 : Integer;
     { Proc index PLUS ONE of the one runtime helper whose emitted call must be
       wrapped in the heap lock; 0 = none. Set by ir.inc's Free desugar to
@@ -5477,6 +5500,8 @@ var
   SigSetHookAddr  : Integer;  { code offset of the SetSignalHandler stub: edi = signal, rsi = handler address -> store hook slot, fall through into SigInstallAddr }
   IOLockAddr  : Integer;  { code offset of the --threadsafe I/O statement-lock acquire stub (reentrant owner-tid spinlock over BSS_IO_OWNER/DEPTH) }
   IOUnlockAddr: Integer;  { code offset of the matching release stub }
+  HeapLockAddr  : Integer; { code offset of the --threadsafe heap-lock acquire stub (reentrant owner-tid spinlock over BSS_HEAP_OWNER/DEPTH). 0 = not emitted; the acquire site falls back to the old ownerless inline loop rather than calling address 0. }
+  HeapUnlockAddr: Integer; { code offset of the matching release stub }
   HeapLockSlowAddr : Integer; { code offset of the --threadsafe heap-lock CONTENDED path
                                 (EmitHeapLockSlowStub, ir_codegen.inc). The fast path stays
                                 inline and byte-identical; only the branch that used to enter

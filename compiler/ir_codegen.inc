@@ -111,11 +111,23 @@ procedure EmitAcquireHeapLock;
 var jzPatch, callStart: Integer;
 begin
   if not ThreadSafeMode then Exit;
-  { NO STUB, NO DIAGNOSIS -- the old unbounded loop, unchanged. Reachable when
-    the acquire is emitted before the prologue got to EmitHeapLockSlowStub, and
-    the alternative is calling address 0. Falling back is the whole reason the
-    stub address is tested rather than assumed: the div-zero stub's own comment
-    records what "the address stayed 0" cost the last time. }
+  { REENTRANT PATH, and it is the normal one since 2026-09-06: a 5-byte call to
+    the owner+depth stub, which contains today's TTAS fast path unchanged and
+    only adds the "is it already mine" test in front of it. Out of line because
+    the identity check needs registers and this is emitted in the MIDDLE of
+    retain/release sequences, not at a statement boundary like the I/O lock.
+    feature-a-make-the-heap-lock-reentrant }
+  if HeapLockAddr <> 0 then
+  begin
+    IREmitCodeCall(HeapLockAddr);
+    Exit;
+  end;
+  { NO STUB, NO DIAGNOSIS, AND NO REENTRANCY -- the old unbounded loop,
+    unchanged. Reachable when the acquire is emitted before the prologue got to
+    EmitHeapLockSlowStub, and the alternative is calling address 0. Falling back
+    is the whole reason the stub address is tested rather than assumed: the
+    div-zero stub's own comment records what "the address stayed 0" cost the
+    last time. }
   if HeapLockSlowAddr = 0 then
   begin
     EmitAsmX64([
@@ -159,9 +171,19 @@ begin
 end;
 
 procedure EmitReleaseHeapLock;
+{ Paired with EmitAcquireHeapLock, and it must know about depth for the same
+  reason the acquire does: an inner release that stored 0 to the lock word would
+  hand the heap to another thread while the OUTER frame is still walking it. }
 begin
-  if ThreadSafeMode then
-    EmitAsmX64(['mov dword [@glob], 0', BSS_HEAP_LOCK]);
+  if not ThreadSafeMode then Exit;
+  if HeapUnlockAddr <> 0 then
+  begin
+    IREmitCodeCall(HeapUnlockAddr);
+    Exit;
+  end;
+  { The ownerless fallback, matching the acquire's own fallback above: no depth
+    exists on that path, so the store is the whole release. }
+  EmitAsmX64(['mov dword [@glob], 0', BSS_HEAP_LOCK]);
 end;
 
 function HeapMagazineEnabled: Boolean;
@@ -3343,7 +3365,146 @@ begin
     'mov rdi, %', 212,
     'syscall'
   ]);
+  { The reentrant layer goes on top of this one and shares its diagnosis; one
+    plant, so a driver that calls this gets both and cannot get half. }
+  EmitHeapLockStubs;
 end;
+
+procedure EmitHeapLockStubs;
+{ THE REENTRANT LAYER OVER THE HEAP LOCK — owner plus depth, so the same thread
+  may take it again instead of hanging on itself.
+
+  Why it exists: `PXXClassFinalizeManaged` runs under this lock, reaches a kind-6
+  (class-instance) member, releases it, and `PyObjFinalize -> PXXClassFinalize`
+  calls `PXXClassFinalizeManaged` again. One instance, one thread, no
+  contention, Runtime error 212. The owner ruled arm (a) of
+  decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock.
+
+  A DEPTH COUNTER AT THE CALLER IS NOT A SUBSTITUTE, and that is measured rather
+  than assumed: the nested `PXXClassFinalize` runs its kind-4 pass, whose
+  `FreeMem` takes the lock at a DIFFERENT codegen site, so no single caller can
+  see the nesting. It has to live in the primitive.
+
+  BUILT ON TOP OF THE EXISTING WORD, NOT INSTEAD OF IT. `BSS_HEAP_LOCK` is still
+  the mutual-exclusion word and `HeapLockSlowAddr` is still the contended path
+  with its spin budget and its exit-212 diagnosis — both untouched. What is new
+  is `BSS_HEAP_OWNER` / `BSS_HEAP_DEPTH` around them, so the whole deadlock
+  DIAGNOSIS survives for the case that is still a real deadlock (a foreign
+  thread, a signal handler) while the case that never was one stops hanging.
+
+  THE OWNER TID, AND THE CHECK THAT MAKES READING IT SAFE. Copied deliberately
+  from EmitIoLockStubs rather than reinvented: read the cached tid from
+  TLS_SLOT_TID, but ONLY when the reader's own rsp lies inside the
+  TLS_SLOT_STACK_LO/_HI bounds that block's owner recorded; otherwise fall back
+  to a gettid syscall.
+
+  The bounds are not an optimisation and they are not a cheaper way to get the
+  id. `gs:[0]` is INHERITED across clone, so a thread this program did not
+  create — glibc pthread_create, which test/test_multithreading.pas has used for
+  months — reads the block of whoever created it and would take that thread's
+  tid as its own. Here that is not a stale value: it is the answer "the lock is
+  already mine" for a lock this thread does not hold, i.e. silent loss of mutual
+  exclusion inside the primitive whose entire job is mutual exclusion. No
+  CONTENT check can catch it, because inheritance reproduces the block byte for
+  byte. Recording the tid harder at thread start does not help and is already
+  done (TLS_SLOT_TID): a foreign thread has no thread-start of OURS at which to
+  record anything. THE STACK-BOUNDS CHECK IS THE ONLY WAY TO DETECT THAT THE
+  RECORDED ID IS NOT YOURS.
+
+  A miss is FAIL-SAFE IN THE RIGHT DIRECTION: gettid answers correctly, just
+  slower, so a foreign thread is never granted false ownership. (A miss is also
+  the exact moment we know this thread has no block of its own, which is where
+  minting one would go if foreign-thread TLS is ever worth having. Not here.)
+
+  CLOBBERS NOTHING: rax/rcx/rsi/r11 are saved and restored, because unlike the
+  I/O lock this is NOT called at statement boundaries — the acquire sites sit in
+  the middle of retain/release sequences with live values in rax.
+
+  Cost note for whoever measures: -dPXX_ALLOC_CENSUS and -dPXX_HEAP_DEBUG both
+  turn the heap magazine OFF, so under either instrument EVERY allocation takes
+  this lock and pays the identity check. That is a measurement-speed cost, not a
+  shipped one. }
+var jePatch, jzPatch, callStart, unlockJnzPatch: Integer;
+begin
+  if HeapLockAddr <> 0 then Exit;
+  if not ThreadSafeMode then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  BSS_HEAP_OWNER := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_DEPTH := BSSSize; Inc(BSSSize, 8);
+
+  HeapLockAddr := CodeLen;
+  EmitAsmX64(['push rax', 'push rcx', 'push rsi', 'push r11']);
+  if TlsMainInstalled then
+  begin
+    { mov rsi, gs:[0] — the block, through the self-pointer convention
+      IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
+      with --emit-obj/--shared nothing installed a base and this load takes
+      address 0 rather than returning one. }
+    EmitB($65); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitAsmX64([
+      'mov rcx, rsp',
+      'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,
+      'jb .hlgettid',
+      'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_HI,
+      'jae .hlgettid',                 { HI = 0 (bounds unset) always lands here }
+      'mov rsi, [rsi+%]', 8 * TLS_SLOT_TID,
+      'jmp .hlhaveowner',
+      '.hlgettid:',
+      'mov eax, %', 186,               { gettid }
+      'syscall',
+      'mov rsi, rax',
+      '.hlhaveowner:'
+    ]);
+  end
+  else
+    EmitAsmX64([
+      'mov eax, %', 186,               { gettid }
+      'syscall',
+      'mov rsi, rax'
+    ]);
+
+  { Already ours? Then this is re-entry: bump the depth and return WITHOUT
+    touching the lock word. }
+  EmitAsmX64(['cmp [@glob], rsi', BSS_HEAP_OWNER]);
+  EmitB($74); jePatch := CodeLen; EmitB(0);          { je -> .bump }
+
+  { Not ours: today's acquire, byte for byte — the TTAS fast path and the 5-byte
+    call to the contended stub, so every number measured on it still stands. }
+  EmitAsmX64([
+    'mov eax, 1',
+    'lock xchg [@glob], eax', BSS_HEAP_LOCK,
+    'test eax, eax'
+  ]);
+  EmitB($74); jzPatch := CodeLen; EmitB(0);          { jz over the call }
+  callStart := CodeLen;
+  IREmitCodeCall(HeapLockSlowAddr);
+  if CodeLen - callStart <> 5 then
+    Error('compiler error: the heap-lock slow-path call must be exactly 5 bytes');
+  PatchRel8(jzPatch);
+  { We hold it now, so we are the owner. Depth is 0 here — the releaser zeroed
+    it — and the bump below makes it 1. }
+  EmitAsmX64(['mov [@glob], rsi', BSS_HEAP_OWNER]);
+  PatchRel8(jePatch);
+  EmitAsmX64([
+    'inc qword [@glob]', BSS_HEAP_DEPTH,
+    'pop r11', 'pop rsi', 'pop rcx', 'pop rax',
+    'ret'
+  ]);
+
+  HeapUnlockAddr := CodeLen;
+  EmitAsmX64(['push rcx', 'dec qword [@glob]', BSS_HEAP_DEPTH]);
+  EmitB($75); unlockJnzPatch := CodeLen; EmitB(0);   { jnz -> still nested }
+  { Outermost release. Owner first, then the lock word: a thread that observes
+    the lock free must not then read a stale owner and believe it holds it. }
+  EmitAsmX64([
+    'xor ecx, ecx',
+    'mov [@glob], rcx', BSS_HEAP_OWNER,
+    'mov dword [@glob], 0', BSS_HEAP_LOCK
+  ]);
+  PatchRel8(unlockJnzPatch);
+  EmitAsmX64(['pop rcx', 'ret']);
+end;
+
 
 procedure EmitDiv0Stub;
 { Shared integer-div-by-zero abort stub: write the FPC-style runtime error to
