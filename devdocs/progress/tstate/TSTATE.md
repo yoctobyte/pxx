@@ -3,20 +3,20 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus **QUIET 7d5h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `b2a41d5f4fb9` | 2026-09-06T16:20:42Z | RED (native) | 170.5s | `29c40526f145` RED |
+| plexus **QUIET 7d6h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
+| seven | `b2a41d5f4fb9` | 2026-09-06T16:31:18Z | RED (full) | 600.7s | `b2a41d5f4fb9` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `29c40526f145` on seven, 2026-09-06T16:16:30Z (4m ago).**
+**Newest full tier in the fleet: `b2a41d5f4fb9` on seven, 2026-09-06T16:31:18Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `29c40526f145` | RED | 4m | — (newest) |
-| plexus | `27424c927b65` | RED | 7d5h | 7d5h |
+| seven | `b2a41d5f4fb9` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 7d6h | 7d6h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -120,30 +120,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-core#src:test/test_libwriteln_parity.pas** — test/test_libwriteln_parity.pas tools/expect_same.sh +1 (seven): bad `fa5e9ef55813`, last good `47b8c3285253`, 4 commit(s) in range
 - **test-core#src:test/test_promoint_bitwise.pas** — test/test_promoint_bitwise.pas tools/expect_same.sh (seven): bad `0aff068c6d08`, last good `bb18f83c859e`, 2 commit(s) in range
 - **test-i386#src:examples/chess/chess.pas** — examples/chess/chess.pas tools/expect_same.sh +1 (seven): bad `33bf8f7badd4`, last good `bb18f83c859e`, 7 commit(s) in range
-- **CASCADE 20 jobs** (seven): bad `0dd59f05cc3a`, last good `851f170cb454`, 4 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-aarch64#src:test/test_parallel_for_private.pas`
-  - `test-aarch64#src:test/test_signal_sp_rewrite.pas`
-  - `test-aarch64#src:test/test_stack_overflow_raise.pas`
-  - `test-arm32#src:test/test_parallel_for_private.pas`
-  - `test-arm32#src:test/test_signal_sp_rewrite.pas`
-  - `test-arm32#src:test/test_stack_overflow_raise.pas`
-  - `test-c-conformance#shard3/6`
-  - `test-c-conformance-aarch64#shard3/6`
-  - `test-c-conformance-arm32#shard3/6`
-  - `test-c-conformance-i386#shard3/6`
-  - `test-c-conformance-riscv32#shard3/6`
-  - `test-i386#src:test/test_parallel_for_private.pas`
-  - `test-i386#src:test/test_signal_sp_rewrite.pas`
-  - `test-i386#src:test/test_stack_overflow_raise.pas`
-  - `test-lua#src:tools/compiler_srchash.sh`
-  - `test-lua-cross#src:tools/compiler_srchash.sh`
-  - `test-riscv32#src:test/test_signal_sp_rewrite.pas`
-  - `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas`
-  - `test-xtensa#src:test/test_signal_sp_rewrite.pas`
-  - `test-xtensa#src:test/test_stack_overflow_raise.pas`
-  </details>
 - **test-core#src:test/test_generic_func.pas** — test/test_generic_func.pas tools/expect_same.sh (seven): bad `b2a41d5f4fb9`, last good `29c40526f145`, 9 commit(s) in range
 - **test-core#src:test/test_inline_generic_specialization.pas** — test/test_inline_generic_specialization.pas tools/expect_same.sh (seven): bad `b2a41d5f4fb9`, last good `29c40526f145`, 9 commit(s) in range
 
@@ -151,12 +127,12 @@ Reading a staler host's map for a cross-target job answers a question about an O
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **test-pascal-conformance#shard0/6** (plexus, quiet 7d5h): bad `e46dbffaa80d`, 217 commit(s) in range
-- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 7d5h): bad `27424c927b65`, 88 commit(s) in range
-- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 7d5h): bad `27424c927b65`, 88 commit(s) in range
-- **test-pascal-conformance#shard1/6** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard2/6** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard3/6** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard4/6** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard5/6** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
-- **tools-devtest#00** (plexus, quiet 7d5h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard0/6** (plexus, quiet 7d6h): bad `e46dbffaa80d`, 217 commit(s) in range
+- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 7d6h): bad `27424c927b65`, 88 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 7d6h): bad `27424c927b65`, 88 commit(s) in range
+- **test-pascal-conformance#shard1/6** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard2/6** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard3/6** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard4/6** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard5/6** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 7d6h): bad `27424c927b65`, 231 commit(s) in range
