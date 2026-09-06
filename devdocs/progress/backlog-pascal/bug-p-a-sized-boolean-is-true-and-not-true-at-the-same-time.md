@@ -97,3 +97,52 @@ is nothing to do with `Str`.
 carries the two options, the trade-offs and a recommendation. Do not start here
 — the choice made there decides how this is fixed, and picking wrong makes the
 enum-identity family wider rather than merely later.
+
+## Re-measured 2026-09-06 — frankB (commit `d3fe44947`, compiler `827722c842de`, fpc 3.2.2)
+
+Independently reproduced, still live. I filed a duplicate of this ticket before
+finding it and retracted it in the same commit; everything in it except the
+`BooleanNN` names was already here, and this ticket's diagnosis was better —
+it names the defs.inc fork, mine only named the mapping.
+
+The `else` arm makes the same defect read as a plain inversion rather than as
+a double fire, which may be the more recognisable spelling for whoever fixes it:
+
+```pascal
+lb := True;
+if not lb then WriteLn('taken') else WriteLn('skipped');
+  pxx  -> taken     fpc -> skipped
+```
+
+`not lb` for a LongBool is **-2** (`not 1` at 32 bits), so it is nonzero and
+therefore true.
+
+### A control that passes under this bug, recorded because I used it
+
+I checked "does any nonzero read as TRUE" first and got a clean match with fpc
+— 2 reads TRUE, 256 reads TRUE, 0 reads FALSE — and concluded from it that the
+divergence was confined to the value STORED by `a := True`. **That control is
+on the arm that works.** It exercises `if a`; the defect is in `if not a`. It
+passes under the bug and it certified the wrong conclusion, which would have
+downgraded this to a display-and-Ord difference.
+
+Consequence for anyone triaging: **this cannot go to `known-incompat/`.** That
+folder is for two behaviours each correct about their own implementation, and a
+type where `a` and `not a` are simultaneously true is not correct about
+anything. The `Ord(True)` = 1-vs--1 row is not a chosen representational
+difference either — it is one visible face of the mapping that also makes `not`
+wrong, so it resolves with this and needs no separate "does real source mean
+it" analysis.
+
+### And an ordering hazard, from how I got here
+
+`Boolean16`/`Boolean32`/`Boolean64` are missing entirely (fpc: 2, 4, 8 bytes)
+and are filed separately as a feature gap —
+`feature-p-the-booleannn-family-of-explicit-width-boolean-type-names`. That
+gap is a real corpus wall: `uthlp.pp` needs `Boolean16` and twelve `tthlp*`
+files use that unit.
+
+**Fix the names first and the corpus moves one wall forward while this stays
+in.** A missing name produces an error message and a wrong branch does not, so
+the feature gap is the one that recruits an owner. Whoever picks up the
+`BooleanNN` ticket should read this one first — they land in the same table.
