@@ -82,6 +82,42 @@ CASES = {
     # CONTROL. The guard must not fire on an adjacent BULLET, or every claim on
     # an ordinary ticket stops updating the bullet and the two forms drift apart
     # again -- which is the defect f1758c6f4 had just fixed.
+    "SINGLE-LINE-annotated-value-is-not-truncated-either": (
+        # THE HALF NO CENSUS CAN FIND. `_bullet_value_continues` asks whether the
+        # value WRAPPED -- the shape that leaves an orphan behind, which is the
+        # shape a scan can see, and NOT the shape that loses text. This bullet
+        # has no continuation, so before the trigger was widened it took the
+        # ordinary single-line path and `.*$` ate the date with nothing left
+        # over to notice it by. 67 board-wide, 26 of them OPEN.
+        "---\ntrack: U\nstatus: backlog\n---\n\n# t\n\n"
+        "- **Status:** backlog \u2014 opened 2026-07-12.\n",
+        lambda out: ("- **Status:** backlog \u2014 opened 2026-07-12." in out
+                     and "\nstatus: done\n" in out),
+        "Status", "done",
+    ),
+    "double-hyphen-is-the-same-separator": (
+        "---\ntrack: T\nstatus: backlog\n---\n\n# t\n\n"
+        "- **Status:** backlog -- found 2026-07-09 (commit b30ccf88)\n",
+        lambda out: ("commit b30ccf88" in out and "\nstatus: done\n" in out),
+        "Status", "done",
+    ),
+    "a-BARE-value-is-still-replaced-IN-THE-BULLET": (
+        # NEGATIVE CONTROL for the widened trigger, and the one that matters:
+        # no annotation and no continuation means nothing the tool cannot
+        # interpret, so the bullet write must still happen. If this regressed,
+        # every ordinary claim would stop updating the bullet and the two forms
+        # would drift apart again -- the defect f1758c6f4 had just fixed.
+        "---\ntrack: T\n---\n\n# t\n\n- **Status:** backlog\n",
+        lambda out: "- **Status:** done" in out and "backlog" not in out,
+        "Status", "done",
+    ),
+    "a-HYPHENATED-value-is-not-an-annotation": (
+        # ` -- ` needs surrounding whitespace. A hyphen inside a value must not
+        # read as a separator, or an owner like `frank-optimize` would freeze
+        # the bullet forever.
+        "---\ntrack: T\n---\n\n# t\n\n- **Owner:** frank-optimize\n",
+        lambda out: "- **Owner:** claude@xeon" in out and "frank-optimize" not in out,
+    ),
     "an-adjacent-bullet-is-not-a-continuation": (
         "---\ntrack: T\n---\n\n# t\n\n- **Owner:** \n- **Track:** T\n",
         lambda out: "- **Owner:** claude@xeon" in out and "- **Track:** T" in out,
@@ -92,12 +128,15 @@ CASES = {
 def main() -> int:
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="setfield-devtest-"))
     failed = []
-    for name, (text, extra) in CASES.items():
+    for name, case in CASES.items():
+        # (text, extra) writes Owner; (text, extra, marker, value) picks a field.
+        text, extra = case[0], case[1]
+        marker, value = (case[2], case[3]) if len(case) == 4 else ("Owner", "claude@xeon")
         p = tmp / f"{name}.md"
         p.write_text(text, encoding="utf-8")
-        progress.set_field(p, "Owner", "claude@xeon")
+        progress.set_field(p, marker, value)
         out = p.read_text(encoding="utf-8")
-        ok = "claude@xeon" in out and extra(out)
+        ok = value in out and extra(out)
         print(("  ok   " if ok else "  FAIL ") + name)
         if not ok:
             failed.append(name)

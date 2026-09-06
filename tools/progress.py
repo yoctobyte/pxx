@@ -2964,6 +2964,44 @@ def _bullet_value_continues(text: str, marker: str) -> bool:
     return not nxt.lstrip().startswith(("-", "*", "|", ">", "#"))
 
 
+# The separator between a bullet field's VALUE and an annotation the author
+# added after it, in both spellings the tickets use:
+#   - **Status:** backlog — opened 2026-07-12.
+#   - **Status:** backlog -- found 2026-07-09, fixed (commit b30ccf88)
+# Surrounding whitespace is required, so a hyphen inside a value ("frank-optimize")
+# is not a separator and such a value is still replaced whole.
+_FIELD_ANNOT = re.compile(r"\s(?:—|--)\s")
+
+
+def _bullet_value_is_annotated(text: str, marker: str) -> bool:
+    """Does `- **Marker:** ...`'s value carry an author annotation after it?
+
+    THE OTHER HALF OF THE SAME LOSS, and the half no scan can find afterwards.
+    `_bullet_value_continues` asks whether the value WRAPPED -- which is the
+    shape that leaves an orphaned continuation behind, i.e. the shape a census
+    can see. It is not the shape that loses text. A one-line
+    `- **Status:** backlog — opened 2026-07-12.` has no continuation, takes the
+    ordinary single-line `pat.sub` path, and `.*$` eats the date with nothing
+    left over to notice it by.
+
+    Censused 2026-09-06, disjoint from the wrapped population: 67 bullets
+    board-wide, 41 in done/ and **26 still open**, so this is forward-looking
+    loss rather than history. (The two counts both being 67 is a coincidence of
+    two different populations, not one number confirmed twice.)
+
+    Same treatment and the same argument as the wrapped case: what the
+    annotation MEANS is ambiguous per ticket -- half status-scoped, half a dated
+    fact -- so the tool does not decide. Since the frontmatter is authoritative,
+    the bullet write is a courtesy, and a courtesy that cannot be performed
+    without destroying text is not performed.
+    """
+    pat = re.compile(
+        rf"^[^\S\n]*-?[^\S\n]*\*\*{re.escape(marker)}:\*\*[^\S\n]*(.*)$",
+        re.I | re.M)
+    m = pat.search(text)
+    return bool(m) and bool(_FIELD_ANNOT.search(m.group(1)))
+
+
 def _ensure_fm_key(path: Path, text: str, fm, key: str, value: str) -> None:
     """Write `key: value` into the frontmatter, creating key or block as needed."""
     line = f"{key}: {value}"
@@ -3047,10 +3085,18 @@ def set_field(path: Path, marker: str, value: str) -> None:
     # the bullet is LEFT ALONE and the frontmatter key -- authoritative since
     # f1758c6f4, created here if absent -- carries the write. Nothing is lost, no
     # judgement is made, and the file says so out loud rather than quietly.
-    if _bullet_value_continues(text, marker):
+    wraps = _bullet_value_continues(text, marker)
+    if wraps or _bullet_value_is_annotated(text, marker):
         _ensure_fm_key(path, text, fm, key, value)
-        print(f"  NOTE: {path.name}: `- **{marker}:**` wraps onto a continuation "
-              f"line, so the bullet was left as-is and `{key}:` was written in the "
+        # The principle, not the symptom: the tool declines whenever the
+        # bullet carries text it did not write and cannot interpret. Stating
+        # it this way puts the NEXT shape after these two already in scope.
+        why = ("carries text this tool did not write (its value wraps onto a "
+               "continuation line)" if wraps else
+               "carries text this tool did not write (an annotation follows "
+               "its value)")
+        print(f"  NOTE: {path.name}: `- **{marker}:**` {why}, "
+              f"so the bullet was left as-is and `{key}:` was written in the "
               f"frontmatter. Reconcile the prose by hand if it now reads wrong.")
         return
     if has_fm_key:
