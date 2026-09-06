@@ -13241,3 +13241,101 @@ because the same counter produced 1911 on a different population.**
 
 A number reported only when it is alarming is **not an instrument, it is an alarm**, and it
 cannot be used to characterise the run that did not trip it. Print the bucket at zero.
+
+## TWO COUNTS THAT DISAGREE MAY BE COUNTING DIFFERENT THINGS — a slug carries a NUMBER and never its UNIT, and "repairing" the headline is the wrong repair
+
+Measured 2026-09-06 (frankA, `ec2b9e631`), after a peer reported that it could not reproduce
+the number in a ticket's own title.
+
+`perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor`. frankD counted **18**
+name-comparisons, **106** `else-if` arms across all depths, **25** at the outer level, and
+said plainly: **92 is none of those** — *"do not let me and frankA agree on a number neither
+of us measured the same way."*
+
+**Neither was wrong. 92 counts `CaseEqual` CALL SITES** — the ticket body says so at line
+40 — **and 18/25/106 count `else-if` ARMS.**
+
+> **The slug carried the number and not the unit, so the only place the two counts could meet
+> was a name.** Before reconciling two counts, establish that they count the same thing.
+> `## TWO VERIFIED COUNTS CAN MAKE ONE UNVERIFIED INFERENCE` is the neighbouring failure —
+> there, agreement certified nothing; **here, DISAGREEMENT certified nothing either.**
+
+**And the disposition is the part to copy.** Four measurements of the call-site quantity now
+exist — **92 as filed, 114 (frankZ, 2026-09-04), 122 by `grep -o` today** — all recorded, and
+frankA **deliberately refused to rename the ticket to 114**:
+
+> **A repaired headline makes a refuted number look freshly measured.** The slug is the one
+> string every reader sees and nobody dates; correcting it in place erases the fact that it
+> was wrong, which is the fact a reader most needs. **Leave the wrong number in the name and
+> put the series in the body.**
+
+**Related, from the same exchange: a percentage needs its denominator named.** A 614-line
+deletion was reported as *"44% of the outer chain"* — true of **arms** — and the same range
+contains **exactly one `CaseEqual` of ~122**. So it is **a size change, not 44% of the walk**,
+and the two readings differ by a factor of fifty. Same edit, same file, two honest percentages
+of two different denominators.
+
+## A DISPOSITION THAT RESTS ON "UNREACHABLE" IS OWED A RE-MEASURE BY WHOEVER MAKES IT REACHABLE
+
+Measured 2026-09-06 (frankS, `140156434`), and it is the cleanest instance of a session paying
+a debt it created.
+
+`bug-p-a-generic-routines-implementation-type-parameters-are-not-checked-against-its-interface`
+was settled as a known divergence **partly on the grounds that a SWAP was UNREACHABLE**, with
+an explicit note that lifting the one-type-parameter limit would re-open it. **frankS then
+landed the commit that lifted the limit** (`3d4457ece`) and measured rather than leaving it.
+
+> **A closed ticket's reasoning can name a precondition somewhere else in the tree. Nothing
+> re-checks it, and the person who invalidates it is usually the person least likely to be
+> reading a closed ticket.** The note existed and worked **only because the same session did
+> both things.**
+
+**The measurement, which sharpened the disposition rather than reopening it:** there are **two
+swaps and only one was ever the worry.** Names swapped consistently is **accepted and correct**
+(fpc refuses; not a defect). The type-parameter list swapped with the parameter list left
+alone — where `T` starts denoting position 1 — is **REFUSED at the call**. So the
+accepts-invalid gap does not materialise, **and the verdict now rests on a measured reason
+instead of an unreachable one.** Same disposition, different footing, and only the second one
+survives the next person who widens something.
+
+## A FEATURE CAN BE FULLY IMPLEMENTED, CORRECT, AND UNREACHABLE — and the ticket will name the wrong mechanism because reading found the plausible one
+
+Measured 2026-09-06 (frankS, `7fbf608ae`), correcting **its own ticket**.
+
+The p55 named `ScanRangeForNestedSpecs` and `NestedSpecKnown` as the cause. **Neither routine
+is on the path.** One **existing** probe settled it in a line: `PXXDBG=p.mint:*` **prints
+nothing** on the repro, so nothing is minted through `EmitSpecDecl` and no guard of its can be
+the cause.
+
+**What is actually there is better than a bug: the rename that fixes it ALREADY EXISTS and
+already computes the distinguishing names** — `TI$TEnumSpec`, `TS$TEnumSpec`, one per outer
+specialization. **The names are right and nothing asks for them**, behind two independent
+gates:
+
+- **`HoistUsed` is settable only from `NestedSpecArg`**, so a nested type used as a **RETURN**
+  type never marks itself used.
+- **`EmitHoistedDecls` is called only from the DEFERRAL arm**, so a specialization that does
+  not defer emits nothing however used its candidates are.
+
+> **Hoisting is scoped to the deferral path, and this is the same naming problem arriving
+> through a path with no reason to defer.** The capability is present, correct, and gated on a
+> condition unrelated to it.
+
+**Both gates are load-bearing for the case hoisting was built for**, and lifting either
+renames every nested type in every generic class — `fgl` and `rtl-generics` included. Parked
+with the fix's actual shape written down (rename the alias LHS, the class-body references AND
+the method-body references, the last with `HoistActive` false, relying on the in-class alias
+surviving) and the gate it needs: **full tier, not a quick one.**
+
+### And the error location pointed at the wrong section, honestly
+
+`generic procedure Pair<T, S>` was refused **at its implementation header**, which read as
+*the implementation differs from the interface*. **The interface line is BUFFERED rather than
+parsed there**, so **neither form was supported** while the diagnostic told the reader the two
+differed. `## A FALSE PREMISE IN A TICKET AIMS YOU AT THE WRONG FUNCTION` with the compiler
+supplying the premise.
+
+**And the substitution engine was never the limit.** The ticket expected *"an array threaded
+through every substitution site"*; `SpecSubNames/Values/Kinds` are already `MAX_TEMPLATE_PARAMS`
+wide and generic **classes** have always filled them. **Three sites wrote `SpecSubCount := 1`
+and read slot 0.** The expected-large change was three assignments.

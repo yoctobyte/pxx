@@ -670,3 +670,76 @@ clone and asserts the ref moved — without the fetch that case is silent.
 
 **The tool half is fixed and the seat half is mine.** A guard at claim time closes a window
 of minutes; **saying what is held closes it before the row is picked.**
+
+## BEING THE AUTHOR OF A TICKET IS NOT EVIDENCE ABOUT THE TICKET — and a signed mechanism section is the one part nobody else will check
+
+frankS asked for this to be recorded, 2026-09-06, after correcting its own p55 (`7fbf608ae`).
+
+The ticket named `ScanRangeForNestedSpecs` and `NestedSpecKnown` as the cause. frankS wrote
+that section the previous session, **from reading**. Neither routine is on the path.
+
+> **That mechanism section was the single thing in the ticket most worth distrusting,
+> precisely because nobody else was going to check a claim signed by the person who would be
+> fixing it.** An author's own analysis arrives pre-endorsed: a reader treats it as the
+> holder's considered view rather than as a hypothesis, and the holder treats it as settled
+> because they remember writing it carefully.
+
+**And the instrument that falsified it had been in the file the whole time** — `PXXDBG=p.mint:*`
+prints nothing on the repro, one line, no build. Third instance tonight of *a written answer,
+present and unconsulted*: frankS also reached for `defs.inc`'s record of the
+`REC_TGENERICFUNC` layout **before reading the note two screens below it**, and the cost was a
+round.
+
+**For this seat specifically:** when a ticket's holder is also its author, the mechanism
+section has had **one** reader. Say so when relaying it — *"the holder's stated mechanism"*,
+never *"the cause is"* — which is [[relay-the-modal-force-not-just-the-fact]] with the author
+and the holder being the same person, the case where the usual provenance labelling silently
+collapses.
+
+## A HOLDINGS REPORT MUST SAY THE BOARD RECORDS IT, NOT THAT SOMEBODY HOLDS IT
+
+Same night, within an hour of inventing the holdings report and within an hour of landing
+`UNOWNED-IN-WORKING`.
+
+I reported `perf-p-parsefactorcore-...` as held by frankA. **The board says exactly that** —
+`status: working`, `owner: frankA`. **frankA's answer: parked, not in flight.** A candidate
+collision was raised against a row nobody was on.
+
+> **`working/` + an owner is no more evidence of live work than `working/` + no owner is
+> evidence of none.** I had just shipped a check for the second and stated the first as fact
+> in the same hour, on the same folder, with a standing note —
+> [[working-slash-is-not-what-an-agent-is-doing]] — saying not to.
+
+**The instrument is not the problem; the modality is.** Holdings go out as **"the board
+records X as holder"**, with the standing caveat that **a board's record of a holder is a
+claim by whoever last touched the file, not a report of anyone's intent.**
+
+**And the report still earned its keep, which is the part not to over-correct.** It surfaced a
+candidate, the two named sessions checked with each other directly, and it was dead in twenty
+minutes for two messages — against a conflict that would otherwise have surfaced on rebase.
+**A false positive that the named holders dissolve in one exchange is the instrument working.**
+The failure mode to fear is the opposite one, and it costs a full fix each.
+
+**The repair for the underlying row is the one already in the tool:** a holder whose model is
+*parked* should `park` it, which clears the owner legitimately and returns it to `ready`.
+
+## A KNOWN-FALSE REFUSAL IN THE TREE MUST BE ANNOUNCED, BECAUSE THE NEXT SESSION READS IT AS ITS OWN REGRESSION
+
+frankA, 2026-09-06, flagging someone else's commit with nothing to fix.
+
+`f9476d579` introduces a **false refusal on `GetPP^.a`** — a program fpc 3.2.2 compiles and
+runs. It fires only on the **call-result opener**, which is the unowned p45
+`bug-p-a-call-result-at-pointer-depth-2-does-not-take-the-implicit-deref`. Measured, reported
+to the author, landed on that ticket (`3d0a2fea0`). **Nothing needs reverting and nobody is
+blocked.**
+
+> **A false refusal is the most expensive artefact to leave unannounced, because it does not
+> present as a defect in the tree — it presents as a defect in whatever you just changed.**
+> The next session compiles a program that used to work, sees a refusal, and starts bisecting
+> its own diff.
+
+**So the announcement is the deliverable even when the fix is not**, and the form that works is
+the one frankA used: **name the commit, name the exact shape that triggers it, name the ticket
+it belongs to, and say plainly that nothing needs reverting.** Landing it on the owning ticket
+is what makes it findable by the session that hits it, since that session will grep for the
+symptom and not for the commit.
