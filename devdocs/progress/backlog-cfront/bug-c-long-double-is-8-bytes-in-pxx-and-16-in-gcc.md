@@ -51,3 +51,12 @@ missing `ldexpl` family, this is the type's width).
 Not proposed here: implementing x87 80-bit. The cheap honest option is to
 REFUSE `long double` in a by-value aggregate parameter rather than silently
 disagree, which is a diagnostic and not a feature.
+
+## RELEASE-RISK: SILENT-WRONG
+
+The program compiles, runs, and is WRONG with no diagnostic — so a user cannot
+discover it from a message and cannot work around what they cannot see. Marked
+2026-09-06 for the beta 0.1 release sweep; a beta may ship known REFUSALS, but
+an unenumerated silent-wrong is the class it must not ship.
+
+Re-measured 2026-09-06: `sizeof(long double)` and `sizeof(struct { long double x; })` are both 16 under gcc and both 8 under pxx, from the same source, both compiling and running silently. An aggregate carrying one disagrees about its own SIZE across any real C boundary before any calling-convention question is reached.

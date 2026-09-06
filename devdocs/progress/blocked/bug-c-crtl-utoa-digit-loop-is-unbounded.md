@@ -101,3 +101,12 @@ original warning.
 
 Not closed. A count that goes down by burying a live defect is worse than a
 count that stays up.
+
+## RELEASE-RISK: SILENT-WRONG
+
+The program compiles, runs, and is WRONG with no diagnostic — so a user cannot
+discover it from a message and cannot work around what they cannot see. Marked
+2026-09-06 for the beta 0.1 release sweep; a beta may ship known REFUSALS, but
+an unenumerated silent-wrong is the class it must not ship.
+
+Conditional, and recorded as such: the unbounded write needs a wrong `base` reaching `__crtl_utoa`, which no user C program supplies directly. It is listed because when it DOES fire it corrupts the stack with no diagnostic, and because this ticket is deliberately parked as the amplifier for an unnamed defect -- so the trigger is exactly the thing nobody has found yet.

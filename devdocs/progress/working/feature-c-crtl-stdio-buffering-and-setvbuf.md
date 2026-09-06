@@ -71,3 +71,12 @@ Land in step with `feature-b-buffered-text-io-and-settextbuf`.
 C tests + self-host + cross. Add a mixed-frontend repro: a Pascal `WriteLn` and
 a C `printf` alternating into a pipe, asserting order. Nothing covers that
 today, and it is the property this pair of tickets can break.
+
+## RELEASE-RISK: SILENT-WRONG
+
+The program compiles, runs, and is WRONG with no diagnostic — so a user cannot
+discover it from a message and cannot work around what they cannot see. Marked
+2026-09-06 for the beta 0.1 release sweep; a beta may ship known REFUSALS, but
+an unenumerated silent-wrong is the class it must not ship.
+
+The SILENT-WRONG half is `setvbuf`, not the missing buffering: `lib/crtl/src/stdio.c` defines it as `{ (void)stream; (void)buf; (void)mode; (void)size; return 0; }` -- it discards every argument and returns 0, which C99 7.19.5.6 defines as SUCCESS. A caller that correctly checks the return is told its buffering request was honoured when nothing happened. Unbuffered output on its own is slow, not wrong; a stub that reports success is the dishonest-stub shape.

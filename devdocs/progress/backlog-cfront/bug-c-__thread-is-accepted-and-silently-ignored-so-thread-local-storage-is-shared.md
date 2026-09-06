@@ -125,3 +125,12 @@ variable is one `.bss` object everywhere.
 test. The two can fail independently, and a probe that only reads the variable
 cannot tell "TLS is not emitted" from "TLS is emitted and every thread resolves
 it to the same block".
+
+## RELEASE-RISK: SILENT-WRONG
+
+The program compiles, runs, and is WRONG with no diagnostic — so a user cannot
+discover it from a message and cannot work around what they cannot see. Marked
+2026-09-06 for the beta 0.1 release sweep; a beta may ship known REFUSALS, but
+an unenumerated silent-wrong is the class it must not ship.
+
+Re-measured 2026-09-06 by this lane, independently of the filing: `__thread int tv = 7;` compiles, runs, prints `tv=7`, and `readelf -SW` finds ZERO `.tbss`/`.tdata` sections in the pxx object against gcc's one. Every thread shares one copy.
