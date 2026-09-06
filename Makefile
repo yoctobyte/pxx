@@ -15201,6 +15201,15 @@ test-core: $(COMPILER)
 	# capacity clamp that path never had. .expected is FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26
 	tools/expect_same.sh test_read_into_a_frozen_string_from_stdin_and_a_file26 "$$(printf 'abc\nlonger-than-four\n77\n' | $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26)" "$$(cat test/test_read_into_a_frozen_string_from_stdin_and_a_file.expected)"
+	# `uses sysutils` must not take Delete/Insert away from a dynamic array.
+	# sysutils declared the two STRING overloads; SoftIntrinsicOpen is asked
+	# BEFORE any argument is parsed, so one same-named routine in scope closed
+	# the intrinsic for every shape and `Delete(a, 1, 2)` answered `no overload
+	# ... matches these arguments`. Both spellings are in ONE file deliberately:
+	# the string rows kept working throughout, so a file testing only the array
+	# half passes in both worlds. .expected is FPC 3.2.2's own output.
+	./$(COMPILER) test/test_uses_sysutils_leaves_the_dynamic_array_intrinsics_open.pas $(TESTTMP)/test_uses_sysutils_intrinsics26
+	tools/expect_same.sh test_uses_sysutils_intrinsics26 "$$($(TESTTMP)/test_uses_sysutils_intrinsics26)" "$$(cat test/test_uses_sysutils_leaves_the_dynamic_array_intrinsics_open.expected)"
 	./$(COMPILER) test/test_record_copy.pas $(TESTTMP)/test_record_copy26
 	tools/expect_same.sh test_record_copy26 "$$($(TESTTMP)/test_record_copy26)" "$$(printf '1 2 3 4\n20 21 22 23')"
 	./$(COMPILER) test/test_static_methods.pas $(TESTTMP)/test_static_methods26

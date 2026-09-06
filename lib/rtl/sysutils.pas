@@ -777,13 +777,26 @@ procedure Sleep(Milliseconds: Cardinal);
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
 function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
 
-{ Remove count chars from s starting at 1-based index. No-op if index < 1,
-  index > Length(s), or count <= 0. Count is clamped to the end of s. }
-procedure Delete(var s: AnsiString; index, count: Integer);
+{ `Delete(var s; index, count)` and `Insert(const src; var dst; index)` are NOT
+  declared here, and that is deliberate. fpc keeps both in `system`, not in
+  `sysutils`, and pxx lowers both to intrinsics (__pxxStrDelete / __pxxStrInsert
+  for a string, AN_DYN_DELETE / AN_DYN_INSERT for a dynamic array).
 
-{ Insert src into dst at 1-based index. If index < 1, inserts at 1;
-  if index > Length(dst)+1, appends. No-op if src is empty. }
-procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
+  A same-named routine in scope CLOSES the intrinsic for EVERY argument shape,
+  because SoftIntrinsicOpen is asked before any argument is parsed. So while
+  these two lived here, one `uses sysutils` took dynamic-array Delete and Insert
+  away from the program -- `Delete(arr, 1, 2)` answered `no overload of Delete
+  matches these arguments`, offering the string overload as the only candidate.
+  fpc compiles it. Three defects came from this one declaration; the third is
+  bug-a-the-import-escape-hatch-fails-on-classes-pas, where TStrings'
+  bare `Delete(Index)` bound the string overload and classes.pas failed to
+  compile under NilPy while compiling clean under Pascal.
+
+  If you are tempted to add them back for a target without the builtin unit:
+  measured 2026-09-06, `uses sysutils` does not compile on `--esp-profile=bare`
+  at all (lib/rtl/strings.pas's UpCase needs the same builtin unit), so no ESP
+  program could ever reach these bodies. EspBareBoot is the only profile that
+  excludes the builtin unit. bug-p-one-uses-sysutils-removes-dynamic-array-delete-and-insert }
 
 { Concatenate two strings. For more than two, chain with + or nest calls. }
 function Concat(const s1, s2: AnsiString): AnsiString;
@@ -3621,24 +3634,6 @@ begin
   FillChar(Result[n + 1], pad, Ord(ch));
 end;
 
-procedure Delete(var s: AnsiString; index, count: Integer);
-var n: Integer;
-begin
-  n := Length(s);
-  if (index < 1) or (index > n) or (count <= 0) then Exit;
-  if index + count - 1 > n then count := n - index + 1;
-  s := Copy(s, 1, index - 1) + Copy(s, index + count, n);
-end;
-
-procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
-var n: Integer;
-begin
-  if src = '' then Exit;
-  n := Length(dst);
-  if index < 1 then index := 1;
-  if index > n + 1 then index := n + 1;
-  dst := Copy(dst, 1, index - 1) + src + Copy(dst, index, n);
-end;
 
 function Concat(const s1, s2: AnsiString): AnsiString;
 begin
