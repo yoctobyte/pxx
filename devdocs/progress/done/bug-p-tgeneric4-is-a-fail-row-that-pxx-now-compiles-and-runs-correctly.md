@@ -143,4 +143,4 @@ and this row becomes a real FAIL again.
 `tgenfunc*`: **6 pass** (was 4), 0 fail, 13 skip (was 14).
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a892cd589.
