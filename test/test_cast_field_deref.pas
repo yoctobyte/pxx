@@ -68,8 +68,10 @@ begin
     tyInteger/REC_NONE/0/0, which is BOTH that resolver's decline signature and
     its TRUE answer for a `^Integer` field -- so a correct answer was
     overwritten with the record PA points at. It now restores only while the
-    walk is still ON the cast, which is the bit ParseCastTargetSuffix already
-    had. The `var` and `vardrf` rows are the control: same chain, other
+    walk is still ON the cast, which is a bit the statement-side cast-target
+    walk had had all along -- that walk is itself gone now (the whole
+    cast-headed target is delegated here), so this loop is where the rule
+    lives. The `var` and `vardrf` rows are the control: same chain, other
     openers, right throughout. }
   x := b.pi^;        WriteLn('varasg=', x);
   x := vpa^.pi^;     WriteLn('vardrfasg=', x);
