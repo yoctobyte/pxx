@@ -5589,6 +5589,102 @@ end;
   a read/write name always lands in the METHOD slot, which is the correct
   reading for an interface property with no further work.
   bug-p-a-property-in-an-interface-declaration-is-rejected }
+procedure ParsePropertyTailDirectives(var isDefaultIndexed: Boolean);
+{ Everything a property declaration may carry after its accessors: `stored`,
+  `default <value>` / `nodefault`, and the hint directives. One copy, called from
+  both the ordinary and the REDECLARATION branch of ParsePropertyDecl, which had
+  written the `default` arm and the hint loop out twice and had the same bug in
+  both.
+
+  `default` IS TWO UNRELATED CLAUSES SHARING ONE KEYWORD, and one arm served
+  both:
+
+    property Items[i: Integer]: Integer read GetItem; default;   THE default
+                                                                 indexed property
+    property Depth: Integer read FDepth write FDepth default 16; an RTTI/streaming
+                                                                 default VALUE
+
+  Only the first may set propIsDefault. The second was setting it too, so a class
+  that declared a value clause BEFORE a genuine indexed `default;` had the slot
+  stolen: `t[2]` was refused with `default property is write-only` where fpc 3.2.2
+  prints 100. ORDER-DEPENDENT -- write the indexed property first and both print
+  100 -- so a probe that declares them in the natural order sees nothing. Even
+  with no indexed property in the class at all the flag is visible: `t[0]` said
+  `default property is write-only` where fpc says `No default property available`.
+  pxx believes a default indexed property EXISTS.
+  bug-p-a-property-default-value-clause-is-read-as-the-default-indexed-property-marker
+
+  THE VALUE IS A CONSTANT EXPRESSION AND WAS A LITERAL. `default DefaultDepth` and
+  `default DefaultDepth + 1` were refused with `expected ':' before ';'` -- fpc's
+  own pscanner.pp:893 uses the named-constant form. `nodefault` was refused
+  outright. It is parsed and DISCARDED: pxx has no RTTI streaming, so the value
+  has no consumer; the bug was the flag and the refusal, not the semantics.
+
+  `stored` decides whether a streaming system writes a property out, so its
+  consumer is lib/pcl and any .lfm round-trip. It takes ONE token -- a constant, a
+  field name, or a parameterless boolean method name -- which is likewise parsed
+  and discarded.
+  feature-p-a-property-stored-clause-is-not-supported
+
+  WHY `default 16` APPEARED TO WORK WHILE `default DefaultDepth` WAS A HARD ERROR,
+  measured 2026-09-06 rather than reasoned: the class-member loop ends in a
+  catch-all `else Next`, which SILENTLY SKIPS any token it does not recognise.
+  `property Depth: Integer read FDepth write FDepth default 16 77 88 99;`
+  compiles clean today. A NAME, though, takes the loop's tkIdent branch and is
+  parsed as a field declaration, which demands a ':'. One missing arm, and which
+  spelling you probe decides whether you see a bug at all. The catch-all is its
+  own defect and is filed rather than changed here, because what legitimately
+  reaches it has not been counted. }
+var discarded: Int64;
+begin
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stored') then
+  begin
+    Next;
+    if CurTok.Kind = tkSemicolon then
+      Error('"stored" needs a constant, a field name or a parameterless boolean method')
+    else
+      Next;                { the single operand, discarded }
+    Eat(tkSemicolon);
+  end;
+  Eat(tkSemicolon);
+  if CurTok.Kind = tkDefault then
+  begin
+    Next;
+    if CurTok.Kind = tkSemicolon then
+    begin
+      isDefaultIndexed := True;     { `default;` -- the indexed marker, the ONLY
+                                      spelling that may set this }
+      Eat(tkSemicolon);
+    end
+    else
+    begin
+      discarded := ConstEval;       { `default <const expr>` -- a VALUE }
+      Eat(tkSemicolon);
+    end;
+  end
+  else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'nodefault') then
+  begin
+    Next;
+    Eat(tkSemicolon);
+  end;
+  { Trailing hint directives -- `property Tests: TFPList read FTests;
+    deprecated;` (fpcunit). Parse-and-ignore, like the method path: they only
+    drive an FPC warning. Unconsumed, `deprecated` was read as the next FIELD
+    name and demanded a ':'. `deprecated` may carry a message literal. }
+  while (CurTok.Kind = tkIdent) and
+        (CaseEqual(CurTok.SVal, 'deprecated') or
+         CaseEqual(CurTok.SVal, 'platform') or
+         CaseEqual(CurTok.SVal, 'experimental') or
+         CaseEqual(CurTok.SVal, 'unimplemented')) do
+  begin
+    if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkString) then
+      Next; { skip the message literal (consumed by the Next below) }
+    Next;
+    Eat(tkSemicolon);
+  end;
+end;
+
 procedure ParsePropertyDecl(ci: Integer; curPublished: Integer);
 var
   propName, readName, writeName: AnsiString;
@@ -5626,24 +5722,7 @@ begin
   if propRedecl then
   begin
     Next;                                { the ';' after the name }
-    if CurTok.Kind = tkDefault then
-    begin
-      propIsDefault := True;
-      Next;
-      Eat(tkSemicolon);
-    end;
-    while (CurTok.Kind = tkIdent) and
-          (CaseEqual(CurTok.SVal, 'deprecated') or
-           CaseEqual(CurTok.SVal, 'platform') or
-           CaseEqual(CurTok.SVal, 'experimental') or
-           CaseEqual(CurTok.SVal, 'unimplemented')) do
-    begin
-      if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
-         (Tokens[TokPos].Kind = tkString) then
-        Next;
-      Next;
-      Eat(tkSemicolon);
-    end;
+    ParsePropertyTailDirectives(propIsDefault);
 
     propBase := FindUProp(ci, propName);
     if propBase < 0 then
@@ -5730,31 +5809,7 @@ begin
     end;
   end;
 
-  Eat(tkSemicolon);
-  { Optional `default;` on an indexed property → obj[i] routes here. }
-  if CurTok.Kind = tkDefault then
-  begin
-    propIsDefault := True;
-    Next;
-    Eat(tkSemicolon);
-  end;
-  { Trailing hint directives — `property Tests: TFPList read FTests;
-    deprecated;` (fpcunit). Parse-and-ignore, like the method path: they
-    only drive an FPC warning. Unconsumed, `deprecated` was read as the
-    next FIELD name and demanded a ':'. `deprecated` may carry a message
-    literal. }
-  while (CurTok.Kind = tkIdent) and
-        (CaseEqual(CurTok.SVal, 'deprecated') or
-         CaseEqual(CurTok.SVal, 'platform') or
-         CaseEqual(CurTok.SVal, 'experimental') or
-         CaseEqual(CurTok.SVal, 'unimplemented')) do
-  begin
-    if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkString) then
-      Next; { skip the message literal (consumed by the Next below) }
-    Next;
-    Eat(tkSemicolon);
-  end;
+  ParsePropertyTailDirectives(propIsDefault);
   i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
   UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
   UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;

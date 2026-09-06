@@ -6905,6 +6905,52 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_a_procedural_type_returns_an_array_or_another_routine.pas $(TESTTMP)/test_proctyperet26
 	@$(TESTTMP)/test_proctyperet26 | diff -u test/test_a_procedural_type_returns_an_array_or_another_routine.expected - \
 	  || { echo 'test_a_procedural_type_returns_an_array_or_another_routine: FAIL - a procedural type lost its return shape, or a call result stopped being callable'; exit 1; }
+	@# `default` IS TWO UNRELATED CLAUSES SHARING ONE KEYWORD and one arm served
+	@# both: `property Items[i: Integer]: Integer read GetItem; default;` (THE
+	@# default indexed property) and `property Depth: Integer read FDepth write
+	@# FDepth default 16;` (a streaming default VALUE). Only the first may set the
+	@# flag; the second set it too, so a class declaring a value clause BEFORE a
+	@# genuine indexed `default;` had the slot stolen.
+	@# DECLARATION ORDER IS THE WHOLE TEST -- Depth is declared above Items on
+	@# purpose. Swap them and both compilers print 100, so a test that declares
+	@# the indexed property first is green against the broken compiler. Do not
+	@# tidy that order.
+	@# ROWS D..H ARE THE VALUE FORMS THAT WERE REFUSED OUTRIGHT: a named constant,
+	@# a constant EXPRESSION, `nodefault`, `stored False`, `stored <method>`, and
+	@# `stored` and `default` together. `default 16` alone appeared to WORK, and
+	@# that is the trap: the class-member loop ends in a catch-all `else Next`, so
+	@# `default 16 77 88 99;` compiles clean while a NAME takes the identifier
+	@# branch and demands a ':'. Which spelling you probe decides whether you see
+	@# the bug at all. fpc's own pscanner.pp:893 uses the NAME spelling.
+	@# .expected is `fpc -Mdelphi` 3.2.2's own output, byte for byte.
+	./$(COMPILER) test/test_a_property_default_clause_is_two_clauses.pas $(TESTTMP)/test_propdefault26
+	@$(TESTTMP)/test_propdefault26 | diff -u test/test_a_property_default_clause_is_two_clauses.expected - \
+	  || { echo 'test_a_property_default_clause_is_two_clauses: FAIL - a default VALUE clause claimed the default-indexed-property slot again, or a stored/nodefault clause stopped parsing'; exit 1; }
+	@# ...and the NEGATIVE half, which is the whole risk of the split above. With
+	@# the flag corrected, a class carrying only `default 16` no longer looks like
+	@# it has a default indexed property -- and the fall-through it now reaches
+	@# built a raw AN_INDEX over the INSTANCE POINTER: 375390216, then -1189085176
+	@# on the next run of the same program. The bug being fixed had at least
+	@# REFUSED that source (wrongly worded), so shipping the split alone would
+	@# have traded a loud error for a silent wrong number.
+	@# ONE ROW PER COMPILE BECAUSE Error() HALTS. All three rows in one file
+	@# report only the first, so a `grep -c` of 1 passes whether the other two are
+	@# refused or silently print garbage -- two thirds of the assertions unable to
+	@# fail. -dROW_A/B/C, three compiles, three greps.
+	@# ROW B IS THE SIBLING LOOP: `TC(t)[0]` goes through the CHAINED walker, not
+	@# ParseLValueAST's suffix loop, and answered 130481955799048 with row A
+	@# already fixed. ROW C is the pre-existing hole (no `default` clause at all,
+	@# garbage on pin v404 too), which is why this is a parser refusal and not a
+	@# revert of the split. The class NAME differs between rows so a message can
+	@# be traced to the row that produced it.
+	@for r in ROW_A ROW_B ROW_C; do \
+	  ./$(COMPILER) -d$$r test/test_a_class_with_no_default_property_cannot_be_subscripted.pas $(TESTTMP)/test_nodefprop26 > $(TESTTMP)/test_nodefprop_$$r.log 2>&1; \
+	  grep -q 'no default property available' $(TESTTMP)/test_nodefprop_$$r.log \
+	  || { echo "test_a_class_with_no_default_property_cannot_be_subscripted: FAIL - $$r compiled, or refused for another reason"; exit 1; }; \
+	done
+	@# ...and the file must COMPILE with no row selected, or all three greps above
+	@# are measuring an unrelated error in a file that never reached the check.
+	./$(COMPILER) test/test_a_class_with_no_default_property_cannot_be_subscripted.pas $(TESTTMP)/test_nodefprop26
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

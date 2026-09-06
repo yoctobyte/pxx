@@ -134,13 +134,27 @@ reverted for. Landing them as two commits, refusal first and green, is what made
 the binding cheap: it had a wired negative test standing behind it the whole time.
 
 **One incidental, and it is a property of the test harness rather than of pxx.**
-The previous version of this file could never have been run through fpc: its
-header comment contains a literal `{$mode delphi}`, and Pascal comments do not
-nest, so fpc closed the comment at that `}` and reported a syntax error four
-tokens later. pxx accepted it. **A test whose ORACLE cannot read it has no
-oracle**, and this one's three rows had been asserted against pxx's own output.
-The directive is spelled without braces in prose now, and all ten rows come from
-fpc.
+The previous version of this file could not have been run through fpc **in the
+mode it declares**: its header comment contains a literal `{$mode delphi}`, and
+under `-Mdelphi` comments do not nest, so fpc closed the comment at that `}` and
+reported `Fatal: Syntax error, "BEGIN" expected but "identifier BINDS" found`.
+pxx accepted it. **A test whose ORACLE cannot read it has no oracle**, and this
+one's three rows had been asserted against pxx's own output. The directive is
+spelled without braces in prose now, and all ten rows come from fpc.
+
+**CORRECTION, AND IT IS THE INTERESTING HALF.** The sentence above originally
+read "Pascal comments do not nest, so fpc could never compile the file", with no
+mode qualifier, and that is FALSE as written — frank-coordinator measured the
+same file compiling with `Warning: Comment level 2 found` and rc 0, and was
+right. **Comment nesting in fpc 3.2.2 is MODE-DEPENDENT**: default and
+`-Mobjfpc` nest `{ }` and merely warn; `-Mdelphi`, `-Mtp` and `-Miso` do not and
+give the Fatal above. Two correct measurements disagreed because an unstated
+parameter differed. The rule drawn from it (`6218e8bd7`): when a peer's
+measurement contradicts yours on the same input, do not adjudicate the RESULT,
+enumerate the PARAMETERS — **a test's own `{$mode}` is part of the invocation
+its oracle must use**, and running the oracle in the default mode is running it
+on a different language. Do not build a checker for this: the narrowed
+population is ~10 files, several of them deliberate tests OF comment nesting.
 
 **Gate:** `tools/gate.sh quick` with the tree DIRTY (FPC seed canary PASS; 16
 rows PASS; the only RED is `pinned builds live lib/rtl`, frankZ's `8374118ec`

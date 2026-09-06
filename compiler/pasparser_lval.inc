@@ -1891,7 +1891,44 @@ begin
             tk := IntToTypeKind(ASTTk[node]); recName := ResolveNodeRec(node);
             continue;   { allow further postfix on the getter result }
           end;
-        end;
+        end
+        else if (not PyExprMode) and (not IsNodeArray(node)) then
+          { A CLASS INSTANCE WITH NO DEFAULT PROPERTY IS NOT SUBSCRIPTABLE, and
+            saying so is the whole point. Both arms above decline when the class
+            has neither a default indexed property nor a Python dunder, and the
+            fall-through builds a raw AN_INDEX over the INSTANCE POINTER --
+            pointer arithmetic on an object, which answered 148897800 and
+            -1189085176 in two runs of the same program. Silent, not a crash, and
+            it has been that way since long before this ticket: the pinned
+            compiler answers a different wrong number for the same source.
+
+            The __getitem__ arm's own note already said this about the NilPy
+            spelling -- "fell all the way through to the generic AN_INDEX
+            fallback below -- raw array/pointer arithmetic on the instance, a
+            silent WRONG value (0 observed), not even a crash" -- and closed it
+            for classes that define a dunder. The Pascal side of the same
+            fall-through was left open.
+
+            IT IS CLOSED HERE BECAUSE THE default-CLAUSE SPLIT WOULD OTHERWISE
+            HAVE WIDENED IT. A value clause used to set propIsDefault, so a class
+            with `default 16` and no indexed property reached the arm above and
+            was refused -- wrongly worded ("default property is write-only" where
+            fpc says "No default property available"), but refused. With the flag
+            correct, that same source falls here instead. Trading a badly worded
+            refusal for a silent wrong number is strictly worse, and shipping
+            the split without this would have done exactly that.
+            IsNodeArray IS NOT A DEFENSIVE EXTRA -- it is half the condition.
+            `FComponents: array of TComponent` carries tk=tyClass and the
+            TComponent recName because tk/recName describe the ELEMENT, so an
+            ordinary dynamic-array subscript arrives here indistinguishable from
+            an instance subscript and the fall-through below is where it BELONGS.
+            Without it lib/rtl/classes.pas:844 stopped compiling: the first
+            version of this refusal was green on all three repros and on the
+            quick tier, and the full suite is what said so.
+            bug-p-a-property-default-value-clause-is-read-as-the-default-indexed-property-marker }
+          Error('no default property available: '
+                + GetSliceName(UClsNOff[mci], UClsNLen[mci])
+                + ' has no default indexed property, so it cannot be subscripted');
       end;
       { An ARRAY-returning CALL indexed directly — `b.Arr[1]`, `b.ArrP(3)[0]`,
         `TBag.Create.Arr[0]`. A call's value is not an addressable base, so the
@@ -5272,6 +5309,21 @@ begin
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
       if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
+      { The class-with-no-default-property refusal, second spelling. `TC(t)[0]`
+        reaches this walker instead of ParseLValueAST's suffix loop, and without
+        this it fell past the array-returning-call arm below into the generic
+        AN_INDEX -- 130481955799048 for a class whose only property is a plain
+        Integer. Same hole, same wording, and it has to be closed in BOTH loops
+        or the cast spelling stays silent: normalise-dont-special-case's "fixed
+        one arm of a double case? grep for the sibling before closing".
+        PyExprMode is excluded because NilPy resolves `obj[k]` through the
+        __getitem__/__setitem__ dunders, which are not properties; and
+        IsNodeArray because tk/recName describe an array's ELEMENT, so an
+        `array of TComponent` subscript reaches here wearing tyClass. }
+      if (dfCi >= 0) and (dfPri < 0) and (not PyExprMode) and (not IsNodeArray(node)) then
+        Error('no default property available: '
+              + GetSliceName(UClsNOff[dfCi], UClsNLen[dfCi])
+              + ' has no default indexed property, so it cannot be subscripted');
 
       { …and whether this `[` is an assignment TARGET, which decides getter vs
         SETTER. The NAMED-property arm ~200 lines above has asked this since it
