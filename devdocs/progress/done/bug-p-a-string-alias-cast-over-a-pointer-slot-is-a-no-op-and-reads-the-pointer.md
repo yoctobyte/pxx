@@ -4,7 +4,7 @@ title: "A string-alias cast over a Pointer slot is treated as a no-op, so the ex
 track: P
 prio: 55
 type: bug
-status: working
+status: done
 found: 2026-09-05
 found-by: frankH
 owner: frankB
@@ -227,3 +227,6 @@ binary sha back to `b8985660920b` byte-identical.
 - `test/test_a_string_alias_cast_over_a_pointer_slot.{pas,expected}` — fpc 3.2.2
   oracle, byte-identical, eight rows. D–H are controls, green before the fix;
   E is the positive control for the discriminator; C is the literal store.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
