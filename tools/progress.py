@@ -2276,6 +2276,37 @@ pre code{background:none;padding:0}
         # unowned. Shipped that way for one hour on 2026-09-06: 3 findings, 1
         # real. A check that is right about one row in three earns the habit of
         # being scrolled past, which is the failure this file already names.
+        # THE BOARD YOU JUST READ IS ONLY AS CURRENT AS THE TREE IT CAME FROM,
+        # and nothing else in this checkout will ever tell you otherwise --
+        # see _tree_is_behind_origin for why a reading seat has no other signal.
+        state, behind_n, behind_sha = _tree_is_behind_origin()
+        if state == "behind":
+            warning_count += 1
+            lines.append(
+                f"TREE-IS-BEHIND: this checkout is {behind_n} commit(s) behind "
+                f"origin/master (newest {behind_sha}). EVERY FINDING ABOVE WAS "
+                f"READ FROM THAT TREE, so a row this reports as open may have "
+                f"been resolved, and a row it does not report may exist. This "
+                f"is not an error and nothing is broken: it is the one staleness "
+                f"signal a session that only READS the board can get, because "
+                f"every other tell in this repo -- an unpushed commit, a dirty "
+                f"file, the fixedpoint stamp, a sha in a trailer -- is an "
+                f"artefact of having WRITTEN something. A seat that reads and "
+                f"reports produces none of them and looks clean the whole time. "
+                f"`tools/sync.sh` or `git pull --rebase`, then re-run. If you "
+                f"already relayed something off this tree, SORT the claims "
+                f"rather than withdrawing or defending all of them: a report "
+                f"file dated last week says the same thing on any tree that has "
+                f"it, and a board row does not.")
+        elif state == "nofetch":
+            warning_count += 1
+            lines.append(
+                f"TREE-FRESHNESS-UNKNOWN: could not fetch origin ({behind_sha}), "
+                f"so this run cannot say whether the board it read is current. "
+                f"Reported rather than assumed clean -- an unreachable origin and "
+                f"an up-to-date tree produce the same silence, and only one of "
+                f"them means the findings above are about today.")
+
         orphan_work = [t for t in self.by_status.get("working", [])
                        if not str(t.owner).strip().strip('"\'')]
         if orphan_work:
@@ -3391,6 +3422,55 @@ def cmd_claim(args: argparse.Namespace) -> int:
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit the move + edits together.", file=sys.stderr)
     _warn_claim_is_local(args.slug, args.owner)
     return 0
+
+
+def _tree_is_behind_origin() -> tuple[str, int, str]:
+    """(state, count, detail) — how far this checkout is behind origin/master.
+
+    A PURE-READER SEAT HAS NO STALENESS SIGNAL AT ALL, WHICH IS WHY THIS IS ON
+    THE READ PATH AND NOT THE WRITE PATH. Every staleness guard this repo has
+    keys on an artefact of DOING WORK: an unpushed commit, a dirty file, a
+    .fixedpoint stamp, `converged` versus `verified`, a sha in a commit trailer.
+    A session that only reads the board and reports on it produces none of them,
+    so it drifts unboundedly while `git status` says `clean` throughout.
+    CLAUDE.md says a clean tree is not evidence about a session -- but it says
+    so about one that has JUST LANDED, which is the opposite case and the one
+    every reader has in mind. Nothing covers a session that has NEVER landed,
+    and the two are indistinguishable from outside.
+
+    Measured 2026-09-06: the seat whose job is auditing every checkout's HEAD
+    against origin/master was 593 commits behind, found only because a peer
+    noticed one of its line citations was 281 off. Its scan checked every peer
+    and not itself, because it was not one of the peers.
+
+    Returns ("behind", n, newest-sha) / ("ok", 0, "") / ("nofetch", 0, reason).
+    """
+    try:
+        r = subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=ROOT,
+                           capture_output=True, text=True, timeout=25)
+        if r.returncode != 0:
+            return ("nofetch", 0, (r.stderr or "").strip().splitlines()[-1:] and
+                    (r.stderr or "").strip().splitlines()[-1] or "fetch failed")
+    except (OSError, subprocess.SubprocessError) as e:
+        return ("nofetch", 0, f"{type(e).__name__}")
+    try:
+        # LEFT..RIGHT: behind = commits on origin we lack. AHEAD IS DELIBERATELY
+        # NOT REPORTED -- local commits not yet pushed is the normal mid-work
+        # state, and a finding that fires there would be a finding everyone
+        # learns to scroll past, which is the failure this file already names.
+        r = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD..origin/master"],
+            cwd=ROOT, capture_output=True, text=True, timeout=15)
+        if r.returncode != 0:
+            return ("nofetch", 0, "no origin/master")
+        n = int((r.stdout or "0").strip() or 0)
+        if n == 0:
+            return ("ok", 0, "")
+        s = subprocess.run(["git", "rev-parse", "--short", "origin/master"],
+                           cwd=ROOT, capture_output=True, text=True, timeout=15)
+        return ("behind", n, (s.stdout or "").strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ("nofetch", 0, "rev-list failed")
 
 
 def _warn_claim_is_local(slug: str, owner: str) -> None:
