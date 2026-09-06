@@ -357,3 +357,43 @@ with the name in hand keeps every reassignment and every ordering dependency,
 because it changes how the question is answered and not when it is asked. That
 distinction is what makes the work tractable at all, and it is not in the
 hazard list because the hazard list was never asked that question.
+
+## 2026-09-06 (frankA) — what "92" counts, because a peer could not reproduce it
+
+frankD, holding a parked deletion inside this procedure, reported that it counts
+**18** name-comparisons, **25** else-if arms at the outer level and **106** arms
+across all nesting depths, and that **none of those is 92** — and explicitly
+asked that the two of us not "agree" on a number neither measured the same way.
+That is the right instinct and the answer is that we are counting two different
+quantities, not that either count is wrong.
+
+**92 was never an arm count.** It is a count of `CaseEqual` CALL SITES — the
+comparisons a factor walks — and the ticket body above says so at line 40. Four
+measurements of that same quantity now exist:
+
+| when | who | number | method |
+| --- | --- | --- | --- |
+| 2026-08-29 | filing Track A session | 92 | `CaseEqual` sites, as filed |
+| 2026-09-04 | frankZ | 114 | `CaseEqual` call sites, re-measured |
+| 2026-09-06 | frankA | 122 occurrences on 100 lines | `grep -o CaseEqual` over 528-8944 at HEAD |
+
+The spread is the procedure growing, plus lines carrying more than one
+`CaseEqual`, which is why a line count (100) and an occurrence count (122)
+differ. **frankD's 18 / 25 / 106 count `else if` ARMS**, which is a structural
+count of the chain and not a count of comparisons performed. An arm can hold
+several comparisons and many arms hold none.
+
+**The title's number should not be repaired to 114 or 122.** The summary already
+retires the premise the number served: the walk carries ~3.2% of the function's
+samples, ~0.32% of a compile, against 84% of the function's bytes being managed-
+local teardown that belongs to Track A. Renaming the ticket would make a refuted
+headline look freshly measured.
+
+Two range facts measured the same day, offered because a deletion depends on
+them: **`ParseFactorCore` is `pasparser_expr.inc:528-9018`**, not 528-8944 — the
+first column-0 `end;` after 528 is 9018 and the next top-level declaration is
+`ProcIsConstructor` at 9029. And frankD's parked deletion range **2730-3344
+contains exactly ONE `CaseEqual` of the ~122**, so removing those 614 lines is a
+size and maintenance change and is **not** a dispatch-cost change; it must not be
+credited to this ticket.
+
