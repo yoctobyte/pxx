@@ -6562,6 +6562,51 @@ about the epilogue could find it. **Reading the emitted bytes found in one
 command what neither of us could argue our way to.**
 
 
+## MEASURING EMITTED CODE SIZE: the compiler's `code=` is PAGE-QUANTISED, and on wasm32 it is not the code at all
+
+`ok: <out>  [code=NB data=NB bss=NB procs=N]` is the number everyone reads, and
+it is the wrong instrument for anything per-slot or per-construct.
+
+**On ELF targets it is padded.** `CodeLen` is the true emitted length while code
+is being generated, but the ELF writer then calls `AlignCodeForData` and
+`PadCodeToPageBoundary` (`elfwriter.inc:1683`, `:1737`), both of which append
+zeros with `EmitB` — **which increments `CodeLen`** — and `compiler.pas:2694`
+prints the padded value. So every `code=` difference is a multiple of the
+segment alignment. **On aarch64 that is 65536**, and the quantum can exceed the
+entire signal: measured 2026-09-07, `code=` reads **196376 for a procedure with
+4 managed locals and 196376 for the same procedure with 532**. A flat row that
+looks like a finding and is a rounding boundary. `tools/count_bytes.py`'s
+docstring has recorded the 4096 case for a while; the 65536 case and the wasm32
+case below were not written down anywhere.
+
+The un-padded length is not lost — `CodePadStart` holds it, and
+`asmdisasm_x64.inc:932` already uses it to stop an `-S` listing at the last real
+instruction. **Do not "fix" the `ok:` line to print it**: `tools/size_canary.py`
+parses `code=(\d+)B` and re-baselining a fleet-wide canary is a coordination
+cost, not a cleanup. (That canary is unaffected either way — its floor is 4096,
+exactly the quantum, and it tracks only `esp32*-bare` and `x86_64-empty`.)
+
+**On wasm32 `code=` tracks neither the code section nor the file.** Measured the
+same day: it reads **3582 for both a 4-local and a 532-local build**, while the
+module's own code section grows 65929 -> 79636 and the file grows 71611 ->
+85318. The wasm backend emits into its own `WasmCodeLen` pool (`wasmenc.inc`);
+the global `CodeLen` the `ok:` line prints is a different buffer. This one is
+worse than the quantisation, because quantisation has a mechanism you can reason
+about once you know the quantum — a number that is not measuring the thing its
+name says has none.
+
+**What to use instead:**
+
+| you want | use |
+| --- | --- |
+| per-slot / per-construct code size | the **artefact's on-disk size** (`stat -c%s`), across a sweep |
+| wasm32 specifically | parse the module's **code section** (section id 10) |
+| "did this exact instruction sequence get emitted" | `tools/count_bytes.py <file> <hex> --expect N` |
+| separating prologue cost from epilogue cost | **vary the return count** — the zero-init is emitted once per procedure, the release at every return, so `size(N,R) = base + N*store + R*N*release` solves from three builds and needs no disassembler (there are no cross-disassemblers installed) |
+
+The last row is how the managed-local prologue store was measured on all seven
+targets without one.
+
 ## Only binaries timed inside ONE interleaved run are comparable — and a pass changed to fix a measurement is as sound as the measurement
 
 The `-O3` residency slice (2026-08-28) measured mandelbrot at **1.10 s** before

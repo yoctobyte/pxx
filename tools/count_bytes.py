@@ -4,7 +4,15 @@
 
 WHY THIS EXISTS. The compiler's own `code=` summary is PAGE-QUANTISED (4096
 here), so it reports a delta of zero for a change that rewrites every prologue
-in the image, and a delta of 4096 for one that added 1944 bytes. When a test
+in the image, and a delta of 4096 for one that added 1944 bytes. Two things
+measured 2026-09-07 that this docstring did not say: the quantum is the SEGMENT
+ALIGNMENT, so on aarch64 it is 65536 and `code=` reads 196376 for a 4-local
+procedure and 196376 for the same one with 532 locals -- the quantum can exceed
+the whole signal. And on wasm32 `code=` is not the code at ALL: it reads 3582
+for both of those builds while the module's code section grows 65929 -> 79636,
+because the wasm backend emits into its own WasmCodeLen pool and the `ok:` line
+prints the unrelated global CodeLen. See the playbook section "MEASURING EMITTED
+CODE SIZE" for what to use instead. When a test
 needs to assert that a particular INSTRUCTION SEQUENCE is present -- that the
 long form of a call or a jump actually fired, rather than that the program
 merely ran -- the artifact is the only honest source, and a shell cannot count a
