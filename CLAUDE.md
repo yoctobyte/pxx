@@ -620,18 +620,46 @@ earlier. The instrument answers "are there uncommitted edits" and gets read as
 "has this session done anything". Ask the right question instead —
 `git log origin/master --grep=<the session's Claude-Session URL>` — and note
 the URL DOES discriminate (verified: two sessions, two ids), while
-`Co-Authored-By` does not, because every agent shares it. **Nothing in the COMMIT maps
+`Co-Authored-By` does not, because every agent shares it. **The id survives a
+compaction and the git-status snapshot in your context does NOT** — that
+snapshot names where this CONTEXT WINDOW opened, not where the session did, so
+your own pre-compaction commits sit "before I started" and read as somebody
+else's. Measured 2026-09-06: that reading produced a false *"the URL
+over-matches"* finding about this very sentence, from two commits that were the
+reader's own. **Nothing in the COMMIT maps
 an id to a session name**, and an id changes when a session restarts — but the
 mapping is recoverable without asking, because each session commits in its own
-checkout first: `git -C ~/<name> reflog --format='%h %gs' | grep '^<sha> commit'`
-names the tree that CREATED it. Plain reflog membership does NOT discriminate —
-every pull walks a sha through every checkout's HEAD — so match on the `commit`
-entry, not on presence. Verified 2026-09-02: seven of eight shas in one arc,
-one checkout, one id. **And it answers WHERE a commit was authored, not WHO
-authored it** (frankD's caveat, the same day): a cherry-pick, a rebase that
-re-creates commits, or one session applying another's patch all put the wrong
-tree's reflog behind the sha. **The EIGHTH sha not resolving is the instrument
-telling you it has a failure mode** — read that as the tell, not as noise.
+checkout first: **`tools/whose_commit.sh <sha>...`** names the tree that
+CREATED it, across every checkout, with the session id beside it. Plain
+reflog membership does NOT discriminate — every pull walks a sha through every
+checkout's HEAD — so match on a **CREATING VERB**, not on presence. **`commit`
+alone is not that set**, and this rule said it was until 2026-09-06.
+`tools/sync.sh` rebases nearly every sync, and a replayed commit's `git commit`
+sha is the DOOMED one — the surviving sha, the only one on origin and the only
+one you ever quote, is born under `rebase (pick)` or `rebase (continue)`.
+Measured 2026-09-06: 33 of one session's 69 commits answered a rebase verb, so
+`grep '^<sha> commit'` denied **46% of its arc, the pin the fleet was running on
+included** — it reported the tree that authored pin v405 as no tree at all.
+**The old matcher was blind exactly when the fleet is busy enough to make
+attribution worth asking about**, and it read cleanest on a quiet tree. Use
+the script rather than retyping a regex: it holds the full creating-verb set
+(`amend`, `fixup`, `squash`, `reword` too), and it exits **1** on both failure
+shapes — no checkout claiming a sha, and two claiming it — instead of printing
+a confident single name. The
+membership noise it was guarding against is real and still separable: that
+arrives as `rebase (start)`, `pull`, `reset`, `checkout` or `merge` — verbs that
+MOVE a ref and never mint an object — and one such `rebase (start)` in a
+BYSTANDER checkout is what a plain-presence match trips on. **The 2026-09-02
+eighth sha, filed then as an unexplained tell, was a rebase and nothing more**;
+the tell was real and pointed here. False positives for the corrected matcher in
+60 non-matching commits: one, and it was this checkout's own `sync.sh`
+PENDING-COMMIT fill-in — authored here, trailerless, so the reflog had it RIGHT
+and the URL could not see it. **The two instruments fail differently, which is
+the entire reason to hold both.** **And it answers WHERE a commit was authored,
+not WHO
+authored it** (frankD's caveat, 2026-09-02): a cherry-pick, a rebase that
+re-creates ANOTHER session's commits, or one session applying another's patch
+all put the wrong tree's reflog behind the sha.
 Corroborate with the id before acting on a single sha. Do not fall back
 to attributing by timing and topic: that produced the false alarm above, and it
 produced a second one the same night, hours later, by this rule's own author.
