@@ -117,4 +117,4 @@ the receiver has become a record, so a fields-only fix prints every number
 correctly and still calls `Sum` with a pointer as Self.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 133d46a03.
