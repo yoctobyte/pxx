@@ -105,9 +105,37 @@ for t in $TARGETS; do
     printf '  %-9s builds   %s\n' "$t" "$got"
     built=$((built + 1))
   else
-    grep -q 'C program entry stub' "$WORK/build_$t.log" \
-      || fail "$t refused for a reason that is NOT the C entry stub, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
-    printf '  %-9s refuses  no C entry stub yet -- outside this check by construction, and the trigger\n' "$t"
+    # THE EXPECTED REFUSAL MOVED, AND THE CHECK FOLLOWS IT RATHER THAN LOOSENING.
+    #
+    # Until 2026-09-06 the only admissible refusal was "C program entry stub not
+    # implemented", which is what put wasm32 outside this check by construction.
+    # That stub now exists (WasmEmitCEntry): a freestanding C program builds and
+    # runs on wasm32. This subject is not freestanding -- it needs <stdio.h> to
+    # print -- so it now stops one wall EARLIER than va_arg, at the environment:
+    # the crtl that stdio pulls declares `environ`, and wasm32 has no initial
+    # stack to derive it from.
+    #
+    # Both spellings stay admissible and NEITHER is a wildcard. The point of
+    # this branch is that a refusal for any OTHER reason means the check quietly
+    # stopped covering the target, and that is still exactly what it detects --
+    # the set of accepted reasons grew by one NAMED wall, each tied to a ticket:
+    #
+    #   C program entry stub  ->  bug-c-no-c-program-entry-stub-for-wasm32-...
+    #   environ               ->  the environ_get gap named in that ticket's
+    #                             wall list; upstream of va_arg, so va_arg
+    #                             remains unreachable here either way.
+    #
+    # DO NOT collapse these to `grep -q error:`. The whole value of this branch
+    # is that it names which wall, and a check that accepts any error is a check
+    # that cannot fail.
+    if grep -q 'C program entry stub' "$WORK/build_$t.log"; then
+      why='no C entry stub yet'
+    elif grep -q 'environ' "$WORK/build_$t.log"; then
+      why='no environ on wasm32 (upstream of va_arg)'
+    else
+      fail "$t refused for a reason that is NEITHER the C entry stub NOR the environ wall, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
+    fi
+    printf '  %-9s refuses  %s -- outside this check by construction, and the trigger\n' "$t" "$why"
     refused=$((refused + 1))
   fi
 done
@@ -122,7 +150,7 @@ done
 [ "$built" -ge 6 ] \
   || fail "only $built target(s) built a va_arg program; this check cannot say anything about a set it never reached"
 
-printf '  %d built, %d awaiting a C entry stub, %d examined\n' "$built" "$refused" "$examined"
+printf '  %d built, %d refused at a named wall, %d examined\n' "$built" "$refused" "$examined"
 
 # ---- the mode ESP actually ships on ----------------------------------------
 # frankS, 2026-09-05: the standalone ELF path is not how C reaches an ESP32.

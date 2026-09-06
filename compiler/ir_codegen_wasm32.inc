@@ -610,6 +610,22 @@ var
     stack only yields it once. -1 = not allocated in this body. }
   WasmLocalSelf     : Integer;
 
+{ The C driver's entry request. -1 means "no C program asked for an entry",
+  which is every Pascal build and every --emit-obj/--shared C build.
+
+  Set by ParseCProgram (cparser.inc) at the END of its run, and read by
+  WasmEmitCEntry below at module-write time. That direction is forced by the
+  include order -- ir_codegen_wasm32.inc is pulled at compiler.pas:250 and
+  cparser.inc at :261 -- so the backend cannot ask the C driver anything and
+  the C driver must leave the answer here.
+
+  Not reset in WasmBeginModuleOnce: that runs on the FIRST BODY emitted, which
+  is long before ParseCProgram's tail, so a reset there would be harmless
+  today and would silently discard the request if the two ever reordered. An
+  initialiser says the same thing without depending on when anything runs. }
+  WasmCEntryMain    : Integer = -1;   { proc index of C's `main` }
+  WasmCEntryFini    : Integer = -1;   { ... and of __pxx_run_finalizers }
+
 procedure WasmBeginModuleOnce;
 var i: Integer;
 begin
@@ -7528,6 +7544,109 @@ end;
   late. A program with no top-level code at all (a unit, or a slice built with
   -dWASM_NOMAIN and no const initialisers) gets no `main`, which is honest:
   there is nothing to run. }
+{ ---- the C program's entry ------------------------------------------------
+
+  Every register target emits its C entry as machine code inside ParseCProgram:
+  save sp, run initialisers, call main(argc, argv), run finalizers, exit. wasm
+  has no machine code and no ELF entry point, so the C driver records what it
+  wants and this synthesises the equivalent function once every body exists.
+
+  IT MUST BE A WRAPPER, AND THAT IS NOT A STYLE CHOICE. A WASI command module
+  is started through `_start`, whose type is [] -> [], while C's `main` is
+  (i32,i32) -> i32. Exporting `main` a second time under the name `_start`
+  therefore does not typecheck and the host refuses the module. The Pascal side
+  carries the same wrapper for the same reason (WasmEmitMainWrapper, below).
+
+  WITHOUT THIS THE FAILURE IS SILENT, which is why the ticket's own first
+  acceptance criterion could not detect it. A module that exports no `_start`
+  is NOT rejected: wasmtime instantiates it, runs nothing and exits 0 -- and
+  `int main(void){return 0;}` succeeding also exits 0. The two are
+  indistinguishable by exit code, so the test for this returns 42.
+  bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it
+
+  ARITY IS READ FROM `main`, NOT ASSUMED TO BE TWO. `int main(void)` is legal C
+  and is this ticket's own repro; on a register target the entry stub loads
+  argc/argv into argument registers unconditionally and a `main(void)` simply
+  ignores them, which costs nothing. wasm TYPE-CHECKS the call, so passing two
+  arguments to a [] -> [i32] function is a module that fails validation rather
+  than one that wastes two loads. The same reasoning covers the result: a
+  `void main` yields nothing to exit with, so the wrapper supplies 0.
+
+  A `main` with no parameters also skips the argv fetch entirely, which is not
+  only an optimisation: WasmEmitArgvFetch allocates through PXXAlloc, and not
+  reaching for it leaves a freestanding C program free of that dependency. }
+function WasmEmitCEntry: Boolean;
+var slot, retL, argcL, vecL, np: Integer;
+    fetched: Boolean;
+begin
+  WasmEmitCEntry := False;
+  if WasmCEntryMain < 0 then
+  begin
+    { Not a C program. The only honest non-result: say True so the caller can
+      distinguish "nothing to do" from "tried and failed". }
+    WasmEmitCEntry := True;
+    Exit;
+  end;
+
+  np := Procs[WasmCEntryMain].ParamCount;
+  if np > 2 then
+  begin
+    WasmUnsupported('main declares ' + WasmIntStr(np) + ' parameters; the C '
+      + 'entry passes at most argc and argv');
+    Exit;
+  end;
+
+  slot := WasmAddFunc('_start', WasmAddType([], []));
+  WasmBodyBegin;
+  retL := WasmAddLocal(WT_I32, 'mainret');
+  argcL := -1; vecL := -1;
+  fetched := False;
+
+  if np >= 1 then
+  begin
+    if not WasmEmitArgvFetch(argcL, vecL) then Exit;
+    fetched := True;
+  end;
+
+  { argc is WASI's raw count, which INCLUDES argv[0] -- and that is exactly
+    what C wants. Pascal's ParamCount subtracts one; C's argc does not, so the
+    adjustment WasmEmitArgCount makes is the Pascal-side one and must not be
+    copied here. }
+  if np >= 1 then WasmLocalGet(argcL);
+  if np >= 2 then WasmLocalGet(vecL);
+  WasmCall(WasmSlotForProc(WasmCEntryMain), 'main');
+
+  if Procs[WasmCEntryMain].IsFunc then
+    WasmLocalSet(retL)
+  else
+  begin
+    WasmI32Const(0);
+    WasmLocalSet(retL);
+  end;
+
+  if fetched then
+    if not WasmEmitArgvRelease(vecL) then Exit;
+
+  { Finalizers before exit, so a plain `return` from main is not a silent skip.
+    Same reason as every machine-code arm: the stub is the ONLY exit path C
+    code normally takes, so without this atexit handlers would fire for exit()
+    and be dropped for `return` -- the worse of the two failure modes.
+    feature-c-entry-stub-must-run-finalizers }
+  if WasmCEntryFini >= 0 then
+    WasmCall(WasmSlotForProc(WasmCEntryFini), '__pxx_run_finalizers');
+
+  WasmLocalGet(retL);
+  WasmCallImport(WasmHostImport('wasi_snapshot_preview1', 'proc_exit',
+                                [WT_I32], []), 'proc_exit');
+  { proc_exit does not return, and wasm requires the body to be well-typed to
+    its end regardless. }
+  WasmBodyUnreachable;
+  WasmBodyTerminate;
+  WasmBodyEnd(slot);
+  WasmAddExport('_start', WEK_FUNC, slot);
+  WasmEmitCEntry := True;
+end;
+
 procedure WasmEmitMainWrapper;
 var i, slot, si, iov, fdw: Integer;
 begin
@@ -7624,6 +7743,13 @@ begin
     zero-length body — `function body must end with END opcode`, at a byte
     offset, naming nothing. }
   WasmEmitMainWrapper;
+  { The C entry, for the same reason and in the same window as the Pascal one:
+    both ADD A FUNCTION, so both must run before WasmFinishMemory hands out
+    table indices and before the empty-body pass. A C program leaves
+    WasmMainChunkCount at 0, so WasmEmitMainWrapper above emits nothing for it
+    and the two never both fire. }
+  if not WasmEmitCEntry then
+    WasmFail('wasm32: the C program entry could not be synthesised');
   WasmFinishMemory;
   WasmFillEmptyBodies;
   WasmReportCoverage;

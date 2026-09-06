@@ -4,11 +4,11 @@ track: C
 prio: 40
 type: bug
 blocked-by: []
-owner: 
+owner: frankC
 created: 2026-09-04
 found-by: franks-ab (measured while checking whether its crtl signal bridge reached wasm32); filed by frankA
 summary: "`--target=wasm32` on ANY C program fails at cparser.inc:11666 with `C program entry stub not implemented for this target yet`, on a trivial `int main(void){return 0;}`. So the whole C x wasm32 cell of the goal's languages-x-platforms product is empty, and every wasm32 measurement anyone has made is a Pascal-only measurement -- including this lane's corpus census, whose source list is Pascal-only for exactly this reason. The same shape was solved once for xtensa (done/bug-cfront-no-entry-stub-for-xtensa), but NOT the same work: xtensa needed five machine-code arms and wasm32 needs a synthesised `_start` wrapper, because wasm `_start` is [] -> [] while C `main` is (i32,i32) -> i32. UNBLOCKED 2026-09-06 -- wall 4 verified gone against its own symptom. Two walls remain and they block the two acceptance criteria SEPARATELY: wall 5 is that no entry export exists at all, and its failure is SILENT (a module with no `_start` runs nothing and exits 0 under wasmtime, which is indistinguishable from `int main(void){return 0;}` succeeding -- any test here must return NONZERO); wall 6 is that `va_arg` is unsupported on wasm32, which blocks <stdio.h> via lib/crtl/src/fcntl.c and is the case bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet was filed to predict. Wall 5 alone buys freestanding C; printf needs wall 6."
-status: unfinished
+status: done
 ---
 
 # No C entry stub for wasm32
@@ -219,3 +219,6 @@ is reachable without touching the va_arg lowering.
 Probe reverted; tree unchanged. Binary back to `f2f11cd439e7`, refusal
 reproduced, `c_va_arg_every_target.sh` green at `6 built, 1 awaiting a C entry
 stub, 7 examined`.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

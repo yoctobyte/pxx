@@ -11381,6 +11381,20 @@ test-core: $(COMPILER)
 	gcc -std=gnu99 -o $(TESTTMP)/c_arrtypedims_gcc test/c_array_typedef_dims.c
 	tools/expect_same.sh c_arrtypedims26 "$$($(TESTTMP)/c_arrtypedims26)" "$$($(TESTTMP)/c_arrtypedims_gcc)"
 	tools/c_va_arg_every_target.sh
+	# C ON wasm32 REACHES `main`. The whole C x wasm32 cell of the goal's
+	# languages-x-platforms product was empty -- --target=wasm32 refused EVERY C
+	# program at the entry stub -- so every wasm32 measurement anyone had made
+	# was a Pascal-only measurement.
+	#
+	# EVERY EXPECTED VALUE IN THAT SCRIPT IS NONZERO, and that is the load-bearing
+	# design. A module exporting no `_start` is not rejected: wasmtime
+	# instantiates it, runs nothing and exits 0 -- so this ticket's own stated
+	# acceptance criterion, "int main(void){return 0;} exits 0 under wasmtime",
+	# is a guard that cannot fail, and it passed against a no-op entry during
+	# development. The script carries that premise as its own last assertion
+	# rather than as a comment, so it stays checkable.
+	# bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it
+	tools/c_wasm32_entry.sh
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }

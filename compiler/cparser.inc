@@ -11970,6 +11970,8 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     needInit: Boolean;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
+    cWasmEntry: Boolean;        { wasm32: the entry is synthesised, not emitted -- see the arm }
+    cWasmFini: Integer;         { ... and the finalizer runner it will call }
     cSfI: Integer;
     envPi: Integer;   { __pxx_set_environ, for the init thunk }
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
@@ -11991,6 +11993,8 @@ begin
     asks the same question again and gets the same answer (the pulled tokens
     never name `environ`). }
   needInit := CNeedsEnvironInit;
+  cWasmEntry := False;
+  cWasmFini := -1;
   initPatch := -1;
   callAnchor := -1; initAnchor := -1;
 
@@ -12358,6 +12362,76 @@ begin
         and 118 is plain exit on this target, verified under qemu -strace. }
       EmitExitReg;
     end;
+    TARGET_WASM32:
+    begin
+      { NO MACHINE CODE, AND NO ELF ENTRY. Every arm above hand-assembles the
+        entry at code offset 0; a wasm module has neither an offset 0 nor
+        instructions to put there. The equivalent is a synthesised function
+        exported as `_start`, which cannot be built until every body exists, so
+        the request is RECORDED here and ir_codegen_wasm32.inc's WasmEmitCEntry
+        builds it at module-write time.
+
+        `main` is looked up in the shared tail below, with the same
+        "main function not found" diagnostic every other target gets -- the
+        lookup is not machine-code-specific and duplicating it here would give
+        wasm32 its own wording for the commonest C mistake there is. }
+      cWasmFini := GetFiniRunnerProc;
+      { Resolved HERE rather than in the tail, matching every arm above: those
+        call EmitCallProc(GetFiniRunnerProc) at stub-emission time, and
+        EmitFinalizerRunnerBody -- which emits the body this index names -- has
+        already run by the time the tail is reached. Asking later would
+        register a forward whose body was emitted before the request existed. }
+
+      { ENVIRON IS AN HONEST REFUSAL, NOT A GUESS. The pre-main initializer
+        shell takes the INITIAL STACK POINTER and walks it to find envp; WASI
+        has no initial stack at all and reports its environment through
+        environ_get instead. There is no value that could be passed here that
+        would be right, and passing one anyway would make `environ` read
+        whatever the shadow stack happens to hold -- a wrong answer with no
+        diagnostic, in a program that asked for the environment.
+
+        AND IT IS NOT NARROW. I wrote "narrow by construction: true only when
+        the program actually names `environ`" here and then measured it:
+
+          stdarg.h  string.h                     compile
+          stdlib.h  stdio.h  unistd.h  math.h    refused
+
+        CNeedsEnvironInit is a token scan over the WHOLE stream, and the stream
+        includes the crtl the program pulls -- unistd.c and stdlib.c both name
+        `environ`. So any header that drags a crtl body drags the declaration,
+        and the predicate cannot tell a DECLARATION from a USE. Essentially
+        every non-trivial C program trips this, and the freestanding programs
+        that do not are exactly the ones that would not have used the
+        environment anyway.
+
+        Refusing anyway, and the reason is the direction of the error: an empty
+        or garbage `environ` is a wrong answer that no test distinguishes from a
+        correct one, while a refusal is visible the moment it happens. xtensa
+        takes the other road (CNeedsEnvironInit Exits early for it) and that is
+        right THERE -- "ESP is not a Unix", there is genuinely no environment to
+        report. WASI HAS one, through environ_get, so silently answering "empty"
+        would be wrong about a fact the host would have told us.
+
+        Costs nothing today: every header in the refused column also needs
+        va_arg, which wasm32 does not have either
+        (bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet).
+        When that lands this becomes the next wall, correctly visible.
+
+        THE MESSAGE MUST NOT BLAME THE USER'S SOURCE. It said "a C program that
+        uses `environ`", and the program that trips it says `#include <stdio.h>`
+        and nothing else -- so the reader greps their own code for a word that
+        is not in it. It names the include instead. }
+      if needInit then
+        Error('the C environment (`environ`) is not available on wasm32 yet, '
+            + 'and including <stdio.h>, <stdlib.h>, <unistd.h> or <math.h> is '
+            + 'enough to require it -- the crtl they pull declares it, so this '
+            + 'is not about your source naming `environ`. Cause: the pre-main '
+            + 'initializer derives the environment from the initial stack '
+            + 'pointer and WASI has no initial stack; it reports the '
+            + 'environment through environ_get, which is not wired up yet. A '
+            + 'freestanding program (no libc headers) is unaffected');
+      cWasmEntry := True;
+    end;
   else
     Error('C program entry stub not implemented for this target yet');
   end;
@@ -12534,8 +12608,25 @@ begin
   if not CRuntimeStubsEmitted then
   begin
     CRuntimeStubsEmitted := True;
-    if TargetArch <> TARGET_XTENSA then EmitCSetjmpStubs;
-    EmitCFenvStubs;
+    { wasm32 joins xtensa in skipping BOTH, and for a different reason than
+      xtensa's. These emit raw machine code — a setjmp buffer is a saved
+      register set and a stack pointer — and wasm has neither. It is also not
+      merely unimplemented: a wasm module's call stack is not addressable
+      memory, so there is nothing for longjmp to unwind ACROSS, and a
+      hand-rolled version could not be made correct later by adding an arm.
+
+      HONEST GAPS, NOT SILENT ONES: a C program calling setjmp or fesetround on
+      wasm32 fails to link, naming the symbol. That is the same standard the
+      xtensa split was held to, and it is why this skips the emitters rather
+      than emitting stubs that return 0 — a `setjmp` that quietly answers 0
+      every time is a program whose error path never runs.
+
+      BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
+      .c-unit pull carry the same condition, and changing one would make a C
+      program and a C unit disagree about which stubs exist. }
+    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
+      EmitCSetjmpStubs;
+    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
   end;
 
   firstIdx := TokPos - 1;
@@ -12755,8 +12846,14 @@ begin
   ApplyCallFixups;
 
   { Object mode emitted no entry stub, so there is nothing to patch and no
-    `main` to demand — see the stub guard above. }
-  if callPatch < 0 then Exit;
+    `main` to demand — see the stub guard above.
+
+    wasm32 is the one target that emitted NO CODE and still needs `main`: its
+    entry is synthesised at module-write time, so callPatch stays -1 while the
+    lookup below is exactly as required as it is everywhere else. Testing
+    callPatch alone would have skipped it and produced a module with no entry
+    and no diagnostic — the silent shape this whole path exists to avoid. }
+  if (callPatch < 0) and (not cWasmEntry) then Exit;
 
   CWarnImplicitSystemImports;
 
@@ -12772,6 +12869,15 @@ begin
     ErrorIdent := '';
     ErrorAt(CLastCSourceLine, 'main function not found');
   end;
+  { wasm32: hand the backend what it needs and stop. Nothing below applies —
+    there is no call site to patch because no call was emitted. }
+  if cWasmEntry then
+  begin
+    WasmCEntryMain := mainIdx;
+    WasmCEntryFini := cWasmFini;
+    Exit;
+  end;
+
   { Patch the entry stub's call-to-main with main's body address. }
   CPatchStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 
@@ -16325,8 +16431,25 @@ begin
   if not CRuntimeStubsEmitted then
   begin
     CRuntimeStubsEmitted := True;
-    if TargetArch <> TARGET_XTENSA then EmitCSetjmpStubs;
-    EmitCFenvStubs;
+    { wasm32 joins xtensa in skipping BOTH, and for a different reason than
+      xtensa's. These emit raw machine code — a setjmp buffer is a saved
+      register set and a stack pointer — and wasm has neither. It is also not
+      merely unimplemented: a wasm module's call stack is not addressable
+      memory, so there is nothing for longjmp to unwind ACROSS, and a
+      hand-rolled version could not be made correct later by adding an arm.
+
+      HONEST GAPS, NOT SILENT ONES: a C program calling setjmp or fesetround on
+      wasm32 fails to link, naming the symbol. That is the same standard the
+      xtensa split was held to, and it is why this skips the emitters rather
+      than emitting stubs that return 0 — a `setjmp` that quietly answers 0
+      every time is a program whose error path never runs.
+
+      BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
+      .c-unit pull carry the same condition, and changing one would make a C
+      program and a C unit disagree about which stubs exist. }
+    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
+      EmitCSetjmpStubs;
+    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
   end;
 
   firstIdx := TokPos - 1;
