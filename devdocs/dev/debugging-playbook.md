@@ -15382,3 +15382,71 @@ to identifiers, and it is easiest to get wrong when relaying **someone else's**
 comparison: the person who put the two side by side had the discriminator and the
 relayer had only the resemblance. **Ask what would distinguish them before
 carrying a pair forward as a pair.**
+
+## PROSE THAT HAS FAILED THREE TIMES IS NOT A GUARD — give the shared step ONE BODY
+
+`normalise-dont-special-case.md` says: fixed one arm of a double case, grep for
+the sibling before closing. Measured 2026-09-06, in the one loop whose own ticket
+is about that habit: **three fixes in a row landed on one arm and not its
+sibling** — the `movedOff` guard, the low-bound fold, and a pointer-depth seed.
+Each time the prose asking the next author to check the sibling was **already
+there**, in that file, in a comment the author read. One of them said it in as
+many words:
+
+```
+f()[i] spends a level exactly as f()^ does -- indexing a ^PChar result
+yields a PChar, not another ^PChar.
+```
+
+That comment sat in the arm the level-spend was dropped from.
+
+**A rule that has been read and skipped three times is not going to be read on
+the fourth.** The repair is not a louder comment and not a fourth reminder: the
+shared step became one procedure, `SeedSpendOneLevel`, called by both arms, and
+now **it cannot be given to one of them.** Prose asks; a shared body makes it
+structurally impossible.
+
+> **The counting rule:** the first time an arm is missed, fix it. The second
+> time, grep for the sibling. **The third time, the arms are the defect** — stop
+> fixing instances and unify the step. Three is not bad luck; it is the design
+> telling you it has two places where it needs one.
+
+## A CLEAN SWEEP CERTIFIES ONLY THE AXIS IT VARIED
+
+The same fix, from the instrument side, and it is the population version of
+*choose a probe whose right answer differs from the default*.
+
+The author's own differential probe was **green throughout and had no business
+being**: all seven rows had a SINGLE-LEVEL pointer result, and at depth one,
+*spending a level* and *handing back the seed unspent* produce the same answer.
+**The population contained no member that could tell the two arms apart.** Adding
+one `^PChar` row — a two-level result — fails on the pre-fix binary
+(`186937661 | e`, the routes disagree) and passes after.
+
+The probe varied the SUFFIX (`^`, `[`, a method call, a cast) thoroughly and held
+POINTER DEPTH at one throughout. So the sweep was a real sweep, over one axis,
+and it read as coverage of the construct.
+
+**Before trusting a green sweep, name the axes it varied and the axes it held
+CONSTANT.** The held ones are where a defect lives undetected, and a sweep is
+most convincing exactly when it is widest on the axis you happened to think of.
+A companion row helps more than more rows: the `midx` case here — the same chain
+off a METHOD — was green before and after, and that is what proved the defect was
+in the ARM rather than in the shape.
+
+## A BINARY PRINTING A STRING THAT IS NOT IN THE TREE IS A STALE BINARY, AND THE CHECK IS FREE
+
+CLAUDE.md's rule *"a nonzero exit deserves suspicion: grep the tree for the error
+string"* has a second, cheaper use: **run it on any diagnostic you are about to
+attribute to a commit.**
+
+Measured 2026-09-06. A session reproduced a red, wrote it into a commit message
+as belonging to a named commit, and that commit had already been REVERTED — the
+local binary predated the pull that `tools/sync.sh` does implicitly. The tell was
+sitting there: `grep PendPtr compiler/` found nothing while the session's own
+compiler was printing `PendPtr` in its diagnostic.
+
+**A diagnostic string is a fingerprint of the binary, not of the tree.** When the
+two disagree, the binary is older than the checkout, and every conclusion drawn
+from that run is about a compiler that no longer exists. One `grep`, no build, and
+it fires precisely in the case that otherwise costs a wrong public attribution.
