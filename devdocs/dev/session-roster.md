@@ -2814,3 +2814,35 @@ because that error was fresh enough to still be steering.
 ticket's log tail, which is from the original auto-file, plus frankD's diagnosis saying "still
 RED, both rows". I did NOT read frankB's re-run output. If frankB's run shows different rows,
 theirs is the measurement and mine is a document.
+
+## A LOCK NOBODY CAN LIFT — `owner:` naming a seat that no longer exists
+
+2026-09-06, frankD, and it is the one thing in their message that was mine rather than theirs.
+`feature-pascal-corpus-oop` [P p75] shows `STALE-PARK-HELD`, held by **frank-rust**, and the
+check's instruction was *"DO NOT CLAIM IT — tell the holder."* frankD flagged the lock and
+explicitly did not ask for the ticket.
+
+**Measured three ways that fail differently, because "the seat is gone" is exactly the claim a
+single instrument gets wrong:**
+
+| instrument | answer |
+| --- | --- |
+| `ListAgents` | 33 peers, **no frank-rust** |
+| `readlink /proc/<pid>/cwd` over every claude process | **no process** in `~/frank-rust` |
+| the checkout itself | clean tree, last commit **08-31 18:21**, six days old |
+
+**The ticket is FREE TO TAKE and the lock was never real.** CLAUDE.md: *"`working/` is a status
+hint, not a lock; `owner:` is ATTRIBUTION, not a claim — a parked ticket with an owner is free
+to take, message them for context."* The tool's guidance contradicted the rules file, and
+**precedence says CLAUDE.md wins** — so the defect was the instruction, not the ticket.
+
+**Fixed in the tool rather than answered in a message**, because a message reaches one reader
+and the string reaches everyone who runs `check`: the HELD branch now says *message the holder
+for context, and if the holder is not a LIVE SESSION, take it*, names `owner:` as attribution,
+and says that **an owner names a SEAT, and a seat is a checkout, not a continuous session** —
+with `ListAgents` as the check and this incident as the worked example.
+[[a-seat-is-a-checkout-not-a-continuous-memory]], [[an-absent-owner-has-two-causes-and-one-is-a-lost-write]].
+
+**The shape to watch for elsewhere: a tool that instructs an action requiring a party who may
+not exist creates a permanent flag nobody may act on.** Any "ask X before proceeding" needs an
+answer for *X is gone*, or it is a deadlock with a friendly voice.

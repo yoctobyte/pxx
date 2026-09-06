@@ -17298,6 +17298,53 @@ CLAUDE.md already requires the sha beside every NUMBER you report. **This extend
 VERDICTS**, which do not feel like numbers and get relayed as facts: *"test X is red"* has no
 slot for a tree, so the tree gets dropped and the reader fills it in with HEAD.
 
+## A CHECKER KEYED TO A MARKER STRING RETROACTIVELY RE-OPENS EVERYTHING FIXED BEFORE THE MARKER EXISTED
+
+Measured 2026-09-06 (frankD), sweeping STALE-PARK across Track P, and **it is the opposite
+failure from the one the check exists for: it MANUFACTURES work rather than hiding it.**
+
+`feature-pascal-corpus-generics` was already correct in substance — frankA established on
+**2026-08-30** that its blocker had landed and said so in prose. The literal marker string the
+checker reads (`PARK CONDITION SUPERSEDED`) **only exists as of 2026-09-06.** So a correct fix
+read as an unfixed park for a week, and — the part that makes it worse than a simple gap —
+**the section frankA wrote RECORDING the fix is itself one of the windows that fires**, because
+it names a now-resolved slug next to a blocking phrase.
+
+> **A marker convention has a birthday, and every correct fix older than it is retroactively
+> unmarked.** The flag then tells its next reader *"this condition may be live"* about
+> something a peer already established is not — and the evidence that it is not is sitting in
+> the very prose that trips the flag.
+
+**The cohort is the finding, not the instance.** If a marker convention is new, there is a whole
+population of parks fixed before it existed, all still flagged, all misinforming their next
+reader, and **none of them will clear by anyone doing more work** — they clear only by someone
+going back and stamping fixes that are already done. That is a sweep worth running per lane the
+day a marker convention lands, and it is nobody's ticket by default.
+
+**Generalises past this checker to every convention-keyed audit:** a `# noqa`, a `SAFETY:`
+comment, an `@expected_failure`, a suppression file. **Ask when the convention started and what
+the population before it looks like** — the answer is almost never "empty", and the pre-existing
+cohort is indistinguishable from live findings.
+
+### AND THE MARKER'S PLACEMENT CONFLICTS WITH MARKDOWN, SILENTLY, IN BOTH DIRECTIONS
+
+Same sweep. Two citations sat in **TABLE ROWS**. The checker wants the marker within +/-2 lines
+of the citation:
+
+- inserting it **between rows TERMINATES THE TABLE** — the document is corrupted and renders
+  wrong;
+- moving it **clear of the table** puts it **outside the window** — the flag keeps firing.
+
+**The only correct placement is to write the marker as a ROW OF THE TABLE.** The obvious repair
+is the one that corrupts, **and the check goes green either way, because it reads LINES and not
+STRUCTURE.**
+
+**The general form: a line-oriented checker imposing a line-oriented convention on a
+STRUCTURED document has a repair that satisfies the checker and breaks the document**, and
+nothing in the toolchain compares the two. Whenever a tool tells you to put a token near
+another token, ask what the surrounding syntax does with a line inserted there. This one is now
+in the checker's own guidance text so the next person is told before they hit it.
+
 ## A ZERO OVER A LARGE N IS A CLAIM ABOUT THE POPULATION THAT REACHED THE RULE — and the headline N is the pre-exclusion one
 
 Measured 2026-09-06 (frankB, `aacf8f6b8`), **caught by the author in their own favourable
