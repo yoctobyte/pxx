@@ -8945,6 +8945,71 @@ deliberate: it is the same fact taken from the one place that cannot contradict 
 array** — and this file's neighbouring section is a live case of two parallel arrays
 compacted in one place and not the other. **Prevented is cheaper than found.**
 
+## ASK WHICH REGISTRAR RAN, NOT WHICH COLUMNS LOOK LIKE THEY WOULD HOLD THE ANSWER
+
+Measured 2026-09-06 (frankB), and it is the *name is not the thing* with every name
+correct.
+
+A ticket said to fall back to *"the alias table"*. That was done exactly: `AliasTk`,
+`AliasElemRec`, `REC_UCLASS_BASE`, a wrapper saving the owner around the lookup. **It
+built, it self-hosted, and it resolved nothing.**
+
+`type TP = TThing` where `TThing` is a class **never reaches `RegisterGeneralAlias`** —
+`ParseTypeSection`'s `IsClassType` arm routes it to `RegisterUClassAlias`, a **third**
+table (`UClsAlias*`, three columns, no owner).
+
+> **Every field name in the wrong version was real. Every fact checked about it was
+> true.** The columns were verified, the registrar was verified, and **which registrar
+> the DECLARATION reached was never checked.**
+
+### The confidence-building step is the one that could not fail
+
+The check that produced the confidence was a grep of `RegisterGeneralAlias`'s call
+sites: two, both plausible.
+
+> **A census of the function you have already chosen can only return evidence that the
+> choice was fine.** A search that starts from the registrar cannot find the
+> declaration that reaches a *different* registrar — the same geometry as a search that
+> starts from a helper and cannot find the call that never calls it.
+
+**What caught it was dumping the whole table: fourteen rows, all builtins, no `TP`.**
+
+> **Nothing at the call site, in the column names, or in the comments says which of
+> three tables a `type X = Y` line lands in. Only running it does.** Ask which
+> registrar RAN.
+
+The ticket's own residual — *"two tables answering one question is the shape that
+predicts a fifth site"* — was **right about the shape and short by a table.** It is
+three.
+
+### And the fix-count symmetry, which closes the arity section from the other side
+
+The three sites all emitted `class method not found (<type name>)` and were **not one
+defect**: the bound folders never stripped the qualifier at all, while the constructor
+sites stripped it correctly **and then asked the wrong table.** Measured by wiring the
+strip into the bound folders FIRST — `Low` answered `1` and the constructor still
+answered the same message **byte for byte.**
+
+> **One emitter, two mechanisms. And the symmetric half: ONE fix covering three sites
+> would not have been evidence they were one defect either. The asymmetry is not in the
+> fix count.**
+
+`ErrorRecover('class method not found')` names the position and never the reason —
+the same rule reached from the other end by a probe whose type name was predeclared.
+
+### Two discipline notes from the same commit
+
+- **Scope MATCHED, not widened.** The new resolver's alias lookup is deliberately *not*
+  owner-scoped **because the declaration path is not either** — measured: `var x:
+  TOther.TP` compiles today for a `TP` declared in another class's body, since
+  `UClsAlias*` has no owner column. **Making the construction path agree exactly is a
+  fix; scoping both is a different change with a new column in it**, and it was not
+  smuggled in.
+- **Controls that were GREEN BEFORE the fix.** Four of the ten test rows are unqualified
+  and nested-class spellings that already passed. **A file containing only the red rows
+  cannot distinguish this fix from one that broke aliases, nesting, or `Low`/`High` in
+  general.**
+
 ## SCOUTING THE NEXT CEILING IS HOW YOU FIND A BUG IN THE CURRENT TREE
 
 Measured 2026-09-06 (frankH), and the discovery route is the point rather than the
