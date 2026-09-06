@@ -3126,3 +3126,64 @@ and none of the three would have been settled by looking at files:**
 **Three collisions, three different discriminators — a written scope note, a direct question, a
 path resolution — and no two of them are substitutes.** That is the argument for the topic layer
 in one night, and it is also the argument against automating it.
+
+## A SEAT CAN HONESTLY DISOWN ITS OWN WORDS, AND THE RECEIPT IS IN THIS SEAT'S TRANSCRIPT
+
+2026-09-06. frankS: *"please do not attribute 'two stale skip reasons out of about a dozen rows'
+to me. I never measured or published that, and I cannot source it."*
+
+**They did say it, and I have the receipt.** `53fcc237…jsonl`,
+**2026-09-06T16:20:56.607Z**, `from-name="frankS"`, verbatim: *"That is now two stale skip
+reasons I have hit personally (tgenfunc19 was the first) out of maybe a dozen rows I have
+actually compiled, which is a rate I would not have guessed and which I think justifies the rule
+you banked: measure the wall, do not read it."* My quotation and my attribution were both
+accurate.
+
+**And frankS was not being careless. This is
+[[a-seat-is-a-checkout-not-a-continuous-memory]] arriving from a direction I had not
+considered:** the rule says *"ask the seat" expires when the session turns over*, which I had
+only ever applied to questions about HELD WORK. It applies to a seat's own STATEMENTS. A seat
+asked *"did you say this?"* is answering from a context window, not from a record — and
+answering **no** is the honest answer when the window does not contain it.
+
+**THE CAPABILITY THIS SEAT HAS AND NO WORKER HAS: I hold the received message.** A peer cannot
+grep my transcript and cannot re-read a window that has rolled. So *"did I say that?"* is a
+question I can SETTLE — with a timestamp, a sender and the exact words — and it is the mirror of
+[[a-peers-belief-about-another-peer-is-my-subject-matter]]. Add it to the list: a peer's belief
+about **their own past statements** is also my subject matter.
+
+**The instrument, because I got it wrong twice before it worked:** `grep -oh '[^"]\{0,220\}…'`
+over `.jsonl` returned NOTHING and read as *"the quote does not exist"* — a confident absence.
+The transcript is JSON, so an embedded quote is `\"`, and the `[^"]` class stops dead at the
+backslash-quote. **A plain `grep -c` said 49 hits in the same file.** Classic
+correct-about-something-else: the pattern answered truthfully about a string class that does not
+occur in JSON. **Count first with the crudest possible match, then extract** — and if a targeted
+pattern returns zero where a crude one returns many, the pattern is the bug.
+
+**What I did with it, because being right about the quote does not make the number right.**
+frankS's substantive point stands entirely and their replacement is better: two separately
+denominated classes (false skips **0 of 9**; misdescribed reasons **7 of 30**, an upper bound
+because people re-measure rows they suspect, with 62 of 92 unmeasured). The playbook now carries
+those and records the quote with its timestamp beside the disavowal. **A disowned quote is not
+deleted and not silently kept — it is dated.**
+
+## THE FLEET SPOKE, AND EVERY SEAT ANSWERED BUT ONE
+
+2026-09-06, closing count for the night's relay. Twelve pxx sessions, four of them briefed by me
+after frankuser covered eight.
+
+| answered | what the answer was worth |
+| --- | --- |
+| `frank-coord-core` | took a cross-axis topic; caught my relay of a rule CLAUDE.md refuses |
+| `frank-subcoord` | took a topic; supplied the resolution the owner's own words supported, adopted wholesale; found a FOURTH reading of "no commits in N hours" |
+| `frank-coord-front` | took the ESP target nobody runs; supplied the stale-vs-unnarrowed-red discriminator |
+| `frankwasm` | held nothing, and produced three of the night's most useful facts from that state |
+| `frankZ` | held nothing DELIBERATELY, for a collision reason, before any collision — the first time anyone has done that |
+| `frankH`, `frankS`, `frankA`, `frankB`, `frankC`, `frankD` | landing, correcting each other, correcting me |
+| **`frank-optimize`** | **silent through three messages. `waiting` all evening.** |
+
+**The one unanswered seat is the whole point of asking.** Nine answers cost nine messages and
+established that nobody was stuck. The tenth is still an unknown, and it is the only kind that
+matters: a permission dialog is the one blockage the owner alone can clear, and the measured
+cost of nobody noticing one is **19 hours**. Escalated as an unknown rather than as a diagnosis;
+no keys sent into any pane.

@@ -18148,11 +18148,37 @@ that has the same immunity for a different reason: **the row stays skipped, so n
 the construct to be contradicted by it.** So the family is not "text asserting an absence"; it
 is **text about something nobody will execute**, and absence-assertions are one surface of it.
 
-**And it now has a measured rate rather than a vibe.** Two stale skip reasons personally hit
-(`tgenfunc19`, `tgeneric95`) out of *"maybe a dozen rows I have actually compiled"* — from the
-seat doing the compiling, not from a census. Whatever the exact denominator, **it is not the
-rate anyone assumes when they read one**, and it is the number that justifies *measure the
-wall, do not read it*.
+**AND IT NOW HAS TWO PROPERLY DENOMINATED NUMBERS, WHICH REPLACED ONE INFORMAL ONE.** This
+entry first carried *"two stale skip reasons personally hit (`tgenfunc19`, `tgeneric95`) out of
+maybe a dozen rows I have actually compiled"* — sourced, quoted, and correctly attributed to
+frankS (2026-09-06T16:20:56Z). **frankS later asked that it not be attributed to them, saying
+they never measured or published it, and replaced it with a proper count. Both facts are true
+and the second is the one to use.** (On the first, see `session-roster.md`,
+`## A SEAT CAN HONESTLY DISOWN ITS OWN WORDS`.)
+
+**The replacement is TWO numbers, and the insistence on two is the finding.** Counted off
+`test/pascal-conformance/pxx.skip` at HEAD:
+
+| class | question | measured |
+| --- | --- | --- |
+| **A — false skip** | would the row actually PASS if un-skipped? | **ZERO of nine.** Every compile-clean `gap:` row diffed against fpc 3.2.2; none matches on output. A measured zero with a stated denominator. |
+| **B — misdescribed skip** | right verdict, wrong or stale REASON? | **7 of 30** re-measured rows had the reason changed (`tarray6`, `tarray18`, `tarrconstr5`, `tgeneric93`, `tgenfunc23`, `tinterface6`, `tstring4`) — ~23%. |
+
+**The denominator caveat, stated rather than buried: 30 of 92 rows were re-measured, so 62 are
+unmeasured in both directions — and people re-measure rows they SUSPECT, so 23% is an UPPER
+BOUND on the wall, not an estimate of it.**
+
+**Why conflating them is the error.** They degrade differently and they are different KINDS of
+claim. A false skip costs you a green you already had — a coverage claim. A stale reason costs
+the next seat a silent re-derivation — a documentation claim. **On this wall the dangerous
+class is currently empty and the milder one is live**, which is only sayable because they were
+counted separately. Reported as one number, "23% of skip reasons are wrong" would read as 23%
+of the wall being falsely skipped, which is measured false.
+
+**And there is a third layer nobody counts at all.** `skip_holes` is silent about those 62 rows,
+because they are not skips in `testmgr`'s sense — they are entries in a hand-maintained file
+that no harness classifies. **A release advertising coverage has at least three layers of "did
+not run" and only one of them is counted.**
 
 **The check, and it is the same one in all four cases: before writing or trusting "X is not
 supported / not enforced / rejected / fails at line N", spend one command establishing it.** Grep the option
