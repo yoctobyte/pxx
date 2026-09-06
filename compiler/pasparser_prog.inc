@@ -780,7 +780,7 @@ procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     needsWide: Boolean;   { program can reach the UTF-16 runtime — see the token scan }
     needsEntropy: Boolean; { program names a hardware-entropy intrinsic — builtinentropy }
-    doneDecls, hasExceptions, needsBuiltin,
+    doneDecls, hasExceptions, needsBuiltin, needsSysGenerics,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
     needsSoftFloat, needsWasiFile: Boolean;
@@ -869,6 +869,7 @@ begin
   hasExceptions := False;
   hasCoroutine := False;
   needsBuiltin := False;
+  needsSysGenerics := False;
   needsTextfile := False;
   usesMath := False;
   needsMath := False;
@@ -1016,6 +1017,33 @@ begin
            CaseEqual(tnm, 'pxxwidefromutf8') or CaseEqual(tnm, 'pxxutf8fromwide') then
         begin needsWide := True; Break; end;
       end;
+  { `TArray<T>` — FPC declares it in the SYSTEM unit, so it is ambient there and
+    a program that names it carries no `uses` at all. pxx has no
+    lib/rtl/system.pas; compiler/builtin/sysgenerics.pas is the stand-in and
+    this is the door it comes through.
+
+    THE POPULATION THAT NEEDS IT IS THE ONE THAT COULD NOT REACH IT. TArray has
+    lived in lib/rtl/sysutils.pas, whose own comment claimed the SysUtils home
+    "covers every real consumer" on the strength of all seven rtl-generics files
+    naming TArray<> also using SysUtils — true, checked, and INVERTED in the
+    other corpus: of the six fpc-testsuite files naming TArray<>, zero use
+    SysUtils (trtti12, trtti16, tarray12, tarray18, tarrconstr5,
+    ttbitconverter). Structural, not luck — see sysgenerics.pas.
+
+    SysUtils keeps its declaration, because this scan sees THE PROGRAM'S TOKENS
+    AND NOTHING ELSE (builtinwide's note above records the same limit): a unit
+    naming TArray while the program does not triggers nothing here.
+
+    A false positive costs a six-line unit with no code in it, so no '(' rule
+    and no ESP gate — unlike `math`, whose `pi` is a plausible variable, and
+    unlike builtin, which ESP cannot compile at all. A program declaring its own
+    `TArray` still wins: its declaration is parsed after the injection and
+    shadows the template. Guarded by NoDefaultRtl like every other injection, so
+    the compiler's own PXX_NODEFAULTRTL self-build never reaches for it. }
+  if (not NoDefaultRtl) then
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'tarray') then
+      begin needsSysGenerics := True; Break; end;
   { ESP-class targets (xtensa always, riscv32 under --esp-profile=bare) have no
     FPU codegen at all: every float op lowers to a __pxx_* soft-float kernel that
     lives in the `softfloat` unit. Hosted riscv32/arm32 pull that unit
@@ -1757,6 +1785,25 @@ begin
     PxxEnvLoad and elfwriter do), so a miss through a unit is not reachable. }
   if needsWasiFile then ParseUsesUnitAmbient('wasibackend');
   if needsBuiltin then ParseUsesUnitAmbient('builtin');
+  { …and the System-unit GENERIC types, on the same terms. Injected AFTER
+    builtin so a program that needs both keeps the existing order. }
+  if needsSysGenerics then
+  begin
+    ParseUsesUnitAmbient('sysgenerics');
+    { AND THE DESUGAR, WHICH IS WHAT AN AMBIENT LOAD DOES NOT GET FOR FREE.
+      Registering the template is only half of importing one: a USE of it --
+      Delphi's bare `TArray<T>` and objfpc's inline `specialize TArray<T>` alike
+      -- is rewritten into an alias declaration by DelphiRewriteGenericUses, and
+      the sweep that runs it over an IMPORTED template is called from the end of
+      ParseUsesClause, which an ambient injection never enters.
+
+      MEASURED, because the failure looks nothing like the cause: with the
+      injection alone, a probe here printed `tmplcount=1 find=0` -- the template
+      registered and NAMEABLE -- while the same compile then answered `unknown
+      type: TArray` two lines later. An explicit `uses sysgenerics` worked, which
+      is what isolated the missing call rather than the missing template. }
+    DesugarImportedDelphiGenericUses;
+  end;
   { the TYPE is spelled PromoInt; the UNIT implementing it is promocore — see
     the note at the top of compiler/builtin/promocore.pas for why they differ }
   if needsPromoInt then ParseUsesUnitAmbient('promocore');

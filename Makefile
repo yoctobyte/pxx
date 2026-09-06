@@ -16267,6 +16267,12 @@ test-core: $(COMPILER)
 	grep -q "not a constant" $(TESTTMP)/test_clsnameint.log
 	./$(COMPILER) test/test_a_qualified_nested_type_can_be_a_base_class.pas $(TESTTMP)/test_qualnestbase26
 	tools/expect_same.sh test_qualnestbase26 "$$($(TESTTMP)/test_qualnestbase26)" "$$(cat test/test_a_qualified_nested_type_can_be_a_base_class.expected)"
+	./$(COMPILER) test/test_tarray_is_ambient_with_no_uses_clause.pas $(TESTTMP)/test_tarrayamb26
+	tools/expect_same.sh test_tarrayamb26 "$$($(TESTTMP)/test_tarrayamb26)" "$$(cat test/test_tarray_is_ambient_with_no_uses_clause.expected)"
+	./$(COMPILER) test/test_tarray_is_ambient_in_delphi_mode_and_yields_to_a_local_one.pas $(TESTTMP)/test_tarraydel26
+	tools/expect_same.sh test_tarraydel26 "$$($(TESTTMP)/test_tarraydel26)" "$$(cat test/test_tarray_is_ambient_in_delphi_mode_and_yields_to_a_local_one.expected)"
+	./$(COMPILER) test/test_a_program_declaring_its_own_tarray_shadows_the_ambient_one.pas $(TESTTMP)/test_tarrayshadow26
+	tools/expect_same.sh test_tarrayshadow26 "$$($(TESTTMP)/test_tarrayshadow26)" "$$(cat test/test_a_program_declaring_its_own_tarray_shadows_the_ambient_one.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
