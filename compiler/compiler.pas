@@ -2110,6 +2110,7 @@ begin
   Data[NEWLINE_OFFSET] := 10;
   BSSSize  := 0;
   StrCount := 0; FixCount := 0;
+  StrHashClear;   { the dedup index is indexed BY Strs slot, so it resets with StrCount }
   KeyCount := 0;
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   CallFixCapacity := 0; CodeRefCapacity := 0; GlobFixCapacity := 0;

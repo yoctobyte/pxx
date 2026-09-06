@@ -1692,24 +1692,81 @@ begin
   end;
 end;
 
-function InternStr(const s: AnsiString): Integer;
-var i, j: Integer; len, orAll, meta: Int64; match: Boolean;
+{ djb2, masked to 24 bits INSIDE the loop rather than at the end: h * 33 then
+  stays under 2^29, so this never depends on what signed overflow does -- the
+  compiler that runs this is also the compiler being built by it. }
+function StrHashOf(const s: AnsiString): Integer;
+var i, h: Integer;
 begin
-  for i := 0 to StrCount-1 do
+  h := 5381;
+  for i := 1 to Length(s) do
+    h := ((h shl 5) + h + Ord(s[i])) and $00FFFFFF;
+  StrHashOf := h;
+end;
+
+procedure StrHashClear;
+var i: Integer;
+begin
+  if Length(StrHashHead) = 0 then
+  begin
+    SetLength(StrHashHead, 4096);
+    StrHashMask := 4095;
+  end;
+  for i := 0 to StrHashMask do StrHashHead[i] := -1;
+end;
+
+{ Rehash into a table twice as wide. Called when the entry count reaches the
+  bucket count, i.e. at load factor 1 -- chains stay ~1 long and the whole point
+  of the index survives at 200k literals. }
+procedure StrHashGrow;
+var i, h, n: Integer;
+begin
+  n := (StrHashMask + 1) * 2;
+  SetLength(StrHashHead, n);
+  StrHashMask := n - 1;
+  for i := 0 to StrHashMask do StrHashHead[i] := -1;
+  for i := 0 to StrCount - 1 do
+  begin
+    h := StrHashOf(Strs[i].Text) and StrHashMask;
+    StrHashNext[i] := StrHashHead[h];
+    StrHashHead[h] := i;
+  end;
+end;
+
+function InternStr(const s: AnsiString): Integer;
+var i, j, h: Integer; len, orAll, meta: Int64; match: Boolean;
+begin
+  if Length(StrHashHead) = 0 then StrHashClear;
+  h := StrHashOf(s) and StrHashMask;
+  i := StrHashHead[h];
+  while i >= 0 do
   begin
     if Strs[i].Len = Length(s) then
     begin
       match := True;
-      for j := 1 to Length(s) do
+      j := 1;
+      while match and (j <= Length(s)) do
+      begin
         if Strs[i].Text[j] <> s[j] then match := False;
+        Inc(j);
+      end;
       if match then begin Result := i; Exit; end;
     end;
+    i := StrHashNext[i];
   end;
   if StrCount >= StrCap then
   begin
     if StrCap = 0 then StrCap := 1024 else StrCap := StrCap * 2;
     SetLength(Strs, StrCap);
+    SetLength(StrHashNext, StrCap);
   end;
+  if StrCount >= StrHashMask + 1 then
+  begin
+    StrHashGrow;
+    h := StrHashOf(s) and StrHashMask;   { the mask moved under us }
+  end;
+  StrHashNext[StrCount] := StrHashHead[h];
+  StrHashHead[h] := StrCount;
   Strs[StrCount].Text   := s;
 
   { ---- the static managed-string header, laid down BEFORE Offset is taken ----

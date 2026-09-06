@@ -3170,6 +3170,17 @@ var
   Strs     : array of TStrEntry;
   StrCount : Integer;
   StrCap   : Integer;
+  { Dedup index over Strs, added because removing MAX_STRS turned a hard error
+    into a TIME ceiling: InternStr used to linear-scan the whole table on every
+    literal. Open chaining -- StrHashHead[bucket] is the newest entry in that
+    bucket or -1, StrHashNext[i] the next one. Parallel to Strs and grown with
+    it, so index identity is preserved and the entries keep the numbers they
+    would have had; this changes only which entries get COMPARED, never which
+    one wins, because dedup makes at most one entry in a bucket match.
+    feature-dynamic-compiler-tables }
+  StrHashHead : array of Integer;
+  StrHashNext : array of Integer;
+  StrHashMask : Integer;
 
   { `uses` edge table (bug-pascal-uses-is-transitive measurement step): one
     entry per `uses X` clause actually parsed, recorded even when X was

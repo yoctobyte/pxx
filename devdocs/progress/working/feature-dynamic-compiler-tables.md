@@ -691,3 +691,66 @@ usability. A hash index over the pool is the fix and it is the natural next
 change; until it lands, do not quote the lifted cap as though 200k literals were
 practical. Nothing here is a regression: this cost is unchanged by the
 conversion, it is merely now reachable.
+
+## 2026-09-06 (frankH) — InternStr hash index: the lifted cap made usable
+
+Removing `MAX_STRS` swapped a hard error for a time ceiling. This closes it.
+
+`InternStr` dedups through an open-chained index parallel to `Strs`
+(`StrHashHead` / `StrHashNext`, doubled at load factor 1) instead of scanning
+the whole table. **Index identity is preserved** — entries keep the numbers they
+would have had — so this changes only which entries get COMPARED, never which
+one wins: dedup guarantees at most one entry per bucket can match.
+
+| literals | linear | hashed |
+| --- | --- | --- |
+| 5000 | 1.27s | 0.94s |
+| 10000 | 2.13s | 1.30s |
+| 20000 | 6.60s | 1.48s |
+| 40000 | 22.24s | 1.68s |
+| 66000 | (refused before `Strs`) | 3.42s |
+
+Emitted output byte-identical at every size, which is the requirement: this is a
+performance change and any output difference would be a defect, not a feature.
+
+The hash is djb2 masked to 24 bits **inside** the loop, so `h * 33` stays under
+2^29 and the result never depends on what signed overflow does — the compiler
+running this code is also the compiler being built by it.
+
+### The next cap in the chain, found by pushing past this one
+
+200000 literals now answers **`error: fixup overflow`** — `MAX_FIXUPS` = 131072.
+Third time this ticket has hit a cap it was not aiming at, and the chain is now
+documented end to end for one input shape: `data overflow` → `string table
+overflow` → (time) → `fixup overflow`. **Each conversion reveals the next
+ceiling, and the reveal is the only way any of them were known to be reachable.**
+
+`MAX_FIXUPS` sizes THREE parallel arrays — `Fixups`, `FixupPCRel`,
+`FixupPicDelta` — so it is the first family here where the ticket's
+"parallel arrays must grow in lockstep" landmine actually bites.
+
+### A DEFECT FOUND WHILE SCOUTING IT, not by this ticket's grep
+
+`Fixups` is compacted in two places and only one of them is right.
+
+- `dce.inc` shifts the record **and** both parallel arrays, with a comment
+  saying why: *"They are parallel BY INDEX, so compacting the record without
+  them hands every surviving site the flags of whoever used to sit at its new
+  index."*
+- `compiler.pas`, the `DATAREF_DROP` arm, does `for j := i to FixCount - 2 do
+  Fixups[j] := Fixups[j + 1]; Dec(FixCount);` and moves **neither** parallel
+  array.
+
+`FixupPCRel` is initialised `False` per entry and set `True` on the i386 PIC
+path, so it is genuinely heterogeneous within one build; `FixupPicDelta` carries
+a per-site anchor delta. After a drop, every surviving fixup past `i` reads its
+neighbour's relocation flags — wrong addresses, silently.
+
+**Honest scope: found by inspection and by the sibling's own comment, not by a
+failing program.** Exposure needs a `DATAREF_DROP` (common — a module with no
+RTTI registry or no resource table) *and* a `FixupPCRel = True` entry after it,
+which is i386 PIC. That is precisely the defect class this repo's default
+instruments cannot see, because the dev loop, `gate.sh quick` and the pin all
+run on x86-64. Fixing it next; it is two lines and the invariant is not in
+question — the disagreement is between a comment that states it and code that
+does not honour it, and the comment is the one that is right.

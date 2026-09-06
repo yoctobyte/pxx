@@ -3291,6 +3291,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-relative-import-in-package-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at edfcdcaf3a5c (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-relative-import-in-package | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-star-args-ctor | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_args_ctor.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_args_ctor.npy /tmp/test_nilpy_star_args_ctor26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-operand-in-a-variant | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy red at 39d4afb022ce (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy red at b4d62b3dcfde (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
