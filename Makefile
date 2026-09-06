@@ -15936,6 +15936,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_case_sensitive26 "$$($(TESTTMP)/test_case_sensitive26)" "$$(printf '10\n20\nupper\nlower')"
 	! ./$(COMPILER) test/test_case_sensitive_error.pas $(TESTTMP)/test_case_sensitive_error26 > $(TESTTMP)/test_case_sensitive_error.log 2>&1
 	grep -q "undefined variable (VALUE)" $(TESTTMP)/test_case_sensitive_error.log
+	# A WHOLE-ARRAY assignment destination is type-checked. All four spellings
+	# (ident, class field, deref, dynamic field) accepted `sa := s` and two of them
+	# SIGSEGV'd; fpc refuses all four. The refusal is a NARROWING, so the shapes
+	# that must keep compiling are asserted FIRST and are drawn from the
+	# PXXDBG=a.wholearr census (2109 files, 1445 whole-array destinations, zero
+	# refused) rather than from imagination -- rows 6-9 of that file are the four
+	# families the first candidate rule would have rejected.
+	./$(COMPILER) test/test_a_whole_array_destination_takes_every_shape_the_census_found.pas $(TESTTMP)/test_wholearr_shapes26
+	tools/expect_same.sh test_wholearr_shapes26 "$$($(TESTTMP)/test_wholearr_shapes26)" "$$(printf 'fails=0\nWHOLEARRSHAPES OK')"
+	! ./$(COMPILER) test/test_a_whole_array_destination_refuses_a_scalar.pas $(TESTTMP)/test_wholearr_refuse26 > $(TESTTMP)/test_wholearr_refuse.log 2>&1
+	grep -q "cannot assign s (AnsiString) to a whole array" $(TESTTMP)/test_wholearr_refuse.log
+	# ...and all FOUR destination spellings are reported, not just the first: the
+	# check recovers, and a fatal one would have certified three of them untested.
+	test "$$(grep -c 'to a whole array' $(TESTTMP)/test_wholearr_refuse.log)" = 4
 	# FPC-parity nested {} comments by default (delphi mode / NESTEDCOMMENTS OFF stay flat)
 	./$(COMPILER) test/test_nested_comments.pas $(TESTTMP)/test_nested_comments26
 	tools/expect_same.sh test_nested_comments26 "$$($(TESTTMP)/test_nested_comments26)" "$$(printf '3\nNESTED COMMENTS OK')"

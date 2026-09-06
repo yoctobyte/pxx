@@ -8620,23 +8620,48 @@ end;
   Deliberately writeln and not WarnAt, for PxxArityProbe's reason one screen
   up: a measurement must not touch WarnCount or interact with -Werror. }
 function DbgWholeArrRhsShaped(rhs: Integer): Boolean;
+{ TRUE = keep, FALSE = the candidate refusal fires.
+
+  MEASURED, NOT DESIGNED. The first version of this asked the opposite
+  question -- "is the right-hand side positively array-SHAPED" -- and the census
+  over test/ and examples/ said it would refuse 49 sites in 12 files, every one
+  of them legal: a function returning a static array (35), an AN_INDEX yielding
+  a fixed ROW out of a dynamic array (6), an indirect or interface call of the
+  same shape (4), `Default(T)` on an aggregate (3), and the zero literal
+  `Default` of a dynamic array lowers to (1). ZERO of the 49 were the defect.
+  The reason is structural and it is worth keeping: there is no reader in the
+  tree that can say "this expression's VALUE is an array" for a call result or
+  a row, so a rule phrased that way refuses everything it cannot see.
+
+  So it is phrased the other way round, which is also the funnel's own
+  documented policy one screen up: refuse only what can be POSITIVELY typed as
+  a non-array value, and accept everything else. An IDENT is the one spelling
+  where that is a recorded flag on a symbol that exists -- `Syms[si].IsArray` --
+  rather than a False that might mean "not found". Cost over the same corpus:
+  ZERO sites. It is exactly the four rows the ticket reports, whose right-hand
+  side is an AnsiString identifier in all four.
+
+  The four exclusions below are AssignSideKind's, for its reasons: a by-ref or
+  untyped slot holds an ADDRESS, a procvar's kind is its RESULT's, a captured
+  cell is one indirection away, and an INTERFACE variable is spelled tyRecord.
+  None of them can be read as "not an array" from the symbol row.
+
+  NOT COVERED, deliberately and measured rather than assumed: a FIELD or a
+  DEREF right-hand side. `RecFieldIsArray` returns False both for a field that
+  is not an array and for a field it did not find, and no reader in the tree
+  separates those two -- so a refusal there would fire on an unresolved record,
+  which is a false reject of working code. `sa := c.Name` therefore still
+  compiles and still crashes; it is a named blank on the ticket, not a clear. }
 begin
   DbgWholeArrRhsShaped := True;
-  if rhs < 0 then Exit;   { no RHS to disagree with }
-  { nil — see the header. }
-  if (ASTKind[rhs] = AN_INT_LIT) and (ASTIVal[rhs] = 0) and
-     (ASTTk[rhs] = Ord(tyPointer)) then Exit;
-  { A whole array in any of its three lvalue spellings: ident, field, deref. }
+  if rhs < 0 then Exit;
+  if ASTKind[rhs] <> AN_IDENT then Exit;
+  if (Integer(ASTIVal[rhs]) < 0) or (Integer(ASTIVal[rhs]) >= SymCount) then Exit;
   if ASTNodeIsWholeArray(rhs) then Exit;
-  { ...and any expression whose VALUE is a dynamic array: a dyn-array-returning
-    call, Copy, a retagged array constructor, an open-array parameter. }
-  if NodeDynDepth(rhs) >= 1 then Exit;
-  { The array-shaped node kinds that are not yet retagged, so their dyn depth
-    is not readable here. }
-  if (ASTKind[rhs] = AN_ARRAY_CTOR) or (ASTKind[rhs] = AN_SET_LIT) or
-     (ASTKind[rhs] = AN_DYN_COPY) or (ASTKind[rhs] = AN_DYN_INSERT) or
-     (ASTKind[rhs] = AN_DYN_DELETE) or (ASTKind[rhs] = AN_VARREC_ARRAY) or
-     (ASTKind[rhs] = AN_SLICE) then Exit;
+  if Syms[ASTIVal[rhs]].IsRef then Exit;
+  if SymProcSig[ASTIVal[rhs]] >= 0 then Exit;
+  if SymCellPtr[ASTIVal[rhs]] >= 0 then Exit;
+  if RecIsReferenceShaped(Syms[ASTIVal[rhs]].RecName) then Exit;
   DbgWholeArrRhsShaped := False;
 end;
 
@@ -12663,6 +12688,39 @@ begin
         asked-and-off, so an unset PXXDBG costs one integer compare per
         assignment. bug-p-a-whole-array-assignment-destination-is-never-type-checked }
       if DbgWholeArrMode <> 1 then DbgWholeArrMaybe(node);
+
+      { ...AND THE REFUSAL THE CHANNEL ABOVE WAS BUILT TO SIZE. `sa := s` -- a
+        managed string assigned to a WHOLE static array of AnsiString --
+        compiled and SIGSEGV'd in all four destination spellings (ident, class
+        field, deref, dynamic field); fpc 3.2.2 refuses every one.
+
+        IT IS THE FALLBACK THAT LET IT THROUGH, NOT A MISSING ARM. An array's
+        TypeKind IS its element's kind, so AssignSideKind cannot type an
+        array-valued side and returns False -- and the funnel above
+        short-circuits on that False into its documented fall-back-to-accept.
+        The bail that reads as a safety measure is the thing storing the handle.
+        Adding an arm to AssignSideKind cannot fix it: there is no TTypeKind for
+        "array of AnsiString" to return.
+
+        MEASURED BEFORE LANDED, because it is a NARROWING and that is the whole
+        reason it sat as a ticket. PXXDBG=a.wholearr over test/ + examples/,
+        2109 files, 1834 compiled to the end, 1445 whole-array destinations:
+        the candidate rule refuses ZERO of them. The FIRST candidate -- "the
+        right-hand side must be positively array-SHAPED", which is what the
+        ticket prescribed -- refused 49 legal sites and none of the defect, and
+        that measurement is why the rule is phrased the other way round. See
+        DbgWholeArrRhsShaped, which IS this rule; there is no second copy to
+        drift.
+
+        Recovering rather than fatal, matching the funnel above. }
+      if (not CProgramMode) and (not PyProgramMode) and
+         ASTNodeIsWholeArray(ASTLeft[node]) and
+         (not DbgWholeArrRhsShaped(ASTRight[node])) then
+        ErrorAtRecover(ASTLine[node],
+          'incompatible types: cannot assign ' +
+          Syms[ASTIVal[ASTRight[node]]].Name + ' (' +
+          TypeKindSpelling(Syms[ASTIVal[ASTRight[node]]].TypeKind) +
+          ') to a whole array');
 
       { ...AND A SECOND PAIR THE KIND CANNOT EXPRESS: a FIXED-length array
         assigned to a DYNAMIC one. `var d: array of LongInt; s: array[0..2] of
