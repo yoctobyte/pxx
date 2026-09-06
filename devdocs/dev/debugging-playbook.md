@@ -16097,3 +16097,44 @@ nothing changed, and the test suite agrees with them. The suite is answering a
 different question — "does anything I assert differ" — and on a refactor that is
 the question you already know the answer to.
 
+## YOU CANNOT ENUMERATE ABSENCES FROM THE THING THEY ARE ABSENT FROM — instrument the OPERATION, not the structure you expect around it
+
+Measured 2026-09-06 by frankD, hunting the eighth hand-written bracket-argument
+door in the Pascal parser. **Four wrong guesses**, all from the same search:
+
+> *"I kept marking loops that walk `ParamCount` — a reasonable model of 'argument
+> loop' that the guilty loop does not fit, since it walks nothing."*
+
+What worked, in one build: **mark every `ParseExpr;` and `ParseArgExpr;` in the
+parser and print only when the current token is `[`.**
+
+**The framing that matters is not "my hypothesis was wrong".** It is frankD's
+correction to that framing:
+
+> **"A search keyed on structure cannot find a site that LACKS the structure, and
+> 'lacks it' is exactly the defect."**
+
+Marking every loop over `ParamCount` is a search for argument loops. The door
+survived eight separate fixes because it **hand-rolls** one — it is invisible to
+the search by the same property that makes it a bug.
+
+**Three independent routes to one rule, all measured in this repo:**
+
+| route | the search | what it cannot see |
+| --- | --- | --- |
+| a caller census | grep the helper's name | the copy that does not call the helper |
+| a set difference between two tables | rows where they disagree | a row absent from both |
+| a structural mark-up | loops shaped like argument loops | the loop that walks nothing |
+
+**So: when the defect is "X is missing here", never search for X.** Search for the
+OPERATION that X exists to perform — the `[` being consumed, the argument being
+parsed, the address being taken — and let the sites that do it without X fall out.
+The operation is a fact about the program; the structure around it is your model
+of the program, and on exactly the sites you are hunting the model is wrong.
+
+**The cheap tell that you are doing this backwards:** your search returns a clean
+population and the bug is still there. A search keyed on the right operation
+returns a MESSY population — every site, correct and incorrect together — and the
+filtering is yours to do afterwards. A tidy result from a structural search is the
+search agreeing with your hypothesis.
+

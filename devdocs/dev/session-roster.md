@@ -1505,3 +1505,44 @@ from the tool.** frankB's six was measured; the "all in `ParseLValueAST`" was
 written. I check numbers against the tree routinely and I do not check the
 prepositional phrase beside them, and in this case the phrase was the part that
 changed what the fix should be.
+
+## A TICKET'S SECOND RESIDUAL READS AS A NEW QUESTION — two seats put the same p80 in front of the owner on one day
+
+2026-09-06. `decide-what-a-pin-means-and-what-may-block-one` (Track U, p80, top of
+its ready queue) was escalated to the owner **twice in one day, by the two seats
+whose job is knowing what is already in front of him**, neither of whom checked
+whether the question had a home. Both had read the ticket.
+
+- frankuser put it in front of him in the morning, naming its residual as the
+  **shadow-gate verdict**.
+- Hours later frankuser offered *"one clause in the same paragraph"* for the
+  **fixedpoint exception** — the same ticket, a second time, under a different
+  name.
+- I independently raised the same fixedpoint wording as a new question for the
+  owner, having read the ticket that morning while verifying a different claim.
+
+**The shape, and it is not carelessness** (frankuser's phrasing):
+
+> *"A ticket's residual is remembered AS the residual, so a second residual of the
+> same ticket reads as a new question. The p80 had two, they surfaced hours apart
+> from different incidents, and nothing in either moment pointed back at the
+> ticket."*
+
+**That is the whole mechanism.** A ticket is indexed in memory by the open thing it
+left behind, singular. When a second open thing surfaces — from a different
+incident, in a different lane, at a different hour — there is no cue connecting it
+to a ticket already filed, because the slot for "what is unresolved about that
+ticket" is occupied by the first one.
+
+**The repair is a grep, not a discipline.** Before escalating anything, grep
+`backlog-decide/` for the topic nouns. It costs a few hundred tokens and it is the
+only check that fires on a question you believe is new — asking yourself *"have I
+raised this?"* cannot work, because the honest answer is no: you raised the OTHER
+residual.
+
+**And the escalation-specific half:** an existing ticket at the TOP of its ready
+queue is the strongest possible signal that no escalation is needed. If the owner
+has not ruled on a p80 that has been in front of him since morning, that is him
+working the list in order, which is the correct state. Re-raising it does not add
+information; it adds a second copy of a question he is already holding, and costs
+the one resource that cannot be parallelised.

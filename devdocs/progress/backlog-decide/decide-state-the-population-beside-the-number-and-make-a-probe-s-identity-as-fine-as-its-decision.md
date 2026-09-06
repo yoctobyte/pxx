@@ -108,9 +108,56 @@ emits when you write the probe, because reproducing it is what you just did. You
 do not necessarily know the type's default, and you are certainly not thinking
 about it.
 
+### A THIRD ROW ARRIVED THE SAME DAY AND IT WIDENS THE SCOPE PAST "GUARD"
+
+frankD, bisecting the bracket-argument door, varied the parameter list with
+`['x']` and got *"compiles"* on four shapes — concluding the shape did not matter.
+**A one-character string is a legal set item**, so all four rows were passing **as
+sets**. `['#0']` failed all four.
+
+**That is not a fourth instance of the same thing; it is the rule outside the
+population it is written about.** The existing clause is about a GUARD, where the
+failure mode is a green row. This is a BISECT, where the failure mode is a
+**BOUNDARY** — and frankD's own reason for why that is worse is the durable part:
+
+> *"A green row gets re-run and a boundary becomes the shape of the ticket and is
+> never re-derived. I was one sentence from writing 'the parameter list does not
+> matter' into a summary as a measured property."*
+
+**frankD's generalisation, offered for the row and better than the one it
+replaces**, because it does not require knowing in advance which kind of thing you
+are building:
+
+> **A probe you are going to reason FROM needs a correct answer the failure mode
+> cannot produce.**
+
+That covers guards, bisects, censuses and controls in one sentence. The existing
+clause covers only the first.
+
+### THE AXIS THE OWNER WILL ACTUALLY DECIDE ON: FOUR OF THE FIVE ADD, ONE REPLACES
+
+Requested by frankuser, and it is the right frame. The owner's stated reason for
+the 2026-08-31 cut was that **every session pays the file at startup**, so the
+question in front of him is not "is each proposal correct" — several are — but
+what the file costs afterwards. That split is currently something a reader has to
+derive by reading all five.
+
+| | proposal | effect on the file |
+| --- | --- | --- |
+| 1 | canary rc-vs-stage (A) | **ADDS** |
+| 2 | encoding rules as checks (B) | **ADDS** |
+| 3 | state the POPULATION beside the number (franka-29) | **ADDS** |
+| 4 | match a probe's IDENTITY to its decision (franka-29) | **ADDS** |
+| 5 | **this one — the colliding expected value** | **REPLACES** |
+| — | `decide-a-repro-line-in-a-ticket-is-not-a-command-anyone-has-run` (frankh-15) | recommended AGAINST by this ticket |
+
 **PROPOSAL: replace the second half of the CLAUDE.md clause with the playbook's
-phrasing, keeping the `sizeof` measurement as its example.** This is the only one
-of the five queued proposals that is a REPLACEMENT rather than an addition — it
-leaves the file the same length or shorter, which is the failure mode this ticket
-opened by naming (*"they should be judged together, or the file grows by
-accretion"*).
+phrasing, keeping the `sizeof` measurement as its example.** It leaves the file
+the same length or shorter, which is the failure mode this ticket opened by naming
+(*"they should be judged together, or the file grows by accretion"*).
+
+**And the evidence for it is of an unusual kind, which is the reason to lead with
+it:** the rule has been in the file since 09-02, was in context at startup for all
+three seats, and was broken three times in one day in three different frontends by
+people who had read it. **That is not a rule anyone failed to read.** A fourth
+copy is the response that cannot help.
