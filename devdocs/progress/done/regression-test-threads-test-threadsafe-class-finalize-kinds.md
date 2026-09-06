@@ -76,4 +76,4 @@ as a bound came from the full tier ten minutes later. A bisect driven from that
 range searches a window that excludes the actual cause entirely. The real
 untested window was `12af8ef6..918842a5`. frankuser raised the guard-hole with
 Track T; recorded here so the range in this ticket is not read as sound.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1fc59d487.
