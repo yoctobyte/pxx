@@ -38,7 +38,7 @@ uses palparallel;
 const
   N = 100000;
   M = 20000;
-  S = 4000;
+  NSTR = 4000;
 
 var gbad: Integer;
 
@@ -92,7 +92,7 @@ begin
     enclosing handle: a private that shared the outer handle would race on its
     refcount, not merely on its value. }
   sacc := 0; s := 'OUTER';
-  parallel(pdChunked) for i := 0 to S-1 reduction(+: sacc) private(s) do
+  parallel(pdChunked) for i := 0 to NSTR-1 reduction(+: sacc) private(s) do
   begin
     s := '';
     SetLength(s, 8);
@@ -105,7 +105,7 @@ begin
     nothing back, which is the whole difference from `reduction`. }
   WriteLn('OUTER ', j, ' ', d:0:1, ' ', b, ' ', c, ' <', s, '>');
 
-  if (acc <> (M * 3) div 2) or (bad <> 0) or (sacc <> S) then gbad := gbad + 1;
+  if (acc <> (M * 3) div 2) or (bad <> 0) or (sacc <> NSTR) then gbad := gbad + 1;
 end;
 
 begin

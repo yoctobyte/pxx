@@ -46,10 +46,10 @@ type
   PPtrUInt = ^PtrUInt;
 
 const
-  SPARE = 65536;
+  SPARE_BYTES = 65536;
 
 var
-  spare: array[0..SPARE - 1] of Byte;
+  spare: array[0..SPARE_BYTES - 1] of Byte;
   hits: Integer;
   depth: Integer;
   after: Integer;
@@ -65,7 +65,7 @@ begin
   if hits > 3 then
     Halt(3);   { the fault loop this ticket is about — bail, do not hang }
   PPtrUInt(__pxxSigSPPtr)^ :=
-    (PtrUInt(@spare[SPARE - 1]) - 256) and not PtrUInt(15);
+    (PtrUInt(@spare[SPARE_BYTES - 1]) - 256) and not PtrUInt(15);
   PPtrUInt(__pxxSigPCPtr)^ := PtrUInt(@Raiser);
 end;
 

@@ -11976,6 +11976,25 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     envPi: Integer;   { __pxx_set_environ, for the init thunk }
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
 begin
+  { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
+    given on the command line. ParseUsesUnitBody already forces the same mode
+    around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive
+    (symtab.inc) is written for exactly this split -- but the top-level entry
+    never called it, so every symbol in a C PROGRAM was registered
+    case-INsensitively.
+
+    It was invisible until 2026-09-06 because FindSym walked the whole chain
+    exact-case FIRST and only then case-insensitively: an exact match always
+    won, whatever the mode said, so `I` and `i` stayed apart by accident of
+    lookup order. Once that became one scope-ordered walk (99c416b54), the
+    NEARER `i` -- an ordinary `int i` local -- started answering for a file-scope
+    `double I[]`, and `sizeof(I)/sizeof(I[0])` came back as a size of int.
+    test/cfloat_global_array_implicit_len_b386.c returned 3 instead of 42.
+
+    Every token in this stream is C: the crtl/pxxcio pulls below arrive through
+    CLexAppend, which lexes them as C too, so there is no Pascal region to
+    restore the mode for. Set once, at the top, before any registration. }
+  CaseSensitiveMode := True;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
   { Token count of the USER program, captured before any unit pull. The pulls

@@ -29,10 +29,10 @@ type
   PPtrUInt = ^PtrUInt;
 
 const
-  SPARE = 65536;
+  SPARE_BYTES = 65536;
 
 var
-  spare: array[0..SPARE - 1] of Byte;
+  spare: array[0..SPARE_BYTES - 1] of Byte;
   hits: Integer;
   onSpare: Boolean;
   p: ^Integer;
@@ -43,7 +43,7 @@ var
 begin
   frame := 1;
   onSpare := (PtrUInt(@frame) >= PtrUInt(@spare[0])) and
-             (PtrUInt(@frame) <= PtrUInt(@spare[SPARE - 1]));
+             (PtrUInt(@frame) <= PtrUInt(@spare[SPARE_BYTES - 1]));
   if frame = 1 then
     raise 99;
 end;
@@ -56,7 +56,7 @@ begin
   { 256 bytes of headroom under the top: the resumed proc's prologue writes
     BELOW the SP the kernel restores. Aligned to 16 for every hosted ABI. }
   PPtrUInt(__pxxSigSPPtr)^ :=
-    (PtrUInt(@spare[SPARE - 1]) - 256) and not PtrUInt(15);
+    (PtrUInt(@spare[SPARE_BYTES - 1]) - 256) and not PtrUInt(15);
   PPtrUInt(__pxxSigPCPtr)^ := PtrUInt(@Raiser);
 end;
 

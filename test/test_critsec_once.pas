@@ -1,14 +1,14 @@
 program test_critsec_once;
 { M2: FPC-compatible TRTLCriticalSection + RunOnce (x86-64). NT threads each:
   (1) RunOnce(@OnceInit) — across all racers the initialiser must run EXACTLY once;
-  (2) K increments of a shared counter guarded by EnterCriticalSection/Leave.
-  Final counter = NT*K (mutual exclusion) and init-ran = 1 (once semantics). Builds
+  (2) KITER increments of a shared counter guarded by EnterCriticalSection/Leave.
+  Final counter = NT*KITER (mutual exclusion) and init-ran = 1 (once semantics). Builds
   on the M1/M2/M3 PAL — libc-free. }
 uses palthread, palsync, palthreadobj;
 
 const
   NT = 8;
-  K  = 50000;
+  KITER  = 50000;
 
 var
   cs:        TRTLCriticalSection;
@@ -32,7 +32,7 @@ procedure TW.Execute;
 var k: Integer;
 begin
   RunOnce(onceCtl, @OnceInit);
-  for k := 1 to K do
+  for k := 1 to KITER do
   begin
     EnterCriticalSection(cs);
     csCounter := csCounter + 1;
@@ -53,8 +53,8 @@ begin
   for i := 0 to NT - 1 do w[i].Start;
   for i := 0 to NT - 1 do w[i].WaitFor;
 
-  writeln('critsec=', csCounter, ' expected=', NT * K);
+  writeln('critsec=', csCounter, ' expected=', NT * KITER);
   writeln('init ran=', initRan, ' expected=1');
-  if (csCounter = NT * K) and (initRan = 1) then writeln('CRITSEC_ONCE OK')
+  if (csCounter = NT * KITER) and (initRan = 1) then writeln('CRITSEC_ONCE OK')
   else writeln('CRITSEC_ONCE FAIL');
 end.
