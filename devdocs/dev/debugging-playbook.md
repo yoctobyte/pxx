@@ -15549,3 +15549,51 @@ two were **not constructed either way**, and the file says *"reachability asked 
 not demonstrated"* in those words, so the next reader cannot inherit an untested
 row as a clearance. **An exemption list that does not distinguish "checked and
 fine" from "not checked" is a clean bill of health written by nobody.**
+
+## A `pgrep -f` WAITER MATCHES ITSELF — a wait whose own existence falsifies its termination condition
+
+Measured 2026-09-06, four sessions, up to **96 minutes** of silent block. Three
+seats wrote the same natural wait:
+
+```sh
+until ! pgrep -f 'bash tools/gate.sh quick' >/dev/null; do sleep 5; done
+while pgrep -f "gate.sh quick" >/dev/null; do sleep 20; done
+```
+
+**`pgrep -f` matches the FULL COMMAND LINE, and the waiter's command line
+contains the string it is grepping for.** Each waiter matches every other waiter
+*and itself*. With the real gates long finished, four waiters sat seeing three
+peers each and none could ever exit:
+
+```
+ps -eo args= | grep -c "^bash tools/gate[.]sh"   ->  0    real gates running
+pgrep -f "gate[.]sh quick" | wc -l               ->  4    what the loop sees
+```
+
+**It is not a slow wait. It is permanent, and it is silent** — no error, no
+timeout, just `sleep` forever. A deadlocked waiter and a gate that is still
+running are **the same observation from inside**, so the session reports itself as
+working. This is the *"a session cannot see its own blockage"* class arriving
+through a **wait** rather than a permission dialog: the condition trapping the
+session is one it wrote itself, and its own existence is what makes it false.
+
+**THE FIX IS TO ANCHOR ON argv**, which discriminates because the two populations
+differ at position zero — a real gate's argv starts with `bash tools/gate.sh`, a
+waiter's with `/bin/bash -c source ...`:
+
+```sh
+until [ "$(ps -eo args= | grep -c "^bash tools/gate[.]sh")" -eq 0 ]; do sleep 5; done
+```
+
+**The general rule: a process-matching predicate must EXCLUDE THE ASKER.** Any
+`pgrep -f`, `ps | grep` or `pkill -f` whose pattern appears in its own invocation
+is measuring a population that includes itself. The famous `grep -v grep` is this
+same bug in the one shape everybody recognises; it is unrecognised in the others.
+**The tell is a count that never reaches zero and never errors.**
+
+**And a polling wait is a timed callback that has lost its off switch** — the
+fleet rule is to background a job and let its completion be the wait.
+
+Found by frankH, in their own waiter, by re-checking with an anchored match
+rather than trusting the loop. The coordinator seat's own `pgrep`, run to verify
+the report, matched itself in the same breath.
