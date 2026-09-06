@@ -279,8 +279,17 @@ def main():
     # answer. What must never come back is the literal.
     print("\nthe pin verify row measures new_red rather than asserting []")
     src = open(os.path.join(HERE, "twatch.py")).read()
+    # Window anchored to the WRITER, not to a character count. It was
+    # `src[i - 900:i]`, which is a guard whose reach depends on how long the
+    # dict happens to be: adding the coverage fields (skips, skip_holes,
+    # skip_hole_jobs, timed_out, unreached, code_fp) pushed `"new_red":
+    # sorted(new_red)` out of the window and reddened two rows that were still
+    # perfectly true. A source-shape guard that goes RED because the source got
+    # LONGER is measuring the wrong thing, and the tempting repair -- a bigger
+    # number -- just moves the next false red further out.
     i = src.find('"pin": ver')
-    row = src[max(0, i - 900):i] if i >= 0 else ""
+    start = src.rfind("f.write(json.dumps(", 0, i) if i >= 0 else -1
+    row = src[start:i] if (i >= 0 and start >= 0) else ""
     check(i >= 0, "found the pin verify archive row writer")
     check('"new_red": []' not in row,
           "new_red is not a hardcoded empty list",

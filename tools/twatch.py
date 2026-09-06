@@ -6644,12 +6644,42 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
         # values, and record whether a baseline existed at all — without that
         # flag an honest empty new_red is still ambiguous, because "nothing was
         # new" and "nothing could be" both render as [].
+        #
+        # THE SAME ARGUMENT, ONE FIELD FURTHER OUT: a pin row carried 10 keys
+        # where an ordinary row carries 17, so the coverage fields a reader uses
+        # to decide whether a verdict MEANS anything were absent here and
+        # present everywhere else. `skip_holes` is the sharp one -- CLAUDE.md's
+        # own rule is that "skip_holes == 0 does not mean every job ran", and
+        # without the key you cannot even ask. A GREEN pin verify covering 3031
+        # of 3081 jobs and one covering 3081 were indistinguishable in this
+        # archive, on the artifact every track builds against.
+        #
+        # The report holds all of them and this row threw them away, which is
+        # the identical shape as the new_red bug above: not a wrong value, an
+        # absent one, in a file whose other rows make the reader expect a
+        # measurement. `still_red` is derived rather than re-measured -- the
+        # reds that are NOT new -- so it cannot disagree with new_red.
         f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
                             "full": True, "verdict": verdict,
                             "wall": report["wall"],
                             "new_red": sorted(new_red),
                             "fixed": sorted(pin_fixed),
+                            "still_red": sorted(set(reds) - set(new_red)),
                             "pin_baseline": bool(base_reds),
+                            "skips": (report.get("skips") or {}).get("count"),
+                            "skip_holes": (report.get("skips")
+                                           or {}).get("coverage_holes"),
+                            "skip_hole_jobs": (report.get("skips")
+                                               or {}).get("hole_jobs"),
+                            "timed_out": bool(report.get("timed_out")),
+                            "unreached": report.get("unreached"),
+                            # WHICH twatch.py produced this row. Without it the
+                            # one query that asks whether a landed fix is live
+                            # (tools/twatch_live_code.py, joining code_fp
+                            # against twatch.py's history) is blind to exactly
+                            # the rows most likely to be answered by a stale
+                            # daemon.
+                            "code_fp": CODE_FP,
                             "pin": ver}, sort_keys=True) + "\n")
     regen_index(clone)
     # A RED here is louder than an ordinary red, and says so: every track
