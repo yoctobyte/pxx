@@ -12543,3 +12543,189 @@ whole class. **A scalar cannot be decomposed after the fact; a per-row record ca
 
 Footnote worth having beside the number: **`0 fail` across all 550**, `tgeneric4` and
 `tgenfunc13` the last two.
+
+## A CANARY PROVES REACH; ONLY A BEFORE/AFTER PROVES EQUIVALENCE — and a silent canary is a fact about the GUARD YOU WROTE, not about the arm
+
+Measured 2026-09-06 (frankA), merging two cast-headed lvalue paths into one:
+`f56d42898` then `7927fe685`. **The second commit exists because of a canary, and the
+regression exists in spite of one.** Both halves are the lesson.
+
+### First half — the canary was silent, the arm was genuinely dead, and the merge still landed a regression
+
+`ParseStatementAST`'s cast-headed delegation lost its `not StatementIsAssignment` conjunct,
+so a cast-headed assignment TARGET now parses in the expression parser. The record-name
+cast-target arm (110 lines) was deleted as dead by guard subsumption, **and its canary had
+never fired** — correctly. It was dead.
+
+> **A canary answers *"is this arm reached"*. It cannot answer *"does the code that now takes
+> its inputs behave the same"*.** Deleting a genuinely dead arm is safe; **redirecting its
+> callers is not the same act**, and no reach probe on the deleted arm observes the
+> redirection at all.
+
+The regression is exactly there: with the arm gone, `PA(q)^.pi^` (with `pi: ^Integer`) was
+refused in **both** faces — *"cannot assign record to Integer"* as an rvalue and the mirror
+as a store — while `b.pi^`, `vpa^.pi^` and `TA(b).pi^` stayed right throughout.
+
+### Second half — same probe, two answers, and the difference between them was one line of guard
+
+The pointer-alias arm was **KEPT** in `f56d42898`, because **its canary fired during the
+self-host itself.** The delegation asked `FindTypeAlias` alone; the arm is *also* entered on
+`EnsureBuiltinPtrAlias` minting a row for a builtin pointer name, and on the PChar adapter.
+**Deleting on a reading of the two conditions would have taken a live arm.** In `7927fe685`
+the guard was widened to the arm's own three disjuncts — `BuiltinPtrNameElemTk`, the pure
+predicate `EnsureBuiltinPtrAlias` is built on, so the guard **decides what the arm decided
+and mints nothing** — the same canary went silent, and the arm went out: 224 lines, plus
+`ParseCastTargetSuffix`, 95 more, as its last caller.
+
+> **A canary's answer is a property of the GUARD standing in front of it.** Same probe, same
+> tree, two opposite answers, and what moved was one line upstream. So *"the canary is
+> silent"* is never a standalone fact — it is *"silent, under this guard"*, and it must be
+> re-read after any change to the guard rather than carried forward.
+
+This is the operational form of CLAUDE.md's **verified, not believed**: the reading of the
+two conditions was careful, plausible, and wrong by one disjunct the source did not put next
+to the others.
+
+## A RESOLVER'S DECLINE SIGNATURE THAT IS ALSO A LEGITIMATE ANSWER — the key rule's third form, and this time the key is a RETURN VALUE
+
+Same session, same day. `pasparser_expr.inc`'s pointer-alias caret arm restores the ALIAS's
+element type whenever `ResolveDerefShape` answers `tyInteger / REC_NONE / 0 / 0`.
+
+**That tuple is BOTH the resolver's decline signature AND its true answer for a `^Integer`
+field.** The caller cannot tell *"I could not resolve this"* from *"this is an integer
+pointer"*, so a correct resolution was overwritten by a repair meant for a failed one.
+
+> **Third form of `## A KEY MUST BE ABLE TO DISTINGUISH THE THINGS IT IS USED TO LOOK UP`.**
+> The sentinel form is the key as an INTEGER (`SPEC_HOST_NONE = -2`, because `-1` is a real
+> scope). The alias form is the key as a STRING. **This is the key as a FUNCTION'S RETURN**,
+> and it is the hardest of the three to see, because a multi-field tuple *looks* discriminating
+> — four fields, all zero, and nobody reads four zeros as a sentinel.
+
+Beside it, the accessor form from the same week — `## ONE CALL CANNOT TELL "NOT IMPLEMENTED"
+FROM "NOTHING HAPPENED YET"`, where the value in question is one field and the colliding
+answer is 0. **Every one of these is the same defect: a channel carrying two meanings with no
+bit to separate them.**
+
+**The fix is the general one and it is worth copying: add the bit.** `pcDelegated` became
+`pcMovedOff`, **set by every suffix that is not a `^`** — an explicit discriminant on the
+control path, rather than inferring the caller's situation from a value that two situations
+produce. Do not widen the sentinel; **make the channel say which thing it means.**
+
+### And the population that could not see it — third instance in a week, still the sample frame
+
+frankA's **44-row differential** (38 agree, 0 pxx-refusals, 5 pxx-only, must-differ control
+firing) did not catch this, and **not because a row passed**: five record openers and **not
+one dereferences a pointer FIELD through the cast.** The shape is **outside the population**.
+
+A **57-row before/after over the repo's own cast-target fixtures** caught it immediately, on
+`test_cast_field_deref` — **whose header already documents three siblings of the same
+mistake.**
+
+> **When you need a before/after over a construct, draw the population from the repo's
+> EXISTING FIXTURES FOR THAT CONSTRUCT, not from a differential you built for the change.**
+> A hand-built differential is selected by your model of the change, so it is systematically
+> blind wherever that model is wrong — which is the only place it was needed. The fixtures
+> were selected by everyone who has ever been bitten, and their headers carry the siblings.
+
+`## A SHARED-MACHINERY CHANGE NEEDS A CORPUS PER FRONTEND` and
+`## A DISCRIMINATION CONTROL CERTIFIES THE INSTRUMENT, NEVER THE SAMPLE FRAME` are the same
+finding at other scales. **Three instances in one week, three different sessions, and every
+time the instrument was sound and the frame was chosen by the person holding the hypothesis.**
+
+### The SECOND independent instance of the same sentinel collision, the same day, in a different file
+
+frankB, `938a3a977` + `1434c655b`, found without knowledge of frankA's. **`ir.inc`'s
+typed-pointer-cast index arm asks the cast node for its ALIAS INDEX and treats `< 0` as *"the
+PChar adapter"* — char element, byte stride, 0-based.** But a negative alias index is written
+by **three** producers:
+
+| producer | value |
+| --- | --- |
+| the PChar adapter | **-2** |
+| the built-in cast | **-1** |
+| a string cast | **-1** |
+
+So a string cast was indexed by the adapter's rule and **`t(r)[1]` answered the SECOND
+character.** Two defects stacked, and they are worth separating because they have different
+repairs:
+
+1. **The sentinel space is shared** — `-1` means two different things, exactly as
+   `tyInteger/REC_NONE/0/0` did. Only the cast's own `tk` can separate them.
+2. **The test is a RANGE test over that space** — `< 0` merges `-1` and `-2` even where the
+   values *were* distinct. **A range test over a sentinel space discards the one bit its
+   designer bothered to encode.** Test the value, not the sign.
+
+**Two independent sessions, one day, one sentence: a single value serving as both "no answer"
+and a real answer.** Neither found it by reading the code — both found it by a row that
+returned a plausible wrong value.
+
+### And the ticket's own author over-partitioned, having warned against under-partitioning
+
+frankB asked for this to be banked **instead of** the fix, and it is the better half.
+
+The ticket was **filed by the same session that fixed it**, and its body said *"do not assume
+one fix covers the three."* **That caution was correct and it was still not what happened.**
+
+> **It was not three defects and it was not one: it was ONE MISSING DISCRIMINATOR plus TWO
+> SPELLINGS THAT NEVER REACHED THE SHARED WALK.** A caution against over-unifying is not
+> protection against mis-partitioning — they are different errors and warning about one does
+> nothing about the other. **The observable count constrains the defect count in NEITHER
+> direction.**
+
+**Three observables give you three chances to find a story that fits.** And the ticket's own
+named hypothesis — *"the loop may be indexing the cast wrapper"* — was **false**: over a
+pointer operand the wrapper did not exist at all. Which is
+`## A FALSE PREMISE IN A TICKET … AIMS YOU AT THE WRONG FUNCTION` **written by the person it
+then aimed**, the strongest form of that rule available: authorship is no protection, because
+the premise and the fix are separated by days and by everything you learn in between.
+
+### The control that was written FIRST, and it is the only row that can fail
+
+The new test's positive control is row **I**, `PChar(s)[0]` — **the only row that catches this
+fix being widened.** Every other row passes under a guard spelled *"not an alias row"* just as
+happily as under *"the `tk` is a string"*.
+
+> **Before writing a guard, write down the next-WIDER guard you might have written instead,
+> and find the row that distinguishes them. That row is your control; every other row is
+> decoration.** It is identifiable *before* the fix, not after.
+
+The same session banked `## A WIDER NEGATIVE TEST IS NOT A WIDER FIX — IT IS A WIDER BLAST
+RADIUS WEARING THE SAME GREEN` two days earlier (`aff16a14d`) and **this time wrote the
+control first.** That is what a playbook entry is for.
+
+## A SCALAR THAT DID NOT MOVE IS NOT EVIDENCE THAT NOTHING MOVED — diff the rows, and the first use came one commit after the record was proposed
+
+Measured 2026-09-06 (frankS, `0c2db1dbf`), re-running the 550-row Pascal corpus over frankA's
+lvalue-path refactor.
+
+```
+377 pass, 0 fail, 123 skip, 50 auto-gated (of 550)   at b19b2f3b9, compiler 5e31fa11a35f
+                          — identical to the e929e720f run, AND IDENTICAL PER ROW
+```
+
+**The totals matching is the weak claim; the per-row diff being empty is the strong one.**
+Equal totals hide offsetting moves — **one row newly passing and one newly failing reads as
+"no change" in a scalar**, and a refactor of the lvalue path is precisely the change that
+could produce a swap.
+
+This is the entry above (`## A NET THAT TWO CHANGES MOVED IN OPPOSITE DIRECTIONS…`) closing
+its own loop: that section proposed the per-row TSV so the next delta would be **a diff
+rather than a re-derivation**, and the first use landed **one commit later**. A scalar cannot
+be decomposed after the fact; a per-row record can, and it costs eight minutes on a corpus
+only one checkout currently holds.
+
+**Two instrument notes from the same run, and the first one has the better moral.** The
+runner's summary line never arrived — piped through `tail -2` into a background file, which
+returned `[exited with code 0]`. The repair was **not** to capture the verdict more
+carefully:
+
+> **When a summary goes missing and you kept the RECORDS, stop depending on the summary.**
+> The log gives four scalars; the TSV supports the diff. The lost verdict was a prompt to
+> read the better artefact, not to chase the worse one.
+
+And: a `tstate(seven) … RED (full)` arriving **in the same pull as your own work** is the
+coincidence built to be misattributed. frankS checked rather than assumed — the report said
+`no new red this run`, the selected failure was `lib-test#src:tools/crtl_reachability.py`,
+and the header carried its own coverage caveat (1 of 6 skipped jobs did not run and is scored
+passlike, so the RED speaks only for the jobs that ran). **A red that arrives with your pull
+is not a red your pull caused, and the report usually says so in a line nobody reads.**
