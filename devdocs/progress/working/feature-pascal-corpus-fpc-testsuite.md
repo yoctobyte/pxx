@@ -598,3 +598,26 @@ old commit is what that would take. What is safe to say:
 If you re-run this and want a clean delta, the runner change is `109fbebb1` and
 `--report` writes a per-row TSV; diffing two reports separates "newly gated"
 from "newly passing" without re-deriving anything.
+
+### Re-run at `b19b2f3b9` — identical, per row
+
+`377 pass, 0 fail, 123 skip, 50 auto-gated (of 550)`, compiler `5e31fa11a35f`.
+
+Re-run because two Track P changes landed downstream of the `e929e720f`
+census — `refactor-p-one-lvalue-path-for-statements-and-expressions` and
+`61932d0ec` (an implicit deref over an explicit caret on a pointer-to-pointer).
+A refactor of the lvalue path is exactly the kind of change 550 corpus rows are
+worth spending eight minutes on.
+
+**Diffed per row, not by total.** Equal totals can hide offsetting moves, which
+is the reason to keep the `--report` TSV at all:
+
+```
+diff <(awk -F'\t' '!/^#/{print $2"\t"$1}' census-e929e720f.tsv | sort) \
+     <(awk -F'\t' '!/^#/{print $2"\t"$1}' census-b19b2f3b9.tsv | sort)
+-> no differences
+```
+
+**Not one of the 550 rows changed status.** That is a clean corpus-wide
+statement about those two changes, and it is the delta-by-diff this ticket's
+previous entry said the TSV would make possible — first use of it.
