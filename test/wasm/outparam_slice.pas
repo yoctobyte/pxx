@@ -64,11 +64,23 @@ var
   d: TIntArr;
   a, b: AnsiString;
 begin
-  s := 'KEEP';  OutStr(s);           writeln('OutStr  after=[', s, ']');
-  s := 'KEEP';  r := OutStrF(s);     writeln('OutStrF after=[', s, '] r=', r);
-  a := 'PA'; b := 'PB'; TwoOut(a, b); writeln('TwoOut  after=[', a, '][', b, ']');
-  s := 'KEEP';  VarStr(s);           writeln('VarStr  after=[', s, ']');
-  n := 10;      OutOrd(n);           writeln('OutOrd  after=', n);
+  { THE `before=` LINES ARE LOAD-BEARING, NOT DECORATION. Every `entry=[]` row
+    below is a witness that the managed clear RAN, and it discriminates only
+    while the caller set a non-empty value first: with `s := ''`, or with the
+    `SetLength(d, 3)` trimmed away to simplify the fixture, `entry=[]` and
+    `entry-len=0` pass just as well with the clear never running at all. The
+    check asserts these rows for exactly that reason, so removing the setup
+    turns a row RED instead of quietly turning a guard into a no-op. }
+  s := 'KEEP';  writeln('OutStr  before=[', s, ']');
+                OutStr(s);            writeln('OutStr  after=[', s, ']');
+  s := 'KEEP';  writeln('OutStrF before=[', s, ']');
+                r := OutStrF(s);      writeln('OutStrF after=[', s, '] r=', r);
+  a := 'PA'; b := 'PB';
+                writeln('TwoOut  before=[', a, '][', b, ']');
+                TwoOut(a, b);         writeln('TwoOut  after=[', a, '][', b, ']');
+  s := 'KEEP';  VarStr(s);            writeln('VarStr  after=[', s, ']');
+  n := 10;      OutOrd(n);            writeln('OutOrd  after=', n);
   SetLength(d, 3); d[0] := 1; d[1] := 2; d[2] := 3;
-  OutDyn(d);                          writeln('OutDyn  after-len=', Length(d), ' [0]=', d[0]);
+                writeln('OutDyn  before-len=', Length(d));
+                OutDyn(d);            writeln('OutDyn  after-len=', Length(d), ' [0]=', d[0]);
 end.

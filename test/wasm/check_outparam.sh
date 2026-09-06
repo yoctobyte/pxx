@@ -137,6 +137,26 @@ echo "ok  the entry clear AND the declared body are both present in every"
 echo "..  multi-chunk routine — asserted on the entry value, which is what"
 echo "..  the dropped chunk used to write"
 
+# THE PRECONDITION, ASSERTED RATHER THAN ASSUMED. Every `entry=[]` row above is
+# a discriminator only while the caller set a non-empty value first — with an
+# empty one, `entry=[]` and `entry-len=0` pass identically whether the clear
+# ran or never ran. That was true here by luck rather than by choice until it
+# was audited: the rows were not wrong, they were UNDERDETERMINED, and those
+# two are indistinguishable from a green. A guard that passes for a reason its
+# author did not choose is one refactor away from passing for no reason, so the
+# setup is asserted and trimming it goes RED instead of going quiet.
+for want in 'OutStr  before=[KEEP]' 'OutStrF before=[KEEP]' \
+            'TwoOut  before=[PA][PB]' 'OutDyn  before-len=3'; do
+  if ! grep -qxF "$want" "$work/wasm.txt"; then
+    echo "FAIL the fixture no longer sets a non-empty value before the call, so"
+    echo "     the entry rows above can no longer tell a clear that RAN from a"
+    echo "     clear that was DROPPED: expected [$want]"
+    exit 1
+  fi
+done
+echo "ok  the setup that gives the entry rows their discriminating power is"
+echo "..  itself asserted — an empty fixture fails here rather than passing above"
+
 for want in '  VarStr entry=[KEEP]' '  OutOrd entry=10'; do
   if ! grep -qxF "$want" "$work/wasm.txt"; then
     echo "FAIL the OTHER direction: a parameter that FPC does not finalize was"
