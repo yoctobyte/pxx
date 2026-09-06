@@ -6,7 +6,7 @@ type: bug
 blocked-by: []
 status: backlog
 created: 2026-08-31
-summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it, gated only by bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it -- whoever lands that stub owes the same one-line widening in the same commit. THE TRIGGER IS NOW EXECUTABLE (2026-09-05, frankC): tools/c_va_arg_every_target.sh asserts, per target, that a build matches gcc exactly and that a REFUSAL names the C entry stub — the second arm being what stops a frontend broken for all cross targets from turning the check green. Proved a guard by ablation: TARGET_RISCV32 removed from the four sets made riscv32 print 0.00 where gcc says 2.50, which is the silent-wrong-values defect this ticket describes. NOTHING WAS WIDENED — the set is untouched and wasm32 stays unmeasurable by construction. The `Cross (aarch64)` comment residual at cparser.inc:2093 is also done -- the sibling at :2171 was reworded when xtensa landed and this one was missed. XTENSA IS NOW VERIFIED RATHER THAN ASSUMED (2026-09-05): the script gave every target its DEFAULT profile, so xtensa hit the ESP one, refused at the entry stub, and the row printed `outside this check by construction' -- false. With `--platform=posix' the same subject builds and qemu-xtensa RUNS it, matching gcc exactly, and all four set sites key on TargetArch alone so the profile cannot launder the result. 6 of 7 targets now assert VALUES; the built floor moved 5 -> 6. ONLY WASM32 IS STILL UNMEASURABLE, and it refuses at the entry stub on every profile it has. The ESP shipping path is covered too: `--emit-obj' must produce a Tensilica Xtensa REL object exporting app_main as a GLOBAL FUNC, which is the name the IDF links and calls."
+summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it. THE GATE WAS MISNAMED AND IS CORRECTED HERE (2026-09-06, frankC): this said \"gated only by bug-c-no-c-program-entry-stub-for-wasm32-..., whoever lands that stub owes the same one-line widening in the same commit\". That stub LANDED (be2c87890) and the four sites are still unreachable, because the entry stub was never what gated them. The four sites are the CONSUMER side -- which helper reads a va_list. The gate is the PRODUCER side: the variadic prologue in ParseCSubroutine that spills registers into __va_save and anchors __va_overflow, which has SIX per-target arms (x86_64, aarch64, riscv32, i386, arm32, xtensa) and none for wasm32 -- that missing arm is the refusal. So the obligation now belongs to whoever adds a wasm32 PROLOGUE arm, not to anyone landing an entry stub. AND IT WAS NEVER ONE LINE: a new member also needs a vaRegSz (arm32 16, riscv32 32, xtensa 24, i386 0 -- wasm32 has no argument registers, so 0), and the cross32 helpers read a __va_save/__va_overflow pair that only a prologue arm creates. NOT WIDENED BLIND, deliberately: adding wasm32 to the four sets today would assert a va_list layout for a target that cannot produce one, unverifiable by any test that exists. THE TRIGGER IS NOW EXECUTABLE (2026-09-05, frankC): tools/c_va_arg_every_target.sh asserts, per target, that a build matches gcc exactly and that a REFUSAL names the C entry stub — the second arm being what stops a frontend broken for all cross targets from turning the check green. Proved a guard by ablation: TARGET_RISCV32 removed from the four sets made riscv32 print 0.00 where gcc says 2.50, which is the silent-wrong-values defect this ticket describes. NOTHING WAS WIDENED — the set is untouched and wasm32 stays unmeasurable by construction. The `Cross (aarch64)` comment residual at cparser.inc:2093 is also done -- the sibling at :2171 was reworded when xtensa landed and this one was missed. XTENSA IS NOW VERIFIED RATHER THAN ASSUMED (2026-09-05): the script gave every target its DEFAULT profile, so xtensa hit the ESP one, refused at the entry stub, and the row printed `outside this check by construction' -- false. With `--platform=posix' the same subject builds and qemu-xtensa RUNS it, matching gcc exactly, and all four set sites key on TargetArch alone so the profile cannot launder the result. 6 of 7 targets now assert VALUES; the built floor moved 5 -> 6. ONLY WASM32 IS STILL UNMEASURABLE, and it refuses at the entry stub on every profile it has. The ESP shipping path is covered too: `--emit-obj' must produce a Tensilica Xtensa REL object exporting app_main as a GLOBAL FUNC, which is the name the IDF links and calls."
 ---
 
 # The 32-bit `va_arg` set is complete only because two targets cannot compile C
@@ -241,3 +241,72 @@ a generic one:
 The third is the one worth keeping: it is a **real object from the wrong
 target**, not a corrupted file, so it is drawn from the population the assertion
 is about.
+
+## 2026-09-06 (frankC): the wasm32 obligation was attached to the wrong event
+
+`be2c87890` landed the wasm32 C entry stub. This ticket said the trigger was
+*"gated only by"* that stub and that whoever landed it *"owes the same one-line
+widening in the same commit"*. I landed it and did neither, and on measuring,
+neither was the right discharge.
+
+**The entry stub was never the gate.** The four sites choose which helper READS
+a `va_list`. What refuses on wasm32 is the other half — the variadic prologue in
+`ParseCSubroutine`, which spills the argument registers into `__va_save` and
+anchors `__va_overflow`:
+
+| | |
+| --- | --- |
+| prologue arms | `TARGET_X86_64`, `TARGET_AARCH64`, `TARGET_RISCV32`, `TARGET_I386`, `TARGET_ARM32`, `TARGET_XTENSA` |
+| missing | **wasm32 — and that absence IS the refusal** |
+
+So landing the entry stub changed nothing about reachability, and the same
+refusal appears at the same place. **A C-capable target is not the trigger
+condition; a target with a variadic prologue is.** The obligation belongs to
+whoever adds the wasm32 prologue arm.
+
+**And it was never one line.** A new member of the four sets also needs a
+`vaRegSz` — the register-save-area size, `16` on arm32, `32` on riscv32, `24` on
+xtensa, `0` on i386 — and the `cross32` helpers read a `__va_save` /
+`__va_overflow` pair that only a prologue arm creates. `ir_codegen_wasm32.inc`
+mentions none of `__va_save`, `__va_overflow`, `__pxx_va_arg_cross32` or
+`__pxx_va_start_impl32`. Three things, not one.
+
+**Not widened blind.** wasm32 is 32-bit with no argument registers, so `cross32`
+with `vaRegSz = 0` — i386's shape — is the likely answer. It is not a measured
+one: no test can reach those sites on wasm32, so adding the target would assert
+a va_list layout for a target that cannot produce one, and would read afterwards
+as a verified decision. That is the shape this ticket exists to prevent, pointed
+the other way.
+
+### What a future reader should do instead
+
+Add the prologue arm and the four sites **together**, and let
+`tools/c_va_arg_every_target.sh` grade it: wasm32 is in its `TARGETS` list, and
+the moment it stops refusing at a named wall the script demands the same output
+gcc gives.
+
+**But know what that script can and cannot see today, because I overclaimed it
+in the first version of this section.** Its subject needs `printf`, so it
+`#include`s `<stdio.h>`, so on wasm32 it stops at the ENVIRON wall — which is
+upstream of the prologue. A change that added the wasm32 prologue arm and left
+`environ` alone would leave the script reporting `refuses no environ on wasm32`
+and passing. **It grades the prologue only after
+[[bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse]]
+wall A is done.** Order: environ, then prologue + the four sets, then the script
+is the grader.
+
+The way to make it fire earlier is a subject that exercises `va_arg` and reports
+through an EXIT CODE rather than `printf` — freestanding, no libc headers, so it
+clears the environ wall entirely. `tools/c_wasm32_entry.sh` already runs
+freestanding C on wasm32 and compares exit codes, so the mechanism exists and
+the work is a second subject, not a new harness. Worth doing when someone starts
+wall A rather than speculatively now.
+
+### The general form, which is why this is written up rather than just fixed
+
+**A residual filed as an obligation on a FUTURE commit has no reader when that
+commit arrives**, because the person landing it is reading their own ticket, not
+the one pointing at them. It survived here only because a third party was
+holding both tickets in mind. The durable version of *"whoever does X owes Y"*
+is a check that goes red, or an edge on the ticket that X closes — never a
+sentence in the body of a ticket X's author has no reason to open.
