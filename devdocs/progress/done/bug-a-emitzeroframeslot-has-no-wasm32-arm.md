@@ -3,9 +3,9 @@ track: A
 prio: 25
 type: bug
 blocked-by: []
-summary: "EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target."
-status: new
-owner: ""
+summary: "FIXED on 346d4bf3e (not by this session; verified and closed by it 2026-09-06). The fork this ticket posed was decided the way the ticket predicted the backend would need: the wasm32 PROLOGUE PASS owns the zero guarantee, and EmitZeroFrameSlot gets an EXPLICIT NO-OP ARM -- symtab.inc:14282, `if TargetArch = TARGET_WASM32 then Exit;` as the routine's first statement, so it covers BOTH dispatch chains, the narrow unguarded x86-64 fall-through and the wide loud Error. Three mechanisms are now one: WasmEmitManagedLocals asks the SHARED ManagedLocalZeroBytes table (symtab.inc, read by four files) rather than a hand-written list, and handles both size classes itself -- i32.store at pointer width, PXXMemZero above it. Both repros in this ticket verified at 50ca24994 / compiler 48c9f5942757: the named casualty test_dynarray_insert_delete.pas compiles for wasm32 where it died at line 93, and the narrow-chain probe shape (record with a string field) compiles AND runs, printing its value."
+status: done
+owner: frankwasm
 ---
 
 > **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
@@ -207,3 +207,50 @@ The chain's final arm is now **named in a comment** as x86-64 rather than a
 default. It emits no differently; it stops reading as a default, which is how a
 seventh target fell into it for an entire phase. The structural fix belongs to
 `refactor-a-target-dispatch-chains-fail-open`, not here.
+
+
+## RESOLVED 2026-09-06 — verified, not fixed, by frankwasm
+
+The fix is `346d4bf3e` and is not this session's. This session found the ticket
+open while warm on these files (which is the condition the owner's re-pricing
+note above names), checked it against the artefact rather than the comment, and
+closed it.
+
+**The fork was decided as option 1, and the reason it is now the only possible
+answer rather than a preference is that the prologue pass grew the second half
+it was missing.** When this ticket was written, `WasmEmitManagedLocals` covered
+scalars and the wide extents were "refused elsewhere on wasm32 anyway". It now
+asks the SHARED `ManagedLocalZeroBytes` table and handles both size classes
+itself — `i32.store` at pointer width, `PXXMemZero` above it. So the wide chain
+no longer needs `EmitZeroFrameSlot` either, and one no-op arm placed as the
+routine's FIRST statement covers both chains at once.
+
+**Mechanism count, which this ticket asked whoever took it to do before adding
+a fourth: three to one.**
+
+| was | now |
+| --- | --- |
+| `WasmEmitManagedLocals` prologue pass (scalars only, hand-written predicate) | the OWNER — both size classes, asks the shared table |
+| x86-64 fall-through emitting into an unread `Code[]` | explicit no-op arm, `symtab.inc:14282` |
+| loud `Error` for wide extents | same arm — it precedes both chains |
+
+**Verified at `50ca24994`, compiler `48c9f5942757`, rebuilt first:**
+
+- `test/test_dynarray_insert_delete.pas` — the casualty this ticket named as
+  dying at line 93 with `EmitZeroFrameSlot: unhandled target` — compiles for
+  wasm32, exit 0.
+- The narrow-chain probe shape the ticket says a *read* could not find,
+  `procedure P; var r: TR;` with `TR = record a: string; end`, compiles and
+  **runs**, printing its value. The ticket only ever established that this
+  shape reached the fall-through; it now also produces a correct answer.
+
+**The reusable half is the ticket's own, and it stands:** a dispatch chain
+whose last arm is a real target rather than an error is a fall-open chain
+wearing the shape of an exhaustive one. The general row is
+`refactor-a-target-dispatch-chains-fail-open`. What this ticket adds is that
+the repair is not always an arm — here it was an arm that does NOTHING, spelled
+out, because an unnamed fall-through and a considered no-op are indistinguishable
+from the outside and only one of them is a decision.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
