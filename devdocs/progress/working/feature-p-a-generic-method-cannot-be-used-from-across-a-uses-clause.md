@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-05
-summary: "ExpandGenericMethod rewrites a generic method into one ordinary method per concrete type argument, and every edit it makes is at or ABOVE the class body. A program calling a USED UNIT\'s generic method is the shape where a use sits BELOW the declaration -- unit tokens are appended after the program\'s -- so the expansion bails out whole and the row still reports the old parse error. tgenfunc7 and tgenfunc9. The free ROUTINE already solved this, at the uses clause; the method needs the same move plus TokPos and DeclItem-span bookkeeping the routine did not."
+summary: "TWO Exits in ExpandGenericMethod produced one identical parse error, and only one is left. ZERO USES is FIXED (this ticket, below): a unit or program that merely DECLARED a generic method it never called could not compile at all, because emitting nothing also left the raw header in the stream -- the zero-specialization path now erases both halves. WHAT REMAINS is the named row: a use sitting BELOW the declaration, which is what a program calling a used unit's generic method looks like. The sweep DOES find that use, so it exits at the SCOPE guard instead, and moving it needs TokPos and DeclItem-span bookkeeping the free routine never needed. tgenfunc7 and tgenfunc9."
 ---
 
 # The shape
@@ -142,3 +142,50 @@ outside".
   it; it gates (b), not (a).
 - Whether (a)'s erase is safe for the DEFINITION as well as the declaration —
   the definition sits in the implementation section and is found separately.
+
+## 2026-09-06 (frankS) — the zero-uses half is FIXED
+
+`ExpandGenericMethod`'s `if nSpec = 0 then Exit;` now erases the declaration and
+the definition instead of leaving them. It reuses the removal the expansion
+performs anyway two dozen lines below, in the same descending order — definition
+first, so removing the declaration cannot shift an index the definition still
+needs — and with no specializations there is simply nothing to splice back.
+
+Rows, measured, `-Futest/generic_unused_units`:
+
+| shape | pinned | HEAD |
+| --- | --- | --- |
+| unit declares a generic method, nothing anywhere calls it | `ugmun.pas:10 expected ':' before '>'` | compiles |
+| program declares one, never calls it | same error | compiles |
+| Delphi surface (`function Add<T>`, no `generic` keyword), unused | same error | compiles |
+| `class generic function`, unused | same error | compiles |
+| used and unused generic method in ONE class | — | used one still expands |
+| ordinary members either side of the erased pair | — | both survive |
+| a use across a uses clause | error | **still the same error** |
+
+Test `test/test_generic_method_unused_is_erased.pas` + `test/generic_unused_units/`,
+wired into `test-core`. Every row doubles as a neighbour check, because the erase
+spans two ranges in two sections and one token too many takes an ordinary member
+with it.
+
+### The guess this corrected
+
+I wrote in the fix's own comment that the cross-unit row's diagnostic would move
+off the declaration and onto the call, then measured it and it does not. **The
+sweep scans the whole token stream**, so a use in the importing program IS found
+even though it sits at a lower index; `nSpec` is therefore >= 1, the zero-uses
+block is never reached, and the SCOPE guard exits exactly as before. The comment
+was corrected before the commit. Two Exits, one error message, and the only way
+to tell which one you are looking at is to count the uses.
+
+## What is left, and it is the whole named row
+
+The SCOPE guard — `if useName[u] <= implEnd then Exit`. Unchanged, and the
+prerequisite this ticket names is still unmeasured:
+
+> Whether a class can gain a method after `ParseTypeSection` has closed its body.
+
+That is what re-running the expansion at the end of the uses clause requires,
+the way `SpecializeImportedGenericFuncUses` does for the free routine. The free
+routine did not need it because a free routine is not a class member. So the
+precedent covers the SWEEP-LATER shape and stops exactly where the member does.

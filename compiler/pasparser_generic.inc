@@ -4804,7 +4804,43 @@ begin
       Inc(k);
     end;
   end;
-  if nSpec = 0 then Exit;   { nothing asks for it; leave the stream alone }
+  if nSpec = 0 then
+  begin
+    { NOTHING ASKS FOR IT -- SO EMIT NOTHING, WHICH MEANS ERASING THE
+      DECLARATION AND NOT MERELY DECLINING TO EXPAND IT.
+
+      "A type argument nothing asks for emits nothing" (see WHY THE USE SITES
+      DECIDE, above) was implemented as Exit, and Exit leaves `generic function
+      Add<T>` sitting in the stream for the class-body parser, which reads it as
+      an ordinary member and dies on the `<`. So emitting nothing cost the whole
+      compilation: a unit declaring a generic method its own code never calls
+      could not be compiled AT ALL, standalone, with no use site anywhere and no
+      uses clause involved -- and neither could a PROGRAM that declares one and
+      does not call it. The generic FREE routine, built on the same
+      uses-decide design, compiles both shapes; the method did not.
+      feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause
+
+      Removing both halves is what the expansion below does anyway before it
+      splices; with no specializations there is simply nothing to splice back,
+      and the same descending order applies -- the definition first, so removing
+      the declaration cannot shift indices the definition still needs.
+
+      This does NOT make a cross-unit USE work, and does not change its
+      diagnostic either -- measured, because the guess that it would was wrong.
+      The sweep scans the WHOLE token stream, so a use in the importing program
+      IS found even though it sits at a lower index; nSpec is therefore >= 1,
+      this block is never reached, and the SCOPE Exit further down still leaves
+      the declaration in place and still reports it. Zero uses and a
+      below-the-declaration use are two different Exits that produced one
+      identical error message; only the first is fixed here. }
+    implRemove := GenericKwAt(implStart);
+    RemoveTokens(implRemove, implEnd - implRemove + 1);
+    removeFrom := GenericKwAt(startIdx);
+    RemoveTokens(removeFrom, declEnd - removeFrom + 1);
+    TokPos := removeFrom;
+    Next;
+    Exit;
+  end;
 
   { Every edit must be at or above the class body -- see SCOPE above. }
   u := 0;

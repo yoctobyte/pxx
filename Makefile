@@ -9644,6 +9644,17 @@ test-core: $(COMPILER)
 	# are here because they are what a wrong fix breaks.
 	./$(COMPILER) -Futest/generic_declunit_units test/test_generic_body_binds_in_its_declaring_unit.pas $(TESTTMP)/test_gen_declunit26
 	tools/expect_same.sh test_gen_declunit26 "$$($(TESTTMP)/test_gen_declunit26)" "$$(printf 'program priv\nunit priv\nunit iface\nunit priv\nunit priv')"
+	# A generic method NOTHING asks for must emit nothing and LEAVE nothing.
+	# ExpandGenericMethod's zero-specialization path used to Exit, which left the
+	# raw `generic function Add<T>` header in the stream for the class-body parser
+	# -- so a unit or a program that merely DECLARED a generic method it did not
+	# call was a hard parse error. Both surfaces are here (objfpc `generic`,
+	# Delphi bare) because both reach the same expansion. Every row doubles as a
+	# neighbour check: the erase spans two ranges in two sections, and one token
+	# too many takes an ordinary member with it. On the pinned compiler this dies
+	# at ugmun.pas:10.
+	./$(COMPILER) -Futest/generic_unused_units test/test_generic_method_unused_is_erased.pas $(TESTTMP)/test_gen_unused26
+	tools/expect_same.sh test_gen_unused26 "$$($(TESTTMP)/test_gen_unused26)" "$$(printf '1 2\n10\n42\n11 22')"
 	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
 	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
 	# A specialized method body's diagnostic must name the file that CONTAINS the
