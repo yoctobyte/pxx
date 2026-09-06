@@ -13052,3 +13052,88 @@ partner. The reason is the failure mode of the negative form:
 GREEN` is the same rule; this is the maintenance form of it. **Name the partner in the file**,
 because the two tests will be read years apart by people who will not know the other exists,
 and the guard is only as good as the pair.
+
+## TO ORDER A SET OF LIMITS, ASK THE SYSTEM WHICH ONE IT HITS FIRST — a grep gives you a SET, an oversized input gives you a SEQUENCE
+
+Measured 2026-09-06 (frankH), converting the fixed-cap families. **One input shape, five
+states, each answer from the compiler that was supposed to give it:**
+
+```
+ 52200 literals  ->  error: data overflow           MAX_DATA, 2 MB
+ 66000           ->  error: string table overflow   MAX_STRS, 65536
+ 40000           ->  22.24s                         no cap: the O(n^2) intern
+200000           ->  error: fixup overflow          MAX_FIXUPS, 131072
+500000           ->  COMPILES. 14.04s, 992 MB peak RSS, runs: 500000 lines,
+                     last `b6eF` = exactly index 499999
+```
+
+**Two findings, and the second is the one nobody predicted.**
+
+> **The ticket's prescribed method could not have produced that ordering.** Grep finds each
+> table's bound and **has no way to rank them.** What ranked them was **one oversized input
+> asking the compiler which limit it would hit first** — and the ranking is the whole value,
+> because a cap you cannot reach is not the next piece of work.
+
+> **The chain TERMINATES, and the terminal state is MEMORY, not a constant.** *"Find the next
+> cap"* felt open-ended and ended after four. **A search whose stopping condition is
+> "eventually there are no more" has no stopping condition; a search that ends when the
+> failure changes KIND does.** 992 MB of RSS is a different kind of answer from
+> `fixup overflow`, and recognising that is what closed the family.
+
+## RAISING A CAP WITHOUT CHECKING THE RESOURCE IT IS DENOMINATED IN IS HOW A GUARD STOPS BEING ABLE TO FIRE — and a NUMBER can be as unfalsifiable as an adjective
+
+Same session, and it came out of a comment that deleting `MAX_STRS` had **orphaned**.
+
+The paragraph justified raising `MAX_STRS` from **8192 to 65536** in 2026: a csmith
+`--paranoid` program needing **9426 distinct literals**, refused at the old cap, compiling at
+the new one in 2.7s with a checksum agreeing with gcc. **Good evidence, honestly gathered,
+and the raise was right.**
+
+> **But 8192 was REACHABLE and 65536 was NOT.** At ≥40 bytes of `Data` per entry against a
+> 2 MB `MAX_DATA`, the string table could never exceed **~52108** — the new cap sat **13000
+> above anything `Data` could fund.** A bound placed beyond the reach of its own resource is
+> a guard that cannot fire, and it prints nothing at all rather than PASS.
+
+**And nothing in the raise's own evidence could have shown it.** The motivating program needed
+9426 entries, comfortably inside *both* limits, so **the measurement that justified the raise
+was correct and complete about the question it asked.** The coupling was not introduced by
+anyone: it was introduced by a raise that looked at one of two numbers, **and there was no
+reason to look at the other, because the other belonged to a different table with a different
+name in a different part of the file.**
+
+**This is the structural cousin of `## A COMMENT'S ADJECTIVE IS NOT A MEASUREMENT`, and it is
+worse:**
+
+> **The raise produced a NUMBER, not an adjective, and it was still unfalsifiable in the
+> direction that mattered.** A cap's value is meaningful **only against the resource funding
+> it**, and **nothing in the source states that relation.** frankH had to derive 40
+> bytes/entry by measuring five literal lengths.
+
+So the check for a cap is not *"is this number justified"* — it is **"what funds it, and what
+is that resource's own bound?"** Two numbers, in different declarations, with no syntactic
+link between them. **Write the relation down when you raise a cap**, because it is the only
+part that cannot be recovered by reading either declaration.
+
+### And the orphaned paragraph was rewritten IN PLACE as history, not deleted
+
+frankH kept the justification and **appended what it could not see**, rather than removing a
+comment whose subject had gone. That is the right disposition: the paragraph is **evidence
+about a decision**, and a decision's evidence stays true even when the constant it defends is
+gone.
+
+> *"The second time tonight that re-reading something already written down was worth more than
+> the thing that prompted the re-read."*
+
+### The lockstep landmine, disarmed structurally rather than by discipline
+
+Three parallel arrays, and the sequencing worry was that a partial grow is **silently** wrong.
+The answer is not care at N sites:
+
+> **All three grow inside one `FixupEnsure`. There is no site that can grow the table without
+> growing the columns, because THERE IS ONLY ONE SITE.**
+
+**That is the direct antidote to `## A RULE SPELLED PER CALLER FAILS BY AN ABSENT COPY` —**
+the failure mode there is a missing copy at one of N sites, and the structural repair is to
+make N equal 1. A grow that moved one array and not the others is **the identical defect to
+the compaction that did**, which this tree carried silently until `a8bfcb695`. `bss` 86425036
+→ 83672548, **2752488 bytes**, all three columns in one commit.
