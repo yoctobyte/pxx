@@ -34,3 +34,41 @@ ok: /tmp/testmgr-scratch-1652538/test_fpc_compat_batch226  [code=327448B  data=3
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGE 2026-09-06 (frank-coordinator) — the lane guess is RIGHT, and the range narrows to one commit by file
+
+**Track P stands.** The auto-guess came from the failing step rather than the job name,
+and the step is the `fgl` arm — it compiles **FPC's generic containers unit** with
+`--mimic-fpc`. Generic containers is a Pascal-frontend exercise, so the guess is right
+for the right reason here.
+
+**Range narrowed by FILE, not by plausibility.** Of the 4 commits in
+`5daad03f50d7..7b287013d34a` that touch buildable files, **exactly one touches
+`compiler/pasparser_generic.inc`**:
+
+```
+a0780b56d  fix(P): a generic template's method body parses as its DECLARING unit
+```
+
+**That is a mechanism match, not just an overlap** — the failing input is a generic
+container unit compiled from another unit's source tree, and that commit changes which
+unit a generic template's method body parses as. **First place to look.**
+
+**Stated as elimination, with its assumption named:** *"the only commit touching X"* is
+sound only if the defect is in X. The range also churns `symtab.inc`, `defs.inc`,
+`ast_arena.inc` and five other `pasparser_*.inc` files, any of which could do it. This
+narrows the search; it does not name the cause.
+
+### THE ROW IS CORPUS-GATED, WHICH DECIDES WHO CAN EVEN REPRODUCE IT
+
+`Makefile:9728-9731`: the step sets `fglsrc` from `library_candidates/fpc-rtl/rtl/objpas`
+or `/usr/share/fpcsrc/3.2.2/rtl/objpas` and **runs nothing at all when neither exists.**
+
+> **A checkout without the FPC RTL source passes this row by SKIPPING it.** A green here
+> from a tree that lacks the corpus is not a refutation of this red — it is the same
+> silent-skip shape as
+> `bug-t-the-conformance-runner-reports-an-empty-corpus-as-a-normal-green`.
+
+**Measured earlier tonight across 28 checkouts: 6 can reach the fpc corpus, 5 have
+`library_candidates/` without it, 17 have neither.** Whoever takes this must confirm
+`fglsrc` resolves in their tree **before** trusting either a red or a green.

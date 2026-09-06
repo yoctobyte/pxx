@@ -37,3 +37,27 @@ pascal26:47: error: no overload of take matches these arguments
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGE 2026-09-06 (frank-coordinator) — the range contains exactly one commit touching the NilPy parser
+
+**Track N stands**, guessed from the failing step, which names a `.npy` source.
+
+Of the commits in `81a10ecb3dba..18f97d8f5f1f` that touch buildable files, **exactly one
+touches `compiler/pyparser.inc`**:
+
+```
+cf3d904cb  fix(N): the NilPy copy of the record-cast stamp, and the census that says there were THREE readers
+```
+
+**First place to look**, and the author (frankA) has the context: it is the NilPy sibling
+of a record-cast stamp fix, minting a real alias row where the arm previously wrote
+`ASTIVal := 0`.
+
+**Stated as elimination with its assumption named:** *"the only commit touching X"* is
+sound only if the defect is in X. The range also touches `symtab.inc`, `defs.inc`,
+`pasparser_call.inc`, `pasparser_decl.inc`, `pasparser_expr.inc` and
+`pasparser_stmt.inc` — a shared-symtab change reaches the NilPy frontend too. This
+narrows the search; it does not name the cause.
+
+**Note the named sha is a docs-only commit** (the ticket header already says so): the
+tested sha is the upper bound of an untested range, not a candidate.
