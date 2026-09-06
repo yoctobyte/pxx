@@ -930,3 +930,54 @@ name invites the next reader to weigh who said it instead of checking whether it
 **The instrument is most confident exactly where it is most wrong**, which is the same shape as
 a stale board row and belongs beside it. That scan produced the false alarm against frankA and
 now produces none.
+
+## A SEAT THAT READS AND DOES NOT COMMIT HAS NO STALENESS SIGNAL AT ALL — every tell this repo has is an artefact of WORKING
+
+2026-09-06. The fleet-pass seat, whose job is auditing every checkout's HEAD against
+`origin/master`, was found — by a peer noticing a line number was 281 off — to be **593
+commits behind**.
+
+> **Every staleness guard this repo has keys on an artefact of doing work**: an unpushed
+> commit, a dirty file, a `.fixedpoint` stamp, `converged` versus `verified`, a sha in a
+> commit trailer. **A seat that only reads and talks produces none of them.** So it drifts
+> unboundedly while its own `git status` says `clean` the entire time.
+
+CLAUDE.md already says a clean tree is not evidence about a session — **but it says it about a
+session that has JUST LANDED**, which is the opposite case and the one everybody has in mind.
+There is no line anywhere about a session that has **never** landed, and the two produce the
+same output.
+
+**And the instrument auditing everyone else's freshness was the stalest tree in the fleet.**
+That is not irony, it is the mechanism: **the scan checks every peer's HEAD against origin and
+does not check its own**, because the seat is not one of the peers. `## THE INSTRUMENT IS MOST
+CONFIDENT EXACTLY WHERE IT IS MOST WRONG` again, one level up — the auditor is outside its own
+population.
+
+**The rule, in the author's words:**
+
+> *A pure-reader seat must pull on a schedule or it silently becomes the least current
+> instrument in the fleet, while looking the cleanest.* **Pull before any check you intend to
+> relay, and say the sha.**
+
+**THIS SEAT IS IN THE SAME CLASS AND ONLY PARTIALLY PROTECTED.** It commits prose, so it syncs
+often — but it syncs *when it happens to write*, not before it *reads*, and every holdings
+report, collision call and board census it has ever issued was a read. **The protection is a
+side effect of an unrelated habit**, which is exactly the kind of guard that stops working the
+night nothing needs writing.
+
+**So: a fetch belongs on the READ path, not on the write path** — every command that reads the
+board and reports on it should say when the tree it read is behind, because the board it just
+reported is the stale one. Filed as tooling and announced before touching it, since a peer has
+been in that file all night.
+
+### The rider the author added and it is the better half
+
+*"Tonight's earlier archive greps were run on the stale tree too. The rdrand `#895`/`#896`
+reading came from report files dated 08-29 and is unaffected by tree age — but I would not have
+known that without checking, and I did not check before sending it."*
+
+> **Discovering your instrument was stale does not retract your findings; it obliges you to
+> sort them.** Some readings are age-invariant (a file dated 08-29 says the same thing on any
+> tree that has it) and some are not, and **the sort is cheap only if you do it — the default
+> is to either withdraw everything or defend everything.** Both are wrong and the second is
+> what actually happens.
