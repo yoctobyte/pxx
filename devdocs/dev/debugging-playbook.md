@@ -15275,3 +15275,70 @@ enumerate what else produces that absence. If the list has more than one entry
 the field is not a discriminator, and reading it more carefully will not make it
 one — you need a different question. *"Is this name a type NOW"* instead of *"was
 this row repaired"*; *"ask the holder"* instead of *"read the board"*.
+
+## CHOOSING WHERE A DEFERRED CHECK RUNS IS CHOOSING **WHERE A NAME IS LOOKED UP**, NOT ONLY **WHEN**
+
+The resolution of the case above, and it is the reusable part. The author's own
+words: *"I chose end-of-parse over end-of-type-section deliberately and argued it
+at length. That argument is sound and it is about ORDER. The thing that actually
+varies is SCOPE, and I never asked the second question at all."*
+
+A forward `^T` is parked and drained later. The drain ran at the program's final
+`end.` — correct on the order axis, because a `^T` resolved by a LATER type
+section is refused by FPC, compiles correctly here, and must keep working. But
+the drain also asks *"is this name a type"*, and it asked **from the program
+scope**, where a type declared in a transitively-used unit is not visible.
+Minimal repro, three files:
+
+```pascal
+unit udeep;  type PX = ^TX; TX = record v: Integer; end;
+unit umid;   uses udeep;
+program pdirect; uses udeep;  ->  compiles
+program pdeep;   uses umid;   ->  refused, identical declarations
+```
+
+**Every attempted reduction that put the declaration one `uses` away failed to
+reproduce**, which is why it survived review: one level down the scope still
+contains the name.
+
+**A DEFERRED CHECK HAS TWO INDEPENDENT AXES AND ONLY ONE OF THEM IS OBVIOUS.**
+*When* it runs decides what has been seen; *where* it runs decides what is
+visible. They are not the same question and a correct answer on the first says
+nothing about the second. Worse: **a well-argued choice on one axis reads as a
+considered choice, full stop** — the commit message argued order carefully and
+completely, and that is exactly what stops a reader (or the author) asking about
+scope. The tell is a check whose predicate is a NAME LOOKUP: any such check has a
+scope, and the scope is a parameter whether or not anyone chose it.
+
+> **The same defect had a symmetric instrument failure, which is why it reached
+> the fleet.** `gate.sh quick` builds lib/rtl only through the compiler's own
+> dependency set, which never reaches the failing unit; and `pinned_rtl_canary`,
+> which DOES sweep all 54 root units, runs them with the **pin** and only retries
+> with `compiler/pascal26` on units that already failed under the pin. So a unit
+> the pin compiles and the tip breaks is never handed to the tip. The failing
+> unit is one of the 54 roots and the probe the sweep already generates for it is
+> byte-for-byte the failing program — **the instrument was standing on the defect
+> and asking the other direction.** Measured at 12.4s/13.6s for the missing
+> direction; filed as
+> `bug-t-the-pinned-rtl-canary-only-asks-one-of-its-two-directions`.
+
+## A PARKED DIAGNOSTIC THAT CARRIES A LINE BUT NOT A FILE POINTS AT A REAL LINE IN THE WRONG FILE
+
+Worse than pointing nowhere, because it resolves. Same incident: the message was
+`pascal26:26: error: ...` with no filename. `26` was faithful — for
+`palsync.pas`. The reader took it against `syncobjs.pas:26`, which is inside a
+comment, and spent the reduction there.
+
+**`ErrorAt` was the right call and is not the bug.** A parked diagnostic fires
+while the parser stands on the program's final `end.`, so a `near:` window would
+splice the last tokens of the program onto a message about a declaration hundreds
+of lines earlier, in another file. Suppressing the window is correct. **What is
+missing is the filename, which the parked entry knows and the message drops.**
+
+**The rule: a diagnostic whose location is DEFERRED must carry the file, or carry
+nothing.** A bare line number is only meaningful relative to the file the reader
+assumes, and the reader assumes the one they are compiling. A location that
+resolves to real text in the wrong place consumes the reduction budget before
+anyone doubts it — which is the same animal as
+*[an instrument that lies by being correct about something else]*, applied to a
+citation rather than to a measurement.
