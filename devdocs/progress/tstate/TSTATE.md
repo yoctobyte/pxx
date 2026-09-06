@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d19h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `85d70d70076a` | 2026-09-06T05:55:27Z | RED (native) | 160.6s | `cab3205aa9e5` RED |
+| seven | `c999836a2981` | 2026-09-06T05:59:49Z | RED (native) | 160.1s | `cab3205aa9e5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `cab3205aa9e5` on seven, 2026-09-06T05:42:56Z (12m ago).**
+**Newest full tier in the fleet: `cab3205aa9e5` on seven, 2026-09-06T05:42:56Z (16m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `cab3205aa9e5` | RED | 12m | — (newest) |
+| seven | `cab3205aa9e5` | RED | 16m | — (newest) |
 | plexus | `27424c927b65` | RED | 6d19h | 6d19h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -119,6 +119,46 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `2a4cd0bcf664`, last good `c1fe3e414d25`, 5 commit(s) in range
 - **test-core#src:test/test_builtin_type_names_cast_and_declare.pas** — test/test_builtin_type_names_cast_and_declare.pas tools/expect_same.sh (seven): bad `b6815e5b8675`, last good `f1148d82c2d4`, 1 commit(s) in range
 - **test-core#src:test/test_pointer_function_result_keeps_its_depth.pas** — test/test_pointer_function_result_keeps_its_depth.pas tools/expect_same.sh +1 (seven): bad `85d70d70076a`, last good `d0f14a2608ad`, 1 commit(s) in range
+- **CASCADE 36 jobs** (seven): bad `c999836a2981`, last good `85d70d70076a`, 2 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-core#src:examples/tk/uses_tkinter_and_configparser.pas`
+  - `test-core#src:test/test_criticalsection.pas`
+  - `test-core#src:test/test_fpc_compat_batch2.pas`
+  - `test-core#src:test/test_pyeval_bignum.pas`
+  - `test-core#src:test/test_pyeval_compound.pas`
+  - `test-core#src:test/test_pyeval_def.pas`
+  - `test-core#src:test/test_pyeval_fstring.pas`
+  - `test-core#src:test/test_pyeval_is_in.pas`
+  - `test-core#src:test/test_pyeval_isinstance_del_dict.pas`
+  - `test-core#src:test/test_pyeval_m1.pas`
+  - `test-core#src:test/test_pyeval_m2.pas`
+  - `test-core#src:test/test_pyeval_m3.pas`
+  - `test-core#src:test/test_pyeval_memory_bytes.pas`
+  - `test-core#src:test/test_pyeval_slice.pas`
+  - `test-core#src:test/test_pyeval_trampoline_shapes.pas`
+  - `test-core#src:test/test_setlen_in_parallel_for_body.pas`
+  - `test-core#src:test/test_syncobjs.pas`
+  - `test-threads#src:test/test_async_parallel_compat.pas`
+  - `test-threads#src:test/test_parallel_for.pas`
+  - `test-threads#src:test/test_parallel_for_capture.pas`
+  - `test-threads#src:test/test_parallel_for_capture_aggr.pas`
+  - `test-threads#src:test/test_parallel_for_capture_callee.pas`
+  - `test-threads#src:test/test_parallel_for_capture_scalar_types.pas`
+  - `test-threads#src:test/test_parallel_for_capture_string.pas`
+  - `test-threads#src:test/test_parallel_for_lang.pas`
+  - `test-threads#src:test/test_parallel_for_nested_for_body.pas`
+  - `test-threads#src:test/test_parallel_for_private.pas`
+  - `test-threads#src:test/test_parallel_policy.pas`
+  - `test-threads#src:test/test_parallel_policy_lang.pas`
+  - `test-threads#src:test/test_parallel_policy_named.pas`
+  - `test-threads#src:test/test_parallel_reduction.pas`
+  - `test-threads#src:test/test_parallel_writeln_atomic.pas`
+  - `test-threads#src:test/test_sched_reactor_exhaustion.pas`
+  - `test-threads#src:test/test_sched_reactors_wide.pas`
+  - `test-threads#src:test/test_threadsafe_refcount_lockfree.pas@1`
+  - `test-threads#src:test/test_threadsafe_refcount_lockfree.pas@2`
+  </details>
 
 ## Held — quiet hosts (not actionable)
 
