@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:21 blocked:7 backlog:15 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:42 backlog-pascal:30 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3410 rejected:79`
+`working:21 unfinished:21 blocked:7 backlog:15 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:42 backlog-pascal:30 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3411 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -80,7 +80,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
-- `[p 70] [T]` regression-cascade-562162b03a02
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-optdiff-shard6-12
@@ -93,6 +92,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [P]` regression-test-pascal-conformance-shard0-6-5
+- `[p 70] [T]` regression-test-pascal-conformance-shard4-6-5
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
