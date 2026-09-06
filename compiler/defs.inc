@@ -5843,6 +5843,21 @@ var
   UClsSealed : array[0..MAX_UCLASS-1] of Boolean;   { `class sealed`: no descendants, and no abstract methods (there could never be an override to supply them) }
   UClsAbstractCls : array[0..MAX_UCLASS-1] of Boolean; { `class abstract`: cannot be instantiated. Distinct from a method's `abstract`. }
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
+  UClsEnclosingCi : array[0..MAX_UCLASS-1] of Integer;
+  { The type this one was declared INSIDE, or -1 at unit level. Written where
+    the two class/record body parsers already save the previous
+    ParsingClassBodyCi, so it is the same chain those `savedPCB` locals form on
+    the parser's call stack -- just written down, because a lookup needs it
+    after the frame that held it is gone.
+
+    It exists so alias visibility can follow LEXICAL NESTING instead of a list
+    of ranges. AliasVisibleHere had grown to four arms, each one a range
+    somebody discovered the hard way, and a nested record's FIELD list was a
+    fifth: parsing a nested type's body sets ParsingClassBodyCi to that nested
+    type, so for exactly the span of its fields the ENCLOSING class stopped
+    being visible and `TVMT = record f: TFacClass; end` inside a class could
+    not see the `TFacClass` declared two lines above it.
+    bug-p-a-nested-record-field-cannot-see-a-sibling-nested-type }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
   UClsHelperTk : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER: Ord(target TTypeKind), -1 = not a helper }
   UClsHelperRec : array[0..MAX_UCLASS-1] of Integer; { helper target's rec id (REC_NONE for scalars/strings) }

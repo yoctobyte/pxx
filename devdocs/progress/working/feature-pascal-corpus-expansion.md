@@ -1,7 +1,7 @@
 ---
 prio: 75
 track: P
-status: unfinished
+status: working
 owner:
 summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles end to end (`code=720664B data=163024B bss=127228B procs=1902`, 4m33s), and so does `generics.defaults` (`procs=1780`, 16s). READ THE 2026-09-05 BLOCKQUOTE AT THE TOP OF `LIVE STATUS` BEFORE ANY OTHER FIGURE IN THIS FILE -- every other wall table here is a dated snapshot and they disagree by design. THE LAST WALL ON 6b WAS NOT IN THE FRONTEND, IT WAS THE PIN: `for-in: enumerator has no readable Current` fell to ONE LINE in `lib/rtl/classes.pas` (`property Current: T read GetCurrent;` on `IEnumerator<T>`), deliberately omitted since 2026-08-30 because Track B builds `lib/rtl` with $(PXX_STABLE) and the pin rejected a property in an interface; the parser fix sat in `done/` doing nothing for this corpus until pin v404 (8844c8c42) carried it. ATTRIBUTED BY ABLATION, not by plausibility -- same binary, same source, that line removed reproduces the exact wall at :1481, rc=1. THE CLASS TO CARRY: \"fixed at HEAD, inert until pinned\" -- any compiler fix a $(PXX_STABLE) consumer needs is closed while still unusable there, the ticket folder gives the wrong answer and the pin gives the right one (`devdocs/dev/track-b-workarounds.md` names this state; THIS instance was missing from that registry because the workaround was an OMISSION and a missing declaration leaves no code to spot). STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30, b613b5fcf broke it the next day, nobody re-ran it, and 6b then appeared to stop inside 6a's file, so the ladder had moved BACKWARDS while reading as a floor. Re-run the rung before you trust any row here. NEXT RUNG IS 7 (`fcl-passrc`, 60k LOC); rungs 1-6 green. NO coordinate on this corpus is trustworthy: `near:` has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
@@ -11,7 +11,7 @@ summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles e
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished (parked)
+- **Status:** working
   The object blocker IS discharged: `decide-revisit-object-types-rtl-generics-fired-the-trigger`
   is in `decided/` as **option C** (`object` = a value type with a hard error on
   inheritance; **option B, "`object` becomes `TObject`", was explicitly
@@ -23,7 +23,7 @@ summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles e
   note inside THE ONE CANONICAL TABLE below. **Re-measure after
   `regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section`
   lands — independence is unproven.**
-- **Owner:** frankwasm
+- **Owner:** frankO
 
 ---
 

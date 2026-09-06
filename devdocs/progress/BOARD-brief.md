@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:8 backlog:11 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:39 backlog-pascal:26 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3381 rejected:78`
+`working:22 unfinished:21 blocked:8 backlog:11 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:39 backlog-pascal:27 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3382 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -21,6 +21,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause` [P] — owner: frankS
+- `feature-pascal-corpus-expansion` [P] — owner: frankO
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -31,7 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-p-one-lvalue-path-for-statements-and-expressions` [P] — owner: frankA
 - `refactor-p-three-hand-rolled-postfix-loops` [P] — owner: frankA
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -49,7 +50,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-user-defined-decorators` [N]
 - `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
 - `feature-pal-esp-posix-fd-semantics` [B+S]
-- `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
@@ -79,7 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
-- `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
@@ -99,5 +98,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [B]` feature-b-getfpcheapstatus-needs-always-on-heap-accounting (unblocks 1)
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
 _364 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

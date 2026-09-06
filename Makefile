@@ -5122,6 +5122,13 @@ test-threads: $(COMPILER)
 	# TWO file params of different widths to show at all). Relation-asserted.
 	./$(COMPILER) test/test_method_param_self_shift_family.pas $(TESTTMP)/test_method_param_self_shift_family_26
 	tools/expect_same.sh test_method_param_self_shift_family_26 "$$($(TESTTMP)/test_method_param_self_shift_family_26 | tail -1)" "SELFSHIFT OK"
+	# A type nested in a class must be visible to declarations further nested
+	# inside it. Alias visibility was a LIST OF RANGES, and parsing a nested
+	# type's body retargets ParsingClassBodyCi at that nested type, so a sibling
+	# nested type went `unknown type` for the span of a nested record's fields.
+	# Row 3 is DEPTH 2 and is what distinguishes a chain walk from a fifth arm.
+	./$(COMPILER) test/test_nested_alias_visible_through_enclosing_chain.pas $(TESTTMP)/test_nested_alias_chain_26
+	tools/expect_same.sh test_nested_alias_chain_26 "$$($(TESTTMP)/test_nested_alias_chain_26 | tail -1)" "NESTEDCHAIN OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"

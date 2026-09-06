@@ -4746,6 +4746,7 @@ begin
     nested type parsed but was registered flat, invisible to FindNestedType — so
     the out-of-line `function TOuter.TSub.M` header could not walk into it. }
   savedPCB := ParsingClassBodyCi;
+  UClsEnclosingCi[ci] := savedPCB;   { the lexical chain, for AliasOwnsThrough }
   ParsingClassBodyCi := ci;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
@@ -6268,6 +6269,7 @@ begin
         begin
         { types declared from here to the matching `end` belong to THIS class }
         savedPCB := ParsingClassBodyCi;
+        UClsEnclosingCi[ci] := savedPCB;   { the lexical chain, for AliasOwnsThrough }
         ParsingClassBodyCi := ci;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin

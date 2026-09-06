@@ -253,10 +253,50 @@ end;
   MethImplOwnerCi is the class there. Both must see the alias: a version
   consulting only the first compiles `var head: PCell` in the class body and
   then fails on `var n: PCell` in the method, which is the same declaration. }
+function AliasOwnsThrough(owner, scope: Integer): Boolean;
+{ Is `owner` `scope` itself, or any type `scope` is lexically nested inside?
+
+  The inner-scope rule, walked rather than enumerated. `scope` is whichever
+  range variable the caller is asking about, and the walk is what makes a
+  NESTED type's body still see the enclosing type's aliases -- parsing a nested
+  body retargets ParsingClassBodyCi at the nested type, so without the walk the
+  enclosing class is invisible for exactly the span of the nested declaration.
+
+  Bounded by construction: UClsEnclosingCi is written once, at the point the
+  body parser has the enclosing ci in hand, and a type cannot be declared
+  inside itself. The explicit counter is belt-and-braces against a malformed
+  table rather than a case anyone can write. }
+var i, guard: Integer;
+begin
+  AliasOwnsThrough := False;
+  if scope < 0 then Exit;
+  i := scope;
+  guard := 0;
+  while (i >= 0) and (guard <= MAX_UCLASS) do
+  begin
+    if owner = i then begin AliasOwnsThrough := True; Exit; end;
+    i := UClsEnclosingCi[i];
+    Inc(guard);
+  end;
+end;
+
 function AliasVisibleHere(a: Integer): Boolean;
 begin
+  { ONLY arm 2 walks. Arms 1 and 2 were both approximations of "somewhere in the
+    enclosing chain" and collapse into one; arms 3 and 4 are NOT chain positions
+    and must stay exact comparisons.
+
+    An out-of-line method body is not lexically inside anything, and
+    QualTypeOwnerCi is, in frankB's words, "a lookup being told which owner to
+    answer for" -- FindNestedClassLikeCi sets it around a FindTypeAlias call
+    while walking an ancestor chain, from outside any lexical nesting. Walking
+    an enclosing chain from either of those answers a different question than
+    the caller asked, and would over-accept.
+
+    Recorded because folding them in looks like the natural next simplification
+    and is wrong: I wrote it that way first. }
   AliasVisibleHere := (AliasOwnerCi[a] < 0) or
-                      (AliasOwnerCi[a] = ParsingClassBodyCi) or
+                      AliasOwnsThrough(AliasOwnerCi[a], ParsingClassBodyCi) or
                       (AliasOwnerCi[a] = MethImplOwnerCi) or
                       (AliasOwnerCi[a] = QualTypeOwnerCi);
 end;
@@ -1858,6 +1898,7 @@ begin
   UClsSealed[UClsCount] := False;
   UClsAbstractCls[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
+  UClsEnclosingCi[UClsCount] := -1;   { unit level until a body parser says otherwise }
   UClsHelperTk[UClsCount] := -1;
   UClsHelperRec[UClsCount] := REC_NONE;
   UClsForward[UClsCount] := False;
