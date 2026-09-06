@@ -3,9 +3,9 @@ track: P
 prio: 25
 type: bug
 blocked-by: []
-summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` were ONE signature in pxx and are two overloads in fpc. FIXED for every binding fpc's own row exercises: `FindProcOverloadRec` now reads `ProcParamDynDepth` beside `Params[j].IsArray` (both sides must be array params; a dyn depth is only ever ASSERTED, so 0 on both sides of a forward/body pair is today's answer and no split), and the argument side gained two channels — `MatchArgDynDepth` (this argument is certainly a named dynamic array) and its MIRROR `MatchArgOpenCtor` (certainly an anonymous element list), read by `MatchParamExact` so they RANK and never refuse. tarrconstr6 burned. STILL OPEN, and measured: `Test(Nil)` takes whichever overload is declared FIRST (1 open-first, 2 dyn-first) where fpc always binds the dynamic one. Arms written in `MatchParamExact` and `MatchArgNilOk` did NOT fire and were removed. THE PHASE IS NOW IDENTIFIED (2026-09-06): `MatchParamCompatible` is `TypesCompatible(...) or MatchArgNilOk(...)`, pxx short-circuits `or` (FPC's {$B-}), and `TypesCompatible` already answers TRUE for an array parameter against nil's tyPointer — so the FIRST candidate is granted outright and the named-dyn one is never asked. That is also why `a.nilarg` printed nothing: the trace sits BELOW the short-circuit. The residual is a ranking that does not exist rather than one that ranks wrong, so the fix belongs in the compatible phase, not in `MatchParamExact`."
-status: working
-owner: frankS
+summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` were ONE signature in pxx and are two overloads in fpc. FIXED, both halves. Registration: `FindProcOverloadRec` reads `ProcParamDynDepth` beside `Params[j].IsArray`. Typed arguments: `MatchArgDynDepth` and its mirror `MatchArgOpenCtor`, read by `MatchParamExact` so they RANK and never refuse, plus a new `ASTCtorDynDepth` column because `TDynArr.Create(...)` and `[...]` are the same AN_ARRAY_CTOR by then. The `nil` row closed 2026-09-06 (frankB) as **Phase 1c3** in `MatchProcCall`: `TypesCompatible` answers TRUE for an array parameter against nil's tyPointer and pxx short-circuits `or`, so the first candidate in the chain was granted outright and the named-dyn one was never asked; the new phase runs only when a literal nil lands on a `ProcParamDynDepth > 0` parameter and only REORDERS — it grants nothing and withdraws nothing. NOT in `MatchParamExact`, measured: `Params[j].TypeKind` on an array parameter is its ELEMENT kind so neither candidate is exact, and an exact arm would have flipped `P(a: Pointer)` vs `P(const a: TLA)`, which BOTH compilers bind to the Pointer in both orders. pxx still accepts nil for a lone open-array parameter where fpc refuses it; that is kept and asserted separately."
+status: done
+owner: frankB
 ---
 
 # An open-array and a named dynamic-array parameter are one signature
@@ -240,3 +240,84 @@ a coarse kind channel granting a match the finer channel would have declined.
 
 Not taken here. frankB said they would take the nil row if their group surfaced
 the phase; the phase is above, and this ticket stays free.
+
+## The nil row, closed — 2026-09-06 (frankB), Phase 1c3 in `MatchProcCall`
+
+Measured at compiler `0e7d9b5661d6`. Both declaration orders now bind the named
+dynamic array, matching fpc 3.2.2:
+
+```
+             before          after         fpc 3.2.2
+open-first   open 0          dyn 0         dyn 0
+dyn-first    dyn  0          dyn 0         dyn 0
+```
+
+**One correction to the paragraph above, and it does not change the conclusion.**
+*"An arm in `MatchParamExact` cannot fire because the call never gets that far"*
+reads as a claim about ordering, and the ordering is the other way round: Phase 1
+of `MatchProcCall` uses `MatchParamExact` and runs BEFORE the compatible phase.
+The measurement it rests on — that `MatchArgNilOk` is never CALLED, because
+`MatchParamCompatible` is `TypesCompatible(...) or MatchArgNilOk(...)` and pxx
+short-circuits `or` — is correct and is the load-bearing part. The exact phase
+nonetheless cannot carry this fix, for a different reason, measured below.
+
+### Why not `MatchParamExact`, measured rather than reasoned
+
+**`Params[j].TypeKind` on an array parameter is its ELEMENT's kind** — this
+ticket's own section says so — so both candidates compare `tyInteger` against
+nil's `tyPointer` and NEITHER is exact. Making nil-at-a-named-dyn-array exact
+would fire, and it would take a case that today is right:
+
+```
+                        pxx before   pxx after   fpc 3.2.2
+P(a: Pointer) first     ptr          ptr         ptr
+P(const a: TLA) first   ptr          ptr         ptr
+```
+
+Both compilers bind the POINTER in both orders. An exact-phase arm flips the
+second row to `dyn` — trading one declaration-order bug for another, in a
+program with no array overload pair in it at all. So the preference has to be
+WEAKER than exact: a named dyn array beats an open array, and a Pointer beats
+both. Rows 5 and 6 of the fixture are that measurement kept.
+
+### Phase 1c3
+
+A new phase between 1c2 and 1d, entered only when some argument is the literal
+nil (`MatchArgNilValid`, `MatchArgNil[]` — both already existed) and at least one
+such nil lands on a parameter whose `ProcParamDynDepth > 0`. Within the phase a
+candidate must satisfy every parameter the ordinary compatible rules ask for, so
+it grants nothing new; it only lets the named-dyn candidate be SEEN before the
+open-array one that `TypesCompatible` would have taken on first hit.
+
+**It never withdraws a candidate either.** fpc REFUSES nil for an open-array
+parameter outright — `Incompatible type for arg no. 1: Got "Pointer", expected
+{an open array of LongInt}` — and the tidier-looking fix is to adopt that rule.
+We do not: us accepting what fpc rejects is not a defect, so a LONE open-array
+candidate still binds nil, and that is asserted in its own program because fpc
+will not compile it.
+
+### Gate
+
+`gate.sh quick` GREEN at the landing tree, including the FPC seed canary — Phase
+1c3 adds no new routine, so it is not in the forward-declaration class that cost
+this session a red on origin earlier today.
+
+**Positive control, run and not assumed.** With Phase 1c3 reverted and the
+compiler rebuilt (`converged after 1 round(s)`, `3bc71d403a17`), rows 1, 7 and 8
+of the fixture fail with `got "open" want "dyn"` and the other five pass. Rows 7
+and 8 are the ones a single-shape probe would not have had: a merely-compatible
+SECOND argument, and a second nil landing on a non-array parameter.
+
+The laxness fixture passes with the fix and without it — correct, and stated
+here so nobody reads it as proving anything about Phase 1c3. It is a no-drift
+guard, not a fix-prover.
+
+### What is left, and it is not this ticket
+
+`Params[j].TypeKind` answering two questions under one name is what made this a
+phase instead of two lines, and it is
+[[refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither]].
+This is its third measured cost in one group.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

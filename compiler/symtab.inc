@@ -11356,6 +11356,7 @@ var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: In
     bestW, bestI, w: Integer;   { --strict-overload-width ranking }
     fits: Boolean;
     variantArg: Boolean;    { some argument is a Variant -- see Phase 1c1 }
+    nilAtArr: Boolean;      { some argument is the literal nil -- see Phase 1c3 }
     dropLateDef: Boolean;   { NilPy: a def below this call site is not bound yet }
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
@@ -11671,6 +11672,84 @@ begin
     begin
       Result := bestI;
       Exit;
+    end;
+  end;
+
+  { Phase 1c3: a `nil` argument prefers a NAMED DYNAMIC-ARRAY parameter over an
+    OPEN-array one. Same shape as 1c and 1c1 above and for the same reason: the
+    kind channel cannot tell the two apart, so the general compatible phase
+    granted whichever was DECLARED FIRST.
+
+    Measured against fpc 3.2.2, both declaration orders, with
+    `Test(const a: array of LongInt)` and `Test(const a: TLA)`:
+
+        open-first    fpc: dyn    pxx: open
+        dyn-first     fpc: dyn    pxx: dyn
+
+    WHY THE EXACT PHASE CANNOT DO IT, and this is the load-bearing measurement
+    rather than the obvious place to put an arm. `Params[j].TypeKind` on an
+    array parameter is its ELEMENT's kind, so both candidates compare tyInteger
+    against nil's tyPointer and neither is exact -- the one-field-two-meanings
+    defect showing up as an overload bug
+    (refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither).
+    Making nil-at-a-dyn-array exact instead would have been WRONG in a way a
+    single probe hides: measured, `P(a: Pointer)` and `P(const a: TLA)` given
+    nil bind the POINTER under fpc in BOTH orders, and pxx already agrees --
+    an exact-phase arm would have flipped the dyn-first program and traded one
+    declaration-order bug for another.
+
+    AND IT IS A PREFERENCE, NOT A COMPATIBILITY RULE, which is the other thing
+    a probe would have got wrong. fpc REFUSES nil for an open-array parameter
+    outright (`Incompatible type for arg no. 1: Got "Pointer", expected
+    "{Open} Array Of LongInt"`) where pxx accepts it. Us accepting what fpc
+    rejects is not a defect, so that acceptance stays: a lone open-array
+    candidate still binds through the general compatible phase below, exactly
+    as before. Only the CHOICE between the two shapes changes.
+
+    Every other argument must still be compatible, so this can only REORDER
+    candidates that would all have matched below; it never makes a call match
+    that did not. MatchArgNilOk is not consulted and cannot be: it is never
+    CALLED for an array parameter, because MatchParamCompatible is
+    `TypesCompatible(...) or MatchArgNilOk(...)` and TypesCompatible already
+    answers True (frankS, measured with a trace ahead of the `or`).
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  if MatchArgNilValid then
+  begin
+    nilAtArr := False;
+    for j := 0 to nArgs-1 do
+      if (j < MAX_PROC_PARAMS) and MatchArgNil[j] then nilAtArr := True;
+    if nilAtArr then
+    begin
+      i := ProcChainHead(name);
+      while i >= 0 do
+      begin
+        if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and
+           ProcArityMatches(i, nArgs) then
+        begin
+          match := False;   { at least ONE nil must land on a named dyn array }
+          fits := True;
+          for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
+          begin
+            if (not MatchParamCompatible(i, j, argTypes[j])) and
+               not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+              fits := False
+            else if MatchArgRecMismatch(i, j, argTypes[j]) then
+              fits := False
+            else if (j < MAX_PROC_PARAMS) and MatchArgNil[j] and
+                    Procs[i].Params[j].IsArray then
+            begin
+              if ProcParamDynDepth[i * MAX_PROC_PARAMS + j] > 0 then match := True
+              else fits := False;
+            end;
+          end;
+          if fits and match then
+          begin
+            Result := i;
+            Exit;
+          end;
+        end;
+        i := ProcHashNext[i];
+      end;
     end;
   end;
 

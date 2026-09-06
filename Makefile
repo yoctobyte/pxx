@@ -5798,6 +5798,30 @@ test-core: $(COMPILER)
 	@# bug-p-a-pointer-to-a-fixed-array-segfaults-as-a-copying-open-array-argument
 	./$(COMPILER) test/test_a_pointer_to_a_fixed_array_is_a_copying_open_array_argument.pas $(TESTTMP)/test_ptrarrarg26
 	tools/expect_same.sh test_ptrarrarg26 "$$($(TESTTMP)/test_ptrarrarg26 | tail -n 2)" "$$(printf 'fails=0\nPTRARRARG OK')"
+	@# bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature
+	@# `Test(const a: array of LongInt)` and `Test(const a: TLA)` both in scope,
+	@# `Test(nil)` -- bound whichever was DECLARED FIRST. fpc binds the named
+	@# dynamic array in BOTH orders, and a TYPED argument already chose right in
+	@# both, so only the literal fell through to declaration order.
+	@# WHY IT IS A PHASE AND NOT AN EXACT MATCH, measured, not reasoned:
+	@# Params[j].TypeKind on an array parameter is its ELEMENT's kind, so both
+	@# candidates compare tyInteger against nil's tyPointer and NEITHER is
+	@# exact -- one-field-two-meanings surfacing as an overload bug. Making
+	@# nil-at-a-dyn-array exact would have flipped `P(a: Pointer)` vs
+	@# `P(const a: TLA)`, which BOTH compilers bind to the Pointer in both
+	@# orders; rows 5 and 6 are that measurement kept as a regression guard.
+	@# CONTROL RUN, NOT ASSUMED: with Phase 1c3 reverted, rows 1, 7 and 8 fail
+	@# (`got "open" want "dyn"`) and the other five pass.
+	./$(COMPILER) test/test_a_nil_argument_prefers_a_named_dynamic_array_over_an_open_array.pas $(TESTTMP)/test_nilarrpref26
+	tools/expect_same.sh test_nilarrpref26 "$$($(TESTTMP)/test_nilarrpref26 | tail -n 2)" "$$(printf 'fails=0\nNILARRPREF OK')"
+	@# ...and the direction that fix must NOT drift in. fpc REFUSES nil for an
+	@# open-array parameter outright; pxx accepts it, and us accepting what fpc
+	@# rejects is not a defect, so a LONE open-array candidate must still bind.
+	@# The new phase only REORDERS candidates -- it never grants one and never
+	@# withdraws one. Separate program because fpc will not compile it at all,
+	@# so it is not an fpc-differential row and must not be read as one.
+	./$(COMPILER) test/test_a_lone_open_array_overload_still_accepts_a_nil_argument.pas $(TESTTMP)/test_nilopenlax26
+	tools/expect_same.sh test_nilopenlax26 "$$($(TESTTMP)/test_nilopenlax26 | tail -n 2)" "$$(printf 'fails=0\nNILOPENLAX OK')"
 	# feature-a-x86-64-object-output-is-position-dependent
 	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
 	# TRAILS the displacement. A rip-relative displacement is measured from the
