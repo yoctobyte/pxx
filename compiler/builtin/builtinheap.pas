@@ -45,6 +45,7 @@ type
     every overload of the thing it is passed to fails to match. (That is exactly how fpjson's
     VarRecToJSON failed: "Mismatch in MatchProcCall: CreateJSON, arg[0] = 0".) }
   PVarRecInt64  = ^Int64;
+  PVarRecQWord  = ^QWord;
   PVarRecDouble = ^Double;
   PVarRecStr    = ^string;
 
@@ -69,7 +70,13 @@ type
     VBoolean: Boolean;
     VChar: Char;
     VPointer: Pointer;
-    VPChar: Pointer;
+    { PChar, not a bare Pointer — for the reason the boxed-member note above
+      already gives, one field further on. `writeln(Args[i].VPChar)` on a
+      Pointer prints the ADDRESS; on a PChar it prints the text, which is what
+      FPC does and what fpc-testsuite tarray2 asserts. Every existing reader
+      already writes `PChar(v.VPChar)`, so typing it costs nothing and removes
+      three casts' worth of opportunity to forget one. }
+    VPChar: PChar;
     VInt64: PVarRecInt64;      { boxed: the union slot is only pointer-sized }
     VExtended: PVarRecDouble;  { likewise }
     { The rest of FPC's union. Adding a field here is SAFE and costs nothing:
@@ -78,8 +85,12 @@ type
       exactly what FPC's variant record is. These exist so code that reads an element BY TAG
       (fpjson's VarRecToJSON does, exhaustively) compiles; a tag this compiler never emits is
       simply a branch that never runs. }
-    VObject: Pointer;
-    VClass: Pointer;
+    { Likewise TObject / TClass rather than Pointer: `Args[i].VObject.ClassName`
+      is what a reader writes, and a Pointer has no members, so it answered the
+      empty string instead of the class name. Nothing outside this record reads
+      either field today, so the typing is free. }
+    VObject: TObject;
+    VClass: TClass;
     VString: PVarRecStr;       { FPC's PShortString; a string pointer here }
     VCurrency: PVarRecDouble;  { FPC's PCurrency; this RTL models Currency as Double }
     VVariant: Pointer;
@@ -88,7 +99,11 @@ type
     VPWideChar: Pointer;
     VWideString: Pointer;
     VUnicodeString: Pointer;
-    VQWord: PVarRecInt64;      { boxed }
+    { PQWord, not PInt64 -- the tag exists precisely to say the slot is
+      UNSIGNED, and reading it through a PInt64 gives back a negative number
+      for every value above High(Int64), which is the whole population the
+      separate tag is for. }
+    VQWord: PVarRecQWord;      { boxed }
   end;
 
 const

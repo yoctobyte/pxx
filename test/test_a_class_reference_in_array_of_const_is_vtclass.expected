@@ -1,0 +1,10 @@
+[0] vtype=8 class=TObject
+[0] vtype=8 class=TFoo
+[0] vtype=8 class=TObject
+[0] vtype=8 class=TFoo
+[0] vtype=7 object=TObject
+[0] vtype=7 object=TFoo
+[0] vtype=5
+[0] vtype=6 pchar=text
+[0] vtype=17 qword=18446744073709551614
+[0] vtype=16 int64=-1234567890123

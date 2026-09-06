@@ -3642,6 +3642,39 @@ begin
   Result := IRPointerStride(node);
 end;
 
+{ Is this node a class REFERENCE (metaclass) value? Both shapes that carry one
+  are tyPointer, so the element-tag selection in AN_VARREC_ARRAY cannot tell
+  them from an untyped pointer by type kind alone and used to tag them
+  vtPointer. CheckMetaclassAssign in pasparser_lval.inc already enumerates
+  exactly these two shapes for the assignment check; this is the same pair read
+  for the tag, kept beside it deliberately so the two cannot drift.
+  feature-pascal-corpus-fpc-testsuite (tarray2 row) }
+function IsNodeClassRef(node: Integer): Boolean;
+var symId: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  { A bare class name used as a value. }
+  if ASTKind[node] = AN_CLASSREF then
+  begin
+    Result := True;
+    Exit;
+  end;
+  { A `class of TBase` variable. }
+  if ASTKind[node] = AN_IDENT then
+  begin
+    symId := ASTIVal[node];
+    if (symId >= 0) and (symId < SymCount) then
+      { A named `class of TBase` carries the base's rec id; a bare `TClass`
+        does not (ParseTypeKind's tclass arm sets only the element kind). So
+        the ELEMENT KIND is the whole test -- an instance variable is tyClass,
+        not a tyPointer with a tyClass element, and the vtObject arm above has
+        already claimed it by the time this runs. }
+      Result := (Syms[symId].TypeKind = tyPointer) and
+                (Syms[symId].PtrElemTk = tyClass);
+  end;
+end;
+
 function IsNodePChar(node: Integer): Boolean;
 var tk: TTypeKind; procIdx, recId, symId: Integer;
 begin
@@ -8257,11 +8290,23 @@ begin
         else if vrElemTk = tyClass then
           vrTag := 7              { vtObject — a class INSTANCE; fell to vtInteger
                                     before, so consumers read a truncated pointer }
+        else if IsNodeClassRef(ASTLeft[item]) then
+          vrTag := 8              { vtClass — a class REFERENCE, not an instance.
+                                    Before the generic pointer tag: a metaclass
+                                    is tyPointer, so vtPointer catches it first
+                                    and the consumer reads VClass as an address }
         else if vrElemTk = tyPointer then
           vrTag := 5              { vtPointer }
-        else if (vrElemTk = tyInt64) or (vrElemTk = tyUInt64) or
-                (((vrElemTk = tyNativeInt) or (vrElemTk = tyNativeUInt)) and
-                 (TARGET_PTR_SIZE = 8)) then
+        else if (vrElemTk = tyUInt64) or
+                ((vrElemTk = tyNativeUInt) and (TARGET_PTR_SIZE = 8)) then
+          { The UNSIGNED half of the row below, split out because it is a
+            DIFFERENT tag and not a formatting nicety: a reader that dispatches
+            on vtInt64 reads the slot through a PInt64, so every QWord above
+            High(Int64) comes back negative. FPC tags NativeUInt as vtQWord on
+            a 64-bit target for the same reason NativeInt is vtInt64 there. }
+          vrTag := 17             { vtQWord (boxed) }
+        else if (vrElemTk = tyInt64) or
+                ((vrElemTk = tyNativeInt) and (TARGET_PTR_SIZE = 8)) then
           { …and a pointer-wide NATIVE int with it, on a 64-bit target. FPC
             makes NativeInt an alias of Int64 there, so this is the tag it
             already gets from the oracle. It used to fall through to vtInteger
@@ -8287,9 +8332,9 @@ begin
         elemAddr := IRAppend(IR_BINOP, elemAddr,
           IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
           Ord(tkPlus), 0, Ord(tyPointer));
-        if (vrTag = 16) or (vrTag = 3) then
+        if (vrTag = 16) or (vrTag = 17) or (vrTag = 3) then
         begin
-          { Boxed value (Int64/float): a pointer-sized union slot can't hold a
+          { Boxed value (Int64/QWord/float): a pointer-sized union slot can't hold a
             64-bit value on 32-bit targets, so store the element in a hidden local
             and put its address in the slot — FPC's VInt64/VExtended convention.
             The asm-text emitters (which build tyInt64 `%`-hole vectors like

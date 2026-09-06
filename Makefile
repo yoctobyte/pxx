@@ -6189,6 +6189,15 @@ test-core: $(COMPILER)
 	# vtObject(7) not vtInteger (fpjson's TJSONArray.Create([PChar(S)]) raised)
 	./$(COMPILER) test/test_varrec_pchar_object_b320.pas $(TESTTMP)/test_varrec_pchar_b32026
 	tools/expect_same.sh test_varrec_pchar_b32026 "$$($(TESTTMP)/test_varrec_pchar_b32026)" "$$(printf '  [0] vtype=0 int=42\n  [1] vtype=6 pchar-first=A\n  [2] vtype=7 obj.tag=77\n  [3] vtype=11 str=managed')"
+	# the same tag-from-static-type-kind arm, two more elements it was wrong
+	# about: a class REFERENCE is tyPointer so vtPointer claimed it (VClass then
+	# had no members), and QWord shared the vtInt64 arm so it was read back
+	# through a PInt64. The QWord row's value is above High(Int64) on purpose --
+	# 1234 reads identically either way and could not fail.
+	./$(COMPILER) test/test_a_class_reference_in_array_of_const_is_vtclass.pas $(TESTTMP)/test_aoc_vtclass26
+	tools/expect_same.sh test_a_class_reference_in_array_of_const_is_vtclass \
+	  "$$($(TESTTMP)/test_aoc_vtclass26)" \
+	  "$$(cat test/test_a_class_reference_in_array_of_const_is_vtclass.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

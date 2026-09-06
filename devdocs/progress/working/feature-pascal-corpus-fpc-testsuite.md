@@ -772,3 +772,49 @@ slug, no status, no summary, and no edge to
 Wired, and both moved from p30/p35 to effective **p75** — the top two of the
 Track P queue. The membership was stated in prose and absent from frontmatter,
 which is the one place the ranker cannot look.
+
+## 2026-09-06 (frankS) — tarray2, and what a skip reason costs when it names the file
+
+`tarray2.pp` has been on the skip list as *"array of const / TVarRec (vtype
+fields, `VExtended^`, `VPointer`)"*. It **compiles and exits 0**, so the runner
+— which compares EXIT CODES — has always called it clean; the row is on the list
+because its OUTPUT diverged. Diffed against fpc 3.2.2 line by line, the
+divergence was five rows, and the reason named **none** of the four that were
+defects:
+
+| row | fpc | pxx (before) | what it was |
+| --- | --- | --- | --- |
+| `type PChar` | `Eerste Pchar` | `4357640` | `TVarRec.VPChar` was a bare `Pointer`, so `writeln` printed the address |
+| `type Object` | `TObject` | *(empty)* | `VObject` was a bare `Pointer`; a `Pointer` has no `.ClassName` |
+| `type Class` | `vtClass` | `vtPointer` | a class REFERENCE is `tyPointer`, so `AN_VARREC_ARRAY`'s tag arm gave it 5 |
+| `QWord(1234)` | `QWord` | `Int64` | `tyUInt64` shared the `vtInt64` arm — read back through a `PInt64` |
+| `type Pointer` | `4198656` | `4351789` | an ADDRESS. Not a defect and never will be. |
+| `1.234` ×2 | 20 digits, `E+0000` | 17 digits, `E+000` | this RTL models `Extended` as `Double` — CLAUDE.md records that as the architecture |
+
+Four fixed, two remaining and neither is ours to fix, so the row is now
+`wontfix:` rather than `gap:` — it can never match by design, and leaving it
+tagged `gap:` kept it in a burn-down population it does not belong to.
+
+**The tag arm and the field types are ONE claim, not two.** `VClass: TClass`
+without the `vtClass` arm is a field nothing ever tags; the `vtClass` arm
+without `VClass: TClass` is a tag whose reader has no members. They landed
+together for that reason.
+
+**`vtQWord` needed a third edit nobody would predict from the first two.** The
+boxing decision is `if (vrTag = 16) or (vrTag = 3)` — an ENUMERATION of tags,
+not a property of the value — so tagging 17 without adding it there put the
+QWord's *value* in a slot the reader dereferenced as a pointer. It segfaulted,
+which is the lucky outcome: the same omission on a value that happens to look
+like an address reads memory instead. A tag introduced next to an existing one
+inherits none of its handling.
+
+**And the QWord test row carries a value above `High(Int64)` on purpose.**
+tarray2's own probe is `QWord(1234)`, which reads back as 1234 through a
+`PInt64` just as happily as through a `PQWord` — **the file that reports the
+bug cannot detect the fix.** `High(QWord) - 1` prints `18446744073709551614`
+correctly and `-2` incorrectly, which is the discriminator the suite lacked.
+
+The general shape, and it is the second time today in this ticket: **a skip
+reason describes the FILE and gets read as describing the WALL.** Five of six
+tmoperator rows were wrong the same way this morning. Any reason that names a
+FEATURE rather than a LINE has not been measured since it was written.

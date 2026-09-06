@@ -39,7 +39,7 @@ tarray13.pp	gap: DynArraySize/DynArrayIndex/DynArraySetLength RTL helpers missin
 tarray14.pp	gap: Concat() on dynamic arrays and array-of-array constructors
 tarray15.pp	gap: dynamic-array typed constants/initializers (Nil, (), nested)
 tarray17.pp	gap: {$modeswitch arrayoperators} — dynarray + and += concatenation
-tarray2.pp	gap: array of const / TVarRec (vtype fields, VExtended^, VPointer)
+tarray2.pp	wontfix: array of const / TVarRec — diffed line by line vs fpc 3.2.2 at compiler e313d353df5f. Every tag and value matches except two rows, neither a defect: one prints @Testit's ADDRESS, and the two Extended rows follow from this RTL modelling Extended as Double (CLAUDE.md records that as the architecture). The four that WERE defects are fixed — VPChar printed its pointer, VObject.ClassName was empty, a class reference tagged vtPointer(5) not vtClass(8), QWord(x) tagged vtInt64(16) not vtQWord(17). The old reason named none of them because it described the FILE, not the line the output diverges on. Detail: working/feature-pascal-corpus-fpc-testsuite.md
 tarray7.pp	gap: open-array slice syntax a[lo..hi] passed to open-array param
 tarrconstr1.pp	gap: Delphi dynamic-array constructor TAB.Create(...)
 tarrconstr5.pp	gap: inline specialize TArray<specialize TArray<String>> in type decl
