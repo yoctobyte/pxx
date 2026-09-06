@@ -43,6 +43,21 @@ begin
   i := 65535; WriteLn('ord W65535=', Ord(WordBool(i)));
   i := -1;    WriteLn('ord Lm1=',    Ord(LongBool(i)));
 
+  { …and what `True` MATERIALISES as, which is a DIFFERENT question from the
+    signedness above and needs its own rows. FPC stores all-bits-set, so
+    Ord is -1 -- and LongBool was signed the whole time and still answered 1,
+    which is the control that separates the two fixes. A row set built only on
+    `True` reads as "the kind change did nothing"; one built only on 255 reads
+    as "sized booleans are fixed". Both are wrong and both are one plausible
+    test file away. }
+  bb := True; w := True; l := True;
+  WriteLn('ord bbT=', Ord(bb), ' wT=', Ord(w), ' lT=', Ord(l));
+  bb := False; WriteLn('ord bbF=', Ord(bb));
+  WriteLn('ord castT=', Ord(ByteBool(True)), ' ', Ord(WordBool(True)), ' ', Ord(LongBool(True)));
+  { an INTEGER source is a reinterpret and keeps its bits -- the row that says
+    materialising a truth value and casting a number are different questions }
+  i := 200; WriteLn('ord cast200=', Ord(ByteBool(i)));
+
   { the widths are the reason these are not simply mapped onto Boolean, so
     assert them -- as a RELATION where one exists, so the row carries no
     per-target constant }

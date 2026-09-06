@@ -11,6 +11,10 @@ ord B255=-1
 ord W40000=-25536
 ord W65535=-1
 ord Lm1=-1
+ord bbT=-1 wT=-1 lT=-1
+ord bbF=0
+ord castT=-1 -1 -1
+ord cast200=-56
 sz=1 2 4
 and=TRUE or=TRUE
 xor tt=TRUE xor tf=TRUE xor same=FALSE

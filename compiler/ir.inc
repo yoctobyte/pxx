@@ -11750,6 +11750,23 @@ begin
         end;
       end;
 
+      { `b := True` where b is a SIZED BOOLEAN stores ALL BITS SET, not 1 --
+        FPC's C-ABI convention, and the reason `Ord(b)` is -1 there and was 1
+        here. Only a PLAIN Boolean source is materialised: a sized-to-sized
+        assignment is a reinterpret at a possibly different width and keeps its
+        bits, which is what a value crossing to C means by it.
+
+        HERE for the reason the char-array and set-literal arms above give in
+        their own words: there are two dozen places that build an AN_ASSIGN and
+        exactly one that lowers it. An arm per builder is how `a := 'abc'` on a
+        Char array stayed silently wrong through several of them.
+        bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln }
+      if SemIsBool(NodeSemIdOf(ASTLeft[node])) and
+         ((IntToTypeKind(ASTTk[ASTRight[node]]) = tyBoolean) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyBool8)) then
+        ASTRight[node] := SemBoolMaterialise(ASTRight[node],
+                            IntToTypeKind(ASTTk[ASTLeft[node]]));
+
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is
         CALLED. Taking its address is what `@fp` is for, and `fp()` with explicit
         parens was already right — so the two spellings disagreed, and the wrong

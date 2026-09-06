@@ -107,6 +107,48 @@ begin
   r := SemBoolAsBoolean(r);
 end;
 
+{ A truth value MATERIALISED as a sized boolean of kind `tk`: `0 - (n <> 0)`,
+  which is 0 for false and ALL BITS SET for true.
+
+  This is the C-ABI convention and it is the other half of why these types are
+  signed. FPC stores True as all-bits-set and reads it back through a signed
+  ordinal, so `Ord(ByteBool(True))` is -1; pxx stored a plain 1 and answered 1.
+  The two are NOT the same question as the signedness of the kind -- LongBool
+  has been tyInteger, and therefore signed, the whole time and still answered 1,
+  which is the control that separates them (frankA, 2026-09-06). A row set built
+  on `True` reads as "the change did nothing" against a kind fix, and one built
+  on `ByteBool(255)` reads as "sized booleans are fixed" against this one.
+  Neither is right on its own and both are one plausible test file away.
+
+  `<> 0` rather than negating the operand directly: a plain Boolean is canonical
+  0/1 here and negating it would do, but this is also the funnel a nonzero
+  sized-boolean value can reach, and `0 - 200` is not all-bits-set. Writing the
+  cheap form would be correct today and would fail the day the caller widens.
+  Constant folding removes it for a literal operand.
+  bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln }
+function SemBoolMaterialise(n: Integer; tk: TTypeKind): Integer;
+var mbZero, mbCmp: Integer;
+begin
+  Result := n;
+  if n < 0 then Exit;
+  mbZero := AllocNode(AN_INT_LIT);
+  ASTIVal[mbZero] := 0;
+  ASTTk[mbZero] := ASTTk[n];
+  mbCmp := AllocNode(AN_BINOP);
+  ASTIVal[mbCmp] := Ord(tkNeq);
+  ASTLeft[mbCmp] := n;
+  ASTRight[mbCmp] := mbZero;
+  ASTTk[mbCmp] := Ord(tyBoolean);
+  mbZero := AllocNode(AN_INT_LIT);
+  ASTIVal[mbZero] := 0;
+  ASTTk[mbZero] := Ord(tk);
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(tkMinus);
+  ASTLeft[Result] := mbZero;
+  ASTRight[Result] := mbCmp;
+  ASTTk[Result] := Ord(tk);
+end;
+
 { A UNARY operator overload on an aggregate operand, built as an ORDINARY CALL.
 
   `-a`, `not a` and `+a` where the operand is a record/class that declares
@@ -7077,6 +7119,17 @@ begin
               enum identity captured above) and a float conversion, and DECLINES
               tyPointer and the string kinds, whose continuations below are
               genuinely this door's own. }
+            { `ByteBool(True)` is a truth value being SPELLED as a sized
+              boolean, so it materialises all-bits-set exactly as an assignment
+              does -- fpc answers Ord(ByteBool(True)) = -1. `ByteBool(200)` is
+              NOT this shape: an integer source is a reinterpret and keeps its
+              bits, which is the row that says the two are different questions.
+              Ahead of TryScalarNamedCast because the operand is what changes,
+              not the construction. }
+            if SemIsBool(castSem) and
+               ((IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) or
+                (IntToTypeKind(ASTTk[CurASTNode]) = tyBool8)) then
+              CurASTNode := SemBoolMaterialise(CurASTNode, castTk);
             if TryScalarNamedCast(castTk, castSem) then Exit;
             { ...and on a promotable int, `Pointer(n)` IS `@n`, so make it one.
               Punning the operand worked for a LOCAL, whose rvalue already is

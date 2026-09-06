@@ -543,6 +543,7 @@ AN_BINOP Left lhsNode
 AN_BINOP Left lhsValIncNode
 AN_BINOP Left lhsValNode
 AN_BINOP Left lnA
+AN_BINOP Left mbZero
 AN_BINOP Left mulNode
 AN_BINOP Left n
 AN_BINOP Left n1
@@ -596,6 +597,8 @@ AN_BINOP Right litN
 AN_BINOP Right lnB
 AN_BINOP Right loLit
 AN_BINOP Right mask
+AN_BINOP Right mbCmp
+AN_BINOP Right mbZero
 AN_BINOP Right mulNode
 AN_BINOP Right n
 AN_BINOP Right nilNode
