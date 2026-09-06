@@ -6797,6 +6797,46 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_a_half_dereferenced_call_result_is_refused.pas $(TESTTMP)/test_halfderefcall26 2>&1 \
 	  | grep -q 'this value is still a POINTER here' \
 	  || { echo 'test_a_half_dereferenced_call_result_is_refused: FAIL - a two-short chain through a call result compiled, or refused for another reason'; exit 1; }
+	@# A BARE ROUTINE NAME INTO A PROCEDURAL SLOT, all four spellings in one
+	@# compile. Outside {$$mode delphi} the name is a CALL, so the Integer RESULT
+	@# went into a function-pointer slot and calling it jumped through 7 --
+	@# compiled clean, SIGSEGV rc=139, identical on pin v404. fpc 3.2.2 refuses
+	@# all four lines (three `Incompatible types`, one `Incompatible type for arg
+	@# no. 1`), which was checked against the oracle rather than assumed.
+	@# FOUR SPELLINGS, TWO CHECKS, and the split is structural: three funnel
+	@# through AN_ASSIGN and the fourth is an ARGUMENT, which passes through no
+	@# node the other three do. The first attempt fixed the assignment and left
+	@# the argument crashing, so the count is asserted, not just the presence.
+	@./$(COMPILER) test/test_a_bare_routine_name_into_a_procedural_slot_is_refused.pas $(TESTTMP)/test_bareproc26 > $(TESTTMP)/test_bareproc.log 2>&1; \
+	  test "$$(grep -c 'procedural slot cannot take' $(TESTTMP)/test_bareproc.log)" = 3 \
+	  || { echo 'test_a_bare_routine_name_into_a_procedural_slot_is_refused: FAIL - expected 3 assignment refusals (variable, record field, array element)'; exit 1; }
+	@test "$$(grep -c 'procedural parameter cannot take' $(TESTTMP)/test_bareproc.log)" = 1 \
+	  || { echo 'test_a_bare_routine_name_into_a_procedural_slot_is_refused: FAIL - the ARGUMENT spelling was not refused; it is a separate check by construction'; exit 1; }
+	@# ...and the POSITIVE half, which is the whole risk of the refusal above: it
+	@# fires on "the source is a CALL whose result is not itself procedural", so
+	@# what it can break is every legitimate way of filling a procedural slot.
+	@# ROW C IS THE ROW THAT SEPARATES THIS RULE FROM THE NEXT-WIDER ONE --
+	@# `f := MakeCb` is a call in source position whose result IS procedural, and
+	@# a rule spelled "a call cannot fill a procedural slot" passes every other
+	@# row here and fails only that one.
+	@# THE OTHER AXIS IS ALREADY ASSERTED ELSEWHERE AND IS NOT DUPLICATED HERE:
+	@# test_method_ptr_cast_b277 does `m.Code := a.MethodAddress(nm)`, where the
+	@# destination IS a procedural slot (TMethod.Code carries a UFldProcSig) and
+	@# the source IS a call -- and a code address is exactly what belongs there.
+	@# Written without the pointer/record/class exclusion this check refused that
+	@# line; the FULL Pascal suite caught it and the quick tier does not run it.
+	./$(COMPILER) test/test_a_routine_address_into_a_procedural_slot_still_works.pas $(TESTTMP)/test_procaddrok26
+	@$(TESTTMP)/test_procaddrok26 | diff -u test/test_a_routine_address_into_a_procedural_slot_still_works.expected - \
+	  || { echo 'test_a_routine_address_into_a_procedural_slot_still_works: FAIL - a legal way of filling a procedural slot was refused, or a call result is no longer called'; exit 1; }
+	@# ...and the OTHER SIDE OF THE FLAG. {$$mode delphi} binds a bare routine
+	@# name to its ADDRESS -- defs.inc calls it "the one behavioural delta" -- so
+	@# the spellings refused above are correct there and still compile. Fixing
+	@# the default-mode crash by adopting Delphi's binding everywhere would also
+	@# have removed the crash and would have deleted the delta; that is a dialect
+	@# decision, not something to arrive at while fixing a segfault.
+	./$(COMPILER) test/test_delphi_mode_binds_a_bare_routine_name.pas $(TESTTMP)/test_delphibare26
+	@$(TESTTMP)/test_delphibare26 | diff -u test/test_delphi_mode_binds_a_bare_routine_name.expected - \
+	  || { echo 'test_delphi_mode_binds_a_bare_routine_name: FAIL - the {$$mode delphi} @-optional binding moved'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

@@ -5,7 +5,7 @@ type: bug
 status: done
 blocked-by: []
 owner: frankB
-summary: "RESOLVED 2026-09-06, together with bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped: ONE ARM, and the two tickets are the depth-2 and depth-1 faces of the same absent step. ParseLValueAST has carried the implicit-deref arm for as long as `p.a` has worked; ParseClassRecordSelectors -- THE SHARED WALKER the three postfix cast loops delegate to -- never had it, and its builder makes AN_FIELD and nothing else, so every caller that correctly delegated got a field applied to a POINTER VALUE. Fixed by that arm in the shared walker plus the C4 loop's delegation guard widened to hand over a pointer-valued `.` at all. THIS TICKET'S OWN DISCRIMINATOR WAS FALSE WHEN I MEASURED IT: it says only the CAST spelling is short a level, and the non-cast `pp^.a` was short a level too until frankA's b7b9e309e landed an hour later. Test: test_a_pointer_cast_dereferences_implicitly_for_a_selector, 8 rows, fpc 3.2.2's own output byte for byte. A third, distinct defect was split out rather than folded in -- bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing -- because its repair is a DIAGNOSTIC and not an address computation."
+summary: "RESOLVED 2026-09-06, together with bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped: ONE ARM, and the two tickets are the depth-2 and depth-1 faces of the same absent step. ParseLValueAST has carried the implicit-deref arm for as long as `p.a` has worked; ParseClassRecordSelectors -- THE SHARED WALKER the three postfix cast loops delegate to -- never had it, and its builder makes AN_FIELD and nothing else, so every caller that correctly delegated got a field applied to a POINTER VALUE. Fixed by that arm in the shared walker plus the C4 loop's delegation guard widened to hand over a pointer-valued `.` at all. THIS TICKET'S OWN DISCRIMINATOR WAS FALSE WHEN I MEASURED IT: it says only the CAST spelling is short a level, and the non-cast `pp^.a` was short a level too until frankD's 61932d0ec (an arm in ResolveNodeRec, compiler/symtab.inc) landed -- attribution corrected 2026-09-06 by frankD's revert control, not by me; I had named the commit that happened to have just landed. Test: test_a_pointer_cast_dereferences_implicitly_for_a_selector, 8 rows, fpc 3.2.2's own output byte for byte. A third, distinct defect was split out rather than folded in -- bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing -- because its repair is a DIAGNOSTIC and not an address computation."
 ---
 
 # A cast to a pointer-to-pointer drops the implicit second deref
@@ -91,10 +91,25 @@ loop's delegation guard widened to hand over a pointer-valued `.` at all.
 **THE TICKET'S OWN DISCRIMINATOR WAS DEAD BY THE TIME I MEASURED IT.** This
 ticket says *"the explicit `pp^^.a` spelling is correct ... only the CAST-headed
 spelling is short a level"*. When I ran the 2x2 — {cast, no cast} x {carets
-written} — the NON-cast `pp^.a` was short a level too. frankA's `b7b9e309e`
-landed underneath me an hour later and turned that row green; measured before
-it, the cast was not the discriminator at all. Reasoning from the premise would
-have aimed the fix at the cast path.
+written} — the NON-cast `pp^.a` was short a level too. It went green under me
+during the session; measured before that, the cast was not the discriminator at
+all. Reasoning from the premise would have aimed the fix at the cast path.
+
+**AND I NAMED THE WRONG COMMIT FOR THAT GREEN — corrected 2026-09-06 by frankD,
+who MEASURED it where I had only inferred it.** I wrote `b7b9e309e`, which is
+what had just landed when I looked. The arm that actually owns `pp^.a` is
+frankD's `61932d0ec` in `compiler/symtab.inc` (`ResolveNodeRec`). Its control is
+stronger than testing at `61932d0ec^` would have been: at today's tip
+`72ad063f6` — `b7b9e309e` and everything later PRESENT — reverse-applying only
+that symtab.inc hunk rebuilds to a different binary and turns
+`test_implicit_deref_through_a_pointer_to_pointer` RED; restoring it rebuilds
+byte-for-byte back and green. So nothing else in the tree substitutes for it.
+**A row changing state while you watch names a TIME, not a cause**, and the
+commit that landed nearest is the one you will reach for. frankD also notes the
+symptom itself moved under me: without that arm today the failure is not a wrong
+value but `"e": this value is still a POINTER here` — my own `f9476d579`
+refusal — so a reading taken across that transition sees two different
+observables and neither of them dates the fix.
 
 **WHAT COST THE MOST, and it is a scope error not a code one:** I first widened
 the delegation guard, rebuilt, and nothing moved. The delegation was being taken.

@@ -84,6 +84,102 @@ begin
   AssignSideRecOf := Syms[si].RecName;
 end;
 
+{ THE THREE FACTS THE KIND CANNOT CARRY, asked one lvalue shape at a time.
+
+  A procedural slot is recorded per ENTITY and never in TTypeKind -- SymProcSig
+  for a variable or parameter, UFldProcSig for a record/class field,
+  SymElemProcSig for an element of an array of them. That is deliberate and it
+  is what makes this check possible at all: the previous attempt at this defect
+  typed the slot tyPointer instead and could then no longer tell a
+  pointer-to-be-CALLED from a pointer-to-be-READ, so it refused Char-into-PChar
+  along with the bug (4760474da, reverted 2d6bfadd6).
+
+  Returns the signature index, or -1 for every shape that is not a procedural
+  slot -- including the ones with no arm here, which fail CLOSED into "not
+  procedural" and therefore into the old accept. A refusal site must never
+  guess: a false reject of working code is worse than the false accept it fixes.
+  bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
+function NodeProcSlotSig(node: Integer): Integer;
+var si, rec, fi: Integer;
+begin
+  NodeProcSlotSig := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    si := Integer(ASTIVal[node]);
+    if (si < 0) or (si >= SymCount) then Exit;
+    if Syms[si].IsArray then Exit;      { the slot is the ELEMENT's; see AN_INDEX }
+    NodeProcSlotSig := SymProcSig[si];
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+    si := Integer(ASTIVal[ASTLeft[node]]);
+    if (si < 0) or (si >= SymCount) then Exit;
+    NodeProcSlotSig := SymElemProcSig[si];
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    rec := ResolveNodeRec(ASTLeft[node]);
+    if rec < REC_UCLASS_BASE then Exit;
+    fi := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(node));
+    if fi < 0 then Exit;
+    NodeProcSlotSig := UFldProcSig[fi];
+  end;
+end;
+
+{ Is this node a CALL whose result CANNOT BE A CODE ADDRESS?
+
+  The whole defect in one question, and the question is deliberately about what
+  the result can HOLD rather than about it being a call. `f := MakeCb` (a
+  function returning a procedural value, ProcRetProcSig set) is legal and
+  answers False; `f := G` returning an Integer is the bug and answers True.
+  Anything that is not a call -- `@G`, another procvar, nil, a field -- answers
+  False and never reaches the refusal.
+
+  THE POINTER AND RECORD RESULTS ARE EXCLUDED BECAUSE OF A REAL PROGRAM, not
+  out of caution. `m.Code := a.MethodAddress(nm)` builds a callable TMethod by
+  hand -- test_method_ptr_cast_b277, wired since b277 -- and `TMethod.Code`
+  carries a UFldProcSig, so the destination IS a procedural slot and the source
+  IS a call. A code address is exactly what belongs there. Written without this,
+  the check refused that line and the full Pascal suite caught it; `gate.sh
+  quick` does not run that row, which is the same coverage gap that reverted the
+  first attempt at this defect.
+
+  So the rule is: an ORDINAL, float, string or set result cannot be a code
+  address under any reading, and jumping through one is the crash. A pointer,
+  record (the {Code,Data} pair) or class result can be, and is left alone --
+  failing OPEN, as a refusal site must.
+
+  Restricted to a call with a REAL proc index: the intrinsics carry a negative
+  id there, and a compiler-generated helper is not what a user wrote. }
+function CallResultIsNotProcedural(node: Integer): Boolean;
+var pi: Integer; rt: TTypeKind;
+begin
+  CallResultIsNotProcedural := False;
+  if node < 0 then Exit;
+  if not ASTNodeIsCall(node) then Exit;
+  pi := Integer(ASTIVal[node]);
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcRetProcSig[pi] >= 0 then Exit;      { the result IS a procedural value }
+  rt := Procs[pi].RetType;
+  if (rt = tyPointer) or (rt = tyRecord) or (rt = tyClass) then Exit;
+  if rt = tyUnknown then Exit;               { unresolved is not evidence }
+  CallResultIsNotProcedural := True;
+end;
+
+{ The routine name to put in the diagnostic, so it names the fix rather than
+  the shape -- `write @G`, not `a call result is not a procedural value`. }
+function CallResultProcName(node: Integer): AnsiString;
+var pi: Integer;
+begin
+  CallResultProcName := 'F';
+  if node < 0 then Exit;
+  if not ASTNodeIsCall(node) then Exit;
+  pi := Integer(ASTIVal[node]);
+  if (pi >= 0) and (pi < ProcCount) then CallResultProcName := Procs[pi].Name;
+end;
+
 function AssignSideKind(node: Integer; var tk: TTypeKind): Boolean;
 var si, rec: Integer; nk: TTypeKind;
 begin
@@ -4408,6 +4504,37 @@ begin
       parallel array persists — see the write site in pasparser_proc.inc's param loop. }
     pvSinkIsProcVar := (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx] >= 0);
   end;
+  { ...and the ARGUMENT face of the bare-routine-name defect, asked here because
+    this is the one place that already knows the parameter is procedural.
+    `Use(G)` with `Use(h: TF)` compiled and SIGSEGV'd exactly as `f := G` did --
+    the same value, the same wrong reading, a different position, and the ticket
+    reported only the first. The pair is deliberately NOT one check: an
+    assignment funnels through AN_ASSIGN and an argument funnels through here,
+    so there is no node both pass through, and pretending otherwise is how the
+    argument face stayed open the first time.
+
+    `var`/`out` is excluded for the reason pvSinkIsProcVar's own note gives: a
+    by-ref parameter binds the variable, never a call result. C and NilPy are
+    excluded like the assignment check -- both have their own conversion rules.
+    bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
+  { ...and it asks ProcParamProcSig DIRECTLY rather than reusing
+    pvSinkIsProcVar, whose default is True and means "unknown, do not auto-call"
+    -- a value that is also a legal answer. Written the reusing way this fired
+    on every BUILTIN call argument, where cpi is negative and the default
+    survives: the compiler's own `WriteLn(..., Ord(SymIsComInterface(i)), ...)`
+    was refused and the self-host failed. Caught by the build, which is the one
+    instrument that could catch it. Third instance in a day of a sentinel that
+    is also a real answer; the rule is the same each time -- ask the fact, not
+    the variable that was set from it. }
+  if (not isRefArg) and (not CProgramMode) and (not PyProgramMode) and
+     (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx] >= 0) and
+     CallResultIsNotProcedural(argAST) then
+    ErrorAtRecover(ASTLine[argAST],
+      'incompatible types: a procedural parameter cannot take the RESULT of a call'
+      + ' -- write @' + CallResultProcName(argAST)
+      + ' to pass the routine itself');
   argAST := IRProcVarAutoCall(argAST, pvSinkIsProcVar);
 
   { A WideChar VALUE passed to a string parameter converts to its UTF-8
@@ -11394,6 +11521,43 @@ begin
             'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
             ' to ' + TypeKindSpelling(asgDstTk));
       end;
+
+      { ...AND THE ONE PAIR THE KIND CANNOT EXPRESS AT ALL, which is why it is
+        its own check and not another arm of the one above: a bare routine NAME
+        stored into a procedural slot.
+
+        Outside `{$mode delphi}` a bare `G` is a CALL (fpc's reading too --
+        hence its `Incompatible types: got "LongInt"`), so `f := G` stores the
+        Integer RESULT into a function-pointer slot and `f()` jumps through 7.
+        pxx compiled it and SIGSEGV'd, in four spellings -- variable, record
+        field, array element and argument -- and identically on pin v404.
+
+        THE PREVIOUS ATTEMPT AT THIS (4760474da, reverted in 2d6bfadd6) typed
+        the slot tyPointer and wrote a POINTER-GENERAL rule, which refused every
+        legal Char-into-PChar binding with it: thirteen rows red, and the
+        self-host could not see the shape because compiler.pas never binds a
+        Char to a PChar. The lesson banked on the ticket is that TTypeKind
+        cannot tell "a pointer that will be CALLED" from "a pointer that will be
+        READ" -- so this check does not ask the kind at all. It asks the two
+        facts that are already recorded per entity: is the destination a
+        PROCEDURAL slot (SymProcSig / UFldProcSig / SymElemProcSig, one per
+        lvalue shape), and is the source a CALL whose result is not itself
+        procedural (ProcRetProcSig). A PChar is neither, so it cannot be
+        reached from here by any spelling.
+
+        `f := @G`, `f := g2`, `f := nil` and `f := MakeCb()` (a function
+        RETURNING a procedural value, ProcRetProcSig >= 0) are all outside it,
+        and Delphi mode never builds the call node in the first place -- the
+        parser binds the address there, which is the documented one behavioural
+        delta and stays exactly as it is.
+        bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode }
+      if (not CProgramMode) and (not PyProgramMode) and
+         (NodeProcSlotSig(ASTLeft[node]) >= 0) and
+         CallResultIsNotProcedural(ASTRight[node]) then
+        ErrorAtRecover(ASTLine[node],
+          'incompatible types: a procedural slot cannot take the RESULT of a call'
+          + ' -- write @' + CallResultProcName(ASTRight[node])
+          + ' to store the routine itself');
 
       { @BodiedPascalProc into a `cdecl` proc-type var: the indirect cdecl call
         arm marshals the TRUE C convention (floats in xmm0..7 / d0..d7, int and
