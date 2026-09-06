@@ -4,7 +4,7 @@ title: "Managed memory is correct — heap, refcounts, leaks, managed fields"
 track: A
 prio: 75
 type: umbrella
-blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released, bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it, bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad]
+blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released, bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it, bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad, feature-pascal-management-operators-nested-and-array, feature-pascal-management-operators-copy-and-addref, feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument."
 ---
@@ -136,3 +136,17 @@ Still open and re-measured on the fixed binary, so it is not this:
 `except X as e:` leaks 2.997 blocks per catch, identically whether the handler
 uses `e` or not.
 [[bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it]]
+
+## 2026-09-06 (frankS) — three management-operator blockers wired in
+
+`class operator Initialize` / `Finalize` / `Copy` / `AddRef` on a record ARE
+managed fields, and the three tickets that carry them were sitting at prio 30,
+35 and unfiled with no edge to this umbrella — so `effective_prio` could not
+reach them and they ranked below their own goal. **The membership was stated in
+prose and absent from frontmatter, which is exactly the state the ranker cannot
+see.** Two of the three had no frontmatter at all beyond `track` and `prio`: no
+slug, no status, no summary.
+
+Each is now backed by fpc-testsuite rows rather than by shape — six live
+`tmoperator` rows measured at `88a0b3d93835`, splitting two / one / three across
+them, with the failing line recorded per row.

@@ -4,7 +4,7 @@ blocked-by: []
 track: P
 status: working
 owner: "frankS"
-summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **377 pass, 0 fail, 123 skip, 50 auto-gated of 550** at `e929e720f` / compiler `d1d15deee084` (frankS, `63350e13c`), superseding 368 at `36d7e5fd4`. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
+summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **391 pass, 0 fail, 109 skip, 50 auto-gated of 550** at compiler `5dec56ae8b3f`, re-confirmed at `88a0b3d93835` (frankS, 2026-09-06), superseding 377 at `e929e720f` and 368 at `36d7e5fd4`. THE 2026-07-10 PARK IN THE BODY IS SUPERSEDED AND IS NOT A LIVE BLOCK -- its three named tickets are in `done/` and sole-A confirmation no longer exists in this repo. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
@@ -111,7 +111,16 @@ Rung of [[feature-pascal-corpus-expansion]] · method mirror
 - Note: the two big parser clusters touch shared `parser.inc` → sole-A
   confirmation needed before an E+B+P agent edits them.
 
-## Parked 2026-07-10
+## Parked 2026-07-10 — SUPERSEDED, DO NOT READ AS A LIVE BLOCK
+> **This park was lifted on 2026-07-14 (see below) and the resume condition it
+> states no longer exists**: the three tickets it names are all in `done/`, and
+> "sole-A confirmation" is not a thing this repo has any more — CLAUDE.md's cold
+> start says *"just take it — there is no sole-A guard and no grant to request."*
+> Kept because it is the record of why the ticket sat, not an instruction.
+> Flagged by `progress.sh check` as STALE-PARK-HELD, correctly: a held ticket is
+> where a stale resume condition survives longest, because the holder has
+> stopped re-reading the park they wrote. I am the holder and I had.
+
 Infra + baseline + cluster tickets landed (see above). Burn-down of the two big
 parser clusters edits shared `parser.inc` — needs the sole-A confirmation an
 E+B+P agent doesn't have. Resume: grab a cluster ticket, confirm sole-A, burn
@@ -720,3 +729,46 @@ the "of 550" every figure in this ticket quotes. Running `--all` and comparing t
 550 reads as a collapse that did not happen. The verdict run is the one with
 neither `--all` nor `--retry-skips`, and the runner says so itself in its
 summary.
+
+## 2026-09-06 (frankS) — 391 / 0 / 109, and the tmoperator cluster is triaged
+
+Census **391 pass, 0 fail, 109 skip, 50 auto-gated of 550**, up from 377,
+measured with compiler `5dec56ae8b3f` — the binary that run actually used, not
+the one at the end of the session. Re-run and confirmed at `88a0b3d93835` after
+the two later fixes, which touch nothing the corpus population reaches
+differently; the number is quoted with the sha it was produced by either way,
+because "it cannot have changed" is a prediction and this file has been wrong
+about a census figure before. The intermediate numbers this session passed through were
+387/2/111 and 391/0/109; the two FAILs were `tgenfunc3`/`tgenfunc4` and were
+**not** this ticket's work — frankD's `7d263221f` fixed them, proven by
+stash-and-rebuild before they were routed.
+
+Burned here: `tforin26`, `tforin27` (a user routine named `Write`, `1ead40679`)
+and `tgeneric83/84/85` earlier in the session.
+
+**The `tmoperator` cluster is triaged rather than burned, and that is the
+result.** Six live rows, measured one by one at `88a0b3d93835`, resolving to
+exactly THREE causes and one defect I could fix:
+
+| rows | cause |
+| --- | --- |
+| 4, 7 | [[feature-pascal-management-operators-nested-and-array]] — the nested-field and array arms |
+| 8 | [[feature-pascal-management-operators-copy-and-addref]] |
+| 2, 3, 9 | [[feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]] — filed today |
+
+**Five of the six skip reasons were wrong about what their row stops on**, all
+in the same direction: they named the FEATURE the file is about rather than the
+LINE the compiler refuses. `tmoperator7`'s said "the management-operator
+cluster" and it was stopping at line 29 on a `class var` named unqualified from
+inside a `class operator` body — name resolution, no relation, fixed in the same
+commit, and the row then advanced 72 lines to a real management-operator wall.
+`tmoperator8`'s named Initialize/Finalize, which work. **A skip reason is a
+claim about one line, and everything past that line is unverified** — which is
+now written into each of the six.
+
+The two existing tickets had **no frontmatter beyond `track` and `prio`**: no
+slug, no status, no summary, and no edge to
+[[umbrella-managed-memory-is-correct]] (p75) that they plainly belong under.
+Wired, and both moved from p30/p35 to effective **p75** — the top two of the
+Track P queue. The membership was stated in prose and absent from frontmatter,
+which is the one place the ranker cannot look.

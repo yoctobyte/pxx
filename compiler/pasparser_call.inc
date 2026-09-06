@@ -79,6 +79,7 @@ var
   isClassOp: Boolean;          { the declaration was spelled `class operator` }
   qualName: AnsiString;        { ...and the `TRec.` it was qualified with }
   qualTk, qualRec: Integer;
+  savedCMC, savedMIOp: Integer;  { CurMethClass / MethImplOwnerCi across the body -- see below }
 begin
   { `class operator TPt.+ (const a, b: TPt): TPt;` — FPC's ADVANCED-RECORD operator syntax.
     Both the `class` prefix and the `TRec.` qualifier are accepted and dropped: pxx keys an
@@ -115,6 +116,15 @@ begin
           + '`class operator` outside a record or class body has no type to '
           + 'belong to (write `class operator TRec.<op>`, or drop `class` for a '
           + 'global operator)');
+  { Resolve the qualifier HERE rather than after the body, because the body
+    needs it: it is the scope the body parses in (see the CurMethClass note at
+    ParseSubroutine below). ONE call, so the scope the body gets and the type the
+    signature is checked against cannot disagree -- which is the same argument
+    OperandTypeKindRec's own header makes about the two operand keys. A
+    qualifier that names no type now reports at the HEADER instead of after the
+    body, which is where it is. }
+  qualTk := 0; qualRec := REC_NONE;
+  if qualName <> '' then OperandTypeKindRec(qualName, qualTk, qualRec);
   opKind := CurTok.Kind;
   opKey := -1;
   { `in` and `><` are here for the same reason the keyword ones are: both are
@@ -345,9 +355,48 @@ begin
   Tokens[TokPos+1].SOffset := nameOff;
   Tokens[TokPos+1].SLen := nameLen;
 
+  { A `class operator TRec.<op>` BODY IS A STATIC METHOD OF TRec, and until now
+    it was parsed as a bare global `function __op__NN`. So the body could not
+    see the record's own `class var`s, class consts or nested types without a
+    qualifier -- `Inc(InitializeCount)` inside `class operator TFoo.Initialize`
+    was `undefined variable (InitializeCount)` while the identical line inside
+    `procedure TFoo.Bump` and inside `class procedure TFoo.CBump` both resolved.
+    ONE ARM OF A THREE-WAY CASE, and the two that worked are what made this read
+    as a management-operator gap rather than a scope one (fpc testsuite
+    tmoperator7). devdocs/dev/normalise-dont-special-case.md
+
+    CurMethClass is the whole mechanism: FindVarSym falls back to FindClassVar on
+    it, and the class-const, property and nested-type lookups key on it too. It
+    is exactly what ParseProcDecl sets for a method impl.
+
+    CurSelfClass is deliberately NOT set. A class operator is STATIC -- there is
+    no instance and no Self -- and ParseProcDecl draws the same line one line
+    apart: `if not UMthIsStatic[mmi] then CurSelfClass := ...` and then
+    CurMethClass unconditionally. Setting Self here would make a bare FIELD name
+    resolve in a body that has no object to read it from.
+
+    ParseProcDecl clears CurMethClass on its way out, so the restore below is
+    what a nested operator definition would need; ParseOperatorDef is top-level
+    only today, and the save/restore costs nothing and stops that being a fact
+    the next caller has to rediscover. }
+  savedCMC := CurMethClass;
+  savedMIOp := MethImplOwnerCi;
+  if qualRec <> REC_NONE then CurMethClass := qualRec;
+  { ...and MethImplOwnerCi, because NESTED TYPES key on that one and not on
+    CurMethClass. `var n: TAlias` in the operator body, where TAlias is declared
+    inside TFoo, is resolved by ParseTypeKind through FindNestedType against
+    MethImplOwnerCi -- so setting only the class-var/class-const scope left
+    `unknown type: TAlias` behind. TWO variables carry "which type is this body
+    a member of", and a fix that sets one of them looks complete right up to the
+    first declaration that reads the other. ParseProcDecl saves and restores
+    MethImplOwnerCi itself, so this value holds for exactly the body. }
+  if qualRec >= REC_UCLASS_BASE then MethImplOwnerCi := qualRec - REC_UCLASS_BASE;
+
   { Advance into the injected 'function/procedure' token }
   Next;
   ParseSubroutine;
+  CurMethClass := savedCMC;
+  MethImplOwnerCi := savedMIOp;
   OpResultAlias := '';
 
   { After ParseSubroutine, the proc is registered — look it up by synName }
@@ -505,7 +554,7 @@ begin
     would otherwise answer REC_NONE and make every operator under it illegal. }
   if qualName <> '' then
   begin
-    OperandTypeKindRec(qualName, qualTk, qualRec);
+    { qualTk/qualRec were resolved at the header -- see the note there. }
     if (qualRec <> REC_NONE) and (recId <> qualRec) and (rightRec <> qualRec) and
        (ProcRetRecId[procIdx] <> qualRec) then
       Error('either the result or at least one parameter must be of type '

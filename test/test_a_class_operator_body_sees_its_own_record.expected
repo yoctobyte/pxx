@@ -1,0 +1,3 @@
+start     Count=0
+in scope  I=7 Count=101
+after     Count=1111

@@ -7329,6 +7329,31 @@ test-core: $(COMPILER)
 	@# from the fpc testsuite) was diffed against fpc 3.2.2 separately.
 	@$(TESTTMP)/test_gblrw26 | diff -u test/test_a_global_routine_may_be_named_read_or_write.expected - \
 	  || { echo 'test_a_global_routine_may_be_named_read_or_write: FAIL - the four intrinsic names are not shadowable, or the intrinsic stopped winning'; exit 1; }
+	./$(COMPILER) test/test_a_class_operator_body_sees_its_own_record.pas $(TESTTMP)/test_clsop26
+	@# .expected is fpc 3.2.2's own output. A `class operator TRec.<op>` BODY IS A
+	@# STATIC METHOD OF TRec and pxx parsed it as a bare global function, so the
+	@# record's own class vars, class consts and nested types were invisible to it
+	@# unqualified. ONE ARM OF A THREE-WAY CASE: the identical `Inc(Count)` inside
+	@# `procedure TFoo.Add1` and inside `class procedure TFoo.Add10` both resolved,
+	@# which is why fpc testsuite tmoperator7 -- stopping at `undefined variable
+	@# (InitializeCount)` -- was skipped as a management-operator row rather than a
+	@# scope one. THE Add1 AND Add10 ROWS ARE NOT DECORATION: they are the two arms
+	@# that were already right, and a fix reaching the operator by breaking either
+	@# would pass a test that only had the operator row.
+	@# TWO variables carry "which type is this body a member of" and the nested
+	@# type is the row that proves it: class vars and class consts key on
+	@# CurMethClass, nested types key on MethImplOwnerCi, and setting only the
+	@# first looks complete until the first `var n: TAlias`.
+	@$(TESTTMP)/test_clsop26 | diff -u test/test_a_class_operator_body_sees_its_own_record.expected - \
+	  || { echo 'test_a_class_operator_body_sees_its_own_record: FAIL - a class operator body lost its own record scope'; exit 1; }
+	@# ...and the negative control, which the passing test cannot express: a file
+	@# that compiles cannot assert that something does not. A class operator is
+	@# STATIC, so a bare FIELD name has no instance to read and must stay
+	@# unresolved -- setting CurSelfClass instead of CurMethClass is the tempting
+	@# one-word version of the fix and it would compile this file. fpc refuses it
+	@# too (`Pointer to object expected`); the differing wording is deferred.
+	! ./$(COMPILER) test/test_a_class_operator_body_has_no_self_fail.pas $(TESTTMP)/test_clsopself26 > $(TESTTMP)/test_clsopself.log 2>&1
+	grep -q "undefined variable (I)" $(TESTTMP)/test_clsopself.log
 	./$(COMPILER) test/test_a_soft_keyword_name_can_be_a_function_result.pas $(TESTTMP)/test_skres26
 	@# .expected is fpc 3.2.2's own output, exit code included. `exit`/`halt`/
 	@# `break`/`continue` are SOFT keywords -- they lex as plain identifiers and
