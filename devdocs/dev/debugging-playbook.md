@@ -6771,6 +6771,59 @@ describes a compiler that may no longer exist. A stale prize is more expensive
 than a stale number, because it does not look like a claim to re-check — it
 looks like work waiting to be done, and the backlog protects it.
 
+## A LOCAL COMMIT MOVES THE TREE AS FAR AS testmgr IS CONCERNED — content is safe, the STAMP is not
+
+`git commit` during a long run does not change one byte of what the harness
+compiles, and it still trips testmgr's tree-moved warning, because the stamp it
+compares is tree IDENTITY and a commit changes that:
+
+    testmgr: WARNING the source tree MOVED during this run
+             (8423bbfe3db5+b940d495 -> ebd82f04041a+e3b0c442)
+    testmgr:   Jobs running tools/compiler_srchash.sh compare the live tree
+               against a stamp written before job one, so any srchash/self-compile
+               failure in this run is about the move and not about the code.
+               (A mid-run rebuild is harmless — the binary is snapshotted — but a
+               pull or commit is not.)
+
+Measured 2026-09-06 on a 2406-job native tier: the mover was the reporting
+session's own local commit, taken deliberately as the bounded-safe option for a
+long run. **CLAUDE.md:835 currently says `git commit` alone does not move the
+tree, and offers commit-locally-push-later as the escape hatch for a sweep of
+hours.** That advice is right about CONTENT and wrong about the INSTRUMENT,
+which is the worst combination: a session follows it, gets a RED, and has no
+reason to suspect the step the handbook called safe. Correcting that line is the
+owner's, not a session's — this section is the measurement it needs.
+
+### The salvage, so nobody has to invent it under time pressure
+
+A moved tree does not void the run; it voids the ATTRIBUTION of a failure. To
+keep a GREEN (or to clear a RED), show that nothing the harness COMPILES moved:
+
+    # what the run reads vs when it started
+    grep -m1 -E '^\s*\[\s*1/' native.log        # the tier's first job line
+    stat -c '%w' native.log                       # when the log was created
+    git diff --name-only <before> <after> | while read f; do
+      [ -f "$f" ] && printf '%s  %s\n' "$(date -d @$(stat -c %Y "$f") '+%H:%M:%S')" "$f"
+    done
+
+If every path under `compiler/`, `test/`, `lib/`, `tools/` and the Makefile has
+an mtime EARLIER than the run's start, and only `devdocs/` moved during it, the
+sources were frozen and the verdict stands on them. That is a checkable claim,
+not an assumption — and it is the only thing that separates "the tree moved and
+it did not matter" from "the tree moved and I would like it not to have
+mattered".
+
+**Order of suspicion when a run goes RED right after you committed: rule the
+commit out FIRST**, before reading the failure as a defect. The two are
+indistinguishable in the log.
+
+### The cheapest instrument artefact of the same night, for calibration
+
+`ls -t` on the session task directory listed an output file that did not exist
+one call later. It was the CURRENTLY RUNNING command's own output file, created
+and reaped between the two calls — an instrument reporting a live job that is
+only itself. It did not error. It answered.
+
 ## A CHANGE THAT LANDS CLEANLY AND MOVES NO MEASUREMENT IS EVIDENCE ABOUT YOUR MODEL, NOT ABOUT THE CODE
 
 The green you were not expecting is a finding. The one you WERE expecting, that
