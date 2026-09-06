@@ -8257,3 +8257,372 @@ begin
     Result := True; Exit;
   end;
 end;
+
+{ The `^ / .field / [i]` suffix chain on an INLINE POINTER CAST, shared by the
+  two spellings of one construct.
+
+  `PRec(raw)^.n^.a` and `TRec(raw)^.n^.a` are the same access -- the second is
+  `PRec(raw)` without a declared `PRec`, a pxx extension fpc refuses -- and
+  until this procedure existed they were parsed by two hand-rolled loops in
+  ParseFactorCore that had drifted apart arm by arm. The pointer-alias copy had
+  grown ResolveDerefShape, ParseNDSubscriptTail, FoldDerefArrayLowBound,
+  DerefPtrArrayElem, the default-property delegation and the implicit-deref
+  arm; the record-name copy had a bare AN_INDEX and a fixed `tk := tyRecord`.
+  Every one of those was a separately-filed silent wrong value on the copy that
+  lacked it -- the notes inside are the record of that drift, and each one names
+  the shape that goes wrong when its arm is missing.
+
+  refactor-p-three-hand-rolled-postfix-loops. This is the merge that ticket
+  asks for, and it is a PARAMETERISATION and not a lift: the two callers differ
+  in what a `^` taken directly off the cast yields, so that answer is an
+  argument rather than a branch on the caller's identity.
+
+  `aliasIdx` is the alias row the cast went through, or -1 for the record-name
+  spelling, which has NO alias row at all. That is load-bearing and not
+  cosmetic: a record-name cast node carries `ASTIVal = 0` meaning "plain
+  reinterpret, no adapter", while ResolveDerefShapeAt reads that same field as
+  an ALIAS INDEX behind a `>= 0` guard that 0 satisfies -- so asking the shared
+  resolver about a record-name cast answers from alias row ZERO, whatever the
+  program happened to declare first. That is the bug
+  test_record_name_cast_strides_by_its_record was written for: `TRec(raw)[0..2].a`
+  gave `10 0 0`, element 0 right by coincidence.
+
+  `seedTk` / `seedRec` are what the CAST says its pointee is -- for the alias
+  spelling `AliasElemTk/AliasElemRec[aliasIdx]`, for the record-name spelling
+  `tyRecord` and the record. Three readers: the resolver's decline-signature
+  restore, the `[i]` fallback where the base is still a plain pointer, and the
+  record-name caret arm. }
+procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
+                                 var recName: Integer;
+                                 aliasIdx: Integer;
+                                 seedTk: TTypeKind; seedRec: Integer);
+var
+  pcMovedOff: Boolean;
+  indexNode, fieldNode, prevTok, i: Integer;
+  derefRem, derefBaseTk, derefBaseRec: Integer;
+  dpeTk, dpeRec, dpeCap: Integer;
+  ndFlat: Integer;
+  ndIsND: Boolean;
+  mcCi: Integer;
+  mcFin: Boolean;
+  fieldName: AnsiString;
+begin
+  pcMovedOff := False;
+  while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+  begin
+    if CurTok.Kind = tkCaret then
+    begin
+      Next;
+      indexNode := AllocNode(AN_DEREF);
+      ASTLeft[indexNode] := node;
+      { Once this chain has been handed to ParseClassRecordSelectors the
+        value in hand is a METHOD RESULT or a PROPERTY, whose pointee has
+        nothing to do with the alias this expression was cast through --
+        so ask the shared resolver rather than the alias row. Identical
+        fact to the record-name cast's twin above; the THIRD opener to
+        need it and the first to get the shared body instead of a copy. }
+      if pcMovedOff then
+      begin
+        StampDerefFromShape(indexNode, node, tk, recName);
+        Continue;
+      end;
+      { After ^ the type is the pointee of the CURRENT node, which is
+        not always the cast: by the second `^` in `PRec(raw)^.n^` the
+        node is the FIELD `n`, and answering from aliasIdx here typed
+        that deref as the record PRec points at. The deref still
+        happened, so the bytes were right and only the TAG was wrong —
+        Writeln printed the string's heap address as an integer, while
+        the same chain with the cast parked in a variable was correct,
+        and a `^Int64` field through the same cast "worked" because the
+        wrong tag happened to match. Silent, and one of the two
+        spellings of one expression.
+        bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped
+
+        …and NodePtrElem answers only the IMMEDIATE pointee, so this
+        loop — a third copy of the deref suffix walk — knew nothing of
+        DEPTH. `PPRec(pp)^^.f` therefore lost the record after the
+        second `^`: the deref nodes carried no remaining-depth, no
+        ultimate base kind and no base record, ResolveNodeRec answered
+        REC_NONE, and every field resolved at OFFSET 0 while the same
+        chain without the cast (`pp^^.f`) was right, because THAT one
+        goes through ParseLValueAST, which has always called
+        ResolveDerefShape. Silent wrong values, one of two spellings —
+        the exact shape the note above describes, one level deeper.
+
+        So this walk now asks the SHARED resolver and stamps the same
+        three fields ParseLValueAST's copy does, instead of carrying a
+        fourth private notion of what a `^` yields
+        (devdocs/dev/normalise-dont-special-case.md).
+        bug-p-a-pointer-to-a-pointer-through-a-typecast-loses-its-depth }
+      { NO ALIAS ROW MEANS THE RESOLVER MUST NOT BE ASKED. A record-name cast
+        node carries ASTIVal = 0 for "plain reinterpret, no adapter", and
+        ResolveDerefShapeAt reads that field as an alias INDEX behind a `>= 0`
+        guard that 0 satisfies -- so the answer would come from alias row zero,
+        whatever the program declared first. The seed handed in is the answer
+        for this spelling and it is exact: a record-name cast is a pointer to
+        the named record and nothing else, at depth one. This is the whole
+        reason the merge takes aliasIdx as a parameter rather than lifting the
+        alias loop's body unchanged.
+        test_record_name_cast_strides_by_its_record }
+      if aliasIdx < 0 then
+      begin
+        ASTIVal[indexNode] := seedRec;
+        tk := seedTk; recName := seedRec;
+        ASTTk[indexNode] := Ord(seedTk);
+        node := indexNode;
+        Continue;
+      end;
+      derefRem := 0; derefBaseTk := Ord(tyUnknown); derefBaseRec := REC_NONE;
+      ResolveDerefShape(node, tk, recName, derefRem, derefBaseTk, derefBaseRec);
+      ASTSOffset[indexNode] := derefRem;
+      ASTSLen[indexNode]    := derefBaseTk;
+      if derefBaseRec > 0 then ASTIVal[indexNode] := derefBaseRec;
+      if (tk = tyInteger) and (recName = REC_NONE) and (derefRem = 0) and
+         (derefBaseRec <= 0) then
+      begin
+        { No shape on the node at all — the ADAPTER casts (ival -1/-2)
+          land here, since they carry no alias row for the resolver to
+          read, and for them the alias in hand IS the right answer, as
+          it always was. }
+        tk      := seedTk;
+        recName := seedRec;
+      end;
+      ASTTk[indexNode] := StrValTk(tk);
+      node := indexNode;
+    end
+    else if CurTok.Kind = tkLBrack then
+    begin
+      pcMovedOff := True;   { see the twin note in the `.name` arm below }
+      { A CLASS value with a DEFAULT PROPERTY means the accessor, not a
+        raw subscript. The `.name` arm below has delegated to
+        ParseClassRecordSelectors since it was written; this one never
+        did, so `t := PTC(raw)^[3]` built an AN_INDEX straight over the
+        object and read t=0 with NO ACCESSOR CALLED, while the same
+        subscript off a plain variable (`pc^[3]`) and the same property
+        named explicitly through the same cast (`PTC(raw)^.A[3]`) both
+        answered 77 through the getter. Silent, and one spelling of
+        three. The store face `PTC(raw)^[3] := 23` was refused outright.
+        Pre-dates pin v403 on both faces.
+
+        The shared walker already knows all of this -- getter, setter,
+        the multi-index group and the PropAccessIsWrite lookahead that
+        decides between them -- which is the argument for handing it the
+        `[` rather than teaching this loop a second copy of a rule that
+        is four arms long. refactor-p-three-hand-rolled-postfix-loops
+        asks of each hand-built arm not whether it is reached but
+        whether it is the right arm at all; this is the answer for this
+        one. }
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (FindDefaultProp(recName - REC_UCLASS_BASE) >= 0) then
+      begin
+        node := ParseClassRecordSelectors(node, recName, tk);
+        recName := ResolveNodeRec(node);
+        if CurTok.Kind <> tkCaret then Break;
+        Continue;
+      end;
+      Next;
+      indexNode := AllocNode(AN_INDEX);
+      ASTLeft[indexNode] := node;
+      ParseExpr;
+      { The N-D subscript tail, through the ONE helper the lvalue side
+        calls (ParseNDSubscriptTail in pasparser_lval.inc) rather than a
+        second copy of the comma walk. Without it this arm read the first
+        subscript and then demanded `]`, so `TP(raw)^[1, 1]` was a hard
+        `expected ']' before ','` in EXPRESSION position while the
+        byte-identical STORE compiled and ran correctly — one of two
+        faces of one spelling, and the write face is the one every
+        derefshape row exercised.
+        bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
+      ndFlat := ParseNDSubscriptTail(indexNode, node, ndIsND);
+      if ndFlat >= 0 then
+        ASTRight[indexNode] := ndFlat
+      else
+      begin
+        if ndIsND then BuildPartialNDRowIndex(indexNode, CurASTNode)
+        else ASTRight[indexNode] := CurASTNode;
+        Expect(tkRBrack, ']');
+      end;
+      { ...and the pointee's LOW BOUND, asked through the same
+        DerefPtrArrayInfo the SHARED loop (pasparser_lval.inc) folds
+        with. This private copy knew the element KIND and not the
+        bound, so `PLo(@lo)^[3]` over `array[2..4]` read element 3
+        instead of element 1 and answered 0 where fpc 3.2.2 answers 99
+        -- silently, and only for an INLINE cast: the same line through
+        a pointer VARIABLE was always right, because that spelling goes
+        through the shared loop.
+
+        Adding the shared PREDICATE here rather than a second copy of
+        the arithmetic is the escape-not-a-fifth-loop shape
+        refactor-p-three-hand-rolled-postfix-loops asks for.
+
+        Excluded for the N-D shapes for the reason the shared loop
+        states at its own copy: BuildFlatNDIndex already subtracts every
+        dimension's low bound, so folding again indexes (i - 2*lo0),
+        which is correct only for the lo=0 case that hides it.
+        bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
+      FoldDerefArrayLowBound(indexNode, ndIsND, ndFlat);
+      if DerefPtrArrayElem(ASTLeft[indexNode], dpeTk, dpeRec, dpeCap) then
+      begin
+        { `TP(raw)^[i]` where TP points at an ARRAY type. The alias row
+          read below is the SCALAR alias table, and an array alias is not
+          in it -- ParseTypeKind answers its unknown-name default for the
+          pointee, which is the same hole AliasPtrElemArrAi was added to
+          fill. So the element came out ordinal and an AnsiString store
+          through this spelling wrote a handle into an untracked slot:
+          exit 0 at the store, SIGSEGV at the read, while the identical
+          store through a record field was correct.
+
+          This is the FOURTH private notion of what a `^` yields that
+          this loop has had to give up (see the ResolveDerefShape note
+          in the tkCaret branch above); it is the same lesson one node
+          kind further out.
+          bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+        tk := IntToTypeKind(dpeTk);
+        recName := dpeRec;
+      end
+      else if tk = tyPointer then
+      begin
+        tk := seedTk;
+        recName := seedRec;
+      end
+      else if IsNodeArray(ASTLeft[indexNode]) then
+      begin
+        { The base is an ARRAY NODE, not a pointer -- `PR(raw)^.m[3]`,
+          an array FIELD reached through the cast chain. The field
+          builder above already left the ELEMENT kind in tk (UFldTk
+          holds the element kind for an array field, defs.inc:4838), so
+          the answer is the one already in hand and there is nothing to
+          resolve. Falling into the `else` instead CLOBBERED it with
+          tyUnknown: `WriteLn(PR(raw)^.m[3]:0:2)` printed
+          4618441417868443648 -- the double's BIT PATTERN as an integer,
+          format spec silently ignored -- while the identical `r.m[3]`
+          and `pv^.m[3]` printed 6.00. Pre-dates the pinned compiler and
+          is not ND-specific; found by probing the SIBLING arms of the
+          N-D parse fix above rather than by any row of the matrix.
+          bug-a-an-array-field-indexed-through-a-record-pointer-cast-loses-its-element-type }
+      end
+      else if TypeIsFrozenString(tk) or (tk = tyString) or (tk = tyAnsiString) then
+      begin
+        { …and the same clobber on the string face: `PR(raw)^.s[2]`
+          printed 1869376613 (the bytes of "ello") where `r.s[2]` printed
+          `e`. One index rule, stated once, exactly as
+          ParseLValueAST states it. }
+        tk := tyChar;
+        recName := REC_NONE;
+      end
+      else
+      begin
+        tk := tyUnknown;
+        recName := REC_NONE;
+      end;
+      ASTTk[indexNode] := StrValTk(tk);
+      node := indexNode;
+    end
+    else { tkDot }
+    begin
+      { EVERY suffix that is not a `^` LEAVES THE CAST, so the alias
+        seed below stops being the answer here and not only after a
+        delegation. `PA(q)^.pi^` with `pi: ^Integer` was refused --
+        `x := PA(q)^.pi^` "cannot assign record to Integer", the store
+        face "cannot assign Integer to record" -- because the caret
+        arm's restore fires on tyInteger/REC_NONE/0/0, which is BOTH
+        the resolver's decline signature AND its true answer for a
+        `^Integer` field, so it overwrote a correct answer with the
+        cast's record. Refused on the pin too, in both faces, while
+        `vpa^.pi^` off a plain variable is right throughout.
+        ParseCastTargetSuffix already gates its copy of this restore on
+        the same bit (`not delegated`); this loop had the bit only for
+        the delegating path, which is the one arm where `.name` is NOT
+        a field. refactor-p-one-lvalue-path-for-statements-and-expressions }
+      pcMovedOff := True;
+      { Not a field -> not this loop's job. See the twin note in the
+        record-name cast above: the hand-rolled builder here can only
+        make AN_FIELD, so a METHOD at the end of the chain silently
+        evaluated to the receiver instead of being called
+        (bug-pascal-record-cast-chain-drops-method-call). Hand the rest
+        to the shared selector parser, which resolves methods,
+        properties and default properties. }
+      { ...and A `.` ON A VALUE THAT IS STILL A POINTER is the same
+        answer for the same reason: `PRec(x).f` and `PPRec(pp)^.f` mean
+        one more dereference (FPC/Delphi), and the hand-rolled builder
+        below cannot make one -- it makes AN_FIELD and nothing else. So
+        both applied the field offset to the POINTER VALUE: `PRec(x).b`
+        printed 0 and `PPRec(pp)^.b` printed 0 beside a low half-address
+        for `.a`, where fpc 3.2.2 prints 22 and 11. Silent, no
+        diagnostic, and one spelling of two -- `PRec(x)^.f` and
+        `PPRec(pp)^^.f` were right throughout, which is what says this
+        is the loop and not the alias table.
+
+        The shared walker has had the implicit-deref arm since
+        bug-p-an-implicit-deref-over-an-explicit-caret-is-dropped, and
+        it asks ResolveNodeRec, which counts the deref chain and gates
+        on the declared depth -- so a HALF-dereferenced pointer is
+        refused rather than resolved to the ultimate record, which is
+        exactly how a wrong offset becomes a plausible value. Handing it
+        the `.` is the fifth thing this loop has given up to the shared
+        one and the argument is unchanged: not what the arm reaches, but
+        whether it is the right arm at all.
+        bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref
+        bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped }
+      if (tk = tyPointer) or
+         ((recName >= REC_UCLASS_BASE) and
+          (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0)) then
+      begin
+        node := ParseClassRecordSelectors(node, recName, tk);
+        recName := REC_NONE;
+        { ParseClassRecordSelectors' own loop is [tkDot, tkLBrack] with
+          NO tkCaret in it, so Break'ing here left a following `^` in
+          the token stream and nobody consumed it: `PTC(raw)^.GetP^` and
+          `PTC(raw)^.Pp^` were refused outright with "expected ')'
+          before '^'" while `pc^.GetP^` and `pc^.Pp^` -- the same chains
+          off a plain variable -- compiled and printed 42, and fpc 3.2.2
+          accepts all four. One opener of two, which is what says this is
+          the cast arm and not the shape. Pre-dates the pinned compiler.
+          Same defect and same fix as the record-name twin above, found
+          by asking of each remaining hand-rolled walk not what it
+          REACHES but whether it re-enters after delegating.
+          refactor-p-three-hand-rolled-postfix-loops (fixed there, not filed separately) }
+        if CurTok.Kind <> tkCaret then Break;
+        Continue;
+      end;
+      { ...and a metaclass-typed field is a RECEIVER, not something to walk
+        into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A
+        `class of T` field records REC_NONE (the class lives in
+        UFldPtrElemRec), so RecFieldRecId answers REC_NONE, the not-a-field
+        guard above cannot fire, and the builder below made an AN_FIELD of
+        the METHOD name -- `PRec(q)^.cr.Get(3)` evaluated to the class
+        reference. Same silent wrong value, one spelling further out.
+        NodeMetaclassCi is the shared five-spelling predicate;
+        ParseMetaclassMemberTail is the shared member parser. }
+      mcCi := NodeMetaclassCi(node);
+      if mcCi >= 0 then
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('expected member name after .');
+        fieldName := GetTokenStr(TokPos - 1);
+        fieldNode := ParseMetaclassMemberTail(node, mcCi, tk, recName, mcFin);
+        if fieldNode < 0 then
+          Error('unknown member on a class reference: ' + fieldName);
+        node := fieldNode;
+        if mcFin then Break;
+        Continue;
+      end;
+      Next;
+      if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+        Error('expected field name after .');
+      prevTok  := TokPos - 1;
+      fieldName := '';
+      for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
+        AppendChar(fieldName, TokChars[i]);
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := node;
+      ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+      ASTSLen[fieldNode]   := Tokens[prevTok].SLen;
+      tk      := RecFieldType(recName, fieldName);
+      recName := RecFieldRecId(recName, fieldName);
+      ASTTk[fieldNode] := Ord(tk);
+      Next;
+      node := fieldNode;
+    end;
+  end;
+end;
