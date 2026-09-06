@@ -29393,6 +29393,43 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_stack_args.pas > $(TESTTMP)/test_esp_stack_args.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_stack_args.oracle $(TESTTMP)/test_esp_stack_args.s3; then echo "esp32s3 (Call0) >6-word args ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 stack args MISMATCH"; exit 1; fi; fi
+	# `Assert` on the bare profile. This whole source did not COMPILE for
+	# --esp-profile=bare until bug-a-assert-is-undefined-on-the-esp-bare-profile:
+	# bare pulls no `builtin`, so the parser's soft-alias had no __pxxAssert to
+	# bind to and a five-line program answered `undefined variable (Assert)`.
+	#
+	# THE OUTPUT DIFF IS THE ASSERTION, not the exit status, and that is
+	# load-bearing here rather than convention. `writeln` is a documented no-op on
+	# this profile (docs/targets/esp32.md:70), so the first fix compiled on both
+	# chips and printed NOTHING when the assertion fired -- a silent Halt(227),
+	# which a build check and an rc check both pass. Only the serial bytes can
+	# tell a working Assert from a silent one.
+	#
+	# This row CAN fail, in both directions: a no-op Assert prints nothing where
+	# the oracle prints the composed message AND reaches the tail line the oracle
+	# never reaches, so it differs at both ends.
+	# THREE LINES, NOT ONE, and the split is the point. Every other oracle in this
+	# suite is `compile && run > oracle`, which works because those programs exit
+	# 0. This one exits 227 BY DESIGN -- the assertion is supposed to fire -- so
+	# the run needs `|| true`. Putting `|| true` on a combined line would swallow
+	# a COMPILE failure too, leaving a stale or empty oracle for the diff to
+	# compare against: a comparison whose inputs were never proven to exist
+	# cannot fail. So the compile stands alone and make aborts on it, the run
+	# tolerates only its own expected 227, and `test -s` asserts the oracle
+	# actually has bytes in it before either chip is booted.
+	@./$(COMPILER) test/test_esp_bare_assert.pas $(TESTTMP)/test_esp_bare_assert_oracle >/dev/null
+	@$(TESTTMP)/test_esp_bare_assert_oracle > $(TESTTMP)/test_esp_bare_assert.oracle || true
+	@test -s $(TESTTMP)/test_esp_bare_assert.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 bare-assert run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_assert.pas > $(TESTTMP)/test_esp_bare_assert.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_assert.oracle $(TESTTMP)/test_esp_bare_assert.c3; then echo "esp32c3 bare Assert ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 bare-assert MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 bare-assert run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_assert.pas > $(TESTTMP)/test_esp_bare_assert.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_assert.oracle $(TESTTMP)/test_esp_bare_assert.s3; then echo "esp32s3 (Call0) bare Assert ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 bare-assert MISMATCH"; exit 1; fi; fi
 	@$(MAKE) --no-print-directory test-esp-softfloat
 
 # Runtime 64-bit-integer gate for the ESP backends: the soft-float library is

@@ -784,6 +784,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
     needsSoftFloat, needsWasiFile: Boolean;
+    needsEspAssert: Boolean;
     needsThreads: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
@@ -875,6 +876,7 @@ begin
   needsMath := False;
   needsSoftFloat := False;
   needsWasiFile := False;
+  needsEspAssert := False;
   needsThreads := False;
   needsPromoInt := False;
   needsWide := False;
@@ -1071,6 +1073,36 @@ begin
          (Tokens[i].Kind = tkReal_T) or (Tokens[i].Kind = tkSingle_T) or
          (Tokens[i].Kind = tkDouble_T) or (Tokens[i].Kind = tkExtended_T) then
       begin needsSoftFloat := True; Break; end;
+  end;
+  { ESP-class BARE: `Assert(`, on demand, and this is the ONLY thing that makes
+    an assertion compile on this profile at all.
+
+    The parser's soft-alias for a bare `Assert(` (pasparser_stmt.inc) fires only
+    when `FindProc('__pxxAssert') >= 0`, and bare pulls no `builtin` -- so the
+    alias did not fire, the name reached the ordinary identifier path, and a
+    five-line program with one assertion answered `undefined variable (Assert)`
+    on both chips. No program containing an assertion could be built for bare
+    metal. It compiled on every IDF profile and on every hosted target, so this
+    was the PROFILE and not the ISA.
+    bug-a-assert-is-undefined-on-the-esp-bare-profile
+
+    EspBareBoot and not TargetIsEspClass: the IDF profiles reach `builtin` and
+    already have `__pxxAssert`, so widening this guard would inject a second
+    declaration of the same name into a program that has one.
+
+    A following '(' is REQUIRED, like the `math` scan above and unlike the
+    softfloat one, and for the reason that scan gives: `assert` is a plausible
+    variable name, and without the check `var assert: Boolean` would pull a unit
+    the program cannot use. A user's own `Assert` still wins either way -- the
+    alias tests FindProc/FindSym first -- so a false positive here costs a small
+    unit and never a wrong binding. }
+  if EspBareBoot and (not NoDefaultRtl) then
+  begin
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 6) and
+         (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
+         CaseEqual(GetTokenStr(i), 'assert') then
+      begin needsEspAssert := True; Break; end;
   end;
   { wasm32: the sys* file intrinsics have no instruction to lower to on this
     target and reach WASI through compiler/builtin/wasibackend.pas instead --
@@ -1738,6 +1770,14 @@ begin
      { ESP-class bare: on demand, from the token scan above — see there. }
      needsSoftFloat then
     ParseUsesUnitAmbient('softfloat');
+  { `Assert` on the ESP-class BARE profile — see the token scan above for why
+    this exists and why it is gated on EspBareBoot rather than TargetIsEspClass.
+    ON DEMAND, so a bare program with no assertion in it pays nothing; the unit
+    is one procedure over AnsiString + WriteLn + Halt, all of which bare already
+    has. TARGET-GATED and never ambient, for the reason the wasibackend
+    injection below records: an ambient unit is parsed by every compiler on
+    every target, the older pinned one included. }
+  if needsEspAssert then ParseUsesUnitAmbient('espassert');
   { The promotable-int runtime is written in ordinary Pascal over managed
     strings and bignum, so it needs the heap allocator and the Str/Val
     conversions regardless of what the user program itself uses. }
