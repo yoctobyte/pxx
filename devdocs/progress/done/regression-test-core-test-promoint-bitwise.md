@@ -2,7 +2,7 @@
 prio: 70
 track: P
 owner: frankD
-status: working
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh sweep_promoint26 "$(/tmp/sweep_promoint26)" "$(printf '18446744073709551615\n0\ncrossed\n1844674407`. The job's own `src` (`test/test_promoint_bitwise.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -113,3 +113,51 @@ files); claimed by frankD, Track P, since the retag site is P's.
 **Parked, not in progress.** The diagnosis above is complete and the fix is
 specified; `owner:` here is attribution, not a lock. Anyone may take it — read
 the revert-trap table first.
+
+## RESOLVED 2026-09-06 (frankD) — the predicate was split, not widened or reverted
+
+Fixed as specified above. `WideLitHasDigits` / `IsWideNegLitDigits` added in
+`compiler/ast_arena.inc`; three PROMO-SLOT call sites routed to them
+(`IRPromoInitFromLiteral`, `IRPromoAddrOf`, `IRPromoEmitBinop`'s mixed-helper
+guard). `IsWideIntLit` is untouched and the signedness arms still rely on it
+going False after the retag.
+
+**One correction to the plan above.** It said to route "the PROMO call sites".
+That is too wide: the discriminator is the DESTINATION, not the literal. Inside
+`[2^63, 2^64)` a correct 64-bit reading EXISTS, so the machine-int lowering and
+the Write arm are right to take it and are cheaper. Only a promo slot needs the
+digits.
+
+**The variant arms look like they belong and do not, measured.** A variant
+carries no unsignedness, so the band genuinely is wrong there — fpc 3.2.2
+prints 18446744073709551615 for `v := 18446744073709551615` and we print -1.
+But those arms reach the promo RUNTIME, and a program that never mentions
+PromoInt does not load promocore, so switching them makes an ordinary program
+fail with `runtime helper PXXPromoFromStr not found`. I wrote that fix, built
+it, measured the failure and reverted it. Filed separately as
+[[bug-a-a-wide-unsigned-literal-boxed-into-a-variant-stores-the-wrapped-value]].
+
+**The trap, because it caught me inside my own verification:** a probe for the
+variant arm must declare NO PromoInt. My band probe declared one for unrelated
+rows, which loaded promocore, which made the broken fix read as correct. The
+population was wrong while every row was honest.
+
+### Verified at compiler `b31b9b1821c1`
+
+- the row itself 7/7, and all 8 `test_promoint_*` rows GREEN under `testmgr --tier native`
+- QWord control unchanged: `q div 18446744073709551615`, `Writeln(9223372036854775907)`, `9223372036854775808 > 1`
+- boundary probe at 2^63-1 / 2^63 / 2^64-2 / 2^64-1 / 2^64 / 10^20 / negative — byte-identical to fpc 3.2.2
+- NilPy byte-identical to CPython across the same band (`tyPromoInt64` shares the predicate)
+- `gate.sh quick` GREEN
+
+### Fixture pairing closed
+
+`test_promoint_bitwise` (narrowing) and
+`test_a_decimal_literal_above_high_int64_is_a_qword` (widening) now name each
+other. Moving this predicate breaks exactly one of them, and the second works
+ONLY because it declares no PromoInt — an absence that was load-bearing and
+invisible from either file. Both headers now say so.
+
+Nothing here is inert until the next pin: the fix is in `compiler/**` and no
+`lib/**` file depends on it.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
