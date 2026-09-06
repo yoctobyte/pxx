@@ -5,7 +5,7 @@ type: bug
 status: working
 blocked-by: []
 owner: frankD
-summary: "MEASURED 2026-09-04 and the ticket below is wrong in both halves. The count is not ten: it was 30 of 36 at this ticket's own commit and is 28 of 30 at HEAD -- the 10 was a `comm` artefact under the default locale, reproducible exactly and only there. And the prescribed fix is backwards: a reachability probe over all 830 .npy programs says ALL 28 Pascal-arm sites inside ParseFactorCore are UNREACHED (17 of them provably, behind the PyExprMode dispatch) while all 3 outside it are live. So the body tells its taker to preserve and share ~28 arms that should be DELETED, which is a wrong-change-lands risk rather than a mis-scheduled tidy-up, and is why this is no longer a 35. Do NOT use duplication as the test: a duplicated diagnostic (TPyList.extend) is live. Position relative to the dispatch is the only discriminator. The measured population now also lives in the pasparser_expr.inc comment above the dispatch, so it survives this ticket."
+summary: "PARTIALLY RESOLVED 2026-09-06 (2626683d6): the 11 top-level `else if NilPyUserCode and (name = ...)` arms in ParseFactorCore are DELETED -- exec eval input format open float map filter next bool str, 608 lines, and the compiler code segment drops 254KB. Zero top-level NilPyUserCode arms remain in the function. NOT DONE: 17 `Nil Python:` diagnostics are still duplicated between pasparser_expr.inc and pyparser.inc (was 28), carried by the NESTED `if NilPyUserCode` uses the deletion deliberately left -- __name__, __file__, pystr_of, len, int, round, divmod -- plus sites outside ParseFactorCore. Those are a different shape and are NOT covered by the subsumption proof: at least one of them, TPyList.extend in ParseExpr, is MEASURED LIVE, so this residue must not be swept on the pattern. What licensed the deletion was guard subsumption, not the corpus: below the dispatch PyExprMode is false by construction, so NilPyUserCode reduces to `isNilPy and (CurrentUnitIdx < 0)`, and isNilPy is set from the root file extension -- unsatisfiable for a .npy whose main program is Python. The differential is now trustworthy where the old 0/229 was not: 242 programs that USE these builtins, identical=242 DIFFER=0, against a positive control (live `str` arm disabled) scoring DIFFER=19 of 19 through the same normalisation."
 ---
 
 # Ten NilPy diagnostics exist on both arms of the ParseFactorCore carve-out
@@ -337,3 +337,58 @@ individually). `tools/npy_differential.sh` shape: capture compile+run output for
 all 827 before and after and require byte-identity, **with a positive control
 that deletes a LIVE arm and must differ** — "output identical" is also what
 deleting nothing produces.
+
+# 2026-09-06, frankD: the 11 top-level arms are deleted (2626683d6)
+
+`exec eval input format open float map filter next bool str` — 608 lines out,
+22 of comment in, code segment 10,407,704 → 10,153,752 bytes, self-host
+fixedpoint converged in one round.
+
+**What licensed it was guard subsumption, not the corpus.** Below the dispatch
+`PyExprMode` is false by construction, so `NilPyUserCode` reduces to
+`isNilPy and (CurrentUnitIdx < 0)`, and `isNilPy` is set from the root file's
+extension (`compiler.pas:1999`) — unsatisfiable for a `.npy`, whose main program
+is Python and leaves at the `Exit`. That is a reading of conditions, checkable by
+a reviewer, and it does not depend on a corpus containing the case.
+
+## The 0/229 this ticket parked on was worth nothing, and here is what replaced it
+
+Identical output is exactly what a deletion that removed nothing produces. Over
+the **242** programs that actually use these builtins:
+
+| | verdict |
+| --- | --- |
+| real deletion vs baseline | **identical=242, DIFFER=0** |
+| live `str` arm disabled (positive control) | **identical=0, DIFFER=19 of 19** |
+
+Same harness, same normalisation, opposite verdicts — so the 242 identical rows
+are a claim that could have come out false.
+
+## Three instrument defects found building that control, none of which errored
+
+1. **`comm` under `en_US.UTF-8`** warns on stderr, prints a PARTIAL answer to
+   stdout, exits 0. **This is the same trap that made this ticket say 10 when it
+   was 30**, hit again by a reader of the write-up about it. `LC_ALL=C`.
+2. **The harness read its work list on stdin**, so a program calling `input()`
+   consumed its own worklist — rows silently skipped, and each row's stdin
+   depended on its position. Read the list on fd 3, give the child `</dev/null`.
+   The tell is a captured count below the list length, and **a row count nobody
+   prints is a row count nobody checks** (frankA, who diagnosed it from the
+   symptom alone).
+3. **The captured compile output embeds the OUTPUT DIRECTORY PATH.** Scored raw,
+   every row differs between any two runs — the comparison could never return
+   "identical", so the positive control passed for the wrong reason and the real
+   run reported 241/242 DIFFER. Normalise the path and re-score BOTH sides.
+
+The third is the one worth carrying: **a positive control can itself be a guard
+that cannot fail.** It fired, it fired on the right rows, and it was still not
+evidence until the same normalisation was applied to both arms of the comparison.
+
+## What is left, and why it is not the same job
+
+17 diagnostics remain duplicated (was 28). They are carried by the **nested**
+`if NilPyUserCode` uses — `__name__` `__file__` `pystr_of` `len` `int` `round`
+`divmod` — plus sites outside `ParseFactorCore`. **The subsumption proof does not
+reach them** and at least one, `TPyList.extend` in `ParseExpr`, is measured LIVE.
+Do not sweep the residue on the pattern; position relative to the dispatch is the
+discriminator, and these are not all below it.
