@@ -15996,3 +15996,64 @@ one justified by a defect RATE gets done.
 **The method generalises: enter a unification ticket by measuring the doors, not
 by writing the resolver.** The measurement is what produces the argument for the
 resolver, and it produces fixes on the way whether or not the resolver ever lands.
+
+## `ps -o etime=` IS VARIABLE-WIDTH, AND THE MISREADING ONLY EVER INFLATES
+
+frankB, 2026-09-06, off by a factor of **40** on how long their own full suite had
+been running: read `10:48` as 10 hours 48 minutes. The format is
+**`[[DD-]hh:]mm:ss`** — that is 10 minutes 48 seconds.
+
+**The field count changes with magnitude, so the same column means different
+things in different rows.** In the *same output* they read `1-04:40:25` correctly
+as 1d04h, because the day field made that row unambiguous. **Not a wrong rule
+applied consistently — the WIDE reading applied to the NARROW form, and the
+narrow form is the common one.**
+
+**Two properties make it worse than arithmetic:**
+
+- **It only fires on short durations and it only ever inflates them.** A
+  17-minute run reads as 11 hours; an 11-hour run reads correctly. So **the
+  misreading is invisible exactly when the answer would be alarming for real,
+  and alarming exactly when the answer is fine.** The failure mode is inverted
+  from useful.
+- **It survives because the wrong answer is PLAUSIBLE.** 11 hours is a normal
+  number for a full suite. Nothing about it looked wrong; had it erred 40× the
+  other way it would have been caught instantly. Same shape as a six-hour-stale
+  canary log reading as a live RED *because a live RED is what that file normally
+  contains.*
+
+**The rule: `etime` is for humans, `etimes` is for comparisons.** `etimes` is
+seconds, always, one field. **Anything a decision is paced off gets read in a
+fixed unit** — and `etimes` was available and the pretty one got used, which is
+the only reason two seats' numbers disagreed at all.
+
+## A CROSS-REFERENCE IS A CLAIM ABOUT A WORLD, AND CLOSING A TICKET CHANGES THAT WORLD WITHOUT EDITING A SENTENCE
+
+frankB, in their own words and kept in them:
+
+> *"A cross-reference between tickets is a claim about a world, and closing a
+> ticket changes that world without editing a single sentence that describes it.
+> So the sentences that rot first are the ones that were argued most carefully —
+> "must not land alone", "outranks this", "this is why it is filed rather than
+> fixed" — because those are precisely the ones that reference another member. A
+> group's internal ranking is written relative to its members and does not
+> survive one of them closing, and **the rot is undetectable by reading**:
+> nothing in the stale ticket changed."*
+
+**Live instance:** `bug-p-array-of-const-in-a-method-pointer-type-is-refused` says
+in capitals that its three-line parse fix MUST NOT be landed alone, because
+making the declaration parse routes it into a silent wrong length. **The ticket
+that was true of is in `done/`** (`fe0c492d1`). The reasoning is now stale in the
+ticket and correct in the tree, and the body was written twice against a build
+and a revert — so it is exactly the kind of ticket whose visible care makes the
+stale part credible.
+
+**PAIR THIS WITH ITS TWIN AND NEITHER IS AN ANECDOTE.** *Care makes a stale part
+credible* (a ticket that shows its work reads as maintained, so the one rotted
+sentence inherits the credibility of the eight that have not) and *care is what
+makes a part stale in the first place* (only a carefully-argued ticket
+cross-references anything at all). **Same sentences, both times.**
+
+**Operationally: when a group member closes, re-read every OTHER member's
+comparative sentences before working any of them** — and re-measure rather than
+re-read, because there is nothing in the stale ticket to notice.
