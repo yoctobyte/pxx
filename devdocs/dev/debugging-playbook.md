@@ -14823,3 +14823,55 @@ map from a complete one; an emptiness check catches the empty case and no check 
 **Generalise it: any tool that appends rows as it goes and is read by another tool has this hole.**
 The question to ask of an artefact is not "is it valid" but **"does anything in it say it is
 FINISHED"** — and if the answer is no, the fix is a rename, not a validator.
+
+## A STRUCT FIELD CAN LIE BY BEING CORRECT ABOUT SOMETHING ELSE — `tk` was right about the ELEMENT and was read as right about the CONTAINER
+
+CLAUDE.md's rule — *every instrument that lies, lies by being correct about something else* — is
+written about tools: a stale binary, a truncated `tail`, a store-local `cat-file`. **The same animal
+lives inside the compiler's own data structures, and there it is harder to see, because a field has
+no version, no timestamp and no staleness tell at all.**
+
+Measured 2026-09-06 (frankB, the property-clause group). A new refusal on the default-indexed-property
+arm was **green on all three of its repros and green on `gate.sh quick`**, and broke
+`lib/rtl/classes.pas:844`:
+
+```pascal
+FComponents: array of TComponent;
+...
+c := FComponents[FComponentCount - 1];
+```
+
+**`tk` and `recName` describe an array's ELEMENT.** So an ordinary dynamic-array subscript reaches
+that arm wearing `tk = tyClass` and the `TComponent` `recName` — **byte-for-byte indistinguishable
+from an instance subscript.** The fall-through frankB had diagnosed as a hole is where a dynamic
+array BELONGS. The condition needed `not IsNodeArray(node)`.
+
+> **The field was not stale, not wrong, and not lying. It was correct about the element of a
+> container and was read as correct about the container.** When a guard's condition is built from a
+> node's TYPE fields, ask **what else those fields describe** — an element type, a pointee, a base
+> class, a specialisation's template. This is the same family as *"a key must be able to distinguish
+> the things it is used to look up"*, one level down: there the key could not separate two subjects,
+> here the field faithfully describes the wrong one of them.
+
+### And the aperture: `array of <class>` cannot exist in the quick tier
+
+frankB's other half, and the compiler side of it is verified here rather than quoted:
+
+```
+grep -c '= class'  compiler/compiler.pas            ->  0
+grep -ho 'array of [A-Za-z_]*' compiler/*.inc compiler/*.pas | sort -u
+   ->  Integer, Boolean, T, const, array, Int64, AnsiString, Char, Byte, string,
+       TTypeKind, Double        (no class type anywhere)
+```
+
+**`compiler.pas` declares no classes at all and no `array of <class>` exists anywhere in the
+compiler's own sources**, so the self-host fixedpoint is *structurally* incapable of exercising this
+construct — the documented scope limit (*"it cannot see a construct the compiler never writes"*)
+with a named construct attached. frankB reports the quick tier's tests have none either; that half is
+frankB's measurement, not this seat's.
+
+**The full suite is what caught it**, and this is the shape that justifies lifting
+`PXX_ALLOW_FULL_SUITE=1` — not "the change touched something shared", which is the trap CLAUDE.md
+names, but **"my change is gated on a type-system predicate, and the construct that would falsify it
+is one the compiler cannot write."** That is a statement about the gate's aperture, checkable in one
+grep before you run anything.
