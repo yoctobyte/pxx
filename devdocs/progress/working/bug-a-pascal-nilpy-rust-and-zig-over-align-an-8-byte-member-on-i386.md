@@ -258,9 +258,17 @@ one is any of: a NilPy export spelling, a `ctypes`-shaped struct interop, or a
 NilPy instance mapped onto foreign memory. None exists.
 
 `UClsAlign` for the NilPy class comes back as **1** while its fields are laid
-out on 8 — worth a look on its own; a record whose stated alignment is weaker
-than its own field placement is either a dead field or a second bug, and this
-note is not a diagnosis of which.
+out on 8. **Diagnosed rather than left open: it is a DEAD FIELD for this
+frontend, not a second bug.** `pyparser.inc` sets `UClsSize_[ci]` and never
+`UClsAlign[ci]`, so the row keeps `AddUClass`'s initial 1 (`symtab.inc:2056`).
+Every reader asks the same *over*-alignment question and 1 is the correct answer
+to it — `abi.inc:691` and `ast_syminfer.inc:156` and two sites in `symtab.inc`
+all test `UClsAlign[...] > 8` or `> TARGET_PTR_SIZE`, i.e. "does this aggregate
+need more than a pointer's alignment", which a NilPy instance reached through a
+pointer never does. **Nothing reads it for a positive answer**, so an
+understated value cannot produce a wrong one. Recorded because the next reader
+of the `a.reclayout` line will ask, and "it is not read for that" is a cheaper
+answer than the census.
 
 ### What the acceptance can be now, and it asserts a RELATION
 
