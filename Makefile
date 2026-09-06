@@ -27412,6 +27412,91 @@ test-packenum-gcc-oracle: $(COMPILER)
 	test "$$ran" -ge 1 || \
 	  { echo "test-packenum-gcc-oracle: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }
 
+.PHONY: test-record-layout-cross-frontend
+test-record-layout-cross-frontend: $(COMPILER)
+	@# THE SAME AGGREGATE THROUGH THREE FRONTENDS OF ONE COMPILER, one target at
+	@# a time. It exists because the sibling test-record-abi-mixed-link cannot be
+	@# built for NilPy, Rust or Zig: ProcCdecl is set only from cparser.inc and
+	@# pasparser_*, so none of the three has an export spelling and there is no
+	@# .o with a callable symbol for a gcc main to link against. That was read
+	@# for months as "these three cannot be tested", and it is not what it says.
+	@#
+	@# What actually settled the Pascal half was not the link. It was ONE
+	@# COMPILER DISAGREEING WITH ITSELF -- {int a; double y} came out 12/4
+	@# through pxx's C frontend and 16/8 through pxx's Pascal frontend, same
+	@# target, same invocation family. The link PINNED that reading afterwards.
+	@# PXXDBG=a.reclayout makes the same reading available for every frontend,
+	@# and the C row is already pinned against gcc by test-record-abi-mixed-link,
+	@# so "NilPy agrees with C" reaches the platform psABI through that row
+	@# without needing an export spelling here.
+	@#
+	@# A RELATION, NEVER A CONSTANT: the byte DISTANCE from the first member to
+	@# the second must agree across the three frontends. No expected width
+	@# appears in this recipe or in the three fixtures, so the row is correct on
+	@# every target and prints a different correct number on each.
+	@#
+	@# DISTANCE AND NOT OFFSET, because a NilPy instance carries an 8-byte
+	@# header in front of its first field and a C struct does not. Comparing raw
+	@# offsets would report that header as a disagreement.
+	@#
+	@# THE MUST-DIFFER CONTROL IS THE LAST BLOCK AND IT IS NOT DECORATION. Three
+	@# frontends agreeing is also what a compiler that ignored --target entirely
+	@# would print, so the i386 distance is required to DIFFER from the x86_64
+	@# one. Without it the whole row passes on a compiler that has stopped
+	@# reading the target.
+	@#
+	@# MISSING is branched on rather than compared: a compile that dies before
+	@# layout prints no lines at all, and an empty distance compared against
+	@# another empty distance AGREES. That is a run where nothing was measured
+	@# passing as a run where everything agreed.
+	@# bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
+	@overall=0; ran=0; \
+	for t in x86_64 i386; do \
+	  case $$t in x86_64) tgt="" ;; *) tgt="--target=$$t" ;; esac; \
+	  for fe in c pas py; do \
+	    case $$fe in \
+	      c)   src=test/reclayout_cross_frontend.c ;; \
+	      pas) src=test/reclayout_cross_frontend.pas ;; \
+	      py)  src=test/reclayout_cross_frontend.py ;; \
+	    esac; \
+	    if ! PXXDBG=a.reclayout ./$(COMPILER) $$tgt $$src $(TESTTMP)/rlx_$${t}_$$fe \
+	         > $(TESTTMP)/rlx_$${t}_$$fe.log 2>&1; then \
+	      echo "test-record-layout-cross-frontend: COMPILE FAIL $$fe/$$t"; \
+	      tail -3 $(TESTTMP)/rlx_$${t}_$$fe.log; overall=1; \
+	    fi; \
+	  done; \
+	  for rec in "BOOLD b y" "BYTEQ c q"; do \
+	    set -- $$rec; r=$$1; f1=$$2; f2=$$3; \
+	    dc=$$(tools/reclayout_delta.sh $(TESTTMP)/rlx_$${t}_c.log $$r $$f1 $$f2); \
+	    dp=$$(tools/reclayout_delta.sh $(TESTTMP)/rlx_$${t}_pas.log $$r $$f1 $$f2); \
+	    dn=$$(tools/reclayout_delta.sh $(TESTTMP)/rlx_$${t}_py.log $$r $$f1 $$f2); \
+	    if [ "$$dc" = MISSING ] || [ "$$dp" = MISSING ] || [ "$$dn" = MISSING ]; then \
+	      echo "test-record-layout-cross-frontend: FAIL $$t/$$r -- a frontend produced no layout line, so NOTHING was compared (c=$$dc pascal=$$dp nilpy=$$dn)"; \
+	      overall=1; continue; \
+	    fi; \
+	    tools/expect_same.sh reclayout-$${t}-$${r}-pascal-vs-c "$$dp" "$$dc" || overall=1; \
+	    tools/expect_same.sh reclayout-$${t}-$${r}-nilpy-vs-c  "$$dn" "$$dc" || overall=1; \
+	    eval "d_$${t}_$$r=$$dc"; \
+	    echo "test-record-layout-cross-frontend: $$t $$r  c=$$dc pascal=$$dp nilpy=$$dn"; \
+	    ran=$$((ran+1)); \
+	  done; \
+	done; \
+	for rec in BOOLD BYTEQ; do \
+	  eval "a=\$$d_x86_64_$$rec"; eval "b=\$$d_i386_$$rec"; \
+	  if [ -z "$$a" ] || [ -z "$$b" ]; then \
+	    echo "test-record-layout-cross-frontend: FAIL $$rec -- a target produced no distance, so the must-differ control did not run"; overall=1; \
+	  elif [ "$$a" = "$$b" ]; then \
+	    echo "test-record-layout-cross-frontend: FAIL $$rec -- i386 and x86_64 gave the SAME distance ($$a), so this row cannot tell the two ABIs apart and would pass on a compiler that ignores --target"; overall=1; \
+	  else \
+	    echo "test-record-layout-cross-frontend: control OK $$rec (x86_64=$$a, i386=$$b)"; \
+	  fi; \
+	done; \
+	echo "test-record-layout-cross-frontend: $$ran (target,record) pairs compared across 3 frontends"; \
+	test "$$ran" -ge 4 || \
+	  { echo "test-record-layout-cross-frontend: RED -- fewer pairs compared than the recipe asks for, so this gate measured less than it claims"; exit 1; }; \
+	test "$$overall" = "0" || { echo "test-record-layout-cross-frontend: RED"; exit 1; }; \
+	echo "test-record-layout-cross-frontend: GREEN"
+
 .PHONY: test-packrecords-c-gcc-oracle
 test-packrecords-c-gcc-oracle: $(COMPILER)
 	@# {$$PACKRECORDS C} promises "lay this record out the way the platform C

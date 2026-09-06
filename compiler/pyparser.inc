@@ -33791,7 +33791,23 @@ begin
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
         sz := TypeSlotSize(tk);
-        curOff := AlignTo(curOff, TypeAlign(tk));
+        { TypeFieldAlign, not TypeAlign, and the difference is the whole of
+          bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386.
+          TypeAlign is the STORAGE answer -- what a standalone object wants --
+          natural on every target. TypeFieldAlign is the MEMBER answer, which
+          SysV caps at 4 on i386, so a Double inside an aggregate aligns to 4
+          there and not to 8. ALL FIVE member-offset sites in this file ask the
+          member question and there is no storage question left in it, so they
+          move together: the widening re-layout at the end of this procedure
+          re-runs this formula over a class's own field window and reproduces
+          the offsets it already assigned ONLY if it is the same formula.
+
+          Measured 2026-09-06 with PXXDBG=a.reclayout, --target=i386, the shape
+          {1-byte b; double y}: before this, NilPy stepped 8 bytes from b to y
+          where pxx's own C and Pascal frontends both stepped 4 and agree with
+          gcc. One compiler, one target, one aggregate, two answers -- which is
+          the same reading that settled the Pascal half, not a new argument. }
+        curOff := AlignTo(curOff, TypeFieldAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
         Inc(curOff, sz);
       end;
@@ -33870,7 +33886,7 @@ begin
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
         sz := TypeSlotSize(tk);
-        curOff := AlignTo(curOff, TypeAlign(tk));
+        curOff := AlignTo(curOff, TypeFieldAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), k);
         Inc(curOff, sz);
       end;
@@ -34068,7 +34084,7 @@ begin
       if FindUField(ci, GetTokenStr(i)) >= 0 then
         Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
       sz := TypeSlotSize(tk);
-      curOff := AlignTo(curOff, TypeAlign(tk));
+      curOff := AlignTo(curOff, TypeFieldAlign(tk));
       LastTypeProcSig := fldSig;   { procedural field — see the capture above }
       if (tk = tyClass) and (PyAnnLastCi >= 0) then
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk),
@@ -34609,7 +34625,7 @@ begin
                 end;
               end;
               sz := TypeSlotSize(tk);
-              curOff := AlignTo(curOff, TypeAlign(tk));
+              curOff := AlignTo(curOff, TypeFieldAlign(tk));
               { AddUField reads LastTypeProcSig for a procedural field, which is
                 what makes `w.native(vm)` lower to an indirect call rather than
                 "field is not callable" (feature-nilpy-function-values). }
@@ -34766,7 +34782,7 @@ begin
     curOff := baseOff;
     for k := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
     begin
-      curOff := AlignTo(curOff, TypeAlign(IntToTypeKind(UFldTk[k])));
+      curOff := AlignTo(curOff, TypeFieldAlign(IntToTypeKind(UFldTk[k])));
       UFldOff_[k] := curOff;
       Inc(curOff, TypeSlotSize(IntToTypeKind(UFldTk[k])));
     end;
