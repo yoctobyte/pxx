@@ -159,3 +159,40 @@ Owner, verbatim, asked directly with this ticket in front of him:
 alone and a relayed authorisation is not verifiable by the seat receiving it —
 see the 2026-09-06 refusal, which was correct. This ticket settles the POLICY;
 the act still needs him.
+
+## 2026-09-06, second answer — WE AVOID ROLLBACKS
+
+Owner, immediately after the above:
+
+> *"yes we avoid rollbacks. useful work done is work done, even if (other)
+> things break."*
+
+**This goes further than the cadence answer and it retires a whole line of
+reasoning rather than settling it.** Everything above about rollback DEPTH —
+nine pins measured, every historical one strictly worse, `trackt pinstatus`
+naming v354 and thereby advising a move from 2 broken roots to 54 — was
+answering a question we do not ask. **Rollback is not the recovery path here.
+Forward is.**
+
+Three consequences:
+
+1. **`pin_is_green` names a target for an operation we do not perform.** The
+   measurement that started this ticket is now interesting only as evidence that
+   the pair is era-scoped. Nobody should spend work making `make revert`
+   produce a coherent pair, and nobody should rank a ticket on rollback depth.
+
+2. **A pin that carries a red is not a liability to be undone — it is a
+   position to be improved by the next pin.** Combined with the cadence answer:
+   pin often, forward only, and the red is carried for hours rather than
+   reverted at all.
+
+3. **"Useful work done is work done, even if (other) things break"** is the
+   general form, and it is already in CLAUDE.md as *"You may land non-green"*.
+   What the owner adds is the REASON: the value of landed work does not become
+   negative because something else is red. That is why the fleet's default is to
+   push and keep going, and why the one thing you may NOT do is push something
+   you know is broken and say nothing.
+
+**The one thing this does not license** is a change that breaks `compiler.pas`'s
+own fixedpoint. That is still REVERTED, not patched around, and it is not a
+rollback in this sense — it is the single property a pin exists to carry.

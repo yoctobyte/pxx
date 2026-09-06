@@ -204,6 +204,15 @@ one-line logbook pointer.
   pin ships to this fleet's own inner loop and is replaced within hours. Applying
   release standards to it produces the outcome those standards exist to prevent:
   no pin at all, which is *"a worse outcome"* (owner, 2026-09-01).
+  **WE AVOID ROLLBACKS — FORWARD IS THE RECOVERY PATH** (owner, 2026-09-06):
+  *"yes we avoid rollbacks. useful work done is work done, even if (other)
+  things break."* So a pin carrying a red is **a position the next pin
+  improves**, never a liability to undo, and `pin_is_green`/`pinstatus` name a
+  target for an operation this fleet does not perform — **do not rank a ticket
+  on rollback depth and do not spend work making `make revert` produce a
+  coherent pair.** The one thing still REVERTED rather than patched around is a
+  change that breaks `compiler.pas`'s own fixedpoint; that is not a rollback,
+  it is the single property a pin exists to carry.
   **The cost of not pinning is not hypothetical: a fix is INERT UNTIL PINNED.**
   Two dated casualties in 48h — `IEnumerator<T>.Current` inert for a MONTH with
   its parser fix closed in `done/`, and `8374118ec` landing three hours after
