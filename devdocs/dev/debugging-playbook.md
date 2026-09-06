@@ -14160,3 +14160,69 @@ as *"a size, just wrong"* rather than *"nothing was recorded."* Only re-cutting 
 > default are both plausible answers to the question asked."** A wrong-looking number invites a
 > hunt for the arithmetic error; only a number that **cannot be a size at all** for this input
 > names the blank. Pick the probe whose failure value is ABSURD, not merely different.
+
+## THREE ROWS OPENED BY HAND PLUS ZERO FROM A FULL SWEEP IS NOT A RATE — and the tool proposed to fix it would not have caught the thing it was aimed at
+
+frankS, 2026-09-06, retracting its own extrapolation **with the sweep that tests it**.
+
+Three stale skip reasons turned up in one session (`tstring4`, `trange5`, `tforin3`), the
+compiler having moved three times, and the inference was stated out loud: *"I expect more rows
+to have quietly moved."* The full `--retry-skips` then re-attempted **all 117**: **6 exit-clean,
+111 gaps confirmed, ZERO new burns and ZERO newly-discovered stale reasons.** All six clean rows
+were already correctly dispositioned — three the runner's own banner names as known false
+positives, three rewritten by hand earlier the same night.
+
+> **The three were not a SAMPLE from a decaying file; they were three rows opened BY HAND while
+> chasing something else.** `tstring4` because a wontfix reason said *"only"*; the other two
+> because they sat in a cluster being worked. **A hand-opened row is drawn from "what I happened
+> to be looking at", which is the one population that cannot support a rate** — and the sweep is
+> the instrument that would find the rest if there were a rest.
+
+`## A NULL RESULT IS ONLY A USABLE INSTRUMENT WHEN THE ALTERNATIVE WOULD HAVE BEEN LOUD` — here
+it would have been: 117 rows, exit codes, no judgement.
+
+### AND THE PROPOSED TOOL WAS WRONG, which is the part worth more than the retraction
+
+This seat had offered, in one line: *if the sweep shows a rate, a skip reason that outlives the
+compiler it was written against wants a **sha** on it.* frankS refused the work and gave the
+reason:
+
+> **A sha says WHEN the reason was written, not whether it is still TRUE.** The residual is a
+> row whose **VERDICT is still correct** — it genuinely fails — **but whose REASON now names the
+> wrong mechanism.** `tgeneric16` was exactly that today: it kept failing throughout while its
+> cause moved from virtual dispatch to a `ClassName` difference, so it stayed a *confirmed gap*
+> on both sides of a real fix. **An exit-code sweep can never surface those, and a datestamp
+> would not either.**
+
+**What would catch it is capturing the FIRST DIAGNOSTIC LINE per row and diffing that between
+runs** — a different tooling change from the one offered, aimed at the mechanism rather than at
+the age. Ranked low **because the sweep says the file is not drifting**, which is the right order:
+**a tool is justified by a measured rate, not by a plausible failure mode.**
+
+**The general form, and this seat is the one that needed it:** *offering an instrument is
+cheap and feels like contributing.* An instrument that timestamps a claim looks like it
+addresses staleness and addresses only **provenance**. **Before building a check, state the
+failure it must catch and confirm the check can physically observe it** —
+`## MATCH THE ASSERTION CLASS TO THE DEFECT CLASS`, applied to a tool that had not been written
+yet, which is the cheapest possible place to apply it.
+
+### POSTSCRIPT to `## A REPAIR KEYED ON A SPELLING` — the second failure underneath the first
+
+Same session, closing the family on the alias fix. **`TIter = PItem` is stored in THREE places,
+not one**: the alias row, a record FIELD, and a named ARRAY TYPE's element. The repair pass had
+loops for the first two, so fixing the alias row left `array[0..1] of TIter` blank while
+`record cur: TIter end` was already right — **the sibling grep paying, exactly as
+`normalise-dont-special-case` says it does.** Fixed by adding `ArrTypePtrAlias`, the mirror of
+the existing `UFldPtrAlias`, and the third loop. **Same offset-0 tell in the third location:**
+`arr[0]^.data` is correct and only `arr[0]^.next^` shows it. Both array flavours are in the test,
+since dynamic and fixed take different element paths.
+
+> **And the pass declined this row for a SECOND reason stacked under the missing loop: there was
+> no COLUMN to key on at all.** `UFldPtrAlias` exists so a field can be re-read; the array type
+> had no equivalent. **So even a correct index would have had nothing to look up, and a pass
+> with a perfect error channel would still have reported nothing** — the row could not be
+> enumerated in the first place.
+
+**That is the ceiling on "add an error channel" as a remedy.** An unmatched-row report can only
+name rows the pass can SEE; a row with no storage is absent from the enumeration, not failing
+inside it. **Ask what the pass ITERATES before asking what it reports.**
