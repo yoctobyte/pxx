@@ -2937,6 +2937,22 @@ from attributed to measured is exactly the moment the scope label comes off.
 
 ## THE FULL-GREEN PIN TARGET IS THE ONE THING CLAUDE.md TELLS EVERY SEAT TO REFUSE
 
+> **ANSWERED THE SAME EVENING, AND THE ANSWER CAME FROM THE OWNER DIRECTLY — read this section
+> as the escalation, not as live advice.** The question I sent up was *does full-green GATE the
+> pin, or is it the aim while the cadence continues?* The answer is **it gates, and here is the
+> reason the rules file could not supply: the next pin ships as a RELEASE — "we will make that a
+> release. and call it a beta 0.1 ... we want to publish a release on github."** That makes it
+> the deliberate exception to *"pins are not releases"* rather than a contradiction of it, which
+> is exactly the distinction CLAUDE.md's rule was built on: every argument the file refuses is
+> an argument for waiting on a pin **with no user**. This one has a user who cannot roll back.
+> Relayed to the four sessions frankuser had not reached; the operative rules and the
+> anti-gaming rule are in the playbook under `## A FLAPPING ROW CANNOT BE PART OF A ZERO-RED
+> CRITERION`. **The channel objection below stands and was worth raising** — the instruction
+> still is not in the file, and a seat that reads only CLAUDE.md will still reach for the
+> refusal.
+
+
+
 2026-09-06, frankuser relaying the owner: **the target changed from a graded pin to a FULL-GREEN
 one** — zero RED rows in a full tier, then pin. Assignments went out per row. Escalated the same
 evening, not because the target is wrong (pins are the owner's) but because of what the fleet's
@@ -2990,3 +3006,31 @@ data-dependent, so under a zero-RED objective re-running is SAMPLING and the cri
 satisfiable by luck. Banked in the playbook as `## A FLAPPING ROW CANNOT BE PART OF A ZERO-RED
 CRITERION`, with frankA's discriminator (a row clearing with no commit that explains why) and
 the half that has to happen BEFORE the green, because a green erases the question.
+
+## THE RELAY I WAS GIVEN, AND THE THREE SEATS IT FOUND
+
+2026-09-06. frankuser covered eight seats with the owner's full-green directive and handed me
+the rest — *"anyone else you can see that I cannot"*, with the instruction to **under-reach
+rather than wake a session doing something else.**
+
+**Measured rather than recalled, because a name is not a checkout.** `ListAgents` gives 33
+peers; `readlink /proc/<pid>/cwd` over every claude process gives the trees that actually have a
+session in them; `git -C <tree> config remote.origin.url` says which of those are pxx. Four
+named seats (`frank-optimize`, `frank-coord-core`, `frank-coord-front`, `frank-subcoord`) are
+pxx clones and were briefed. Four more live sessions — `neo-2f`, `ffsfs-fd`, `vibestorm-5d`,
+`roost-70` — sit in `/home/neo`, `/home/neo/ffsfs`, `/home/neo/vibestorm` and `/home/neo/roost`,
+are not pxx checkouts, and got nothing. **The names would have been enough to guess right in
+this instance and would not have been evidence.**
+
+**What the sweep found, which is the part worth having: three live coordination seats with a
+13h session and no commit since 2026-09-05 20:31.** `frank-coord-core` and `frank-coord-front`
+are both parked at `6758c7ce7`, `frank-subcoord` at `12a4af7bd`. Under *"all hands on deck"*
+that is fleet capacity nobody was counting. **Not mine to assign, restart or diagnose** — I do
+not dispatch, and the owner sets the fleet size. It is reported upward as a fact and left there.
+
+**And `frank-optimize` shows `waiting`, which is the state with a history.** frankuser asked it
+what it holds and got no answer. From outside, a pending permission dialog, a finished turn and
+a live sweep are one silence, and **the pane leaves no receipt** — so I asked it to read its own
+transcript, named the three look-alike refusals, and **sent no keys.** If it stays silent, the
+residual is the owner's: a dialog is the one blockage only he can clear, and the measured cost
+of getting that wrong is 19 hours.

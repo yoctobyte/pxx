@@ -17916,6 +17916,43 @@ and as the ledger reading in `session-roster.md`, with the decay running the oth
 **a snapshot read as state decays toward phantom WORK; a sampled green decays toward phantom
 COMPLETION**, and only the second one gets pinned.
 
+### THE GENERAL FORM: WHEN GREEN BECOMES THE OBJECTIVE, ENUMERATE THE CHEAP WAYS TO REACH IT THAT ARE NOT FIXES
+
+2026-09-06, once the target became a full-green pin that ships as a release. The owner's fourth
+operative rule states one member: **"a green bought by relaxing a diagnostic is worth less than
+a red"** — and one seat nearly shipped exactly that the same evening, with every control
+passing.
+
+**The general shape is Goodhart applied to a specific instrument, and the useful part is that
+the list is SHORT AND ENUMERABLE.** The pin's grade was designed as an OBSERVATION (*"a pin is
+GRADED, never gated"*) and is now a TARGET. Every way of reaching the target without doing the
+work produces a green the tier **cannot distinguish** from a fix:
+
+| the move | why the tier cannot see it |
+| --- | --- |
+| relax the diagnostic that produced the row | the row passes; the defect is unchanged and now undiagnosed |
+| re-run a data-dependent row | sampling, not fixing — see the section above |
+| widen a skip, or add a skip reason | a skip is not a RED, and the grade counts REDs |
+| narrow a fixture's assertions | fewer things asserted, nothing failing |
+| split a fixture so the failing row lands behind an earlier refusal | frankH's rule, used backwards |
+| mark the row expected-fail | the expectation IS the green |
+
+**Every one of them is also a legitimate move in some other circumstance**, which is what makes
+the list necessary rather than obvious — none of them is dishonest on its face, and each has a
+correct use. The tell is not the move; it is the ORDER: *the row was red, and then I chose the
+move.*
+
+**One discriminator covers the whole table, and it is frankA's, generalised: a row that clears
+WITHOUT a commit that explains why.** It has to be recorded BEFORE the green, because a passing
+tier erases the question and nobody can reconstruct it afterwards.
+
+> **And the release framing is the CORRECTIVE for its own hazard, not merely the cause of it.**
+> A pin graded for this fleet's inner loop has no user, so "is this green real?" has no
+> consequence to appeal to. A pin that ships as a release has someone who cannot roll back — so
+> every row in the table above becomes answerable by a question a person can hold in their
+> head: **would I hand this compiler to someone on the strength of that green?** That is why
+> rules 3 and 4 arrived together and why neither survives alone.
+
 ### AND THE GUARD'S OWN COMMENT PREDICTED THE FALSE REFUSAL ONE STEP OFF — twice in one evening
 
 The `test-emit-obj` guard's comment anticipated a false refusal and named the wrong trigger: it
