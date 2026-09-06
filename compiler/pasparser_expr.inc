@@ -5595,7 +5595,11 @@ begin
           filed separately; adding the missing guard here would move it from one
           wrong answer to another, so it is not done blind. What this arm claims
           is only the dynamic-of-fixed-row shape, where the right answer is
-          known. See NodeFixedRowInfo. }
+          known. See NodeFixedRowInfo, and
+          bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds,
+          which carries the reason rather than only the measurement -- a comment
+          reaches whoever opens this function and everyone else arrives from the
+          queue. }
         if NodeFixedRowInfo(valNode, frRowLen, frRowLo) then
           ASTIVal[CurASTNode] := frRowLo
         else if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
