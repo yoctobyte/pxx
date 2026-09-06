@@ -1546,3 +1546,40 @@ has not ruled on a p80 that has been in front of him since morning, that is him
 working the list in order, which is the correct state. Re-raising it does not add
 information; it adds a second copy of a question he is already holding, and costs
 the one resource that cannot be parallelised.
+
+## A SHARED ADDRESS IS NOT A SHARED DEFECT — and the phrasing of the warning decides who pays for that
+
+2026-09-06. Two seats were holding what looked like one shape at one function:
+frankB on *"`ParseClassRecordSelectors` never builds `AN_CALL_IND`"*, frankD on
+*"door 5 of eight hand-written bracket-argument doors"*. I flagged it and asked
+them to **compare lists**. frankD checked: door 5 is at `pasparser_lval.inc:5251`,
+which is line 373 of frankB's function's body — **the same address, and two
+orthogonal absences.** Theirs is *which door claims the bracket*; frankB's is *who
+constructs the indirect call after a selector chain*. Neither closes the other.
+
+**The near miss is in the wording, not in the finding.** frankD's operational
+form, and it is the rule this seat should carry:
+
+> **The discriminator is one grep, and it is always cheaper than the stand-down.**
+
+Ninety seconds established that door 5 lives inside frankB's function. The cost of
+getting it wrong was **one of them abandoning a real fix**. So a collision warning
+phrased as *"you are duplicating work"* asks the receiver to act on my inference,
+and a warning phrased as *"compare lists"* asks them to run the grep — same
+message, same latency, and only the second one preserves the asymmetry.
+
+**This is the seat's own failure mode with the sign flipped.** My standing hazard
+is under-warning — silence about holdings, a lane relayed in the wrong tense. The
+over-warning direction costs just as much and is harder to see afterwards, because
+**a fix that was never attempted leaves no artefact.** A stood-down seat produces
+no commit, no ticket, and no complaint; the collision I "prevented" and the fix I
+destroyed are the same absence.
+
+**And the good outcome here was not the warning — it was that the collision
+resolved into a CHECKABLE INTERFACE.** `BuildIndirectCallAST` already calls
+`TryParseBracketArgForSlot` at `pasparser_lval.inc:106`, so: if frankB's new
+`(`-arm routes through that constructor it inherits the bracket door for free; if
+it hand-rolls a loop beside the one at `:5251` it becomes door nine. That is a
+property of a **diff**, visible to a reviewer, needing neither seat to hold the
+other's context. **Aim every collision report at producing one of those**, not at
+producing an assignment.

@@ -105,9 +105,9 @@ days.** That is the argument in one sentence.
    refusal. If it said *"advisory — 12 reds this pin does not have; pinning is
    not blocked"*, none of tonight happens. That is the one cheap code change and
    it is Track T's.
-3. **Keep `pinstatus` and the green-fallback**, because "last pin T found fully
+3. ~~**Keep `pinstatus` and the green-fallback**, because "last pin T found fully
    green" is genuinely useful — it just must not be the thing that stops a pin
-   being cut.
+   being cut.~~ **SUPERSEDED BY THE OWNER, 2026-09-06** — see the note below.
 
 ## 2026-09-06 — RECOMMENDATION 1 WAS FOLLOWED AND IT NEARLY CAUSED THE OPPOSITE FAILURE
 
@@ -182,3 +182,40 @@ that. The answer is that it was already the accepted trade — `make revert`
 demotes a bad pin — and that 12 days of no movement is a larger, quieter cost
 than an occasional bad pin that gets demoted. But it is a real trade and the
 decision should name it rather than pretend the fast pin is free.
+
+## 2026-09-06 — THE OWNER RULED ON HALF OF THIS TICKET WHILE IT SAT HERE, AND RECOMMENDATION 3 IS NOW WRONG
+
+`b93dc4098` (09:34, *"PINS ARE NOT RELEASES — the owner settles pin cadence and
+RTL coherence"*) and `e89f6da8f` (09:35, *"we avoid rollbacks — forward is the
+recovery path"*) put the ruling into CLAUDE.md, which takes precedence over this
+ticket. Verbatim:
+
+> *"yes staying in sync with the rtl is a primary purpose of pinning. this is also
+> why we have to pin on regular intervals, even if there are reds. pins are not
+> releases."*
+>
+> *"yes we avoid rollbacks. useful work done is work done, even if (other) things
+> break."*
+
+**Recommendation 3 is directly contradicted.** CLAUDE.md now says
+`pin_is_green`/`pinstatus` *"name a target for an operation this fleet does not
+perform"*, and instructs nobody to rank a ticket on rollback depth or spend work
+making `make revert` produce a coherent pair. The green-fallback is the rollback
+path; there is no rollback. **Keeping it "because it is genuinely useful" is the
+release instinct this ticket was opened to name, wearing the ticket's own
+clothes.**
+
+**Recommendations 1 and 2 stand and are strengthened**, because the cadence
+ruling makes the shadow's wording matter more, not less: a fleet that pins on a
+regular interval *with reds* reads `would_pin: false` more often, not less.
+
+> **HOW THIS WAS MISSED, which is the part worth keeping.** I appended the
+> fixedpoint incident to this ticket at 10:07 — **33 minutes after the owner's
+> ruling landed on the same subject** — having pulled, and did not notice. I was
+> reading the ticket, and the thing that had changed was the file the ticket is
+> about. A ticket does not announce that its premise moved, and CLAUDE.md does not
+> announce which tickets it just invalidated. **The check is cheap and I did not
+> run it: `git log origin/master --since=<when this ticket was last touched> --
+> CLAUDE.md` before appending to any Track U decision ticket.** A decision ticket
+> is the one artefact whose whole content is a claim about what the rules
+> currently say.

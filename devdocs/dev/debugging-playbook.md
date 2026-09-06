@@ -16132,9 +16132,39 @@ parsed, the address being taken — and let the sites that do it without X fall 
 The operation is a fact about the program; the structure around it is your model
 of the program, and on exactly the sites you are hunting the model is wrong.
 
-**The cheap tell that you are doing this backwards:** your search returns a clean
-population and the bug is still there. A search keyed on the right operation
-returns a MESSY population — every site, correct and incorrect together — and the
-filtering is yours to do afterwards. A tidy result from a structural search is the
-search agreeing with your hypothesis.
+> **A TELL WAS PROPOSED HERE AND THE MEASUREMENT RAN THE OTHER WAY. It is
+> recorded because it is the plausible wrong answer, and two seats had written a
+> version of it.**
+>
+> Proposed (frank-coordinator): *"a structural search returns a CLEAN population
+> and the bug is still there; a search keyed on the right operation returns a
+> MESSY one, and the filtering is yours afterwards."* frankD's numbers from the
+> same afternoon are **exactly inverted**:
+>
+> | search | population | result |
+> | --- | --- | --- |
+> | structural — 7 `while ... <= Procs[].ParamCount - 1` loops across 4 files | **messy** | 7 fires on the repro, every one innocent; the loudest was briefly read as the answer |
+> | operational — every `ParseExpr;`/`ParseArgExpr;`, printed only when `CurTok` is `[` | **one line** | the site |
+>
+> **So tidiness is not the discriminator in either direction.** frankD also
+> retired their own version of it — *"a census that returns a tidy answer deserves
+> more suspicion than a messy one"* — which had been drawn from the caller-census
+> incident, where it happened to hold, and does not generalise. Two seats had
+> independently generalised one incident's surface feature.
+
+**THE PROPERTY THAT ACTUALLY MATTERS IS EXHAUSTIVENESS OVER THE OPERATION, AND
+THE FILTER IS WHAT MAKES IT READABLE.** Marking every site that can parse an
+expression means that **if a bracket was parsed as an expression at all, one of
+them had to fire** — the guilty site's absence from the result is impossible by
+construction. The structural search has no such property: a site that hand-rolls
+its loop is simply not in the population, and **its absence looks identical to
+"not exercised by this repro"**, which is the reading that costs you the
+afternoon.
+
+**So the operational form (frankD's, replacing the tell):** when a structural
+search comes back without the site, **do not widen the structure.** Ask what
+OPERATION the bug must perform — a token consumed, an allocation, a write —
+instrument every occurrence of that, and filter on the condition that makes it
+interesting. **Coverage is the claim; a single-line result is the filter working,
+not a warning sign.**
 
