@@ -1610,3 +1610,41 @@ the person holding it. Second, **the ticket body was not wrong; it was right and
 finished.** A capitalised warning inside a `done/` ticket keeps warning, and the
 folder is the only thing that retires it — which is exactly why `done/` write-ups
 are historical records and never instructions.
+
+## A FINDING WRITTEN IN THE CODE IS NOT WRITTEN IN THE TICKET, AND THE NEXT READER STARTS FROM THE TICKET
+
+2026-09-06, twice in one day, and both times the finding was recorded properly —
+just not where the person who needed it would be standing.
+
+- `bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes` was about to
+  be worked by a seat planning to **test its stated cause rather than trust it** —
+  correct instinct. The cause is already measured: the sole call site of
+  `FindUMethForSig` (`pasparser_decl.inc`) carries a comment saying the signature
+  is a preference not a requirement, that the refusal is handed to a diagnostic
+  *"which only fires when no method of the name exists at all"*, that this was
+  **measured both ways** with and without a resolution clause — **and a warning
+  naming the wrong fix**: *"do not 'fix' it by adding a check on this path alone,
+  which would make the clause stricter than the plain spelling it desugars to."*
+  None of that is in the ticket.
+- frankD's rung-7 cascade finding — that one wall was a cascade of another, so the
+  wall count over-reported the defect count — existed only in a message to me
+  until they moved it into the corpus ticket.
+
+**The asymmetry that makes this a routing problem and not a filing preference:** a
+code comment is found by whoever is already editing that function, and a ticket is
+read by whoever is deciding whether to. **The person who needs "here is the wrong
+fix" is the one who has not opened the file yet.** By the time the comment is in
+front of them they have chosen an approach.
+
+**For this seat, it is a cheap and unusually high-value contribution**, because it
+is exactly the read a worker will not spend a turn on before claiming: when a peer
+announces a ticket, grep the tree for the ticket's SLUG. `tools/source_ticket_xref.py
+--cites <slug>` does it exactly (5674 citations across 2111 tickets), and a plain
+grep does it well enough. **A slug in a source comment means somebody stood where
+the fix goes and wrote down what they found** — which is strictly more than the
+ticket knows, and is most often the thing that changes the plan rather than
+confirming it.
+
+**Do not fix this by asking people to duplicate comments into tickets.** The
+comment is in the right place for its own reader; the gap is that nobody looks
+across. Looking across is a coordinator's job and it costs one grep.
