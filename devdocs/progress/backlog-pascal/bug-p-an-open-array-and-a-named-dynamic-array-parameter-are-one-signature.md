@@ -80,6 +80,39 @@ by exit code and this defect is a wrong-value defect that halts, so an
 exit-clean row would not have caught the first three cases had `Halt` been
 absent).
 
+## The field the comparison is built from under-describes the signature
+
+**`Procs[pi].Params[j].TypeKind` means two different things depending on
+`IsArray`** — the parameter's own kind when False, its ELEMENT kind when True —
+and the field name says neither. Verified 2026-09-06 at `pasparser_proc.inc`
+around 1235: the named-array-type arm sets `tk := IntToTypeKind(ArrTypeElemTk
+[paramAi])` and `isArr := True`, and `tk` is what reaches `ptypes[i]` and then
+`Params[i].TypeKind`.
+
+So the two declarations here are not merely *compared* as equal — they are
+**stored** identically: same element kind, same `IsArray` bit. The signature
+comparison is built from fields that under-describe the signature, which is why
+adding one more comparison is the fix rather than correcting an existing one.
+
+**frankD's suggestion, and it is better than a shared predicate:** the unit to
+introduce is a **refusing accessor** — one that returns `tyUnknown` for an array
+parameter's "own kind" — rather than a predicate both sides call. A predicate can
+be called correctly and still be handed the wrong field; an accessor that refuses
+cannot. Two open tickets read this same field without the `IsArray` guard
+([[bug-p-a-default-value-is-accepted-on-an-open-array-parameter]] in the decl
+path, and its call-path twin), so whoever takes any one of the three should
+check whether the accessor closes all of them.
+
+**What kind of defect this is, since it is not the one the summary shape
+suggests.** Not a missing record: the column exists and is written. Not an
+unread record: `ir.inc` reads it at the call site. It is a **partially-consulted
+record** — one consumer reads it, another ignores it, and both produce
+correct-looking code. An absence can in principle be enumerated (declared-set
+minus carried-set); a column that one consumer reads and another does not cannot
+be found by any set difference. The only question that surfaces it is *"what
+distinguishes these two things, and is that thing consulted at the point where
+they are distinguished?"*
+
 ## Neighbour
 
 [[bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct]] is the same
