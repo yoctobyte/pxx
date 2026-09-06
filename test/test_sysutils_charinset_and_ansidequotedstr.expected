@@ -1,0 +1,12 @@
+inset hit   = TRUE
+inset miss  = FALSE
+inset edge  = TRUE FALSE
+inset empty = FALSE
+quoted      = [hello]
+doubled     = [ab'c]
+unquoted    = [ab'cd]
+unterminat  = [abc]
+empty       = []
+bare        = []
+inner only  = []
+other quote = [a"b]

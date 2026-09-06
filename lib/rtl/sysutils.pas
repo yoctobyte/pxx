@@ -459,6 +459,28 @@ function StringOfChar(ch: Char; count: Integer): AnsiString;
 { 1-based substring; count clamped to the end; out-of-range index -> ''. }
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
 
+{ FPC's `Ch in CSet`, spelled as a function. TSysCharSet has been declared above
+  for a while and its own comment already named this as "the parameter type of
+  the CharInSet / character classification family" -- the type was here, named
+  after the function, and the function was not. Delphi-compatible code calls it
+  unconditionally because `Ch in Set` is not writable when Ch is a WideChar.
+  fcl-passrc pscanner.pp:559. feature-b-sysutils-charinset }
+function CharInSet(Ch: AnsiChar; const CSet: TSysCharSet): Boolean;
+
+{ FPC's SysUtils.AnsiDequotedStr: strip one surrounding pair of AQuote and
+  collapse each DOUBLED quote inside to one.
+
+  THE THREE NON-OBVIOUS CASES ARE FPC'S, NOT CHOICES, and each has a row in the
+  test: a string that does not START with the quote is returned WHOLE and
+  unexamined (FPC's AnsiExtractQuotedStr does `exit(strpas(P))` there, so
+  `ab'cd` keeps its inner quote); an UNTERMINATED quote consumes to the end
+  rather than failing; and a doubled quote is an escape, so `'ab''c'` is `ab'c`.
+  Written over the string rather than over a PChar because pxx has no need of
+  FPC's `var Src: PChar` cursor, which exists so AnsiExtractQuotedStr can report
+  where it stopped -- a caller nothing here has.
+  fcl-passrc pparser.pp:4467. feature-b-sysutils-charinset (which covers both) }
+function AnsiDequotedStr(const S: AnsiString; AQuote: Char): AnsiString;
+
 { Strip characters <= ' ' (spaces, tabs, control) from both ends. }
 function Trim(const s: AnsiString): AnsiString;
 
@@ -1482,6 +1504,43 @@ begin
   { build the result once — SetLength + a single Move, not char-by-char append }
   SetLength(Result, len);
   Move(s[index], Result[1], len);
+end;
+
+function CharInSet(Ch: AnsiChar; const CSet: TSysCharSet): Boolean;
+begin
+  CharInSet := Ch in CSet;
+end;
+
+function AnsiDequotedStr(const S: AnsiString; AQuote: Char): AnsiString;
+var i, n: Integer;
+begin
+  AnsiDequotedStr := '';
+  n := Length(S);
+  if n = 0 then Exit;
+  { Not quoted at all: FPC returns the whole string WITHOUT scanning it. }
+  if S[1] <> AQuote then
+  begin
+    AnsiDequotedStr := S;
+    Exit;
+  end;
+  i := 2;
+  while i <= n do
+  begin
+    if S[i] = AQuote then
+    begin
+      { A doubled quote is one literal quote; a lone one closes the string. }
+      if (i < n) and (S[i + 1] = AQuote) then
+      begin
+        AnsiDequotedStr := AnsiDequotedStr + AQuote;
+        i := i + 2;
+        Continue;
+      end;
+      Exit;
+    end;
+    AnsiDequotedStr := AnsiDequotedStr + S[i];
+    i := i + 1;
+  end;
+  { Fell off the end: an unterminated quote keeps everything after it. }
 end;
 
 function Trim(const s: AnsiString): AnsiString;

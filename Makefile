@@ -7510,6 +7510,29 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_tlist_count_is_writable \
 	  "$$($(TESTTMP)/test_tlistcount26)" \
 	  "$$(cat test/test_tlist_count_is_writable.expected)"
+	@# CharInSet and AnsiDequotedStr, two SysUtils functions FPC has and we did
+	@# not, added together because fcl-passrc needs both and each was invisible
+	@# until the wall in front of it fell.
+	@# CharInSet: TSysCharSet had been declared here for a while and its own
+	@# comment named this as "the parameter type of the CharInSet / character
+	@# classification family" -- the type present and named after the function,
+	@# the function absent. BOTH answers are asserted, plus the empty set: a
+	@# predicate returning a constant passes any single-row test.
+	@# AnsiDequotedStr's three non-obvious cases are FPC'S BEHAVIOUR, NOT CHOICES,
+	@# and each is a plausible place to differ, so each has a row: a string that
+	@# does not START with the quote comes back WHOLE and unexamined (`ab'cd`
+	@# keeps its inner quote -- an implementation that strips quotes wherever it
+	@# finds them passes every other row and fails this one); a doubled quote is
+	@# an escape, so `'ab''c'` is `ab'c`; an unterminated quote consumes to the
+	@# end rather than raising or returning empty. `empty`, `bare` and
+	@# `inner only` are the degenerate inputs that crash a cursor written one
+	@# character off. All twelve rows measured against fpc 3.2.2 -Mobjfpc rather
+	@# than against a reading of its source.
+	@# fcl-passrc pscanner.pp:559 and pparser.pp:4467.
+	@./$(COMPILER) test/test_sysutils_charinset_and_ansidequotedstr.pas $(TESTTMP)/test_sysquote26
+	@tools/expect_same.sh test_sysutils_charinset_and_ansidequotedstr \
+	  "$$($(TESTTMP)/test_sysquote26)" \
+	  "$$(cat test/test_sysutils_charinset_and_ansidequotedstr.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
