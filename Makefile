@@ -9743,6 +9743,14 @@ test-core: $(COMPILER)
 	# worked AT ALL -- `class` before `generic`, and the header scan stepped over
 	# `generic` only, so the emitted specialization was an ordinary method and the
 	# call failed IN ONE FILE at the pin.
+	# A generic ROUTINE whose implementation RENAMES the type parameter (<T>
+	# declared, <S> implemented) is accepted -- a deliberate divergence. It lives
+	# here because its two corpus rows (tgenfunc17, tgenfunc18) are UNIT sources:
+	# pxx cannot compile a unit standalone, so it refused them for that reason
+	# alone and their `{ %FAIL }` was satisfied without the compiler reaching the
+	# construct. The skip lines described a dialect-pass the run never showed.
+	./$(COMPILER) -Futest/generic_rename_units test/test_generic_implside_type_parameter_rename.pas $(TESTTMP)/test_gen_rename26
+	tools/expect_same.sh test_gen_rename26 "$$($(TESTTMP)/test_gen_rename26)" "$$(printf '42\nok')"
 	./$(COMPILER) -Futest/generic_xunit_method_units test/test_generic_method_across_a_uses_clause.pas $(TESTTMP)/test_gen_xmeth26
 	tools/expect_same.sh test_gen_xmeth26 "$$($(TESTTMP)/test_gen_xmeth26)" "$$(printf '5\nab\n15\n42\n3\n13\n42')"
 	./$(COMPILER) -Futest/generic_nestedspec_units test/test_generic_body_sees_its_specializations_nested_type.pas $(TESTTMP)/test_gen_nestedspec26

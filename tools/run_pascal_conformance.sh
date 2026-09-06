@@ -204,6 +204,28 @@ for name in $(list_tests); do
   done <<EOF
 $dirs
 EOF
+  # ---- a UNIT source is not evaluable here, and a %FAIL one passes VACUOUSLY ----
+  # FPC's dotest compiles a unit standalone; pxx has no standalone unit compile
+  # and answers "this file is a unit, not a program" for every one of them. That
+  # is a refusal, so under the %FAIL contract ("the compile must be REJECTED")
+  # EVERY unit-source %FAIL row passes -- whatever it contains, including a row
+  # whose subject we get wrong. A guard that cannot fail, and it printed PASS:
+  # measured 2026-09-06, tgeneric105 was being counted as a pass on exactly this,
+  # and tgenfunc14/17/18 carried curated skip reasons describing a dialect-pass
+  # the compiler never reached the source to have.
+  #
+  # Auto-gated rather than skip-listed because it is the same KIND of thing the
+  # gates above are: suite infra we do not model, not a triaged gap. 4 rows in
+  # the curated categories today and 9 in the corpus, and that grows as
+  # CATEGORIES expands.
+  #
+  # The claims those skip lines carried are not lost: they are asserted by
+  # test_generic_implside_rename26 (the impl-side type-parameter rename) and by
+  # tgenfunc13's own live skip line (the repeated constraint), both of which run.
+  case "$(sed -n 's/^[[:space:]]*\(unit\|program\|library\)[[:space:]].*/\1/p' "$src" | head -1)" in
+    unit) gate="unit-source" ;;
+  esac
+
   if [ -n "$gate" ]; then
     auto=$((auto+1))
     emit auto "$name" "$gate"
