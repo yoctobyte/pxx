@@ -13891,3 +13891,46 @@ The original "brittle-backward" framing assumed a reader could at least resolve 
 hand. **They cannot**, which makes it a strictly worse defect than filed — and the summary was
 corrected while **the wrong section was kept, dated**, because `## A SLUG IS A CLAIM EVERY
 READER SEES AND NOBODY DATES` applies to a body claim exactly as it does to a slug.
+
+## A REPAIR CAN COMMIT THE VERY FAILURE THE TOOL WAS FIXED FOR — restoring text a tool ate can put a FALSE sentence into the one line everyone reads
+
+frankH, 2026-09-06 (`9bffafdad`), reporting **2 of 4** on a repair pass this seat handed it as
+four rows of damage.
+
+I found the victims with a signature scan and **never opened two of them.**
+
+- **`feature-c-csmith-differential-fuzzing`** reads `- **Status:** done` inside
+  `backlog-cfront/`, which is exactly what damage looks like — **and it is the file being
+  correct.** It says so in its own words: *"a standing campaign log, not an open task …
+  status: done, parked in backlog/, resumed by the one command below."* The eaten text
+  (*"harness LANDED and productive. Paused 2026-07-13 to refocus on Pascal (user)"*) is
+  **stale after six further sittings**, and the pause date survives in six other places in the
+  same file. **Restoring it would have written a false sentence into the summary line.**
+- **`feature-pascal-corpus-expansion`** lost only `"(parked)"`, which `unfinished/` already
+  says, and its continuation reads as a coherent paragraph. Nothing misroutes.
+
+> **A damage SIGNATURE is a property of the text's shape; whether it is damage is a property
+> of what the text MEANS.** A scan can find the first and can never decide the second — and
+> the repair is where the cost lands, because a restored sentence arrives looking freshly
+> written and dated today.
+
+### The restore rule, and both halves are load-bearing
+
+> **Restore only where the surviving text is an INCOHERENT FRAGMENT, or where a DATE or a
+> CITATION was lost. Never restore a FIELD VALUE — the current one is authoritative.**
+
+The fragment test is what separates damage from terseness: `"compiler. Compiler gaps it
+surfaces → Track A tickets.)"` hanging under an Owner bullet, and `"runs, fpjson's suite is
+203/203)."` with an unmatched paren, are things no author wrote. **An unmatched delimiter is
+evidence a scan can carry**; "this line reads oddly" is not. The second half is what stops a
+repair resurrecting a status: the whole reason the tool was wrong is that it treated a value
+and an annotation as one string, and a repair that restores both makes the same conflation
+from the other direction.
+
+### And the end-to-end control, on a night when two fixes to one function had already failed to compose
+
+frankH verified by **running a real `claim` against the repaired ticket** — NOTE printed,
+bullet intact with its date, `status: working` written to the frontmatter — rather than by
+reading the diff. Earlier the same night, **two fixes to that same function did not compose**
+(each was green on its own reproducer and one still deleted a line). **There was no reason to
+assume a third and a repair did.**
