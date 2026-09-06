@@ -11932,3 +11932,62 @@ output file — and that consequence cannot be produced by a warning, at any sev
 any wording. Prefer the consequence to the text whenever the consequence is cheap to
 observe. This is `## MATCH THE ASSERTION CLASS TO THE DEFECT CLASS` applied to a verdict:
 "did it refuse" is a question about an artefact, and it was being asked of a log.
+
+## AN EDIT WINDOW STATED AS "THE WHOLE STREAM" IS A CLAIM ABOUT WHERE THE CURSOR IS — and the cursor moves
+
+Measured 2026-09-06 (frankS), landing the cross-uses generic-method call. A token sweep
+was written to scan **the whole stream**, which reads as the safe, total, no-special-cases
+choice. It fires at the end of **every** uses clause — including one inside an imported
+unit, where the importing program's body sits at *lower* indices. So it removed tokens
+**behind `TokPos`** and shifted `TokPos` itself.
+
+**It did not surface as a sweep bug.** It surfaced as `expected ':' before ';'` in the
+middle of a `var` section three lines away — a parse error about perfectly good source, at
+a location with no relationship to the edit. The bound (`AHEAD OF TokPos` only) **is the
+fix, not a tidy-up.**
+
+> **"The whole stream" is not a scope; it is the absence of one.** Any editor that runs
+> while a cursor exists has two regions, and the one behind the cursor has already been
+> consumed by something that will not re-read it.
+
+Same family as `## A SENTINEL MUST NOT COLLIDE WITH THE VALUE IT EXISTS TO DISCRIMINATE
+AGAINST`: a bound you did not state is a bound the machinery picks for you, and it picks
+the one that is wrong in the quiet direction. Ask of any stream edit: **what has already
+been read, and who still holds an index into it?**
+
+### And the loop that would eat its own declaration
+
+The same commit fixed `class generic function`, which **had never worked on any surface,
+in one file, at the pin**: FPC writes `class` before `generic`, the header scan stepped
+back over `generic` only, and the expansion re-read the member from `function` and emitted
+an ordinary method — `TZ.specialize Twice<Integer>(21)` answering *"cannot call non-static
+method on class type directly"*. The repair is **three bounded steps, deliberately not a
+loop**, because a loop eats the class declaration's own `class` when a generic method is
+the first member, and deletes the type. **A loop is the natural generalisation and it is
+wrong here for a reason that only shows on one input order.**
+
+## A CONTROL RUN AT THE END TELLS YOU THE ANSWER; A CONTROL RUN AT EACH STEP TELLS YOU WHICH STEP LIED
+
+frankS, the same night, stating the cost of its own near-miss precisely:
+
+A probed source line was restored **without rebuilding**. Two reductions then measured as
+NOT reproducing, the shape was concluded wrong, and the search moved elsewhere — every
+reading taken from a binary that still had the fix disabled. **The positive control did
+eventually catch it, and only after the wrong conclusion had already been acted on**: the
+tell was the control later failing rows that had just been certified as passing.
+
+> **A control at the end certifies the run. A control at each step localises the lie.**
+
+The difference is not rigour, it is **resolution**. An end-of-run control tells you
+something in the sequence was wrong and leaves you to re-derive which; a per-step control
+names the step. Here the build is **12 seconds** and the per-step control was not paid —
+which is the general shape of this trade: the per-step version is affordable far more often
+than it feels, and the end-of-run version is what you reach for because it looks like the
+same check done once.
+
+Corollary for a REVERT-AND-RESTORE cycle specifically, which is where this bites hardest
+(`## A CONTROL PROVES NOTHING IF THE STATE YOU BELIEVE IT IS IN IS NOT THE STATE IT IS
+IN`): **the restore is a build step, not an editing step.** Print `sha256sum
+compiler/pascal26` after every restore, exactly as you would after every revert — the
+binary sha moving is the only thing that distinguishes "restored" from "restored and
+rebuilt".
