@@ -8,7 +8,14 @@ found-by: claude-N
 owner: frankA
 ---
 
-# Five dispatch sites decide what `SomeName(expr)` casts to
+# Five dispatch sites decide what `SomeName(expr)` casts to — FOUR since `1df943481`
+
+*(The slug keeps the five. A count in a slug is frozen at filing and nothing
+dates it, so repairing it in place would destroy the only evidence the number
+ever moved. The series belongs in the summary, and this is it: five at filing,
+four since the `OrdinalNameToTk` door was deleted. Note also that FIVE counts
+RECOGNITION rules, not constructions — the file has fourteen
+`AllocNode(AN_PTR_CAST)` sites, and the two counts are not in conflict.)*
 
 `ParseFactorCore` (`compiler/pasparser_expr.inc`) resolves a named-type cast in
 **five** places. Four of them build the identical node — `AN_PTR_CAST` with
@@ -168,3 +175,68 @@ function (11 NilPy-guarded builtin arms, 2730–3344). Told frankD I am entering
 after it lands rather than before; a collapse of the outer chain against a
 pending deletion of eleven of its arms is a conflict neither diff would show.
 
+
+## 2026-09-06 (frankA) — one door down, and the two-armed control is the part worth copying
+
+**Landed `1df943481`: the `OrdinalNameToTk` door is gone.** Five recognition
+rules become four. Its 31 names now fall through to the
+`BuiltinScalarTypeKind` door ~3000 lines below, which recognises a strict
+SUPERSET of them and builds the same node with strictly more around it (the
+`operator Explicit` conversion call, the `Pointer`/`AN_ADDR` spelling, the enum
+identity under `{$PACKENUM}`).
+
+**The method, because "no rows moved" is not a proof and I nearly shipped it as
+one.** A byte-identical sweep after deleting a door cannot tell a correct
+fall-through from a THIRD path answering by luck. What separates them is a
+poison with two arms:
+
+| | poison the lower door (`castTk := tyUInt8` for one name) |
+| --- | --- |
+| upper door present | 163 rows IDENTICAL — the upper catches it first, poison inert |
+| upper door deleted | that name's rows change — the lower door is what answers now |
+
+Run on `unicodechar` (a name the compiler never casts, so the self-host
+survives and the rows are readable) and independently on `int64`, where the
+poisoned build **SEGFAULTS the self-host** with the upper door gone and
+converges with it present — the same answer from the compiler's own source
+instead of from a probe.
+
+**The first run of the `int64` arm reported IDENTICAL and was wrong.** The
+poisoned build had segfaulted, `make` left the previous binary in place, and the
+sweep measured a compiler that did not contain the poison. `make ... | grep
+converged` printed nothing and I read the absence as noise. Reading make's FULL
+output is what caught it. A control that silently does not run reports the same
+word as a control that ran and found nothing.
+
+**The two hazards this ticket named, both measured rather than reasoned about:**
+
+- **The `-3` WideChar marker.** It was already redundant: `NodeIsWideCharVal`
+  also answers on `ASTTk = tyWideChar`, and every node the deleted door stamped
+  `-3` on carried that kind too, so `-3` could never be the deciding arm.
+  `UnicodeChar(x)` proves it from the other side — it reached the same door and
+  was NEVER stamped `-3`, because the guard read the NAME rather than the kind,
+  and it behaves identically to `WideChar(x)` in every string context. NilPy
+  keeps its own verbatim copy of the door and its own `-3`
+  (`pyparser.inc:46428`), so that arm stays live for N and not for P.
+- **The `(qUnit = -2)` System-qualifier exemption.** The lower door does not
+  spell one and did not need one: with a shadowing `var Int64: LongInt`,
+  `System.Int64(65769)` still answers 65769, exactly as fpc 3.2.2 does. The aim
+  check is that the UNQUALIFIED `Int64(65769)` is still a syntax error on both,
+  so the shadow really shadows.
+
+**What is left, and only two of the four can merge.** The type-KEYWORD arms key
+on a TOKEN KIND, not a name — no name resolver reaches them without a lexer
+change. `FindTypeAlias` asks the symbol table and `BuiltinScalarTypeKind` asks
+the name table; those two are the pair a `name -> (castKind, enumId, aliasIdx)`
+resolver actually collapses, and their ORDER is the load-bearing part this
+ticket's Shape section already records.
+
+**A NEW INSTRUMENT CAME OUT OF THIS, and it is the one that was missing.** The
+expensive failure here is not two doors disagreeing about a VALUE — it is one
+NAME that works at some doors and is refused at others, because every working
+door tells you the name is fine. `SizeUInt` was exactly that (`ecb00083e`), and
+its three synonyms all worked. `tools/type_name_every_door_probe.py` asks every
+name in the UNION of the two tables at every door — declaration, `SizeOf`, a
+cast stored in its declared type, the cast's value, `High`, `Low`, `TypeInfo` —
+and reports names accepted at some and refused at others. It is indexed in
+`devdocs/dev/differential-probes.md`.

@@ -7533,8 +7533,30 @@ begin
   begin vuName := 'VariantToDouble'; vuRet := tyDouble; end
   else if target = tyBoolean then
   begin vuName := 'VariantToBool'; vuRet := tyBoolean; end
-  else if target = tyChar then
+  else if TypeIsCharKind(target) then
   begin
+    { TypeIsCharKind, not `target = tyChar`: a WideChar target reached the ELSE
+      below and unboxed through VariantToInt64, which is why
+      `v := 'A'; w := WideChar(v)` first reinterpreted the record (answering 5)
+      and then, once tyWideChar was admitted to IRVariantUnboxKind, raised
+      "cannot convert string to integer" at run time. Both are the same miss:
+      this dispatch enumerates kinds, and tyWideChar did not exist when the
+      list was written -- a WideChar variable was tyUInt16 then, and tyUInt16
+      falls to the integer helper CORRECTLY, so the arm was right on the day it
+      was spelled.
+
+      VariantToChar returns a tyChar, and the store into a 2-byte WideChar
+      widens it. That gives fpc 3.2.2's answer for a variant holding a
+      character, which is the shape real code writes. It does NOT give a
+      UTF-16 code unit above 255 for a variant holding a multi-byte character;
+      no oracle asks for that here, because fpc renders the variant and takes
+      character 1 in the same situation.
+
+      The NilPy branch above has the identical shape (`target = tyChar` ->
+      pyvar_to_char, else pyvar_to_int) and is deliberately NOT changed: NilPy
+      has no WideChar spelling that reaches it, so the necessity was not shown
+      and a guard nobody needed is its own defect.
+      bug-a-a-variant-cast-to-widechar-reinterprets-the-record }
     { --strict-fpc swaps in FPC's rule (render the variant, take character 1:
       Char(65) = '6') by picking a different HELPER NAME here. Doing it at the
       seam — the same place the Pascal/pylib helper sets already diverge — is

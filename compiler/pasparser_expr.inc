@@ -8625,9 +8625,12 @@ end;
   String() casts below.
 
   Returns -1 for "not mine" — a non-variant operand, or a target no variant
-  payload can stand in for (pointer/record/set/class; mirror of ir.inc's
-  IRVariantUnboxKind, minus tyPointer: `Pointer(v)` stays a reinterpret, since
-  the address of the record is the only sensible reading of it).
+  payload can stand in for (pointer/record/set/class). That set is
+  IRVariantUnboxKind's, ASKED rather than mirrored; it lives in symtab.inc, not
+  ir.inc, because NilPy's *args forwarder needs the same answer. `Pointer(v)`
+  stays a reinterpret — the address of the record is the only sensible reading
+  of it — and that falls out of the predicate rather than being subtracted from
+  it here, which is what the old wording claimed and no copy ever did.
   bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting }
 function VariantCastToTemp(n: Integer; target: TTypeKind): Integer;
 var vcTmp, vcAsg, vcLhs, vcRd, vcNd: Integer;
@@ -8635,12 +8638,13 @@ begin
   VariantCastToTemp := -1;
   if n < 0 then Exit;
   if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
-  if not (TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
-          (target = tyString) or (target = tyAnsiString) or
-          (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
-          (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or
-          (target = tyUInt8) or (target = tyUInt16) or (target = tyUInt32) or
-          (target = tyUInt64) or (target = tyNativeUInt)) then Exit;
+  { ASK the predicate that owns this set rather than mirroring it. The list
+    here was CHARACTER-FOR-CHARACTER identical to IRVariantUnboxKind's, and the
+    comment above still said "minus tyPointer" although neither copy has ever
+    listed tyPointer -- a difference that was documented and did not exist.
+    Both copies were missing tyWideChar for the same reason and neither could
+    tell you the other was wrong. }
+  if not IRVariantUnboxKind(target) then Exit;
   vcTmp := AllocVar('', target);
   vcNd  := AllocNode(AN_STR_FROM_CHAR);
   vcLhs := AllocNode(AN_IDENT);

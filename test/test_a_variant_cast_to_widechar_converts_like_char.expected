@@ -1,0 +1,8 @@
+wide  one-char   65
+char  one-char   65
+wide  two-char   65
+char  two-char   65
+wide  lower      122
+char  lower      122
+wide  in-string  2 xA
+VARIANT WIDECHAR OK

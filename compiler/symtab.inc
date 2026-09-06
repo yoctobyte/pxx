@@ -4047,8 +4047,25 @@ function IRVariantUnboxKind(target: TTypeKind): Boolean;
   before ir.inc. It answers a question about a TYPE KIND, so it has no business
   being IR-private in the first place. }
 begin
+  { tyWideChar is here because it is a CHARACTER, and this list was written
+    when it was not a kind at all. `w: WideChar` used to be tyUInt16, which IS
+    listed, so the set was complete on the day it was spelled; the fix that gave
+    WideChar its own kind (bug-a-writeln-of-a-widechar-prints-its-ordinal) took
+    it silently out of every enumeration that named tyUInt16 and meant "a
+    16-bit character too". Nothing failed loudly: `WideChar(v)` on a Variant
+    just fell out of the unbox and REINTERPRETED the variant record, so
+    `v := 'A'; w := WideChar(v)` answered 5 against fpc 3.2.2's 65 -- and the
+    5 is a field of the variant record, not a truncation of anything.
+    A guard spelled as a list of kinds goes wrong by the kind nobody listed,
+    and here the kind did not exist yet when the list was written.
+
+    tyUCS4Char is deliberately NOT here, for TypeIsCharKind's reason above: FPC
+    spells UCS4Char = LongWord, an INTEGER wearing a character's name, and fpc
+    3.2.2 refuses `UCS4Char(v)` on a variant outright -- so there is no oracle
+    asking for it and no shape that wants it. }
   IRVariantUnboxKind :=
     TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
+    (target = tyWideChar) or
     (target = tyString) or (target = tyAnsiString) or
     (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
     (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or

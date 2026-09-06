@@ -7108,6 +7108,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_atselwalk26 "$$($(TESTTMP)/test_atselwalk26)" "$$(cat test/test_at_over_a_class_base_walks_every_selector.expected)"
 	./$(COMPILER) test/test_sizeuint_answers_like_its_synonyms.pas $(TESTTMP)/test_sizeuintsyn26
 	tools/expect_same.sh test_sizeuintsyn26 "$$($(TESTTMP)/test_sizeuintsyn26)" "$$(cat test/test_sizeuint_answers_like_its_synonyms.expected)"
+	./$(COMPILER) test/test_a_variant_cast_to_widechar_converts_like_char.pas $(TESTTMP)/test_varwidechar26
+	tools/expect_same.sh test_varwidechar26 "$$($(TESTTMP)/test_varwidechar26)" "$$(cat test/test_a_variant_cast_to_widechar_converts_like_char.expected)"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas $(TESTTMP)/test_virtual_call_string26
 	tools/expect_same.sh test_virtual_call_string26 "$$($(TESTTMP)/test_virtual_call_string26)" "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
