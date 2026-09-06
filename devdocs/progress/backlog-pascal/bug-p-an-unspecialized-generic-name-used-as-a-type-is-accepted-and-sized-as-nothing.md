@@ -3,7 +3,7 @@ slug: bug-p-an-unspecialized-generic-name-used-as-a-type-is-accepted-and-sized-a
 track: P
 prio: 35
 type: bug
-status: done
+status: backlog
 owner: ""
 created: 2026-09-06
 found-by: frankS
@@ -56,71 +56,3 @@ NOT the same as `tgeneric21.pp` (a generic nested in a generic — fpc rejects,
 pxx accepts, and that one is a genuine dialect pass) or `tclass13c.pp`
 (`TRootClass.Integer` — a qualified member lookup falling through to global
 scope, a different missed diagnostic).
-
-# Fixed 2026-09-06 — and the root cause was one level up from the generic
-
-The generic name is a SPECIAL CASE of a defect with no generics in it at all:
-
-```pascal
-type PNever = ^TNeverDeclared;   { no such type anywhere in the program }
-var  p: PNever;
-begin p := nil; writeln(SizeOf(p^)); end.   { pxx: compiled, ran, printed 4 }
-```
-
-fpc 3.2.2: `Forward type not resolved "TNeverDeclared"`. The 4 is the same
-`TypeStorageSize(tyUnknown)` this ticket measured for `^TTest` — same blank, same
-collision with `sizeof(Integer)`, arrived at without a template in sight.
-
-`ParseTypeKindInner`'s `PtrElemDepth > 0` arm tolerates an unknown pointee name,
-and it must: `PNode = ^TNode;` above `TNode` is how every linked node in Pascal
-is spelled. What it did NOT do was ever come back and ask. **Tolerated and
-accepted had become the same thing** — there was no pending list, so a name that
-never arrived was indistinguishable from one that arrived on the next line.
-
-The fix is that list: `PendPtr*` (defs.inc), `RecordPendingPtrTarget` at the
-hatch, `DrainPendingPtrTargets` after the program's final `end.` — beside the
-goto-label check, which is the same shape of question.
-
-## Why the scope warning above did not turn into scoping code
-
-This ticket said the refusal "has to be scoped to uses outside the declaring
-generic", and it does — but `TemplateSrcKeyOfTok` was not needed to do it.
-Measured: `SpecializeTemplate` REWRITES the template's own name inside its body
-to the specialization's name before that body is ever parsed (the
-`CaseEqual(s, SpecializeTemplateName)` arm in pasparser_generic.inc), so
-`generic TNode<T> = record next: ^TNode; end` reaches the hatch reading
-`TNode$LongInt` and resolves. The inside/outside distinction was already made,
-one layer down, by machinery that exists for another reason. **The scoping the
-ticket asked for was real and the mechanism it assumed would be needed was not.**
-
-## What the drain asks, and the three rows that decide it
-
-"Is this name a type now?", not "was this row repaired?". The difference is not
-cosmetic: `ResolvePendingPointerAliases` repairs classes, records, named arrays
-and pointer/record aliases, and repairs NOTHING for a forward `^T` to an ENUM, a
-SUBRANGE or a plain scalar alias — those three are legal, compile, run, and
-agree with fpc today, and were never broken, so no pass ever touched them. A
-drain keyed on repair refuses all three. They are rows 3, 4 and 5 of
-`test_forward_pointer_targets_that_resolve_late.pas` for exactly that reason.
-
-## Deliberately still accepted
-
-- `type PRec = ^TRec;` in one type section with `TRec` in the NEXT one. fpc
-  rejects it (`Forward type not resolved`); pxx compiles it and prints the right
-  answer. Accepting what fpc rejects is not a defect, and it is why the drain
-  runs at the end of the PARSE rather than at the end of the type section.
-- `var p: ^TRec` / `const P: ^TRec = nil` above `TRec`. Same reasoning; fpc says
-  `Identifier not found`.
-- A bad pointee inside a generic that is NEVER specialized: that body is never
-  parsed, so nothing reaches the hatch. fpc diagnoses it; we do not. That is the
-  template model, not this list.
-
-## Corpus
-
-`tgeneric83.pp`, `tgeneric84.pp`, `tgeneric85.pp` all refuse now and are BURNED
-from `pxx.skip`. Curated 550: 386/0/114 before, 389/0/111 after, and the run
-before burning was 386/0/114 — identical to the pre-fix baseline, which is the
-number that says the new refusal cost nothing.
-
-## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 393fe0184.

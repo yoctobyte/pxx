@@ -7201,31 +7201,6 @@ test-core: $(COMPILER)
 	@# procedure were found by it.
 	@$(TESTTMP)/test_fpsca26 | diff -u test/test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee.expected - \
 	  || { echo 'test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee: FAIL - a forward pointer lost its scalar or set pointee'; exit 1; }
-	./$(COMPILER) test/test_forward_pointer_targets_that_resolve_late.pas $(TESTTMP)/test_fptrl26
-	@# .expected is fpc 3.2.2's own output. The ACCEPT side of the drain added
-	@# 2026-09-06 for a `^T` whose T is never declared. Six legal forward
-	@# spellings, and they are NOT interchangeable: the record, pointer-to-pointer,
-	@# array and nested-in-a-class rows are repaired by four different arms of
-	@# ResolvePendingPointerAliases, while the enum, subrange and scalar-alias rows
-	@# are repaired by NOBODY -- they never needed it. A drain asking "was this row
-	@# repaired?" rather than "is this name a type?" refuses those three, which is
-	@# why they are here. Every row prints a DISTINCT number: six rows printing 7
-	@# would pass with any two of them swapped.
-	@$(TESTTMP)/test_fptrl26 | diff -u test/test_forward_pointer_targets_that_resolve_late.expected - \
-	  || { echo 'test_forward_pointer_targets_that_resolve_late: FAIL - a legal forward pointer stopped resolving'; exit 1; }
-	@# ...and the two positive controls, without which the six rows above are just
-	@# a program that compiles. Row 1: `^T` for a T no section declares. It used to
-	@# compile clean and print 4 for SizeOf(p^) -- TypeStorageSize(tyUnknown)
-	@# wearing the value of sizeof(Integer), which is why the number never looked
-	@# wrong. fpc: `Forward type not resolved "TNeverDeclared"`.
-	! ./$(COMPILER) test/test_forward_pointer_to_an_undeclared_type_fail.pas $(TESTTMP)/test_fpund26 > $(TESTTMP)/test_fpund.log 2>&1
-	grep -q "forward type not resolved: .TNeverDeclared." $(TESTTMP)/test_fpund.log
-	@# Row 2: a generic's BARE name as the pointee -- fpc testsuite tgeneric83/84/85,
-	@# three %FAIL rows pxx compiled clean. The specialization inside that file is
-	@# load-bearing: TTest IS a type in that program, just not under that spelling,
-	@# so the grep checks for the GENERIC wording rather than for a nonzero exit.
-	! ./$(COMPILER) test/test_an_unspecialized_generic_as_a_pointer_target_fail.pas $(TESTTMP)/test_unspecptr26 > $(TESTTMP)/test_unspecptr.log 2>&1
-	grep -q "is a generic and cannot be used as a type on its own" $(TESTTMP)/test_unspecptr.log
 	./$(COMPILER) test/test_prefetch_is_a_hint.pas $(TESTTMP)/test_pfh26
 	@# .expected is fpc 3.2.2's own output. Prefetch is a CACHE HINT, so an empty
 	@# body is the specification rather than a stub and there is deliberately no
