@@ -3,9 +3,9 @@ slug: bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type
 track: P
 prio: 30
 type: bug
-status: open
+status: working
 blocked-by: []
-owner: unassigned
+owner: frankB
 created: 2026-09-04
 found-by: frankH (ProcRet* column census)
 summary: "`TF = function(n: Integer): TIA` (dyn array), `: TA3` (fixed array) and `TOuter = function: TInner` (procedural) all parse as DECLARATIONS and then refuse at the call: `fp(3)[2]` and `fp(4)[2]` give `expected ')' before '['`, `fo()(41)` gives `expected ')' before '('`. FPC compiles all three (3 14 / 12 / 42). Cause is one thing, not three: ParseProcTypeSignature parses its return type with a bare ParseTypeKind, which cannot see an ARRAY return at all, so the six array columns (IsDynArray, DynDepth, FixedArrBytes, ArrAi, ElemTk, ElemRec) and ProcSig are never filled on the signature row -- and ApplyCallResultPtrSuffix reads exactly those to decide the suffix arm. The DIRECT-call spelling of each is measured working, so it is the signature path and not the feature."

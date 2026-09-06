@@ -3,10 +3,10 @@ slug: bug-p-delphi-mode-binds-a-bare-routine-name-only-for-a-variable-target
 track: P
 prio: 45
 type: bug
-status: backlog
+status: working
 created: 2026-09-06
 found-by: frankB
-owner: ""
+owner: frankB
 blocked-by: []
 summary: "`{$mode delphi}` binds a bare routine name to its ADDRESS -- `f := G` -- but ONLY when the target is a plain VARIABLE. `r.f := G` (record field) and `a[0] := G` (array element) never reach that arm: it is keyed on the destination SYMBOL (`idx >= 0 and SymProcSig[idx] >= 0`), and for those two shapes `idx` is the BASE variable, whose SymProcSig is -1. fpc 3.2.2 -Mdelphi prints 7 for all three. On pin v404 the two unbound shapes compiled and SIGSEGV'd; since 2026-09-06 they are REFUSED with `a procedural slot cannot take the RESULT of a call -- write @G`, which is louder and still not what fpc does. Split out of bug-p-a-bare-function-name-assigned-to-a-procedural-variable-segfaults-outside-delphi-mode, whose subject is the DEFAULT-mode crash: that one is now fixed in all four spellings and this is the Delphi arm's own incompleteness."
 ---
