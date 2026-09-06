@@ -81,7 +81,7 @@ _none_
 | regression-cascade-6758c7ce7dbd | T | 70 | regression | regression CASCADE: 23 jobs newly red in b8e3b3010..6758c7ce7 (105 commits) — auto-filed by twatch | — |
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
-| regression-size-canary-size-canary-2 | T | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
+| regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2-2 | P | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas at 7b287013d34a in step 8/3, `fglsrc=""; \ if [ -f library_candidates/fpc-rtl/rtl/objpas/fgl.pp ]; then fglsrc=library_candidates/fpc-rtl/rtl/objpas;…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
@@ -1211,7 +1211,7 @@ _none_
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
-- [p 40] [T] regression-size-canary-size-canary-2
+- [p 40] [A] regression-size-canary-size-canary-2
 - [p 40] [A] task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
 - [p 40] [A] task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale
