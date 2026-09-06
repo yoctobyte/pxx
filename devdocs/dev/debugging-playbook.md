@@ -8877,6 +8877,80 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## SCOUTING THE NEXT CEILING IS HOW YOU FIND A BUG IN THE CURRENT TREE
+
+Measured 2026-09-06 (frankH), and the discovery route is the point rather than the
+defect.
+
+The work was converting fixed tables to dynamic ones. After landing one, the session
+pushed a **200000-literal input past the new cap to see what would stop it next** —
+`fixup overflow`, `MAX_FIXUPS = 131072` — and went to read *that* table's shape. Which
+is how it noticed the table has **two arrays parallel to it and two compaction sites
+that disagree.**
+
+> **The defect was never in the path of any grep the ticket prescribes.** Looking at
+> the NEXT ceiling is what found a bug in the CURRENT tree.
+
+**A ticket's own search plan is bounded by the table it names.** Scouting one step past
+the deliverable costs a single oversized input and puts you in code the plan had no
+reason to open — which is where an unrelated invariant violation is sitting, because
+nobody's plan has had a reason to open it either.
+
+### The defect, which is the parallel-array class already in this file
+
+`dce.inc:467-468` compacts the record **and both parallel arrays**, and carries the
+comment saying why: *"They are parallel BY INDEX, so compacting the record without them
+hands every surviving site the flags of whoever used to sit at its new index."*
+`compiler.pas`'s `DATAREF_DROP` arm (`:2410`) shifts **only** `Fixups`.
+
+**Verified independently: `compiler.pas` mentions `FixupPCRel` and `FixupPicDelta`
+ZERO times.**
+
+> **The invariant's only statement lives in the sibling that OBEYS it.** From inside the
+> file that violates it, there is nothing to notice — not a stale comment, not a wrong
+> name, an *absence*. You would have to already be in `dce.inc` to know the rule exists.
+
+Found by inspection and by the sibling's comment, **not by a failing program**, and
+scoped honestly as such: exposure needs a `DATAREF_DROP` *and* a `FixupPCRel = True`
+entry after the dropped index, which is **i386 PIC** — the target class CLAUDE.md
+already names as structurally invisible here, since the dev loop, `gate.sh quick` and
+the pin all run on x86-64.
+
+## WHEN SUCCESS LOOKS EXACTLY LIKE DOING NOTHING, ONE CONTROL CANNOT CARRY THE RUN
+
+Same session, on a pure-performance change, and it is the cleanest handling of a
+guard-that-cannot-fail this file has.
+
+**The deliverable is TIME, so the output comparison's expected result is 100%
+identical** — which means the comparison has **no must-differ row from its own
+population and would pass on a dead harness.** The usual remedy (draw a positive control
+from the population under test) is unavailable, because every row in that population is
+supposed to match.
+
+The answer was **three controls, each labelled by what it actually proves**:
+
+| | control | proves |
+| --- | --- | --- |
+| **A** | the oversized input against the **pre-change** binary, which refuses | right population, **must differ** |
+| **B** | a one-byte corruption of a copy, which must report `DIFFERS` | the compare path is **live** — and is **NOT from the population**, and was not claimed to be |
+| **C** | at 40000 literals, the **TIME must differ and the OUTPUT must not** | the real assertion, **inverted** |
+
+> **Splitting them was the only way to get a falsifiable run out of a change whose
+> success looks like doing nothing.** One control would have had to be all three and
+> would have been none.
+
+**B is the one usually left unlabelled**, and labelling it is what keeps it honest: an
+instrument self-test is real evidence about the *instrument* and no evidence about the
+*subject*, and a report that lists it beside A invites the reader to count two controls
+where there is one.
+
+### And the denominator earned its keep in the same run
+
+The corpus comparison summed to **2500 where 2494 was expected** — six tests had
+arrived with a sync between the two runs. Benign, **and only knowable because the
+denominator is checkable.** An absence-based verdict — *no failures reported* — would
+have read **identically before and after the corpus changed size.**
+
 ## GIVE EVERY ACCESSOR A SIDE EFFECT THAT NAMES ITSELF — A TRACE HAS NO COLLISION WITH THE DEFAULT
 
 Measured 2026-09-06 (frankA), settling a question that neither reading nor a value
