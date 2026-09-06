@@ -5918,7 +5918,7 @@ test-core: $(COMPILER)
 	grep -q 'duplicate identifier "result": Pascal is case-insensitive, so it is the same identifier as the implicit function result "Result" of Doubled' $(TESTTMP)/test_casedup.log
 	@# ...and BOTH are reported from one compile, because the check recovers. A
 	@# fatal one would have certified the second arm untested.
-	test "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_casedup.log)" = 2
+	tools/expect_same.sh test_casedup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_casedup.log)" "2"
 	@# THE NEGATIVE CONTROLS, drawn from the population the census actually found
 	@# rather than from imagination. The census turned up three families that
 	@# differ only in case in ONE scope and are LEGAL, and the refusal must not
