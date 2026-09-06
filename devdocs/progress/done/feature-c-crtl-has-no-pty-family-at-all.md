@@ -117,4 +117,4 @@ are a layer above this one (allocate, then `open` the slave, then optionally
 `fork` and `login_tty`), and nothing measured needs them yet.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d4303a1ac.
