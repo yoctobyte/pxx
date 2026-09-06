@@ -4,8 +4,8 @@ title: "`class operator Copy` / `AddRef` are recognised but never dispatched"
 track: P
 prio: 30
 type: feature
-status: backlog
-owner: ""
+status: working
+owner: frankA
 blocked-by: []
 summary: "`class operator Copy` and `AddRef` PARSE and register, and the compiler then refuses at the use site rather than compiling them silently: `operator Copy/AddRef is recognised but not dispatched yet`. Initialize/Finalize landed in slice 3 and WORK -- measured 2026-09-06, both fire for a local and in the right order -- so this is the copy/assign lifetime event only. CORPUS EVIDENCE, measured 2026-09-06 at 88a0b3d93835: fpc testsuite tmoperator8 stops on exactly this refusal at line 63, and it is the ONLY one of the six live tmoperator rows that does. That is the demand for this slice and the reason it is not speculative. The refusal is deliberate and must stay until the dispatch lands: a record whose declared invariant simply never runs is a plausible wrong value far from the cause, which is the expensive shape here."
 ---
@@ -14,7 +14,7 @@ summary: "`class operator Copy` and `AddRef` PARSE and register, and the compile
 
 - **Type:** feature (Pascal frontend, operator overloading)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** backlog
+- **Status:** working
 - **Follows:** [[feature-pascal-class-management-operators]] — slice 3 landed
   Initialize/Finalize and refuses these two by name.
 

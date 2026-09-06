@@ -4,8 +4,8 @@ title: "Management operators do not reach an array element or a nested field"
 track: P
 prio: 35
 type: feature
-status: backlog
-owner: ""
+status: working
+owner: frankA
 blocked-by: []
 summary: "`class operator Initialize/Finalize` fires for a variable OF the managed record type and not for an ELEMENT of an array of it, nor for a FIELD of a record or class that contains one at any depth. Refused rather than skipped, by design -- a declared invariant that simply never runs is a plausible wrong value far from the cause. fpc 3.2.2 does all three. The fix generalises WrapManagementOpsRange from per-SYMBOL to per-LVALUE-node: a field path for the nested case, a synthesised `for i := lo to hi` for the static array; the DYNAMIC array and class-instance-field cases are the RTTI walk fpc uses and belong to [[feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]]. CORPUS EVIDENCE, measured 2026-09-06 at 88a0b3d93835: fpc testsuite tmoperator4 (line 81, the nested-field arm) and tmoperator7 (line 101, the array arm) stop on this ticket's own two refusal strings -- two of the six live tmoperator rows, one for each arm, which is why both arms are in one ticket. tmoperator7 only reaches line 101 since the class-operator scope fix landed the same day; before it, the row stopped at line 29 on `undefined variable (InitializeCount)` and was skipped as a management-operator row for a defect that was nothing of the kind."
 ---
@@ -14,7 +14,7 @@ summary: "`class operator Initialize/Finalize` fires for a variable OF the manag
 
 - **Type:** feature (Pascal frontend, operator overloading)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** backlog
+- **Status:** working
 - **Follows:** [[feature-pascal-class-management-operators]] — slice 3 refuses
   these shapes rather than compiling them silently.
 
