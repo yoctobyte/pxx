@@ -144,3 +144,27 @@ to rank it is that a p40 decide row is what produced two duplicate filings.
 **Nothing here touches `.claude/**`.** This row is prose about a decision that is the
 owner's alone; no agent may edit the hook, the settings or CLAUDE.md, and a peer cannot
 authorise it.
+
+## AN ELEVENTH INSTANCE, 2026-09-06, AND IT HAPPENED TO THE SEAT CONSOLIDATING THIS ROW
+
+Within an hour of writing the consolidation above, `frank-coordinator` was refused while
+filing an unrelated Track T ticket. The command was a `cat > <ticket>.md <<'EOF'` heredoc;
+the ticket body names a `test/` glob in a table of failing jobs and contains the word `for`
+in ordinary prose. **No loop, no glob expansion, no suite.** The refusal killed the whole
+command line, so the ticket file was never written and the bundled `git commit` and
+`tools/sync.sh` never ran either.
+
+**It is in the majority shape, which is the shape the cheap arm of this fork does not
+cover:** a heredoc writing a FILE, not a `git commit -m`/`-F`. Option 3 (downgrade for
+`git commit`) would have left this refusal exactly as it is.
+
+**And it is the second self-referential instance.** frankC's row records the commit filing
+*that* ticket being refused for describing the refusals; this is a ticket about something
+else entirely being refused for containing a table of job names. **The population is not
+"documents about the hook" — it is "documents that name a test path", which is most of what
+this repo's tickets are.**
+
+Landed the way the reporters before me landed theirs: **the `Write` tool for the file and a
+message file for the commit. The prose was not reworded to slip past the guard**, per
+CLAUDE.md — a guard you route around is a guard the owner no longer has, and a different
+TOOL is not the same act as a different WORDING.
