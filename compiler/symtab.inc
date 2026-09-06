@@ -9277,6 +9277,18 @@ end;
   toward a phantom distinction. ProcParamPtrElemTk's note in defs.inc is about
   what that costs when the recording is missing, and the answer there is to
   record it, not to split the sentinel. }
+{ ...and the frozen CAPACITY a `string[N]` parameter should record, under the
+  same window rule: valid only immediately after the ParseTypeKind that
+  produced `tk`. 0 for anything that is not a frozen string AND for a plain
+  ShortString, which has no narrower N -- the two readings share the value
+  deliberately, because every consumer treats 0 as "no declared capacity" and
+  falls back to the full 255. }
+function ParamStrCapOf(tk: TTypeKind): Integer;
+begin
+  if TypeIsFrozenString(tk) then ParamStrCapOf := LastTypeStrCap
+  else ParamStrCapOf := 0;
+end;
+
 function ParamPtrElemOf(tk: TTypeKind): Integer;
 begin
   if tk <> tyPointer then ParamPtrElemOf := Ord(tyUnknown)

@@ -1,0 +1,6 @@
+A direct free routine: len=4 [lite]
+B direct class method: len=4 [lite]
+C interface reference: len=4 [lite]
+D procedural-type var: len=4 [lite]
+E nested routine: len=4 [lite]
+F method pointer: len=4 [lite]

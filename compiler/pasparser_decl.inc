@@ -5356,6 +5356,7 @@ var
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPAliases: array[0..MAX_PROC_PARAMS-1] of Integer;   { the alias each param was declared through, -1 = none. Filled beside mPTypesRec. }
   mPArr, mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPStrCapPT: array[0..MAX_PROC_PARAMS-1] of Integer;  { the frozen `string[N]` capacity of each param, 0 = none. See the note at its fill site. }
 begin
       mIsFunc := (CurTok.Kind = tkFunction);
       Next;
@@ -5415,6 +5416,17 @@ begin
             mPTypesRec[i] := LastTypeRecId;
             mPArr[i] := mIsArr;
             mPByRef[i] := mIsByRef;
+            { ...and the frozen CAPACITY of a `string[N]` parameter, which is the
+              FOURTH instance of the dropped-field pattern this routine's own
+              comments already name three times for the RESULT (the pointee, the
+              enum identity, the record id). Same shape, param side: a call
+              through `TCb = procedure(st: string[4])` reached the callee holding
+              ten characters where fpc 3.2.2 truncates to four, while the DIRECT
+              call to the same routine truncated correctly -- so the row that
+              could not answer was the procedural type's, not the routine's.
+              Read in ParseTypeKind's window, like every other field here.
+              bug-p-a-string-n-value-parameter-does-not-truncate-to-its-own-capacity }
+            mPStrCapPT[i] := ParamStrCapOf(mTk);
           end;
           if not Eat(tkSemicolon) then mDoneArgs := True;
         end;
@@ -5511,6 +5523,18 @@ begin
           after the record -- all three exactly one word out of place. }
         if i < MAX_PROC_PARAMS then
           ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
+        { ...and the frozen `string[N]` CAPACITY, the same dropped field one
+          type family over and in the loop the RecId note above was written
+          for. `TCb = procedure(st: string[4])` left ProcParamStrCap at 0, so
+          the by-value copy at an indirect call sized its temp 255 and the
+          callee received TEN characters where fpc 3.2.2 truncates to four --
+          while the DIRECT call to the same routine truncated correctly, which
+          is the tell that the row and not the clamp was wrong. The census note
+          above says a procedural type's row dropped six columns for the
+          RESULT; this is the param side of the same accounting.
+          bug-p-a-string-n-value-parameter-does-not-truncate-to-its-own-capacity }
+        if i < MAX_PROC_PARAMS then
+          ProcParamStrCap[mpi * MAX_PROC_PARAMS + i] := mPStrCapPT[i];
       end;
   Result := mpi;
 end;
@@ -5806,6 +5830,15 @@ var
     NARROW -- so the DECL and its out-of-line IMPL disagreed on the signature
     the moment overload matching started reading the width. }
   mPStrElemTk: array[0..MAX_PROC_PARAMS-1] of Integer;
+  { ...and the frozen CAPACITY, captured in the same window and dropped by this
+    path for the same reason: an INTERFACE method has no out-of-line
+    implementation header, so the class-body row is the ONLY registration its
+    signature ever gets. Without this a `string[4]` parameter reached the callee
+    through an interface reference holding ten characters, while the identical
+    method called on the CLASS truncated correctly -- the two registrations
+    disagreeing, exactly as mPStrElemTk's note above describes for the width.
+    bug-p-a-string-n-value-parameter-does-not-truncate-to-its-own-capacity }
+  mPStrCap: array[0..MAX_PROC_PARAMS-1] of Integer;
   { A typed POINTER parameter's pointee kind — the same duplicate-signature
     question one type family over, and it has to be captured HERE for the
     reason mPStrElemTk above does.
@@ -6171,7 +6204,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPStrElemTk[i] := ParamStrElemOf(mTk); mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk)); mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPStrElemTk[i] := ParamStrElemOf(mTk); mPStrCap[i] := ParamStrCapOf(mTk); mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk)); mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -6215,8 +6248,8 @@ begin
           while EatIntfMethodDirective do ;
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPUntyped[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPStrCap[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPUntyped[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           { The ROW's name, for the reason the class and record arms give: a
             NESTED interface is registered qualified when the bare name is
@@ -6266,6 +6299,7 @@ begin
               records no width says NARROW, and its out-of-line implementation
               (which does record one) no longer matches the row it belongs to. }
             if i < MAX_PROC_PARAMS then ProcParamStrElemTk[mpi * MAX_PROC_PARAMS + i] := mPStrElemTk[i];
+            if i < MAX_PROC_PARAMS then ProcParamStrCap[mpi * MAX_PROC_PARAMS + i] := mPStrCap[i];
             { ...and the pointee, for the reason mPPtrElemTk's declaration gives }
             if i < MAX_PROC_PARAMS then ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(mPPtrElemTk[i]);
             if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
@@ -6871,7 +6905,7 @@ begin
                 begin
                   mPTypes[i] := mTk;
                   mPTypesRec[i] := LastTypeRecId;
-                  mPStrElemTk[i] := ParamStrElemOf(mTk);
+                  mPStrElemTk[i] := ParamStrElemOf(mTk); mPStrCap[i] := ParamStrCapOf(mTk);
                   mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk));
                   mPArr[i] := mIsArr;
                   mPByRef[i] := mIsByRef;
@@ -6932,7 +6966,7 @@ begin
                 mPNames[i] := mPNames[i-1];
                 mPTypes[i] := mPTypes[i-1];
                 mPTypesRec[i] := mPTypesRec[i-1];
-                mPStrElemTk[i] := mPStrElemTk[i-1];
+                mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1];
                 mPPtrElemTk[i] := mPPtrElemTk[i-1];
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
@@ -6949,7 +6983,7 @@ begin
               if isClassMethod then mPTypes[0] := tyPointer
               else mPTypes[0] := tyClass;
               mPTypesRec[0] := REC_NONE;   { must agree with the impl side's Self }
-              mPStrElemTk[0] := 0;
+              mPStrElemTk[0] := 0; mPStrCap[0] := 0;
               mPPtrElemTk[0] := tyUnknown;
               mPArr[0]   := False;
               mPByRef[0] := False;
@@ -7010,6 +7044,8 @@ begin
                   part of the signature }
                 if i < MAX_PROC_PARAMS then
                   ProcParamStrElemTk[mpi * MAX_PROC_PARAMS + i] := mPStrElemTk[i];
+                if i < MAX_PROC_PARAMS then
+                  ProcParamStrCap[mpi * MAX_PROC_PARAMS + i] := mPStrCap[i];
                 if i < MAX_PROC_PARAMS then
                   ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(mPPtrElemTk[i]);
               end;

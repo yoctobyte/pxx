@@ -1474,7 +1474,16 @@ begin
           ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
         if ptypes[i] = tyAnsiString then
           ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
-          ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
+        { The capacity twin of the width above, and NOT under that `if`: the width
+          question is about tyAnsiString and this one is about the FROZEN kinds, so
+          guarding it on tyAnsiString would record nothing for every string[N]
+          there is. Written flat and dedented so the scope is visible -- the line
+          above it ends its own `if`, and this file already has one line (the
+          AliasIdx write under the tySet test) that reads as guarded and is not.
+          ptypesStrCap is 0 for anything that is not a frozen string, so the write
+          is unconditional by construction. defs.inc says why the N cannot be read
+          back off the param SYMBOL. }
+        ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];
         if ptypes[i] = tyPointer then
         begin
           ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
@@ -1910,7 +1919,16 @@ begin
               ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
             if ptypes[i] = tyAnsiString then
               ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
-              ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
+            { The capacity twin of the width above, and NOT under that `if`: the width
+              question is about tyAnsiString and this one is about the FROZEN kinds, so
+              guarding it on tyAnsiString would record nothing for every string[N]
+              there is. Written flat and dedented so the scope is visible -- the line
+              above it ends its own `if`, and this file already has one line (the
+              AliasIdx write under the tySet test) that reads as guarded and is not.
+              ptypesStrCap is 0 for anything that is not a frozen string, so the write
+              is unconditional by construction. defs.inc says why the N cannot be read
+              back off the param SYMBOL. }
+            ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];
             { The six columns this path did NOT write, the pointee among them.
               The ticket predicted this path was benign "because the body fills
               it in later" -- measured FALSE on 2026-08-30, because "later" is
@@ -2379,7 +2397,16 @@ begin
         ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
       if ptypes[i] = tyAnsiString then
         ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
-        ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
+      { The capacity twin of the width above, and NOT under that `if`: the width
+        question is about tyAnsiString and this one is about the FROZEN kinds, so
+        guarding it on tyAnsiString would record nothing for every string[N]
+        there is. Written flat and dedented so the scope is visible -- the line
+        above it ends its own `if`, and this file already has one line (the
+        AliasIdx write under the tySet test) that reads as guarded and is not.
+        ptypesStrCap is 0 for anything that is not a frozen string, so the write
+        is unconditional by construction. defs.inc says why the N cannot be read
+        back off the param SYMBOL. }
+      ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];
     end;
     { The SYMBOL needs the width too, for a different reader than the durable
       column above: that one answers a CALLER, this answers the callee's own

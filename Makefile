@@ -8423,6 +8423,17 @@ test-core: $(COMPILER)
 	# safe meaning, and narrowing the check must not take the whole check with it.
 	! ./$(COMPILER) test/test_char_value_to_a_pchar_parameter_fail.pas $(TESTTMP)/test_chrptr26 > $(TESTTMP)/test_chrptr.log 2>&1
 	grep -q "a Char VALUE is not a PChar" $(TESTTMP)/test_chrptr.log
+	# ...and the same clamp through EVERY call shape. The capacity lives on the
+	# callee's ROW, so the clamp is only as wide as the set of registration paths
+	# that fill the column: an INTERFACE method (no implementation header, so the
+	# class-body path is its only registration) and a PROCEDURAL TYPE both dropped
+	# it and printed len=10 where fpc says 4, while the identical routine called
+	# directly printed 4. Each row prints its own tag because every row's correct
+	# answer is the same four characters -- untagged, the file cannot say which
+	# path regressed.
+	./$(COMPILER) test/test_shortstring_parameter_truncates_through_every_call_shape.pas $(TESTTMP)/test_ssshape26
+	@$(TESTTMP)/test_ssshape26 | diff -u test/test_shortstring_parameter_truncates_through_every_call_shape.expected - \
+	  || { echo 'test_shortstring_parameter_truncates_through_every_call_shape: FAIL - a call shape lost the string[N] clamp'; exit 1; }
 	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
 	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas $(TESTTMP)/test_defgen26 > $(TESTTMP)/test_defgen.log 2>&1
 	grep -q "must be specialized" $(TESTTMP)/test_defgen.log
