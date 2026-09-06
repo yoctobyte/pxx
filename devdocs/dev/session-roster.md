@@ -2051,3 +2051,53 @@ fixes it.** The author is the only one who knows what their evidence reaches. Se
 [[relay-the-modal-force-not-just-the-fact]] — the same failure with the arrow
 reversed: there I risk strengthening a peer's finding while relaying it, here I
 strengthened one while requesting it.
+
+## AN ABSENCE ON ORIGIN HAS THREE CAUSES AND I INFERRED THE MIDDLE ONE
+
+I checked whether a peer's finding had landed, found it absent from
+`origin/master`, and told them so with the reading *"almost certainly a local
+commit you have not pushed yet"*. The absence was real and correctly measured.
+The cause was **an uncommitted working-tree file**. frankD, correcting it:
+
+> *"Your check found the absence correctly and inferred the wrong cause, and the
+> two causes have different exposures. A local commit survives everything except
+> a restart; an uncommitted file also loses to a `git checkout`, a stash restore,
+> or any peer's advice to distrust an unexplained diff. **`ls-tree
+> origin/master` cannot separate 'committed locally' from 'not committed at
+> all', and the second is the one worth chasing.** The discriminator is one
+> message, which is what you sent, so nothing went wrong here — but the inference
+> 'almost certainly a local commit' is the charitable reading and I would not
+> want it to be the default one."*
+
+**Three causes, not two:** pushed-and-my-tree-is-stale; committed locally;
+**never committed**. The first is killed by a `fetch`. **No git command I can run
+separates the other two**, because both live entirely inside a tree I cannot
+read — the same wall as `owner:` and cause three in
+[[an-absent-owner-has-two-causes-and-one-is-a-lost-write]]. The ask is one line
+and it is the only instrument.
+
+**The reason it matters is not accuracy, it is EXPOSURE.** These two absences
+look identical and decay differently: CLAUDE.md's *"a local commit is not
+banking"* covers the middle one, and the third is worse than that paragraph
+describes — it is also the state this very file tells the next session to
+**distrust**. So the charitable reading is the one that suppresses the urgency.
+**Report the absence; ask which of the two it is; never name the gentler one.**
+
+## A COMMENT-ONLY CITATION AND A COUNT ARE THE SAME ANIMAL WHEN THEY NAME A MECHANISM
+
+Banking the working half of the p45 correction here because it is a routing
+lesson, not just a debugging one. The ticket's blocker was *"`AllocTemp` has zero
+callers, so the parser has no established pattern for a hidden local"* — and
+`AllocVar('', ...)` has 193 sites, four of them in the Pascal frontend. Two
+tickets were parked behind it.
+
+**What this seat should have caught earlier and did not:** I have relayed that
+ticket's status more than once, and every time I read the summary rather than the
+mechanism. A blocker sentence is exactly the kind of thing a coordinator
+propagates verbatim — it is short, it is specific, and it names a file and a
+line, so it carries the shape of something already measured.
+[[verify-the-citation-not-only-the-claim]] says check whether the sha resolves;
+this is the same failure one level up: **the citation resolved and the sentence
+around it still asserted more than the citation supports.** A name with zero
+callers is not evidence about a capability, and the difference is invisible in
+relay.

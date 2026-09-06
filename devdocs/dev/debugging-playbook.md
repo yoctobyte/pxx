@@ -17509,3 +17509,68 @@ every repair does. The expectation is never written down, which is why it surviv
 — nobody states "and that will fix the other one", they just stop tracking it.
 **When you file a hygiene ticket beside a semantics ticket, say in both that the
 first does not close the second.**
+
+## A BLOCKER THAT NAMES A MISSING MECHANISM GOES STALE WHEN THE MECHANISM ARRIVES UNDER ANOTHER NAME
+
+A zero-caller count is a **true fact about an identifier and a false one about a
+capability**, and nothing in the sentence marks which of the two it is claiming.
+
+Measured 2026-09-06.
+`bug-p-free-on-a-computed-receiver-is-refused-because-the-desugaring-clones-it`
+had carried this in its **summary** — the one part everyone reads — for as long
+as it had been open:
+
+> *"`AllocTemp` (symtab.inc:6193) exists and has ZERO callers, so the parser has
+> no established pattern for a hidden local and that is the real work."*
+
+The first clause is correct. `AllocTemp` really does have zero callers, today,
+at `symtab.inc:6200`. The second does not follow, because `AllocTemp` is an
+unused **alias** for `AllocVar('', tyInteger)` — and the thing it aliases has
+**193 sites** in `compiler/**` (58 `tyPointer`, 27 `tyAnsiString`, 23
+`tyInteger`, 12 `tyVariant`, …), at least four of them in the Pascal frontend
+itself (`pasparser_stmt.inc:2463`, `:3685`, `:7565`,
+`pasparser_expr.inc:10838`). The three-line idiom is sitting in
+`GenMakeStrArgTemp` at `pasparser_stmt.inc:357`:
+
+```pascal
+st := AllocVar('', tyAnsiString);
+preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+            GenMakeAssign(GenMakeIdent(st, tyAnsiString), argNode), -1));
+Result := GenMakeIdent(st, tyAnsiString);
+```
+
+**The frontend had been making hidden locals all along. It had just never called
+one `AllocTemp`.**
+
+**Why this class survives review.** A blocker written as *"X has zero callers"*
+looks like the most checkable sentence in the ticket — it is one `git grep` and
+it comes back agreeing. Re-reading the ticket therefore **confirms it**, every
+time, for as long as the ticket is open. The reading that breaks it is not a
+closer look at the sentence; it is asking a different question: **not "does this
+name have callers" but "does this CAPABILITY exist anywhere, under any
+spelling".** Those two greps have different subjects and only the second one is
+the blocker's actual claim.
+
+**The tell, and it is cheap:** a blocker that names an **identifier** and
+concludes about a **mechanism** has crossed a level. `X` has callers or it does
+not; *"the frontend has no pattern for Y"* is a claim about every spelling of Y
+in the tree. Whenever a sentence does both, grep for the mechanism's SHAPE — the
+call plus what surrounds it — not for the name.
+
+**And a stale line number rides along unnoticed.** The same summary cited
+`symtab.inc:6193`; the function is at `:6200`. That does not error either — it
+points somewhere, at code that explains nothing, exactly as the `Makefile:<n>`
+citations did.
+
+**How it was actually found, which is the method worth copying (frankD):** not
+by auditing tickets, but from inside `lib/rtl`'s `Delete` lowering — *"the
+frozen-string arm I was just in does exactly that today; if that generalises the
+blocker is stale rather than real, and I will find out by trying it rather than
+by re-reading the ticket."* **A blocker is disproved from the code that does the
+thing, never from the ticket that says it cannot be done.** The ticket is
+where the claim lives; it is not where the evidence lives, and re-reading it can
+only ever return the claim.
+
+Related: "The name is not the thing" in `CLAUDE.md`, and *a whole-base slice is
+indistinguishable from its base* — same shape, a true narrow reading standing in
+for a false wide one.
