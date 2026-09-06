@@ -160,4 +160,4 @@ invisible from either file. Both headers now say so.
 
 Nothing here is inert until the next pin: the fix is in `compiler/**` and no
 `lib/**` file depends on it.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 644d3a53f.
