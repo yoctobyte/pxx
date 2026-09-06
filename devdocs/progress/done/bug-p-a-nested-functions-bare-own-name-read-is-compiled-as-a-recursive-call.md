@@ -86,6 +86,39 @@ Measured: **fpc refuses that spelling outright** (`Illegal expression`), so no
 fpc-compatible source loses anything. Nested PROCEDURES and `{$mode delphi}`
 keep the old behaviour and both have a control row.
 
+## The narrowing's cost, measured by someone else
+
+**My evidence that nothing used the removed spelling was the self-host
+fixedpoint, and that is a claim about `compiler.pas` and `lib/rtl` (a build
+input) — not about the tree.** It reads as covering more than it does, which is
+the failure mode CLAUDE.md already names for Track P coverage: partial, and
+worse than none because it looks total. `lib/pcl`, `examples/`, `test/` and
+`tools/` were the residual and I did not measure them.
+
+frankA did, 2026-09-06, unprompted: 2508 `.pas`/`.inc`/`.pp` swept for a nested
+`function F` whose own name appears as a bare `F;` — first at line start, then
+anywhere on a line (after `then`/`else`/`do`, or beside another statement, which
+is where the spelling actually hides). **33 raw hits, zero real ones:**
+
+- `test_nested_routine_depth2_capture.pas` — eleven `C;` sites, every one a
+  nested PROCEDURE. Its single nested FUNCTION already writes
+  `C := C(n - 1) + n`: explicit parens to recurse, `C :=` for the result. Both
+  arms this fix keeps.
+- `test_nested_routine_local_shadows_own_name.pas` — five `Inner;` statement
+  sites, all nested procedures; its one `function Inner` is read as
+  `seen := Inner`, which is the defect fixed here rather than the spelling
+  removed.
+- The rest: `x := F;` value reads (the fix again), property/type/var noise, and
+  `lib/rtl/palthreadobj.pas:463`'s `WaitFor;` — `TThread.Destroy` calling its
+  own method, matched only because the first pass could not tell an indented
+  method declaration from a nested routine.
+
+**What that census still cannot see, stated because an unlabelled claim beside a
+measured one inherits its credibility:** Pascal outside this repo, a name reached
+through `with` or a unit qualification, and anything under `compiler/` — which is
+exactly where the fixedpoint IS the right instrument. Real outside source using
+the spelling is a **compat** item, not a reopening of this call.
+
 ## How it was found, and the correction that matters
 
 Reducing the `pparser.pp:2670 PeekOper` wall. The reduction `n1.pas` was
