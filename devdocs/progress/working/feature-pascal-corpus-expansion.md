@@ -2741,3 +2741,40 @@ assumed. Banked rather than half-done:
 [[feature-p-a-local-var-section-array-initializer]].
 
 **Next on this rung: `pparser.pp` behind wall 2, then `pasresolver.pp` (29660).**
+
+## 2026-09-06 — rung 7 `pparser.pp`: THREE errors to ONE (frank-coord-core)
+
+Re-measured, not inferred, at binary `6950458c2da2` (pin v407 seed + HEAD):
+
+```
+$ pascal26 --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/packages/fcl-passrc/src \
+      -Fulib/rtl -Fulib/rtl/platform/posix rung7c.pas rung7c
+pascal26:2670: error: no overload of PeekOper$62727 matches these arguments
+```
+
+**One error. 9.6s.** This file recorded *"THREE errors from TWO causes"*; the
+second cause is closed and the `.Name` lookup on a dynamic array's record
+element is gone, so the bogus `CompareText` arity report it poisoned into is
+gone with it.
+
+**The cause was the ticket's own prediction and it held**:
+`bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-parameter`,
+fixed at `86852f93a`. `TPasUsesClause = array of TPasUsesUnit` arriving as a
+parameter lost its element's class identity, because the parameter
+classification chain had an arm for `array of RECORD` and none for `array of
+CLASS`, so the class case fell into the SCALAR arm and its element rec id went
+to `RecName` instead of `ElemRecName`. That prediction is worth noting as a
+prediction: it was written from the shape before anything was fixed.
+
+**The survivor is `:2670` and its report is partly a lie.** Filed as
+[[bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently]]:
+the argument half prints a raw TypeKind and the candidate half is IsArray-aware,
+so a CORRECT `array of record` argument reads as a mismatch. Reduced to 12
+lines. **In `:2670`, argument 3 is fine and argument 2 is the whole
+mismatch** — consistent with the wrong capture actuals
+[[bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals]]
+describes. Do not reduce it believing two arguments are bad.
+
+Caveat this file already states and which applies to this row too: `in:` names
+`pscanner.pp` while the construct is in `pparser.pp`. Unchanged, and still the
+coordinate problem, not a new one.
