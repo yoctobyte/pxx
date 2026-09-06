@@ -14489,3 +14489,55 @@ whether it is a qualification or a refutation before you file it under "caveat".
 
 And when relaying: split the sentence. Send the verdict and the reason as two claims with their own
 evidence, because the receiver will keep the reason.
+
+## A CHECK IS UNREACHABLE EXACTLY WHEN IT IS NEEDED, BECAUSE THE FALLBACK THAT DEFERS TO IT IS ALSO WHAT DISARMS IT — two defensible halves, one hole, and neither file is wrong
+
+**The single-owner version of this is already here** (*"a diagnostic that exists and is
+unreachable — writing PART of a chain silences the guard that catches writing NONE of it"*): one
+guard, and an input shape that slips out of its reach. **This is the two-party version and it is
+harder to see, because there is no wrong line to find.** Each half is correct, each half is
+argued for in its own comment, and the hole lives in the REFERRAL between them.
+
+Measured 2026-09-06 (frankS, compiler `66e848666e3c`,
+`bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes`):
+
+```pascal
+IFoo = interface function M(a: LongInt): LongInt; end;
+TFoo = class(TInterfacedObject, IFoo)
+  function M: LongInt;        { NO parameter }
+end;
+var f: IFoo;  f := TFoo.Create;  writeln(f.M(1));   { pxx: compiles, prints 7 }
+```
+
+FPC refuses: *No matching implementation for interface method "M(LongInt):LongInt;" found.*
+The 0-argument body is reached through a 1-argument slot and the extra argument is left in place.
+
+- **`FindUMethForSig`** falls back to the first NAME match when no signature matches. Deliberate,
+  and its comment justifies it: `does not implement` stays *"the IMT builder's diagnostic rather
+  than this function's"*. Reasonable — a resolver that refuses would break classes whose
+  implementation differs only cosmetically.
+- **The IMT builder** does make that diagnostic — **but only when NO method of the name exists.**
+
+So the fallback hands the refusal to a party whose precondition the fallback itself has just made
+false. **The arity case is refused by nobody, and both comments read as correct.** Grepping for a
+missing check finds nothing, because nothing is missing; what is missing is the *overlap*.
+
+**How to find this class:** whenever a comment defers responsibility to another component —
+*"X's job"*, *"handled downstream"*, *"the caller checks this"* — **go read X and establish that it
+still fires under the conditions this path leaves it in.** A referral is a claim about another
+file's behaviour, made by someone who was looking at this one, and it is exactly as checkable as a
+line citation. Treat *"the IMT builder's diagnostic rather than this function's"* the way you treat
+a sha: go look.
+
+**frankS's warning, and it is the operative part of the ticket: DO NOT FIX THIS ON THE CLAUSE
+PATH ALONE.** The defect was found through method-resolution-clause work and it is **not** that
+work's doing — measured with a clause *and* with a plain same-named method, and **both compile**.
+The clause inherits the looseness; it does not add it. A fix that tightens only the clause arm will
+go green on the reproducer that found the bug and leave the ordinary path exactly as wrong, which
+is the `normalise-dont-special-case` failure with a passing test on top.
+
+**And note where the silence comes from.** The sibling
+`bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity` records
+that i386, arm32 and aarch64 *do* refuse a call-argument-count mismatch and x86-64 does not. So
+this same source is plausibly a hard error on three targets and a wrong answer on the one everyone
+measures on — the native-only blindness CLAUDE.md names, arriving through a second door.
