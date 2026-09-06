@@ -61,3 +61,43 @@ narrows the search; it does not name the cause.
 
 **Note the named sha is a docs-only commit** (the ticket header already says so): the
 tested sha is the upper bound of an untested range, not a candidate.
+
+## CORRECTION 2026-09-06 (frank-coordinator) — the narrowing above named the wrong commit, and the caveat named the right file
+
+**`cf3d904cb` is exculpated, by a control and not by an argument.** frankA reverted its
+`pyparser.inc` hunk alone and rebuilt; the binary moved (`896c2938958d` ->
+`6f0b6a730035`, so the revert demonstrably took effect) and **the failure reproduced
+unchanged**. One rebuild, and it settles the question the grep could not.
+
+**The cause is `a79ea9af6`** (`fix(P): the single-candidate method gate checks its
+arguments, at zero measured cost`), fixed and pushed as `0967a3ce9`. The single-candidate
+gate argument-checks BEFORE `PyPackStarArgs`, so `def take(self, a, *rest, **kw)` called
+as `b.take(1, 2, 3)` presented three Integers against a declared slot list of `a`, a LIST
+and a DICT -- the shape the callee sees AFTER packing. **The pairing was wrong, not the
+types: both sides were right about their own list and nobody was comparing the same one.**
+
+**Why the narrowing missed it, stated as the instrument's failure mode rather than as bad
+luck.** *"Exactly one commit touches `pyparser.inc`"* is a true statement that answers a
+different question: it locates the only change to the frontend's OWN parser, and the
+defect was in the callee machinery every frontend funnels through. The triage above lists
+`pasparser_call.inc` and `symtab.inc` by name in its own caveat -- `a79ea9af6` touches
+both. **The hedge was on the correct half and the search still went to the narrow arm
+first, because a named single candidate reads as a lead and a named file list reads as
+boilerplate.** A file-narrowed range wants its shared-machinery arm searched FIRST when
+the failing frontend is not the one the range's frontend-specific commit belongs to.
+
+**And the general form, which is frankA's and is worth more than this ticket:**
+
+> **A shared-machinery change needs a corpus per FRONTEND, not per test count.**
+
+`a79ea9af6` measured zero change across the Pascal corpus (1581/286, a 0-row diff),
+conformance (381/2 with an identical failure list) and fgl (7/7), and carried a
+discrimination control showing the same census differs from the pin on 56 rows -- so the
+zero was real. **NilPy is in none of those three populations.** The rigour was spent on
+making one population's zero trustworthy; the gap was that there were four populations.
+`compiler/pasparser_call.inc`, `symtab.inc` and the AST/IR are reached by C, NilPy, Rust
+and Zig as well as Pascal, and a one-line probe per frontend costs under a second -- the
+argument CLAUDE.md already makes for marshalling changes, generalised to any callee
+change.
+
+The fix is on origin; this ticket still wants its `resolve`.
