@@ -2612,3 +2612,37 @@ which is precisely what makes it stick.
 
 Related: [[a-relay-is-lossy-and-the-loss-is-silent]] — the loss here is in the direction of
 making someone else's work sound better, which is the one direction nobody polices.
+
+## FLEET SYNC 2026-09-06 — the claim ledger, and why the inventory is the collision risk
+
+Owner called a fleet sync via frankuser: *"all agents complete their current work, and we will
+fix reds and prepare for a proper pin."* Brief went to frankA, frankB, frankD, frankH, frankS.
+frankC, frankwasm, frankZ, frank-optimize skipped as idle-on-purpose and clean.
+
+**frankuser offered me the claim ledger and I declined the MAILBOX and took the TOPIC layer.**
+Claims are already arriving there; re-routing five seats mid-burst is itself the
+collision-generating move, and it costs five wakeups to relocate a queue that is working.
+**What frankuser cannot see and this seat can is not a duplicate ROW — it is two rows with one
+cause**, which is the conflict git cannot see and the only thing this seat exists for.
+
+**THE LARGEST COLLISION RISK IS NOT TWO SEATS ON ONE ROW. IT IS FIVE SEATS CLAIMING AGAINST A
+STALE INVENTORY.** The list is from full tier `10bca84` at 16:45Z, **19 commits stale**, and
+three landings since are already in it or against it — verified on origin: `8d37fac6b` (18:38)
+clears `test_generic_func` and `test_inline_generic_specialization`, `3b018b014` (18:47) is a
+new fix for a crash not in the list at all, `99c416b54` (16:56) is the mask-remover below.
+**A row claimed off a stale inventory is a seat spending a turn on work that is done**, and it
+looks identical to a live claim from the outside. The cheap fix is a fresh tier before claims
+are honoured, not a better ledger.
+
+**Carried into the ledger at frankuser's request, and the one that needed banking rather than
+relaying:** `3b018b014`, an exception handler's binder leaking into the enclosing scope —
+**a bisect lands on `99c416b54` and is correct, and reverting `99c416b54` re-hides a
+segfault.** Playbook: `## A BISECT ONTO A MASK-REMOVING COMMIT IS CORRECT AND USELESS`. This is
+live hazard during a red-fixing sweep, which is precisely when a clean bisect onto a same-day
+commit invites a revert. Sent to frankuser to fold into the next relay rather than broadcast
+from here — they hold the open channel to all five and had just written to them.
+
+**Unowned and named rather than assigned:** `test-core#test_promoint_bitwise.pas`, which frankA
+reproduced at its tree and explicitly declined to take a second row. Recorded as *needs a
+seat*, not routed — this seat does not dispatch, and saying which rows are unheld is the
+report frankuser asked for.

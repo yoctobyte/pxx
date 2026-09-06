@@ -17194,6 +17194,49 @@ in code, and the odd one out is the defect. This is `a rule spelled per caller f
 ABSENT COPY` with the search made cheap: **find the majority pairing, then find who does not
 do it.**
 
+## A BISECT ONTO A MASK-REMOVING COMMIT IS CORRECT AND USELESS — AND THE REVERT RE-HIDES THE DEFECT
+
+Measured 2026-09-06 (frankA, `3b018b014`), and this is the third member of a family banked
+today. **Read it before reverting anything during a red-fixing sweep, which is exactly when
+this fires.**
+
+`on E: TClass do` leaked its binder into the enclosing scope, so reading a same-name OUTER
+variable after the handler hit the destroyed exception object and **segfaulted**. The leak was
+old. `99c416b54` — the `FindSym` one-walk fix — only removed what was hiding it: under the old
+two-walk order the outer name resolved elsewhere, so the stale binder was never read.
+
+> **A bisect of that crash lands on `99c416b54` and is CORRECT. Reverting `99c416b54`
+> re-hides a segfault.**
+
+**The three today, same animal at three depths:**
+
+| mask | what removing it exposed |
+| --- | --- |
+| a `%fail` row green because the compiler refused for an unrelated reason | the row's own subject, now failing |
+| a parse wall in front of a feature | a lowering that had never executed |
+| a resolution order that sent a name somewhere else | a use-after-free that was always there |
+
+**In all three the bisect is right about WHEN the verdict changed and wrong about WHAT broke**,
+and in this one the difference is load-bearing rather than merely tidy: the natural response to
+a segfault bisecting cleanly to a same-day commit is to revert it, and the revert restores a
+green that is a lie.
+
+**The discriminator is the same one banked this morning and it is not a bisect: run the failing
+case against the PINNED binary and read WHICH error, or whether it fails at all.** Here the
+defect predates the pin, so the pinned compiler has the leak and merely does not reach it —
+which means the sharper question for this member is *"does the named commit TOUCH the failing
+mechanism?"* `99c416b54` is a symbol-lookup change; the crash is an object lifetime. **A commit
+that cannot plausibly cause the mechanism, arrived at by a correct bisect, is the signature of
+a lifted mask.**
+
+**AND THE TEST THAT SHOULD HAVE CAUGHT IT WAS GREEN THROUGHOUT, THREE TIMES OVER.**
+`test_class_inherits_from_tobject` carries the shape three times and stays green **because it
+only reads the binder INSIDE the handler** — the one position where the leak is invisible. A
+corpus census found the bug; the file named for the construct could not. Same lesson as the
+width fixture and the leak fixture: **a test named for the feature is the weakest evidence
+about the feature**, because it was written by someone holding the intended usage in mind, and
+the defect lives in the usage nobody intended.
+
 ## WHEN A PARSE ERROR GUARDS A FEATURE, THE CODE BEHIND IT HAS NEVER RUN — so the loud half hides the silent one
 
 Measured 2026-09-06 (frankS, `6e80c3042`), and this is the one to reach for whenever a fix
