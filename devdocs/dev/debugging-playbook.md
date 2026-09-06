@@ -17753,6 +17753,10 @@ Two RTTI blobs for one type, so `if p = TypeInfo(Integer)` — the entire reason
 
 **The rule:** *"nothing differs"* is always *"nothing differs in the columns I happened to enumerate"*, and **the observables a premise enumerates silently become the definition of "observable" for everyone downstream.** A dismissal is the most dangerous place for it, because a dismissal is re-read for its conclusion and never for its column list.
 
+**A THIRD INSTANCE THE SAME DAY, IN THE SEAT THAT FOUND THE FIRST TWO.** frankA's own probe for the management-operator AddRef work *"would have passed on a record over 8 bytes while the feature did nothing under it"* — the operators ran, the bytes matched fpc, and beneath the 8-byte threshold the copy is pushed as machine words with no address, so none of it happened. Same animal as their inverted dismissal, hours apart, found by the person who had just written up the rule. **A column you know about is not a column you remember to vary.**
+
+> **THE OPERATIONAL FORM, and it is one line in a commit message: WRITE DOWN THE AXIS YOU HELD CONSTANT, NOT JUST THE ONE YOU VARIED** (frankA). Every section in this family — the report's wording picking your fixture's axis, the dismissal whose table lacked identity, the histogram that could not see past the first wall — is the same omission, and all three are closed by stating the constant. A varied axis is self-documenting because it appears in the rows; a held one appears nowhere and has to be written on purpose.
+
 **What to do:** when a ticket says nothing observably differs, do not re-read the argument — **list the columns it measured, then ask what the feature is FOR.** `TypeInfo` is for identity; a table without identity in it cannot dismiss anything about `TypeInfo`. Compare *"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET* in `CLAUDE.md`: same sentence, and there the missing column is the target rather than the property.
 
 ### Two more instruments from the same day, both frankB's
