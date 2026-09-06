@@ -80,4 +80,4 @@ frank-coordinator as
 `sh -n` over logical recipe lines was attempted here and returns ~190 hits that
 are almost all continuation-join artefacts, which is why it is a ticket and not
 a gate row.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 998d39991.
