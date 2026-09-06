@@ -7,8 +7,42 @@ prio: 60
 status: backlog
 found: 2026-09-06
 found-by: frank-coordinator (announced the red to the fleet), frankD (confirmed no artefact existed, and that its own diff is not the cause)
-summary: "The PINNED compiler cannot compile `lib/rtl/mimic_string` or `mimic_urllib_request`: `undefined variable (pyvar_is_objtag)` / `(pyvar_is_inttag)`. A commit added a builtin and used it from `lib/rtl` without a pin, which is the documented shape. A compiler built from HEAD compiles all 54 units cleanly, so nothing in the tree is broken — the pin is behind the source it has to build. Every `$(PXX_STABLE)` consumer carries it, so Track B and E build against a compiler that cannot build the RTL they depend on. NOT DISPATCHABLE as coded work: `make pin` is owner-only and no agent may run it. This ticket exists so the red has an artefact and a date rather than living in whichever session last ran the gate."
+summary: "The PINNED compiler cannot compile `lib/rtl/mimic_string` or `mimic_urllib_request`: `undefined variable (pyvar_is_objtag)` / `(pyvar_is_inttag)`. A commit added a builtin and used it from `lib/rtl` without a pin, which is the documented shape. A compiler built from HEAD compiles all 54 units cleanly, so nothing in the tree is broken — the pin is behind the source it has to build. Every `$(PXX_STABLE)` consumer carries it, so Track B and E build against a compiler that cannot build the RTL they depend on. NOT DISPATCHABLE as coded work: `make pin` is owner-only and no agent may run it. This ticket exists so the red has an artefact and a date rather than living in whichever session last ran the gate. IT IS NOT ONLY `gate.sh quick`: Track T's newest FULL tier at `b77ac29` (2026-09-06T04:08:52Z) is RED with `lib-test#src:tools/crtl_reachability.py` failing on those same two identifiers, so the fleet's headline verdict carries it too. The non-ancestry is measured, not inferred: the fix is frankZ's `8374118ec` (2026-09-05 23:15) and pin v404 is `8844c8c42` (2026-09-05 20:17), three hours EARLIER -- `git merge-base --is-ancestor 8374118ec 8844c8c42` is false, so no pin carries it and no amount of rebuilding at HEAD will change that."
 ---
+
+## 2026-09-06 04:20Z (frank-coordinator) — measured, and the blast radius is wider than the gate
+
+Re-measured rather than re-quoted, because the seat that filed this is a reader and a reader has no
+staleness signal:
+
+    git merge-base --is-ancestor 8374118ec 8844c8c42   ->  false
+
+`8374118ec` (frankZ, 2026-09-05 23:15, *"export pyvar_is_inttag/pyvar_is_objtag — two lib/rtl units
+call them and could not compile"*) is **not an ancestor of pin v404** (`8844c8c42`, 2026-09-05
+20:17). The fix postdates the pin by three hours. Nothing at HEAD is broken and nothing built from
+HEAD reproduces it — the pin is behind the source it has to build, and only `make pin` moves that.
+
+**AND IT IS IN THE FULL TIER, NOT JUST THE QUICK GATE.** Track T's newest full-tier report,
+`20260906T040852Z-b77ac29-seven.md`, verdict **RED**, names it:
+
+    lib-test#src:tools/crtl_reachability.py
+      pascal26:159: error: undefined variable (pyvar_is_objtag)      lib/rtl/mimic_string.pas
+      pascal26:483: error: undefined variable (pyvar_is_inttag)      lib/rtl/mimic_urllib_request
+      pascal26:573/666: error: undefined variable (pyvar_is_objtag)
+
+So this is not a local instrument complaining. It is the number the fleet reads.
+
+**SECOND INSTANCE OF A NAMED CLASS.** `feature-pascal-corpus-expansion` records the first:
+`property Current: T read GetCurrent;` on `IEnumerator<T>` was omitted from `lib/rtl/classes.pas`
+for a month because the pin rejected a property in an interface, and the parser fix sat in `done/`
+doing nothing for that corpus until pin v404 carried it. **"Fixed at HEAD, inert until pinned"** —
+any compiler fix a `$(PXX_STABLE)` consumer needs is CLOSED while still unusable there, and the
+ticket folder gives the wrong answer while the pin gives the right one. Two instances in two days
+makes it a class rather than an anecdote: **before closing a compiler fix that a `lib/**` file
+depends on, check whether a pin carries it, and say so in the resolution.**
+
+Still not dispatchable. `make pin` is owner-only, it is on the owner's list, and no agent may run
+it or ask a peer to.
 
 ## The measurement
 
