@@ -202,3 +202,46 @@ rows did not see it because `test_esp_bare.pas` contains no assertion. That is
 this ticket's own thesis holding for a second time: the suite is not merely
 unwatched, it is unwatched in a way that makes its green misleading about the
 target's coverage rather than about its correctness.
+
+### The open half, answered by measurement rather than by asking: seven cannot run these rows today
+
+frankS left this as *"a fact about the runner, not about the suite"* and it was
+still open. It is answerable without touching seven, because the blocker is not
+whether a box has *a* qemu — it is that **stock QEMU has no ESP32 machine at
+all**, on either ISA. Measured on plexus, which has both builds side by side:
+
+| emulator | version | ESP machines |
+| --- | --- | --- |
+| `/usr/bin/qemu-system-xtensa` | 10.2.1 (Debian/Ubuntu) | **none** — kc705, lx60/lx200, ml605, sim, virt |
+| `/usr/bin/qemu-system-riscv32` | 10.2.1 | **none** |
+| Espressif `qemu-system-xtensa` | esp_develop_9.2.2_20250817 | `esp32`, `esp32s3` |
+| Espressif `qemu-system-riscv32` | esp_develop_9.2.2_20250817 | `esp32c3` |
+
+So the recipe's `$HOME/.espressif/tools/qemu-*/...` guard is **correct and not
+over-narrow**. A box with a newer stock qemu is not a substitute, and enrolling
+on such a box would produce 29 rows of `not installed` — a false skip in exactly
+frankZ's sense, where the silent answer is worse than a red.
+
+**What that makes the enrolment decision.** It is not a `tools/testmgr.py` edit
+waiting on someone to make it. It is: install the Espressif toolchain on seven
+(an infra act), THEN enrol. Enrolling first buys a target that prints skips.
+
+### And the archive cannot tell you this, which is the reusable part
+
+`twatch.py`'s `RUNNER_BINARIES` (tools/twatch.py:7003) records `qemu-xtensa` and
+`qemu-riscv32` — the **user-mode** binaries `tools/run_target.sh` resolves from
+PATH. seven's stamp says `qemu-xtensa: 10.2.1`, `qemu-riscv32: 10.2.1`, and both
+are true. Neither is the emulator these rows need: `qemu-system-xtensa` from
+`~/.espressif` is a different binary, from a different fork, with a capability
+the recorded one does not have.
+
+**A reader who checks the archive for "does seven have qemu-xtensa" gets YES and
+is wrong about this question.** The field does not error and does not lie — it
+answers about the user-mode runner. That is the same shape as the incident the
+fingerprint's own docstring was written for (*"a cross-target verdict is also a
+statement about an EMULATOR, which nothing recorded"*), one fork further in.
+
+Not fixed here — `twatch.py` is Track T's file and frankB is in it. If T wants
+it, the ESP system emulators are a two-entry addition to `RUNNER_BINARIES`
+resolved at the Espressif path rather than on PATH, and they would make this
+ticket's open half readable from the archive instead of by measurement.
