@@ -10143,6 +10143,42 @@ begin
     ((FindProc(nm) < 0) and not IntrinsicShadowedByMember(nm));
 end;
 
+function IntrinsicShadowIsStringOnly(const nm: AnsiString; paramNo: Integer): Boolean;
+{ True when EVERY free routine named `nm` in the proc table takes a plain
+  (non-array) STRING at parameter `paramNo` -- i.e. when no declaration in scope
+  could bind a dynamic array there, so a dynamic-array argument has exactly one
+  possible reading and it is the intrinsic's.
+
+  This is the "which, not whether" half that SoftIntrinsicOpen cannot supply: it
+  answers whether a routine of the name EXISTS, and a Boolean cannot distinguish
+  a shadow that competes for the call from one that could never bind it.
+  Measured against fpc 3.2.2, and the distinction is real in both directions:
+  a user `Delete(var a: TA; ...)` DOES take the call (fpc runs the user routine),
+  while a user `Delete(var s: AnsiString; ...)` makes fpc REFUSE a dyn-array
+  argument outright rather than fall back. We accept it instead, which is the
+  benign direction -- accepting what fpc rejects is not a defect.
+
+  Conservative: an unknown or out-of-scope row answers False and nothing
+  reopens. Methods are not consulted here -- a method shadow is
+  IntrinsicShadowedByMember's question and it stays a shadow. }
+var i: Integer;
+begin
+  Result := False;
+  i := ProcChainHead(nm);
+  while i >= 0 do
+  begin
+    if CaseEqual(Procs[i].Name, nm) then
+    begin
+      if paramNo >= Procs[i].ParamCount then Exit;
+      if Procs[i].Params[paramNo].IsArray then Exit;
+      if not (Procs[i].Params[paramNo].TypeKind in
+              [tyString, tyAnsiString, tyShortString, tyFixedString]) then Exit;
+      Result := True;   { at least one row seen, and every row so far is a string }
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
 function SoftIntrinsicOpenSym(const nm: AnsiString; qUnit: Integer): Boolean;
 { For the older guards, which test an in-scope SYMBOL rather than a method
   (Inc, Dec, GetMem, FreeMem, Break, Continue, Move/FillChar, ...). }

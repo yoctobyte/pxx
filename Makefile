@@ -7032,6 +7032,18 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_nested_routine_assigns_the_enclosing_functions_result \
 	  "$$($(TESTTMP)/test_nestres26)" \
 	  "$$(cat test/test_a_nested_routine_assigns_the_enclosing_functions_result.expected)"
+	@# A STRING `Delete` IN SCOPE CLOSED THE DYNAMIC-ARRAY `Delete` INTRINSIC.
+	@# SoftIntrinsicOpen answers WHETHER a routine of the name exists, never
+	@# WHICH overload the call wants, and lib/rtl/sysutils.pas declares the two
+	@# string routines fpc keeps in `system` -- so one `uses sysutils` took
+	@# dyn-array Delete/Insert away from essentially every program in the tree.
+	@# THE LAST ROW IS THE CONTROL: a user routine that CAN bind a dynamic array
+	@# must still win (fpc runs it), so the reopening reads the shadow's
+	@# PARAMETER TYPE. Both spellings live in this one file, separated by scope.
+	@./$(COMPILER) test/test_a_dynamic_array_delete_survives_a_string_delete_in_scope.pas $(TESTTMP)/test_dyndelshadow26
+	@tools/expect_same.sh test_a_dynamic_array_delete_survives_a_string_delete_in_scope \
+	  "$$($(TESTTMP)/test_dyndelshadow26)" \
+	  "$$(cat test/test_a_dynamic_array_delete_survives_a_string_delete_in_scope.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

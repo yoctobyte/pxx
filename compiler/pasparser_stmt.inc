@@ -5643,6 +5643,85 @@ end;
   style choice. }
 function FinishCastAsLValueStore(valNode: Integer; castTk: TTypeKind): Integer; forward;
 
+function BareDynArrayArgAhead(argNo: Integer): Boolean;
+{ True when argument `argNo` (0-based) of the call whose `(` sits at TokPos is a
+  BARE NAME denoting a dynamic array -- a plain symbol, a class var, or an
+  implicit-Self field. Token-level, and deliberately conservative: every shape it
+  cannot resolve answers False, so this predicate can only ADD acceptance and
+  never redirect a call that binds something today.
+
+  WHY IT EXISTS: THE GUARD ANSWERED WHETHER, NOT WHICH. SoftIntrinsicOpen asks
+  whether ANY routine of the name is in scope, with no reference to the call's
+  arguments -- and lib/rtl/sysutils.pas declares `Delete(var s: AnsiString;
+  index, count)` and `Insert(const src: AnsiString; var dst: AnsiString; index)`,
+  which FPC keeps in `system` and not in sysutils. So one `uses sysutils` closed
+  the DYNAMIC-ARRAY Delete and Insert intrinsics for essentially every program in
+  the tree, and the diagnostic named the string overload as the only candidate.
+  A `var AnsiString` parameter cannot bind a dynamic array under any rule, so
+  there is nothing ambiguous to arbitrate here; the shadow was simply never
+  asked about the argument.
+
+  Only the bare-name spelling is resolved. `Delete(obj.Items, i, 1)` with a
+  string Delete in scope still takes the shadow -- that wants the general
+  signature-aware answer, filed as
+  bug-p-a-shadowed-soft-intrinsic-is-closed-without-consulting-the-arguments. }
+var i, depth, argi, si: Integer; nm: AnsiString;
+begin
+  Result := False;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen) then Exit;
+  i := TokPos + 1; depth := 0; argi := 0;
+  while (i < TokCount) and (argi < argNo) do
+  begin
+    if (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkLBrack) then Inc(depth)
+    else if (Tokens[i].Kind = tkRBrack) then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;      { the call ended before argument argNo }
+      Dec(depth);
+    end
+    else if (Tokens[i].Kind = tkComma) and (depth = 0) then Inc(argi);
+    Inc(i);
+  end;
+  if (argi <> argNo) or (i + 1 >= TokCount) then Exit;
+  { A bare name and nothing else: the next token must be the argument separator,
+    which rules out `a.b`, `a[i]`, `a^` and a call -- each of which needs the
+    expression parser to answer, not this. }
+  if (Tokens[i].Kind <> tkIdent) or (Tokens[i + 1].Kind <> tkComma) then Exit;
+  nm := GetTokenStr(i);
+  si := FindVarSym(nm);
+  if si >= 0 then
+  begin
+    Result := Syms[si].IsArray and (Syms[si].ArrLen = -1) and (SymDynDepth[si] >= 1);
+    Exit;
+  end;
+  Result := (CurMethClass >= REC_UCLASS_BASE) and
+            (RecFieldDynDepth(CurMethClass, nm) >= 1);
+end;
+
+function DynArrayReopensIntrinsic(const nm: AnsiString; argNo, qUnit: Integer): Boolean;
+{ The dynamic-array Delete/Insert intrinsic, reopened past a shadow that could
+  never have bound the call. THREE conditions, and dropping any one of them was
+  measured wrong:
+
+  * the shadow is a free routine taking a STRING at that position
+    (IntrinsicShadowIsStringOnly) -- a user `Delete(var a: TA; ...)` still wins,
+    which is what fpc does;
+  * no METHOD of the enclosing class shadows the name -- that shadow is
+    deliberate and stays;
+  * the argument really is a dynamic array, resolved from the TOKENS
+    (BareDynArrayArgAhead), because the shadow decision is made before anything
+    is parsed.
+
+  The wall this clears: lib/rtl/sysutils.pas declares `Delete(var s: AnsiString;
+  index, count)` and `Insert(const src: AnsiString; var dst: AnsiString; index)`,
+  which fpc keeps in `system` and not in sysutils -- so one `uses sysutils`
+  closed the dynamic-array Delete and Insert for essentially every program in
+  this tree. fcl-passrc's pscanner.pp:5025 and :5033 are the live case. }
+begin
+  Result := (qUnit = -1) and (not IntrinsicShadowedByMember(nm)) and
+            IntrinsicShadowIsStringOnly(nm, argNo) and BareDynArrayArgAhead(argNo);
+end;
+
 function ParseCastAsLValueStore(castTk: TTypeKind): Integer;
 { `<TypeName>(target) := value` as a STATEMENT. Call with the type name already
   consumed and CurTok on the `(`; castTk is what the name resolved to.
@@ -6755,7 +6834,9 @@ begin
         node := AllocNode(AN_SET_SIGNAL);
         ASTLeft[node] := opNode; ASTRight[node] := valNode;
       end
-      else if CaseEqual(name, 'Delete') and SoftIntrinsicOpen('Delete', qUnit) and
+      else if CaseEqual(name, 'Delete') and
+              (SoftIntrinsicOpen('Delete', qUnit) or
+               DynArrayReopensIntrinsic('Delete', 0, qUnit)) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Delete(s, index, count): in-place string delete, lowered to the
@@ -6839,7 +6920,9 @@ begin
           node := BuildFrozenStrVarArgRMW(frozenDest, ASTIVal[valNode], node);
         end;
       end
-      else if CaseEqual(name, 'Insert') and SoftIntrinsicOpen('Insert', qUnit) and
+      else if CaseEqual(name, 'Insert') and
+              (SoftIntrinsicOpen('Insert', qUnit) or
+               DynArrayReopensIntrinsic('Insert', 1, qUnit)) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Insert(src, s, index): in-place string insert, lowered to __pxxStrInsert.
