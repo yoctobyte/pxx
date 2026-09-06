@@ -6834,6 +6834,28 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXVarClear');
           end;
         end
+        else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                NilPyUserCode and PyClassSymArcEligible(i) then
+        begin
+          { NilPy-user class local: drop the binding's ref at scope exit, the
+            same row ir_codegen.inc emits for x86-64 and symtab.inc's shared
+            EmitManagedLocalCleanup emits for the five register arms. This arm
+            was ABSENT here until 2026-09-06 and it was the only one missing, so
+            an object binding held in a local leaked once per call on wasm32 and
+            nowhere else -- measured with -dPXX_ALLOC_CENSUS on a NilPy loop
+            calling a function that binds one instance: live 1900 at N=2000 and
+            7815 at N=8000 against a flat live=1 on x86-64 for the same source.
+            The pointer goes in BY VALUE, as on every other backend; the callee
+            carries the nil check and the population-tag guard, so a
+            Pascal-created instance parked here is left alone. }
+          hpK := WasmWriteHelper('PXXObjRelease');
+          if hpK >= 0 then
+          begin
+            WasmSlotAddr(i);
+            WasmMemOp($28, 'i32.load', 2, 0);     { the instance pointer }
+            WasmCall(WasmSlotForProc(hpK), 'PXXObjRelease');
+          end;
+        end
         else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
         begin
           { Promotable-int local: release a heap-tier payload. Optional by
