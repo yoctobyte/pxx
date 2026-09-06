@@ -10860,6 +10860,15 @@ test-core: $(COMPILER)
 	# plain Trunc() is deliberately unaffected.
 	./$(COMPILER) -Fulib/rtl test/test_variant_double_to_integer_rounds.pas $(TESTTMP)/test_vardblround26
 	tools/expect_same.sh test_vardblround26 "$$($(TESTTMP)/test_vardblround26 | tail -1)" "ALL OK"
+	# ...and the SIBLING arm of that same rule: a plain (non-variant) float
+	# assigned to an integer lvalue. That one moved the BITS -- `Co := D` with
+	# D = 4.7 answered 4616977747989548237 -- because the conversion lived in the
+	# backend and, in Pascal mode, five of seven backends had no arm for it.
+	# Wired here rather than beside the float tests so the two paths of one rule
+	# are read together: fixing one arm and not grepping for the other is how the
+	# variant row above stayed correct next to a broken neighbour for months.
+	./$(COMPILER) -Fulib/rtl test/test_double_to_integer_lvalue_rounds.pas $(TESTTMP)/test_dbl2intlv26
+	tools/expect_same.sh test_dbl2intlv26 "$$($(TESTTMP)/test_dbl2intlv26 | tail -1)" "ALL OK"
 	# A stringy Variant converts to a Boolean by FPC's rule -- keywords, then
 	# numeric text, then raise. The raising rows are asserted as raises.
 	./$(COMPILER) -Fulib/rtl test/test_variant_string_to_boolean.pas $(TESTTMP)/test_varstrbool26

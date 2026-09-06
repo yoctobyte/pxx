@@ -8911,6 +8911,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     foldOff, foldK, foldSym: Integer;
     bLastNode: Integer;
+    rndCall, rndArg: Integer;   { float -> integer lvalue, via the Round intrinsic }
     writeFd: Integer;
     wValNode, wEnumId: Integer;   { write(TEnum) -> the member NAME, like write(Boolean) }
     chArrCap, chArrCap2: Integer;   { static `array of Char` <-> string conversion }
@@ -12660,6 +12661,52 @@ begin
                                  IntToTypeKind(ASTTk[ASTLeft[node]]),
                                  NodeDynDepth(ASTLeft[node]));
         end;
+      end;
+
+      { A FLOAT ASSIGNED TO AN INTEGER LVALUE MOVED THE BITS INSTEAD OF
+        CONVERTING. `D := 4.7; Co := D` with `Co: Comp` printed
+        4616977747989548237 -- the IEEE-754 payload read as an integer -- where
+        fpc 3.2.2 prints 5. The IR is load_sym -> store_sym with NO conversion
+        node in either direction, because the conversion lives in the BACKEND:
+        only x86-64 and aarch64 have a float->int store arm at all, and
+        x86-64's is CProgramMode-gated besides, so five backends had none and
+        the sixth had one nobody in Pascal mode could reach.
+
+        Fixing it per-backend would write the same rounding rule seven times
+        and manufacture six new places to diverge, so it is rewritten HERE, for
+        the reason the char-array, set-literal and sized-boolean arms around it
+        all give in their own words: there are two dozen places that build an
+        AN_ASSIGN and exactly one that lowers it.
+
+        ROUND, not truncate, and this is measured rather than assumed --
+        fpc 3.2.2: 4.7->5, 2.5->2, 3.5->4, -4.7->-5, -2.5->-2. Ties go to EVEN,
+        which is precisely what the -204 Round intrinsic already emits, on all
+        seven backends, matching all five of those rows today. So this is a
+        REUSE of a working lowering, not a new one -- the same trade the
+        `int(float)` arm in pasparser_expr.inc takes for -203.
+
+        Pascal only. C's rule is TRUNCATE (ir_codegen.inc's CProgramMode arm),
+        and Python REBINDS the name rather than converting, so rounding under
+        either would be a fresh wrong answer, not a fix. Rust and Zig reach
+        this only if their frontends accept an implicit narrowing assignment
+        that both languages spell as an explicit cast -- and rounding beats
+        moving the bits there too.
+
+        TypeIsMachineInt is the predicate rather than "not a float": it
+        excludes Boolean, Char, Pointer and the promo kinds, none of which
+        want a rounding conversion and each of which has its own arm above.
+        bug-a-a-float-assigned-to-an-integer-lvalue-moves-the-bits-instead-of-converting }
+      if (not CProgramMode) and (not PyProgramMode) and
+         TypeIsFloat(IntToTypeKind(ASTTk[ASTRight[node]])) and
+         TypeIsMachineInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+      begin
+        rndCall := AllocNode(AN_CALL);
+        ASTIVal[rndCall] := -204;         { Round: nearest, ties to even }
+        ASTTk[rndCall] := Ord(tyInt64);
+        rndArg := AllocNode(AN_ARG);
+        ASTLeft[rndArg] := ASTRight[node];
+        ASTLeft[rndCall] := rndArg;
+        ASTRight[node] := rndCall;
       end;
 
       { `b := True` where b is a SIZED BOOLEAN stores ALL BITS SET, not 1 --

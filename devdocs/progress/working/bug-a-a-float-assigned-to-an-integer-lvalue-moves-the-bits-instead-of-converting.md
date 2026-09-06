@@ -4,8 +4,8 @@ title: "A float-valued RHS stored into an integer LVALUE moves the BIT PATTERN â
 track: A
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankwasm
 created: 2026-09-06
 found-by: frankS
 blocked-by: []
