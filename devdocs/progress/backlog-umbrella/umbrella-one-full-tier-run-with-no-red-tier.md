@@ -6,7 +6,7 @@ type: umbrella
 blocked-by: [regression-test-core-c-crtl-wait, bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain]
 created: 2026-09-01
 owner: frankZ
-summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RE-RANKED 85 -> 55 on 2026-09-06: the prio-85 justification was that a green run makes the rollback target VERIFIED rather than merely recent, and CLAUDE.md now says the fleet does not roll back at all (owner, 2026-09-06: 'we avoid rollbacks. useful work done is work done'), usable rollback depth is ZERO, and verbatim `do not rank a ticket on rollback depth`. The other stated buy -- grading a pin `green` rather than `reds(N)` -- is voided by the same rule, which calls `pin_is_green`/`pinstatus` a target for an operation this fleet does not perform. What survives is ordinary regression value, and the goal itself stays reasonable: the reds are real defects. Lowering it DOES lower what its blockers inherit -- `effective_prio` (`tools/progress.py:945`) is max(own prio, dependents), so the floor they inherit from this goal drops 85 -> 55; what it cannot do is push any blocker below the prio it earned on its own, and that is the intended effect, not a side effect. CLOSER THAN IT HAS EVER BEEN: the newest full run on seven (`c543b335fb2f`, 2026-09-06T19:55Z) is RED on THREE jobs, down from nine in eight hours. Still ends when one clean run comes back; still not a standing triage desk."
+summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RE-RANKED 85 -> 55 on 2026-09-06: the prio-85 justification was that a green run makes the rollback target VERIFIED rather than merely recent, and CLAUDE.md now says the fleet does not roll back at all (owner, 2026-09-06: 'we avoid rollbacks. useful work done is work done'), usable rollback depth is ZERO, and verbatim `do not rank a ticket on rollback depth`. The other stated buy -- grading a pin `green` rather than `reds(N)` -- is voided by the same rule, which calls `pin_is_green`/`pinstatus` a target for an operation this fleet does not perform. What survives is ordinary regression value, and the goal itself stays reasonable: the reds are real defects. Lowering it DOES lower what its blockers inherit -- `effective_prio` (`tools/progress.py:945`) is max(own prio, dependents), so the floor they inherit from this goal drops 85 -> 55; what it cannot do is push any blocker below the prio it earned on its own, and that is the intended effect, not a side effect. CLOSER THAN IT HAS EVER BEEN: the newest full run on seven (`c543b335fb2f`, 2026-09-06T19:55Z) is RED on THREE jobs, down from nine in eight hours, and one of those three was self-inflicted by a change that passed `gate.sh quick`, which does not run that job. Still ends when one clean run comes back; still not a standing triage desk."
 ---
 
 # One full tier run with no RED tier
@@ -63,7 +63,21 @@ the arrival rate loses to the fix rate for one tier's duration"* — that
 happened tonight. The three at `c543b335fb2f`:
 
 - `tools-devtest#00` — STILL-RED, and group 7 above already reports it fixed
-  three times. Its fourth fault is the ticket to write, not a fourth fix.
+  three times. **The fourth fault is now known and was self-inflicted by the
+  fleet**: frankH's `85c8c1bf8` (19:41Z) added a devtest that trips
+  `tstate_reader_devtest`'s no-tool-reads-tstate-by-path discipline. They found
+  it, put both fixture files in ALLOWED with reasons, and the job runs PASS in
+  isolation. Not a fourth ticket — a fourth cause, closed by its author.
+
+  **This one is structural and it belongs to this umbrella, not to frankH.**
+  That red was landed GREEN under `gate.sh quick`, which does not run
+  `tools-devtest#00`. So the arrival side of this ticket's own
+  arrival-rate-versus-fix-rate condition includes reds that **the per-fix gate
+  cannot see by construction** — the same shape as "nothing observably differs
+  is a claim about one target", one level up: a change measured green by every
+  gate its author is asked to run, and red in the only tier that judges this
+  goal. Any reasoning about whether the count can reach zero has to model that
+  source, and this ticket did not until tonight.
 - `lib-test#src:test/lib_sysutils_delphi_exceptions.pas` — NEW-RED tonight.
 - `test-debug-g#src:tools/compiler_srchash.sh` — NEW-RED tonight, and the job
   name is a SELECTOR, not a label: `tools/compiler_srchash.sh` is merely the
@@ -72,14 +86,50 @@ happened tonight. The three at `c543b335fb2f`:
 
 ### And the archive claim, corrected in both directions
 
-A peer read the archive as *zero shas with a full run and no RED, ever*. That
-is false — 47 shas qualify, and this ticket's own body already said so
-(*"588 shas have been fully green at some point"*). But the useful half of
-their reading is the one neither of us stated: **every full GREEN in the
-archive is plexus, borg or xeon; `seven` has never produced one.** The body
-already explains why the goal can only be met there (*"the `full` run cannot
-come from plexus — 41 jobs SKIP for missing corpus"*), so the two facts
-together say the goal has never been met **by the only host that can meet it**.
+**The number here was 47 for about twenty minutes and it was mine, not the
+peer's.** The real count is **589**: borg 399, plexus 119, xeon 71, seven 0.
+frankH reproduced it and I confirmed it independently off the ndjson.
+
+My 47 came from `reports/*.md` — 2069 curated digests — while the archive is
+`runs-<host>.ndjson`, 5530 rows. **The reports directory is a SUBSET, so
+counting it answers "shas that got written up", not "shas that ran".** It did
+not error. The tell was sitting inside my own sentence: I wrote *"47 shas
+qualify, and this ticket's body already said 588"* and did not stop at two
+numbers that cannot both be true. **A discriminator being present is not the
+same as a discriminator being consulted** — this session's own line, from
+[[bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised]],
+missed by its author eight hours later.
+
+The peer's error was the mirror and belongs beside it: they queried
+`runs-seven.ndjson` correctly and reported the answer as *"the whole archive"*.
+Right query, narrower scope than the sentence. **"0 on seven" and "0 anywhere"
+share a digit and point at opposite actions** — a global zero reads as *the
+goal is unreachable*, a seven-only zero reads as *the goal has never been
+attempted where it counts*.
+
+**The load-bearing half, which neither original number carried:** every full
+GREEN in the archive is borg, plexus or xeon, and `seven` has never produced
+one. The body already explains the goal can only be met on seven (*"the `full`
+run cannot come from plexus — 41 jobs SKIP for missing corpus"*), so the goal
+has never been met **by the only host that can meet it**.
+
+**And all three green-producing hosts have STOPPED.** Measured 2026-09-06 off
+the ndjson:
+
+```
+host     newest clean full run          last row of ANY kind
+borg     104629a6d7b6   2026-07-31      2026-07-31
+xeon     7d8929633721   2026-08-04      2026-08-04
+plexus   90892318c94c   2026-08-26      2026-08-30
+seven    none, ever                     2026-09-06  (live)
+```
+
+So **589 is entirely historical.** It is not a reservoir of recent evidence
+that this suite can come back clean — it is three retired hosts, the most
+recent of which stopped reporting a week ago. And `90892318c94c`, which this
+ticket has cited as the most recent full green since 2026-09-02, is plexus's
+LAST clean run and eleven days old. Every live prospect for this goal rests on
+the one host whose lifetime score is zero.
 
 That is worth stating plainly and is NOT yet a reason to call the goal
 unsatisfiable in the sense of *"a gate that cannot pass is not a gate either"* —
