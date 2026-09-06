@@ -3,7 +3,7 @@ slug: bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor
 track: P
 prio: 30
 type: bug
-status: working
+status: done
 blocked-by: []
 created: 2026-09-06
 found-by: frankB (ctor site, predicted from mechanism); frankD (Low/High)
@@ -194,3 +194,6 @@ separate change with a new column in it.
 - `test/test_a_qualified_nested_alias_is_a_type_and_a_scope.{pas,expected}` —
   fpc 3.2.2 oracle, byte-identical, wired in the Makefile. Rows A–D are the
   controls and were green before the fix.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
