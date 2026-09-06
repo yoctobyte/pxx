@@ -315,6 +315,36 @@ begin
     Result := Procs[CurProc].RetSymIdx;
 end;
 
+{ `FuncName` as an ASSIGNMENT TARGET — `F := x`, `F.field := x`, `F[i] := x`,
+  `F^ := x`. A DIFFERENT QUESTION FROM OwnNameResultSym ABOVE, and the difference
+  is the whole reason this is not that:
+
+  OwnNameResultSym answers about a READ, and its {$mode delphi} delta is correct
+  for one -- in Delphi a bare own-name READ is a reference to the routine, never
+  the result var. **A WRITE is the Result synonym in Delphi too.** Measured
+  2026-09-06: fpc 3.2.2 -Mdelphi compiles and runs `function f(x: LongInt):
+  Boolean; begin f := x > 0; end;` and so does pxx, through the tkIdent arm in
+  pasparser_stmt.inc that this routine is extracted from. Reusing
+  OwnNameResultSym for the write question would have imported a read-only rule
+  and quietly refused delphi-mode sources that work today.
+
+  The four-token test IS the `(` exclusion OwnNameResultSym's header hands to the
+  caller: a call is `(`, and none of `:=` `.` `[` `^` is one.
+
+  THREE CALLERS, deliberately: the tkIdent own-name arm this was lifted from, the
+  keyword-token twin in the tkwrite/tkRead arm, and the soft-keyword guard before
+  the statement dispatch (`exit := x` inside `function exit`). The first two were
+  already two spellings of one condition; the third is the arm that was missing,
+  and adding a fourth hand-written copy is how the first two came to differ. }
+function OwnNameLValueHere(const name: AnsiString): Boolean;
+begin
+  Result := (CurProc >= 0) and Procs[CurProc].IsFunc and
+            (TokPos < TokCount) and
+            (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
+            ((name = Procs[CurProc].Name) or
+             CaseEqual(name, LastDotName(Procs[CurProc].Name)));
+end;
+
 { The fixed N-D subscript TAIL, in both spellings: `[i, j]` and `[i][j]`.
 
   Call it with `indexNode` = the AN_INDEX node being built, `base` = the node

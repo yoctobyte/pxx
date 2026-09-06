@@ -7312,6 +7312,39 @@ test-core: $(COMPILER)
 	@# from the fpc testsuite) was diffed against fpc 3.2.2 separately.
 	@$(TESTTMP)/test_gblrw26 | diff -u test/test_a_global_routine_may_be_named_read_or_write.expected - \
 	  || { echo 'test_a_global_routine_may_be_named_read_or_write: FAIL - the four intrinsic names are not shadowable, or the intrinsic stopped winning'; exit 1; }
+	./$(COMPILER) test/test_a_soft_keyword_name_can_be_a_function_result.pas $(TESTTMP)/test_skres26
+	@# .expected is fpc 3.2.2's own output, exit code included. `exit`/`halt`/
+	@# `break`/`continue` are SOFT keywords -- they lex as plain identifiers and
+	@# ParseStatementAST dispatches on the NAME -- so a user routine could always
+	@# be CALLED any of them. What could not be done is assigning its result by
+	@# its own name: the Halt/Exit arm took the name, produced AN_EXIT, and left
+	@# the `:=` for the caller, so `exit := x` was `a statement cannot start with
+	@# ':='` while `Result := x` in the same function worked. THE `delphi` ROW IS
+	@# THE ONE THAT SAYS WHICH PREDICATE: a bare own-name READ is a reference to
+	@# the routine in Delphi and never the result var (OwnNameResultSym's rule,
+	@# and correct), but a WRITE is the Result synonym in Delphi too -- fpc
+	@# -Mdelphi compiles and runs it. Ask the read predicate for the write
+	@# question and that row is refused for a rule about the other direction.
+	@# THE LAST LINE IS THE BINDING CONTROL: `halt(5)` must reach the FUNCTION
+	@# and discard its result. If it reached the intrinsic the program would exit
+	@# 5 and `after-halt-call` would never print -- which is the difference
+	@# between testing four declarations and testing that they are bound to.
+	@# The bare STATEMENT forms cannot be controlled from this file: once these
+	@# names are declared, shadowing is TOTAL and pxx and fpc agree to the line
+	@# (`Wrong number of parameters specified for call to "continue"`). They are
+	@# in test_a_soft_keyword_statement_still_works.pas, which declares none.
+	@$(TESTTMP)/test_skres26 | diff -u test/test_a_soft_keyword_name_can_be_a_function_result.expected - \
+	  || { echo 'test_a_soft_keyword_name_can_be_a_function_result: FAIL - a soft-keyword-named function cannot assign its own result, or no longer binds'; exit 1; }
+	./$(COMPILER) test/test_a_soft_keyword_statement_still_works.pas $(TESTTMP)/test_skstmt26
+	@# The unshadowed control for the row above, and it exits 5 on purpose: the
+	@# bare `halt(5)` here IS the intrinsic, because nothing declares that name.
+	@# Both halves are asserted -- an output-only check would pass a compiler
+	@# whose `halt` had stopped halting, and an rc-only check would pass one
+	@# whose `break`/`continue` had stopped bounding the loop.
+	@set +e; $(TESTTMP)/test_skstmt26 > $(TESTTMP)/test_skstmt.out; rc=$$?; set -e; \
+	  [ "$$rc" = 5 ] || { echo "test_a_soft_keyword_statement_still_works: FAIL - the bare halt(5) exited $$rc, not 5"; exit 1; }; \
+	  diff -u test/test_a_soft_keyword_statement_still_works.expected $(TESTTMP)/test_skstmt.out \
+	  || { echo 'test_a_soft_keyword_statement_still_works: FAIL - a bare soft-keyword statement changed behaviour'; exit 1; }
 	./$(COMPILER) test/test_prefetch_is_a_hint.pas $(TESTTMP)/test_pfh26
 	@# .expected is fpc 3.2.2's own output. Prefetch is a CACHE HINT, so an empty
 	@# body is the specification rather than a stub and there is deliberately no

@@ -5690,6 +5690,7 @@ var
   assertPosNode: Integer;   { synthesised ' (file.pas, line N)' literal for __pxxAssert, or -1 }
   assertMsgLit, assertArg: Integer;   { the empty-message literal a 1-arg Assert needs, and the AN_ARG carrying either }
   assertPosText: AnsiString;
+  ownNameLV: Boolean;   { this ident is the enclosing function's RESULT VAR, not a call -- see below }
 begin
   { -1 for every statement but an `Assert` the alias site below rewrites. Set
     here rather than at that site because the arm that CONSUMES it sits in the
@@ -5819,9 +5820,7 @@ begin
         `Read := x` / `Write.field := x`. The name lexes as an intrinsic token, so
         catch the own-name result assignment before the intrinsic statement —
         otherwise it silently misparses as a Read/Write intrinsic. }
-      if (CurProc >= 0) and Procs[CurProc].IsFunc and
-         (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
-         CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name)) then
+      if OwnNameLValueHere(CurTok.SVal) then
       begin
         { Assigning the function result by its own name, where that name is an
           intrinsic keyword (Read/Write/Readln/Writeln). Build the same
@@ -5966,6 +5965,30 @@ begin
     begin
       name := CurTok.SVal;
       qUnit := ConsumeUnitQualifier(name);
+      { ASSIGNING THE FUNCTION RESULT BY ITS OWN NAME, where that name is also a
+        SOFT-KEYWORD intrinsic statement. `function exit(x: LongInt): Boolean`
+        with `exit := x > 0` in its body was `a statement cannot start with ':='`
+        -- the Halt/Exit arm below took the name, consumed it, produced AN_EXIT,
+        and left the `:=` for the caller to trip over. `Result := x > 0` in the
+        same function compiles and runs, which is what made this look like a
+        declaration problem: the routine declares fine and always did.
+
+        The keyword-TOKEN twin of this is in the tkwrite/tkRead arm above and
+        was written first; this is the soft-keyword half, which is the arm that
+        stayed broken. devdocs/dev/normalise-dont-special-case.md
+
+        OwnNameLValueHere (pasparser_lval.inc) is the rule, extracted here from
+        the tkIdent arm that already had it. NOT OwnNameResultSym, which answers
+        about a READ and carries a {$mode delphi} delta that is correct for one:
+        in Delphi a bare own-name READ is a reference to the routine. A WRITE is
+        the Result synonym in Delphi too -- measured against fpc 3.2.2 -Mdelphi,
+        which compiles and runs it, as does pxx today -- so reusing the read
+        predicate would have imported a read-only rule and refused working
+        sources. Two questions, one name away from each other.
+
+        Asked ONCE, before the chain, and consumed by the two arms that have a
+        BARE statement form. Every other arm already requires a following `(`. }
+      ownNameLV := OwnNameLValueHere(name);
       { Initialize(x) / Finalize(x) — System.
 
         Both used to be no-ops (Finalize parsed-and-discarded its argument,
@@ -6290,6 +6313,7 @@ begin
         first. A user's own parameterless `procedure Exit` still shadows.
         bug-c-exit-shadows-pascal-exit. }
       else if (CaseEqual(name, 'Halt') or CaseEqual(name, 'Exit')) and
+              (not ownNameLV) and
               ((qUnit = -2) or
                ((((FindProc(name) < 0) or
                   ((Tokens[TokPos].Kind <> tkLParen) and
@@ -6309,6 +6333,7 @@ begin
         end;
       end
       else if (CaseEqual(name, 'Break') or CaseEqual(name, 'Continue')) and
+              (not ownNameLV) and
               ((qUnit = -2) or ((FindProc(name) < 0) and (FindSym(name) < 0))) then
       begin
         { Break / Continue: bare soft-keyword statements.
@@ -7453,10 +7478,7 @@ begin
           node := GenMakeSeq(node, GenMakeSeq(valTmpAssign, -1));
         end;
       end
-      else if (CurProc >= 0) and Procs[CurProc].IsFunc and
-              (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
-              ((name = Procs[CurProc].Name) or
-               CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
+      else if OwnNameLValueHere(name) then
       begin
         Next;
         { `FuncName := `, `FuncName.field := `, `FuncName[i] := `, `FuncName^ := `
