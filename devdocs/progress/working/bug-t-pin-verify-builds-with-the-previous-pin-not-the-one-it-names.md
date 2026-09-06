@@ -7,7 +7,8 @@ found: 2026-09-02
 found-by: claude-T
 owner: frank-subcoord
 blocked-by: []
-summary: "REFUSAL HALF LANDED 2026-09-06; the structural half is open. verify_pin() does clone.checkout(<the pinned TREE>), and a pin commit is always a DESCENDANT of the tree it pins, so the checked-out stable_linux_amd64 is the PREVIOUS pin: every $(PXX_STABLE) job built with v(N-1) while the verdict was filed under vN. testmgr had recorded the right answer in report['pin'] the whole time and nothing compared it. It is compared now -- a mismatch publishes NOTHING and prints the tree, the pin COMMIT and the gap. So pin verify now produces a GAP rather than a fiction, and WILL PUBLISH NOTHING until the structural half lands. WHAT REMAINS, with the blocker each route actually has: option 1 (restore the artefacts from the pin commit) leaves the worktree dirty for clone_head_back's plain `git checkout <branch>`; option 2 (verify at the pin COMMIT) re-keys the archive row and breaks the pin.log x tstate join. Neither is a one-liner and both need the join in hand. Helpers landed and tested: pin_version_str, pinned_tree_for, pin_commit_for."
+summary: "FIXED 2026-09-06, fixture-tested, ONE STEP UNCONFIRMED: no live pin verify has run yet, because seven's daemon holds code from 09-05 and only a restart makes this live. verify_pin checked out the pinned TREE, and a pin commit is always a DESCENDANT of the tree it pins, so stable_linux_amd64 came back holding v(N-1): every $(PXX_STABLE) job built with the PREVIOUS pin while the verdict was filed under vN. MEASURED, not reasoned -- VERSION at the pinned tree is exactly N-1 for all nine pins v399..v407. THE FIX (option 1): restore stable_linux_amd64 from the pin COMMIT after checking out the tree, then clean that dirt with `git checkout HEAD -- stable_linux_amd64` before clone_head_back, keeping clone_head_back strict. Option 2 was argued down: re-keying the row to the pin commit breaks trackt.read_pin_log's join on the tree. BACKSTOP: report['pin'] is compared against the version being published and a mismatch publishes NOTHING, so a failed restore degrades to a gap rather than a wrong record. 24 guard rows in twatch_pin_identity_devtest.py on a fixture repo shaped like a real pin, including the defect reproduced and a wedge control. THE WEDGE IS CONDITIONAL, found by that control failing: git refuses the branch checkout only when the tip's artefacts DIFFER from the restored ones, so verifying the current pin usually would not have wedged and verifying an overtaken one would."
+
 
 ---
 
@@ -311,3 +312,51 @@ And option 2 is now argued down rather than merely ranked second: re-keying the
 archive row to the pin COMMIT breaks `trackt.read_pin_log`'s join on the tree,
 which is a query that stays correct-looking, exhaustive and false — one word to
 write and a wrong answer nobody sees. **Option 1 is the route.**
+
+## Fixed 2026-09-06 — option 1, with the wedge measured rather than assumed
+
+`verify_pin` now restores the pinned artefacts from the pin COMMIT after
+checking out the tree, and cleans that dirt before `clone_head_back`:
+
+```
+clone.checkout(sha)                                  # the pinned TREE
+git checkout <pin commit> -- stable_linux_amd64      # ...make it vN's artefacts
+<run the tier>
+git checkout HEAD -- stable_linux_amd64              # our own dirt, only ours
+clone_head_back(clone)                               # stays a plain checkout
+```
+
+`HEAD --`, never bare `--`: the restore writes the index too, and bare `--`
+restores *from* the index, which would keep exactly what we are removing.
+`clone_head_back` stays strict on purpose — a forceful one would discard state
+from any cause, and a wedge we can diagnose beats state silently thrown away.
+
+**The wedge is conditional, and the guard's own control is what established
+that.** The row asserting "without the cleanup, checking the branch back out
+FAILS" went RED on its first run: git refuses only when the target content
+DIFFERS from the local change, and the first fixture had master's artefacts
+identical to the restored ones. So **verifying the CURRENT pin would usually not
+have wedged at all**, and verifying one that a newer pin has overtaken would —
+`pin_changed_mid_run` is a tracked condition, so that case is real. The fixture
+now carries a newer pin on the branch tip and the control fires. The cleanup is
+kept: it is correct in both cases, and "usually does not wedge" is not a
+property to rely on in the fleet's one instrument.
+
+**Guard:** `tools/twatch_pin_identity_devtest.py`, 24 rows, auto-enrolled by
+`tools-devtest`'s `tools/*devtest*.py` glob. It builds a fixture repo shaped
+like a real pin (base → tree T → pin commit as T's child → a newer pin), and
+**reproduces the defect** before testing the fix: at the pinned tree, `VERSION`
+is the previous pin. An earlier draft drove `verify_pin` with a clone pointing
+at the real checkout and so ran `git checkout` against the actual working tree;
+it restored cleanly, which is the bad luck. It now uses the fixture and asserts
+the real checkout is untouched.
+
+### What is NOT yet established
+
+**No live pin verify has run with this.** Seven's daemon is executing twatch.py
+from 2026-09-05 (`tools/twatch_live_code.py --host seven`), so none of this is
+live until a restart. The first correct row is what closes this ticket:
+`twatch: pin verify — restored stable_linux_amd64 from the pin commit …` in the
+daemon log, followed by a published pin-verify row whose `pin` matches the
+version it is filed under. Until then the backstop means the failure mode is a
+missing row, not a wrong one.

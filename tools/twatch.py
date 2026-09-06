@@ -5825,6 +5825,10 @@ def idle_phase(st, tested, mid_tier, deep_tier):
 # Verifying the pin is therefore NOT the same work as testing HEAD, and it is
 # scheduled ahead of idle depth on HEAD.
 PIN_LOG_REL = "stable_linux_amd64/default/pin.log"
+# The whole pinned-artefact subtree: the binary, VERSION, last.sha256 and the
+# frozen builtin/. Restored as ONE path so a partial restore cannot leave a
+# binary from one pin beside a VERSION from another.
+PIN_ARTEFACT_REL = "stable_linux_amd64"
 
 
 def pinned_ref(clone):
@@ -6405,8 +6409,58 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
           "builds on" % (ver, sha[:12], tier), flush=True)
     set_phase(clone, host, "pin-verify", sha=sha[:12], tier=tier, pin=ver)
     clone.checkout(sha)
+    # PUT THE PIN'S OWN ARTEFACTS IN PLACE BEFORE MEASURING IT.
+    #
+    # `sha` is the pinned TREE, and a pin commit is a DESCENDANT of the tree it
+    # pins -- you cut at T, then commit the binary as a child of T. So the
+    # checkout brings back stable_linux_amd64 as it was at T, holding v(N-1).
+    # MEASURED rather than reasoned: VERSION at the pinned tree is exactly N-1
+    # for all nine pins v399..v407, so this is structural and there is no case
+    # where it happens not to bite.
+    #
+    # Restoring from the pin COMMIT is the route that keeps the run keyed to the
+    # TREE. Verifying at the pin commit instead is one word and re-keys the
+    # archive row, which breaks trackt.read_pin_log's join on the tree -- a
+    # query that stays correct-looking, exhaustive and false.
+    restored = False
+    pin_commit = pin_commit_for(clone, ver, sha)
+    if pin_commit:
+        try:
+            sh(["git", "checkout", pin_commit, "--", PIN_ARTEFACT_REL],
+               cwd=clone.path)
+            restored = True
+            print("twatch: pin verify — restored %s from the pin commit %s, so "
+                  "$(PXX_STABLE) is %s and not the pin before it"
+                  % (PIN_ARTEFACT_REL, pin_commit[:12], ver), flush=True)
+        except (RuntimeError, subprocess.SubprocessError, OSError) as e:
+            # Not fatal here: the identity check below is the backstop and will
+            # refuse to publish. Saying so is what keeps that refusal readable
+            # rather than mysterious.
+            print("twatch: pin verify — could NOT restore %s from %s (%s); the "
+                  "identity check will refuse to publish"
+                  % (PIN_ARTEFACT_REL, pin_commit[:12], e), flush=True)
+    else:
+        print("twatch: pin verify — could NOT resolve the pin commit for %s, so "
+              "the artefacts stay as the tree left them; the identity check "
+              "will refuse to publish" % ver, flush=True)
     report, rc = run_gate(clone, tier, abort_check=abort_check,
                           resume_key=(sha, tier))
+    # CLEAN OUR OWN DIRT, AND ONLY OURS, BEFORE HANDING THE WORKTREE BACK.
+    # clone_head_back is a plain `git checkout --quiet <branch>`, which git
+    # REFUSES when it would overwrite local changes -- so leaving this behind
+    # would WEDGE the daemon rather than fail a run. Deliberately not making
+    # clone_head_back forceful instead: it would then discard state from ANY
+    # cause, and a wedge we can diagnose beats state silently thrown away.
+    # `HEAD --`, never bare `--`: the latter restores from the INDEX, and the
+    # restore above just wrote the index.
+    if restored:
+        try:
+            sh(["git", "checkout", "HEAD", "--", PIN_ARTEFACT_REL],
+               cwd=clone.path)
+        except (RuntimeError, subprocess.SubprocessError, OSError) as e:
+            print("twatch: pin verify — could not clean %s (%s); "
+                  "clone_head_back may refuse" % (PIN_ARTEFACT_REL, e),
+                  flush=True)
     clone_head_back(clone)
     if rc == "aborted":
         # "will resume" was aspirational until shape 2: the run was torn down
