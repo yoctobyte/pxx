@@ -17049,9 +17049,28 @@ begin
               Syms[ASTIVal[node]].IsArray;
     Exit;
   end;
-  { An index or a deref has already selected an ELEMENT; a FIELD has not. }
-  if ASTKind[node] <> AN_FIELD then Exit;
-  Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+  { An INDEX has already selected an element; a FIELD has not. }
+  if ASTKind[node] = AN_FIELD then
+  begin
+    Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+    Exit;
+  end;
+  { NOR HAS A DEREF, when the POINTEE is the array: `p^` on `^array[0..2] of T`
+    or `^TDyn` denotes the whole array, not an element -- the element is `p^[i]`,
+    which is an AN_INDEX and falls out above. This arm was missing while the
+    sentence at the top of this function said "this lvalue node", and the third
+    spelling is the one the two fixes that built this function did not reach.
+
+    MEASURED INERT TODAY, and recorded as inert rather than credited: the sole
+    caller is the `X := nil` lowering in ir.inc, and `p^ := nil` through a
+    pointer to a dynamic array of records answers `len=0` byte-for-byte with fpc
+    3.2.2 both with a live handle and with an already-nil one -- the shapes that
+    produced the SIGSEGV this function was written for. Another arm is catching
+    it. The arm is here because the QUESTION has a right answer for a deref and
+    this reader is the one that owns the question, not because a row moved.
+    refactor-p-is-this-node-a-whole-array-is-answered-in-four-places-with-four-lists }
+  if ASTKind[node] <> AN_DEREF then Exit;
+  Result := DerefPtrArrayShape(node);
 end;
 
 

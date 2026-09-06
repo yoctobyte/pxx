@@ -190,7 +190,13 @@ begin
       begin
         si := Integer(ASTIVal[node]);
         if (si < 0) or (si >= SymCount) then Exit;
-        if Syms[si].IsArray then Exit;          { the kind is the ELEMENT's }
+        { THE KIND IS THE ELEMENT'S, so this side cannot be typed. Asked through
+          ASTNodeIsWholeArray rather than `Syms[si].IsArray` inline: that reader
+          owns the question "is this lvalue a whole array", answers it for the
+          FIELD and DEREF spellings too, and for AN_IDENT it IS this test.
+          Same answer, one name.
+          refactor-p-is-this-node-a-whole-array-is-answered-in-four-places-with-four-lists }
+        if ASTNodeIsWholeArray(node) then Exit;
         if Syms[si].IsRef then Exit;            { by-ref/untyped: the slot holds an address }
         if SymProcSig[si] >= 0 then Exit;       { procvar: the kind is the RESULT's }
         if SymCellPtr[si] >= 0 then Exit;       { captured cell: one indirection away }
