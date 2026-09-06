@@ -143,10 +143,21 @@ value — the operator prints it. There is no release-then-copy here the way
 means for the record.
 
 **Both parameters cross by reference, including for a small record.** `var` is
-by-ref, and a `const` record parameter is forced by-ref in `ParseParamList`
-(by value it would truncate to one qword). So passing two addresses is correct
-for a 4-byte record as well as a large one — which mattered, because the
-size-based by-ref rule alone would not have covered it.
+by-ref, and a `const` record parameter is forced by-ref too (by value it would
+truncate to one qword). So passing two addresses is correct for a 4-byte record
+as well as a large one — which mattered, because the size-based by-ref rule
+alone would not have covered it.
+
+The rule is in `pasparser_proc.inc`, found by grepping for
+``const` record param is passed by reference`` — deep inside `ParseSubroutine`.
+**This paragraph cited `ParseParamList` when it landed in `10d7a345a`, and no
+such routine has ever existed in this tree.** I invented a plausible name for a
+rule I had actually read, an hour after relaying a peer's correction of exactly
+that failure (`ArgListHasBracketElem`, also cited in two comments and defined
+nowhere). `tools/ghost_names.py` cannot catch this one: it reports names that
+were once defined and are now gone, and a name that never existed leaves no
+trace for it to find. The only instrument that works is grepping your own
+citations for a definition — which is what turned it up here.
 
 ### Why AddRef did not land with it
 

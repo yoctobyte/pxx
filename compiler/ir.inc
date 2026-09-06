@@ -8086,9 +8086,13 @@ function IRRecCopyOpCall(recId, dstAddr, srcAddr: Integer): Integer;
      feature-pascal-management-operators-copy-and-addref
 
   Both parameters cross by reference and this passes two ADDRESSES: `var` is
-  by-ref, and a `const` record parameter is forced by-ref too (see
-  ParseParamList -- by value it would truncate to one qword), so this holds for
-  a small record as well as a large one. }
+  by-ref, and a `const` record parameter is forced by-ref too -- by value it
+  would truncate to one qword, dropping every field but the first -- so this
+  holds for a small record as well as a large one. The rule lives in
+  pasparser_proc.inc; find it by grepping for `const` record param is passed by
+  reference`, NOT by a routine name: it sits deep inside ParseSubroutine, and
+  the name this comment first carried (`ParseParamList`) is one that has never
+  existed in this tree. }
 var cpIdx, a0, a1, callN: Integer;
 begin
   IRRecCopyOpCall := -1;
