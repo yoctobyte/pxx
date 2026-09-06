@@ -14541,3 +14541,84 @@ is the `normalise-dont-special-case` failure with a passing test on top.
 that i386, arm32 and aarch64 *do* refuse a call-argument-count mismatch and x86-64 does not. So
 this same source is plausibly a hard error on three targets and a wrong answer on the one everyone
 measures on — the native-only blindness CLAUDE.md names, arriving through a second door.
+
+## A CONTROL A TICKET *CITES* IS A CLAIM; A CONTROL YOUR TEST FILE *ASSERTS* IS A MEASUREMENT — and only the second one can go red
+
+frankA's phrasing, frankB's incident, 2026-09-06 (`1aee0f035`, procedural-type group).
+
+A p30 ticket stated that each of its three shapes "has a DIRECT-call control that passes", and named
+`MkOuter()(41)` among them. **That control was refused too.** The ticket had asserted its own control
+in prose, where nothing runs it. frankB put the fix in `BuildIndirectCallAST` — where the ticket's
+repro lives — **and it went green**: the repro passed and the ticket's own cited control stayed red.
+The arm belonged in `ApplyCallResultPtrSuffix`, the single materialisation point from which the
+direct and indirect spellings are fixed together.
+
+> **A sentence in a ticket saying "X passes" is a claim with a date on it, and it decays exactly
+> like a sha or a line number.** The version of that sentence that cannot decay is a row in a test
+> file. When a ticket hands you a control, **run it before you use it to bound your fix** — it is
+> the thing telling you where the fix goes, and if it is wrong you will place the fix in the file
+> where the symptom is instead of the file where the cause is, and the suite will agree with you.
+
+This is the `root-cause-over-microfix` failure with a green on top, and the tell is specific: **a fix
+that greens the repro while leaving a control from the same ticket red is in the wrong file**, not
+incomplete.
+
+### The remedy in a ticket outlives the diagnosis, because nobody re-derives it
+
+Same session, second incident, and it is about ticket-writing rather than code. A p45 ticket
+prescribed MOVING the node-keyed "is this a procedural slot" fact from `NodeProcSlotSig` in `ir.inc`
+into `symtab.inc`. **`PasNodeProcSig` already existed in `pasparser_call.inc`** — in a file the
+statement parser already includes, written for exactly this class, its own note saying the question
+"was answered SPELLING BY SPELLING and only the first spelling was ever taught".
+
+frankB had written the `ir.inc` helper an hour earlier. **HAVING JUST BUILT A TOOL IS WHAT STOPS YOU
+LOOKING FOR THE ONE ALREADY THERE** — the freshly-built thing is the one in your head, and it
+answers, so the search never starts. (The seat-level version of *"a written answer, present and
+unconsulted"*.)
+
+> **A WRONG REMEDY IN A TICKET IS MORE DURABLE THAN A WRONG DIAGNOSIS.** A reader re-derives a
+> diagnosis — that is what reproducing means — and takes the remedy on trust, because the remedy is
+> the part that reads as already-decided work. So the cost was not the move that did not happen; it
+> was that the ticket sent the next reader into **two files the change does not belong in**.
+> When you write "the fix is to move X into Y", grep for X's siblings first, and say what you
+> grepped for.
+
+### A brace error surfaces as a NAME error, in a file you did not touch, thousands of lines away
+
+frankB's extraction cut at what read like the end of a recognition block; the third arm was
+`else begin`, whose `begin` closed ~80 lines lower. The helper had an unclosed `begin`, and the
+compiler reported **`undefined variable (NestStrOff)` in `pasparser_stmt.inc`** — a file frankB had
+not touched — naming a function declared **2600 lines below** the edit in the file frankB *had*
+touched.
+
+**PXX prescans headers.** A desynced brace ends the prescan early, so everything declared after the
+cut is simply absent, and the error surfaces in **the first file that USES something declared after
+it**. The diagnostic is therefore about a consequence two files and two thousand lines from the
+cause, and it is not wrong — it is correct about the tree it was given.
+
+> **Choose an extraction boundary by counting `begin`/`end` over the comment-stripped range, not by
+> reading where a block "looks like" it ends.** And when an edit to file A produces an undefined-name
+> error in file B, suspect the PRESCAN before suspecting the name: ask what the last thing
+> successfully declared was, not what the missing thing is.
+
+### Three more closed-world `Kind =` sites, and one had just become live
+
+Sites four, five and six of *"an `or` chain over `Kind = ...` constants is a closed-world claim
+wearing an open-world shape"*, all in `1aee0f035`, all now routed through `ASTNodeIsCall` — whose own
+comment says it exists because that test was copied five times and the copies drifted. **These were
+three of the copies.**
+
+- `ir.inc`'s whole-static-array-from-a-call assign arm knew `AN_CALL` and `AN_VIRTUAL_CALL` of five
+  kinds, so `b := fq(4)` took the SCALAR store and printed `4310400 0 0` against fpc's
+  `104 204 304` — silently, on pin v404 too.
+- Both postfix index arms in `pasparser_lval.inc` excluded `AN_CALL_IND` *"on purpose — its IVal is
+  a signature, not a Procs[] index"*, which is false and which `BuildIndirectCallAST` contradicts
+  **in the same file**.
+
+**The new part is the TIMING, and it is the thing to carry.** The exclusion's gate is
+`ProcRetIsDynArray or ProcRetFixedArrBytes > 0`, which was false for every `AN_CALL_IND` while those
+columns were empty. **So a comment that had been false since the day it was written started costing
+something the moment an unrelated hole was closed.** Read that with *"a hole is invisible until
+someone widens a guard into it"*: **the population of latent wrong comments is not static, and
+closing a gap can promote several of them at once.** After landing a change that fills in a column
+or enables a path, grep for the guards that were reading that column as always-empty.
