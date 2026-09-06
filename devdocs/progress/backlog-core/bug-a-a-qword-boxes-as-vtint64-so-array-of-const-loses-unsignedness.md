@@ -6,7 +6,7 @@ status: backlog
 owner: ""
 created: 2026-09-04
 blocked-by: []
-summary: "A `QWord` passed to `array of const` boxes as `vtInt64` (16); FPC boxes the same source as `vtQWord` (17). Measured side by side. `vtQWord` IS declared in builtinheap.pas and appears in EXACTLY ONE place in the whole tree -- its own declaration: zero producers, zero readers. So any consumer that dispatches on the tag the way FPC's does takes the signed branch and renders a value >= 2^63 negative. NOT fixable inside a quick gate: the emit change lands on four backend asm-text readers (x86-64/i386/arm32/riscv32) that test `<> vtInteger and <> vtInt64`, and three of those are invisible on this host."
+summary: "A `QWord` passed to `array of const` boxes as `vtInt64` (16); FPC boxes the same source as `vtQWord` (17). Measured side by side. `vtQWord` IS declared in builtinheap.pas and appears in EXACTLY ONE place in the whole tree -- its own declaration: zero producers, zero readers. So any consumer that dispatches on the tag the way FPC's does takes the signed branch and renders a value >= 2^63 negative. NOT fixable inside a quick gate: the emit change lands on four backend asm-text readers (x86-64/i386/arm32/riscv32) that test `<> vtInteger and <> vtInt64`, and three of those are invisible on this host. SUPERSEDED 2026-09-06 (frankA) AND THE PREMISE IS FALSE: d210325a6 landed the EMIT half, so there has been a producer and no readers since -- a WORSE state than filed, because an unlisted tag falls to a case `else` and rendered the EMPTY STRING rather than a signed value. That is test-core#test_libwriteln_parity, red from d210325a6 until f4b288b16, which adds the vtQWord arm to all four lib readers (libwriteln VarRecToText; sysutils FmtArgStr/FmtArgInt/FmtArgFloat -- %d stays SIGNED on purpose, matching fpc, measured). THE ASM-TEXT BLOCKER IS CENSUSED AND EMPTY: it is SIX readers not four (aarch64 and xtensa postdate this ticket) and NONE is reachable -- all 363 EmitAsm* call sites parsed by bracket matching, every hole argument an Integer literal, constant or field read. They fail LOUDLY if ever reached, never mis-render, so they are a latent trap and are deliberately NOT changed. Beware the obvious census: a line-oriented grep sees only 237 of the 363 sites because 126 calls span lines, and reports nothing for them exactly as it does for a clean site."
 ---
 
 # A QWord boxes as vtInt64, so `array of const` loses unsignedness
@@ -98,3 +98,89 @@ begin
   q := 3; Dump([q]);     { pxx: 16    fpc: 17 }
 end.
 ```
+
+## RESOLVED IN TWO HALVES, AND THE READER CENSUS THIS TICKET ASKED FOR IS DONE
+
+**2026-09-06 (frankA), on binary `5375cb2828e8`.**
+
+### The emit half landed first, and broke the reader half
+
+`d210325a6` made the compiler emit `vtQWord` (17) — `ir.inc`, the `tyUInt64` /
+`tyNativeUInt`-on-64-bit arm. So this ticket's central claim, *"zero producers,
+zero readers"*, has been false since that commit. There was a producer and no
+reader, which is a worse state than the one filed here: every `array of const`
+reader dispatches with a `case` over the tag, and an unlisted tag falls to the
+`else`. `LibWriteLn(['x=', q])` printed **nothing at all** for a QWord, where
+the filed defect was merely rendering signed. That is
+`test-core#test_libwriteln_parity`, red from `d210325a6` until `f4b288b16`.
+
+**The divergence moved from "renders signed" to "renders nothing" between the
+two fixes, and this ticket's summary described neither.**
+
+### The reader half: FOUR readers, and the ticket had found one class of them
+
+`f4b288b16` adds the `vtQWord` arm to all four:
+
+| reader | was | now |
+| --- | --- | --- |
+| `libwriteln.pas` `VarRecToText` | `''` | `UIntToStr` |
+| `sysutils.pas` `FmtArgStr` (`%s`) | `''` | `UIntToStr` |
+| `sysutils.pas` `FmtArgInt` (`%d`) | `0` | `Int64()` — see below |
+| `sysutils.pas` `FmtArgFloat` (`%f`) | `0` | `Double` |
+
+`%d` stays SIGNED deliberately and the comment carries the measurement, because
+it looks like a bug: at `q = 18000000000000000000`, fpc 3.2.2 and pxx both give
+`Format('%d')` = `-446744073709551616` and `Format('%u')` = the full value. `%d`
+is the signed conversion. Making that arm unsigned would diverge from the oracle.
+
+### The asm-text readers: CENSUSED, and they are unreachable today
+
+This ticket's stated blocker was that the emit change *"lands on four backend
+asm-text readers … and three of those are invisible on this host."* Measured:
+
+**It is SIX readers, not four** — `asmtext.inc:1209`, `asmtext_386.inc:681`,
+`asmtext_arm32.inc:544`, `asmtext_rv32.inc:506`, `asmtext_a64.inc:905`,
+`asmtext_xtensa.inc:419`. All still test `(VType <> vtInteger) and (VType <>
+vtInt64)`. The ticket's count predates aarch64 and xtensa.
+
+**And none of them can be reached today.** Census over every `EmitAsm*` call
+site in `compiler/**`: **363 sites**, each parsed by matching its bracket rather
+than by line, and every hole argument is an `Integer` literal, an `Integer`
+constant (`BSS_*`, `HEAP_*`, `VT_PROMO_*`) or an `Integer` field read
+(`Syms[i].Offset`, `Strs[i].Offset`, `Strs[i].Len`, `LabelPositions[l]`). No
+`QWord`, `NativeUInt`, `PtrUInt` or `Int64` argument exists at any of them.
+
+**The first cut of that census was wrong and the correction is the useful part.**
+A single-line `grep` for `EmitAsm*([...]` sees only 237 of the 363 sites —
+**126 calls span lines**, and a line-oriented instrument reports nothing for
+them, exactly as it reports nothing for a site with no wide argument. Both look
+like "clean". The count that matters is not the hits, it is the 363.
+
+The bracket-matching splitter is imperfect in one direction only: it mis-splits a
+few string literals containing `{ }` comments, so they appear in the candidate
+list as if they were arguments. That **over**-reports candidates and cannot
+**under**-report them, so the conclusion survives the flaw.
+
+**So these six are a LATENT TRAP, not a live defect, and they fail LOUDLY.**
+Reached, they call `Error('… missing integer hole value')` — for a value that is
+an integer. They never mis-render. `tyNativeUInt` only becomes `vtQWord` where
+`TARGET_PTR_SIZE = 8` (frankS's narrowing), so the 32-bit backends cannot
+inherit it through that door at all; a literal `QWord` in an asm-text hole is
+the only way in, and nothing writes one.
+
+**Not fixed here, deliberately.** Adding a `vtQWord` arm to six readers no
+caller can reach is a change with no measured need, and
+[[a-guard-you-add-must-say-whether-its-necessity-was-shown]] applies. What is
+worth having is this paragraph, so the next person to widen the tag set knows
+the readers exist, that there are six, and that the census was of call sites
+rather than of grep hits.
+
+### What is inert under the pin, stated precisely
+
+Two true statements about different things, and a pin manifest wants the second
+(frankS's distinction, and it corrects the looser line in `f4b288b16`):
+
+- The lib/rtl **source** is live for anything built from the tree.
+- The new **arm never fires** under `$(PXX_STABLE)`, because the pinned compiler
+  does not emit tag 17. Under the pin these readers see `vtInt64` exactly as
+  before.
