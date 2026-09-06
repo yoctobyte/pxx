@@ -49,3 +49,6 @@ expect_same: MISMATCH [test_interface_containers_ts26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-core#src:test/test_interface_containers.pas@2` passes at 69fff6d18e43 (tier native); it was red at 918842a5fd43. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
