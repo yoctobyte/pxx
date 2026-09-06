@@ -3,12 +3,12 @@ slug: decide-where-the-string-delete-and-insert-routines-should-live
 track: U
 prio: 35
 type: decide
-status: backlog
+status: resolved
 created: 2026-09-06
 found-by: frankD
-owner: ""
+owner: "frankH"
 blocked-by: []
-summary: "lib/rtl/sysutils.pas declares `Delete(var s: AnsiString; index, count)` and `Insert(const src: AnsiString; var dst: AnsiString; index)` -- two routines fpc keeps in `system` and not in sysutils -- and both bodies are byte-for-byte what the __pxxStrDelete/__pxxStrInsert intrinsic already does. Their only effect is to shadow the intrinsic, which cost dyn-array Delete/Insert for every program that uses sysutils (fixed narrowly at f5ad23c32; the non-bare spellings are still closed). Deleting them removes the cause at the source -- but the builtin unit is not compiled for ESP, so on ESP the string spelling would go from working to `Delete: string helper unavailable`. The fork is which of those two costs we keep, and it needs a Track B/S reader, not a P one."
+summary: "lib/rtl/sysutils.pas declares `Delete(var s: AnsiString; index, count)` and `Insert(const src: AnsiString; var dst: AnsiString; index)` -- two routines fpc keeps in `system` and not in sysutils -- and both bodies are byte-for-byte what the __pxxStrDelete/__pxxStrInsert intrinsic already does. Their only effect is to shadow the intrinsic, which cost dyn-array Delete/Insert for every program that uses sysutils (narrowed at f5ad23c32). RESOLVED SAME DAY AND THERE WAS NO FORK: the ESP cost I declined to trade against does not exist. frankH measured it at HEAD -- on the bare ESP profile `uses sysutils` does not compile AT ALL (sysutils drags lib/rtl/strings.pas, whose UpCase needs the same builtin unit), so nothing on ESP can reach these declarations, and the posix ESP profile HAS the builtin unit so the intrinsic works there. Removal owned by frankH."
 ---
 
 # Where should the string Delete and Insert live?
@@ -74,3 +74,48 @@ diverge — dyn-array `Copy(a)`, `Copy(a,i,n)` and `Concat(a,a)` all match fpc
 with sysutils in scope, because they resolve on a different path in the
 expression parser. Same duplication, no observable cost, so they are not part
 of this fork; they would only come along for tidiness.
+
+## RESOLVED 2026-09-06 — the fork was not a fork
+
+frankH measured the premise instead of reasoning about it, and it is FALSE at
+HEAD. `compiler/pascal26`, `--target=xtensa --esp-profile=bare`:
+
+```
+uses sysutils; begin end.        -> UpCase: builtin helper unavailable
+                                    (needs the builtin unit; not on ESP)
+                                    in lib/rtl/strings.pas:146
+Delete(s, 1, 6);  (no sysutils)  -> Delete: string helper unavailable
+```
+
+The first line is the discriminator: sysutils drags `lib/rtl/strings.pas`,
+whose `UpCase` needs the same builtin unit, so **`uses sysutils` fails on bare
+ESP before it can offer anybody a `Delete`.** Removing the declarations moves
+bare ESP from "cannot compile `uses sysutils`" to "cannot compile `uses
+sysutils`". The other ESP profile (`--platform=posix`) HAS the builtin unit, so
+the intrinsic works there and the declaration carries nothing;
+`EspBareBoot` is the sole exclusion in `pasparser_prog.inc`, so those two
+profiles are the whole ESP population.
+
+**What I got wrong, stated plainly, because the shape is reusable.** Declining
+the placement half inside a P bug fix was right — it is a B/S trade and I would
+have guessed the S half. Writing down the CONSEQUENCE as though it were
+established was not. `TargetIsEspClass` blocks the builtin unit, therefore the
+string spelling breaks on ESP: every step of that is true and the conclusion is
+still false, because it never asks whether anything on ESP can reach the
+declaration in the first place. **A cost inherited from a code path is not a
+cost until something reaches that path**, and the reaching is the cheap half to
+measure — two compiles. I reasoned about the consequence and routed the
+reasoning; the measurement collapsed it in under an hour.
+
+Third instance of the same cause, which is what settles that it is the
+placement and not the predicate: `pasparser_expr.inc:5045` and
+`pyparser.inc:47148` both carry a comment about `TStrings.SetValueFromIndex`'s
+bare `Delete(Index)` binding `sysutils.Delete`, which broke `lib/rtl/classes.pas`
+under NilPy while it compiled clean under Pascal
+(`bug-a-the-import-escape-hatch-fails-on-classes-pas`), and `classes.pas:805`
+and `:910` still carry `Self.` with the comment *"Delete is also a builtin"* —
+workarounds for this declaration.
+
+Option A, taken by frankH. The parser narrowing at f5ad23c32 stays and is
+independent: it fixes the bare-name spelling for any USER-declared shadow,
+which removing our own declaration does not address.
