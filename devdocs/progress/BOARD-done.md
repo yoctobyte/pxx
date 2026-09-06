@@ -3461,6 +3461,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-xtensa-test-signal-default-revert-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_default_revert_b336.pas at 370170edaffe in step 1/2, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 | regression-test-xtensa-test-signal-handler-callback-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_handler_callback_b336.pas at 370170edaffe in step 1/3, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-zlib-conflicting-typedef-gz-statep | A | 70 | regression | summary | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |

@@ -27367,8 +27367,45 @@ test-zlib: $(COMPILER)
 	  $(ZLIB_SRC)/gzread.c $(ZLIB_SRC)/gzwrite.c $(ZLIB_SRC)/gzclose.c \
 	  $(ZLIB_SRC)/test/example.c || exit 1; \
 	( cd $(TESTTMP) && ./pxx_zlib_oracle > $(TESTTMP)/pxx_zlib_oracle.txt 2>&1 ); \
+	echo "preparing a VALID unity translation unit ..."; \
+	: '  gzguts.h TYPEDEFS AN ANONYMOUS STRUCT AND HAS NO INCLUDE GUARD, and'; \
+	: '  FIVE files here include it -- zutil.c (as `#  include`, with spaces,'; \
+	: '  which a naive grep for `#include "gzguts.h"` misses) plus the four'; \
+	: '  gz*.c. Real zlib compiles each separately and never sees the repeat.'; \
+	: '  This runner is a UNITY build, so `typedef gz_state FAR *gz_statep` was'; \
+	: '  parsed five times -- and an anonymous struct has no tag to dedupe on,'; \
+	: '  so each pass is a DISTINCT type in C and the repeat is invalid.'; \
+	: '  GCC REJECTS THE UNTAGGED UNITY TU (13 conflicting-type errors) and'; \
+	: '  pxx reported the same thing on the same line. THE COMPILER IS RIGHT'; \
+	: '  AND THIS FILE WAS INVALID C ALL ALONG; the redefinition check added'; \
+	: '  2026-09-05 merely started saying so. Do NOT relax that check to make'; \
+	: '  this row green -- that buys a green by accepting what the very oracle'; \
+	: '  this test diffs against refuses. (Measured: relaxing it to compare'; \
+	: '  record SHAPE rather than id does make this compile, and is wrong.)'; \
+	: '  THE REPAIR IS TO GIVE THE STRUCT A TAG, which is what makes a repeated'; \
+	: '  typedef legal C -- same tag, same type. gcc ACCEPTS the tagged TU.'; \
+	: '  A guard on the header instead would ALSO stop the redefinition and is'; \
+	: '  the obvious move; it breaks the `#undef COPY` workaround below, which'; \
+	: '  DEPENDS on gzguts.h being re-included to restore COPY after inflate.h'; \
+	: '  has been parsed. Measured: gzread.c then fails on `state->how == COPY`.'; \
+	: '  The tagged copies go in their own dir because a quoted include searches'; \
+	: '  the includer own directory before -I (measured, gcc and pxx alike), so'; \
+	: '  the five .c files must sit BESIDE the tagged header to see it; every'; \
+	: '  other zlib header still resolves out of $(ZLIB_SRC).'; \
+	rm -rf $(TESTTMP)/zlibtag; mkdir -p $(TESTTMP)/zlibtag; \
+	sed 's/^typedef struct {$$/typedef struct pxx_gz_state_s {/' \
+	  $(ZLIB_SRC)/gzguts.h > $(TESTTMP)/zlibtag/gzguts.h; \
+	: '  ...and BRANCH on that substitution, because a sed that silently matches'; \
+	: '  nothing (upstream reformats the typedef) would hand the compiler the'; \
+	: '  untagged header again and this row would fail for a reason nobody'; \
+	: '  reading it would connect to a missing tag. In a `;`-chained recipe an'; \
+	: '  unbranched assertion is a comment.'; \
+	tools/expect_same.sh zlib-gzguts-tagged \
+	  "$$(grep -c '^typedef struct pxx_gz_state_s {' $(TESTTMP)/zlibtag/gzguts.h)" "1" || exit 1; \
+	cp $(ZLIB_SRC)/zutil.c $(ZLIB_SRC)/gzlib.c $(ZLIB_SRC)/gzread.c \
+	   $(ZLIB_SRC)/gzwrite.c $(ZLIB_SRC)/gzclose.c $(TESTTMP)/zlibtag/; \
 	echo "compiling pxx zlib runner ..."; \
-	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(ZLIB_SRC) -I$(ZLIB_SRC)/test \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(TESTTMP)/zlibtag -I$(ZLIB_SRC) -I$(ZLIB_SRC)/test \
 	  test/zlib/runner.c $(TESTTMP)/pxx_zlib_runner || exit 1; \
 	( cd $(TESTTMP) && ./pxx_zlib_runner > $(TESTTMP)/pxx_zlib_got.txt 2>&1 ); \
 	if diff -u $(TESTTMP)/pxx_zlib_oracle.txt $(TESTTMP)/pxx_zlib_got.txt; then \
