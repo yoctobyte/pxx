@@ -340,3 +340,67 @@ harness's own key rather than in the report's rendering.
 
 **Bounds unchanged:** 5 open tickets to re-cite. The `done/` and `tstate/` citations stay as
 they are.
+
+## 2026-09-06 — THE NUMERIC KEY IS POSITIONAL AND IT DRIFTS ~25 A DAY. Measured twice, and the first reading was an inference
+
+frankuser refused the previous section's claim as stated — *"insert a job earlier and every
+later index shifts"* was **read off the shape of a numeric key, not measured**, and a numeric
+key can equally be a stable id assigned at registration. Different claims, and the second is
+how a hazard gets ranked without ever being real. Both readings now exist and they fail
+differently.
+
+**Reading 1 — the code.** `tools/testmgr.py`:
+
+```
+2913    for i, g in enumerate(groups):
+2914        jobs.append(Job(target, i, g))
+1960        self.name = "%s#%02d" % (target, index)
+```
+
+`groups` is the recipe's line-groups in recipe order (`sorted(buckets)` over the union-find
+representative, which is the lowest line index in each group). **The index is a POSITION in the
+Makefile, not a registered id and not derived from content.**
+
+**Reading 2 — the archive, which fails differently and gives a RATE.** The rdrand skip is one
+job with an unmistakable reason string, present in every `full` report from `seven`. Following
+that one job:
+
+```
+20260829   #895..#915   (52 reports)      20260902   #989..#1018  (113)
+20260830   #915..#948   (183)             20260903  #1018..#1035  (48)
+20260831   #948..#963   (149)             20260904  #1035..#1063  (68)
+20260901   #963..#989   (162)             20260905  #1090..#1113  (35)
+                                          20260906  #1113..#1132  (18)
+```
+
+> **One job. 131 distinct keys in nine days.** It moved **twenty places inside 2026-08-29
+> alone**. A `test-core#N` cited in the morning names a different job by the evening.
+
+**And the mis-attribution is in hand, not hypothesised.** `test-core#895` was the rdrand job
+on 2026-08-29. Today `--list` says:
+
+```
+test-core#895   unit   2 lines   test/cvararg_double_b83.c tools/expect_same.sh
+```
+
+**A C vararg test.** Same key, different subject, eight days apart, **no error, no gap, no
+split** — the same silent repointing this ticket already records for `@N`, in the harness's own
+key, across **4259 of 4312 rows** rather than 21.
+
+### AND THE TWO HALVES INTERACT — do not "fix" `@N` first
+
+frankuser's second point, and it inverts the obvious repair order:
+
+> **The `#src:<path>@N` rendering carries the SOURCE PATH, and that is the only thing that lets
+> a historical verdict be re-identified independently of the index.** If `@N` is retired in
+> favour of the numeric key, the archive loses its cross-check — **and the numeric key is the
+> unstable one.**
+
+So the rendering that looks like the defect is currently the only stable handle in a report.
+**Whoever does the naming work must read both halves together**: name the jobs first (as
+`test-uforth#<suite>` already does for 49 of them), and only then consider what the report
+should render. Retiring `@N` before the keys are stable would make 1091 archived reports
+unresolvable.
+
+**This is measured on `test-core`, one target, one job.** The drift rate on other targets is
+not measured and is not extrapolated here.
