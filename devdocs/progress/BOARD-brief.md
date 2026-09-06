@@ -87,7 +87,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
-- `[p 70] [T]` regression-test-pascal-conformance-shard0-6-5
+- `[p 70] [P]` regression-test-pascal-conformance-shard0-6-5
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators

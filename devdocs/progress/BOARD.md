@@ -84,7 +84,7 @@ _none_
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard0-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
@@ -1014,7 +1014,7 @@ _none_
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-pascal-conformance-shard0-6-5
+- [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]

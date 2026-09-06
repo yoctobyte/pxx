@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: T
+track: P
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 1 of 1 is `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6`. The job's own `src` (`tools/run_pascal_conformance.sh`, 1 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -46,3 +46,54 @@ test-pascal-conformance: FAILURES: tgenfunc13.pp(accepted-invalid)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGE 2026-09-06 (frank-coordinator) — ALREADY DISPOSITIONED AT HEAD; do not claim, it self-clears
+
+**The failing row is `FAIL tgenfunc13.pp — %FAIL test compiled (must be rejected)`**, visible
+in the log tail above. It was answered **before the watcher reported it** and the answer is
+already on origin.
+
+```
+tested sha      ef03a6282980
+disposition     a892cd589   test/pascal-conformance/pxx.skip  (tgenfunc13 skip line)
+merge-base --is-ancestor a892cd589 ef03a6282980   ->  FALSE
+```
+
+**The skip landed AFTER the sha that was tested**, so the tested tree genuinely lacked it
+and the RED is correct about that tree and stale about HEAD. **Nothing to implement. The
+next full tier on seven clears this row by itself** — a regression clears when a later run
+on that host passes the job, and no agent action is on that path.
+
+**Re-laned T -> P.** The Track T banner is right that the failing step named no owner; the
+row is a Pascal conformance disposition, so the lane is P for accuracy. That is bookkeeping,
+not an invitation.
+
+### Why it went red is more interesting than that it did, and it is already written up
+
+`tgenfunc13` was **REJECTED at pin v404 and is ACCEPTED at HEAD**, which reads exactly like a
+behaviour regression on a `{ %fail }` row and is the opposite. **The pin refused it because
+the generic-method header did not parse at all**, so the row was passing by accident rather
+than by rule; `1364d9542` made the header parse and removed the accident.
+
+> **A `%FAIL` row asserts that the compile is REFUSED and never WHICH refusal, so any
+> unimplemented construct anywhere in the file satisfies it — and such a row goes RED the
+> moment the unrelated gap closes. The red is a signal that a FEATURE LANDED.**
+
+The skip line is not a citation of a sibling row: the shared premise was **measured** —
+constraints on generic METHODS are parsed and DROPPED, so a contradictory pair (declared
+`<T: class>`, implemented `<T: record>`, specialized with `Integer`, which is neither)
+compiles and runs, and the repeat FPC forbids therefore produces no wrong answer and refuses
+no legal code. It carries a **re-measure trigger**: *the repeated and contradictory forms
+stop being equivalent the moment either side is enforced, and this row becomes a real FAIL
+again if constraint checking is ever added.*
+
+Full context in `devdocs/dev/debugging-playbook.md`, `## "IT PASSED AT THE PIN" AND "IT
+PASSED FOR THE REASON IT NAMES" ARE DIFFERENT CLAIMS`, and in the same pass that removed two
+other skips rather than adding any (`tgenfunc9`, `tgenfunc3`) — families now `tgeneric*`
+75/0 and `tgenfunc*` 6/0.
+
+**This is the second auto-filed red in six hours whose answer was already on origin when the
+ticket was written.** The watcher tags a callback to the sha it tested and says so in its own
+banner (*"origin/master has advanced 19 commit(s) since this sha — re-verify at current HEAD
+before acting"*). **That banner is the instrument; read it before the log tail.** Both times
+the log tail was the compelling part and the banner was the true one.
