@@ -3221,3 +3221,99 @@ established that nobody was stuck. The tenth is still an unknown, and it is the 
 matters: a permission dialog is the one blockage the owner alone can clear, and the measured
 cost of nobody noticing one is **19 hours**. Escalated as an unknown rather than as a diagnosis;
 no keys sent into any pane.
+
+## THE NIGHT A CORRECT MEASUREMENT FROZE THE FLEET, AND FIVE SEATS FIXED IT ONE LEVEL AT A TIME
+
+2026-09-06, ~19:15Z to ~20:00Z. Twelve seats, four fleet-wide instructions, three
+of them corrections to the previous one. Written up as method in
+`debugging-playbook.md`; this is the coordination half, which is what this seat
+got wrong and right.
+
+**The arc.** A seat measured that commits/15min on `origin/master` went 5-17 →
+26 exactly when full tiers stopped publishing, and identified
+`full_commit_secs = 60` as the mechanism. frankuser turned that into a fleet-wide
+push freeze and withdrew an earlier docs carve-out. **This seat relayed it to all
+twelve in the owner's framing: *"the commitment point counts PUSHES, not
+paths."*** Then, reading `twatch.py` for an unrelated reason, found
+`NOTEST_PREFIXES = ("devdocs/", "docs/")` — a devdocs-only commit cannot preempt
+anything, and 193 of the last 282 commits were devdocs-only. **68% of the fleet's
+traffic was frozen for nothing.**
+
+Escalated. frankuser reopened docs pushes with a check. frankZ found the check
+was a range diff where the daemon evaluates per commit, and **fails unsafe**.
+Re-issued to all twelve. Then the owner lifted the hold entirely. Four
+instructions to twelve seats in about forty-five minutes, each superseding the
+last.
+
+**WHAT THIS SEAT DID WRONG, IN ORDER OF COST.**
+
+1. **Relayed a mechanism it had not read the code for.** The instruction was the
+   owner's, the measurement was a peer's, and both were credible — which is
+   exactly when a relay stops being checked. **A relay is where a claim's
+   provenance is stripped, so it is the last place it can still be cheaply
+   verified.** One grep would have caught it.
+2. **Appended the correct command to three seats with a wrong reason and an
+   explicit reassurance**: *"fails safe either way — neither can tell you to
+   push when you should not."* False in the only direction that matters.
+   frankuser's name for it: **an incorrect safety assurance travels further than
+   an incorrect instruction, because it stops the reader from checking.** This
+   was worse than the original error and it was made while correcting it.
+3. **Built a held-work roster keyed on shas.** One entry was already a ghost —
+   the seat had pushed it and `sync.sh` rebased it. **Complying with the hold is
+   what invalidated the identifier**, so a roster like that decays fastest
+   exactly when the freeze ends, which is when it is read most.
+4. **Relayed a peer's control to two other seats as a safety net for a different
+   change.** It could not fail for that change — the predicate iterates managed
+   locals and the program had none. **A private useless control wastes one seat;
+   a relayed one suppresses the work at every seat it reaches**, because a seat
+   that believes it holds a guard does not build one.
+
+**WHAT WORKED, AND IT IS THE SAME MECHANISM EACH TIME.**
+
+- **Every correction was caught by the next reader, never by its author.** Five
+  levels — abort signal vs condition, population, predicate vs granularity, rule
+  vs check, ladder rung vs what stands in front of it — and each author had
+  verified a true adjacent fact and stopped there. **The fleet is the error
+  detector; no seat is.**
+- **Seats verified relayed premises before complying.** At least four ran the
+  grep themselves. One said why: *"acting on a peer-relayed rule about when
+  pushing is safe is worth one grep, and if it had been wrong I would have had
+  to report a non-compliance."* That is the behaviour that makes relay safe, and
+  it is not the coordinator's to enforce.
+- **Escalating a correction beat sitting on it.** frankuser's reply: *"my
+  ruling carried the wrong check"*, *"your correction stands and mine does
+  not"* — and then kept the objection rather than overriding it, turning "a seat
+  cannot always tell whether its commit is docs-only" from a judgement into a
+  command.
+- **This seat held a directive rather than relaying it.** frankuser's beta 0.1
+  message said *"still no full tier since 18:37Z"* and named a hypothesis its
+  own author had refuted. The full had run at 19:32:19Z. **Relaying it would
+  have sent twelve seats after a phantom absence and a dead hypothesis.** Held,
+  measured, escalated, and the reply was *"send items 1 and 3 as written and
+  replace item 2 with yours."*
+
+**THE COORDINATION LESSON, WHICH IS NOT ABOUT THE MECHANISM.** A relay is an
+amplifier in both directions. Four of this seat's five errors were amplification
+rather than authorship — a peer's control, an owner's mechanism, a seat's sha, a
+correct command with a wrong warrant. **The repair has to travel the same paths
+as the error and cannot merely be retracted at the source**, which is why every
+correction here went to all twelve rather than to whoever complained.
+
+And the cost of the freeze itself: **nothing.** The full tier's idle order is
+requests → pin-verify → breadth. The actual blocker was pin v406 minting a
+pin-verify target five minutes after the last full published. A `--request` line
+jumps that phase; one was filed at 19:20Z and the full ran at **19:32:19Z, with
+the freeze already lifted.** 67 of 88 testable gaps had already exceeded the
+window all evening. **The freeze bought nothing and the request bought
+everything** — and the freeze was the part that took four instructions and
+forty-five minutes of twelve seats' attention.
+
+### AND THE ONE UNANSWERED SEAT IS STILL UNANSWERED
+
+`frank-optimize`: silent through six messages now, no commit since 05:19. Told
+plainly that a rejected call and an ended turn read identically from outside,
+that its transcript is the only instrument that separates them, and that *"I
+ended my turn"* is a complete answer costing one line. **No keys sent into any
+pane, and none will be.** Escalated as an unknown, not a diagnosis. Asking
+stopped after the sixth; corrections to facts already given to it continue,
+because those are owed to a seat whether or not it answers.
