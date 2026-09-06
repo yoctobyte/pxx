@@ -70,4 +70,4 @@ that is the whole lesson**: the three red rows are all GLOBAL. A helper extracte
 from N call sites re-declares every parameter's type, and a type that was
 implicit in the old inline code — `initVal: Int64`, assigned straight into an
 Int64 slot — becomes an explicit choice nobody re-derives.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8cfd309b5.
