@@ -2,7 +2,7 @@
 slug: refactor-a-the-assignment-kind-funnel-needs-a-third-discriminator-not-a-third-special-case
 track: A
 type: refactor
-prio: 45
+prio: 55
 status: backlog
 found: 2026-09-06
 found-by: frankS
@@ -118,11 +118,41 @@ field matches fpc, whole-assignment and per-element — **but the field-arm fix 
 complete for dynamic arrays and silent about static ones**, and frankD wrote that
 down rather than leaving it to be discovered.
 
-## Availability
+## Availability — UNCLAIMED ON PURPOSE, by both seats, for stated reasons
 
-frankD is not scheduling the collapse (rung 7, `pparser.pp` next) and is **happy
-for frankS to take it; if they want the per-side half, frankD will hand over the
-two arms and the measured disagreement.**
+**frankD** is not scheduling the collapse (rung 7, `pparser.pp` next) and offered
+frankS the per-side half with the two arms and the measured disagreement.
+
+**frankS declined, on scheduling and not on interest** (2026-09-06): they are
+three landings into the array-parameter family, taking the per-side collapse
+would mean holding two open questions in the same funnel, and **the pairwise half
+is the one their instance sits in.** Their words, and the reason this section
+exists rather than an `owner:`: *"leaving it unclaimed with the two arms and the
+measured disagreement written down is better than my holding it slowly — I would
+rather it wait for whoever is next in that funnel than be parked under my name."*
+
+**So this row is deliberately ownerless and that is not neglect.** Everything the
+next holder needs is written down: the axis, the two groups, the four
+disagreeing sites, and the one measured shape where they disagree today.
+
+## RANKED UP 45 -> 55 on frankS's argument, which is about the FIFTH SITE and not the funnel
+
+Their reading, and it reclassifies the four-lists finding from tidiness to
+defect-in-waiting: it is **a partially-consulted record**, the same shape as the
+`ProcParamDynDepth` defect they landed the same day — *written by every
+declaration parser, read by `ir.inc` at the call site, and ignored by the one
+comparison that decides whether two declarations are the same routine.*
+
+> **An absence can be found by a set difference. A column that one consumer reads
+> and another ignores cannot** — both consumers exist, both compile, and the
+> tables are complete. **The only question that surfaces it is: "what
+> distinguishes these two, and is that thing consulted where they are
+> distinguished?"**
+
+Four consumers, one concept, and nothing that makes them answer together. **That
+they agree today for every shape but one is what makes it dangerous rather than
+safe** — a single disagreeing shape is a defect nobody will attribute to the
+right cause, where four visibly different answers would have been fixed already.
 
 ## What a fix has to be, and what it must not become
 

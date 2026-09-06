@@ -18085,3 +18085,82 @@ is not a diagnostic, it is a diagnostic's absence wearing one.*
   itself an enumerated predicate wearing a different hat, and will need the same
   widening the next time a member kind arrives that is neither an instance method
   nor a static one.
+
+## A PARTIALLY-CONSULTED RECORD — a column one consumer reads and another ignores cannot be found by a set difference
+
+**An absence can be found by a set difference.** Kinds with a value arm and no
+address arm; names in one table and not the other; a `blocked-by` with no
+matching ticket. Every one of those is a missing ROW, and a scan finds it.
+
+**A field that exists, is written faithfully, is read by one consumer and ignored
+by another is invisible to every scan of that kind** — both consumers exist, both
+compile, and the tables are complete. Nothing is missing. The two just do not
+agree that the column matters.
+
+Measured 2026-09-06 (frankS), landing `ad64945c0`: `ProcParamDynDepth` is
+**written by every declaration parser**, **read by `ir.inc` at the call site**,
+and **ignored by the one comparison that decides whether two declarations are the
+same routine** — so an open array and a named dynamic array were one signature.
+
+> **The only question that surfaces it: "what distinguishes these two, and is
+> that thing consulted where they are distinguished?"** Not *"is the column
+> populated"* — it was. Not *"does anything read it"* — something did.
+
+**And it has a level-two form, which is where it gets dangerous.** frankD's four
+sites answering *"is this node a whole array?"* — `Syms[].IsArray`,
+`NodeDynDepth`, `NodeDynDepth` plus `Kind <> skParam`, and `ASTNodeIsWholeArray`
+— are four consumers of one concept with nothing making them answer together.
+They agree today for every shape but one (a static array FIELD: the fourth says
+True, the second says 0).
+
+**Agreeing on all but one shape is worse than disagreeing visibly.** Four
+obviously different answers get reconciled the first time anyone looks. Four
+answers that agree everywhere except one shape produce a single defect nobody
+attributes to the right cause — the disagreement is not in the report, the
+symptom is.
+
+## A FIXTURE THAT CAN ONLY FAIL ONE WAY — one source order cannot tell a rule from an accident of declaration order
+
+The sibling of *a guard that cannot fail*, and it passes the usual checks: the
+rows are real, the expected values are right, and the population is correct.
+
+Measured 2026-09-06 (frankS). Ranking a dynamic-array ARGUMENT away from the open
+parameter made **every row of the ticket's own repro correct**. The same pair
+**written in the other declaration order** still answered 2 where fpc answers 1 —
+the element-list direction still tied, and the exact phase took whichever
+candidate came first in the chain.
+
+**The repro they had written themselves happened to be in the order that hides
+half the bug.** Not carelessness: a repro is written to reproduce, so it captures
+the order in which the symptom was first seen, and that order is then held
+constant by every subsequent run of it.
+
+> **Wherever resolution can depend on declaration order, one source order is not
+> a test — it is a sample of size one from a population of two, and the
+> tie-breaking half is the half a repro never happens to be in.** Write both
+> orders, or the green means "correct in the order I first saw it".
+
+Same family as *write down the axis you held constant*: here the held axis is
+source order, and it is held by the artefact rather than by the author.
+
+## DEAD CODE THAT READS AS LIVE IS WORSE THAN AN OPEN GAP
+
+frankS wrote a `nil` arm in `MatchParamExact`, then a refinement in
+`MatchArgNilOk`, for fpc's rule that `Test(Nil)` binds to the dynamic overload.
+**Neither fired.** `PXXDBG=a.nilarg` produced no trace line for a nil argument
+against an array parameter in either the one- or the two-candidate program, so
+the call resolves in a phase not yet identified.
+
+**Both were deleted, each site left with a comment saying what was measured.**
+That is the right disposal and it is worth stating why, because the instinct is
+to leave plausible code in place:
+
+> **A rule that is written but never reached tells the next reader it is
+> implemented, and they stop looking.** An absent rule tells them nothing and
+> they investigate. The dead version is strictly worse than the gap — it converts
+> an open question into a closed one, wrongly, for everyone downstream.
+
+The precedent is the same shape one level up: a diagnostic naming four operators
+where the predicate tested two cost frankA a session, because the message was
+evidence that all four were handled. **Do not leave an unreached implementation
+as documentation of intent. Leave the measurement.**

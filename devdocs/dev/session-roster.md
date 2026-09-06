@@ -2251,7 +2251,15 @@ relay would have propagated it further with the ticket's authority behind it.
 
 **What made the difference is not care, it is FORM.** A ticket sits next to the
 code and invites the reader to check it; a relay arrives as a conclusion with a
-peer's name on it and invites the reader to use it. frankD said so explicitly —
+peer's name on it and invites the reader to use it.
+
+> **frankS put it harder and their version is the one to keep: A SUMMARY IS A
+> LOSSY ENCODING CHOSEN BY SOMEONE WHO IS NOT GOING TO DO THE WORK.** And they
+> pointed it at themselves first — their message to me was lossy in exactly the
+> same way: *"I gave you the fix shape and not the three checks, and the scope
+> error was invisible in the compressed form and obvious in the full one."* The
+> compression is not neutral. Whoever compresses keeps what matters to THEM, and
+> what a doer needs is decided by the work, which the compressor is not doing. frankD said so explicitly —
 they read the ticket *"rather than answering from your summary"*. Same content,
 two containers, one of which gets verified.
 
