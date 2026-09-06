@@ -78,6 +78,16 @@ but it is MARKED, and if every moved row moved into one, this says so: that is
 the shape of a broken run, and reading it as 86 changed mechanisms is the
 failure mode this whole tool exists to avoid.
 
+WHAT `<compiles clean>` DOES NOT CLAIM. It means OUR compiler accepted the file
+and printed its `ok:` line. It does NOT mean we agree with fpc about it: frankS
+measured 2026-09-06 that 360 of the 1447 suite files carry an `{$ifdef FPC}`,
+and pxx does not define FPC outside --mimic-fpc, so on those rows the two
+compilers are given DIFFERENT PROGRAMS. This tool is unaffected -- it compares
+our diagnostics to our earlier diagnostics, which is self-consistent whichever
+arm we took -- but a reader who takes a `<compiles clean>` row as a burn
+candidate is making the stronger claim, and for a row with a live FPC arm that
+claim is not in evidence. tarray3 is one such row.
+
 Usage:
     tools/skip_diag_diff.py OLD.map NEW.map [--quiet-if-clean]
 

@@ -101,6 +101,26 @@ WORK="${TMPDIR:-/tmp}/pxx_pas_conformance.$$"
 TIMEOUT_S="$(awk -v s="${TESTMGR_TIME_SCALE:-1}" -v l="${TESTMGR_LOAD_SCALE:-1}" \
   'BEGIN { t=10*s*l; printf "%d", (t<10 ? 10 : t) }')"
 
+# A ROW THAT PASSES THROUGH A SKIPPED ARM IS NOT THE SAME CLAIM AS A ROW THAT
+# PASSES. Reported by frankS 2026-09-06 and recorded here rather than in a
+# ticket, because the number this script prints is what everyone quotes:
+#
+#   360 of the 1447 suite files contain an `{$ifdef FPC}`. pxx does not define
+#   FPC outside --mimic-fpc and this runner passes only --strict-case
+#   --strict-operator, so for those rows THE EXIT-CODE COMPARISON IS BETWEEN TWO
+#   DIFFERENT PROGRAMS: fpc compiles the FPC arm, we compile the other one.
+#
+# It does not error and both sides exit 0 -- the instrument answers, correctly,
+# about a different program. tarray3.pp is a live case: its output matches fpc
+# except for two `{$ifdef FPC}` blocks we never compile. NOT A BUG TO FIX HERE;
+# turning on --mimic-fpc for the corpus is a design call and belongs to whoever
+# owns the corpus, not to this comment. What it means for a READER is narrow and
+# firm: a pass count from this runner bounds "our arm compiles and exits like
+# fpc's arm", never "we agree with fpc on this file".
+#
+# (frankS's count; this checkout has no fpc-testsuite under library_candidates/
+# -- it is gitignored -- so the coordinator recording it could not re-measure it.)
+
 # Curated categories (ticket scope): what self-host never exercises.
 # Expand as rungs clear.
 CATEGORIES="tgeneric tgenconstraint tgenfunc tobject tclass tprop texception
