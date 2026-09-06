@@ -4,7 +4,7 @@ title: "Calling a method pointer reached through an INDEXED PROPERTY does not re
 track: P
 prio: 60
 type: bug
-status: backlog
+status: done
 owner: ""
 blocked-by: []
 summary: "RE-MEASURED 2026-09-06 at 22d8395be, compiler e54f10adf969: THE BOUNDARY IN THIS TICKET WAS WRONG AND THE DEFECT IS BIGGER. It is NOT the indexed property -- `TR(o).R.Fn(1)`, a cast base with no property anywhere in it, fails identically, and `o.GetI(0).Fn(1)` (an ordinary method call mid-chain) SUCCEEDS. The failing ingredient is WHICH WALKER PARSED THE CHAIN: ParseClassRecordSelectors, the shared selector walker every non-trivial spelling delegates to, builds no AN_CALL_IND at any point -- all five construction sites are in ParseLValueAST, which is why only the shapes ParseLValueAST handles by hand can call through a designator. AND THE THIRD POSITION IS THE ONE THAT MATTERS: `if <chain>(x) then` and `<chain>(x);` are REFUSED (loud, harmless), but `b := <chain>(x)` COMPILES AND IS SILENTLY WRONG -- the call never happens, the argument list is discarded, and the method pointer\'s own truthiness is assigned, so it answers TRUE for every argument. Proven with a body that can only return False: pxx still prints TRUE for `o.Items[0].Fn` and `TR(o).R.Fn`, fpc prints FALSE, and the other five shapes agree. A PROBE WITH A POSITIVE ARGUMENT CANNOT SEE THIS: `Fn(5)` is correctly TRUE and wrongly TRUE, so the expected value collides with the failure value and every row passes. Re-ranked 45 -> 60 to match its p60 sibling bug-p-an-open-array-literal-loses-its-length-through-a-procedural-type-call, which was ranked there for exactly this shape. The statement-position diagnostic also blames the base identifier `o` for a callee four selectors away."
@@ -147,3 +147,6 @@ statement-position diagnostic names the callee rather than the base, and
 uPSCompiler gets past 5033. **A test asserting only that the refused rows now
 compile would pass over the silent arm** — the assertion has to be the returned
 value, with an argument whose right answer is not the failure value.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

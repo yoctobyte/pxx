@@ -70,7 +70,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (11)
+## backlog (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -78,6 +78,7 @@ _none_
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
+| regression-test-core-test-libwriteln-parity | T | 70 | regression | regression: test-core#src:test/test_libwriteln_parity.pas at fa5e9ef55813 in step 2/2, `tools/expect_same.sh test_libwln26 "$(/tmp/test_libwln26)" "$(cat test/test_libwriteln_parity.expected)"` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
@@ -398,11 +399,10 @@ _none_
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (29)
+## backlog-pascal (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve | P | 60 | bug | RE-MEASURED 2026-09-06 at 22d8395be, compiler e54f10adf969: THE BOUNDARY IN THIS TICKET WAS WRONG AND THE DEFECT IS BIGGER. It is NOT the indexed property -- `TR(o).R.Fn(1)`, a cast base with no property anywhere in it, fails identically, and `o.GetI(0).Fn(1)` (an ordinary method call mid-chain) SUCCEEDS. The failing ingredient is WHICH WALKER PARSED THE CHAIN: ParseClassRecordSelectors, the shared selector walker every non-trivial spelling delegates to, builds no AN_CALL_IND at any point -- all five construction sites are in ParseLValueAST, which is why only the shapes ParseLValueAST handles by hand can call through a designator. AND THE THIRD POSITION IS THE ONE THAT MATTERS: `if <chain>(x) then` and `<chain>(x);` are REFUSED (loud, harmless), but `b := <chain>(x)` COMPILES AND IS SILENTLY WRONG -- the call never happens, the argument list is discarded, and the method pointer\'s own truthiness is assigned, so it answers TRUE for every argument. Proven with a body that can only return False: pxx still prints TRUE for `o.Items[0].Fn` and `TR(o).R.Fn`, fpc prints FALSE, and the other five shapes agree. A PROBE WITH A POSITIVE ARGUMENT CANNOT SEE THIS: `Fn(5)` is correctly TRUE and wrongly TRUE, so the expected value collides with the failure value and every row passes. Re-ranked 45 -> 60 to match its p60 sibling bug-p-an-open-array-literal-loses-its-length-through-a-procedural-type-call, which was ranked there for exactly this shape. The statement-position diagnostic also blames the base identifier `o` for a callee four selectors away. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles | P | 45 | bug | The current wall on the FPC compiler-source march, and the first one this session that did NOT reduce. `cclasses` / `comphook` / `finput` / `cfileutl` stop at `cclasses.pas:2909 dereferenced value is not a pointer` — `Entry := @Entry^^.Next` inside `THashSet.Lookup`, where `Entry: PPHashSetItem` and the three types are declared forward (`PPHashSetItem = ^PHashSetItem` above `PHashSetItem = ^THashSetItem` above the record). A hand-written reduction with those exact declarations, that exact routine body and a class field of the same type COMPILES AND RUNS, so the discriminator is something else in the unit and the reduction is the work. Two separate small shapes DO fail and are recorded below; neither produces this diagnostic, so neither is established as the cause. | — |
 | bug-p-a-generic-specialisation-suffix-on-an-unknown-name-is-dropped-in-field-position | P | 45 | bug | `A: TNope<Byte>;` inside a record or class body leaves `<`, `Byte`, `>` UNCONSUMED, because DelphiRewriteGenericUses only rewrites a specialisation whose template it can resolve, and the field type parser has no fallback for the tokens it leaves behind. In VAR position the same source reaches ParseTypeKind, which consumes them and reports `unknown type: ` -- with an EMPTY name, because it errors on the trailing `>` rather than on `TNope`. So one type-reference position stumbles into a mislabelled diagnostic and the other drops three tokens on the floor; neither names the template. Until 76efae23e the field-position drop was SILENT -- the member-loop terminus was a bare `else Next` and stepped over all three, so the field was declared with the specialisation discarded. Found by the catch-all census over the fpc-testsuite corpus (trtti12.pp, trtti16.pp: `A: TArray<byte>;` with no `uses SysUtils`, which is where pxx keeps TArray). The fix is one type-reference path that recognises `ident <` as a specialisation attempt and refuses it BY NAME in both positions. | — |
@@ -918,9 +918,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3427)
+## done (3428)
 
-3427 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3428 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1028,6 +1028,7 @@ _none_
 - [p 70] [T] regression-cascade-6758c7ce7dbd
 - [p 70] [T] regression-cascade-b8e3b3010249
 - [p 70] [T] regression-optdiff-shard6-12
+- [p 70] [T] regression-test-core-test-libwriteln-parity
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
@@ -1047,7 +1048,6 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
-- [p 60] [P] bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve (unblocks 1)
 - [p 60] [A] bug-a-the-pinned-compiler-cannot-build-live-lib-rtl-and-nothing-tracks-it [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
@@ -1162,6 +1162,7 @@ _none_
 - [p 45] [A] feature-a-getinterface-refcounting
 - [p 45] [A] feature-a-object-output-for-arm32-and-aarch64
 - [p 45] [C] feature-c-crtl-has-no-pty-family-at-all
+- [p 45] [B] feature-embed-pascal-script
 - [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file
 - [p 45] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
 - [p 45] [N] feature-nilpy-methods-on-int-and-float
@@ -1431,7 +1432,6 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
-- **1** — bug-p-a-call-through-an-indexed-property-in-the-chain-does-not-resolve
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets

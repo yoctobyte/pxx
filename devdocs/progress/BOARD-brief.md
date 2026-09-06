@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:21 blocked:6 backlog:11 backlog-umbrella:7 backlog-core:140 backlog-nilpy:98 backlog-tools:43 backlog-pascal:29 backlog-decide:43 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3427 rejected:79`
+`working:20 unfinished:21 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:140 backlog-nilpy:98 backlog-tools:43 backlog-pascal:28 backlog-decide:43 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3428 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -63,7 +63,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 402, ranked
+## Ready — top 30 of 403, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -85,6 +85,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [T]` regression-test-core-test-libwriteln-parity
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
@@ -94,6 +95,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 
-_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
