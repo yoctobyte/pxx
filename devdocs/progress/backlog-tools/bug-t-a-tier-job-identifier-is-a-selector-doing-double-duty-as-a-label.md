@@ -212,3 +212,38 @@ against the assertion, phrased as a relation rather than a count.
 - `chore-t-split-lib-test-into-jobs-that-name-what-failed` [T p45, low-prio] —
   splitting one bundled job so each piece names its own source. Fixing either
   does not fix the other.
+
+## 2026-09-06, frankuser — the misnomer is PERSISTED IN SLUGS, not just printed
+
+A fourth session hit layer 1 the same evening, and the new fact is that the bad
+name does not stay in a log line. **It becomes the ticket slug, which is the
+search key.**
+
+Nine auto-filed regression tickets on disk are named `#src:tools/compiler_srchash.sh`,
+across **seven distinct jobs** — `test-debug-g` (×2), `test-cjson`, `test-fgl`,
+`test-lua`, `test-lua-cross` (×2), `test-emit-obj`,
+`test-sqlite-threads-aarch64`. One script, seven unrelated subjects, because it
+sits at `srcs[0]` for everything that depends on `$(COMPILER)`.
+
+**The cost, measured rather than argued.** `tools/compiler_srchash.sh` was
+genuinely edited tonight (`79264f396` — a bash shebang meant the stamp guard
+compared two absences and called them equal). Grepping the backlog for
+`srchash` afterwards returns nine regression tickets, and **every one reads as a
+possible fallout from that fix.** They are not: the newest was found
+`2026-09-06T04:48:59Z`, seventeen hours before the change. Two tool calls to
+establish that, and the discriminator was a timestamp, not anything about the
+subject.
+
+**This is the specific way an 80%-accurate name is worse than a 0%-accurate
+one.** A log line is read once by the person who ran the job and has the run in
+front of them. A slug is read by everyone afterwards, out of context, forever —
+and it is what `grep` matches, so it decides who *finds* the ticket as well as
+who is misled by it. The nine will still be answering the wrong question long
+after the run that minted them is gone.
+
+**Consequence for the fix, not a new ask:** whatever layer 1 lands on, the slug
+generator should take it too. The archive is where a wrong name compounds, and
+renaming these nine afterwards is cheap only while they are still open.
+
+The ticket's own line holds and this is an instance of it — right about a third
+of the time is what teaches you to trust it.
