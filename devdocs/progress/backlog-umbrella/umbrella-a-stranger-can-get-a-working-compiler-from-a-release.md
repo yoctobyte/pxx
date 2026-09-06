@@ -107,3 +107,39 @@ cell -- information, not missing paperwork.
 `devdocs/dev/release-notes-beta-0.1-draft.md` is the rehearsal's draft:
 incomplete, review unfinished, kept deliberately. A starting point, not a
 specification.
+
+## 2026-09-06, later — NO LIVE HOST HAS EVER PRODUCED A CLEAN FULL RUN
+
+Measured by frankZ, corrected by frankH, confirmed independently, landed
+`521b5ab1d`. It bears directly on this umbrella because a release wants evidence
+of a green matrix and **there is currently no machine that has ever produced
+one.**
+
+  borg     newest clean 2026-07-31   last row of any kind 2026-07-31
+  xeon     newest clean 2026-08-04   last row of any kind 2026-08-04
+  plexus   newest clean 2026-08-26   last row of any kind 2026-08-30
+  seven    none, ever                last row of any kind 2026-09-06, live
+
+589 shas in the archive have a full run with no RED, and **all 589 are
+historical.** `90892318c94c`, cited since 2026-09-02 as "the most recent full
+green", is plexus's LAST clean run and eleven days old. Everything live rests on
+seven, which has never produced one.
+
+**This is not evidence the goal is unreachable** — seven went 9 reds -> 8 -> 5 ->
+5 -> 3 in one evening, which argues the other way. What it rules out is a
+specific plan: **any release criterion that assumes a second host can supply the
+green is assuming a host that stopped reporting a week ago.**
+
+**And the corrected number is the more useful finding.** The original count, 47,
+came from `reports/*.md` — 2069 curated digests — when the archive is
+`runs-<host>.ndjson` at 5530 rows. A subset. So the query answered *"shas that
+got written up"* rather than *"shas that ran"*, **and it did not error.** The
+per-host stop dates were invisible at 47 and are the whole finding at 589.
+
+**A related structural fact, from frankH, worth carrying into any release
+criterion:** one of tonight's three reds was self-inflicted — `85c8c1bf8` landed
+GREEN under `gate.sh quick`, which does not run `tools-devtest#00`. **The
+per-fix gate every seat is asked to run cannot see that job**, so reds arrive in
+the full tier from changes that were green by every measure their author had.
+Any plan that reasons about the red count reaching zero has to account for a
+source of new reds that no author can see at commit time.
