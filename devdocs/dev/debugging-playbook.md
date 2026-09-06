@@ -6685,6 +6685,61 @@ describes a compiler that may no longer exist. A stale prize is more expensive
 than a stale number, because it does not look like a claim to re-check — it
 looks like work waiting to be done, and the backlog protects it.
 
+## A CHANGE THAT LANDS CLEANLY AND MOVES NO MEASUREMENT IS EVIDENCE ABOUT YOUR MODEL, NOT ABOUT THE CODE
+
+The green you were not expecting is a finding. The one you WERE expecting, that
+arrives without the number moving, is a different finding and it is easy to bank
+as success: the build converged, the gate passed, nothing regressed — and the
+defect is untouched, because the code you changed is not on the path.
+
+Measured 2026-09-06, fixing routine-local type scoping. `AliasOwnerProc` was
+added to the alias table, the fixedpoint converged, `gate.sh quick` was green,
+and the headline repro answered **exactly what it answered before**:
+
+    procedure A; type TRec = packed record p, q, r: Byte; end; ... { fpc 3 }
+    procedure B; type TRec = packed record s: Byte; end;      ... { fpc 1, pxx 3 }
+
+The tell was a SECOND repro of the same shape that DID move: `type TNum =
+LongInt` started answering correctly the moment the alias fix landed. Two
+repros a reader would call the same bug, one moving and one not, is the
+instrument saying they are two tables. They were: `type X = LongInt` is an alias
+row and `type X = record ... end` is a **UCls** row, and only the first goes
+through `FindTypeAlias`. A single repro would have been read as "the fix is
+incomplete" or, worse, as "close enough, land it".
+
+**So carry at least two repros that differ in SHAPE and not only in values,
+and when one moves and the other does not, stop and ask which mechanism each
+one is on** — before deciding your fix needs to be bigger. The cheap
+discriminator is a probe at the function you changed, printing whether it is
+called at all. Here it was never called: the whole fix was correct and on the
+wrong path.
+
+### The second half: a warning is a guard on the line you are READING, not the line you are TYPING
+
+Same session, half an hour later. The `FindUClass` fix was written INSIDE the
+`if CurrentUnitIdx >= 0` guard, so at program scope — where `CurrentUnitIdx` is
+-1, a real scope and not "unknown" — the new arm never ran, and both repros are
+programs. **Twelve lines below the edit sits a comment that says exactly this**,
+written by whoever last made the identical mistake:
+
+> NOT inside the guard above: at PROGRAM scope CurrentUnitIdx is -1, which is a
+> real scope here and not "unknown" ... Guarding this on >= 0 fixed the same bug
+> in a unit and left it live in a program, which is the harder half to notice
+> because the repro is shorter.
+
+It was on screen and it did not stop the edit, because it reads as HISTORY —
+an account of a bug that was fixed — rather than as a live constraint on the
+line being written. A second seat hit the identical shape the same hour, adding
+a scan to `tools/check_test_wiring.py` and reproducing the bug the first scan in
+that same file was patched for, comment and all.
+
+There is no way to make a comment louder that has not already been tried. What
+works is the mechanical version: **after editing inside a guarded block, ask
+what the guard's value is in the repro you are about to run**, and prefer
+putting a shared rule on the SCANS as a condition over adding a fourth copy of
+the loop. The measurement that caught it was the same one as above — the
+function was never called.
+
 ## MOVING A RATCHET'S BASELINE HONESTLY: move the number, keep the measurement, record why — a threshold that is only ever tightened stops being a guard and becomes a wall
 
 `tools/size_canary.py` compares five bare images against

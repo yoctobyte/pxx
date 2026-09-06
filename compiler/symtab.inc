@@ -242,6 +242,7 @@ begin
   AliasUnitIdx[AliasCount]  := CurrentUnitIdx;
   AliasDeclImpl[AliasCount] := DeclInImplNow;
   AliasOwnerCi[AliasCount]  := ParsingClassBodyCi;   { -1 when not in a class body }
+  AliasOwnerProc[AliasCount] := CurProc;             { -1 at unit/global level }
   AliasIsDistinct[AliasCount] := DeclDistinctNow;    { `T = type Base`; False for every other row }
   DeclDistinctNow := False;                          { CONSUMED: one keyword marks exactly one row, so a later implicit alias cannot inherit it }
   Inc(AliasCount);
@@ -303,11 +304,59 @@ begin
                       (AliasOwnerCi[a] = QualTypeOwnerCi);
 end;
 
+function ScopeReachesProc(ownerProc: Integer): Boolean;
+{ May a declaration owned by routine `ownerProc` be seen from the routine being
+  parsed now? True for a global (-1), for the routine itself, and for any
+  routine it is lexically nested inside — ordinary Pascal scope, walking
+  ProcLexParent outward.
+
+  ONE HELPER FOR THREE TABLES ON PURPOSE. The rule existed in exactly one of
+  them (StrConst) and was missing from the alias and set-const tables, which is
+  the shape normalise-dont-special-case.md describes: a rule spelled per site
+  fails by an ABSENT copy, so the sites that are wrong agree perfectly with each
+  other and reading them against one another finds nothing.
+  bug-p-routine-local-name-scoping-is-implemented-in-one-of-three-tables }
+var p, guard: Integer;
+begin
+  ScopeReachesProc := True;
+  if ownerProc < 0 then Exit;
+  p := CurProc;
+  guard := 0;
+  while (p >= 0) and (guard <= ProcCount) do
+  begin
+    if p = ownerProc then Exit;
+    p := ProcLexParent[p];
+    Inc(guard);
+  end;
+  ScopeReachesProc := False;
+end;
+
+function ScopeHopsToProc(ownerProc: Integer): Integer;
+{ How many lexical hops out from CurProc reach `ownerProc`; MaxInt for a global
+  (-1), so the ordinary innermost-wins comparison puts it last; -1 when it is
+  not reachable at all. INNERMOST WINS IS A COMPARISON, NOT AN ORDER: the tables
+  are append-ordered, and a nested routine's own row is not reliably the newest
+  by the time a sibling has been parsed. }
+var p, guard: Integer;
+begin
+  if ownerProc < 0 then begin ScopeHopsToProc := MaxInt; Exit; end;
+  p := CurProc;
+  guard := 0;
+  while (p >= 0) and (guard <= ProcCount) do
+  begin
+    if p = ownerProc then begin ScopeHopsToProc := guard; Exit; end;
+    p := ProcLexParent[p];
+    Inc(guard);
+  end;
+  ScopeHopsToProc := -1;
+end;
+
 function FindTypeAlias(const name: AnsiString): Integer;
-var i, bestRank, r: Integer; lo, name2: AnsiString; owned, bestOwned: Boolean;
+var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString; owned, bestOwned: Boolean;
 begin
   Result := -1;
   bestRank := -2;
+  bestHop := 0;
   bestOwned := False;
   name2 := name;
   lo := ULower(name2);
@@ -342,10 +391,27 @@ begin
         when the top of the range is already the sentinel, which is the same
         collision-with-a-legal-value trap this table's own AliasOwnerCi comment
         describes for class 0. }
+      { LEXICAL SCOPE IS THE FIRST KEY, ahead of both of the others, because a
+        routine-local type shadows everything -- a class's nested type included
+        -- while it is in scope, and is invisible outside it. Every unit-level
+        row answers MaxInt hops, so they all tie here and the class/uses
+        comparison below decides between them EXACTLY as it did before this key
+        existed: the new key is a filter plus a tie-break, not a reordering of
+        the old ones.
+
+        Before it the table was FLAT and ties kept the FIRST row, so an
+        enclosing routine's `TRec` beat a nested routine's own -- silently, with
+        the wrong SIZE, no diagnostic and no generics needed. It is worth being
+        precise about why nobody hit it sooner: the flat table also got the
+        ENCLOSING-routine case right, by accident, so the visible behaviour was
+        "nested scoping mostly works". }
       owned := AliasOwnerCi[i] >= 0;
-      if (Result < 0) or (owned and (not bestOwned)) or
-         ((owned = bestOwned) and (r > bestRank)) then
-      begin Result := i; bestRank := r; bestOwned := owned; end;
+      hop := ScopeHopsToProc(AliasOwnerProc[i]);
+      if (hop >= 0) and
+         ((Result < 0) or (hop < bestHop) or
+          ((hop = bestHop) and (owned and (not bestOwned))) or
+          ((hop = bestHop) and (owned = bestOwned) and (r > bestRank))) then
+      begin Result := i; bestRank := r; bestOwned := owned; bestHop := hop; end;
     end;
     Inc(i);
   end;
@@ -669,26 +735,46 @@ function FindStrConst(const name: AnsiString): Integer;
   The table was flat and searched oldest-first, so a routine-local const leaked into every
   routine parsed after it AND beat that routine's own const of the same name -- the wrong
   text, silently. bug-pascal-string-const-not-scoped. }
-var i: Integer;
+var i, hop, bestHop: Integer;
 begin
+  { THE TWO TIERS HERE USED TO BE `own routine` AND `global`, WITH NOTHING IN
+    BETWEEN, and that middle is a real Pascal scope: a nested routine reading
+    the ENCLOSING routine's const was refused outright — `undefined variable`
+    on a program fpc compiles. The two-tier rule was written when nested
+    routines could not reach this question, and it reads as complete because
+    both tiers it does have are correct. Now one comparison over the whole
+    lexical chain, which is the same answer at both ends and right in the
+    middle. }
   Result := -1;
-  for i := StrConstCount - 1 downto 0 do          { the current routine's own }
-    if (StrConstOwner[i] = CurProc) and CaseEqual(StrConstName[i], name) and
+  bestHop := 0;
+  for i := StrConstCount - 1 downto 0 do
+    if CaseEqual(StrConstName[i], name) and
        DeclVisibleSect(StrConstUnitIdx[i], StrConstDeclImpl[i], IMPLTAB_STRCONST, i) then
-      begin Result := i; Exit; end;
-  for i := StrConstCount - 1 downto 0 do          { else a unit/global-level one }
-    if (StrConstOwner[i] = -1) and CaseEqual(StrConstName[i], name) and
-       DeclVisibleSect(StrConstUnitIdx[i], StrConstDeclImpl[i], IMPLTAB_STRCONST, i) then
-      begin Result := i; Exit; end;
+    begin
+      hop := ScopeHopsToProc(StrConstOwner[i]);
+      if (hop >= 0) and ((Result < 0) or (hop < bestHop)) then
+      begin Result := i; bestHop := hop; end;
+    end;
 end;
 
 function FindSetConst(const name: AnsiString): Integer;
-var i: Integer;
+{ Innermost-wins, like FindStrConst and for the same reason. This table was FLAT
+  and searched OLDEST-first, which is the worst of the three: `procedure A;
+  const S = [1,2,3];` leaked into a SIBLING `procedure B; const S = [7,8];` and
+  beat B's own — pxx answered `B TRUE FALSE` where fpc says `B FALSE TRUE`. No
+  nesting needed, and no diagnostic. }
+var i, hop, bestHop: Integer;
 begin
   Result := -1;
-  for i := 0 to SetConstCount - 1 do
-    if CaseEqual(SetConstName[i], name) and DeclVisibleSect(SetConstUnitIdx[i], SetConstDeclImpl[i], IMPLTAB_SETCONST, i) then
-      begin Result := i; Exit; end;
+  bestHop := 0;
+  for i := SetConstCount - 1 downto 0 do
+    if CaseEqual(SetConstName[i], name) and
+       DeclVisibleSect(SetConstUnitIdx[i], SetConstDeclImpl[i], IMPLTAB_SETCONST, i) then
+    begin
+      hop := ScopeHopsToProc(SetConstOwner[i]);
+      if (hop >= 0) and ((Result < 0) or (hop < bestHop)) then
+      begin Result := i; bestHop := hop; end;
+    end;
 end;
 
 procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer;
@@ -1594,12 +1680,47 @@ begin
 end;
 
 function FindUClass(const name: AnsiString): Integer;
-var i, bestRank, r: Integer; lo, name2: AnsiString;
+var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
   bestRank := -2;
   name2 := name;
   lo := ULower(name2);
+  { A ROUTINE-LOCAL type wins over everything, and this arm is DELIBERATELY
+    OUTSIDE the `CurrentUnitIdx >= 0` guard below.
+
+    `type TRec = record ... end` inside a routine is a UCls row, not an alias
+    row, so the alias table's scope key does not reach it -- and this scan took
+    the FIRST same-unit match, so one routine's local TRec beat a SIBLING
+    routine's own. fpc `A 3 / B 1`, pxx `A 3 / B 3`: the wrong SIZE, silently,
+    with no nesting and no generics in the program.
+
+    Written inside that guard first, which is the trap the note twelve lines
+    below already describes -- at PROGRAM scope CurrentUnitIdx is -1, a real
+    scope and not "unknown", so the arm never ran and both repros were programs.
+    The probe that caught it was `FindUClass` never printing at all; the fix had
+    built, converged and changed nothing. THE COMMENT WARNING ABOUT THIS WAS ON
+    THE SCREEN WHILE THE MISTAKE WAS MADE, which is why the reachability test
+    below is a condition on the existing scans rather than a fourth copy of the
+    loop.
+
+    Unreachable rows -- another routine's locals -- are skipped in the scans
+    below rather than ranked, which is the half the alias table cannot have:
+    there a unit-level row legitimately answers from every scope. }
+  bestHop := 0;
+  i := 0;
+  while i < UClsCount do
+  begin
+    if (UClsUnitIdx[i] = CurrentUnitIdx) and (UClsOwnerProc[i] >= 0) and
+       UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    begin
+      hop := ScopeHopsToProc(UClsOwnerProc[i]);
+      if (hop >= 0) and ((Result < 0) or (hop < bestHop)) then
+      begin Result := i; bestHop := hop; end;
+    end;
+    Inc(i);
+  end;
+  if Result >= 0 then Exit;
   { A class declared in the unit being parsed wins over a same-named one
     elsewhere. Two libraries may legitimately export the same class name —
     tkinter's `Canvas` and reportlab's `Canvas` are both spellings their
@@ -1613,7 +1734,8 @@ begin
     while i < UClsCount do
     begin
       if (UClsUnitIdx[i] = CurrentUnitIdx) and
-         UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
+         UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
+         ScopeReachesProc(UClsOwnerProc[i]) then begin Result := i; Exit; end;
       Inc(i);
     end;
     { AN ALIAS DECLARED HERE ALSO BEATS A CLASS ROW FROM ELSEWHERE, and it did
@@ -1639,7 +1761,10 @@ begin
   i := 0;
   while i < UClsCount do
   begin
-    if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    { ...and never another routine's local type, which the flat fallback would
+      otherwise hand out globally -- the leak this whole key exists to close. }
+    if UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
+       ScopeReachesProc(UClsOwnerProc[i]) then
     begin
       { NOT gated on CurrentUnitIdx >= 0 any more: every warn site was, so a
         leak into the MAIN PROGRAM — this ticket's own headline repro — was
@@ -2062,6 +2187,7 @@ begin
   UClsPCount[UClsCount] := 0;
   UClsParent[UClsCount] := -1;
   UClsUnitIdx[UClsCount] := CurrentUnitIdx; UClsDeclImpl[UClsCount] := DeclInImplNow;   { declaring unit — access-control scope }
+  UClsOwnerProc[UClsCount] := CurProc;   { declaring ROUTINE -- see the declaration }
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
@@ -12495,6 +12621,7 @@ begin
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
+  SetLength(ProcLexParent, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
@@ -12549,6 +12676,7 @@ begin
   Procs[ProcCount].FramePatch := -1;
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
+  ProcLexParent[ProcCount]    := CurProc;   { -1 at top level; see the declaration }
   ProcExternal[ProcCount]     := False;
   ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCStaticLink[ProcCount] := False;      { set when the C definition said `static` }

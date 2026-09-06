@@ -7,14 +7,15 @@ status: open
 owner: frankS
 ---
 
-# Routine-local name scoping is implemented in one of three tables, and the one implementation is wrong at the edge
+# Routine-local name scoping is implemented in one of FIVE tables, and the one implementation is wrong at the edge
 
-Four measured repros, one concept, three name tables. Every one is a silent
+Six measured repros, one concept, five name tables. Every one is a silent
 wrong value or a refused-correct-program, and none needs generics.
 
 | table | rule today | measured |
 | --- | --- | --- |
-| alias (types) | FLAT, first match wins | nested routine's `TRec` ignored, binds the enclosing one — fpc 1, pxx 3 |
+| UCls (record/class type names) | FLAT, first match wins | a SIBLING routine's local `TRec` loses to an earlier routine's — fpc `A 3 / B 1`, pxx `A 3 / B 3`. The row the title's own repro needs. |
+| alias (type aliases) | FLAT, first match wins | nested routine's `TRec` ignored, binds the enclosing one — fpc 1, pxx 3 |
 | set const | FLAT, first match wins | **sibling** routine's `S = [7,8]` ignored, binds the earlier routine's `S = [1,2,3]` — fpc `B FALSE TRUE`, pxx `B TRUE FALSE` |
 | string const | two-tier: own routine, else global | over-corrects — a nested routine reading the ENCLOSING routine's const is **refused**: `undefined variable (Greeting)`, fpc prints it |
 
@@ -71,3 +72,32 @@ Fix them together or the halves disagree.
 Noticed in passing, not measured further: the `Greeting` refusal's diagnostic
 names `./compiler/builtin/builtinheap.pas` as the file, which is not where the
 error is — the token->file map does not follow a lifted routine.
+
+---
+
+## CORRECTION 2026-09-06: it is FIVE tables, and the title undercounts
+
+Measured while fixing it. `UCls` is the fifth and it is the one the headline
+repro actually needs: **`type TRec = record ... end` inside a routine is a UCls
+row, not an alias row**, so `AliasOwnerProc` does not reach it and the two are
+indistinguishable in the source. `FindUClass`'s same-unit scan took the FIRST
+match, so a SIBLING routine's local `TRec` beat its own — fpc `A 3 / B 1`, pxx
+`A 3 / B 3`, no nesting and no generics. `Syms` is the control: already scoped
+via `FindSym`, which is what shows the rule is writable here.
+
+**And "no proc parent chain exists, so the lift-parent must be recorded at lift
+time" — written above, and false.** `ParseNestedRoutine` leaves an in-place
+`<header>; forward;` behind, and that forward is parsed while `CurProc` is still
+the ENCLOSING routine, so `ProcLexParent[ProcCount] := CurProc` at `RegisterProc`
+— the documented single chokepoint for every `Proc*` table — is the whole
+mechanism. The ticket sent a reader to the harder place because its author
+reasoned about the lift instead of looking at what the lift leaves behind.
+
+## Residual, NOT fixed here
+
+`specialize TBox<TRec>` in a nested routine still binds the OUTER `TRec` even
+though a bare `TRec` in the same body now resolves correctly. The specialization
+dedup compares concrete arguments **by NAME string** (`SpecConcreteNames`), and
+two different types in two scopes share the spelling — a name standing in for
+the type it names, one layer above the tables this ticket is about. Its own
+ticket, or the group's next rung.

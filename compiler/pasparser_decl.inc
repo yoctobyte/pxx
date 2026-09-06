@@ -4091,6 +4091,7 @@ begin
           Expect(tkEq, '=');
           if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
           SetConstName[SetConstCount]   := name;
+        SetConstOwner[SetConstCount]  := CurProc;   { routine scope; see FindSetConst }
           SetConstEnumId[SetConstCount] := LastTypeSetEnumId;
           SetConstOff[SetConstCount]    := BakeSetConst;
           SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; SetConstDeclImpl[SetConstCount] := DeclInImplNow; Inc(SetConstCount);
@@ -4326,6 +4327,7 @@ begin
           ConstEval. }
         if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
         SetConstName[SetConstCount]   := name;
+        SetConstOwner[SetConstCount]  := CurProc;   { routine scope; see FindSetConst }
         SetConstEnumId[SetConstCount] := -1;
         SetConstOff[SetConstCount]    := BakeSetConst;
         SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; SetConstDeclImpl[SetConstCount] := DeclInImplNow; Inc(SetConstCount);

@@ -3732,6 +3732,18 @@ var
   ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array of Integer; { Strs[] unit name, or -1 for main }
+  { The routine this one is lexically NESTED IN (CurProc at registration; -1 =
+    top level). Nested routines are lambda-LIFTED to flat top-level routines by
+    ParseNestedRoutine, which destroys the only record of the nesting -- and
+    three name tables need it to answer "is a declaration owned by routine X
+    visible from here". Recorded at RegisterProc because that is the one place
+    every Proc* table is written, and captured from the in-place `forward` the
+    lift leaves behind, which is parsed while CurProc is still the ENCLOSING
+    routine. Widening is the safe direction if a stream ever registers a routine
+    under an unrelated CurProc: the reachability test then admits a declaration
+    it should not, which is exactly what the flat tables did before this.
+    bug-p-routine-local-name-scoping-is-implemented-in-one-of-three-tables }
+  ProcLexParent : array of Integer;
   ProcDeclImpl : array of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   { ONE-BASED token index of a NilPy module-level `def`, or 0 for "not one".
     One-based because the sentinel and a real position would otherwise collide
@@ -6202,6 +6214,13 @@ var
   UClsAbstractCls : array[0..MAX_UCLASS-1] of Boolean; { `class abstract`: cannot be instantiated. Distinct from a method's `abstract`. }
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
   UClsEnclosingCi : array[0..MAX_UCLASS-1] of Integer;
+  { The routine that declared it (CurProc at AddUClass; -1 = unit/global). The
+    FIFTH table to need this key and the last one a routine-local `type` section
+    can reach: `type TRec = record ... end` inside a routine is a UCls row, not
+    an alias row, so the alias table's scope key does not cover it and the two
+    look identical in the source. See AliasOwnerProc, StrConstOwner,
+    SetConstOwner, and ScopeReachesProc for the one rule all five share. }
+  UClsOwnerProc : array[0..MAX_UCLASS-1] of Integer;
   { The type this one was declared INSIDE, or -1 at unit level. Written where
     the two class/record body parsers already save the previous
     ParsingClassBodyCi, so it is the same chain those `savedPCB` locals form on
@@ -6518,6 +6537,13 @@ var
   AliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = main program / compiler-registered. What lets FindTypeAlias apply the non-transitive uses rule the routine and class tables already apply — without it an enum or scalar type alias stayed globally visible while a record type beside it was correctly hidden (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   AliasOwnerCi : array[0..MAX_TYPEALIAS-1] of Integer; { the class/record ci whose BODY declared this alias, -1 = declared at unit level. Inside a class body the name is not the unit's: `TA.PCell` and `TB.PCell` are two legal distinct types, exactly as AddClassLikeType already treats a nested CLASS or RECORD. Without this column they were one flat row and the second declaration inherited the first's pointee -- and the error followed declaration ORDER, which is the tell for a shared slot. -1 AND NOT `ci + 1`: class 0 is a real class (TGuid), and ResetDeclScopeSentinels' own header records what a 0 default cost here before -- every top-level class in an imported unit became a nested type of TGuid, silently. Set by AliasCommit for every row, so a new Register*Alias cannot forget it. bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
   AliasIsDistinct : array[0..MAX_TYPEALIAS-1] of Boolean; { declared as `T = type Base` -- FPC's strong typedef: layout-identical to Base and a DIFFERENT type for overload resolution and var-parameter matching. Set by AliasCommit from DeclDistinctNow, so a new Register*Alias cannot forget it, exactly as AliasOwnerCi above. READ AT THE COMPARISON, NEVER AT REGISTRATION: an ordinary `type TInt = Integer` registers the same row shape and must keep accepting an Integer, so distinctness is a property of the QUESTION being asked and not of the row. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  { The routine that declared it (CurProc at AliasCommit; -1 = unit/global).
+    The alias table was FLAT, so a routine-local type stayed visible to every
+    routine parsed afterwards and, because the lookup keeps the FIRST match,
+    even beat a later routine's OWN type of the same name. Same sentence as
+    StrConstOwner one table over, which is the point: the rule was written once
+    and the siblings were never grepped. }
+  AliasOwnerProc : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   AliasCount   : Integer;
 
@@ -6664,6 +6690,7 @@ var
   SetConstDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   SetConstOff  : array[0..MAX_TYPEALIAS-1] of Integer;   { Data[] offset of the mask }
   SetConstEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { element enum type id, or -1 }
+  SetConstOwner : array[0..MAX_TYPEALIAS-1] of Integer;   { declaring routine; -1 = unit/global. See AliasOwnerProc. }
   SetConstCount: Integer;
 
   { Class-scoped consts (`type TFoo = class const Max = 5; ...`). A class const is
