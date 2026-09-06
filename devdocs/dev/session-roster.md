@@ -1737,6 +1737,33 @@ The other three — /tmp is a real 94G filesystem and the reaper is 6h; the play
 pointer's size tripled; push BEFORE a measurement because `sync.sh` pulls — are
 cost and accuracy rather than correctness.
 
+> ### THE PREMISE OF THIS SECTION WAS WRONG WITHIN THE HOUR, AND IT WAS WRONG IN THE DIRECTION THAT WASTES PEOPLE'S TIME
+>
+> I wrote *"every session running at that moment ... will not read it again"* and
+> warned two seats on the strength of their START TIME. **frankB's session
+> predates 09:01 and holds all five corrections**, enumerated back to me — the
+> INDEX warning on `git checkout HEAD -- <file>`, *"GATE BEFORE OR AFTER THE
+> COMMIT"*, the 94G /tmp with the 6h reaper, the playbook at 905KB/237, and PUSH
+> BEFORE A MEASUREMENT STARTS. Their correction is the rule:
+>
+> > **"Session start time does not determine which version a session holds."**
+>
+> **The mechanism is a context refresh without a restart** — this seat observed
+> one in its own session the same day: after a compaction, the instruction files
+> are re-read and the notice says so explicitly. So a long-lived session holds the
+> text from its start OR from its last refresh, **and neither is visible from
+> outside.** `git log --since=<their start> -- CLAUDE.md` answers a question about
+> the FILE and gets read as a question about the SESSION — the population error
+> in its usual clothes, committed here by the person who wrote the population-error
+> section.
+>
+> **So the timestamp is not a discriminator in either direction.** frankA was
+> stale and proved it by quoting the old text; frankB was current and proved it by
+> enumerating the new. **Only the CONTENT discriminates**, and it is cheap to get:
+> quote the corrected sentence and let them tell you whether they have it. Warning
+> on a start time is wrong *"in the direction that makes you re-explain rules
+> people already have"* — frankB's phrasing, and the cost lands on them, not on me.
+
 **What this seat owes, and it is not a broadcast.** Waking an idle session costs a
 full context re-read, so the answer is not to message everyone. It is:
 
