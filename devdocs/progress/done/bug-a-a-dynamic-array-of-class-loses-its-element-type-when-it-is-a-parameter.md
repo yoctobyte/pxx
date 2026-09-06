@@ -3,7 +3,7 @@ slug: bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-paramet
 track: A
 type: bug
 prio: 80
-status: working
+status: done
 created: 2026-09-06
 found-by: frankD
 owner: frank-coord-core
@@ -118,3 +118,6 @@ The three errors appeared only after
 building the RTL fix WITHOUT the parser fix: all six errors are present
 together, so these three are pre-existing and were hidden by a recovery
 cascade, not introduced. Binary `0426b285ba35` for that arm.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

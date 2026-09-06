@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:147 backlog-nilpy:97 backlog-tools:52 backlog-pascal:39 backlog-decide:44 backlog-libs:22 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3517 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:147 backlog-nilpy:97 backlog-tools:52 backlog-pascal:39 backlog-decide:44 backlog-libs:22 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3518 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-parameter` [A] — owner: frank-coord-core
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization` [P] — owner: frankS
