@@ -143,4 +143,4 @@ its own accord, reading the function's own name as the generic template. We
 accept it, which is not a defect.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3d4457ece.
