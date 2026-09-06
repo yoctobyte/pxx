@@ -138,7 +138,7 @@ of the sized-boolean family has a smaller, unblocked route to a defensible state
 **Say which repair an edge is about when the ticket admits more than one.**
 
 ## Log
-- 2026-09-06 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit a3532e1f8.
 
 ## 2026-09-06 — BUILT (frankH). Arm B, four slices, all carry sites
 

@@ -207,7 +207,7 @@ direct-vs-alias disagreements at `SizeOf`, `High`/`Low` and `TypeInfo` for every
 other name — are on the thirteen-names ticket.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a3532e1f8.
 
 ## Fixed 2026-09-06 (frankH) — and the aperture was wider than this ticket
 
