@@ -221,4 +221,4 @@ reproduced, `c_va_arg_every_target.sh` green at `6 built, 1 awaiting a C entry
 stub, 7 examined`.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit be2c87890.
