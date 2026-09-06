@@ -112,7 +112,7 @@ not bank the green. The probe that would settle this ticket has to build the
 cycle; a straight `uses` cannot reach the condition.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 696d4a8ae.
 
 ## Resolved — 2026-09-06 (frankS), compiler `d3cc5b9b653d`
 
