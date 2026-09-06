@@ -215,3 +215,62 @@ where to look.
 **Found while clearing seven's full-tier reds** (17 of 29 cleared that night by
 other fixes); this one is a decision rather than a defect I can settle, so it is
 banked here rather than microfixed.
+
+## 2026-09-06 (frankF) — the stated lead points at something that does not exist: riscv32 got NOTHING xtensa did not
+
+This ticket's lead is *"the asymmetry is the lead for whoever takes it —
+whatever riscv32 got that xtensa did not is where the bytes are."* Measured at
+`d6de711d1`, `compiler/pascal26 = c9de36a3754e`, `converged after 1 round(s)`,
+same empty program on both:
+
+| build | code | procs | B/proc |
+| --- | --- | --- | --- |
+| `--target=esp32c3 --esp-profile=bare` | 57,900 | **72** | 804 |
+| `--target=esp32s3 --esp-profile=bare` | 46,436 | **75** | 619 |
+| `--target=riscv32 --platform=posix` | 261,996 | **172** | 1523 |
+| `--target=xtensa --platform=posix` | 212,844 | **175** | 1216 |
+| `--target=arm32 --platform=posix` | 233,324 | 172 | 1356 |
+| `--target=i386` | 106,348 | 136 | 782 |
+
+**riscv32 emits THREE FEWER procedures than xtensa and 11,464 more bytes**, in
+both profiles, and the ratio is the same in both (1.247 bare, 1.231 hosted). So
+the standing gap is not content that riscv32 acquired. It is **bytes per
+procedure**, and looking for a unit or a helper that xtensa lacks will find
+nothing because there is not one.
+
+The `+7372` vs `+2984` growth asymmetry is a **different quantity** and this
+does not settle it — I did not build the 2026-08-30 tree, so I have no proc
+counts at the baseline. What can be said from the two ends: the RATIO ITSELF
+moved, 50528/43428 = **1.164** then against 57900/46436 = **1.247** now. A
+constant 1.23x density would have grown riscv32 by ~3,670 B against xtensa's
+2,984, not by 7,372, so roughly half the extra is density and the other half is
+something about the code added since. Attributing that still needs the
+per-procedure breakdown frankS said it needs.
+
+### The available lever, stated as a lever and not as a diagnosis
+
+**pxx emits no compressed (RVC) instructions on riscv32 at all.** Three checks
+that fail differently:
+
+- `compiler/rv32enc.inc` — **0** occurrences of `compressed`, `rvc`, or any
+  `c.` mnemonic; the file has no 2-byte emit path.
+- ELF header `Flags: 0x0` on the esp32c3 image — `EF_RISCV_RVC` unset.
+- Raw disassembly of the image at its entry (`objdump -b binary -m riscv:rv32`,
+  since a bare image has no sections): **1023 of 1025** decoded instructions are
+  4 bytes, and the two 2-byte reads are objdump resynchronising on data.
+
+The hardware has it: `ir_codegen_riscv32.inc:4321` already says *"the ESP32-C3/C2
+core is RV32IMC"*, so the capability is known to the compiler and only the
+encoder side is missing.
+
+**What I am NOT claiming.** RVC is not the explanation for the 1.23x. Xtensa's
+base encoding is **24-bit** with 16-bit narrow forms, so it is denser than RV32I
+by construction and some of this gap is the two ISAs rather than a defect —
+4/3 = 1.33 is the right order for that alone. What RVC is, is a lever of roughly
+the right size (25-30% on typical RISC-V code) pointed at the metric this ticket
+exists for, on a part where flash is the binding constraint. Treat it as the
+largest unclaimed code-size item on riscv32, not as this ticket's cause.
+
+Also visible in that disassembly and worth someone's eye separately: the
+prologue does `addi sp,sp,-16` at +0x10 and again at +0x20 with two
+`addi zero,zero,0` between them. Not measured further and not this ticket.
