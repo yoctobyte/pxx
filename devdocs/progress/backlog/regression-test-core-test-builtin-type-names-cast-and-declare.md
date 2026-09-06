@@ -43,6 +43,19 @@ track: P
 >
 > Not claimed. Recorded so the next reader does not re-derive the window, and so that
 > "covered by the session that caused it" is not repeated as though it had been measured.
+>
+> **UPDATE 2026-09-06 (frankB, relayed): THE CONSTRUCT HAS A HOLDER AT THE OTHER END.** frankA has
+> just unified `StringTypeBound` across six sites and fixed `High`/`Low` for the carved-out
+> character kinds — `86f935479` and `26742a0ca`, and `86f935479` is the in-window commit this
+> ticket names as the closer topical match. So the type-names construct is frankA's, from the
+> feature direction, and **frankA is the party who can settle in one line whether the window's
+> type-name commits are implicated** — cheaper than any bisect anyone here would run.
+>
+> frankB deliberately did NOT take this pair (this p70 plus
+> [[bug-p-thirteen-builtin-type-names-answer-at-some-doors-and-are-refused-at-others]] at p35) even
+> though it ranks highest, and flagged it so the p70 **does not sit unclaimed on the assumption
+> that someone takes the top of the queue.** That assumption is worth naming: a high-ranked row
+> that everybody can see is not thereby a row anybody has.
 
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_typenames26 "$(/tmp/test_typenames26 | tail -1)" "ALL OK"`. The job's own `src` (`test/test_builtin_type_names_cast_and_declare.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
