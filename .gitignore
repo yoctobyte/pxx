@@ -17,6 +17,14 @@ test/*.o
 test/*.ppu
 # Scratch test binaries (manual `pxx test/foo.pas test/tmp_foo` builds).
 test/tmp_*
+# ...and the ad-hoc ones, which the two rules above CANNOT catch: a probe built
+# as `test/trf` or `test/tgf` matches neither `test_*` nor `tmp_*`, so `git add
+# -A` takes a 190KB ELF. Three of them reached origin from three different
+# seats between 2026-08-28 and 2026-09-06, each unreferenced by anything.
+# There is no pattern to add -- the names are arbitrary by definition -- so
+# what is listed here is only the shape, and the real guard is
+# bug-t-nothing-stops-a-probe-binary-being-committed-under-test.
+# Build probes OUTSIDE the repo (the session scratchpad) and this cannot happen.
 /tmp/
 __pycache__/
 *.swp
