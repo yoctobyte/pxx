@@ -71,3 +71,77 @@ the place commit messages go, and the Makefile comment format had no slot for
 it. The defect, if there is one, is that a skip reason is free-text with no
 field for WHICH gap — and that belongs to whoever owns the skip format, not
 here.
+
+---
+
+# MEASURED: the sentence was correct for 2 of 24
+
+Run half, same night, after the hold lifted. **21 of 24 runnable rows PASS on
+riscv32 today.**
+
+    COMMIT   b5f499d4a
+    BINARY   compiler/pascal26 = 67075a6033c8f94f
+    SRCHASH  9d1f549507c7fa70 (stamp == tree)
+    BUILD    "converged after 1 round(s)"
+    BOX      shared, load 14.08 — frankA on test-nilpy, frank-coord-front on test-esp-bare
+
+## The instrument was controlled before any of this was believed
+
+21 passes is exactly the shape of a harness that is not running the target it
+names, so it was checked from the right population before being reported:
+
+    ptr=4   qemu-riscv32
+    ptr=8   native
+
+`SizeOf(Pointer)` must differ and does. `run_target.sh:113` execs
+`qemu-riscv32`, and the emitted file is `ELF 32-bit LSB exec`. Had the harness
+been falling back to native, both would have said 8 and **every PASS below
+would be void.**
+
+## Result
+
+| outcome | n | rows |
+| --- | --- | --- |
+| **PASSES — the skip is false** | **21** | arm32_virtual_wide, channel, class_of, classref, cross_aggregate_return, cross_frozen_strlen_deref, cross_managed_aggregate_locals, cross_syscall, cross_var_string_param, forin_implicit_field, forin_member_access, interface_arc, interfaces_as, interfaces_inherit, interfaces_is, interfaces_param, lfm, scheduler, scheduler_exc, streaming, streaming_enumset |
+| **skip reason CORRECT** | 2 | `test_extern_c`, `test_extern_c_float` — *"target riscv32: external (dynamic) symbols are not supported on this target"*, a compile-time refusal |
+| **skip reason wrong IN KIND** | 1 | `test_rtti` |
+| not run here | 1 | `cunsigned_div_mod_b123.c`, C harness |
+
+**Whole families are false.** All five `interfaces` rows pass. All six
+class-RTTI/streaming rows except `test_rtti` pass. Both `for-in` rows pass. Both
+scheduler rows and `test_channel` pass. Of the six families the original commit
+named, exactly one — dynamic externs — still holds.
+
+## `test_rtti` is a third category and it matters
+
+It is not a backend gap and not a false skip. Its only differences are:
+
+    InstanceSize: 64   vs  80          <- pointer width, legitimately different
+    Prop 0 pointer: 135071936 vs 4393176   <- raw ADDRESSES
+
+**The test prints addresses and a pointer-width-dependent size, so it can never
+match an x86-64 oracle on any 32-bit target.** Diffing it against a native
+build was never going to work. That is this repo's own standing rule — prefer a
+test asserting RELATIONS over per-target constants — and the row was skipped
+under a sentence that blamed the backend for a property of the test.
+
+## What this does NOT license
+
+**Do not read "21 pass" as "un-skip 21 rows".** The SKIP lines are comments; the
+recipe stanzas do not exist and would have to be written, and adding 21 jobs
+changes tier timing during a release push. That is a scheduling decision with an
+owner, not a consequence of this measurement.
+
+Note also `cc7ec7dce`, which landed *while the reading half above was being
+written*: riscv32 has no `timerfd_settime`, CoSleep hung forever, and a stale
+skip hid it — clearing `test_timer`, `test_reactor` and `test_asyncecho`, the
+whole timers family, in one fix. The list above was 28 rows an hour earlier.
+**One root cause per family is how this population behaves**, which is the
+argument for running it by family rather than by row.
+
+## Denominators, because these are different populations
+
+frankS measured **false skips 0 of 9** on the Pascal conformance wall
+(`pxx.skip`). This is **21 of 24** on the riscv32 Makefile skips. Both are
+correct and they are not in tension: different files, different authors,
+different mechanism. **Do not merge them into one rate.**
