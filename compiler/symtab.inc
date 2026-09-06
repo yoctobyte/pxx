@@ -242,6 +242,8 @@ begin
   AliasUnitIdx[AliasCount]  := CurrentUnitIdx;
   AliasDeclImpl[AliasCount] := DeclInImplNow;
   AliasOwnerCi[AliasCount]  := ParsingClassBodyCi;   { -1 when not in a class body }
+  AliasIsDistinct[AliasCount] := DeclDistinctNow;    { `T = type Base`; False for every other row }
+  DeclDistinctNow := False;                          { CONSUMED: one keyword marks exactly one row, so a later implicit alias cannot inherit it }
   Inc(AliasCount);
 end;
 
@@ -382,6 +384,12 @@ end;
 function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
 function SysPathFrozenSym(argNode: Integer): Integer; forward;
 function TypeIsAnyString(tk: TTypeKind): Boolean; forward;
+{ Body beside MatchArgRecMismatch, ~900 lines below its first caller
+  (FindProcOverloadRec). pxx resolves across the unit and FPC resolves in source
+  order, so without this the tree self-hosts cleanly and the FPC SEED BUILD
+  fails -- which is the entire reason gate.sh's forward-decl canary exists, and
+  it is what caught this. }
+function AliasIdentityMismatch(a, b: Integer): Boolean; forward;
 { The length-prefix WIDTH the two frozen kinds disagree about; see its body. }
 function FrozenStrPrefixSize(tk: TTypeKind): Integer; forward;
 function FrozenStrAlign(tk: TTypeKind): Integer; forward;
@@ -4938,6 +4946,7 @@ begin
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
   SetLength(SymIsExcBinder, n);
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
+  SetLength(SymAliasIdx, n);
   SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
   SetLength(SymPtrElemStrTk, n);
@@ -5149,6 +5158,7 @@ begin
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymSetElemLo[SymCount] := 0;
@@ -5487,6 +5497,7 @@ begin
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymSetElemLo[SymCount] := 0;
@@ -5852,6 +5863,7 @@ begin
   SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymSetElemLo[SymCount] := 0;
@@ -5977,6 +5989,7 @@ begin
   SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymSetElemLo[SymCount] := 0;
@@ -6118,6 +6131,7 @@ begin
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
   SymEnumId[SymCount] := -1;
+  SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
@@ -9273,7 +9287,7 @@ end;
   (bug-overload-resolution-record-identity). A rec id is only compared when
   both sides are known (<> REC_NONE), so registration paths that never stored
   ProcParamRecId keep matching as before. }
-function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const pstrelem: array of Integer; const pptrelem: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
+function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const pstrelem: array of Integer; const pptrelem: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean; const paliases: array of Integer): Integer;
 var i, j: Integer; match: Boolean;
 begin
   { Hash-chain walk (FIFO = registration order) instead of the full Procs scan
@@ -9334,6 +9348,24 @@ begin
           if (ptypes[j] = tyAnsiString) and (j < MAX_PROC_PARAMS) and
              (StrElemIsWide(pstrelem[j]) <>
               StrElemIsWide(ProcParamStrElemTk[i * MAX_PROC_PARAMS + j])) then
+            match := False;
+          { ...and the FOURTH instance of the one shape, on a DISTINCT TYPE:
+            `type TMyB = type byte` is tyByte and so is byte, and the two are
+            different types for overload resolution. Without this arm the second
+            declaration matched the first's row, the caller warned `duplicate
+            definition of 'P' with the same parameter types`, the later body won,
+            and BOTH calls ran it -- where FPC binds two bodies.
+
+            THIS ARM AND MatchArgRecMismatch'S MUST AGREE, and they are the two
+            halves the ticket named: a permissive answer here with a strict one
+            there means a call is refused against a candidate list that never had
+            the right candidate in it, which is exactly what the argument-side
+            fix alone produced (`candidates: P(Byte)`, one row, two decls). One
+            predicate, AliasIdentityMismatch, read from both.
+            bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+          if (j < MAX_PROC_PARAMS) and
+             AliasIdentityMismatch(paliases[j],
+                                   ProcParamAliasIdx[i * MAX_PROC_PARAMS + j]) then
             match := False;
           { ...and the THIRD instance of the one shape, on typed POINTERS:
             PChar and PWideChar are both tyPointer, distinguished by the
@@ -10212,6 +10244,29 @@ end;
   callers that don't provide rec ids keep the legacy behavior. Records only:
   class params keep their inheritance-tolerant matching.
   (bug-overload-resolution-record-identity) }
+{ True when alias rows `a` and `b` are DIFFERENT TYPES for overload purposes.
+
+  READ AT THE COMPARISON AND NEVER AT REGISTRATION, which is the whole design of
+  AliasIsDistinct: an ordinary `type TInt = Integer` produces the same row shape
+  as `type TMyB = type byte` and must keep accepting an Integer, so the question
+  is not "is this row an alias" but "does either SIDE of this comparison insist".
+  Either side insisting is enough and that is deliberate -- FPC refuses both
+  `P(m: TMyB)` given a `byte` and `P(b: byte)` given a `TMyB`, so the relation is
+  symmetric even though only one of the two names carried the keyword.
+
+  -1 on either side means UNCONSTRAINED, not "the base type": an argument the
+  channel could not identify (anything but a plain variable today) must keep
+  matching exactly as it did, or this becomes a silent narrowing of every call
+  in the tree rather than a fix to two.
+  bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+function AliasIdentityMismatch(a, b: Integer): Boolean;
+begin
+  Result := False;
+  if a = b then Exit;
+  if (a >= 0) and (a < AliasCount) and AliasIsDistinct[a] then begin Result := True; Exit; end;
+  if (b >= 0) and (b < AliasCount) and AliasIsDistinct[b] then Result := True;
+end;
+
 function MatchArgRecMismatch(i, j: Integer; aTk: TTypeKind): Boolean;
 var pr, ar, curr: Integer;
 begin
@@ -10932,6 +10987,28 @@ begin
   Result := (paramTk = argTk) or
             ((paramTk = tyInteger) and (argTk = tyInt32)) or
             ((paramTk = tyInt32) and (argTk = tyInteger));
+  { A DISTINCT TYPE (`type TMyB = type byte`) and its base are the SAME KIND and
+    different types, so the exact phase would otherwise take whichever candidate
+    came first in the chain -- declaration order again, the same failure the
+    string-width arm below describes.
+
+    THE EXACT PHASE AND NOT MatchParamCompatible, AND THAT IS A MEASUREMENT AND
+    NOT A STYLE. It was written as a hard mismatch first, and fpc 3.2.2 then
+    disagreed with us on three shapes that have only ONE candidate: `V(var v:
+    byte)` given a TMyB, `V(var v: TMyB)` given a byte, and the by-value form of
+    each. FPC compiles and runs all three -- a distinct type stays
+    assignment-compatible with its base, in both directions, even by reference.
+    So distinctness in FPC is an overload PREFERENCE and not a compatibility
+    rule, and blocking it outright refuses working code. The ticket said a var
+    parameter of the base type is something "FPC refuses"; measured three ways,
+    it does not, and that sentence is what sent the first version to the wrong
+    function.
+    bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  if Result and MatchArgAliasValid and (j < MAX_PROC_PARAMS) and
+     (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
+     AliasIdentityMismatch(MatchArgAliasIdx[j],
+                           ProcParamAliasIdx[i * MAX_PROC_PARAMS + j]) then
+    Result := False;
   { ...and the OPPOSITE correction one type family over: two spellings that are
     the same type must match here, and two TYPES that share a spelling must not.
     AnsiString, WideString and UnicodeString are all tyAnsiString, so at kind
@@ -11578,6 +11655,7 @@ begin
   SetLength(InlineLocalTk, n*MAX_INLINE_LOCALS);
   SetLength(DceEdgeHead, n+1);
   SetLength(ProcParamPtrDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamRecId, n*MAX_PROC_PARAMS);  SetLength(ProcParamSetEnumId, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamAliasIdx, n*MAX_PROC_PARAMS);
   SetLength(ProcParamPtrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamPtrElemRec, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
@@ -11675,6 +11753,7 @@ begin
     ProcParamDefaultIsBool[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamSetEnumId[ProcCount * MAX_PROC_PARAMS + i] := -1;
+    ProcParamAliasIdx[ProcCount * MAX_PROC_PARAMS + i] := -1;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;

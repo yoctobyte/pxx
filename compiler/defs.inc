@@ -2948,6 +2948,24 @@ var
     refused nil. bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
   MatchArgNil : array[0..MAX_PROC_PARAMS-1] of Boolean;
   MatchArgNilValid : Boolean;
+  { Call arg j was declared through this ALIAS row, else -1. An EIGHTH channel
+    in the family above, and it exists for the family's own stated reason: the
+    kind pair cannot answer it. `type TMyB = type byte; var x: TMyB` arrives as
+    tyByte, indistinguishable from a plain byte, so `P(b: byte)` and
+    `P(m: TMyB)` collapsed to one overload with a `duplicate definition` warning
+    and both calls ran the last body -- where FPC binds two.
+
+    ONLY AN AN_IDENT ARGUMENT CAN ANSWER IT TODAY, and that is a stated limit
+    rather than an oversight: a distinct-typed value reaches a call as a
+    variable, a parameter, a field, an index or a call result, and only the
+    first two carry a symbol to read SymAliasIdx off. Everything else stays -1,
+    which means "unconstrained" and matches exactly as before -- the same
+    conservative default MatchArgScalar and MatchArgArray take, and for the same
+    reason: an identity channel that GUESSES is worse than one that abstains,
+    because the guess is believed.
+    bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  MatchArgAliasIdx : array[0..MAX_PROC_PARAMS-1] of Integer;
+  MatchArgAliasValid : Boolean;
   { Call arg j is DEFINITELY a non-aggregate scalar value (an ordinal/float
     literal, arithmetic expression, non-array variable, or scalar-returning
     call), so it cannot bind an ARRAY parameter. Filled beside MatchArgRec from
@@ -3324,6 +3342,7 @@ var
   SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymEnumId : array of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
+  SymAliasIdx : array of Integer; { the alias row a var/param was DECLARED THROUGH, else -1. Not the same question as its TypeKind: `var x: TMyB` and `var b: byte` are both tyByte and only this says which name was written. Stamped at the declaration sites from LastTypeAlias, the way SymEnumId is stamped from LastTypeEnumId and for the same reason -- NOT inside AllocVar, where the LastType* channel may be stale. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   SymElemEnumId : array of Integer; { ARRAY var whose ELEMENT is an enum: that enum type index, else -1. An array symbol's TypeKind IS its element kind, so an enum element leaves TypeKind=tyInteger and SymEnumId would be the wrong slot to reuse — every reader of SymEnumId means "this VALUE is an enum", which an array is not. Set at the array decl sites beside SymEnumId's scalar arm; drives `WriteLn(a[i])` printing the member name. }
   SymSetElemTk : array of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   { The element SUBRANGE bounds of `set of 1..10`. SymSetElemTk answers the
@@ -3563,6 +3582,7 @@ var
   ProcParamPtrElemRec : array of Integer; { rec id of the pointee when ProcParamPtrElemTk is a record/class/interface; REC_NONE otherwise }
   ProcParamRecId : array of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
   ProcParamSetEnumId : array of Integer; { `set of TEnum` param: the element enum type index, -1 otherwise. A PARALLEL ARRAY rather than a TParam field, and durable for the same reason ProcParamRecId is: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER parsing `f([...])` cannot ask the symbol what the set's element type is. Read by the set-literal element check. }
+  ProcParamAliasIdx : array of Integer; { the alias row a PARAMETER was declared through, else -1. A parallel array and durable for the reason ProcParamRecId and ProcParamSetEnumId above both state: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER matching an argument cannot ask the symbol. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   ProcParamStrElemTk : array of Integer; { managed-string PARAMETER: the element width as a TTypeKind ord -- Ord(tyChar) for a byte string, Ord(tyWideChar) for a wide one; 0 = not a managed string. The param member of the five-carrier set (symbol / record field / type alias / array element / param-return) that Option B needs, because tyAnsiString names the KIND and no longer implies the WIDTH. A PARALLEL ARRAY rather than a TParam field for the reason ProcParamRecId/ProcParamSetEnumId/ProcParamPtrElemTk each state: param syms are reused across procs, so a CALLER cannot read the width back off Syms[Params[j].SymIdx] -- it would read whatever the next scope allocated there. Note 0 is the "not a managed string" sentinel AND the value a path that forgot to store leaves behind, so a missed write reads as a NARROW string rather than as an error; see bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted for what that same double duty cost the pointer twin. }
   ProcParamDynDepth : array of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
   ProcParamIsConst : array of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
@@ -3934,6 +3954,8 @@ var
   LastArrIdxEnumId : Integer;  { its enum type index when LastArrIdxTk is Ord(tyInteger), else -1. }
   LastTypePointerElemRec : Integer;
   LastTypePointerAlias : Integer;  { set by ParseTypeKind when a pointer type resolves through a NAMED alias: that alias index, else -1 (see UFldPtrAlias) }
+  LastTypeAlias : Integer;  { set by ParseTypeKind when a GENERAL (non-pointer) type resolves through a NAMED alias: that alias index, else -1. The twin of LastTypePointerAlias above, and it did not exist -- which is why a value declared through `type TMyB = type byte` reached overload matching as a bare tyByte with nothing carrying the name that produced it. Reset at the top of ParseTypeKind like every other LastType* channel. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  DeclDistinctNow : Boolean;  { the type declaration currently being parsed carried FPC's `type` keyword on its right-hand side (`T = type Base`). Read by AliasCommit only. A GLOBAL rather than a parameter because the keyword is consumed ahead of the whole binding chain -- every RHS shape then takes the arm it would have taken without it, which is the property that kept the parse fix from teaching a new case to eleven arms. }
   LastTypePointerElemAlias : Integer;  { set by ParseTypeKind's `^` arm when the POINTEE is itself a named POINTER alias (`TPP = ^TP`): that alias index, else -1. The one fact `pp^^` needs and no carrier held: the outer deref yields a TP, and without a handle back to TP nothing downstream could say what the SECOND caret dereferences. Same one-integer shape as AliasPtrElemArrAi, one level up. bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
   LastTypePointerElemArrAi : Integer;  { set by ParseTypeKind when a pointer's POINTEE is a named FIXED-array type: that ArrType index, else -1. Carries the pointee's extent so Length/High/SizeOf of `p^` can fold it. }
   LastTypePointerDepth : Integer;
@@ -4476,6 +4498,7 @@ var
   VDElemRowLen   : Integer;
   VDElemRowLo    : Integer;
   VDElemProcSig  : Integer;
+  VDAliasIdx     : Integer;  { the alias row the declared type resolved through, else -1. Captured from LastTypeAlias at the END of ParseDeclTypeDesc rather than read at the allocation site, because the two are separated by AllocVar/AllocArray/AllocDynArray -- any of which may parse nothing but does call into code that runs ParseTypeKind for an initializer. A LastType* read at the far end is the stale-channel shape this file's own comments warn about for LastTypeEnumId. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   VDElemEnumId   : Integer;  { array element's enum type index, else -1 -> SymElemEnumId }
   VDIdxTk        : Integer;  { the declared array's dimension-0 INDEX type -> SymArrIdxTk. Reset per declaration beside VDElemEnumId; filled either from the named type's ArrTypeIdxTk or from LastArrIdxTk after the inline `[..]` list. }
   VDIdxEnumId    : Integer;  { its enum type index when VDIdxTk is Ord(tyInteger) -> SymArrIdxEnumId. }
@@ -6115,6 +6138,7 @@ var
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = main program / compiler-registered. What lets FindTypeAlias apply the non-transitive uses rule the routine and class tables already apply — without it an enum or scalar type alias stayed globally visible while a record type beside it was correctly hidden (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   AliasOwnerCi : array[0..MAX_TYPEALIAS-1] of Integer; { the class/record ci whose BODY declared this alias, -1 = declared at unit level. Inside a class body the name is not the unit's: `TA.PCell` and `TB.PCell` are two legal distinct types, exactly as AddClassLikeType already treats a nested CLASS or RECORD. Without this column they were one flat row and the second declaration inherited the first's pointee -- and the error followed declaration ORDER, which is the tell for a shared slot. -1 AND NOT `ci + 1`: class 0 is a real class (TGuid), and ResetDeclScopeSentinels' own header records what a 0 default cost here before -- every top-level class in an imported unit became a nested type of TGuid, silently. Set by AliasCommit for every row, so a new Register*Alias cannot forget it. bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
+  AliasIsDistinct : array[0..MAX_TYPEALIAS-1] of Boolean; { declared as `T = type Base` -- FPC's strong typedef: layout-identical to Base and a DIFFERENT type for overload resolution and var-parameter matching. Set by AliasCommit from DeclDistinctNow, so a new Register*Alias cannot forget it, exactly as AliasOwnerCi above. READ AT THE COMPARISON, NEVER AT REGISTRATION: an ordinary `type TInt = Integer` registers the same row shape and must keep accepting an Integer, so distinctness is a property of the QUESTION being asked and not of the row. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   AliasDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   AliasCount   : Integer;
 

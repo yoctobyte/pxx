@@ -2482,6 +2482,16 @@ begin
     bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
   MatchArgNil[i] := IsNilLiteralNode(node);
 
+  { ...and the ALIAS the argument was declared through, so a DISTINCT type
+    (`type TMyB = type byte`) can refuse the base-typed parameter FPC refuses it
+    for. Only a symbol-bearing node can answer -- read the boundary in
+    MatchArgAliasIdx's own header in defs.inc rather than guessing from here.
+    bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  MatchArgAliasIdx[i] := -1;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+     (ASTIVal[node] < SymCount) then
+    MatchArgAliasIdx[i] := SymAliasIdx[Integer(ASTIVal[node])];
+
   { ...and whether the argument is a ROUTINE OR METHOD ADDRESS. Both node kinds
     are typed tyPointer deliberately (so `TakesPtr(@h.M)` works), and a
     procedural parameter is a tyRecord or carries a ProcParamProcSig, so the
@@ -2926,6 +2936,7 @@ begin
         FillMatchArgChannelsAt(pj, argNode[j], argTk[j]);
     end;
     MatchArgRecValid := True;
+    MatchArgAliasValid := True;
     MatchArgNilValid := True;
     MatchArgScalarValid := True;
     MatchArgArrayValid := True;
@@ -2988,6 +2999,7 @@ begin
     { Nothing downstream may read a fill made for THIS argument list. }
     MatchArgProcAddrValid := False;
     MatchArgRecValid := False;
+    MatchArgAliasValid := False;
     MatchArgNilValid := False;
     MatchArgScalarValid := False;
     MatchArgArrayValid := False;

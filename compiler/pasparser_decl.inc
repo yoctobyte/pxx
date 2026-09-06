@@ -430,11 +430,24 @@ end;
 function ParseTypeKindInner: TTypeKind; forward;
 
 function ParseTypeKind: TTypeKind;
-var savedQTO: Integer;
+var savedQTO: Integer; savedDistinct: Boolean;
 begin
   savedQTO := QualTypeOwnerCi;
+  { DeclDistinctNow BELONGS TO THE DECLARATION, NOT TO ITS RIGHT-HAND SIDE.
+    `type TMyB = type byte` sets it before the RHS is parsed, and the RHS may
+    itself commit alias rows -- EnsureBuiltinPtrAlias mints one for a builtin
+    pointer name, and the pending-forward resolver commits others. AliasCommit
+    CONSUMES the flag, so without this the first row registered inside here
+    would eat it and the declaration's own row would come out ordinary, or
+    worse, an unrelated implicit row would come out distinct. Cleared for the
+    inner parse and restored after, which is the same wrapper shape
+    QualTypeOwnerCi above uses and for the same class of reason.
+    bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  savedDistinct := DeclDistinctNow;
+  DeclDistinctNow := False;
   ParseTypeKind := ParseTypeKindInner;
   QualTypeOwnerCi := savedQTO;
+  DeclDistinctNow := savedDistinct;
 end;
 
 function ParseTypeKindInner: TTypeKind;
@@ -450,6 +463,7 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     wasPacked: Boolean;
 begin
   LastTypeRecId := REC_NONE;
+  LastTypeAlias := -1;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerStrElemTk := 0;
   LastTypePointerStrCap := 0;
@@ -1211,6 +1225,14 @@ begin
               else
               begin
                 LastTypeRecId := AliasElemRec[aliasIdx];
+                { …and WHICH alias answered, which nothing carried before. The
+                  kind alone cannot distinguish `var x: TMyB` from `var b: byte`
+                  once `TMyB = type byte` has resolved, so a declaration site
+                  that wants the NAME has to read it here. The pointer arm above
+                  has had its twin (LastTypePointerAlias) since forward-pointer
+                  resolution needed it; the general arm never did.
+                  bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+                LastTypeAlias := aliasIdx;
                 LastTypeProcSig := AliasProcSig[aliasIdx];  { method-pointer record carries a call signature }
                 { …and a frozen-string alias hands back its capacity, so Alloc*
                   stamps SymStrCap and the store clamps at N }
@@ -1395,6 +1417,7 @@ begin
     elemResolved := False; VDElemDynDepth := 0;
     VDElemRowLen := 0; VDElemRowLo := 0;
     VDElemProcSig := -1;
+    VDAliasIdx := -1;
     VDElemEnumId := -1;
     VDIdxTk := 0; VDIdxEnumId := -1;
     VDIsArrND := False; VDNdCnt := 0;
@@ -1644,6 +1667,10 @@ begin
         VDTk := ParseTypeKind;
       end;
     end;
+    { The alias NAME the declared type resolved through, captured HERE, at the
+      end of the routine that ran ParseTypeKind, and not at the allocation site
+      a few lines further on. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+    if not (VDIsArr or VDIsDyn) then VDAliasIdx := LastTypeAlias;
 end;
 
 { One symbol from the descriptor ParseDeclTypeDesc just filled. Reads no tokens.
@@ -1690,6 +1717,11 @@ begin
   begin
     idx := AllocVar(nm, VDTk);
     if EnumKindMatches(VDTk, LastTypeEnumId) then SymEnumId[idx] := LastTypeEnumId;
+    { …and the alias NAME the declaration was written through, read from the
+      same still-live LastType* channel the enum identity above is read from.
+      -1 for every declaration that did not go through a named alias.
+      bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+    SymAliasIdx[idx] := VDAliasIdx;
     if (VDTk = tyRecord) or (VDTk = tyClass) then
     begin
       Syms[idx].RecName := LastTypeRecId;
@@ -5065,6 +5097,7 @@ var
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mPAliases: array[0..MAX_PROC_PARAMS-1] of Integer;   { the alias each param was declared through, -1 = none. Filled beside mPTypesRec. }
   mPArr, mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
 begin
       mIsFunc := (CurTok.Kind = tkFunction);
@@ -5503,6 +5536,7 @@ var
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mPAliases: array[0..MAX_PROC_PARAMS-1] of Integer;   { the alias each param was declared through, -1 = none. Filled beside mPTypesRec. }
   { A managed-string PARAMETER's element width, Ord(tyChar) / Ord(tyWideChar),
     0 = not a managed string. The declaration-side twin of ParseSubroutine's
     ptypesStrElemTk, and it has to be captured HERE, in the window right after
@@ -5647,11 +5681,22 @@ begin
         is what it ALREADY does for a plain `= byte` alias. So this spelling
         reaches an existing loud behaviour rather than adding a silent one.
         bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+      DeclDistinctNow := False;
       if (CurTok.Kind = tkType) and
          not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
               CaseEqual(GetTokenStrFromRaw(Tokens[TokPos].SOffset,
                                            Tokens[TokPos].SLen), 'helper')) then
+      begin
+        { …AND THE TYPE IS NOW ACTUALLY DISTINCT, which the paragraph above used
+          to say it was not. AliasCommit stamps AliasIsDistinct from this flag
+          and clears it, ParseTypeKind saves and restores it around the RHS, and
+          the two overload-decision points read it. Measured against fpc 3.2.2:
+          `P(b: byte)` / `P(m: TMyB)` now bind two bodies and print `base` then
+          `distinct`, where this warned `duplicate definition` and ran one.
+          bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+        DeclDistinctNow := True;
         Next;
+      end;
       if CurTok.Kind = tkLParen then
       begin
         etid := RegisterEnumType(tnOff, tnLen);
@@ -6636,7 +6681,17 @@ begin
               proc and each IMPL body clobbered the other's — fpjson's
               `Add(TJSONData(AnObject))` then re-dispatched to Add(TJSONObject) and
               recursed to stack overflow (bug-pascal-overload-impl-decl-signature-match). }
-            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPStrElemTk, mPPtrElemTk, mPArr, mPByRef);
+            { -1 EVERYWHERE, AND THAT IS A STATED BOUNDARY RATHER THAN AN
+              OMISSION. This class-method declaration path does not stage an
+              alias identity per parameter the way ParseProcHeader's ptypesAlias
+              does, so a DISTINCT type used as a METHOD parameter still collapses
+              with its base type here. -1 means unconstrained, which is exactly
+              today's behaviour, so the boundary costs nothing and pretending
+              otherwise would cost a wrong split. Filling it means staging
+              LastTypeAlias through this path's own parameter loop.
+              bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+            for i := 0 to MAX_PROC_PARAMS - 1 do mPAliases[i] := -1;
+            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPStrElemTk, mPPtrElemTk, mPArr, mPByRef, mPAliases);
             if mpi < 0 then
             begin
               mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);

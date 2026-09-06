@@ -6981,6 +6981,7 @@ begin
     currArg := ASTRight[currArg];
   end;
   MatchArgRecValid := True;
+  MatchArgAliasValid := True;
   MatchArgNilValid := True;
   MatchArgScalarValid := True;
   MatchArgArrayValid := True;

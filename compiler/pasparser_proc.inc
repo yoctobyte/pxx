@@ -519,6 +519,7 @@ var
   ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
+  ptypesAlias : array[0..MAX_PROC_PARAMS-1] of Integer;  { the alias row this parameter was DECLARED THROUGH, -1 otherwise. Staged and persisted to ProcParamAliasIdx for the reason ptypesSetEnum's own twin gives: a caller cannot read it back off the param symbol. }
   { The REST of a set parameter's element identity, staged in the same window and
     for the same reason as ptypesStrCap below. ptypesSetEnum alone was captured
     for the CALLER's benefit (it lands in ProcParamSetEnumId, an argument-check
@@ -804,6 +805,7 @@ begin
   { A local array is stack garbage until written, and the Self/capture insertion
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesAlias[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetElemTk[i] := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do begin ptypesSetElemLo[i] := 0; ptypesSetElemHi[i] := -1; end;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
@@ -1007,6 +1009,12 @@ begin
         ptypes[i] := tk;
         puntyped[i] := isUntyped;
         ptypesRec[i] := LastTypeRecId;
+        { …and the alias NAME the parameter was declared through. Unlike
+          LastTypeSetEnumId below this one IS cleared for every kind (at the top
+          of ParseTypeKindInner), so it needs no guard: -1 means the parameter
+          was not written through a named alias.
+          bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+        ptypesAlias[i] := LastTypeAlias;
         { LastTypeSetEnumId is only meaningful when the type just parsed WAS a
           set — it is not cleared for other kinds. }
         if tk = tySet then ptypesSetEnum[i] := LastTypeSetEnumId
@@ -1545,7 +1553,7 @@ begin
       Next;
       Eat(tkSemicolon);
     end;
-    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
+    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     if sawVarargs then ProcVariadic[procIdx] := True;
@@ -1620,6 +1628,7 @@ begin
           ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
         if ptypes[i] = tySet then
           ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+          ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
         if ptypes[i] = tyAnsiString then
           ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
         if ptypes[i] = tyPointer then
@@ -1666,6 +1675,7 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesAlias[i] := ptypesAlias[i-1];
       ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
       ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
       ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
@@ -1864,6 +1874,7 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesAlias[i] := ptypesAlias[i-1];
       ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
       ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
       ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
@@ -1980,7 +1991,7 @@ begin
     end;
     if (not PreScanPass) or (methOwnerCi < 0) then
     begin
-      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
+      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
       if procIdx < 0 then
       begin
         if StrictOverload and (FindProc(name) >= 0) and not DialectIsPxx then
@@ -2052,6 +2063,7 @@ begin
               ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
             if ptypes[i] = tySet then
               ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+              ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
             if ptypes[i] = tyAnsiString then
               ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
             { The six columns this path did NOT write, the pointee among them.
@@ -2121,7 +2133,7 @@ begin
   end;
 
   { Register or resolve }
-  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref);
+  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, ptypesStrElemTk, ptypesPtrElemTk, parr, pbyref, ptypesAlias);
   if procIdx < 0 then
   begin
     if StrictOverload and (FindProc(name) >= 0) then
@@ -2501,6 +2513,7 @@ begin
       ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
       if ptypes[i] = tySet then
         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+        ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
       if ptypes[i] = tyAnsiString then
         ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
     end;

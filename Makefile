@@ -6706,6 +6706,26 @@ test-core: $(COMPILER)
 	@# live payload pointer, so p = Pointer(s)) and not for `t(p) := 'abc'`.
 	@$(TESTTMP)/test_straliasptrslot26 | diff -u test/test_a_string_alias_cast_over_a_pointer_slot.expected - \
 	  || { echo 'test_a_string_alias_cast_over_a_pointer_slot: FAIL - a string-alias cast over a Pointer slot is not a reinterpret, or the no-op over a string operand was lost'; exit 1; }
+	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the
+	@# entire risk of the change: distinctness is decided at the COMPARISON and
+	@# never at registration, so an ORDINARY alias must keep binding its base
+	@# parameter. A file with only A and B passes just as well when every alias
+	@# in the tree has stopped matching.
+	@# ROWS H/I/J ARE THE ROWS THAT CAUGHT THE WRONG DESIGN. Written first as a
+	@# COMPATIBILITY rule, the fix refused all three single-candidate calls --
+	@# and fpc 3.2.2 compiles and runs every one. A distinct type stays
+	@# assignment-compatible with its base in both directions and by reference;
+	@# distinctness is an overload PREFERENCE, so it belongs in the exact phase.
+	@# The ticket said a var parameter of the base type is something FPC refuses;
+	@# measured three ways, it does not.
+	@# A LITERAL IS DELIBERATELY ABSENT: once the overloads are genuinely
+	@# distinct fpc answers `Can't determine which overloaded function to call`
+	@# for P(5). We bind the base. Accepting what fpc rejects is not a defect, so
+	@# that row could carry no oracle.
+	@$(TESTTMP)/test_distincttype26 | diff -u test/test_a_distinct_type_is_a_different_type_for_overloads.expected - \
+	  || { echo 'test_a_distinct_type_is_a_different_type_for_overloads: FAIL - `T = type Base` is not a distinct type, or an ordinary alias stopped matching its base'; exit 1; }
 	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
 	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
 	@# RELATION, never a byte count: the absolute numbers are allocator- and

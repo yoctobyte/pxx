@@ -8,7 +8,7 @@ blocked-by: []
 created: 2026-09-04
 found-by: frankB
 owner: ""
-summary: "`T = type Base` now PARSES (compat-pascal-distinct-type-declaration, 2026-09-04) but the type it declares is an ordinary alias: pxx has no type-IDENTITY channel for aliases at all, so a value declared through the name reaches overload matching as its base kind. FPC binds `P(b)` and `P(x)` to different bodies; pxx warns `duplicate definition of 'P' with the same parameter types` and binds both to one. Loud, not silent, and the same thing it already does for a plain `= byte` alias -- so the parse fix reached an existing behaviour rather than adding a new one. The missing piece is one channel, not one predicate: no LastTypeAlias, no Syms[].AliasIdx, no ProcParam alias carrier."
+summary: "FIXED 2026-09-06. `T = type Base` declared an ordinary alias, so `P(b: byte)` and `P(m: TMyB)` collapsed into one row with `duplicate definition of 'P'` and both calls ran the last body; FPC binds two. Built the identity chain the ticket asked for -- AliasIsDistinct, LastTypeAlias, SymAliasIdx, ProcParamAliasIdx, MatchArgAliasIdx -- and ONE predicate, AliasIdentityMismatch, read from both decision points. TWO OF THIS TICKET'S OWN PREMISES WERE WRONG. Its var-parameter claim (`which FPC refuses`) is false: measured three ways, fpc accepts a distinct value through a base-typed var parameter, so distinctness is an overload PREFERENCE and belongs in MatchParamExact, not in the compatibility test where the first implementation put it and refused working code. And its survey said the argument side needed a signature change or a new AST channel; FillMatchArgChannelsAt already existed and takes the NODE."
 ---
 
 # A distinct-type declaration is parsed but is not distinct
@@ -28,8 +28,10 @@ begin x := 5; b := 1; P(b); P(x); end.
 | fpc 3.2.2 | `base` then `distinct` |
 | pxx | `warning: duplicate definition of 'P' with the same parameter types` — then `distinct` twice |
 
-A `var` parameter of the base type also accepts a value of the distinct type,
-which FPC refuses.
+**CORRECTED 2026-09-06, and this sentence was FALSE — see the resolution
+section.** It read: *"A `var` parameter of the base type also accepts a value of
+the distinct type, which FPC refuses."* Measured three ways, FPC accepts it, and
+believing this put the first implementation in the wrong function.
 
 **It is LOUD, and it is not new.** pxx says exactly the same thing for a plain
 `type TMyB = byte;` — the two overloads collapse there too. So this is not
@@ -131,3 +133,92 @@ bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers
 **Scope estimate: six sites and a signature change**, not five appends. Worth
 doing, worth doing in one pass, and not worth beginning at the end of a session.
 
+
+## RESOLVED 2026-09-06 (frankB) — and TWO of this ticket's own premises were wrong
+
+### The survey above was wrong about the argument side, and wrong in the way that matters
+
+It said: *"The argument arrives as a bare `TTypeKind`. There is nowhere in that
+call to put 'and it was declared through TMyB', so step 5 needs the argument's
+identity threaded in as well — which means either a signature change carrying the
+argument NODE, or an `ASTAliasIdx` channel."*
+
+The signature observation is true. The conclusion is false, because **the channel
+already exists**: `FillMatchArgChannelsAt(i, node, argTk)` in
+`pasparser_call.inc` is a single entry point that takes the NODE and fills seven
+side channels for exactly this reason — `MatchArgRec`, `MatchArgNil`,
+`MatchArgScalar`, `MatchArgArray`, and three more, every one of them added
+because *"the kind pair alone gave a WRONG ANSWER"*. `MatchArgAliasIdx` is the
+eighth, filled beside them, read the same way.
+
+I reasoned from the SIGNATURE instead of looking for the channel — and the
+extraction that created that entry point (`refactor-p-the-overload-probe-cannot-
+see-the-argument-match-channels`) landed on **2026-09-05, the same day I wrote
+the survey**. The scope estimate ("six sites and a signature change") was
+therefore pessimistic about the hard part and silent about the real one.
+
+### THE VAR-PARAMETER CLAIM IN THIS TICKET IS FALSE, AND IT SENT THE FIX TO THE WRONG FUNCTION
+
+This ticket said: *"A `var` parameter of the base type also accepts a value of the
+distinct type, which FPC refuses."*
+
+Measured against fpc 3.2.2, three shapes, all with a SINGLE candidate:
+
+```
+procedure V(var v: byte);  var x: TMyB;  V(x)   -> fpc compiles, prints 6
+procedure V(var v: TMyB);  var b: byte;  V(b)   -> fpc compiles, prints 1
+procedure V(v: TMyB);      var b: byte;  V(b)   -> fpc compiles, prints 3
+```
+
+**FPC accepts all three.** A distinct type stays assignment-compatible with its
+base, in both directions, by reference as well as by value. So distinctness is an
+overload **PREFERENCE**, not a compatibility rule.
+
+The first implementation followed the ticket and put the check in
+`MatchArgRecMismatch` — a hard refusal — and it refused all three. That is
+rejecting working code, which is strictly worse than the bug it fixes. Moved to
+`MatchParamExact`, whose own header already states the rule for the identical
+mistake one type family over: *"passing a WideString to the only overload that
+takes an AnsiString is a legal, real conversion, and FPC compiles it. What FPC
+does NOT do is prefer it when a width-exact candidate exists. Blocking it
+outright would refuse working code; ranking it below exact is the rule."*
+
+The precedent was already in the file. The ticket's sentence is what stopped me
+reading it.
+
+### The chain, as built
+
+1. `AliasIsDistinct[]` beside `AliasOwnerCi`, stamped by `AliasCommit` from
+   `DeclDistinctNow` and **consumed** there, so one keyword marks one row.
+   `ParseTypeKind` saves/restores the flag around the RHS, because the RHS
+   commits alias rows of its own (`EnsureBuiltinPtrAlias`) that would otherwise
+   eat it.
+2. `LastTypeAlias` out of `ParseTypeKindInner`'s general-alias arm — the twin of
+   `LastTypePointerAlias`, reset at the top with every other `LastType*`.
+3. `SymAliasIdx[]`, stamped from `VDAliasIdx`, which `ParseDeclTypeDesc` captures
+   at the end of the routine that ran `ParseTypeKind` rather than at the
+   allocation site.
+4. `ProcParamAliasIdx[]`, staged as `ptypesAlias` and persisted at all three
+   registration sites, for the reason `ProcParamRecId`'s own note gives.
+5. `MatchArgAliasIdx[]` + `MatchArgAliasValid`, filled in
+   `FillMatchArgChannelsAt`.
+6. `AliasIdentityMismatch(a, b)` — ONE predicate, read from both decision points:
+   `MatchParamExact` (call-site preference) and `FindProcOverloadRec`
+   (declaration-time splitting). The ticket was right that both are needed and
+   right that they must agree; the argument-side fix alone produced
+   `candidates: P(Byte)` — a call refused against a candidate list that never had
+   the second declaration in it.
+
+### Stated boundaries, not omissions
+
+- Only an `AN_IDENT` argument carries an alias identity today. A field, an index
+  or a call result stays -1, which means *unconstrained* and matches exactly as
+  before — the conservative default `MatchArgScalar` and `MatchArgArray` already
+  take, and for the same reason: a channel that GUESSES is worse than one that
+  abstains, because the guess is believed.
+- The class-method declaration path (`pasparser_decl.inc`) passes -1 for every
+  parameter, so a distinct type as a METHOD parameter still collapses with its
+  base. -1 is today's behaviour, so the boundary costs nothing.
+- `P(5)` with both overloads live: fpc answers *"Can't determine which overloaded
+  function to call"*; we bind the base. Accepting what fpc rejects is not a
+  defect, so the row carries no oracle and is not in the test.

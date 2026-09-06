@@ -658,6 +658,7 @@ begin
       afterwards on purpose -- every filling path sets them True itself.
       refactor-p-the-overload-probe-cannot-see-the-argument-match-channels }
     MatchArgRecValid := False;
+    MatchArgAliasValid := False;
     MatchArgNilValid := False;
     MatchArgScalarValid := False;
     MatchArgArrayValid := False;
