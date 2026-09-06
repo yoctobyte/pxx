@@ -9,7 +9,10 @@ class .Sub.V      42
 class .Sub.R.M    43
 class .Arr[2].M   45
 class .Arr[2].N   TRUE
+class .Items[0].V 48
+class .It[2].R.M  49
 store .Sub.R.M    91
 store .Arr[2].M   92
 store .R.N        FALSE
+store .Items[0].V 93
 AT SELECTOR WALK OK

@@ -32,12 +32,32 @@ type
     R: TInner;
   end;
   TOwner = class
+  private
+    FItems: array[0..2] of TSub;
+    function GetIt(i: LongInt): TSub;
   public
     Sub: TSub;
     R: TInner;
     Arr: array[0..2] of TInner;
     N: Boolean;
+    { A PROPERTY IS THE THIRD MEMBER KIND AND THE ARM KNEW TWO. `@o.Items[0].V`
+      was refused with `@obj.method: unknown method or field` -- not by the
+      missing selector walk, but one step earlier, by a name lookup that asked
+      FindUMeth and FindUField and stopped. Same sentence as the implicit-deref
+      rule's own guard, which enumerated field and method and not property.
+      A row whose FIRST selector is a property is the only one that can see it. }
+    property Items[i: LongInt]: TSub read GetIt;
+    constructor Create;
   end;
+constructor TOwner.Create;
+var k: LongInt;
+begin
+  for k := 0 to 2 do FItems[k] := TSub.Create;
+end;
+function TOwner.GetIt(i: LongInt): TSub;
+begin
+  Result := FItems[i];
+end;
 var
   o: TOwner;
   r: record Inner: TInner; end;
@@ -47,6 +67,7 @@ var
 begin
   o := TOwner.Create;
   o.Sub := TSub.Create;
+  o.Items[0].V := 48; o.Items[2].R.M := 49;
   o.Sub.V := 42; o.Sub.R.M := 43;
   o.R.M := 44; o.R.N := True;
   o.Arr[2].M := 45; o.Arr[2].N := True;
@@ -68,6 +89,8 @@ begin
   pv := @o.Sub.R.M;    WriteLn('class .Sub.R.M    ', pv^);
   pv := @o.Arr[2].M;   WriteLn('class .Arr[2].M   ', pv^);
   pb := @o.Arr[2].N;   WriteLn('class .Arr[2].N   ', pb^);
+  pv := @o.Items[0].V; WriteLn('class .Items[0].V ', pv^);
+  pv := @o.Items[2].R.M; WriteLn('class .It[2].R.M  ', pv^);
 
   { and the addresses must be WRITEABLE, not merely readable: a walk that
     resolved the wrong offset would still print the value it happened to land
@@ -75,6 +98,7 @@ begin
   pv := @o.Sub.R.M;    pv^ := 91;   WriteLn('store .Sub.R.M    ', o.Sub.R.M);
   pv := @o.Arr[2].M;   pv^ := 92;   WriteLn('store .Arr[2].M   ', o.Arr[2].M);
   pb := @o.R.N;        pb^ := False; WriteLn('store .R.N        ', o.R.N);
+  pv := @o.Items[0].V; pv^ := 93;   WriteLn('store .Items[0].V ', o.Items[0].V);
 
   WriteLn('AT SELECTOR WALK OK');
 end.

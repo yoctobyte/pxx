@@ -921,6 +921,40 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
       begin
         ci := Syms[idx].RecName - REC_UCLASS_BASE;
+        { A MEMBER IS NOT ONLY A METHOD OR A FIELD, AND THIS ARM KNEW TWO OF THE
+          THREE. It asked FindUMeth, then FindUField, then raised
+          `@obj.method: unknown method or field` -- so `@o.Items[0].Ev`, whose
+          first selector is an indexed PROPERTY, was refused by name resolution
+          rather than by the missing selector walk that this arm's other face
+          had. A guard built by ENUMERATING member kinds goes wrong by the kind
+          nobody listed, and properties are the kind this family keeps
+          forgetting: the implicit-deref rule enumerated field and method and
+          not property in exactly the same way
+          (test_an_implicit_deref_through_every_opener records that one).
+
+          Decided BEFORE the two Next's rather than after, because
+          ParseClassRecordSelectors' loop is `[tkDot, tkLBrack]` and wants
+          CurTok sitting ON the dot -- consuming it first and rewinding would be
+          a second way to spell the same thing. The member name is therefore
+          peeked out of Tokens[TokPos + 1].
+          bug-p-at-over-a-class-base-consumes-only-one-selector }
+        if (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
+           (FindUMeth(ci, GetTokenStr(TokPos + 1)) < 0) and
+           (FindUField(ci, GetTokenStr(TokPos + 1)) < 0) then
+        begin
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := idx;
+          ASTTk[valNode] := Ord(tyClass);
+          Next;            { consume obj name; CurTok is the '.' the walker wants }
+          tk := tyClass;
+          node := ParseClassRecordSelectors(valNode, Syms[idx].RecName, tk);
+          valNode := AllocNode(AN_ADDR);
+          ASTLeft[valNode] := node;
+          ASTTk[valNode] := Ord(tyPointer);
+          CurASTNode := valNode;
+          LastExprTk := tyPointer;
+          Exit;
+        end;
         Next;            { consume obj name (CurTok = '.') }
         Next;            { consume '.' (CurTok = method name) }
         if CurTok.Kind <> tkIdent then Error('expected method name after @obj.');
