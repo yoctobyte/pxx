@@ -3,7 +3,7 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "MEASURED 2026-09-06 at 70fdf89165e1. Assigning a record that CONTAINS a field whose type declares `class operator Copy` does not run that field's Copy: `h2 := h1` where `THolder = record f: TFoo; k: Integer; end` and TFoo has Copy -- fpc 3.2.2 prints `Copy src.id=42`, pxx prints nothing and does a byte copy. ASYMMETRIC WITH THE OTHER TWO OPERATORS ON THE SAME SHAPE: Initialize and Finalize DO propagate into the field (both print twice, for h1.f and h2.f, under both compilers) because the scope desugar walks the field table and builds a field path; Copy is hooked at the IR assignment lowering instead, asks FindOpOverload(OPK_COPY, tyRecord, THolder), gets -1 because THolder itself declares nothing, and falls through to IR_COPY_REC. THE VALUE LOOKS CORRECT (42) so no expect_same row can see it -- Copy exists to do something OTHER than a byte copy (duplicate a handle, bump a refcount, deep-copy a buffer), so the two records silently SHARE whatever the field owned. RESOLVES THE `NOT ESTABLISHED` LINE in feature-pascal-management-operators-copy-and-addref: the two hooked assignment arms are NOT the whole population. Found by censusing 14 copy shapes against fpc; the other 13 agree (rows 1-8, 11, 14 fire in both; the dynamic-array rows are refused by feature-pascal-management-operators-nested-and-array and could not be measured). SECOND SITE 2026-09-06, INDEPENDENT OF THE FIRST: a whole-ARRAY assignment `d := s` over `array[0..1] of TR` drops the element's OWN Copy -- fires twice under fpc, never under pxx -- while the controls `two := one` and `d[0] := s[0]` BOTH fire, which proves the operator is dispatchable and the per-element path reaches it, so the whole-array assign is a block copy that never runs that path. NOT downstream of the contained-field defect and NOT closed by fixing the record-assign path: two sites, two mechanisms, only one of them nesting. This CORRECTS frankS's report that the array row fires under pxx and would therefore close for free (an fpc result read as a pxx one); recorded because that conclusion would have left this site with nobody holding it. The static->DYNAMIC form cannot be measured at all -- refused by feature-pascal-management-operators-nested-and-array, whose guard asks whether the ELEMENT record has an operator, which is exactly why the CONTAINED-field case slips through it. All rows produce byte-identical values on both compilers."
+summary: "MEASURED 2026-09-06 at 70fdf89165e1. Assigning a record that CONTAINS a field whose type declares `class operator Copy` does not run that field's Copy: `h2 := h1` where `THolder = record f: TFoo; k: Integer; end` and TFoo has Copy -- fpc 3.2.2 prints `Copy src.id=42`, pxx prints nothing and does a byte copy. ASYMMETRIC WITH THE OTHER TWO OPERATORS ON THE SAME SHAPE: Initialize and Finalize DO propagate into the field (both print twice, for h1.f and h2.f, under both compilers) because the scope desugar walks the field table and builds a field path; Copy is hooked at the IR assignment lowering instead, asks FindOpOverload(OPK_COPY, tyRecord, THolder), gets -1 because THolder itself declares nothing, and falls through to IR_COPY_REC. THE VALUE LOOKS CORRECT (42) so no expect_same row can see it -- Copy exists to do something OTHER than a byte copy (duplicate a handle, bump a refcount, deep-copy a buffer), so the two records silently SHARE whatever the field owned. RESOLVES THE `NOT ESTABLISHED` LINE in feature-pascal-management-operators-copy-and-addref: the two hooked assignment arms are NOT the whole population. Found by censusing 14 copy shapes against fpc; the other 13 agree (rows 1-8, 11, 14 fire in both; the dynamic-array rows are refused by feature-pascal-management-operators-nested-and-array and could not be measured). SECOND SITE, INDEPENDENT OF THE FIRST: a whole-STATIC-array assign `d := s` drops the element's OWN Copy (fpc fires twice, pxx never) while the controls `two := one` and `d[0] := s[0]` BOTH fire -- so the operator is dispatchable and the per-element path reaches it, and the whole-array assign is a block copy that never enters that path. Two sites, two mechanisms, only one nesting; a fix for either leaves the other. STATIC->DYNAMIC IS THE OPPOSITE AND IS CORRECT: it routes through the array constructor, which already dispatched operators before frankS's static-to-dynamic copy landed, and it FIRES, byte-identical to fpc. THE DISCRIMINATOR IS WHICH OPERATORS THE RECORD DECLARES, and it is why two sessions measured "the same" construct and disagreed: `var d: array of TR` is REFUSED when TR declares Initialize or Finalize and COMPILES when it declares only Copy or only AddRef. The diagnostic says "a record with a management operator", naming four operators where the rule uses two -- a Copy-only record satisfies that wording and compiles anyway. THE ASYMMETRY THAT CREATES SITE (1): the guard asks whether the ELEMENT record declares Initialize/Finalize, and a record that merely CONTAINS such a field declares none of its own, so it passes a refusal meant to be conservative and then silently skips the field. VERIFIED CORRECT, NOT A THIRD SITE: `b := a` between two dynamic arrays runs no operator in either compiler -- a reference copy, nothing to hook. ALL ROWS PRODUCE BYTE-IDENTICAL VALUES on both compilers, so no expect_same fixture over any of them can fail."
 status: backlog
 owner: unassigned
 ---
@@ -119,14 +119,33 @@ go through the per-element path at all.** It is a block copy, and the element's
 own `Copy` is bypassed even though nothing about the element is nested.
 
 **So this is NOT downstream of the contained-field defect above, and fixing the
-record-assign path will NOT close it.** frankS's report stated the opposite —
-that `array[0..1] of TR` with `TR` declaring `Copy` fires under pxx, and
-therefore only the CONTAINED field is dropped and their path would close for
-free once the record-assign path is fixed. Measured here, that row fires under
-fpc and **never** under pxx; the most likely reading is an fpc result attributed
-to pxx while running both. Recorded because the conclusion drawn from it — "no
-edit needed on my side" — would have left this site unfixed with nobody holding
-it.
+record-assign path will NOT close it.**
+
+### CORRECTION — I accused a peer of a misreading and I was wrong
+
+An earlier revision of this section said frankS's contradicting row was "most
+likely an fpc result attributed to pxx while running both". **That was a
+speculative attribution of error, it was wrong, and it is withdrawn.** Both
+measurements were correct and they were of DIFFERENT records:
+
+| record declares | `d, s: array[0..1] of TR` (static→static) | `s: array[0..1]; d: array of TR` (static→dynamic) |
+| --- | --- | --- |
+| **`Copy` only** | **Copy DROPPED** (this site) | **Copy FIRES**, matches fpc |
+| `Initialize`/`Finalize` too | Copy dropped | **declaration REFUSED** |
+
+frankS's record declared `Copy` alone, so their static→dynamic row compiled and
+fired. Mine declared `Initialize`, `Finalize` and `Copy`, so the same shape was
+refused at the DECLARATION and I never reached the assignment — I then measured
+the static→static form, which is a different construct, and read the two as
+contradicting.
+
+**Both rows stand. The disagreement was the finding**: it is what separated the
+block-copy path from the constructor path, and neither of us could have found
+that alone. The lesson is not about trusting a peer's number — it is that "the
+same construct" was doing unstated work in both directions.
+
+Recorded rather than silently edited, because the wrong sentence was pushed and
+someone reading only the summary would carry it.
 
 **Two sites, two mechanisms, and only one of them is nesting:**
 
@@ -138,14 +157,36 @@ it.
 
 A fix aimed only at (1) leaves (2); a fix aimed only at (2) leaves (1).
 
-**Not measurable for a dynamic destination.** `s: array[0..1] of TR;
-d: array of TR` is refused outright — *"a dynamic or multi-dimensional array of
-a record with a management operator"* — so the static→dynamic form of ROW A
-cannot be measured until
-[[feature-pascal-management-operators-nested-and-array]] lands. Note the
-asymmetry that lets the CONTAINED-field case through the same refusal: the guard
-asks whether the ELEMENT record has a management operator, and a record that
-merely contains one has none of its own.
+### The refusal is keyed on `Initialize`/`Finalize`, NOT on "a management operator"
+
+Measured one operator at a time, `var d: array of TR`:
+
+| `TR` declares | `array of TR` |
+| --- | --- |
+| `Copy` only | **compiles** |
+| `AddRef` only | **compiles** |
+| `Initialize` only | refused |
+| `Finalize` only | refused |
+
+Only the two that need a synthesised per-element loop at scope entry and exit
+trip it, which is correct — but the diagnostic says *"a record with a management
+operator"*, and that names four operators when it means two. **A record with
+only `Copy` is a record with a management operator by that wording and compiles
+anyway**, so the message describes a rule the compiler does not apply.
+
+This also corrects an earlier note here. It said the guard "asks whether the
+ELEMENT record has a management operator, and a record that merely contains one
+has none of its own". The second half stands and explains site (1); **the first
+half was imprecise** — it asks about `Initialize`/`Finalize`, which is why a
+`Copy`-only element reaches the dynamic path at all and why frankS's row could
+be measured while mine could not.
+
+### A shape that is CORRECT, checked so it is not mistaken for a third site
+
+`b := a` for two dynamic arrays runs no operator in **either** compiler, and
+`b[0] := 999` leaves `a[0] = 999` in both: a dyn-array assignment is a reference
+copy, so there is no copy for an operator to hook. Byte-identical. frankS raised
+it as a possible third site and judged it correct; confirmed against fpc here.
 
 **Every row here produces byte-identical values on both compilers** (11 22, and
 11/1 22/2 for the nested form). No `expect_same` fixture over any of these
