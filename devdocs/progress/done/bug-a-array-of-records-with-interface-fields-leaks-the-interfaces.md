@@ -3,7 +3,7 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-summary: "An array (static or dynamic) of records holding a COM interface field leaks every interface: the element walk calls PXXRecordRelease, which owns kinds 1-3 only, and nothing runs the unlocked kind-4 pass the scalar record path now has."
+summary: "FULLY FIXED. An array (static or dynamic) of records holding a COM interface field leaked every interface: the element walk called PXXRecordRelease, which owns kinds 1-3 only, and nothing ran the kind-4 pass. Fixed for the general case 2026-08-21 (7a9450ea8) with a DELIBERATE RESIDUAL on x86-64 --threadsafe, where the sub-pass was compiled out under PXX_TS_HARDLOCK because IR_SETLEN_DYN/IR_DYNUNIQUE hold the codegen spinlock across the walk and _Release re-enters it through FreeMem. THAT RESIDUAL IS NOW LIFTED TOO: the resolution named feature-a-reentrant-heap-lock-and-per-thread-arenas as the unblocking condition and the reentrant lock landed 2026-09-06, so both guards are gone. test_interface_containers under --threadsafe is now BYTE-IDENTICAL to native (eight counts moved off 0), and with -dPXX_NO_REENTRANT_HEAPLOCK the same program dies rc=212 with the heap-lock diagnosis at the first dyn-array walk -- so the guards were load-bearing for exactly the stated reason and the reentrancy is what permits the lift."
 status: done
 owner: agent-A
 ---
@@ -106,3 +106,36 @@ Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
 
 ## Log
 - 2026-08-21 — resolved, commit 7a9450ea8.
+
+## Resolution 2026-09-06 (frankH) — the residual, lifted by its own named condition
+
+The 2026-08-21 resolution left the x86-64 `--threadsafe` arm compiled out and
+wrote down what would unblock it: *"Lifting it is
+[[feature-a-reentrant-heap-lock-and-per-thread-arenas]]"*. The reentrant half of
+that landed today, so both `{$ifndef PXX_TS_HARDLOCK}` guards on
+`PXXRecordReleaseIntf` are removed — one in `PXXDynArrayReleaseDepth`, one in
+`PXXArrayReleaseImmediate`.
+
+**Why not the scalar path's answer.** `decide-interface-members-in-aggregates-
+lock-strategy` chose to run the interface pass UNLOCKED, hoisted ahead of
+`EmitAcquireHeapLock`. That option does not exist here: this walk's callers are
+already inside the lock when they reach it, so there is nothing to hoist out of.
+Reentrancy is the only route, which is why the residual waited for it rather than
+copying the scalar fix.
+
+**Measured, both directions.**
+
+| `test_interface_containers` | before | after |
+| --- | --- | --- |
+| `--threadsafe` vs native | 8 counts read 0 | **byte-identical** |
+| `--threadsafe -dPXX_NO_REENTRANT_HEAPLOCK` | — | **rc=212**, heap-lock text, at the first dyn-array walk |
+
+The 212 is the discriminating control: message checked, not just the code.
+
+### The Makefile row was a control that encoded the defect, and it had already gone stale
+
+The `--threadsafe` row asserted its OWN literal, eight counts of which were the
+leak. Lifting the kind-4 degradation earlier today moved `dyn`/`after shrink`/
+`shrink` to 2/2/4 and left that row asserting 0/0/0 — **red at HEAD for one
+commit, and I put it there.** Both rows now share one literal, with a comment
+saying they must stay identical and why.

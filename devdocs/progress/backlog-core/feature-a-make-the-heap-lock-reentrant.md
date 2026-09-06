@@ -368,3 +368,17 @@ heap-lock text. Also green under `--threadsafe`: `test_multithreading`,
 site, from "this never runs". The population is every `FindProc` in a
 prologue-time emitter. Where the thing looked up is *required*, the guard should
 be loud or the lookup should happen where the answer cannot be absent.
+
+## 2026-09-06 — the third row closed too, so all three are done
+
+"Still open, deliberately" above is no longer true. The two
+`{$ifndef PXX_TS_HARDLOCK}` guards on `PXXRecordReleaseIntf` are lifted; that was
+the record COM-interface-fields row. It waited for exactly this feature —
+[[bug-a-array-of-records-with-interface-fields-leaks-the-interfaces]] named
+`feature-a-reentrant-heap-lock-and-per-thread-arenas` in its own 2026-08-21
+resolution as the condition for lifting it.
+
+`test_interface_containers --threadsafe` is now byte-identical to the native row
+(eight counts off 0), and `-dPXX_NO_REENTRANT_HEAPLOCK` gives rc=212 with the
+heap-lock diagnosis at the first dyn-array walk. Three rows, three discriminating
+controls, one feature.

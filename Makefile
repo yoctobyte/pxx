@@ -8231,18 +8231,24 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_string_ordering_cross26 "$$($(TESTTMP)/test_string_ordering_cross26)" "$$(printf 'aaa vs zzz : lt le .. .. .. \nzzz vs aaa : .. .. gt ge .. \nabc vs abc : .. le .. ge eq \nab  vs abc : lt le .. .. .. \nabc vs ab  : .. .. gt ge .. \nempty vs a : lt le .. .. .. \na vs empty : .. .. gt ge .. \nempty x2   : .. le .. ge eq \nhi200 vs a : .. .. gt ge .. \nA vs a     : lt le .. .. .. \nvar x vs y : lt le .. .. .. \nvar y vs x : .. .. gt ge .. ')"
 	./$(COMPILER) test/test_interface_containers.pas $(TESTTMP)/test_interface_containers26
 	tools/expect_same.sh test_interface_containers26 "$$($(TESTTMP)/test_interface_containers26)" "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 3\nrdyn:    3\nrec after shrink: 2\nrshrink: 4\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   2')"
-	# ...and --threadsafe must still TERMINATE. Releasing an interface element
-	# under the non-reentrant heap lock would hang, so ManagedElemKindLocked
-	# refuses kind 4 there and the dyn-array counts fall back to the documented
-	# pre-existing leak (0). Asserting the leak is not the point; asserting that
-	# it is a leak and not a DEADLOCK is (decide-interface-members-in-aggregates-lock-strategy).
-	# The r* rows carry the identical residual for a RECORD element's interface
-	# member: the element walk's interface sub-pass is compiled out under
-	# PXX_TS_HARDLOCK, because several of its callers (IR_SETLEN_DYN, IR_DYNUNIQUE)
-	# hold that spinlock. Note rcopy drops to 0 while the scalar copy row stays 2 —
-	# the retain still runs (AddRef frees nothing), so it is a leak, never a dangle.
+	# ...and --threadsafe must produce the IDENTICAL output, deliberately the same
+	# literal as the native row above. It used to be a DIFFERENT one: eight counts
+	# read 0 there, because releasing an interface element re-entered the
+	# non-reentrant heap lock, so ManagedElemKindLocked refused kind 4 and the
+	# element walk's interface sub-pass was compiled out under PXX_TS_HARDLOCK for
+	# a RECORD element's interface member. Both are gone since
+	# feature-a-make-the-heap-lock-reentrant, which is the condition
+	# bug-a-array-of-records-with-interface-fields-leaks-the-interfaces named in
+	# its own resolution for lifting the residual.
+	#
+	# KEEP THE TWO LITERALS IDENTICAL. A --threadsafe expectation that is allowed
+	# to differ from the native one is a control that ENCODES the defect, and it
+	# goes stale silently the moment the defect is fixed -- which is exactly what
+	# happened here: lifting the kind-4 degradation moved dyn/after-shrink/shrink
+	# to 2/2/4 and left this row asserting 0/0/0 for one commit. If they ever have
+	# to diverge again, say which row is the leak and why it is not a deadlock.
 	./$(COMPILER) --threadsafe test/test_interface_containers.pas $(TESTTMP)/test_interface_containers_ts26
-	tools/expect_same.sh test_interface_containers_ts26 "$$($(TESTTMP)/test_interface_containers_ts26)" "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     0\nafter shrink: 0\nshrink:  0\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 0\nrdyn:    0\nrec after shrink: 0\nrshrink: 0\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   0')"
+	tools/expect_same.sh test_interface_containers_ts26 "$$($(TESTTMP)/test_interface_containers_ts26)" "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 3\nrdyn:    3\nrec after shrink: 2\nrshrink: 4\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   2')"
 	./$(COMPILER) test/test_member_visibility.pas $(TESTTMP)/test_member_visibility26
 	tools/expect_same.sh test_member_visibility26 "$$($(TESTTMP)/test_member_visibility26)" "$$(printf '7\n30\n3\n1')"
 	# class consts are class-SCOPED, not unscoped globals: two classes' same-named

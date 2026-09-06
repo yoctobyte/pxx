@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 5
-summary: "FIXED 2026-09-06 -- 7939 live -> 3 at the SAME allocation count (13891), 1000 trips of a dyn array of Variants and of COM interfaces. ManagedElemKindLocked's ThreadSafeMode degradation of kinds 4 and 6 is deleted because the heap lock is reentrant (feature-a-make-the-heap-lock-reentrant, owner decision arm (a)); _Release -> Destroy -> FreeMem still re-enters the lock and the lock now survives it. The trade this ticket declined to dispute was correct and is simply no longer necessary. POSITIVE CONTROL: the same program with -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis on stderr (message checked, not just the code), so the reentrancy is load-bearing rather than assumed. NOT closed by this: the record COM-interface fields named at the bottom, which still carry two {$ifndef PXX_TS_HARDLOCK} guards on PXXRecordReleaseIntf and are left for a change that can measure them on their own."
+summary: "FIXED 2026-09-06 -- 7939 live -> 3 at the SAME allocation count (13891), 1000 trips of a dyn array of Variants and of COM interfaces. ManagedElemKindLocked's ThreadSafeMode degradation of kinds 4 and 6 is deleted because the heap lock is reentrant (feature-a-make-the-heap-lock-reentrant, owner decision arm (a)); _Release -> Destroy -> FreeMem still re-enters the lock and the lock now survives it. The trade this ticket declined to dispute was correct and is simply no longer necessary. POSITIVE CONTROL: the same program with -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis on stderr (message checked, not just the code), so the reentrancy is load-bearing rather than assumed. The record COM-interface fields named at the bottom were NOT closed by this and ARE closed now, later the same day: both {$ifndef PXX_TS_HARDLOCK} guards on PXXRecordReleaseIntf are lifted, test_interface_containers under --threadsafe is byte-identical to native, and -dPXX_NO_REENTRANT_HEAPLOCK gives rc=212 there too. See bug-a-array-of-records-with-interface-fields-leaks-the-interfaces."
 tags: [memory-leak, threadsafe, variant, interfaces, dynarray]
 blocked-by: [feature-a-make-the-heap-lock-reentrant]
 status: done
@@ -129,3 +129,12 @@ left for a change that can measure it on its own rather than riding in on a
 commit whose control is about elements.
 
 - 2026-09-06 — resolved, commit 3bb71fd79 (the fix and the close are one commit).
+
+## 2026-09-06, later — the record row IS closed
+
+The two `{$ifndef PXX_TS_HARDLOCK}` guards this ticket deliberately left standing
+are lifted, under
+[[bug-a-array-of-records-with-interface-fields-leaks-the-interfaces]], whose own
+resolution had named the reentrant heap lock as the unblocking condition.
+`test_interface_containers --threadsafe` is byte-identical to native; the same
+program with `-dPXX_NO_REENTRANT_HEAPLOCK` dies rc=212 with the heap-lock text.

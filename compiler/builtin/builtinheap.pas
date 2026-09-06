@@ -3927,16 +3927,18 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
-{$ifndef PXX_TS_HARDLOCK}
-            { The record element's interface members. Skipped on x86-64
-              --threadsafe: several callers of this walk (IR_SETLEN_DYN,
-              IR_DYNUNIQUE) hold the codegen spinlock, and _Release re-enters it
-              through FreeMem — the identical residual, for the identical
-              reason, that ManagedElemKindLocked already keeps for kind-4
-              ELEMENTS. Leak, not hang.
+            { The record element's interface members. NO LONGER GATED on
+              x86-64 --threadsafe. It was, because IR_SETLEN_DYN and
+              IR_DYNUNIQUE hold the codegen spinlock across this walk and
+              _Release re-enters it through FreeMem -- and the lock is
+              reentrant since feature-a-make-the-heap-lock-reentrant, which is
+              the condition this ticket's own resolution named for lifting it.
+              The scalar record path hoists its interface pass OUT of the
+              locked region instead (decide-interface-members-in-aggregates-
+              lock-strategy); that option does not exist here, because this
+              walk's callers are already inside the lock when they reach it.
               bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
             PXXRecordReleaseIntf(itemAddr, baseRecDesc);
-{$endif}
             PXXRecordRelease(itemAddr, baseRecDesc);
             i := i + 1;
           end;
@@ -4132,11 +4134,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
-{$ifndef PXX_TS_HARDLOCK}
-        { The record element's interface members — see PXXDynArrayReleaseDepth
-          for why this one arm is gated on x86-64 --threadsafe. }
+        { The record element's interface members -- see PXXDynArrayReleaseDepth
+          for why this arm is no longer gated on x86-64 --threadsafe. }
         PXXRecordReleaseIntf(itemAddr, baseRecDesc);
-{$endif}
         PXXRecordRelease(itemAddr, baseRecDesc);
         i := i + 1;
       end;
