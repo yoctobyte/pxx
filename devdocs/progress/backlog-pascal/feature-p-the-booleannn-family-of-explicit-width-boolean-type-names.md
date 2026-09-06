@@ -7,12 +7,24 @@ status: backlog
 created: 2026-09-06
 found-by: frankB
 owner: ""
-blocked-by: []
+blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 title: "`Boolean16` / `Boolean32` / `Boolean64` do not exist — a whole FPC type family, and one real corpus wall"
 summary: "fpc has two sized-boolean families and we have one. `ByteBool`/`WordBool`/`LongBool` resolve (badly -- see bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time) and `Boolean16`/`Boolean32`/`Boolean64` are refused outright: `unknown type: Boolean16`. fpc sizes them 2/4/8 with Ord(True)=1, which is what distinguishes them from the *Bool family's all-bits-set. MEASURED CORPUS COST: uthlp.pp declares a Boolean16 and TWELVE tthlp* test files use that unit, so one missing name blocks twelve. They land in BuiltinScalarTypeKind, which frankA is actively collapsing with FindTypeAlias under refactor-p-five-dispatch-sites-for-one-named-type-cast -- ask them whether the rows go into the table as it stands or into the merged resolver before writing any. READ THE SIBLING BUG FIRST: adding these four names moves the corpus wall forward while `not` stays inverted on the three names we already ship, which looks like progress and is not."
 ---
 
 # The `BooleanNN` family does not exist
+
+> **ORDERING HAZARD — READ THIS BEFORE DOING EITHER TICKET.** Every spelling
+> `Boolean16` can have TODAY is already a defect: `tyUInt16` gets the width
+> right and `not` / `WriteLn` / `Ord` wrong; `tyBoolean` gets those right and
+> the width wrong (`defs.inc` has exactly two boolean kinds, `tyBoolean` and
+> `tyBool8`, and both are ONE BYTE). So adding the four names moves the corpus
+> wall forward while shipping four more instances of the sibling bug — it looks
+> like progress and it is not. That converts
+> `decide-how-a-type-carries-an-identity-its-kind-cannot-hold` from an argument
+> to have before this work into a SCHEDULE for it: the fork is not optional
+> here, it is the ordering constraint.
+
 
 Measured 2026-09-06, commit `d3fe44947`, compiler `827722c842de`, against
 fpc 3.2.2 — one program per name, both compilers.

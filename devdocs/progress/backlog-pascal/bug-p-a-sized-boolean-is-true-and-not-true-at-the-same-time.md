@@ -8,6 +8,18 @@ summary: "`var a: ByteBool; a := True;` makes BOTH `if a` and `if not a` fire --
 
 # A sized boolean is true and not-true at the same time
 
+> **ORDERING HAZARD — READ THIS BEFORE DOING EITHER TICKET.** Every spelling
+> `Boolean16` can have TODAY is already a defect: `tyUInt16` gets the width
+> right and `not` / `WriteLn` / `Ord` wrong; `tyBoolean` gets those right and
+> the width wrong (`defs.inc` has exactly two boolean kinds, `tyBoolean` and
+> `tyBool8`, and both are ONE BYTE). So adding the four names moves the corpus
+> wall forward while shipping four more instances of the sibling bug — it looks
+> like progress and it is not. That converts
+> `decide-how-a-type-carries-an-identity-its-kind-cannot-hold` from an argument
+> to have before this work into a SCHEDULE for it: the fork is not optional
+> here, it is the ordering constraint.
+
+
 ```pascal
 var a: ByteBool;
 a := True;

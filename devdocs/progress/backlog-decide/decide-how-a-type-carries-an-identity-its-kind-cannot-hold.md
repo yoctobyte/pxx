@@ -671,3 +671,83 @@ No `not`, no `{$if sizeof}`, no corpus. So the family is wrong in three
 positions — `not`, `WriteLn`, and the Ord/ABI face — reached by three unrelated
 routes. Recorded because **three faces from one cause is the shape that stops
 the next reader filing a fourth.**
+
+## THE FIELD BOUNDARY — a further consumer, and it recurses rather than adding a second lossy hop (frankB, 2026-09-06) — evidence, no arm picked
+
+> **Numbering note.** This ticket now carries two sections labelled *fifth
+> consumer* — mine of 2026-09-05 and frankA's of 2026-09-06, written
+> independently. **The ordinals have stopped being a count**, so I have dropped
+> the number from this one rather than add a third ambiguous ordinal. Consumers
+> are distinguished by their SUBJECT, not their position: this one is the record
+> FIELD.
+
+frankA made the field case as a structural CLAIM: *"a cast has a point of use; a
+`LongBool` FIELD has no point of use, and the declaration boundary is exactly
+where today's identity dies — the one place my fix never had to work."* The
+claim is right and a reader could have disbelieved it for free, so here it is as
+rows. `type TR = record flag: LongBool; n: Integer; end`, measured 2026-09-06
+against fpc 3.2.2, pxx binary `827722c842de` (the tree at `d3fe44947`):
+
+| row | pxx | fpc |
+| --- | --- | --- |
+| `SizeOf(r.flag)` | 4 | 4 |
+| `SizeOf(TR)` | 8 | 8 |
+| `if not r.flag` after `r.flag := True` | **TAKEN** | skipped |
+| `WriteLn(r.flag)` | **1** | `TRUE` |
+
+**The top two rows are the finding, not the filler.** The width crosses the
+declaration boundary INTACT — through `UFldTk`/`RecFieldType` — and the record
+layout is right in both compilers. So the field carrier is not lossy, and
+"the identity dies at the declaration boundary" is not quite the mechanism:
+**the slot keeps the same fact one level down that it kept upstairs.** This is
+one-slot-two-facts RECURSING, not a second lossy hop.
+
+Two estimates change, both downward:
+
+- **Nothing in the field machinery needs fixing.** Arm B's carrier has to
+  TRAVEL WITH the field; it does not have to replace how fields carry types.
+- The structural shortfall is still real — a field has no point of use, so no
+  cast-shaped fix reaches it — but it costs a channel that recurses, not a
+  rewrite of `UFldTk`.
+
+### The cheapest demonstration in the ticket, and it is a HALF fix (frankA's, recorded here)
+
+frankA fixed the enum-alias identity this morning (`type TE = TMyEnum; TE(1)`
+printed `1` where `TMyEnum(1)` printed `eB`), then found the fix was half a fix.
+The guard was
+
+```pascal
+if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then { take the enum id }
+```
+
+which is a correct test only while every enum IS `tyInteger`. Under
+`{$PACKENUM 1}` an enum's storage kind is `tyUInt8`, the guard goes false, and
+the identity drops again: `TS2(1)` printed `1` where `TSmall(1)` printed `sB`.
+The sibling door's own comment predicted this in almost those words and had been
+read hours earlier — **the kind is the only handle in reach, and it is right
+often enough to look like the question.** The fix reads the alias table's
+identity COLUMN, which answers "is this an enum" without asking anything about
+the kind: arm B, one line, one site.
+
+**A guard written on the layout kind is a bet that the layout kind will never
+narrow** — and narrowing it is exactly what `{$PACKENUM 1}`, `tyBool8`,
+`tyWideChar` and `{$H-}` `ShortString` all do. Every instance in this fork's
+history is that same bet losing.
+
+Method note attached to it, because it is the reason the half-fix shipped: the
+row set that missed it varied the DOOR and held the directive at its default.
+**A probe is naturally written at the default value of every setting it is not
+about**, and `{$PACKENUM}` is file-scoped — so the second value needed a second
+FILE, and folding the two together would have silently dropped the default half.
+
+### The membership test for this fork, which is cheaper than arguing about it
+
+**If a bug can be fixed by reading a different field, it is NOT this fork.**
+
+Group 19's `FileIOArgSize` was exactly that: the kind came from the node and the
+capacity from the symbol, and the fix was to read the kind out of the same
+record. The fact existed; one caller looked in the wrong place. Here there is no
+other field to read — once the kind slot holds `tyInteger`, **no slot anywhere
+holds "this is a boolean"**, and that is what makes it a carrier question rather
+than a lookup bug. Apply it to an incoming ticket before attaching it to this
+fork; it separates the two classes in one question.
