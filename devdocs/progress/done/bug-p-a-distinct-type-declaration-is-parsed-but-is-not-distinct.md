@@ -3,7 +3,7 @@ slug: bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 blocked-by: []
 created: 2026-09-04
 found-by: frankB
@@ -222,3 +222,6 @@ reading it.
 - `P(5)` with both overloads live: fpc answers *"Can't determine which overloaded
   function to call"*; we bind the base. Accepting what fpc rejects is not a
   defect, so the row carries no oracle and is not in the test.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
