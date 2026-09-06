@@ -277,3 +277,62 @@ a job name — never on the cause you have reasoned your way to, because the
 existing ticket is filed under a cause you do not know yet.** A red row you are
 the first to SEE is not a red row nobody has FILED, and a failure that was
 unreachable behind an earlier one is indistinguishable from a new one.
+
+## 2026-09-06 (frankF) — the retention is PER-UNIT, and that is what decides option (S/B)
+
+Two things this ticket needed and did not have: a repro that runs, and a
+measurement of the GRANULARITY the split depends on.
+
+**First, the repro line in "Measurement that still shows the defect" is wrong —
+it omits `--emit-obj`.** As written it builds an executable, and on a directory
+that does not exist it prints `ok:` and exits 0 having written nothing (that
+part is `bug-a-the-compiler-prints-ok-and-exits-0-when-it-wrote-no-output-file`,
+already filed by someone else; it reproduces on x86-64 too, not just xtensa).
+With the flag added the defect reproduces exactly as filed at `d6de711d1`,
+`compiler/pascal26 = c9de36a3754e`: **xtensa 36 UND / 18 `lwip_*` / 114 PAL**
+against **riscv32 2 UND / 0 / 114**.
+
+**Second, and this is the part that decides the design.** The ticket's option
+(S/B) is "split the ESP `platform_backend` so file I/O does not drag the socket
+surface", and whether that helps at all depends on a granularity nobody had
+printed. Measured, `--target=xtensa --emit-obj`, each a whole program:
+
+| program | PAL syms | `lwip_*` UND | procs |
+| --- | --- | --- | --- |
+| `begin end.` | 0 | 0 | 175 |
+| `x := 'a'; x := x + 'b'; WriteLn(x)` (AnsiString + concat) | **0** | **0** | 175 |
+| `WriteLn(StdErr, 'x')` | **0** | **0** | 175 |
+| `Assert(i = 1)` — five lines | **114** | **18** | 606 |
+| `uses platform;` **with an empty body** | **114** | **18** | 606 |
+| one `Assign`/`Rewrite`/`WriteLn`/`Close` on a `Text` | 114 | 18 | 606 |
+
+**`uses platform;` and `begin end.` — naming the unit is the whole cost.** So
+retention is per-UNIT: every procedure of a unit in the uses graph is emitted,
+and nothing finer is consulted. **Option (S/B) therefore works**, and it is the
+only one of the two candidates that does: moving the socket bodies to their own
+unit takes them out of the graph for a program that never names it.
+
+**It also corrects this ticket's own account of the mechanism.** The body above
+says `__pxxAssert`'s *"string path reaches the PAL's file I/O"* — but a bare
+AnsiString concatenation and a `WriteLn` to either stream reach the PAL **not at
+all**, on this target. Console output on xtensa does not go through `platform`.
+What `__pxxAssert` reaches is the unit, and reaching it anywhere costs all 114.
+
+**A five-line program is now the repro**, in place of `test/test_emit_obj.pas`:
+one `Assert` drags 18 lwIP imports and 431 procedures into an object for a
+routine the program never calls. That is worth having because it is not an
+`--emit-obj` property — see the executable rows in
+[[bug-a-assert-is-undefined-on-the-esp-bare-profile]], where the same `Assert`
+costs +229,376 B on hosted riscv32 and +94,208 B on x86-64 against the same
+empty program.
+
+**Not started, and not claimed here.** frankA holds option (A) under
+[[feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes]]
+and I have not touched `dce.inc`. The coordinator has confirmed (S/B) collides
+with nobody: `lib/rtl/platform/esp/platform_backend.pas` and
+`lib/rtl/platform/posix/platform_backend.pas` are different files that share a
+basename, and the POSIX one is another seat's. **The scope the split actually
+has, which this ticket understates:** `platform.pas` is a facade that re-exports
+the net surface, so taking the sockets out of the graph means splitting the
+FACADE too, and its interface is shared by the `esp`, `posix` and `wasi`
+backends — three files, not one.

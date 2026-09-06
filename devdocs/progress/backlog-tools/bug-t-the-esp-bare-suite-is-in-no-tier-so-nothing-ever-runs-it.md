@@ -152,3 +152,53 @@ behind an earlier `exit 1`.
 
 **So the dependency runs enrolment → guard, not guard → enrolment.** Anyone who
 files a "add a size row" ticket should have it `blocked-by` this one.
+
+## 2026-09-06 (frankF) — the number Track T asked for: 29 assertions, both chips, ZERO skips
+
+Ran on plexus, `PXX_ALLOW_FULL_SUITE=1 make -k test-esp-bare test-esp-softfloat`
+at `d6de711d1`, `compiler/pascal26 = c9de36a3754e`, `converged after 1 round(s)`.
+`rc=0`, read off the command's own exit status and not off the background
+wrapper's.
+
+**29 `ok` rows, 0 MISMATCH, 0 skipped, 0 build failures.** Both chips on every
+row that has two: bare-boot, softfloat kernels, atomics (S32C1I and the riscv
+pair), Call0 large frames via ADDMI, inline asm plus the windowed lowering,
+odd-index 64-bit argument pairs, frozen `string[N]`, var→var forwarding, record
+copy and by-value results, try/except/finally, class + virtual dispatch,
+proc-var indirect calls, >6-word arguments, and softfloat/int64. Every one is a
+UART-output diff against the x86-64 oracle, executed under the Espressif qemu
+builds (`esp_develop_9.2.2_20250817`), not a build check.
+
+Wall time ~12 minutes, derived from the job's launch and its output file's mtime
+(21:04:58 +0200) rather than from a timer — treat it as an order of magnitude,
+and re-time it under `time` before sizing a tier slot on it.
+
+**So the enrolment question now has both halves measured.** frankS established
+what it buys on a box with the toolchains; this establishes that at HEAD, today,
+it is entirely GREEN — a tier gains 29 executed cross-checks and no new red.
+That is the cheap case for enrolling and the one that expires: it is true of
+`d6de711d1` and of nothing else.
+
+**The framing that belongs with the number, and it is not mine — frankZ's, via
+the coordinator.** *A false skip is worse than a false red: a red is loud, a
+skip is silent.* **A job in zero tiers is not even a skip.** `test-esp-bare` and
+`test-esp-softfloat` appear in no tier as a red, as a skip, or as a hole — they
+appear as nothing, so no count reports them and there is nothing to scrutinise.
+Under a release that advertises "all frontends and all targets", enrolment is
+what turns that absence into a row that can be read. This is also why
+`skip_holes == 0` cannot speak for these two: they are not skipped for a reason
+the harness owns, because the harness has never been told they exist.
+
+**What I did NOT do, deliberately.** I did not touch `tools/testmgr.py`. It is
+T's file, frankB is in it on the un-skips, and a number lands cleanly where an
+edit would collide. Whether seven has `~/.espressif` is still the open half and
+is a fact about the runner, not about the suite — I can only report that plexus
+does.
+
+**One thing enrolment would immediately expose, filed today:**
+[[bug-a-assert-is-undefined-on-the-esp-bare-profile]] — no program containing an
+`Assert` can be built for `--esp-profile=bare` on either chip. Twenty-nine green
+rows did not see it because `test_esp_bare.pas` contains no assertion. That is
+this ticket's own thesis holding for a second time: the suite is not merely
+unwatched, it is unwatched in a way that makes its green misleading about the
+target's coverage rather than about its correctness.
