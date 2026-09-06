@@ -46,6 +46,7 @@ of this page for what happened the last time nobody did.
 | `tools/crtl_decl_probe.sh` | — (census) | is a declared crtl function actually IMPLEMENTED, or silently binding to libc? | B |
 | `tools/c_array_shape_census.py` | gcc | does every way C can *reach* an array agree with every way it can *use* one? | C |
 | `tools/c_strlit_decay_census.py` | gcc | does every way to *wrap* a C string literal agree with every site that *consumes* one? | C |
+| `tools/deref_opener_chain_probe.py` | FPC 3.2.2 | for a `.member` on a value that is still a POINTER: does every OPENER (pointer variable, typed cast, call result, each at depth 1-3) agree with FPC across every member kind (field, method, property)? 41 rows, the opener is the axis. `PXX=` to point it at another binary; it **exits 1** if its must-differ control agrees | P |
 
 `crtl_decl_probe` is the odd one out: it has no oracle. It answers *"is the
 symbol there at all"*, which is the question **before** `gcc_diff_probe`'s
