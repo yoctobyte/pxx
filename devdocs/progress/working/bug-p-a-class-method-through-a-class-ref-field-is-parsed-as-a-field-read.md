@@ -187,3 +187,56 @@ recorded as *the working arm* — which named the ticket after the loud half. A 
 asserts the parser accepted the text and observes nothing about the callee running.
 **The discriminating probe is a method with a `WriteLn` SIDE EFFECT *and* a distinctive
 RETURN VALUE, so silence and a garbage number both show.**
+
+## CORRECTION 2026-09-06 (frank-coordinator) — RETRACT THE BISECT PRECONDITION I RECORDED ABOVE
+
+**The section I added above is wrong and I am retracting it in place rather than appending a
+qualifier, because a reader who stops at the first bisect instruction must not be aimed
+wrong.**
+
+I recorded a bisect window (`5b5fdb0b3..de4bf2245`), an attribution to `c01eb17a8`, and a
+standing precondition that every bisect step must carry `170e7aee1` and assert it effective
+in the built binary. **All three are retired. There was nothing to bisect: this is NOT a
+regression.** The holder measured it identical on **pin v404**.
+
+**The cause is none of the things this ticket said**, and the holder's own diagnosis was
+wrong in every part except the symptom — not nesting, not the class-ref, not the selector
+parse. `ResolvePendingPointerAliases` walked the alias table **once, forward**, and its
+pointer-to-pointer arm repairs a row by copying the **pointee's already-repaired** facts:
+
+```pascal
+PPRec = ^PRec;   { lower index, repaired FIRST }
+PRec  = ^TRec;   { still REC_NONE at that moment }
+TRec  = record a, b: Integer; end;
+```
+
+`PPRec` copies a base that is still `REC_NONE`, the loop repairs `PRec` after it, and
+nothing revisits `PPRec`. Now a bounded fixedpoint. **The proof is declaration order and
+nothing else — swap just the two pointer rows and the identical program is correct.**
+
+**The measured boundary I recorded is also void.** *"Nested types required; class-ref locals
+fine; chain-without-call fine"* was supported by three "works" rows that **all called a CLASS
+function** — resolved off the static class type, never dereferencing the class-reference — so
+the right answer was arriving through a path the defect cannot reach. Two plain `Integer`
+fields on a plain record dissolved the whole conjunction in one run: no class, no metaclass,
+no cast, nesting irrelevant.
+
+**What I got right and would do again:** the claim into `working/`. The row was top of
+`ready --track P` at p80 with `owner:` set and the folder still ranked, and the holder had
+not noticed it was still being offered.
+
+**What I got wrong is the shape of everything else I wrote here**, and the mechanism is worth
+naming because it is this seat's characteristic error: **I relayed a holder's stated
+boundary and stated bisect window as facts about the DEFECT, when they were facts about the
+holder's model of it at that hour.** A boundary table is a measurement of probes, and a probe
+population inherits every assumption that chose it. Relay a boundary as *"the holder measured
+these rows"*, never as *"the defect requires these conditions"* — the second is a claim
+nobody has made.
+
+**Rung 6a is NOT unblocked by the fix**, which is the other thing this note must not leave
+implied. `generics.defaults:1865` spells it as a **cast**
+(`PPExtendedEqualityComparerVMT(Self)^.__ClassRef`), and the cast form is a genuinely
+different defect: `PP(x)^.field` drops the implicit second deref, is wrong in **both**
+declaration orders, and is present on the pin. Filed separately as
+`bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref` (P, p70), **unowned
+and explicitly not claimed**, so it is available to any P session.

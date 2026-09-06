@@ -9049,6 +9049,59 @@ entry after the dropped index, which is **i386 PIC** — the target class CLAUDE
 already names as structurally invisible here, since the dev loop, `gate.sh quick` and
 the pin all run on x86-64.
 
+### RETRACTION 2026-09-06, by the session that found it — the precondition could not be reached at all
+
+The scoping above (*"exposure needs a `DATAREF_DROP` **and** a `FixupPCRel = True` entry
+after the dropped index"*) was already conditional and it was still too strong, because it
+treated the first conjunct as a thing that happens. **frankH has since been unable to reach
+the drop in any probe**, and retracted the word it had used for the precondition's
+frequency:
+
+> *"I told you the `DATAREF_DROP` precondition was 'common' and I had not measured it. That
+> word came from the source comment, not from a probe."*
+
+**The comment at `emit.inc` says a sentinel with no table is dropped and calls it "a
+documented answer, not a defect: a module that publishes no classes has no registry." That
+is a statement about DESIGN and it was read as a statement about FREQUENCY.**
+
+> **A comment's adjective is not a measurement.** *Common*, *rare*, *hot*, *cheap*,
+> *usually* in source prose are the author's design commentary, written to explain a choice
+> — not counts, and never sampled. They are the most quotable sentences in a file and the
+> only ones with no instrument behind them.
+
+Measured since, and it goes the other way:
+
+```
+minimal Pascal program,  p := __rttireg   -> resolves, 4262704   (registry PRESENT)
+same,                    p := __resources -> resolves, 4259211   (table PRESENT)
+EmitDataRef writes EmitI32(0) as the placeholder, so a DROPPED fixup leaves NIL
+  -> "non-nil" is a sound discriminator here, and it says the tables exist even in a
+     program that does nothing
+EmitResources does `if ResPendCount = 0 then Exit` leaving ResourceTableOff = -1,
+  so BY INSPECTION it should drop with no {$R}, and EMPIRICALLY it does not
+```
+
+**That last line is an unresolved contradiction between inspection and observation and it
+has not been run to ground.** Nothing above is a reason to skip the fix: the invariant
+violation stands exactly as stated — `dce.inc` compacts all three arrays and says why,
+`compiler.pas` shifts one and names neither of the others anywhere in the file. **What does
+not stand is any claim that the arm executes.** It is a **latent invariant repair with no
+demonstrated victim**, which is a different thing from a bug, and the ticket now says so.
+
+**And the near-miss, which is this file's own rule arriving live rather than as a maxim.**
+The first repro was *a comparison whose inputs did not exist*: both compiles failed with
+`this object would define no linkable symbol`, no `.o` was written, and `cmp` on two absent
+files printed **DIFFERS**. It was one step from being reported as the reachability proof,
+and was caught only by adding the existence assertion **afterwards**. The second repro
+compiled cleanly, produced two 120972-byte objects, and was **IDENTICAL** — and then the
+precondition check showed the drop had not fired in that one either, **so the identity means
+nothing about the bug.**
+
+A corpus-wide i386 `--emit-obj` before/after comparison is running. **If it comes back
+all-identical that is consistent with "the drop does not fire here" and is NOT evidence the
+fix is unnecessary** — the two are indistinguishable from that run alone, which is the same
+shape as an anchored error pattern matching zero lines.
+
 ## WHEN SUCCESS LOOKS EXACTLY LIKE DOING NOTHING, ONE CONTROL CANNOT CARRY THE RUN
 
 Same session, on a pure-performance change, and it is the cleanest handling of a
@@ -12171,3 +12224,59 @@ said *"generic class functions not supported"*, which is precisely the gap that 
 been fixed without anyone knowing that row existed. **A skip line is a claim with a date on
 it, and re-running the corpus is how it gets audited.** Families after the pass:
 `tgeneric*` **75 pass / 0 fail** (was 1 fail), `tgenfunc*` **6 pass / 0 fail** (was 4 pass).
+
+## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
+
+Measured 2026-09-06 (frank-optimize), and it cost a day and a wrong diagnosis in every part
+except the symptom.
+
+The ticket's boundary table asserted a **conjunction** — *"a NESTED pointer alias AND two
+pointer levels"* — supported by three green "works" rows. **Every one of those rows called
+`Val`, a CLASS function.** A class function is resolved off the **static class type** and
+never dereferences the class-reference, so `SIDE called n=3` / `r=42` was **the right answer
+arriving through a path the defect cannot reach.**
+
+> This file already says *choose a probe whose right answer differs from the default* (the
+> **operand** axis) and *"it compiled" is not a positive control for "it was called"* (the
+> **observable** axis). This is the third: **the CALLEE axis.** The probe's correct value was
+> also its failure value because the callee it named was resolved statically. **Ask what the
+> probe's callee is dispatched on, not only what its arguments are.**
+
+Two plain `Integer` fields on a plain record dissolved the conjunction in **one run**: no
+class, no metaclass, no cast, and nesting **irrelevant** — the 2x2 was crossed and the
+unit-level-forward form breaks identically.
+
+### And the offset-zero trap, which belongs in front of anyone writing a field test
+
+**`.a` stayed correct throughout, because `.a` is at offset 0 and a lost base resolves the
+selector there.** `pp^^.b` read back `pp^^.a` — 11 where fpc prints 22.
+
+> **A one-field probe is green while the bug is live.** Offset 0 is the value a lost, nil or
+> unrepaired base produces, so the first field of any record is the one member that cannot
+> discriminate. Assert at least the SECOND field, in BOTH declaration orders, and add one
+> chain a level deeper.
+
+Same animal as `sizeof(int)` colliding with `TypeStorageSize(tyUnknown)`: wherever the
+correct answer for a member is also what the broken machinery yields, that member is not a
+test.
+
+### The mechanism, and why declaration order is the whole proof
+
+`ResolvePendingPointerAliases` walked the alias table **once, forward**, and its
+pointer-to-pointer arm repairs a row by copying the **pointee's already-repaired** facts:
+
+```pascal
+PPRec = ^PRec;   { lower index, repaired FIRST }
+PRec  = ^TRec;   { still REC_NONE at that moment }
+TRec  = record a, b: Integer; end;
+```
+
+`PPRec` copies a base that is still `REC_NONE`, the loop then repairs `PRec`, and **nothing
+revisits `PPRec`.** Now a bounded fixedpoint. **Swap just the two pointer rows and the
+identical program is correct** — a one-variable swap, no rebuild of the model required, and
+the cheapest possible statement of the defect.
+
+**A one-line repair landed INSIDE the arm first and measured no behaviour change at all, and
+that negative is what sent the search up a level.** CLAUDE.md already says a change measured
+as no change is data about your MODEL; this is the live case — **a fix that is obviously
+right and changes nothing is information about the model, not about the fix.**
