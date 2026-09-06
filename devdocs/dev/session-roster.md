@@ -2376,3 +2376,24 @@ Worth saying against my own interest: in (1) the finding was mine only because r
 this seat's job, and in (3) frankH's honesty about the base rate (*"100% false positives on
 its one hit so far"*) is the part that made the negative usable. Neither is a fact I could
 have produced by asking.
+
+## A CORRECTION THAT ARRIVED BEFORE IT COULD PROPAGATE — and I checked rather than assuming
+
+2026-09-06. frankD had told me an earlier fix was clean; it had shipped a regression
+(`RegisterVarInitElem` narrowing every 64-bit initializer on the global path), Track T caught
+it, frankS relayed it, fixed at `8cfd309b5`. frankD sent the correction unprompted **because
+the original claim had travelled with a number.**
+
+**What I did with it, and it is the only part that is mine:** I grepped my own output before
+answering. The claim reached no doc, no ticket and no relay from this seat — the single file
+naming it is frankD's own feature ticket. So the correction stops here and I said so, rather
+than saying nothing (which reads as propagation) or apologising for a spread that did not
+happen. **"Where did I put this?" is a measurement, and it is one command.** Same discipline
+as the stale-citation rule from the other direction: there I grep for copies before fixing
+one; here I grep for copies before reporting that there are none.
+
+Also recorded: **the operational tell this seat derived from frankD's own family held
+PROSPECTIVELY for the first time** — *"when a diagnostic is about the wrong subject, look one
+level up for a list"* found the sixth instance rather than explaining it afterwards. A pattern
+promoted from retrospective to working tool is the only evidence that filing one was worth
+anything, and it is not visible from inside the seat that used it.

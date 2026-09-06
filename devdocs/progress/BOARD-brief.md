@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:6 backlog:21 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:46 backlog-pascal:30 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3478 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:21 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:46 backlog-pascal:30 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3479 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -80,11 +80,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
+- `[p 70] [T]` regression-cascade-0dd59f05cc3a
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-core-cfloat-global-array-implicit-len-b386
-- `[p 70] [T]` regression-test-core-test-interface-containers
 - `[p 70] [T]` regression-test-core-test-libwriteln-parity
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [T]` regression-test-core-test-promoint-bitwise

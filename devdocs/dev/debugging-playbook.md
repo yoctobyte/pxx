@@ -17030,6 +17030,135 @@ reason** — not a bigger one. Seven files and six files settled this; seventy o
 first kind would not have.
 
 
+## AN ENUMERATION CAN BE AN APPROXIMATION OF A FUNNEL THAT ALREADY EXISTS AND SAYS SO IN ITS OWN DECLARATION — and then the fix is the arm REJOINING, not a widening
+
+Measured 2026-09-06 (frankD), sixth instance of the enumerated-predicate family and a
+sub-shape the other five do not have. `fcl-passrc`'s `pparser.pp` died at
+`expected ')' before '['`. A bare implicit-`Self` method call applied a trailing selector only
+for two return kinds:
+
+```pascal
+if (mpi >= 0) and (CurTok.Kind in [tkDot, tkLBrack]) and
+   ((Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord)) then
+```
+
+so `CurTokenText[1]` — the class's own parameterless `String` method, indexed — dropped its
+`[`. In a statement the same defect says `a statement cannot start with '['`. **Two
+diagnostics, neither about a return type.**
+
+**The sub-shape: `ApplyCallResultPtrSuffix` is declared in `pasparser_lval.inc` as "the ONE
+materialisation point for a suffix on a call RESULT".** Three of the four spellings of this
+call reach it — `Self.Txt[2]`, `p.Txt[2]`, and a bare global `GT[1]` all index correctly.
+**One arm had opted OUT of the funnel and grown a two-member approximation of it.**
+
+**So separate these two in the family, because the fixes differ and only one of them deletes
+code:**
+
+| shape | fix |
+| --- | --- |
+| *the list is too short* | add the missing members — the enumeration stays |
+| *a canonical answer exists and this site declined to call it* | the arm **rejoins**; the enumeration is deleted |
+
+Reading the second as the first produces a third member on a list that should not exist, and
+it passes, and the next spelling fails the same way. **The tell is in the callee's own
+declaration** — a comment saying *"the ONE place"* is a claim about the codebase that a
+two-member `or` chain three files away is quietly contradicting. Companion to
+`## A RULE SPELLED PER CALLER FAILS BY AN ABSENT COPY` and to frankD's per-side/pairwise
+finding in the assignment-kind funnel.
+
+**AND THE DETECTION METHOD, which is the reusable half: one spelling out of four behaving
+differently is what an enumerated list LOOKS LIKE from outside.** frankD's other five
+instances that day had no working sibling to compare against and each needed a hypothesis.
+**This one needed a table.** So before theorising about a construct that fails, write down
+every spelling of it you can reach and run them: a list that is short shows up as a partition
+of the spellings, and partitions are cheap to produce and impossible to argue with.
+
+**The operational tell held PROSPECTIVELY here for the first time** — *"when a diagnostic is
+about the wrong subject, look one level up for a list"* was used to FIND this, not to
+recognise it afterwards. That is the promotion the family was filed for.
+
+## WHICH HALF OF THE DIAGNOSTIC IS LYING IS ITSELF THE QUESTION — neither the line nor the quoted text is reliably the good one
+
+Measured 2026-09-06 (frankD), and it is the exact inverse of a case from the same week.
+
+The `expected ')' before '['` error's **LINE was right and its `near:` window was wrong** —
+the quoted text pointed 167 lines away at an unrelated `ParseExc(...)` call, and two
+hypotheses were spent on that text. frankS's `toperator78` was the other way round: **the line
+lied and the construct was elsewhere**, so the quoted text was the honest half.
+
+**There is no rule "trust the line" or "trust the text".** A diagnostic is two independent
+claims about where a parse failed, produced by different bookkeeping, and either can be
+correct about a different position. **Ask which half you are relying on and what would be true
+if that half were wrong** — then check the other half against the source directly rather than
+against your reading of the first.
+
+The general form is the one worth keeping: **a compound diagnostic is not one measurement.**
+Treat `file:line` and `near: <text>` the way you would treat two sources — they only
+corroborate if they can fail differently, and here they demonstrably do.
+
+## TWO WAYS A BISECTION IS ALREADY WRONG BEFORE IT STARTS — a predicate that matches anywhere in the output, and a search space that is not monotone
+
+Both measured 2026-09-06 (frankD), in one diagnosis, and both are cheap to check up front.
+
+**1. THE PREDICATE MATCHED THE WHOLE COMPILER OUTPUT.** The bisect predicate grepped all of
+stdout for `expected ')'` and returned True on a run whose **FIRST** error was
+`undefined variable (charinset)` — the string was there, several lines down. **A predicate
+that cannot distinguish "this error" from "this error mentioned anywhere later" will confirm
+a bisection all the way to a wrong answer**, because compiler output after the first error is
+a cascade and contains almost anything. **Grep the FIRST line, not the output.**
+
+This is the same animal as *a `%FAIL` row is green whenever the compiler refuses for ANY
+reason*, one level down: there, any refusal satisfies the row; here, any occurrence satisfies
+the predicate. **Whenever your oracle is "did this string appear", ask what else produces it.**
+
+**2. THE SEARCH SPACE WAS NOT MONOTONE.** The binary search ran over successive truncations of
+a unit, and **a truncated unit fails differently** — so "no paren error" meant one thing at
+one end of the range and another thing at the other. Bisection presupposes a predicate that
+flips exactly once across the space, and **nobody checks that presupposition**, because the
+tool is presented as a search rather than as an assumption.
+
+**Before bisecting anything that is not a commit history, state why the predicate is
+monotone.** Over commits it usually is. Over truncations, input sizes, optimisation levels or
+feature flags it usually is not, and the failure is silent: you get a confident boundary.
+
+**Two more instruments from the same diagnosis, neither of which errored.** **Stubbing the
+suspect function moved the error to that function's own HEADER**, which reads exactly like
+*"the imbalance predates this function"* and was an artefact of the stub — **a reduction that
+changes the answer is not always narrowing the search.** And what actually worked was blunt:
+truncate at successive TOP-LEVEL boundaries, append `end.`, ask only whether the error
+appears. No stubbing, no reasoning about paren depth.
+
+**AND THE TRUNCATION SURFACED A WALL THE PARSE ERROR WAS HIDING** — accidental cover from the
+other side. `pparser.pp:559` calls `charinset`, and `lib/rtl/sysutils.pas` does not declare
+it, **although its own comment names `TSysCharSet` as "the parameter type of the CharInSet /
+character"**. The type is there, named for the function; the function is not. Unreachable
+today behind two parse walls, so it has never been on any instrument — filed for Track B and
+explicitly marked as never measured end to end, **because a one-line body is exactly what
+gets closed on a build rather than on a run.**
+
+## A WIDTH BUG SURVIVES EVERY FIXTURE WHOSE VALUES FIT — and the wrong answer is a plausible number, not a zero
+
+Measured 2026-09-06 (frankD), reported as a correction to their own earlier clean report.
+`RegisterVarInitElem` took `val: Integer` while **both init tables are `array of Int64`**,
+truncating every 64-bit initializer element on the GLOBAL path. Track T caught it; fixed at
+`8cfd309b5`.
+
+**The part worth banking is the fixture, not the bug. The fixture shipped WITH that fix could
+not have caught it at any width.** Eight rows, green, a file named for the feature — and every
+element it asserted was a string, a small integer or a class reference, **all of which survive
+a narrowing to 32 bits intact.** Structurally blind to the defect the same commit introduced.
+
+*Match the assertion class to the defect class* is usually quoted about leaks, where no output
+assertion can observe the failure. **It applies to WIDTH identically, and width carries an
+extra trap: the wrong answer is a plausible number rather than a zero or a crash**, so it
+survives eyeballing as well as asserting. Same family as CLAUDE.md's rule that a probe whose
+right answer collides with the failure value is a guard that cannot fail — here every value in
+the fixture collides.
+
+**Operationally: any fixture for code that stores, copies or passes a numeric value must carry
+at least one value that does not fit the narrower type** — `High(Int64)`, or anything above
+`2^32`. One row. It costs nothing and it is the only row in the file that can fail.
+
 ## AN ENUMERATION IS PRECISELY THE THING YOU CANNOT SAMPLE — any subset of it behaves consistently, because consistency within a list is what a list is
 
 frankB, 2026-09-06, falsifying their own banked claim within one probe of banking

@@ -76,13 +76,13 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| regression-cascade-0dd59f05cc3a | T | 70 | regression | regression CASCADE: 20 jobs newly red in 851f170cb..0dd59f05c (4 commits) — auto-filed by twatch | — |
 | regression-cascade-6758c7ce7dbd | T | 70 | regression | regression CASCADE: 23 jobs newly red in b8e3b3010..6758c7ce7 (105 commits) — auto-filed by twatch | — |
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
 | regression-test-core-cfloat-global-array-implicit-len-b386 | T | 70 | regression | regression: test-core#src:test/cfloat_global_array_implicit_len_b386.c at 0dd59f05cc3a in step 2/2, `/tmp/cfloat_global_array_implicit_len_b38626; tools/expect_same.sh cfloat_global_array_implicit_len_b38626-rc "$?" "42"` (auto-filed by twatch) | — |
-| regression-test-core-test-interface-containers | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@2 at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_interface_containers_ts26 "$(/tmp/test_interface_containers_ts26)" "$(printf 'strarr: ok\nsta…` (auto-filed by twatch) | — |
 | regression-test-core-test-libwriteln-parity | T | 70 | regression | regression: test-core#src:test/test_libwriteln_parity.pas at fa5e9ef55813 in step 2/2, `tools/expect_same.sh test_libwln26 "$(/tmp/test_libwln26)" "$(cat test/test_libwriteln_parity.expected)"` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-core-test-promoint-bitwise | T | 70 | regression | regression: test-core#src:test/test_promoint_bitwise.pas at 0aff068c6d08 in step 2/2, `tools/expect_same.sh sweep_promoint26 "$(/tmp/sweep_promoint26)" "$(printf '18446744073709551615\n0\ncrossed\n184467440…` (auto-filed by twatch) | — |
@@ -945,9 +945,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3478)
+## done (3479)
 
-3478 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3479 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1048,11 +1048,11 @@ _none_
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [A] perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
+- [p 70] [T] regression-cascade-0dd59f05cc3a
 - [p 70] [T] regression-cascade-6758c7ce7dbd
 - [p 70] [T] regression-cascade-b8e3b3010249
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-core-cfloat-global-array-implicit-len-b386
-- [p 70] [T] regression-test-core-test-interface-containers
 - [p 70] [T] regression-test-core-test-libwriteln-parity
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-promoint-bitwise
