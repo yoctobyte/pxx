@@ -14864,6 +14864,12 @@ grep -ho 'array of [A-Za-z_]*' compiler/*.inc compiler/*.pas | sort -u
        TTypeKind, Double        (no class type anywhere)
 ```
 
+frankB re-measured this rather than quoting it, and closed the one hole in it: a strict
+`^\s*Name\s*=\s*class` across `compiler/*.inc` finds **three** hits and **all three are prose
+inside comment blocks** (`defs.inc:679`, `ir.inc:15848`, and the `TFoo = class` in a worked example
+above `pasparser_decl.inc`'s class-const arm). So the zero is a real zero on both files and
+includes.
+
 **`compiler.pas` declares no classes at all and no `array of <class>` exists anywhere in the
 compiler's own sources**, so the self-host fixedpoint is *structurally* incapable of exercising this
 construct — the documented scope limit (*"it cannot see a construct the compiler never writes"*)
@@ -14875,3 +14881,35 @@ frankB's measurement, not this seat's.
 names, but **"my change is gated on a type-system predicate, and the construct that would falsify it
 is one the compiler cannot write."** That is a statement about the gate's aperture, checkable in one
 grep before you run anything.
+
+
+## "WE ACCEPT WHAT FPC REJECTS" IS THE RIGHT STOPPING POINT FOR A *PARITY* QUESTION AND THE WRONG ONE FOR AN *INTERNAL INCONSISTENCY*
+
+CLAUDE.md is unambiguous: *us accepting what FPC rejects is not a defect*. That rule is doing real
+work — it is what stops the backlog filling with parity chores nobody asked for — and it is
+therefore reached for early, which is exactly when it can close the wrong question.
+
+Measured 2026-09-06 (frankS's argument, frankB's ticket, property clauses in P). `stored` on a CLASS
+property is accepted where FPC refuses it. frankB stopped at the parity rule and was right to,
+**until frankS pointed at `tclass14b`: we ALREADY refuse `published` on a class property.**
+
+> **`published` and `stored` are two spellings of one rule, and we had implemented one of them.**
+> That is not a divergence from FPC. It is an inconsistency with OURSELVES, and internal
+> consistency is ours whatever FPC does.
+
+**The check to run before invoking the exemption is cheap and mechanical: is there another spelling,
+clause, or syntactic route to the SAME rule, and do we already refuse it?** If yes, the parity
+question was never the question. A codebase that refuses a construct under one name and accepts it
+under another gives the programmer a rule they cannot learn, and "FPC's answer is not a
+specification" says nothing about that.
+
+Note where the argument came from. frankB had reached the correct stopping point for the question it
+was asking; the reframing came from a **second session that had the sibling ticket in view**. The
+sibling is what made it takeable, and neither party could have seen it alone — the generalisable
+half is that **a parity exemption is a claim about the whole rule, so it wants a look at the rule's
+other spellings before it is granted.**
+
+And frankB landed it as a **separate commit with its own gate**, on the stated grounds that *a
+refusal's risk is refusing working code* — having already had exactly one such refusal go green on
+three repros and on `gate.sh quick` that session. Adding a refusal and relaxing one are not
+symmetric changes and should not share a gate.
