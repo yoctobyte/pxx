@@ -41,6 +41,7 @@ test/qualified_default_unit.pas  Pascal unit imported by test/test_nilpy_qualifi
 test/test_exc_resident_param.pas  RUN by test-opt across -O0/-O1/-O2/-O3 (Makefile `for t in ... test_exc_resident_param`); the loop names the STEM and builds `test/$$t.pas`, so no literal `test/test_exc_resident_param.pas` token exists to be found
 
 # --- deliberately manual: needs a checkout this repo does not vendor ---
+test/manual/try_synapse_compile.sh  the hand-run driver for the four synapse_smoke_*.pas above; nothing names it because nothing should — it needs external/synapse, which this repo does not vendor, and it exits 2 with an install hint when the checkout is absent
 test/manual/synapse_smoke_blcksock.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
 test/manual/synapse_smoke_synaip.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
 test/manual/synapse_smoke_synautil.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout

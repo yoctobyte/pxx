@@ -2,6 +2,18 @@
 # SPDX-License-Identifier: MPL-2.0
 """check_test_wiring.py — a file in test/ is not a test until a rule runs it.
 
+TWO CENSUSES, AND THEY ASK DIFFERENT QUESTIONS. The original one is over test
+SUBJECTS (SUBJECT_EXT below: .pas/.npy/.c/.lua/.fth) and asks whether a build
+rule reaches them. The second, added 2026-09-06, is over test RUNNERS -- the
+`.sh` scripts under test/ -- and asks whether ANY file that could invoke one
+names it at all. A runner is not a subject and was structurally invisible to the
+first census: `check_nilpy_objlocal.sh` sat in test/wasm/ invoked by nothing --
+not check_all.sh, not the Makefile, not any script -- so the regression guard
+for a leak fixed hours earlier never ran, and the suite printed green one check
+smaller than its own directory. Found by a file count and a PASS count
+disagreeing by one; this check makes that arithmetic automatic. See
+"THE OUTER MEMBER: A GUARD THAT IS NEVER REACHED" in debugging-playbook.md.
+
 Writing a test and confirming it passes are both true, and neither makes it
 covered. The only fact that establishes "this is gated" is a build rule
 referencing the file — and `test-core` / `test-nilpy` both ENUMERATE their
@@ -32,6 +44,22 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXEMPT = os.path.join(ROOT, "test", "UNWIRED.txt")
+
+# FILES THAT ARE *ABOUT* THIS CHECK ARE NOT EVIDENCE FOR IT. Both scans exclude
+# them, and the reason is one the tool already states about everyone else: a
+# devtest that lists test paths as DATA mentions them exactly like a runner that
+# executes them, which is why `tools/check_test_wiring_devtest.py:17` is graded
+# ADVISORY when it turns up as the only reference to csqlite_file_probe.c.
+#
+# It is not merely advisory when it is THIS check's own devtest, because the
+# fixtures are built from the real citations: naming test/wasm/objlocal_slice.npy
+# in a docstring -- to record that the file pointed BACK at its own runner -- was
+# enough to credit that .npy as wired and move it out of the parked bucket, and
+# naming test/manual/try_synapse_compile.sh made its own correct exemption read
+# as stale. Both measured while writing the runner census. Derived rather than
+# spelled so a rename does not silently re-open it.
+_SELF = os.path.basename(__file__)
+_SELF_DOCS = (_SELF, _SELF[:-3] + "_devtest.py")
 
 # Extensions that are SUBJECTS of a test run. `.expected` is deliberately not
 # here: it is an assertion belonging to a subject, and it is checked through its
@@ -170,7 +198,7 @@ def wired_paths(prov=None, dir_refs=None):
     files = [os.path.join(ROOT, "Makefile")]
     tools = os.path.join(ROOT, "tools")
     for fn in sorted(os.listdir(tools)):
-        if fn.endswith((".sh", ".py")) and fn != os.path.basename(__file__):
+        if fn.endswith((".sh", ".py")) and fn not in _SELF_DOCS:
             files.append(os.path.join(tools, fn))
     for path in files:
         try:
@@ -373,6 +401,92 @@ def consumed_by(wired, subject_paths, dir_refs=None):
 
 _quoted_re = re.compile(r"'([^']*)'")
 _ident_re = re.compile(r"[a-z_][a-z_0-9.]*")
+
+
+# Files that could INVOKE a runner. Deliberately not "every tracked file", and
+# the difference is the whole check: at fa4d9c43f^, `check_nilpy_objlocal.sh`
+# was named by four files and run by none of them -- LOGBOOK.md and two tickets
+# (history), `objlocal_slice.npy:9` (*"N_ITERS is substituted by
+# check_nilpy_objlocal.sh"*) and `wasmhost.js:66` (*"could not instantiate its
+# own fixture"*). The last two are the interesting pair: they are files the
+# script USES, pointing back at it, so a corpus of "anything that mentions the
+# name" reads a runner's own dependencies as its callers and can never report
+# an orphan that has any fixture at all.
+#
+# .js is out on that evidence and not on principle -- if a .js host ever
+# genuinely spawns a check, this list is where that gets fixed, and the fix is
+# a measurement, not an argument.
+_INVOKER_EXT = (".sh", ".py", ".mk")
+
+
+def runner_paths():
+    """git-tracked *.sh under test/, minus SKIP_DIRS. Tracked-only, as subjects()."""
+    out = subprocess.run(["git", "ls-files", "test/"], cwd=ROOT,
+                         capture_output=True, text=True).stdout.split()
+    return sorted(p for p in out
+                  if p.endswith(".sh")
+                  and not any(p.startswith(d) for d in SKIP_DIRS))
+
+
+def unreferenced_runners(runners):
+    """Runners no other invokable file names at all. -> {path: None}.
+
+    THE QUESTION IS LOCAL ON PURPOSE, and the alternative was measured before
+    this was written. Asked GLOBALLY -- "is this reachable from the Makefile or
+    a tools/ script" -- the answer today is 47 of 48, because test/wasm/ is run
+    by hand and check_all.sh is itself named by no rule. That is true, already
+    known, recorded as an absence with a named cause, and printing it here every
+    run would be a check that flags everything, which is as empty as one that
+    never fires. So a sibling runner counts as an invoker: this census asks
+    whether a suite can SEE its own members, not whether a tier runs the suite.
+    Coverage of the suite by a tier is a different claim with a different owner.
+
+    A runner that nothing names cannot be reached by any route, whatever the
+    suite's tier status -- which is why the local question still catches the
+    case that motivated it and the global one adds nothing on top.
+    """
+    named = {r: False for r in runners}
+    # Tracked AND untracked-not-ignored, for the same reason added_since() reads
+    # the working tree: the per-push arm asks its question at the moment the new
+    # runner and the edit that wires it are both still uncommitted, and a corpus
+    # of only tracked files would answer about a repo that does not exist yet.
+    corpus = subprocess.run(["git", "ls-files"], cwd=ROOT,
+                            capture_output=True, text=True).stdout.split()
+    corpus += subprocess.run(["git", "ls-files", "--others",
+                              "--exclude-standard"], cwd=ROOT,
+                             capture_output=True, text=True).stdout.split()
+    bases = {os.path.basename(r): r for r in runners}
+    for f in corpus:
+        if not f.endswith(_INVOKER_EXT) \
+           and not os.path.basename(f).startswith("Makefile"):
+            continue
+        # THIS FILE IS NOT AN INVOKER, and leaving it in the corpus made the
+        # check clear a file by DOCUMENTING it. Measured while writing this:
+        # the comment below the census named test/manual/try_synapse_compile.sh
+        # as the example of a legitimate hand-run script, check_test_wiring.py
+        # is a .py, and the scan read its own prose as a reference -- so the one
+        # true positive in the tree went to zero and the checker printed OK.
+        #
+        # wired_paths() has carried this exact exclusion, with a comment saying
+        # *"the check was reading its own documentation as evidence"*, since
+        # before this census existed. The fix was already in the file, roughly a
+        # hundred lines up, and writing a second scan reproduced the bug the
+        # first scan was patched for. A warning is only a guard on the line
+        # someone is reading; it is not one on the line they are typing.
+        if os.path.basename(f) in _SELF_DOCS:
+            continue
+        try:
+            with open(os.path.join(ROOT, f), encoding="utf-8",
+                      errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for b, r in bases.items():
+            if r == f:
+                continue          # a script naming itself proves nothing
+            if b in text or r in text:
+                named[r] = True
+    return {r: None for r in runners if not named[r]}
 
 
 def subjects():
@@ -605,6 +719,39 @@ def main(argv=None):
         subs = sorted(set(subs) | set(extra))
 
     reached = consumed_by(wired, subs, dir_refs)
+
+    # THE RUNNER CENSUS. Everything above is about SUBJECTS; this is about the
+    # scripts that run them, and the two cannot share an enumeration because a
+    # runner is not a subject -- see the module docstring for the case that
+    # motivated it.
+    runners = runner_paths()
+    if since is not None and added:
+        runners = sorted(set(runners) | {
+            q for q in added
+            if q.endswith(".sh")
+            and not any(q.startswith(d) for d in SKIP_DIRS)
+            and os.path.exists(os.path.join(ROOT, q))})
+    # EXACT ENTRIES ONLY, and this is the correction that made the check able
+    # to catch its own motivating case. A `dir/` entry answers the SUBJECT
+    # question -- "nothing on master wires this tree, and nothing should until
+    # the branch lands" -- which is a claim about the directory's relationship
+    # to the build. Whether a directory's own entry point can see its own
+    # members is a DIFFERENT claim, and a parked tree still has one: test/wasm/
+    # is parked and `check_all.sh` names 43 of its 44 siblings, so the internal
+    # question is not merely live there, it is the only one that is.
+    #
+    # Wired through _covered() first, and the park swallowed exactly the file
+    # this census was built for: check_nilpy_objlocal.sh sits under test/wasm/,
+    # parked since 2026-08-30, months before it was written. The check would
+    # have printed OK over it. An exemption for one question silently answering
+    # another is the same animal as every instrument in the playbook -- correct
+    # about something else.
+    #
+    # An exact-path entry still exempts, because that is a person naming THIS
+    # runner and saying why (test/manual/try_synapse_compile.sh: needs a
+    # checkout the repo does not vendor).
+    orphan_runners = [r for r in unreferenced_runners(runners)
+                      if r not in exempt and r not in parked]
     # A PARK WHOSE TICKET HAS CLOSED IS NOT A PARK, and this is the whole
     # reason parks are a separate kind. An exemption is forever by design; a
     # park borrows a live ticket's authority, so when that ticket closes the
@@ -687,8 +834,19 @@ def main(argv=None):
         print("check-test-wiring: %d test file(s) added since %s (committed, "
               "staged or untracked), %d of them wired into nothing"
               % (len(added), since, len(scoped)))
+        new_orphans = sorted(r for r in orphan_runners if r in added)
+        if new_orphans:
+            print("check-test-wiring: THIS PUSH ADDS %d RUNNER(S) THAT NOTHING "
+                  "NAMES:" % len(new_orphans))
+            for r in new_orphans:
+                print("  %s" % r)
+            print("  No Makefile, script or sibling check mentions the file at "
+                  "all, so no route reaches it. Add it to its directory's "
+                  "entry point (test/wasm/check_all.sh runs its siblings in a "
+                  "loop), or to %s WITH A REASON if it is meant to be run by "
+                  "hand." % os.path.relpath(EXEMPT, ROOT))
         if not scoped:
-            return 0
+            return 1 if new_orphans else 0
         print("check-test-wiring: THIS PUSH ADDS %d TEST FILE(S) THAT NOTHING "
               "RUNS:" % len(scoped))
         for p in scoped:
@@ -701,8 +859,9 @@ def main(argv=None):
         print("   response that loses the work you just did.)")
         return 1
 
-    print("check-test-wiring: scanned %d test subject(s) against %s"
-          % (len(subs), os.path.relpath(EXEMPT, ROOT)))
+    print("check-test-wiring: scanned %d test subject(s) and %d runner(s) "
+          "against %s"
+          % (len(subs), len(runners), os.path.relpath(EXEMPT, ROOT)))
 
     # PARKS ARE PRINTED, ALWAYS, AND WITH THEIR COUNT. A park is not a pass and
     # must not read like one: the whole risk of the category is that a number
@@ -718,7 +877,7 @@ def main(argv=None):
             print("  %-22s %4d file(s)  [%s]" % (e, len(parked_hits[e]), slug))
             print("      %s" % reason)
 
-    if not unwired and not stale and not advisory:
+    if not unwired and not stale and not advisory and not orphan_runners:
         print("check-test-wiring: OK — all referenced by a rule or explained")
         return 0
 
@@ -729,6 +888,15 @@ def main(argv=None):
         for p in unwired:
             print("  %s" % p)
         print("  Wire each into a rule, or add it to %s with a reason."
+              % os.path.relpath(EXEMPT, ROOT))
+    if orphan_runners:
+        print("check-test-wiring: %d runner script(s) NAMED BY NOTHING — not "
+              "by the Makefile, not by a tools/ script, not by a sibling "
+              "check:" % len(orphan_runners))
+        for r in orphan_runners:
+            print("  %s" % r)
+        print("  A runner nothing names cannot be reached by any route. Add it "
+              "to its directory's entry point, or to %s with a reason."
               % os.path.relpath(EXEMPT, ROOT))
     if stale:
         print("check-test-wiring: %d STALE exemption(s) — wired or gone, so the "
@@ -742,7 +910,7 @@ def main(argv=None):
         for p in advisory:
             where = ", ".join("%s:%d" % fl for fl in prov.get(p, [])[:3])
             print("  %-46s named by %s" % (p, where))
-    return 1 if (unwired or stale) else 0
+    return 1 if (unwired or stale or orphan_runners) else 0
 
 
 if __name__ == "__main__":

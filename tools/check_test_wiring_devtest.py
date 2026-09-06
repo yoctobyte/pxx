@@ -553,6 +553,185 @@ def t_a_park_with_no_reason_is_refused_like_any_exemption():
     return "a ticket slug is not a reason — the sentence is still required"
 
 
+# ------------------------------------------------- 12. the runner census --
+#
+# A DIFFERENT QUESTION FROM EVERYTHING ABOVE, and the guards have to prove it
+# separately: the subject census asks whether a build rule reaches a test, the
+# runner census asks whether ANY file names the script that would run one. The
+# motivating case is `test/wasm/check_nilpy_objlocal.sh`, which at fa4d9c43f^
+# was named by four files and run by none of them.
+
+
+def _runner_tree(files, unwired="", makefile="all:\n\techo hi\n"):
+    """A tree whose test/ contents are given verbatim. -> root.
+
+    _tree() writes every test file as "x\n", which is fine for a subject and
+    useless here: the whole question is what one file's TEXT says about
+    another.
+    """
+    root = _tree(makefile=makefile, unwired=unwired)
+    for name, body in files.items():
+        full = os.path.join(root, "test", name)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        open(full, "w").write(body)
+    subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+    return root
+
+
+def t_a_runner_named_by_nothing_is_reported():
+    """The positive control. Without this the census cannot fail."""
+    root = _runner_tree({"wasm/check_x.sh": "#!/bin/sh\necho hi\n"})
+    rc, out = _run(root)
+    assert "test/wasm/check_x.sh" in out, \
+        "a runner nothing names was not reported: %s" % out
+    assert "NAMED BY NOTHING" in out, out
+    assert rc == 1, out
+    return "a runner script nothing names is reported"
+
+
+def t_a_runner_named_by_a_sibling_is_not_reported():
+    """The negative control, and the reason the question is LOCAL.
+
+    Asked globally -- reachable from the Makefile? -- the real tree answers
+    47 of 48, because test/wasm/ is run by hand and its own entry point is
+    named by no rule. A check that flags everything is as empty as one that
+    never fires, so a sibling counts as an invoker.
+    """
+    root = _runner_tree({
+        "wasm/check_all.sh": "#!/bin/sh\nfor c in check_x.sh; do sh $c; done\n",
+        "wasm/check_x.sh": "#!/bin/sh\necho hi\n"})
+    rc, out = _run(root)
+    assert "check_x.sh" not in out, \
+        "a runner named by its sibling entry point was reported: %s" % out
+    return "a sibling entry point naming a runner counts as a reference"
+
+
+def t_a_directory_park_does_NOT_cover_a_runner():
+    """The correction that let this census see its own motivating case.
+
+    A `dir/` entry answers the SUBJECT question -- nothing on master wires
+    this tree and nothing should yet. Whether the directory's own entry point
+    can see its own members is a different claim, and a parked tree still has
+    one. Wired through _covered() first, the real test/wasm/ park -- which
+    predates check_nilpy_objlocal.sh by months -- swallowed exactly the file
+    this was built for, and the checker printed OK over it.
+    """
+    root = _runner_tree({"wasm/check_x.sh": "#!/bin/sh\necho hi\n"},
+                        unwired="test/wasm/  developed on a branch\n")
+    rc, out = _run(root)
+    assert "test/wasm/check_x.sh" in out, \
+        "a directory-level exemption hid an orphan runner: %s" % out
+    assert rc == 1, out
+    return "a `dir/` entry does not exempt a runner inside it"
+
+
+def t_an_exact_exemption_DOES_cover_a_runner():
+    """The other half: a person naming THIS runner and saying why."""
+    root = _runner_tree(
+        {"manual/try_it.sh": "#!/bin/sh\necho hi\n"},
+        unwired="test/manual/try_it.sh  hand-run, needs a checkout we do not "
+                "vendor\n")
+    rc, out = _run(root)
+    assert "try_it.sh" not in out, \
+        "an exact exemption with a reason did not cover its runner: %s" % out
+    assert rc == 0, out
+    return "an exact-path exemption with a reason covers a runner"
+
+
+def t_a_fixture_POINTING_BACK_at_its_runner_does_not_clear_it():
+    """Measured, not hypothesised, and it is why the corpus is by extension.
+
+    At fa4d9c43f^ the orphan was named by objlocal_slice.npy (*"N_ITERS is
+    substituted by check_nilpy_objlocal.sh"*) and by wasmhost.js (*"could not
+    instantiate its own fixture"*). Both are files the script USES, pointing
+    back at it. A corpus of "anything that mentions the name" reads a runner's
+    own dependencies as its callers, and can then never report an orphan that
+    has any fixture at all -- which is every orphan worth finding.
+    """
+    root = _runner_tree({
+        "wasm/check_x.sh": "#!/bin/sh\necho hi\n",
+        "wasm/slice.npy": "# N_ITERS is substituted by check_x.sh\n",
+        "wasm/host.js": "// check_x.sh could not instantiate its fixture\n"})
+    rc, out = _run(root)
+    assert "test/wasm/check_x.sh" in out, \
+        "a fixture naming its own runner was counted as an invoker: %s" % out
+    return "a fixture or host naming its runner is not a reference to it"
+
+
+def t_a_doc_mentioning_a_runner_does_not_clear_it():
+    """A LOGBOOK line and two tickets named the real orphan. History is not
+    invocation, and counting it would let one paragraph hide a file forever."""
+    root = _runner_tree({"wasm/check_x.sh": "#!/bin/sh\necho hi\n",
+                         "wasm/NOTES.md": "check_x.sh was added today\n"})
+    rc, out = _run(root)
+    assert "test/wasm/check_x.sh" in out, \
+        "a .md mention was counted as an invoker: %s" % out
+    return "a .md mention does not count as running a runner"
+
+
+def t_the_checker_NAMING_a_runner_in_its_own_source_does_not_clear_it():
+    """Found by hitting it: documenting the exemption cleared the file.
+
+    A comment in check_test_wiring.py named test/manual/try_synapse_compile.sh
+    as the example of a legitimate hand-run script; the file is a .py, the scan
+    read its own prose as a reference, and the only true positive in the tree
+    went to zero with rc=0. wired_paths() had carried this exclusion for weeks,
+    with a comment saying so, roughly a hundred lines above where the second
+    scan was written.
+    """
+    root = _runner_tree({"wasm/check_x.sh": "#!/bin/sh\necho hi\n"})
+    open(os.path.join(root, "tools", "check_test_wiring.py"), "w").write(
+        "# test/wasm/check_x.sh is the example of a hand-run script\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+    rc, out = _run(root)
+    assert "test/wasm/check_x.sh" in out, \
+        "the checker's own source was counted as an invoker: %s" % out
+    return "the checker naming a runner in its own source is not a reference"
+
+
+def t_THIS_devtest_is_not_evidence_for_either_census():
+    """The guards are built from real citations, so they name real paths.
+
+    Every fixture below quotes a live path on purpose -- that is what makes a
+    guard checkable by a reader. It also means this file mentions
+    test/wasm/objlocal_slice.npy and test/manual/try_synapse_compile.sh, and
+    while it was in the corpus that moved a parked .npy into `wired` and made a
+    correct exemption read as STALE, which invites a deletion that re-opens the
+    gap. A devtest is documentation about the check, exactly like the check's
+    own source, and neither is proof that anything runs a file.
+    """
+    root = _runner_tree({"orphan.pas": "x\n",
+                         "wasm/check_x.sh": "#!/bin/sh\necho hi\n"})
+    open(os.path.join(root, "tools", "check_test_wiring_devtest.py"),
+         "w").write("# test/orphan.pas and test/wasm/check_x.sh, as fixtures\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+    rc, out = _run(root)
+    assert "test/orphan.pas" in out, \
+        "the devtest's prose was counted as wiring a subject: %s" % out
+    assert "test/wasm/check_x.sh" in out, \
+        "the devtest's prose was counted as naming a runner: %s" % out
+    return "this check's own devtest is evidence for neither census"
+
+
+def t_since_reports_a_runner_THIS_push_added_that_nothing_names():
+    """The cheap half, landing on the agent who still has the oracle in head.
+
+    The census answers slowly and addresses nobody; this arm caught the real
+    case at the moment it was created rather than after a suite printed green
+    one check smaller than its own directory.
+    """
+    root, base = _committed_tree("all:\n\techo hi\n", [], [])
+    full = os.path.join(root, "test", "wasm", "check_new.sh")
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    open(full, "w").write("#!/bin/sh\necho hi\n")
+    rc, out = _run_since(root, base)
+    assert "test/wasm/check_new.sh" in out, \
+        "a runner added by this push and named by nothing was missed: %s" % out
+    assert "THIS PUSH ADDS" in out and "NAMES" in out, out
+    assert rc == 1, out
+    return "a runner added by this push that nothing names fails the gate"
+
+
 TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_hash_comment_inside_a_recipe_body_does_not_wire,
          t_a_real_rule_still_wires,
@@ -584,7 +763,16 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_park_is_printed_not_silently_passed,
          t_a_park_whose_ticket_CLOSED_is_refused,
          t_a_park_naming_no_ticket_at_all_is_refused,
-         t_a_park_with_no_reason_is_refused_like_any_exemption]
+         t_a_park_with_no_reason_is_refused_like_any_exemption,
+         t_a_runner_named_by_nothing_is_reported,
+         t_a_runner_named_by_a_sibling_is_not_reported,
+         t_a_directory_park_does_NOT_cover_a_runner,
+         t_an_exact_exemption_DOES_cover_a_runner,
+         t_a_fixture_POINTING_BACK_at_its_runner_does_not_clear_it,
+         t_a_doc_mentioning_a_runner_does_not_clear_it,
+         t_the_checker_NAMING_a_runner_in_its_own_source_does_not_clear_it,
+         t_since_reports_a_runner_THIS_push_added_that_nothing_names,
+         t_THIS_devtest_is_not_evidence_for_either_census]
 
 
 def main():
