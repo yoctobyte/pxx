@@ -6759,6 +6759,24 @@ test-core: $(COMPILER)
 	@# cast-is-dropped are the depth-2 and depth-1 faces of the same absent step.
 	@$(TESTTMP)/test_castimplderef26 | diff -u test/test_a_pointer_cast_dereferences_implicitly_for_a_selector.expected - \
 	  || { echo 'test_a_pointer_cast_dereferences_implicitly_for_a_selector: FAIL - a . on a pointer-valued cast lost (or doubled) its implicit dereference'; exit 1; }
+	@# ...and the NEGATIVE half of the same arm, both spellings. A chain that is
+	@# one dereference SHORT must not compile: it used to answer the pointer
+	@# value truncated to four bytes, and fpc 3.2.2 refuses both lines with
+	@# `Illegal qualifier` (asserted against the oracle, not assumed).
+	@# TWO FILES BECAUSE THEY ARE TWO BUILDERS: the variable spelling reaches
+	@# ParseLValueAST's field builder, the cast spelling reaches the shared
+	@# walker's -- and the cast one arrives with the ULTIMATE base record already
+	@# in hand, so RequireValueHasMembers and RequireRecMember both pass. Fixing
+	@# only the first left the second answering a number in silence.
+	@# THE POSITIVE HALF IS THE TEST ABOVE, every row of which is a COMPLETE
+	@# chain. Without it this pair passes just as well when the guard has been
+	@# widened until nothing with a `.` compiles at all.
+	@./$(COMPILER) test/test_a_half_dereferenced_chain_is_refused_var.pas $(TESTTMP)/test_halfderefvar26 2>&1 \
+	  | grep -q 'this value is still a POINTER here' \
+	  || { echo 'test_a_half_dereferenced_chain_is_refused_var: FAIL - a chain one dereference short compiled, or refused for another reason'; exit 1; }
+	@./$(COMPILER) test/test_a_half_dereferenced_chain_is_refused_cast.pas $(TESTTMP)/test_halfderefcast26 2>&1 \
+	  | grep -q 'this value is still a POINTER here' \
+	  || { echo 'test_a_half_dereferenced_chain_is_refused_cast: FAIL - the CAST spelling of a short chain compiled; the two spellings reach different builders'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

@@ -3,12 +3,12 @@ slug: bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusin
 track: P
 prio: 45
 type: bug
-status: backlog
+status: done
 created: 2026-09-06
 found-by: frankB
-owner: ""
+owner: frankB
 blocked-by: []
-summary: "`ppp^.a` and `PPPRec(ppp)^.a` with `ppp: ^^^TRec` COMPILE and print 4310376 / 0 where the correct value is 11 / 22 -- one dereference short, applied to the pointer VALUE. fpc 3.2.2 refuses both with `Illegal qualifier`. Accepting what FPC rejects is not a defect here; printing a plausible wrong number is. The two-caret-short spellings that DO refuse show the diagnostic already exists and is simply not reached: `pp.a` (depth 2, no caret) says `a pointer has no members` and `PPRec(pp).a` says `this value has no members`, so the gap is exactly the shapes where ONE caret was written and TWO were needed. Pre-existing: identical on pin v404 (4306248 / 0), and unchanged by the implicit-deref fix in bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref, which is why it is filed rather than folded in -- the repair is a DIAGNOSTIC, not an address computation."
+summary: "RESOLVED 2026-09-06, hours after filing, because the boundary table was already in hand and the repair was two lines. BOTH were needed and they are two different BUILDERS: the variable spelling `ppp^.a` reaches ParseLValueAST's field builder, the cast spelling `PPPRec(ppp)^.a` reaches the SHARED walker's -- and fixing only the first left the cast one answering 4306200 in silence. The guard that was wrong is the one whose own comment argued against it: `(tk = tyPointer) and (recName = REC_NONE)`, sitting under a note explaining that a pointer-to-record has already been auto-dereffed by then -- which is exactly why recName cannot be the test. A half-dereferenced chain arrives with the ULTIMATE base record in recName (ResolveDerefShape's true answer to a different question), so both RequireValueHasMembers and RequireRecMember pass: they ask about the RECORD, and the record is fine; what is wrong is that we are not at it yet. Now refused in both spellings with a message that says the value is still a POINTER and needs another ^. Two negative tests wired, one per builder, each asserted against fpc 3.2.2's own `Illegal qualifier` rather than assumed; the positive half is test_a_pointer_cast_dereferences_implicitly_for_a_selector, without which the pair passes just as well when the guard has been widened until nothing with a . compiles."
 ---
 
 # A half-dereferenced pointer chain answers garbage instead of refusing
@@ -70,3 +70,24 @@ second conjunct.** `recName` is non-`REC_NONE` for every correct chain too; that
 guard passes today only because the arm above it already turned the complete
 chains into records. Establish which shapes reach line 3422 with a pointer in
 hand before changing what happens there.
+
+## RESOLVED 2026-09-06 — two builders, one guard, and the comment was right
+
+Refused now in both spellings. `tools/gate.sh quick` run with the tree DIRTY:
+self-host fixedpoint PASS, tier quick PASS, FPC seed canary PASS; the only RED is
+the known `pinned builds live lib/rtl`, which has its own ticket and is not
+dispatchable.
+
+**The prediction written into this ticket's own `What a fix has to satisfy` was
+right for once, and only because it was written as a WARNING rather than a
+plan:** *"do not widen `(tk = tyPointer) and (recName = REC_NONE)` by dropping
+the second conjunct ... establish which shapes reach line 3422 with a pointer in
+hand."* Dropping the conjunct IS the fix — but only after the measurement showed
+that every COMPLETE chain has already become a record by that line, which is the
+thing the warning asked for and the thing that makes the widening safe. The same
+edit made without the measurement is the wider-blast-radius shape.
+
+**What the ticket did NOT predict, and it is half the fix:** the cast spelling
+reaches a different builder in a different function, with the ultimate base
+record already in hand. One guard, two sites — found by running the repro
+through both spellings after the first one went green, not by reading.

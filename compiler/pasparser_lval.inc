@@ -3418,8 +3418,25 @@ begin
         `q.NoSuchThing` compiled and yielded the pointer itself, turning a typo into
         a silent no-op. A pointer TO a record has already been auto-dereffed above,
         and a metaclass has taken its own branch, so neither reaches here. }
-      if (tk = tyPointer) and (recName = REC_NONE) then
-        Error('"' + fieldName + '": a pointer has no members (dereference it with ^, or the pointee type is unknown here)');
+      { ...AND THE SECOND CONJUNCT WAS DOING THE OPPOSITE OF WHAT ITS OWN
+        COMMENT ARGUES. The note above is right that a pointer-to-record has
+        already been auto-dereffed by the time this line runs -- which is
+        exactly why `recName` cannot be the test: a HALF-dereferenced chain
+        arrives here with the ULTIMATE base record in `recName` and a pointer
+        still in hand. `ppp^.a` on a three-deep pointer therefore fell through
+        and built AN_FIELD over the pointer, printing 4310376 where fpc 3.2.2
+        says `Illegal qualifier`. Write NO caret and the same expression refuses
+        cleanly, because there `recName` really is REC_NONE -- so the diagnostic
+        existed, and one caret was enough to make it unreachable.
+
+        Us accepting what fpc rejects would not be a defect; a plausible wrong
+        NUMBER is, and the rule for a construct only a mistake produces is to
+        leave the mistake visible. Every correct chain is a record by now, so
+        anything still pointer-kinded at a `.` is short at least one `^`.
+        bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing }
+      if tk = tyPointer then
+        Error('"' + fieldName + '": this value is still a POINTER here -- it needs another ^'
+              + ' (a pointer has no members; the pointee type may also be unknown here)');
 
       { Property-backed access: FPC checks the PROPERTY's visibility, and the
         backing field is read on the declaring class's behalf — a private FField
@@ -5167,6 +5184,24 @@ begin
         end;
         Next;                        { not a helper: re-consume the member name }
       end;
+      { ...and the SAME refusal the lvalue walker states above, because a
+        half-dereferenced chain reaches THIS builder with the ultimate base
+        record in hand as well: `PPPRec(ppp)^.a` on a three-deep pointer arrives
+        with recId = TRec (ResolveDerefShape reports the ULTIMATE base, which is
+        the right answer to a different question) and tk still tyPointer, so
+        both RequireValueHasMembers and RequireRecMember pass and the field went
+        on the POINTER -- 4306200 where fpc 3.2.2 says `Illegal qualifier`.
+        Neither Require* can catch it: they ask about the RECORD, and the record
+        is fine; what is wrong is that we are not at it yet.
+
+        Every complete chain is a record by the time it gets here -- the
+        implicit-deref arm above turns one into a record and declines only when
+        the deref count does not match the declared depth -- so anything still
+        pointer-kinded at a `.` is short at least one `^`.
+        bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing }
+      if tk = tyPointer then
+        Error('"' + fieldName + '": this value is still a POINTER here -- it needs another ^'
+              + ' (a pointer has no members; the pointee type may also be unknown here)');
       RequireValueHasMembers(recId, fieldName);
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);
