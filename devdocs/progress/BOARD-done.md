@@ -3416,6 +3416,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-threads-test-sched-reactor-exhaustion-5 | B | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at c687ffeecb1f (auto-filed by twatch) | — |
 | regression-test-threads-test-sched-reactor-exhaustion | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-test-threads-test-static-string-literals | T | 70 | regression | regression: test-threads#src:test/test_static_string_literals.pas@2 red at 5bb3e120d3f7 (auto-filed by twatch) | — |
+| regression-test-threads-test-threadsafe-class-finalize-race | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_class_finalize_race.pas at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_tscfr26 "$(/tmp/test_tscfr26)" "$(printf 'errors=0\nRACE OK')"` (auto-filed by twatch) | — |
 | regression-test-threads-test-threadsafe-refcount-lockfree | A | 70 | regression | regression: test-threads#src:test/test_threadsafe_refcount_lockfree.pas at 1e37a55f6748 in step 2/2, `tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$(/tmp/test_threadsafe_refcount_lockfree26 \| tail -n 2)" "$(p…` (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |

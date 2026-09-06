@@ -18164,3 +18164,62 @@ The precedent is the same shape one level up: a diagnostic naming four operators
 where the predicate tested two cost frankA a session, because the message was
 evidence that all four were handled. **Do not leave an unreached implementation
 as documentation of intent. Leave the measurement.**
+
+## A GUARD ANOTHER ROW CAN SATISFY IS NOT A GUARD — the ablation discipline applied to a FILE
+
+The positive-control rule says a guard needs a case it must reject, asserted, and
+drawn from the right population. **There is a second question nobody asks: can
+the FILE still fail for a reason that has nothing to do with your row?**
+
+Measured 2026-09-06 (frankB). Adding a route to a class const meant the helper
+now calls `EnforceMemberVis` — and **nothing read that call**. They wrote a
+must-not-compile control with **exactly ONE illegal access** and fired it by
+deleting the call and rebuilding.
+
+**The move worth copying is what they declined to do.** The obvious home for the
+row was `test_class_const_visibility_strict_fail.pas`, which already exists and
+already asserts a visibility refusal. **They did not put it there**, because with
+the visibility call deleted that file **keeps failing on its own
+descendant-method row** — so it goes on passing its `%FAIL` assertion while the
+new route is wide open. The file cannot see the defect the row was written for.
+
+> **A `%FAIL` file with N rows asserts that SOMETHING failed, never that YOURS
+> did.** Every row you add to it is covered by every other row's refusal. The
+> ablation — delete the mechanism, rebuild — is the only thing that tells the two
+> apart, and it can only give a clean answer on a file with **one** reason to
+> fail.
+
+This is *a `%FAIL` fixture asserts that something fails and never WHY* with the
+remedy attached: **one illegal access per file, or the ablation is
+uninterpretable.** The pull toward folding it in is real — a new file for one
+line looks like clutter, and the existing file is *about the same subject*.
+Subject is not the criterion; **what the file can still fail on is.**
+
+And the framing that produced it is worth keeping on its own: **a fix that ADDS a
+route to a member adds a route past whatever guards the old one.** Every new
+access path needs the guards re-asked, not inherited.
+
+## A PROBE CAN CONTRAST A THING WITH ITSELF AND PASS EVERY ROW
+
+`class var IV: LongInt; F: LongInt;` — **`F` is a class var too. `class var`
+opens a SECTION**, and it runs to the next section keyword. Measured under both
+pxx and fpc 3.2.2: `a.F := 1; b.F := 2` leaves both reading 2.
+
+frankB had two probes *"written to contrast a class var with an instance field"*
+that were in fact **contrasting a class var with a class var — and every row
+still passed.** Cost: a wrong root cause (*"declaration order decides it"*) held
+for about ten minutes, until a `var` section got re-opened and the real
+discriminator turned out to be *"both links are per-class"*.
+
+> **The probe was not broken and its rows were not wrong. It simply was not
+> measuring a contrast** — and a contrast that has collapsed to one case cannot
+> announce itself, because both halves agree, which is what a passing row looks
+> like.
+
+**The tell is that the probe's two arms agree on everything, including the thing
+you built the probe to separate.** Where a declaration keyword opens a SECTION
+rather than qualifying one item — `class var`, `var`, `const`, `threadvar`,
+`published` — **spell the section out on every member you intend to contrast**,
+and assert the contrast itself rather than only the values. Same family as
+*choose a probe whose right answer differs from the default*: here the two arms
+have the same right answer because they are the same arm.
