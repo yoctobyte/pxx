@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d21h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `47b8c3285253` | 2026-09-06T08:08:50Z | GREEN (native) | 160.6s | `0142845988d0` RED |
+| seven | `fa5e9ef55813` | 2026-09-06T08:23:46Z | RED (native) | 160.8s | `0142845988d0` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `0142845988d0` on seven, 2026-09-06T07:52:19Z (27m ago).**
+**Newest full tier in the fleet: `0142845988d0` on seven, 2026-09-06T07:52:19Z (31m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `0142845988d0` | RED | 27m | — (newest) |
+| seven | `0142845988d0` | RED | 31m | — (newest) |
 | plexus | `27424c927b65` | RED | 6d21h | 6d21h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -118,6 +118,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
   </details>
 - **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `2a4cd0bcf664`, last good `c1fe3e414d25`, 5 commit(s) in range
 - **test-emit-obj#src:test/c_obj_data_import.c** — test/c_obj_data_import.c test/c_obj_data_export.c +3 (seven): bad `0142845988d0`, last good `8a8694ba3ccf`, 10 commit(s) in range
+- **test-core#src:test/test_libwriteln_parity.pas** — test/test_libwriteln_parity.pas tools/expect_same.sh +1 (seven): bad `fa5e9ef55813`, last good `47b8c3285253`, 4 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
