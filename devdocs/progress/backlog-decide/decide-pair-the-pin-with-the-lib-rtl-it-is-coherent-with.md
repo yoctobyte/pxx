@@ -11,6 +11,41 @@ blocked-by: []
 summary: "USABLE ROLLBACK DEPTH IS ZERO. Measured across nine pins against the current tree's 54 `lib/rtl` root units: HEAD 0 failures, v404 2, v375..v403 all 14, v365 and v354 both 54. Every historical pin is STRICTLY WORSE than the current one, and `trackt pinstatus` names v354 as the recovery target -- so following the advice it prints moves you from 2 broken roots to 54. The cause is that `make revert` is `git checkout $SRC -- $(STABLE_DEFAULT_DIR)` and nothing else: the pin moves back and `lib/rtl` does not. NO ARGUMENT TO THAT COMMAND PRODUCES A COHERENT PAIR, because the pair is only coherent within one era -- each new builtin mints a cliff, roughly one a fortnight (`0f6a04644` __pxxblockmove 08-21, `31f8b11bf` System.TMethod 09-04). THIS IS NOT A REASON TO GATE A PIN and must never be read as one; if anything it argues for pinning MORE promptly, since the current pin is the best rollback target in existence. What it falsifies is a PREMISE, not a practice."
 ---
 
+## 2026-09-06 (frank-coordinator, at frankuser's request) — TWO DATED CASUALTIES IN 48 HOURS, and the window is not diligence
+
+This ticket has been arguing pin cadence from a rollback-depth measurement. Here are two dated
+instances of the cost, in the other direction, so the decision carries casualties and not only a
+premise. Both are the same shape and it now has a name: **"FIXED AT HEAD, INERT UNTIL PINNED."**
+
+1. **`IEnumerator<T>.Current`, inert for a MONTH.** `property Current: T read GetCurrent;` was
+   deliberately omitted from `lib/rtl/classes.pas` from 2026-08-30 because the pin of the day
+   rejected a property in an interface. The parser fix that made it legal sat in `done/` — closed,
+   correct, and doing nothing for its consumer — until pin **v404** (`8844c8c42`) carried it on
+   09-05. Recorded on `feature-pascal-corpus-expansion`, attributed by ablation, and it was the
+   last wall on corpus rung 6b.
+2. **`pyvar_is_inttag` / `pyvar_is_objtag`, red right now.**
+   [[bug-a-the-pinned-compiler-cannot-build-live-lib-rtl-and-nothing-tracks-it]]. frankZ's
+   `8374118ec` (09-05 23:15) exports two builtins that two `lib/rtl` units call. Pin v404 is
+   `8844c8c42` (09-05 20:17) — **three hours earlier**, and
+   `git merge-base --is-ancestor 8374118ec 8844c8c42` is **false**. Track T's full tier at
+   `b77ac29` is RED on `lib-test` for exactly those two identifiers.
+
+**THE STRUCTURAL POINT, WHICH IS FRANKUSER'S AND IS WHY THIS IS A DECISION RATHER THAN A
+CHECKLIST ITEM.** A `lib/**`-facing compiler fix is only real once pinned; pinning is owner-only;
+the owner sleeps. **So the window between "fixed" and "real" is not a few minutes of diligence —
+it is however long until a human is awake**, and every ticket closed inside that window is
+*honestly closed and observably wrong to everyone downstream*. Adding "check whether a pin carries
+it, and say so in the resolution" to the closing discipline is right and should be kept: it makes
+the gap VISIBLE. **It cannot make the gap SHORTER.** Only a cadence answer does that, which is
+what this ticket is for.
+
+Note the two casualties point the same way as this ticket's own measurement: v404 is the best
+rollback target in existence and every historical pin is strictly worse, so both the rollback
+argument and the inert-fix argument say **pin more promptly**, not less. Neither is a reason to
+GATE a pin, and neither may be read as one.
+
+Not ranked or re-prioritised by this seat — `owner: user`, and `make pin` is owner-only.
+
 # Pair the pin with the `lib/rtl` it is coherent with
 
 ## The measurement

@@ -32,6 +32,10 @@ HEAD reproduces it — the pin is behind the source it has to build, and only `m
 
 So this is not a local instrument complaining. It is the number the fleet reads.
 
+**THIS IS EVIDENCE FOR AN OPEN DECISION:** [[decide-pair-the-pin-with-the-lib-rtl-it-is-coherent-with]]
+(U, prio 55, `owner: user`) now carries both casualties. A cadence argument in the abstract is
+weak; one carrying two dated casualties in 48 hours is not.
+
 **SECOND INSTANCE OF A NAMED CLASS.** `feature-pascal-corpus-expansion` records the first:
 `property Current: T read GetCurrent;` on `IEnumerator<T>` was omitted from `lib/rtl/classes.pas`
 for a month because the pin rejected a property in an interface, and the parser fix sat in `done/`
