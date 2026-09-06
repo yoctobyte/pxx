@@ -56,6 +56,24 @@ if nobody does, 2 and 3 buy nothing and cost a fight with libc over FS.
 
 **What would settle it is a real consumer, not an argument.**
 
+## A PROOF OF CONCEPT THAT FITS IN THE SLACK IS NOT A SMALLER VERSION OF THE FEATURE
+
+Framing owed to frankA, who says they would have walked into it. The existing
+per-thread block is exactly full — 144 slots, 0..12 taken, the heap magazine at
+16..79 and 80..143 — leaving **three**. Three is enough to demonstrate
+`__thread` working on one variable and nothing like enough for the feature,
+**and a demo is how a design gets ratified.**
+
+So a working one-variable proof would be evidence for the wrong proposition: it
+would show that GS-relative access works (true, and not the open question)
+while saying nothing about allocation, which is the part that has to change.
+Whoever implements this must size the area first and demonstrate second.
+
+Same shape as the discriminating-fixture problem on the layout ticket next door:
+`{int a; double y}` "works" under both candidate rules and therefore separates
+neither. **A fixture that fits the slack cannot test the thing the slack is
+hiding.**
+
 ## And a second thing to rule on at the same time
 
 A thread pxx did NOT create **inherits** the parent's GS base rather than
