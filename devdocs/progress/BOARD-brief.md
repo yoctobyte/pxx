@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:6 backlog:13 backlog-umbrella:7 backlog-core:142 backlog-nilpy:99 backlog-tools:44 backlog-pascal:31 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:148 done:3446 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:13 backlog-umbrella:7 backlog-core:142 backlog-nilpy:99 backlog-tools:45 backlog-pascal:31 backlog-decide:42 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3446 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -71,7 +71,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [T]` bug-t-the-named-rollback-target-cannot-build-the-tree-it-would-roll-back-to
-- `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [A]` bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
@@ -97,5 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
 _384 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

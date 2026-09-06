@@ -220,7 +220,22 @@ one-line logbook pointer.
   into a sampled tier. **Before closing a compiler fix that a `lib/**` file
   depends on, check whether a pin carries it and say so in the resolution.**
 - **A VALID PIN IS THE SELF-HOST FIXEDPOINT. NOTHING ELSE MAY BLOCK ONE** (owner,
-  2026-09-01). Not a red tier, not a red count, not a shadow verdict. A pin is
+  2026-09-01, and he has now said it at least four separate times — 09-01,
+  09-06, and twice in the week before. **A rule its author has had to repeat four
+  times is not being misunderstood, it is being re-litigated**, so treat a fresh
+  argument for waiting as the thing this line exists to refuse, not as a new
+  consideration). *"we NEED regular pinning, green or not"* (owner, 2026-09-06).
+  **THE FIXEDPOINT ROW IS THE EXCEPTION THIS RULE ITSELF CREATES.** It is not a
+  grade, because it IS the pin: **a row that restates the pin's own DEFINITION
+  gates; every row that reports a property of the TREE grades.** Phrased as a
+  reason and not as a row count, because a count goes stale the moment someone
+  adds a row. Measured 2026-09-06: a seat authorised to pin, gating first as
+  required, got RED on `self-host fixedpoint` and had to reason its way to
+  stopping, because *"graded, never gated"* read as covering every red on the
+  gate. Had it pinned, `test-smoke` would have chained from a local binary and
+  blessed a fixedpoint the sources do not define — **both binaries self-reproduce
+  and print green**, so nothing downstream could have seen it.
+  Not a red tier, not a red count, not a shadow verdict. A pin is
   GRADED, never gated: `green` (a full tier at that tree, no RED) or
   `reds(N)` with the manifest, recorded AT PIN TIME. Rollback prefers a green
   pin and falls back to the most recent, so recovery is never empty.

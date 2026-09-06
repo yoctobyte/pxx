@@ -3,9 +3,9 @@ slug: decide-what-a-pin-means-and-what-may-block-one
 track: U
 type: decide
 prio: 80
-status: open
+status: decided
 blocked-by: []
-summary: "NOTHING IN THE TOOLING PREVENTS A PIN — verified, and this corrects the first version of this ticket. `would_pin` has ZERO deciding consumers (one assignment at twatch.py:2718, one comment); `pin_is_green` is used once, in cmd_pinstatus (trackt.py:1581), to name a ROLLBACK TARGET; and pin_shadow() says it 'deliberately never touches pinned, make pin, or stable_linux_amd64/**'. The code already implements the documented design. THE INVERSION IS IN READING: agents read 'would NOT pin' as 'cannot pin', and `make pin` — a ~34s human action needing only the self-host fixedpoint — was available every hour of the 49. The real cost is the RECOVERY leg, not the pin: pin_is_green needs a full run with no RED tier, nothing has qualified since v354 (2026-08-19), so the fast-pin trade's 'recovered, not prevented' has no fresh target. Owner (2026-09-01): 'a pin is a successful self compile... we added in all regression testing before we would do a full pin, but that is why we ran into this issue - no pin at all. which is a worse outcome.' The finding worth keeping is general: A SHADOW GATE THAT PUBLISHES A VERDICT NOBODY IS AUTHORISED TO ACT ON WILL BE READ AS AUTHORITY ANYWAY."
+summary: "DECIDED 2026-09-06: both live recommendations taken. CLAUDE.md now says WHICH rows gate -- a row that restates the pin's own DEFINITION gates, every row that reports a property of the TREE grades -- and the shadow-verdict rewording is routed to Track T. The owner has stated the underlying rule at least FOUR times; that count is now in the rule, because a rule its author must repeat is being re-litigated rather than misunderstood. NOTHING IN THE TOOLING PREVENTS A PIN — verified, and this corrects the first version of this ticket. `would_pin` has ZERO deciding consumers (one assignment at twatch.py:2718, one comment); `pin_is_green` is used once, in cmd_pinstatus (trackt.py:1581), to name a ROLLBACK TARGET; and pin_shadow() says it 'deliberately never touches pinned, make pin, or stable_linux_amd64/**'. The code already implements the documented design. THE INVERSION IS IN READING: agents read 'would NOT pin' as 'cannot pin', and `make pin` — a ~34s human action needing only the self-host fixedpoint — was available every hour of the 49. The real cost is the RECOVERY leg, not the pin: pin_is_green needs a full run with no RED tier, nothing has qualified since v354 (2026-08-19), so the fast-pin trade's 'recovered, not prevented' has no fresh target. Owner (2026-09-01): 'a pin is a successful self compile... we added in all regression testing before we would do a full pin, but that is why we ran into this issue - no pin at all. which is a worse outcome.' The finding worth keeping is general: A SHADOW GATE THAT PUBLISHES A VERDICT NOBODY IS AUTHORISED TO ACT ON WILL BE READ AS AUTHORITY ANYWAY."
 ---
 
 # What is a pin, and what is allowed to block one?
@@ -219,3 +219,32 @@ regular interval *with reds* reads `would_pin: false` more often, not less.
 > CLAUDE.md` before appending to any Track U decision ticket.** A decision ticket
 > is the one artefact whose whole content is a claim about what the rules
 > currently say.
+
+## 2026-09-06 — DECIDED BY THE OWNER. Both live recommendations taken.
+
+> *"i take your advise and i think i already sayd such before like 3 times last
+> week. we _need_ regular pinning, green or not."*
+
+**Recommendation 1 — LANDED in CLAUDE.md**, with the half it was missing. The
+original sentence was followed literally this morning and nearly produced the
+opposite failure: a seat authorised to pin, gating first as required, got RED on
+`self-host fixedpoint` and had to reason its way to stopping. The clause now
+says which rows gate and why, phrased as a reason rather than a row count:
+
+> **A row that restates the pin's own DEFINITION gates; every row that reports a
+> property of the TREE grades.**
+
+**Recommendation 2 — accepted, routed to Track T.** `would_pin: false` gets
+wording that cannot be read as permission.
+
+**Recommendation 3 — struck earlier the same day**, by the rollback ruling.
+
+## The thing worth more than the ruling
+
+**The owner has now stated this at least four separate times** — 09-01, 09-06,
+and twice in the preceding week, by his own count. **A rule whose author has had
+to repeat it four times is not being misunderstood; it is being re-litigated.**
+Each session that re-argued it did so honestly, from a fresh reading, with good
+reasons — which is exactly why restating it a fifth time would not have worked
+either. That fact is now IN the rule, so the next fresh reading meets the
+repetition count before it meets the argument.
