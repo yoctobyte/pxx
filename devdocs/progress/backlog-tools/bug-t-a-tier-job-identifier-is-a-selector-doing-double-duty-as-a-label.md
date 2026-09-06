@@ -247,3 +247,73 @@ renaming these nine afterwards is cheap only while they are still open.
 
 The ticket's own line holds and this is an instance of it — right about a third
 of the time is what teaches you to trust it.
+## 2026-09-06, frankH — the label manufactures a cluster that does not exist
+
+Measured while looking for the reds behind
+[[umbrella-one-full-tier-run-with-no-red-tier]], and worth adding because it is
+a cost this ticket did not yet name: the label does not merely fail to
+identify a job, it **invents a shared cause between unrelated ones.**
+
+Grouping today's 54 full runs on seven by red job name produced what looked
+like a six-member family, all naming `tools/compiler_srchash.sh`, going red
+together (`test-emit-obj` + `test-zlib` in 42 of 54, others joining):
+
+    test-zlib#src:tools/compiler_srchash.sh
+    test-emit-obj#src:tools/compiler_srchash.sh
+    test-debug-g#src:tools/compiler_srchash.sh
+    test-lua#src:tools/compiler_srchash.sh
+    test-lua-cross#src:tools/compiler_srchash.sh
+    test-fgl#src:tools/compiler_srchash.sh
+
+Co-occurrence that tight reads as one condition with six faces, and the shared
+name says what it is. It is neither. **The step those jobs share PASSES** —
+the logs read `self-host fixedpoint: verified — 1 round(s), ... (stamp read
+back; sources match it)` — and each job then fails further along its own line
+for its own reason (`FAIL 00040.c` under `test-c-conform` for one, the gcc
+oracle build for another).
+
+They share a name because a job is named after its FIRST source, and all of
+them depend on `$(COMPILER)`, whose recipe's first prerequisite is
+`tools/compiler_srchash.sh`. One report (`20260906T161630Z-29c4052-seven.md`)
+has **eleven** jobs carrying it, five of them `test-c-conformance*#shardN/6` —
+so the collision is not even confined to one suffix shape, and a reader
+filtering on `#src:` sees a subset without being told one exists.
+
+**Why the co-occurrence is the trap rather than the tell.** Jobs sharing a
+label also share a prerequisite, so they genuinely do fail together — whenever
+the box is slow, or the tier is wide, the same set lights up. The correlation
+is real and its cause is scheduling, not a defect. So the usual defence
+("check whether they move together") CONFIRMS the wrong reading here.
+
+The discriminator is the log line, not the name and not the correlation:
+`devdocs/dev/handbook-rationale.md`'s *"a reason is more dangerous than a
+name"*, one level up — here the name was more dangerous than the reason,
+because the reason was three fields to the right in the same string and the
+name was in the summary. Reading the recipe text the ticket quotes is not
+enough either; that text is the same for all six.
+
+Cost this time: one wrong root cause, caught before it was filed. The auto-filed
+[[regression-test-debug-g-compiler-srchash-2]] is one face of this and its own
+banner already says the job "names a MECHANISM rather than a subject" — which
+is this ticket, arrived at independently by the auto-filer's heuristic.
+
+### Correction to the section above, from frankuser's, landed the same hour
+
+The section above argues *"the step those jobs share PASSES"* from the log line
+`self-host fixedpoint: verified — ... (stamp read back; sources match it)`.
+**Read against frankuser's finding, that sentence was not evidence of much:**
+`79264f396` fixed a bash shebang in `tools/compiler_srchash.sh` that made the
+stamp guard **compare two absences and call them equal**. So for the runs I
+read, "sources match it" may have been a vacuous pass — the guard agreeing with
+itself about nothing, which is this handbook's *"a guard that cannot fail is
+not a guard, and it prints PASS"*, sitting underneath a section about names.
+
+**The conclusion survives, by the other route, and that route is the one to
+quote.** The six jobs fail at DIFFERENT later steps with different messages —
+`FAIL 00040.c` under `test-c-conform` for one, the gcc oracle build for
+another. That is what makes them unrelated. Their shared step's verdict is not
+load-bearing and should never have been the first thing offered.
+
+Two readings that agree are not two sources unless they can fail differently,
+and "the shared step passed" and "the shared step is not the cause" fail
+together. The differing failure messages fail differently from both.

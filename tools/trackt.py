@@ -382,6 +382,12 @@ def emit_completions(clone, pos, show_sha=True):
                 line += " %sNEW-RED:%s%s" % (RED, ",".join(r["new_red"][:5]), OFF)
             if r.get("fixed"):
                 line += " %sFIXED:%s%s" % (GRN, ",".join(r["fixed"][:5]), OFF)
+            # A REQUESTED row has neither of the above and cannot: it does not
+            # walk the HEAD progression, so nothing is "new" or "fixed"
+            # relative to anything. Without this it rendered as a bare RED
+            # naming nothing, in the one view every track watches.
+            if r.get("reds"):
+                line += " %sRED:%s%s" % (RED, ",".join(r["reds"][:5]), OFF)
             print("\r\033[K  " + line)
             emitted = True
     return emitted

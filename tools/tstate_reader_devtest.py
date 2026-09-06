@@ -39,6 +39,19 @@ ALLOWED = {
         "just wrote in its own tmp dir is not that, and routing it through "
         "the helper would make it read the real one instead of the fixture. "
         "Arrived with 9b0b1d3e5 on 2026-09-01.",
+    "twatch_idle_tier_try_devtest.py":
+        "same shape as twatch_detail_slot_devtest above: writes a SYNTHETIC "
+        "state under its own tmp dir and reads it back through the real "
+        "load_state/save_state. Routing it through the helper would point it "
+        "at the LIVE tstate, which is the thing this guard exists to prevent. "
+        "Arrived with 85c8c1bf8 on 2026-09-06 and broke this file for ~40 "
+        "minutes -- gate.sh quick does not run tools-devtest, so the author "
+        "landed green and the red only existed in the full tier.",
+    "twatch_requested_reds_devtest.py":
+        "writes a synthetic runs-seven.ndjson under its own tmp dir and hands "
+        "that dir to job_history()/job_selectors(). The fixture IS the "
+        "subject: the case proves the readers can see a requested run's reds, "
+        "so it must supply the archive rather than read the real one.",
     "twatch.py":
         "the WRITER — it publishes tstate, and owns states_at/materialize_tstate",
     "twatch_web.py":

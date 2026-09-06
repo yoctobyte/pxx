@@ -5969,7 +5969,7 @@ def job_selectors(repo, host=None):
     seen = {}
     for h in ([host] if host else archive_hosts(repo)):
         for r in archive_rows(repo, h):
-            for key in ("new_red", "still_red", "fixed"):
+            for key in ("new_red", "still_red", "fixed", "reds"):
                 for sel in (r.get(key) or []):
                     seen[sel] = seen.get(sel, 0) + 1
     return seen
@@ -6003,7 +6003,7 @@ def job_history(repo, sel, host=None):
     out = []
     for h in hosts:
         for r in archive_rows(repo, h):
-            for key in ("new_red", "still_red", "fixed"):
+            for key in ("new_red", "still_red", "fixed", "reds"):
                 if sel in (r.get(key) or []):
                     out.append((r.get("date") or "", h, r.get("sha") or "",
                                 r.get("tier") or "", key))
@@ -6620,9 +6620,32 @@ def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
             if j["status"] not in ("pass", "skip")]
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
+        # `reds` is the measurement. `new_red` and `fixed` are ABSENT here,
+        # deliberately, rather than []. Both were literal [] while `reds` was
+        # computed six lines up and spent only on the stdout line below --
+        # the same defect the PIN row carried until 2026-09-05, and that fix
+        # never reached this sibling. Its comment states the rule this row was
+        # breaking: "on every other row in this archive those fields are a
+        # measurement, so a reader takes the empty list as one."
+        #
+        # The pin row could answer by measuring; this one cannot. The
+        # docstring above says why: this function deliberately does not walk
+        # the HEAD progression, so there is no baseline for "new" or "fixed"
+        # to be relative to. An empty list would claim a baseline existed and
+        # was clean. Absence reads as "not recorded", which is the truth.
+        # `reds` makes no baseline claim, which is exactly why it can be
+        # honest here -- and without it the row said RED and named nothing,
+        # a verdict no reader could check.
+        #
+        # "Could check" is literal, not rhetorical. The pin path's thin row is
+        # backed by a full report at that sha, so a reader can recover the
+        # reds from the report; a REQUESTED run writes no report at all. All
+        # three requested rows in this archive (every host, all time) have
+        # none, so this row is the ONLY record that the run happened, and
+        # somebody asked for each one.
         f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
                             "full": tier == "full", "verdict": verdict,
-                            "wall": report["wall"], "new_red": [], "fixed": [],
+                            "wall": report["wall"], "reds": sorted(reds),
                             # provenance: this row is an ANSWER, not a rung of
                             # the ladder, so a reader counting ladder coverage
                             # can exclude it.
