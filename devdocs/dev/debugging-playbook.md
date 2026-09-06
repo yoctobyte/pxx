@@ -12887,6 +12887,40 @@ and what B did that A does not** — the second list is the one nobody makes, an
 the regressions live. `## "IT COMPILED" IS NOT A POSITIVE CONTROL FOR "IT WAS CALLED"` is the
 same family: delegation being *taken* was true and told you nothing about what it arrived at.
 
+### CORRECTION 2026-09-06 — the four earlier tickets were NEVER wrong, and the rule is STRONGER for it
+
+The obvious residual — *were those four green for a window?* — was answered by frankB with a
+measurement rather than a judgement, and the answer changes the operational form above rather
+than softening the section.
+
+**All four delegations are guarded on the receiver ALREADY BEING A RECORD OR CLASS.** The
+record-name cast arm delegates on `recName >= REC_UCLASS_BASE` alone; the C4 pointer-alias arm
+on `recName >= REC_UCLASS_BASE and FindUField(...) < 0`; the other two pass an explicit record
+id. **The hole is "a `.` on a value that is still a POINTER", so a pointer-valued `.` never
+crossed into the shared walker at all.** No window, nothing unrecorded, and their own tests
+were correct throughout.
+
+**What kept them safe was not that the shared path was complete — it was that each guard was
+NARROW ENOUGH TO MISS THE MISSING ARM.**
+
+> **A hole in a shared path is invisible until someone widens an unrelated guard into it —
+> and the widening looks like a small, well-scoped change.** frankB's was **one disjunct**,
+> made for a reason that had nothing to do with the hole, and the hole was in the blast radius
+> immediately.
+
+**So run the enumeration at the moment a GUARD GROWS, not only at the moment a caller is
+normalised.** That is the correction: the instrument was right and aimed at the wrong event.
+A delegation added today is safe because of *today's* guard, and nothing records that
+dependency — the guard and the shared implementation are edited by different people for
+different reasons, and neither edit looks like it concerns the other.
+
+**And the null result that found it was luckier than it reads.** frankB widened the guard,
+rebuilt, and **nothing moved** — which is the reading that led to the two probes. But:
+
+> **A null result is only a usable instrument when the alternative would have been LOUD.**
+> Had the arm existed and been subtly wrong, "nothing moved" would have been a silent wrong
+> value in four more shapes, with no reason to probe anything.
+
 ### The partition rule, tested in both directions inside one group, in one day
 
 `## A CAUTION AGAINST OVER-UNIFYING IS NOT PROTECTION AGAINST MIS-PARTITIONING` was banked
@@ -12955,3 +12989,66 @@ behind a fully green value table.
 The controls that matter are rows **E..H — every row where a dereference is already WRITTEN
 OUT** — because the change **INSERTS** a dereference and what it can break is inserting a
 **second** one. Written before the fix.
+
+## "DIFFERENT REPAIR MEANS DIFFERENT DEFECT" HAS A DUAL — same repair at TWO SITES is one defect, and fixing one site is a partial fix wearing a full green
+
+Measured 2026-09-06 (frankB), closing the half-dereferenced-chain diagnostic it had filed an
+hour earlier — the ticket split out on the *repair-shape* criterion, then closed once the
+boundary table was in hand and the repair turned out to be two lines.
+
+**It needed BOTH.** The **variable** spelling reaches `ParseLValueAST`'s builder; the **cast**
+spelling reaches the **shared walker's**. Two builders.
+
+> **Fixing only the first left `PPPRec(ppp)^.a` answering `4306200` IN SILENCE** — the exact
+> observable the ticket was about, still present, behind a fix that was correct as far as it
+> went.
+
+So the split criterion has a symmetric partner and both are needed:
+
+| | |
+| --- | --- |
+| **different repair** | different defect — file separately |
+| **same repair, two sites** | ONE defect — and a one-site fix is a **partial fix that passes every row it can reach** |
+
+The second is the dangerous one, because a one-site fix **greens its author's own reproducer**
+if the reproducer used the spelling that site handles. **Ask which SPELLINGS reach which
+builder** before believing a fix is complete — this is `normalise-dont-special-case`'s *"fixed
+one arm of a double case? grep for the sibling before closing"* with the sibling being a
+*builder*, not a syntax form.
+
+### The guard whose own comment argued against it, and `recName` as the week's third true-answer-to-a-different-question
+
+The wrong guard was `(tk = tyPointer) and (recName = REC_NONE)`, sitting **under a comment
+explaining that a pointer-to-record has already been auto-dereferenced by that point.**
+
+**The comment was RIGHT, and it is the reason `recName` cannot be the test.**
+
+> **A half-dereferenced chain arrives with the ULTIMATE base record already in `recName`.**
+> That is a **true answer to a different question**. Both `Require*` checks pass, because they
+> ask about the RECORD and the record is fine — **what is wrong is that we are not at it yet.**
+
+CLAUDE.md's *comment vs code: if they disagree, one is wrong and you do not know which* has a
+third case this file had not recorded: **the comment and the code do not disagree at all — the
+comment states a fact that REFUTES the guard beneath it, and reads as supporting it.** A note
+saying *"X has already happened by here"* is an argument against testing for X, and it takes
+the same words as an argument for it.
+
+And it is the **third independent instance in about 24 hours** of one value carrying two
+meanings: `ResolveDerefShape`'s `tyInteger/REC_NONE/0/0` (frankA), the alias index where `-1`
+has three producers (frankB), and now `recName` holding the base of a chain you are not
+standing on. See `## A KEY MUST BE ABLE TO DISTINGUISH THE THINGS IT IS USED TO LOOK UP`.
+
+### A negative-test PAIR needs its positive partner named in the file
+
+Two negative tests were wired, **one per builder**, each **asserted against fpc's `Illegal
+qualifier` rather than assumed** — and the file comments name the 8-row positive test as their
+partner. The reason is the failure mode of the negative form:
+
+> **Without the positive test beside it, the negative pair passes just as happily when the
+> guard has been widened until NOTHING with a `.` compiles.** A refusal test cannot tell a
+> correct refusal from a refusal of everything.
+
+`## A WIDER NEGATIVE TEST IS NOT A WIDER FIX — IT IS A WIDER BLAST RADIUS WEARING THE SAME
+GREEN` is the same rule; this is the maintenance form of it. **Name the partner in the file**,
+because the two tests will be read years apart by people who will not know the other exists,
+and the guard is only as good as the pair.
