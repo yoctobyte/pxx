@@ -1,0 +1,6 @@
+solo=5
+pair=7,hi
+trio=1,two,TRUE
+pair=swap,9
+pair=7,again
+cmp=TRUE FALSE

@@ -4216,12 +4216,17 @@ end;
   compat-pascal-inline-generic-specialization }
 procedure SpecializeInlineGenericFuncUses(gfi: Integer);
 const MAX_INLINE_SPECS = 64;
-var i, k, nSpec, base: Integer;
-    fname, cname, specName: AnsiString;
-    seen, hasKw, isDecl: Boolean;
-    specArgs: array[0..MAX_INLINE_SPECS-1] of AnsiString;
+var i, k, q, j, nSpec, nArg, base: Integer;
+    fname, specName: AnsiString;
+    seen, hasKw, isDecl, matched: Boolean;
+    argNm: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+    argKd: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+    { one ROW per specialization, MAX_TEMPLATE_PARAMS wide -- a routine's
+      argument list is a tuple now, not a single name }
+    specArgs: array[0..MAX_INLINE_SPECS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+    specArgKinds: array[0..MAX_INLINE_SPECS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+    specNArgs: array[0..MAX_INLINE_SPECS-1] of Integer;
     specNames: array[0..MAX_INLINE_SPECS-1] of AnsiString;
-    specKinds: array[0..MAX_INLINE_SPECS-1] of TTokenKind;
 begin
   fname := GenericFuncs[gfi].Name;
   nSpec := 0;
@@ -4250,15 +4255,56 @@ begin
       Measured 2026-09-05 on the cross-unit probe, not reasoned about. }
     isDecl := (base > 0) and
               ((Tokens[base - 1].Kind = tkFunction) or (Tokens[base - 1].Kind = tkProcedure));
+    { The ARGUMENT LIST, not a single argument. `F<A>` was the only shape read
+      here; `F<A, B>` fell through the match entirely and was left in the stream
+      as `a < b > (c)` would be. The trailing `(` is still required and is what
+      keeps a real comparison chain from being eaten.
+      bug-p-a-generic-routine-supports-exactly-one-type-parameter }
+    matched := False;
+    nArg := 0;
     if (hasKw or GenericFuncIsDelphi[gfi]) and (not isDecl) and
        (base + 4 < TokCount) and
        (Tokens[base].Kind = tkIdent) and CaseEqual(GetTokenStr(base), fname) and
-       (Tokens[base + 1].Kind = tkLt) and
-       IsConcreteTypeArgKind(Tokens[base + 2].Kind) and
-       (Tokens[base + 3].Kind = tkGt) and (Tokens[base + 4].Kind = tkLParen) then
+       (Tokens[base + 1].Kind = tkLt) then
     begin
-      cname := GetTokenStr(base + 2);
-      specName := fname + '_' + cname;
+      j := base + 2;
+      while (j < TokCount) and IsConcreteTypeArgKind(Tokens[j].Kind) and
+            (nArg < MAX_TEMPLATE_PARAMS) do
+      begin
+        argNm[nArg] := GetTokenStr(j);
+        argKd[nArg] := Tokens[j].Kind;
+        Inc(nArg);
+        if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkComma) then
+          j := j + 2
+        else
+        begin
+          matched := (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkGt) and
+                     (Tokens[j + 2].Kind = tkLParen);
+          j := j + 1;   { j now indexes the `>` }
+          Break;
+        end;
+      end;
+    end;
+    { An arity MISMATCH must not be rewritten -- a use asking for a different
+      number of type arguments is not this routine's specialization, and
+      mangling it anyway would invent a name nothing declares.
+
+      With the `specialize` KEYWORD written, though, a name match at the wrong
+      arity cannot be anything else, so say so. Declining silently left the run
+      in the stream to be read as an expression, and the reader was told
+      `undefined variable (specialize)` -- a true statement about the token that
+      survived, naming neither the routine nor the count. The keyword is the
+      whole discriminator: without it the same tokens are a legal comparison
+      chain (`a < b > (c)`), which is why the bare surface stays quiet and falls
+      through. }
+    if matched and (nArg <> GenericFuncNParams[gfi]) and hasKw then
+      Error('generic routine ' + fname + ' takes ' +
+            AIntToStr(GenericFuncNParams[gfi]) + ' type argument(s), not ' +
+            AIntToStr(nArg));
+    if matched and (nArg = GenericFuncNParams[gfi]) then
+    begin
+      specName := fname;
+      for q := 0 to nArg - 1 do specName := specName + '_' + argNm[q];
       seen := False;
       for k := 0 to nSpec - 1 do
         if CaseEqual(specNames[k], specName) then seen := True;
@@ -4266,21 +4312,28 @@ begin
       begin
         if nSpec >= MAX_INLINE_SPECS then
           Error('too many inline specializations of ' + fname);
-        specArgs[nSpec] := cname;
+        for q := 0 to nArg - 1 do
+        begin
+          specArgs[nSpec * MAX_TEMPLATE_PARAMS + q]     := argNm[q];
+          specArgKinds[nSpec * MAX_TEMPLATE_PARAMS + q] := argKd[q];
+        end;
+        specNArgs[nSpec] := nArg;
         specNames[nSpec] := specName;
-        specKinds[nSpec] := Tokens[base + 2].Kind;
         Inc(nSpec);
       end;
-      { collapse `specialize F < C >` (or the keyword-less `F < C >`) to the one
-        identifier F_C. The token COUNT differs between the two surfaces, which
-        is the only place the distinction survives past the match above. }
+      { collapse `specialize F < A , B >` (or the keyword-less form) to the one
+        identifier F_A_B. The token count is `j - i`: j indexes the `>` and i is
+        the first token of the whole run, so this covers both surfaces AND every
+        arity without a per-shape constant -- the two literals it replaced (4
+        with the keyword, 3 without) were the only place the distinction
+        survived past the match. }
       Tokens[i].Kind := tkIdent;
       Tokens[i].IVal := 0;
       Tokens[i].SOffset := TokCharsAppend(specName);
       Tokens[i].SLen := Length(specName);
       TokSrcOff[i] := 0;   { it says F_C now -- see the note in ExpandGenericMethod }
       TokSrcLen[i] := 0;
-      if hasKw then RemoveTokens(i + 1, 4) else RemoveTokens(i + 1, 3);
+      RemoveTokens(i + 1, j - i);
     end;
     Inc(i);
   end;
@@ -4292,11 +4345,16 @@ begin
       want, so leave that one alone. }
     if FindProc(specNames[k]) >= 0 then Continue;
     SpecializeTemplateName := GenericFuncs[gfi].Name;
-    { generic FUNCTIONS stay single-parameter — load the substitution directly }
-    SpecSubCount := 1;
-    SpecSubNames[0]  := GenericFuncs[gfi].Param;
-    SpecSubValues[0] := specArgs[k];
-    SpecSubKinds[0]  := specKinds[k];
+    { The substitution set, one entry per type parameter. The engine has always
+      been MAX_TEMPLATE_PARAMS wide -- this site simply never filled more than
+      slot 0. }
+    SpecSubCount := specNArgs[k];
+    for q := 0 to SpecSubCount - 1 do
+    begin
+      SpecSubNames[q]  := GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + q];
+      SpecSubValues[q] := specArgs[k * MAX_TEMPLATE_PARAMS + q];
+      SpecSubKinds[q]  := specArgKinds[k * MAX_TEMPLATE_PARAMS + q];
+    end;
     { SpecializeStream splices at TokPos, and CurTok is holding the token AT
       TokPos-1 — so step back, splice in front of it, and the `Next` below reads
       the first spliced token. When ParseSubroutine finishes, CurTok is back on
@@ -4535,8 +4593,9 @@ procedure ParseGenericFunctionDef;
   Delphi form would have duplicated the whole token-buffering body, which is
   exactly the second path that stays broken.
   feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
-var isFunc, isDelphi: Boolean; funcName, paramName: AnsiString;
-    gfi, j, cur, finalCur, depth: Integer;
+var isFunc, isDelphi, moreParams: Boolean; funcName: AnsiString;
+    paramNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+    nParam, gfi, j, cur, finalCur, depth: Integer;
 begin
   isDelphi := not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic'));
   if not isDelphi then Next; { consume 'generic' }
@@ -4549,23 +4608,46 @@ begin
   funcName := CurTok.SVal; Next;
 
   Expect(tkLt, '<');
-  if CurTok.Kind <> tkIdent then Error('expected generic type parameter');
-  paramName := CurTok.SVal; Next;
-  { An optional CONSTRAINT -- `<T: class>`, `<T: IInterface>`, `<T: TBase>`.
-    pxx does not check constraints, so it is consumed and dropped; refusing to
-    PARSE one turns an unchecked rule into a syntax error, which is the worse of
-    the two answers and is what `expected '>' before ':'` on tgenfunc12 was. The
-    method path reads the same group through TokGenericParamGt, which skips a
-    constraint for the same reason. }
-  if CurTok.Kind = tkColon then
-    while (CurTok.Kind <> tkGt) and (CurTok.Kind <> tkEOF) do Next;
+  { The parameter LIST. `<T>` was the only accepted shape and `<T, S>` died here
+    with `expected '>' before ','` -- at the IMPLEMENTATION header, which made
+    the diagnostic point at the wrong section, because the interface line is
+    buffered rather than parsed through here.
+    bug-p-a-generic-routine-supports-exactly-one-type-parameter }
+  nParam := 0;
+  moreParams := True;
+  while moreParams do
+  begin
+    if CurTok.Kind <> tkIdent then Error('expected generic type parameter');
+    if nParam >= MAX_TEMPLATE_PARAMS then
+      Error('too many type parameters on generic routine ' + funcName);
+    paramNames[nParam] := CurTok.SVal;
+    Inc(nParam);
+    Next;
+    { An optional CONSTRAINT -- `<T: class>`, `<T: IInterface>`, `<T: TBase>`.
+      pxx does not check constraints, so it is consumed and dropped; refusing to
+      PARSE one turns an unchecked rule into a syntax error, which is the worse
+      of the two answers and is what `expected '>' before ':'` on tgenfunc12
+      was. The method path reads the same group through TokGenericParamGt, which
+      skips a constraint for the same reason.
+
+      The scan stops at a COMMA as well as at `>` now: with one parameter there
+      was nothing after the constraint but the close, so `<T: class, S>` would
+      have swallowed the rest of the list. }
+    if CurTok.Kind = tkColon then
+      while (CurTok.Kind <> tkGt) and (CurTok.Kind <> tkComma) and
+            (CurTok.Kind <> tkEOF) do Next;
+    moreParams := CurTok.Kind = tkComma;
+    if moreParams then Next;
+  end;
   Expect(tkGt, '>');
   { CurTok = '(' of param list, or ';' / ':' if no params }
 
   if GenericFuncCount >= MAX_GENERIC_FUNCS then Error('too many generic functions');
   gfi := GenericFuncCount;
   GenericFuncs[gfi].Name     := funcName;
-  GenericFuncs[gfi].Param    := paramName;
+  GenericFuncNParams[gfi]    := nParam;
+  for j := 0 to nParam - 1 do
+    GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + j] := paramNames[j];
   GenericFuncs[gfi].IsFunc   := isFunc;
   GenericFuncIsDelphi[gfi]   := isDelphi;   { parallel array -- see its declaration }
   GenericFuncs[gfi].TokStart := TemplateTokenCount;
@@ -5063,24 +5145,37 @@ end;
 { Parses: specialize Max<Integer> as MaxInt;
   Called when CurTok = tkIdent('specialize') at top level }
 procedure ParseTopLevelSpecialize;
-var templateName, concreteName, specName: AnsiString;
-    concreteKind: TTokenKind; gfi, i: Integer;
+var templateName, specName: AnsiString;
+    concreteNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+    concreteKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+    nArg, gfi, i, q: Integer; moreArgs: Boolean;
 begin
   Next; { consume 'specialize' }
   if CurTok.Kind <> tkIdent then Error('expected generic function name after specialize');
   templateName := CurTok.SVal; Next;
 
   Expect(tkLt, '<');
-  if (CurTok.Kind = tkIdent) or (CurTok.Kind = tkInteger_T) or
-     (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) or
-     (CurTok.Kind = tkString_T) then
+  { The argument LIST. One argument was the only accepted shape here, matching
+    the one type parameter the routine could declare; both limits were the same
+    single field. IsConcreteTypeArgKind is the shared predicate the two other
+    argument scanners use -- it replaces the five-way test written out here,
+    which had drifted from it (it did not accept every kind they did).
+    bug-p-a-generic-routine-supports-exactly-one-type-parameter }
+  nArg := 0;
+  moreArgs := True;
+  while moreArgs do
   begin
-    concreteName := CurTok.SVal;
-    concreteKind := CurTok.Kind;
+    if not IsConcreteTypeArgKind(CurTok.Kind) then
+      Error('expected concrete type in specialize');
+    if nArg >= MAX_TEMPLATE_PARAMS then
+      Error('too many type arguments in specialize ' + templateName);
+    concreteNames[nArg] := CurTok.SVal;
+    concreteKinds[nArg] := CurTok.Kind;
+    Inc(nArg);
     Next;
-  end
-  else
-    Error('expected concrete type in specialize');
+    moreArgs := CurTok.Kind = tkComma;
+    if moreArgs then Next;
+  end;
   Expect(tkGt, '>');
 
   { Optional 'as Name' }
@@ -5092,11 +5187,15 @@ begin
   end
   else
   begin
-    { Auto-generate: Max_Integer }
+    { Auto-generate: Max_Integer, or Pair_Integer_string for a list }
     specName := templateName;
-    AppendChar(specName, '_');
-    i := 1;
-    while i <= Length(concreteName) do begin AppendChar(specName, concreteName[i]); Inc(i); end;
+    for q := 0 to nArg - 1 do
+    begin
+      AppendChar(specName, '_');
+      i := 1;
+      while i <= Length(concreteNames[q]) do
+      begin AppendChar(specName, concreteNames[q][i]); Inc(i); end;
+    end;
   end;
   { CurTok = ';' — do NOT Eat here. Insert at TokPos (after ';') so that
     after ParseSubroutine finishes its own 'end;', CurTok lands on the next
@@ -5105,12 +5204,16 @@ begin
   gfi := FindGenericFunc(templateName);
   if gfi < 0 then Error('generic function ' + templateName + ' not found');
 
+  if nArg <> GenericFuncNParams[gfi] then
+    Error('generic routine ' + templateName + ' takes a different number of type arguments');
   SpecializeTemplateName := GenericFuncs[gfi].Name;
-  { generic FUNCTIONS stay single-parameter — load the substitution set directly }
-  SpecSubCount := 1;
-  SpecSubNames[0]  := GenericFuncs[gfi].Param;
-  SpecSubValues[0] := concreteName;
-  SpecSubKinds[0]  := concreteKind;
+  SpecSubCount := nArg;
+  for q := 0 to nArg - 1 do
+  begin
+    SpecSubNames[q]  := GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + q];
+    SpecSubValues[q] := concreteNames[q];
+    SpecSubKinds[q]  := concreteKinds[q];
+  end;
   SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount, specName);
   Next;
   ParseSubroutine;

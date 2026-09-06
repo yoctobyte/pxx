@@ -9825,6 +9825,21 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Futest/generic_rename_units test/test_generic_implside_type_parameter_rename.pas $(TESTTMP)/test_gen_rename26
 	tools/expect_same.sh test_gen_rename26 "$$($(TESTTMP)/test_gen_rename26)" "$$(printf '42\nok')"
 	./$(COMPILER) -Futest/generic_xunit_method_units test/test_generic_method_across_a_uses_clause.pas $(TESTTMP)/test_gen_xmeth26
+	./$(COMPILER) -Futest/generic_routine_arity_units test/test_generic_routine_type_parameter_arity.pas $(TESTTMP)/test_gra26
+	@# .expected is fpc 3.2.2's own output. A generic ROUTINE may declare more
+	@# than one type parameter; `generic procedure Pair<T, S>` was refused at its
+	@# implementation header and pin v404 still is, with the ticket's own
+	@# `expected '>' before ','`. Row D is the row with teeth: Pair<string,
+	@# Integer> and Pair<Integer, string> must be two DIFFERENT specializations, and
+	@# it is the only row that fails if the mangled name stops carrying the whole
+	@# argument list -- a key built from the first argument alone prints every
+	@# other row correctly. Row A is the arity-1 regression control (the matcher
+	@# and the substitution load that serve it were both rewritten). Row F asserts
+	@# `a < b > (c)` is still a comparison: widening the use matcher from one
+	@# argument to a comma-separated list widens exactly the pattern that can eat
+	@# a comparison chain.
+	@$(TESTTMP)/test_gra26 | diff -u test/test_generic_routine_type_parameter_arity.expected - \
+	  || { echo 'test_generic_routine_type_parameter_arity: FAIL - a generic routine lost a type parameter'; exit 1; }
 	tools/expect_same.sh test_gen_xmeth26 "$$($(TESTTMP)/test_gen_xmeth26)" "$$(printf '5\nab\n15\n42\n3\n13\n42')"
 	./$(COMPILER) -Futest/generic_nestedspec_units test/test_generic_body_sees_its_specializations_nested_type.pas $(TESTTMP)/test_gen_nestedspec26
 	tools/expect_same.sh test_gen_nestedspec26 "$$($(TESTTMP)/test_gen_nestedspec26)" "$$(printf '33 44\n55\n66')"

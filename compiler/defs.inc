@@ -2353,6 +2353,10 @@ type
 
   TGenericFunc = record
     Name     : AnsiString;
+    { DEAD since the type-parameter list moved to GenericFuncParams -- kept
+      because this record's layout is BAKED INTO THE COMPILER BINARY (see the
+      note on GenericFuncIsDelphi below), so removing a field is exactly as
+      impossible as adding one. Nothing reads it. }
     Param    : AnsiString;
     IsFunc   : Boolean;
     TokStart : Integer;
@@ -2594,6 +2598,28 @@ var
     the same shape for the same record.
     feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
   GenericFuncIsDelphi : array[0..MAX_GENERIC_FUNCS-1] of Boolean;
+
+  { A generic routine's TYPE PARAMETERS, one row of MAX_TEMPLATE_PARAMS per
+    routine, with the used length beside it. This is the data-model half of
+    bug-p-a-generic-routine-supports-exactly-one-type-parameter: TGenericFunc
+    held ONE AnsiString, so `generic procedure Pair<T, S>` died at its
+    implementation header with `expected '>' before ','` while generic CLASSES
+    took several. The substitution engine underneath was never the limit --
+    SpecSubNames/SpecSubValues/SpecSubKinds are MAX_TEMPLATE_PARAMS wide and the
+    class path has always filled them.
+
+    PARALLEL ARRAYS rather than fields on TGenericFunc, for the reason stated at
+    GenericFuncIsDelphi and measured on 2026-09-05: that record's layout is
+    hard-coded in symtab.inc's REC_TGENERICFUNC table and baked into the
+    compiler BINARY, so a new field cannot be compiled by the compiler that
+    PRECEDES it -- round 0 of the fixedpoint answers `no such member` even with
+    the table, the size check and the declaration all updated together and all
+    agreeing. Confirmed again here: the first cut of this fix put Params/NParams
+    in the record and round 0 said `"NParams": no such member on this
+    record/class`. The dead `Param` field is still declared for the same reason
+    in the other direction -- removing one is as impossible as adding one. }
+  GenericFuncParams  : array[0..MAX_GENERIC_FUNCS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  GenericFuncNParams : array[0..MAX_GENERIC_FUNCS-1] of Integer;
   { Concrete type arguments a generic METHOD was asked for, keyed by the METHOD
     NAME rather than by the class. A use site (`t.Add<Integer>(..)`) names a
     method and a receiver whose type the token stream cannot resolve, so the
