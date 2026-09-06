@@ -2687,3 +2687,62 @@ twenty minutes and that is exactly why nobody, including me, looked at the reaso
 
 Related: [[two-verified-counts-can-make-one-unverified-inference]],
 [[a-relay-welds-an-observation-to-its-inference]], [[a-composition-of-two-reports-is-a-third-measurement]].
+
+## A CLAIM LEDGER RECORDS WHO SPOKE, NOT WHO BEGAN
+
+2026-09-06, frankuser, during the fleet sync, and it is a first-class finding about the
+instrument this seat was offered and declined.
+
+frankS and frankA both worked `test_libwriteln_parity`. The ledger showed it as frankA's
+**because frankA replied first** — not because frankA started first. **A claim ledger is an
+index of REPLIES**, and reply latency has nothing to do with start time: a seat mid-measurement
+answers late precisely because it is deep in the work.
+
+**So the ledger's failure mode is the reverse of the one it is built to prevent.** It exists to
+stop two seats on one row, and it systematically credits the seat that was *less* engaged at
+the moment the brief arrived. The collision it recorded had already happened before the ledger
+had an entry for it.
+
+**Nothing here makes a ledger not worth keeping** — the alternative is no record at all. What
+it needs is the label: **read an entry as "this seat said so at time T", never as "this seat
+holds it"**, which is the same distinction as `owner:` being ATTRIBUTION and not a claim, and
+the same as [[working-slash-is-not-what-an-agent-is-doing]]. And the cheap improvement is to
+ask for a START time rather than a claim, since a seat always knows when it began and the
+answer does not depend on how fast it replies.
+
+**This is also the argument for the split frankuser and I ended up with**, better than the one I
+gave when I declined the mailbox: a ledger of replies cannot see a collision that predates the
+brief, and neither can I — but the seats can, because each of them knows what it started and
+when. **Peer-to-peer beats routing here for a structural reason, not merely a cost one.**
+
+## IS IT ONE ANIMAL OR THREE — asked by frankuser, and answered as a READING with its reasoning attached
+
+frankuser declined to assert whether frankD's *enumerated-predicate staleness presenting as a
+neighbouring subsystem's defect* is the same family as the `#src:` misnaming and the
+proxy-guard rule, and put it here. **The answer is two and one, and I am giving the reasoning
+rather than the verdict — which is the thing I failed to do earlier this evening.**
+
+**The two that ARE one animal — a predicate whose EXTENT is wrong, with the symptom surfacing
+at a CONSUMER:**
+
+- `IsWideIntLit` accepts `tyInt64`/`tyPromoInt64` and not `tyUInt64`, so a retagged literal
+  leaves the predicate silently and **PromoInt** reports the defect. Extent too NARROW.
+- the generic call site's trailing-`(` proxy is justified by an ambiguity that exists on the
+  bare Delphi spelling and is applied to the `specialize` spelling too, refusing a legal
+  parameterless call. Extent too WIDE.
+
+**Same axis, opposite sign, and in both the diagnostic names the consumer rather than the
+predicate** — which is exactly why both were filed against a subsystem that was fine. That is
+one family and the unifying question is: *what is the exact set this predicate admits, and who
+consumes the answer?*
+
+**The third is NOT in it.** The `#src:` case is not a predicate defect at all — no code is
+wrong. It is a READER grouping on an identifier whose semantics were never established
+(`job.target` + `srcs[0]`, assigned by build order). The defect was in the observer, and the
+remedy is a grep for the generator, not a change to any extent. **Filing it with the other two
+would put an observer error and a code defect under one heading and make the family useless for
+both.**
+
+**Held loosely on purpose:** this is a reading of three cases, two of which I did not measure. A
+fourth instance that is a predicate-extent bug whose symptom lands on a *naming* surface would
+merge them and I would want to see it before it does.

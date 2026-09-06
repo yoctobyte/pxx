@@ -17328,6 +17328,52 @@ mechanism?"* `99c416b54` is a symbol-lookup change; the crash is an object lifet
 that cannot plausibly cause the mechanism, arrived at by a correct bisect, is the signature of
 a lifted mask.**
 
+> ### THE DISCRIMINATOR SORTS — IT DOES NOT EXCULPATE, and here is the POSITIVE instance
+>
+> Measured 2026-09-06 (frankD, at `fdcb44bdf`), and it is here because **a rule with only
+> negative instances on record reads as "never revert a same-day commit", which is not what
+> this section means.** frankD's own words: *"it is not a rule that a same-day commit under a
+> red sweep is innocent, and if it were, the discriminator would be useless."*
+>
+> `10e670503` moved a decimal literal's retag to its creation site. `test_promoint_bitwise`
+> went red. **The discriminator answers YES** — the commit touches the failing mechanism
+> exactly, since the failure is in that retag's consumer. The bisect is right about *what* as
+> well as *when*. **And the revert is still wrong**, because the cost was measured in BOTH
+> directions rather than inferred from the red:
+>
+> ```
+> retag live (HEAD)  -> promoint_bitwise RED (-1, "not"), q div 18446744073709551615 correct
+> retag disabled     -> promoint_bitwise GREEN 7/7, QWord programs DO NOT COMPILE AT ALL
+> ```
+>
+> **One red row against ordinary QWord programs failing to build.** So the two questions are
+> independent and both are cheap:
+>
+> | question | instrument |
+> | --- | --- |
+> | is the bisect naming a CAUSE or a lifted MASK? | does the commit touch the failing mechanism? |
+> | is the revert cheaper than the red? | **run the tree with the change disabled and read what ELSE breaks** |
+>
+> **The second is the one nobody runs**, because a red is visible and what a revert would
+> destroy is not. A revert's cost is a measurement, not an inference from the size of the red.
+>
+> **AND THE MECHANISM EXPLAINS THE MISFILING, which is frankD's third instance today of a
+> predicate's staleness presenting as a defect in a NEIGHBOURING subsystem.** The retag tags
+> every decimal in **[2^63, 2^64)** as `tyUInt64`; `IsWideIntLit` accepts only `tyInt64` /
+> `tyPromoInt64`, so those literals **silently left the predicate every PromoInt path asks**,
+> and PromoInt fell back to the wrapped machine reading — `mask := 18446744073709551615`
+> becomes `-1`, which is both failing rows from one cause. **Above 2^64 the tag stays `tyInt64`
+> and PromoInt still works.** The defect hides in exactly one band, so it reads as a PromoInt
+> bug and was filed against a subsystem that is fine.
+>
+> **The part worth carrying past this bug: `10e670503`'s own comment PREDICTED the hazard ONE
+> BAND TOO HIGH.** It reasoned about `> 2^64` and never considered that the band it was itself
+> creating had the same consumer. **An author who anticipates a hazard can anticipate it in the
+> wrong place — and having written the caution makes it LESS likely that anyone re-derives
+> it**, because a documented hazard reads as a handled one. Check which band a caution actually
+> covers against the band the change actually creates; they are different facts and only one of
+> them is in the comment.
+
 **AND THE TEST THAT SHOULD HAVE CAUGHT IT WAS GREEN THROUGHOUT, THREE TIMES OVER.**
 `test_class_inherits_from_tobject` carries the shape three times and stays green **because it
 only reads the binder INSIDE the handler** — the one position where the leak is invisible. A
@@ -17335,6 +17381,20 @@ corpus census found the bug; the file named for the construct could not. Same le
 width fixture and the leak fixture: **a test named for the feature is the weakest evidence
 about the feature**, because it was written by someone holding the intended usage in mind, and
 the defect lives in the usage nobody intended.
+
+> ### THE FAMILY SPLITS IN TWO, AND THE SPLIT CHANGES THE REMEDY (frankD, 2026-09-06)
+>
+> Treated as one thing here until frankD separated it. **A fixture named for a defect that is
+> structurally blind to it** has two causes and they are not fixed the same way:
+>
+> | | why it is blind | remedy |
+> | --- | --- | --- |
+> | **it CANNOT hold the failing case** | the sibling needs a different ORACLE — one row is an fpc differential, the other a pxx extension fpc rejects, so no single file can assert both | **a pointer in each file** to the other; the blindness is structural and permanent |
+> | **it CAN hold it and does not** | the position exists in the same file and was never written — `test_class_inherits_from_tobject` exercises the leaking shape **three times** and never once from OUTSIDE the handler | **fix it in place**: it is one row away from being a real guard, and that is worth more than a pointer |
+>
+> **Reading the second as the first is how a one-line fix becomes a cross-reference.** Ask
+> whether the missing assertion needs a different oracle or merely a different POSITION —
+> position is cheap and permanent, an oracle split is neither.
 
 ## WHEN A PARSE ERROR GUARDS A FEATURE, THE CODE BEHIND IT HAS NEVER RUN — so the loud half hides the silent one
 
