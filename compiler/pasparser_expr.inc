@@ -580,6 +580,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     hlValTk: TTypeKind; hlCap: Integer;          { High/Low over a STRING operand }
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
+    frRowLen, frRowLo: Integer;          { `d[i]` over a dyn array of fixed rows: the row's extent and low bound }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
  szDeclTk: TTypeKind; szNameConsumed: Boolean;
@@ -5305,6 +5306,16 @@ begin
           ASTIVal[CurASTNode] := dpaLo + dpaCount - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if NodeFixedRowInfo(valNode, frRowLen, frRowLo) then
+        begin
+          { `High(d[i])` where d is `array of array[lo..hi] of Base`. The row's
+            extent is on the base symbol and never on this node, so this fell to
+            the Length-1 tail and answered -1 — `for j := Low(r) to High(r)`
+            simply did not run. See NodeFixedRowInfo. }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := frRowLo + frRowLen - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
                 TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk, hlBoundEid) then
         begin
@@ -5478,7 +5489,22 @@ begin
           `ASTTk := tyInteger` at the bottom used to overwrite them -- which is
           why High(c) answered 'e' while Low(c) still answered 97. }
         ASTTk[CurASTNode] := Ord(tyInteger);
-        if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
+        { FIRST, because the two whole-array arms below ask about the SYMBOL and
+          not about the operand: they fire on `Low(d[i])` just as happily as on
+          `Low(d)` and answer the OUTER array's lower bound. The High chain's
+          equivalents each carry an `(ASTKind[valNode] = AN_IDENT) and
+          (ASTIVal[valNode] = idx)` guard and these two do not — measured
+          2026-09-06, `var m: array[5..9] of array[2..3] of LongInt` gives
+          `Low(m[5])` = 5 against fpc's 2, and `High(m[5])` = -1 against 3. That
+          nested-STATIC case is a different defect (pxx flattens nested static
+          dimensions, so `m[5]` is not a row value in our model at all) and is
+          filed separately; adding the missing guard here would move it from one
+          wrong answer to another, so it is not done blind. What this arm claims
+          is only the dynamic-of-fixed-row shape, where the right answer is
+          known. See NodeFixedRowInfo. }
+        if NodeFixedRowInfo(valNode, frRowLen, frRowLo) then
+          ASTIVal[CurASTNode] := frRowLo
+        else if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
            (SymArrNDims[idx] <= 1) then
         begin
           ASTIVal[CurASTNode] := Syms[idx].ConstVal;
@@ -5669,6 +5695,18 @@ begin
             (SymArrDimSpan[sym*MAX+0]). }
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := SymArrDimSpan[ASTIVal[valNode] * MAX_ARR_DIMS]; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if NodeFixedRowInfo(valNode, frRowLen, frRowLo) then
+        begin
+          { `Length(d[i])` over a dyn array of fixed rows. The row has no
+            [data-8] header — it is bytes inside the outer array's block — so
+            the runtime path read one off it and answered 0 while `d[i][j]`
+            indexed correctly, exactly the shape the `p^` arm below describes.
+            See NodeFixedRowInfo. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := frRowLen;
+          ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
         else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo, dpaFlat) then

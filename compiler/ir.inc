@@ -3700,6 +3700,20 @@ begin
   else ASTSOffset[node] := 0;
 end;
 
+{ `d` is a dynamic array whose ELEMENT is a fixed ROW (`array of array[0..2] of
+  T`, either spelling). The row is bytes inside the outer block, not a handle,
+  so an element list cannot be built for it the way the open-array constructor
+  builds one for scalar and handle elements. }
+function NodeDynElemRowLen(node: Integer): Integer;
+var si: Integer;
+begin
+  NodeDynElemRowLen := 0;
+  if (node < 0) or (ASTKind[node] <> AN_IDENT) then Exit;
+  si := ASTIVal[node];
+  if (si < 0) or (si >= SymCount) then Exit;
+  NodeDynElemRowLen := SymDynElemRowLen[si];
+end;
+
 function IsNodeClassRef(node: Integer): Boolean;
 var symId: Integer;
 begin
@@ -11703,9 +11717,22 @@ begin
         if (ASTKind[ASTRight[node]] = AN_SET_LIT) and
            (NodeDynDepth(ASTLeft[node]) >= 1) and
            SetLitElemsArePlain(ASTRight[node]) then
+        begin
+          { …except when the element is a fixed ROW. The ctor lowering builds a
+            temp whose slots are scalars or handles and row-COPIES from an
+            existing array; a literal is neither, so retagging here produced a
+            dyn-of-dyn temp stored into a row-strided array and printed two
+            addresses. fpc REFUSES this shape outright ("Incompatible types...
+            expected {Dynamic} Array Of Array[0..2] Of LongInt"), so a
+            diagnostic is both the honest answer and the same answer; the
+            alternative on offer was silent garbage, which is what both the
+            pre-retag and post-retag paths gave. }
+          if NodeDynElemRowLen(ASTLeft[node]) > 0 then
+            Error('an element list cannot initialise a dynamic array of fixed rows');
           RetagSetLitAsArrayCtor(ASTRight[node],
                                  IntToTypeKind(ASTTk[ASTLeft[node]]),
                                  NodeDynDepth(ASTLeft[node]));
+        end;
       end;
 
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is

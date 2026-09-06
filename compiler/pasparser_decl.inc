@@ -1729,14 +1729,60 @@ begin
         VDIsDyn := True;   { 'array of T' without bounds is a dynamic array }
         VDDynDepth := 1;
         Expect(tkOf, 'of');
-        { Nested dynamic arrays: array of array of ... of BaseType. }
-        while CurTok.Kind = tkArray do
+        { Nested dynamic arrays: array of array of ... of BaseType — and, at the
+          innermost level, an ANONYMOUS FIXED array element. }
+        while (CurTok.Kind = tkArray) and (not elemResolved) do
         begin
           Next;
           if CurTok.Kind = tkLBrack then
-            Error('mixed static/dynamic nested arrays not supported');
-          Inc(VDDynDepth);
-          Expect(tkOf, 'of');
+          begin
+            { `array of array[0..2] of LongInt`. This used to answer *"mixed
+              static/dynamic nested arrays not supported"*, and that sentence was
+              FALSE ABOUT THE CAPABILITY: `type TR = array[0..2] of LongInt; var
+              v: array of TR` compiles and runs correctly today, through the
+              alias arm below, which models the element as a ROW of
+              ArrTypeHi-ArrTypeLo+1 base elements. The refusal was about the
+              SPELLING, and a diagnostic saying "not supported" about a shape the
+              compiler supports sends every reader to build what already exists.
+              Same asymmetry, same fix, as `array[0..2] of array of LongInt` in
+              the other direction (0455ce596).
+
+              THE FIELDS SET HERE ARE EXACTLY THE ALIAS ARM'S, deliberately: the
+              symbol the two spellings produce must be indistinguishable, because
+              three separate functions answer "how deep is this array"
+              (NodeDynDepth, DynArrayNodeDepth, NodeArrNDInfo) and two of them
+              are already known to disagree. A construct whose two spellings
+              build one symbol cannot be the place a fourth divergence appears.
+              refactor-a-two-dyn-array-depth-functions-that-drift }
+            if VDDynDepth > 1 then
+              Error('array of array of <fixed array type> not supported');
+            Next;                       { '[' }
+            ParseArrayDimBounds(dLo, dHi);
+            VDElemRowLen := dHi - dLo + 1;
+            VDElemRowLo  := dLo;
+            { N-D element rows flatten, the same way the alias arm takes
+              ArrTypeHi-ArrTypeLo over an already-flattened named type. }
+            while Eat(tkComma) do
+            begin
+              ParseArrayDimBounds(dLo, dHi);
+              VDElemRowLen := VDElemRowLen * (dHi - dLo + 1);
+            end;
+            Expect(tkRBrack, ']');
+            Expect(tkOf, 'of');
+            VDElemTk := ParseTypeKind;
+            VDElemEnumId := LastTypeSemId;
+            if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
+               (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) or
+               ((VDElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
+              Error('array of <fixed array of managed elements> not supported');
+            VDTk := VDElemTk;
+            elemResolved := True;
+          end
+          else
+          begin
+            Inc(VDDynDepth);
+            Expect(tkOf, 'of');
+          end;
         end;
         { A named dynamic-array alias as the element (`array of TA` where
           `TA = array of Integer`) composes its depth: the result is
@@ -1744,7 +1790,7 @@ begin
           alias's BASE element type. ParseTypeKind cannot do this — array-type
           aliases live in the ArrType table, not the scalar alias table, so it
           would resolve `TA` to a bare base type and drop the dynamic dimension. }
-        if CurTok.Kind = tkIdent then
+        if (CurTok.Kind = tkIdent) and (not elemResolved) then
         begin
           ai := FindArrayType(CurTok.SVal);
           if (ai >= 0) and ArrTypeIsDyn[ai] then
@@ -2687,6 +2733,12 @@ begin
 	        end;
 	        if (CurTok.Kind <> tkLParen) and (CurTok.Kind <> tkLBrack) then
 	          Error('dynamic array initializer must be nil or an element list');
+	        { A dyn array of fixed ROWS has no element-list form -- see the twin
+	          refusal in ir.inc's AN_ASSIGN, which fpc also gives. Refused HERE as
+	          well so the diagnostic names the declaration's line rather than the
+	          program entry the pending init is emitted into. }
+	        if SymDynElemRowLen[idx] > 0 then
+	          Error('an element list cannot initialise a dynamic array of fixed rows');
 	        EnsurePendingInitCapacity(PendingInitCount);
 	        PendingInitSym[PendingInitCount]  := idx;
 	        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
@@ -2696,7 +2748,7 @@ begin
 	        PendingInitPCount[PendingInitCount] := 0;
 	        PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
 	        PendingInitKind[PendingInitCount] := 10;
-	        PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST;
+	        PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST(0);
 	        { THE AST ARENA IS PER-PROC SCRATCH and this is the one pending-init
 	          kind that keeps a NODE rather than a constant, so it is the one that
 	          can be handed out again before it is read. Every proc body parsed
@@ -2795,7 +2847,7 @@ begin
 	              PendingInitPCount[PendingInitCount] := 0;
 	              PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
 	              PendingInitKind[PendingInitCount] := 10;
-	              PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST;
+	              PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST(0);
 	              if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
 	              PendingInitValAux[PendingInitCount] := 0;
 	              PendingInitTk[PendingInitCount]   := Ord(elemTk);

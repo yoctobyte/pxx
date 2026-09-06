@@ -15762,6 +15762,34 @@ begin
   Result := AliasPtrElemArrAi[dpaA];
 end;
 
+{ `d[i]` where d is a depth-1 dynamic array whose ELEMENT is a fixed row
+  (`array of T`, T = `array[lo..hi] of Base`, either spelling). The row's extent
+  lives on the BASE symbol -- SymDynElemRowLen/Lo, which the indexing and stride
+  code already read -- and nothing puts it on the AN_INDEX node, so Length, Low
+  and High all fell through to the dynamic-array answer and reported 0, 0 and -1
+  for a row that indexes correctly. fpc says 4, 2, 5 for `array[2..5] of
+  LongInt`. Silent wrong values in the canonical `for i := Low(r) to High(r)`
+  spelling: the loop simply does not run.
+
+  A predicate rather than three copies of the test, because it is the same
+  question three intrinsics ask and the repo already has two functions that
+  disagree about array depth. refactor-a-two-dyn-array-depth-functions-that-drift }
+function NodeFixedRowInfo(node: Integer; var rowLen, rowLo: Integer): Boolean;
+var fri: Integer;
+begin
+  Result := False;
+  rowLen := 0;
+  rowLo := 0;
+  if (node < 0) or (ASTKind[node] <> AN_INDEX) then Exit;
+  if (ASTLeft[node] < 0) or (ASTKind[ASTLeft[node]] <> AN_IDENT) then Exit;
+  fri := ASTIVal[ASTLeft[node]];
+  if (fri < 0) or (fri >= SymCount) then Exit;
+  if SymDynElemRowLen[fri] <= 0 then Exit;
+  rowLen := SymDynElemRowLen[fri];
+  rowLo := SymDynElemRowLo[fri];
+  Result := True;
+end;
+
 function DerefPtrArrayInfo(node: Integer;
                            var elemCount, lowBound, flatCount: Integer): Boolean;
 var dpaSi, dpaAi: Integer;

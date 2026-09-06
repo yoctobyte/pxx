@@ -619,7 +619,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
-function ParseDynArrayInitElemsAST: Integer; forward;
+function ParseDynArrayInitElemsAST(nest: Integer): Integer; forward;
 function NodeSemIdOf(node: Integer): Integer; forward;
 { An enum's STORAGE WIDTH as a kind, and "is this declaration of that enum" --
   bodies in pasparser_decl.inc, which compiler.pas includes AFTER the expression

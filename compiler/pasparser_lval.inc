@@ -4056,7 +4056,7 @@ begin
   Result := node;
 end;
 
-function ParseDynArrayInitElemsAST: Integer;
+function ParseDynArrayInitElemsAST(nest: Integer): Integer;
 { `(e0, e1, ...)` or `[e0, e1, ...]` in a dynamic-array VAR/CONST initialiser.
 
   Yields the SAME node an expression `[...]` yields -- an AN_SET_LIT holding an
@@ -4067,7 +4067,14 @@ function ParseDynArrayInitElemsAST: Integer;
 
   Elements are full expressions, not set elements: an initialiser is not a set
   and the one-character rule has no business here. A nested `(...)` / `[...]`
-  is itself an element list, for `array of array of T`. }
+  is itself an element list, for `array of array of T`.
+
+  THE `nest` PARAMETER EXISTS TO MAKE THE RECURSION A CALL. Written
+  parameterless, `itemNode := ParseDynArrayInitElemsAST` inside this body is
+  Pascal's RESULT VARIABLE, not a recursive call -- it reads an uninitialised
+  Integer, consumes no tokens, and the loop then meets the `(` it never entered:
+  `expected ')' before '('`, a parse error that says nothing about recursion.
+  It compiled and it answered, about something else. }
 var node, argNode, lastArg, itemNode, closeTk: Integer; done: Boolean;
 begin
   node := AllocNode(AN_SET_LIT);
@@ -4083,7 +4090,7 @@ begin
     while not done do
     begin
       if (CurTok.Kind = tkLParen) or (CurTok.Kind = tkLBrack) then
-        itemNode := ParseDynArrayInitElemsAST
+        itemNode := ParseDynArrayInitElemsAST(nest + 1)
       else
       begin
         ParseExpr;

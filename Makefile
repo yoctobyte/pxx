@@ -6218,6 +6218,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_dynamic_array_var_can_be_initialised_at_its_declaration \
 	  "$$($(TESTTMP)/test_dynarr_varinit26)" \
 	  "$$(cat test/test_a_dynamic_array_var_can_be_initialised_at_its_declaration.expected)"
+	# `array of array[2..5] of T` — the ANONYMOUS spelling, which answered "mixed
+	# static/dynamic nested arrays not supported" while the named-alias spelling
+	# of the identical slot shape compiled and ran. Plus Length/Low/High of a
+	# ROW, which answered 0/0/-1 on BOTH spellings against fpc's 4/2/5. Every row
+	# is asserted for both spellings side by side: the fix is that they build one
+	# symbol, and three functions here already answer "how deep is this array".
+	./$(COMPILER) test/test_a_dynamic_array_of_fixed_rows_has_row_bounds.pas $(TESTTMP)/test_dynarr_rowbounds26
+	tools/expect_same.sh test_a_dynamic_array_of_fixed_rows_has_row_bounds \
+	  "$$($(TESTTMP)/test_dynarr_rowbounds26)" \
+	  "$$(cat test/test_a_dynamic_array_of_fixed_rows_has_row_bounds.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
