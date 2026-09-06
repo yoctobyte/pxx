@@ -109,6 +109,70 @@ days.** That is the argument in one sentence.
    green" is genuinely useful — it just must not be the thing that stops a pin
    being cut.
 
+## 2026-09-06 — RECOMMENDATION 1 WAS FOLLOWED AND IT NEARLY CAUSED THE OPPOSITE FAILURE
+
+**This ticket is entirely about UNDER-pinning: agents reading an advisory verdict
+as a refusal and not cutting a pin for 49 hours. Today produced the other edge of
+the same sentence, and recommendation 1 as written does not prevent it.**
+
+Pin v405, owner-authorised, seat gating first as required. `gate.sh quick` came
+back RED on two rows:
+
+```
+FAIL  pinned builds live lib/rtl   (19s)   <- the red this pin CLEARS. A grade.
+FAIL  self-host fixedpoint         (86s)   <- NOT a grade. This IS the pin.
+      "the fixedpoint reached from PINNED differs from compiler/pascal26"
+```
+
+**The seat held, and said afterwards that they had been carrying only half the
+rule.** *"A valid pin is the self-host fixedpoint. Nothing else may block one"* —
+the half everyone quotes is *nothing else may block one*, which is this ticket's
+finding and is correct. The half that has no sentence of its own is that **the
+fixedpoint row is therefore the one row that DOES block**, because it is not a
+test result about the pin, it is the pin's definition.
+
+**Read at speed — *"a red is a reason to pin SOONER"*, *"graded, never gated"* —
+the paragraph reads as covering every red on the gate.** Had it been followed
+that way, `test-smoke` would have chained from the seat's LOCAL binary and
+blessed a fixedpoint that these sources do not define, then handed it to every
+lane as ground. **Both binaries self-reproduce and both print green**, so nothing
+downstream could have seen it — the Thompson shape `selfhost_fixedpoint.sh`'s
+header is written to catch.
+
+**So recommendation 1 needs its second clause**, and this is the proposed wording,
+stated as a REASON rather than as a count because a count goes stale the moment a
+row is added:
+
+> **A row that restates the pin's own DEFINITION is not a grade. Every row that
+> reports a property of the TREE is.**
+
+The first draft of that said *"of the gate's rows, exactly one is not a grade"*,
+and the seat that hit the incident objected before it hardened: that is a fact
+about a row LIST, and a new definitional row tomorrow makes it false with nothing
+reporting the change — a stale `Makefile:<n>` in prose form.
+
+**And note the symmetry with this ticket's existing finding, because it is the
+same defect and not a second one.** *"A shadow gate that publishes a verdict
+nobody is authorised to act on will be read as authority anyway"* is a rule about
+a reading that is too STRONG. This is the same sentence being read too WEAK. Both
+directions cost a pin — 49 hours in one direction, a poisoned ground in the other
+— and **both are fixed by the same thing: saying which rows decide and why, in the
+place the reader is standing.**
+
+**Two residuals from the incident, neither blocking:**
+
+- The fixedpoint row went red once and **never reproduced** — three hand-run
+  hermetic chains agreed afterwards, the rebuilt binary was byte-identical to the
+  one the gate had called a mismatch, the race guard did not fire, and `byte 98`
+  sits inside the first program header's `p_filesz`, a real content difference
+  rather than a timestamp. Recorded as **unexplained, not resolved**; stage_1a
+  hashed `3daed564c60c` and that is the first question if it recurs.
+- A SECOND fixedpoint red on the confirming gate was **operator error and is
+  closed**: `sync.sh` pulls before it pushes, so banking the pin moved
+  `compiler/**` and the gate ran without a rebuild — two valid fixedpoints. Noted
+  here only so the residual is read as **one** occurrence and not two, because two
+  reads as a pattern and a pattern gets chased.
+
 ## The counter-argument, stated fairly
 
 `pinned` is the ground B/C/D/E build every artifact on, and the reason pin
