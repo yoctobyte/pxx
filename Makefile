@@ -5808,6 +5808,29 @@ test-core: $(COMPILER)
 	@# bug-p-a-nested-n-d-subscript-clobbers-the-outer-subscripts-global-parse-state
 	./$(COMPILER) test/test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas $(TESTTMP)/test_ndnested26
 	tools/expect_same.sh test_ndnested26 "$$($(TESTTMP)/test_ndnested26 | tail -n 2)" "$$(printf 'fails=0\nNDNESTED OK')"
+	@# ONE ANSWER FOR THE LOW BOUND, whatever the container is spelled as. It
+	@# used to be TWO mechanisms: `a1[1]` built AN_INDEX(AN_IDENT, 1) and IR
+	@# subtracted from ConstVal, while `p1^[1]` built AN_INDEX(AN_DEREF, 1 - 1)
+	@# because the PARSER subtracted. Both right; the defect was that "has the
+	@# bound been applied yet" was a property of the SPELLING and not of the
+	@# node, so every new AN_INDEX producer had to know which convention its
+	@# container followed. BuildForInArrayLoop inherited neither and iterated
+	@# shifted garbage. ArrayLoOf (ir.inc) answers node-keyed now, the parser's
+	@# fold and the for-in compensation are DELETED, and the subscript is raw.
+	@# THIS ROW DOES NOT GO RED AT THE PIN, and saying so is the point: the old
+	@# two-mechanism code was CORRECT for every shape here, so a pin control
+	@# would pass and prove nothing. It was guarded by ABLATION instead, both
+	@# directions the single convention can break -- kill ArrayLoOf's deref arm
+	@# and 10 rows fail (deref lo1 reads 22 for 11, a store lands on the
+	@# neighbour); let that arm answer for rank >= 2 and the N-D deref rows fail
+	@# (p^[1,1] reads 0 for 11, a 3-D pointee reads 4310984). The second is not
+	@# hypothetical -- it shipped for the length of one build.
+	@# The N-D rows discriminate and the direct spelling cannot: an N-D array
+	@# SYMBOL carries ConstVal 0 and keeps its bounds in the N-D dim table, so
+	@# only the DEREF spelling can double-subtract. Asserted against fpc.
+	@# bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other
+	./$(COMPILER) test/test_an_array_low_bound_is_one_answer_for_every_spelling.pas $(TESTTMP)/test_arraylo26
+	tools/expect_same.sh test_arraylo26 "$$($(TESTTMP)/test_arraylo26 | tail -n 2)" "$$(printf 'fails=0\nARRAYLO OK')"
 	@# THE FIFTH SHAPE, and it was a SEGFAULT rather than a wrong value.
 	@# StaticArraySourceInfo -- the one resolver both the by-value/const arm and
 	@# the var/out arm ask "what static array is behind this argument" -- knew a
@@ -15974,7 +15997,7 @@ test-core: $(COMPILER)
 	grep -q "cannot assign s (AnsiString) to a whole array" $(TESTTMP)/test_wholearr_refuse.log
 	# ...and all FOUR destination spellings are reported, not just the first: the
 	# check recovers, and a fatal one would have certified three of them untested.
-	test "$$(grep -c 'to a whole array' $(TESTTMP)/test_wholearr_refuse.log)" = 4
+	tools/expect_same.sh test_wholearr_refuse26-count "$$(grep -c 'to a whole array' $(TESTTMP)/test_wholearr_refuse.log)" "4"
 	# FPC-parity nested {} comments by default (delphi mode / NESTEDCOMMENTS OFF stay flat)
 	./$(COMPILER) test/test_nested_comments.pas $(TESTTMP)/test_nested_comments26
 	tools/expect_same.sh test_nested_comments26 "$$($(TESTTMP)/test_nested_comments26)" "$$(printf '3\nNESTED COMMENTS OK')"

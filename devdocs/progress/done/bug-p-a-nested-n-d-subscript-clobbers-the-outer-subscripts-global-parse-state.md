@@ -19,10 +19,38 @@ observable faces from one root:
 | wrong element | `z3[1, 2, z2[1,1]]` | `112` | `122` |
 | wrong row | `ShowRow(z3[1, z2[1,1]])` | `12 20 21` | `120 121 122` |
 
-**The refusal is the NEWEST face and the least harmful one**, which inverts the
-urgency a reader arriving from chess will assume. Pin v405 compiles
-`chess.pas` fine, so the refusal never reached a `$(PXX_STABLE)` consumer; the
-two silent faces are older and have been shipping.
+## What pin v405 actually carries — measured, and it corrects a claim I made
+
+I first said "the pin does not carry the refusal." **That was too broad**, and it
+was relayed onward before it was checked. Run against
+`stable_linux_amd64/default/pinned` (binary sha256 `8f21d04df626`):
+
+```
+$ pinned examples/chess/chess.pas /tmp/p1.bin
+ok: ... [code=405272B data=37848B bss=1665232B procs=893]          <- COMPILES
+
+$ pinned test/test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas
+pascal26:66: error: too many subscripts for array                   <- REFUSED
+  near: [ 1 , 1 ] , >>> 0 ] ,
+
+$ pinned ndclob.pas && ./ndclob                    (face 2)
+z3[1,2,z2[1,1]] = 112  want 122                                     <- WRONG
+
+$ pinned ndpartial.pas && ./ndpartial              (face 3)
+row = 12 20 21          want 120 121 122                            <- WRONG
+```
+
+So **pin v405 carries all three faces**, including the refusal — for a nested
+index that is itself N-D. What it does *not* do is refuse `chess.pas`, whose
+nested index is a rank-1 record-field array (`pos.board[sq].color`). Post-pin
+work widened which SPELLINGS reach `NodeArrNDInfo` (the four-arm resolver), and
+that is what brought chess's particular line inside the blast radius.
+
+The correct summary for a pin decision: the two silent faces and the N-D-nested
+refusal have been in `$(PXX_STABLE)` since v405; only chess's own rank-1-field
+shape is post-pin. Every `$(PXX_STABLE)` consumer using a nested N-D subscript
+has been computing wrong element and row addresses, silently, for longer than
+the visible red has existed.
 
 The refusal is position-dependent — rank ≥ 3, and a subscript that is neither
 first (parsed *before* `NodeArrNDInfo` runs) nor last (nothing reads the global
@@ -94,6 +122,34 @@ Also: **the pin does not carry the chess face.** Pin v405 compiles `chess.pas`
 fine; only post-pin `compiler/**` refuses it. So that face never reached a
 `$(PXX_STABLE)` consumer, and this fix is inert-until-pinned only for the two
 silent faces, which are older and DO reach the pin.
+
+## Inert until the next pin
+
+**Every `$(PXX_STABLE)` consumer is on the wrong element until the next pin.**
+The fix is in `compiler/**`; the pinned compiler is unchanged, and pin v405
+carries the silent face:
+
+```
+z3[1, 2, z2[1,1]]    pinned (v405): 112    HEAD: 122    fpc: 122
+```
+
+Confirmed independently by frank-coordinator at `c69b52b6e` / binary
+`cda68a91bec5`, which is a second measurement rather than a re-reading of mine.
+
+**And the usual worry is inverted here: the pin does NOT carry the loud refusal
+for chess's shape and DOES carry the silent wrong value. The visible red was the
+safe one.**
+
+### This ticket's own fixture cannot serve as the pin probe
+
+Under the pinned compiler
+`test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas` dies at line 66
+on the loud face, before reaching any of the silent rows — **the mask hides the
+defect inside the test written to catch both.** A pin probe has to be built from
+shapes the mask does not cover; the three-line one above is one. Worth knowing
+for anyone building a pin-vs-HEAD probe in this area, and it generalises: a
+fixture that asserts a refusal and a value in one file cannot measure the value
+on any build that still refuses.
 
 ## Log
 

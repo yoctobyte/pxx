@@ -2000,6 +2000,75 @@ begin
     Result := SymPtrElemStrCap[DerefPtrArraySym(base)];
 end;
 
+{ THE LOW BOUND OF THE FIXED ARRAY A NODE REFERENCES -- asked once, answered the
+  same way for every spelling. FrozenStrElemCapOf, directly above, is the same
+  repair for the frozen-string CAPACITY and is the precedent this follows.
+
+  IT USED TO BE TWO MECHANISMS, and which one you got depended on how the
+  container was SPELLED. Measured with PXXDBG=a.ast over one `array[1..4]`:
+
+    x := a1[1]    ->  AN_INDEX(AN_IDENT, 1)      IR subtracts, from ConstVal
+    x := p1^[1]   ->  AN_INDEX(AN_DEREF, 1 - 1)  the PARSER already subtracted
+
+  Both were right, and neither was a defect alone. The defect was that "has the
+  low bound been applied yet?" was not a property of the NODE -- so any third
+  producer of an AN_INDEX had to know which convention its container follows,
+  and nothing in the AST said. BuildForInArrayLoop synthesises its own AN_INDEX
+  and inherited neither: `for x in p^` over array[1..4] holding 11 22 33 44
+  iterated as 22 33 44 4310536, and over array[5..7] as 0 0 4. Shifted garbage,
+  no diagnostic. That was patched by teaching the builder the spelling-keyed
+  rule -- a THIRD site knowing the convention, which is the wrong shape of fix
+  and was commented as such at the site.
+
+  Now there is ONE convention: an AN_INDEX subscript is always RAW, and the
+  bound is subtracted here. The parser's FoldDerefArrayLowBound and the for-in
+  builder's deref arm are both DELETED rather than left inert -- a compensation
+  left in place would keep those rows green for the OLD reason and the positive
+  control would prove nothing.
+
+  The AN_FIELD arm carries no `isArr` guard, and that is not an omission:
+  RecFieldArrLo returns 0 unless the field is a static 1-D array (it tests
+  UFldIsArray, UFldDynDepth and UFldArrNDims itself), so the guard the ladder
+  used to carry could not change an answer. Checked, not assumed.
+  bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other }
+function ArrayLoOf(base: Integer): Integer;
+var alCount, alLo, alFlat: Integer;
+begin
+  Result := 0;
+  if base < 0 then Exit;
+  if ASTKind[base] = AN_IDENT then
+  begin
+    if (ASTIVal[base] >= 0) and (Syms[ASTIVal[base]].RecName <> REC_TPARAM) then
+      Result := Syms[ASTIVal[base]].ConstVal;
+  end
+  else if ASTKind[base] = AN_FIELD then
+    Result := RecFieldArrLo(ResolveNodeRec(ASTLeft[base]), GetASTIdentName(base))
+  else if DerefPtrArrayInfo(base, alCount, alLo, alFlat) then
+  begin
+    { RANK 1 ONLY, and this is the arm's whole subtlety. BuildFlatNDIndex
+      subtracts EVERY dimension's low bound, dim 0 included, when it flattens an
+      N-D subscript -- so for a rank >= 2 pointee the bound is already paid and
+      answering here subtracts it twice. Measured, because I shipped it for the
+      length of one build: `p^[1,1]` over `array[1..3,1..3]` read 0 instead of
+      11, `p3^[2,1,5]` over a 3-D pointee read 4310984, and a store through
+      `p^[2,2]` landed on a different element. fpc gets all of them right.
+
+      The AN_IDENT arm above needs no such guard because it cannot have the
+      problem: an N-D array SYMBOL carries ConstVal 0 and keeps its bounds in
+      the N-D dim table, so the direct spelling was always asking a slot that
+      says nothing. DerefPtrArrayInfo instead hands back NDInfoLo[0] whatever
+      the rank is -- the two carriers disagree about what "the low bound" means
+      for an N-D array, which is the same two-mechanisms disease one level down
+      and is why deleting the parser's fold exposed it.
+
+      NDInfoNDims is read IMMEDIATELY after the call that fills it (via
+      DerefPtrArrayShape) with nothing in between, which is the one safe way to
+      use that global -- see NDRePrime in pasparser_call.inc for what happens
+      when anything can run between the write and the read. }
+    if NDInfoNDims < 2 then Result := alLo;
+  end;
+end;
+
 { The ARGUMENT's TRUE frozen kind, for the call-boundary width test below.
 
   ASTTk is not usable for that question on its own: a genuinely narrow variable
@@ -2957,23 +3026,17 @@ begin
       else
         elemSize := TypeSlotSize(tk);
 
-      if ASTKind[baseNode] = AN_IDENT then
-      begin
-        if Syms[ASTIVal[baseNode]].RecName <> REC_TPARAM then
-          lo := Syms[ASTIVal[baseNode]].ConstVal;
-      end
-      else if isArr and (ASTKind[baseNode] = AN_FIELD) then
-        { A record/class FIELD array has a low bound too, and it was never
-          subtracted: `r.c[i]` on `c: array[1..3]` addressed one element PAST
-          the field (clobbering the next one), `array[5..7]` five past (off the
-          record entirely — SIGSEGV), `array[-2..2]` two BEFORE it, and on a
-          class that is the object header, so Free crashed. Reads shifted with
-          the writes, so the field stayed self-consistent and only its
-          NEIGHBOURS were wrong — which is how it survived a corpus full of
-          `array[1..N]` fields.
-          bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
-        lo := RecFieldArrLo(ResolveNodeRec(ASTLeft[baseNode]),
-                            GetASTIdentName(baseNode));
+      { ONE question, one answer, every spelling -- including the AN_DEREF arm
+        this ladder never had, and which the PARSER used to pay for instead.
+        The AN_IDENT and AN_FIELD arms that stood here are inside ArrayLoOf
+        unchanged; the field arm's history is worth keeping and lives there:
+        `r.c[i]` on `c: array[1..3]` used to address one element PAST the field,
+        array[5..7] five past (off the record entirely -- SIGSEGV), array[-2..2]
+        two BEFORE it, and on a class that is the object header, so Free
+        crashed. Reads shifted with the writes, so the field stayed
+        self-consistent and only its NEIGHBOURS were wrong.
+        bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+      lo := ArrayLoOf(baseNode);
     end;
 
     { A depth-1 DYNAMIC array / open-array param whose element is a fixed-array

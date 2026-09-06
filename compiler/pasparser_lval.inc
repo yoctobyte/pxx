@@ -489,59 +489,21 @@ begin
   end;
 end;
 
-{ Fold a pointee's LOW BOUND into a `p^[i]` subscript, in place.
+{ FoldDerefArrayLowBound IS GONE. It folded a pointee's low bound into a
+  `p^[i]` subscript, in place, because ir.inc's `lo` ladder had an AN_IDENT arm
+  and an AN_FIELD arm and no AN_DEREF arm -- so for that ONE spelling the parser
+  paid instead, and every site minting an AN_INDEX over a deref owed the
+  subtraction. It said there were THREE such sites for a day, then four; the
+  real count was three, and the comment warned to re-derive rather than read it.
 
-  `AN_INDEX` over a deref carries an ALREADY-NORMALISED subscript by
-  convention: for this shape the PARSER subtracts the bound, because ir.inc's
-  `lo` ladder has an AN_IDENT arm and an AN_FIELD arm and no AN_DEREF arm.
-  (That split is itself a design flaw and is Track A's --
-  bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other.)
-
-  So EVERY site that mints an AN_INDEX over a deref owes this subtraction, and
-  there are FOUR of them: ParseLValueAST's chain loop, ParseClassRecordSelectors
-  (the store path), the pointer-alias cast's private loop in pasparser_expr.inc,
-  and ApplyCallResultPtrSuffix (`GetP^[i]`). Only the first had it.
-
-  IT SAID THREE FOR A DAY, and the count is what stopped the recount -- I had
-  enumerated DerefPtrArrayInfo's callers rather than asking who ALLOCATES an
-  AN_INDEX whose left is a deref, which is the actual predicate. The fourth
-  turned up in the escape census for refactor-p-three-hand-rolled-postfix-loops:
-  tabulating which shared routines each of the five Pascal postfix loops reaches
-  shows one loop reaching six and the rest reaching one or two, and this fold was
-  in exactly one. If you add a fifth minting site, this comment is wrong again --
-  re-derive it, do not read it. `PLo(@lo)^[3]` over `array[2..4]`
-  read element 3 of a 3-element array and answered 0 against fpc's 99, and
-  `PLo(@lo)^[2] := 55` STORED INTO lo[4] -- a silent write to the neighbour,
-  the same shape as bug-p-record-field-array-with-a-non-zero-low-bound-writes-
-  out-of-bounds. Both only for an INLINE cast; through a pointer VARIABLE the
-  chain loop handled it and both were always right.
-
-  One function asked at all three rather than three copies of the arithmetic,
-  because a fact with three copies goes stale serially and this one already had
-  (refactor-p-three-hand-rolled-postfix-loops).
-
-  NOT applied to the N-D shapes, and that exclusion is load-bearing rather than
-  cautious: BuildFlatNDIndex already subtracts every dimension's low bound, dim
-  0 included, so folding again indexes (i - 2*lo0) -- correct only for the lo=0
-  case that hides it. Callers pass isND/ndFlat so the one rule lives here too. }
-procedure FoldDerefArrayLowBound(indexNode: Integer; isND: Boolean; ndFlat: Integer);
-var fdCount, fdLo, fdFlat, fdLoNode, fdSubNode: Integer;
-begin
-  if indexNode < 0 then Exit;
-  if isND or (ndFlat >= 0) then Exit;
-  if ASTRight[indexNode] < 0 then Exit;
-  if not DerefPtrArrayInfo(ASTLeft[indexNode], fdCount, fdLo, fdFlat) then Exit;
-  if fdLo = 0 then Exit;
-  fdLoNode := AllocNode(AN_INT_LIT);
-  ASTIVal[fdLoNode] := fdLo;
-  ASTTk[fdLoNode] := Ord(tyInteger);
-  fdSubNode := AllocNode(AN_BINOP);
-  ASTIVal[fdSubNode] := Ord(tkMinus);
-  ASTLeft[fdSubNode] := ASTRight[indexNode];
-  ASTRight[fdSubNode] := fdLoNode;
-  ASTTk[fdSubNode] := Ord(tyInteger);
-  ASTRight[indexNode] := fdSubNode;
-end;
+  A rule whose cost is "every future minting site must know it" is the rule that
+  should not exist. ir.inc's ArrayLoOf now answers the low bound for every
+  spelling, node-keyed, so an AN_INDEX subscript is RAW everywhere and there is
+  nothing to owe. The exclusion this carried -- never fold for the N-D shapes,
+  because BuildFlatNDIndex already subtracts every dimension's bound including
+  dim 0, so folding again indexes (i - 2*lo0) -- disappears with it rather than
+  becoming a rule someone has to remember.
+  bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other }
 
 function ParseIntrinsicDestLValue(var symOut: Integer): Integer;
 { THE DESTINATION ARGUMENT OF AN INTRINSIC THAT WRITES THROUGH IT -- Str, Val,
@@ -2526,7 +2488,6 @@ begin
         extra condition and stays here: it means an earlier arm already built a
         normalised subscript. }
       if not alreadyResolved then
-        FoldDerefArrayLowBound(indexNode, isND, -1);
       ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;
 
@@ -6034,7 +5995,6 @@ begin
       end;
       { The STORE face of the low bound. This walker minted an AN_INDEX over a
         deref and never subtracted, so `PLo(@lo)^[2] := 55` wrote into lo[4]. }
-      FoldDerefArrayLowBound(sub, ndIsND, ndFlat);
       { `TP(raw)^[i] := ...` -- indexing a DEREF whose pointee is an ARRAY. The
         alias row deliberately records the ARRAY'S ELEMENT as the pointee kind
         (pasparser_decl.inc's `PArr = ^TArr` arm, so that `p^[i]` yields it), so
@@ -9342,7 +9302,6 @@ begin
         dimension's low bound, so folding again indexes (i - 2*lo0),
         which is correct only for the lo=0 case that hides it.
         bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
-      FoldDerefArrayLowBound(indexNode, ndIsND, ndFlat);
       if DerefPtrArrayElem(ASTLeft[indexNode], dpeTk, dpeRec, dpeCap) then
       begin
         { `TP(raw)^[i]` where TP points at an ARRAY type. The alias row

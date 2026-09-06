@@ -904,11 +904,18 @@ begin
   end;
 end;
 
-{ NDInfo* AND NDIdxNode[] ARE GLOBAL, AND EVERY N-D SUBSCRIPT LOOP HOLDS THEM
-  ACROSS A ParseExpr THAT CAN RE-ENTER NodeArrNDInfo. A nested N-D subscript in
-  any index position -- `z3[1, 2, z2[1,1]]` -- refills NDInfoNDims/Lo/Span for
-  the INNER array and overwrites NDIdxNode[0..] with the inner array's index
-  nodes. Two faces, and only one of them is loud:
+{ FIXED -- bug-p-a-nested-n-d-subscript-clobbers-the-outer-subscripts-global-parse-state.
+  THIS BLOCK IS RATIONALE FOR THE FUNCTION BELOW, NOT A LIVE DEFECT REPORT, and
+  it says so first because it did not: a peer read the present tense, took the
+  repro shapes for current behaviour, and sent them back to me as a fresh
+  finding. Four paragraphs of "is" with the slug on the last line is a comment
+  that reads as an open bug to everyone who does not reach the end.
+
+  WHAT IT WAS. NDInfo* and NDIdxNode[] are global, and every N-D subscript loop
+  HELD them across a ParseExpr that can re-enter NodeArrNDInfo. A nested N-D
+  subscript in any index position -- `z3[1, 2, z2[1,1]]` -- refilled
+  NDInfoNDims/Lo/Span for the INNER array and overwrote NDIdxNode[0..] with the
+  inner array's index nodes. Two faces, and only one of them was loud:
 
     a[0, b[0], 0]        rank 3, b rank 1 -> `too many subscripts for array`,
                          because the count check compares this array's index

@@ -504,7 +504,6 @@ AN_AS_CAST Left left
 AN_AWAIT Left -1          { bare `await
 AN_AWAIT Left CurASTNode
 AN_AWAIT Left ParseStatementAST()
-AN_BINOP Left ASTRight[indexNode]
 AN_BINOP Left CloneAST(SetLenDimNode[0])
 AN_BINOP Left CloneAST(SetLenDimNode[k])
 AN_BINOP Left CurASTNode
@@ -589,7 +588,6 @@ AN_BINOP Right cmp
 AN_BINOP Right cntNode
 AN_BINOP Right diff
 AN_BINOP Right e
-AN_BINOP Right fdLoNode
 AN_BINOP Right flGuardCall
 AN_BINOP Right flNotNode
 AN_BINOP Right flUnboxCall

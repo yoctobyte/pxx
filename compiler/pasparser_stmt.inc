@@ -1314,9 +1314,21 @@ begin
                  GenMakeBinop(tkMinus, GenMakeIdent(idxSym, tyInteger),
                               GenMakeIntLit(staticLo), tyInteger),
                  GenMakeIntLit(idxScale), tyInteger)
-  else if (staticLo <> 0) and (ckind = 2) and (DerefPtrArraySym(ctemplate) >= 0) then
-    idxNode := GenMakeBinop(tkMinus, GenMakeIdent(idxSym, tyInteger),
-                            GenMakeIntLit(staticLo), tyInteger)
+  { THE DEREF COMPENSATION IS GONE, and its absence is the positive control for
+    bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-
+    other. It used to read:
+
+      else if (staticLo <> 0) and (ckind = 2) and (DerefPtrArraySym(ctemplate) >= 0)
+        idxNode := __i - staticLo
+
+    a THIRD site knowing the spelling-keyed convention, added because a deref
+    container inherited neither mechanism. ArrayLoOf (ir.inc) now answers the
+    low bound for every spelling, so an AN_INDEX subscript is RAW everywhere and
+    this builder owes nothing. Leaving the subtraction in would double it.
+    The lo1deref / lo5deref / negderef rows of test_forin_deref_ptr_array.pas
+    are green BECAUSE this is deleted -- they compare a deref spelling against
+    the DIRECT spelling of the same array, so a change shifting both cannot
+    pass. }
   else
     idxNode := GenMakeIdent(idxSym, tyInteger);
   ASTRight[elemAccess] := idxNode;
