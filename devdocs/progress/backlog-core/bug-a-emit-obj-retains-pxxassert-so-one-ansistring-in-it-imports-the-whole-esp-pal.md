@@ -177,3 +177,50 @@ plexus, kernel 7.0.0-30-generic, xtensa-esp-elf 15.2.0 (esp-15.2.0_20251204),
 against `compiler/pascal26 = 0a20bae79296` at `cd2d0f3ca`. Every link above is a
 real `xtensa-esp32s3-elf-gcc` invocation, not qemu. ESP-IDF **is** installed on
 this box and is irrelevant: the recipe's link line never references it.
+
+## 2026-09-06 (frankA) — THIS TICKET'S ROW IS GREEN NOW AND THE DEFECT IS NOT FIXED
+
+**Read this before reading `test-emit-obj` as evidence about this bug.**
+
+`test-emit-obj` passes. Nothing here was fixed. I changed the harness, and in
+doing so I removed the only thing that was reporting this defect.
+
+What happened: the i386 relocation assertion had been aborting `test-emit-obj`
+700 recipe lines before the xtensa link, so I never saw this ticket's failure
+until I fixed that. I then diagnosed the xtensa link from scratch and filed
+[[bug-a-the-emit-obj-xtensa-link-shim-does-not-provide-the-pal-backends-esp-idf-symbols]]
+— **a duplicate of this ticket, reaching a shallower cause.** Your bisect to
+`f0a1a8be9` and the `--emit-obj` retention half are the real diagnosis; mine
+stopped at "the shim does not provide what the object imports". Same 35 UND,
+same 25 undefined references, same riscv32-is-clean-because-the-POSIX-backend-
+defines-them. I should have found this ticket first.
+
+**What genuinely was wrong with the harness, and is fixed:** the shim named its
+stubs BY HAND, so a linkability check doubled as an unplanned alarm for whatever
+the RTL imports; and the two xtensa links were separated by `;`, so the first
+one's failure was swallowed and only the windowed line ever reached a log —
+which is why this looked windowed-ABI-specific. `tools/emit_obj_stub_shim.sh`
+now generates the shim from each object's own UND list.
+
+**The consequence for you is the part that matters.** With the stub list
+generated, the link answers whatever the object asks for, so it will keep
+passing however far the over-import grows. The recipe therefore **prints** the
+count and names this ticket:
+
+    test-emit-obj: NOTE -- the xtensa object still imports N ESP-IDF symbols
+                   for a routine it never calls.
+
+It prints rather than asserts, and that is a decision I did not think was mine
+to take alone: asserting would keep the row red under a full-green pin target,
+and not asserting removes an alarm. Raised with frankuser (who holds the
+full-green ledger) and with you. **If you want it to gate, say so and it is one
+line** — the count is already computed.
+
+Measurement that still shows the defect, unchanged:
+
+    ./compiler/pascal26 -Fulib/rtl --target=xtensa test/test_emit_obj.pas /tmp/xt.o
+    readelf -sW /tmp/xt.o | awk '$7 == "UND" && ($8 ~ /^lwip_/ || $8 == "vTaskDelay" || $8 == "esp_timer_get_time")' | wc -l
+
+**Whatever fixes this should land its own assertion rather than relying on the
+link**, since the link no longer has an opinion. A symbol-count row belongs with
+the fix; adding one now would just re-red a row for a reason it does not own.

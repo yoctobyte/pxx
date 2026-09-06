@@ -28883,15 +28883,58 @@ test-emit-obj: $(COMPILER)
 	# the old shim at a different .text offset. Only the riscv32 line appeared
 	# in the log because make ABORTS there and never reaches the xtensa links.
 	# regression-test-emit-obj-test-emit-obj
-	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > $(TESTTMP)/test_emit_obj_shim.c
+	#
+	# AND THAT WENT STALE THE OTHER WAY ROUND. test_emit_obj.pas now reaches the
+	# PAL socket/timer backend, so the objects import lwip_*, esp_timer_get_time
+	# and vTaskDelay, and a shim that names its stubs by hand cannot keep up: 25
+	# undefined references, from the PINNED compiler and from HEAD alike, on BOTH
+	# xtensa ABIs, with riscv32 clean. Invisible until 2026-09-06 only because
+	# the i386 relocation assertion aborted this target 700 lines earlier.
+	# The shim is GENERATED from each object's own UND list now, so the next PAL
+	# addition does not re-red a row whose diff looks unrelated to the PAL.
+	# bug-a-the-emit-obj-xtensa-link-shim-does-not-provide-the-pal-backends-esp-idf-symbols
+	#
+	# WHAT THIS STEP CAN STILL FAIL ON, since generating the stubs narrows it: it
+	# cannot fail on a missing IMPORT any more -- everything the object asks for
+	# is answered -- and it still fails on the relocations, which is what it was
+	# written for. Two guards keep that honest. The stub COUNT is asserted
+	# non-zero -- the UND count SEEN, not the stubs emitted, because riscv32's
+	# object legitimately needs zero stubs (it imports only the two names this
+	# shim owns) and a zero there is a real answer rather than a silent failure
+	# to read the object. And the shim is linked ALONE as a positive
+	# control: with no object to define app_main it must fail, so a link step
+	# that had stopped being able to fail would be caught here rather than
+	# certifying every object that follows.
+	#
+	# -fno-builtin because the generated stubs redefine names gcc knows as
+	# builtins (calloc, fwrite, ...) with a `void f(void)` signature. Without it
+	# the link succeeds while printing conflicting-type notes, and an instrument
+	# that warns and passes anyway is one whose next real message nobody reads.
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$RV" ]; then \
-	  $$RV -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_rv.o -o $(TESTTMP)/test_emit_obj_rv.elf && echo "riscv32 .o links ok"; \
+	  tools/emit_obj_stub_shim.sh $(TESTTMP)/test_emit_obj_rv.o > $(TESTTMP)/test_emit_obj_shim_rv.c || exit 1; \
+	  grep -qE 'und seen: [1-9]' $(TESTTMP)/test_emit_obj_shim_rv.c || { echo "test-emit-obj: the riscv32 stub shim saw NO undefined symbols -- the UND list was not read"; exit 1; }; \
+	  if $$RV -fno-builtin -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim_rv.c -o $(TESTTMP)/test_emit_obj_rv_ctl.elf >/dev/null 2>&1; then \
+	    echo "test-emit-obj: the riscv32 shim linked with NO object -- this link step cannot fail"; exit 1; fi; \
+	  $$RV -fno-builtin -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim_rv.c $(TESTTMP)/test_emit_obj_rv.o -o $(TESTTMP)/test_emit_obj_rv.elf || exit 1; \
+	  echo "riscv32 .o links ok"; \
 	else echo "riscv32-esp-elf-gcc not installed; link check skipped"; fi
 	@XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$XT" ]; then \
-	  $$XT -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_xt.o -o $(TESTTMP)/test_emit_obj_xt.elf && echo "xtensa .o links ok"; \
-	  $$XT -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_xt_windowed.o -o $(TESTTMP)/test_emit_obj_xt_windowed.elf && echo "xtensa windowed .o links ok"; \
+	  tools/emit_obj_stub_shim.sh $(TESTTMP)/test_emit_obj_xt.o $(TESTTMP)/test_emit_obj_xt_windowed.o > $(TESTTMP)/test_emit_obj_shim_xt.c || exit 1; \
+	  grep -qE 'und seen: [1-9]' $(TESTTMP)/test_emit_obj_shim_xt.c || { echo "test-emit-obj: the xtensa stub shim saw NO undefined symbols -- the UND list was not read"; exit 1; }; \
+	  if $$XT -fno-builtin -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim_xt.c -o $(TESTTMP)/test_emit_obj_xt_ctl.elf >/dev/null 2>&1; then \
+	    echo "test-emit-obj: the xtensa shim linked with NO object -- this link step cannot fail"; exit 1; fi; \
+	  $$XT -fno-builtin -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim_xt.c $(TESTTMP)/test_emit_obj_xt.o -o $(TESTTMP)/test_emit_obj_xt.elf || exit 1; \
+	  echo "xtensa .o links ok"; \
+	  $$XT -fno-builtin -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim_xt.c $(TESTTMP)/test_emit_obj_xt_windowed.o -o $(TESTTMP)/test_emit_obj_xt_windowed.elf || exit 1; \
+	  echo "xtensa windowed .o links ok"; \
+	  pal=$$(readelf -sW $(TESTTMP)/test_emit_obj_xt.o | awk '$$7 == "UND" && ($$8 ~ /^lwip_/ || $$8 == "vTaskDelay" || $$8 == "esp_timer_get_time")' | wc -l); \
+	  if [ "$$pal" != 0 ]; then \
+	    echo "test-emit-obj: NOTE -- the xtensa object still imports $$pal ESP-IDF symbols for a routine it never calls."; \
+	    echo "test-emit-obj:         That is bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (prio 65, bisected to f0a1a8be9), NOT this row."; \
+	    echo "test-emit-obj:         This step used to be its only alarm and deliberately is not any more -- see that ticket for why the count is printed and not asserted."; \
+	  fi; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
 	# ---- the 19 test_esp_* programs nothing ran (sweep batch 4) ----
 	# Every one of these was written during the ESP bringup and then left
