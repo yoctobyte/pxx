@@ -33,6 +33,7 @@ var
   vsi: SizeInt; vsu: SizeUInt; vcmp: Comp;
   vac: AnsiChar; vwc: WideChar; vu4: UCS4Char;
   vcp: CodePointer; vdt: TDateTime; vcy: Currency; vvr: ValReal; vov: OleVariant;
+  d: Double; vr: Real; vsg: Single; vdb: Double; vex: Extended;
 
 procedure ChkI(const what: AnsiString; got, want: Int64);
 begin
@@ -93,6 +94,26 @@ begin
 
   { OleVariant declares and casts; a Variant is 16 bytes here }
   ChkI('OleVariant', SizeOf(vov), SizeOf(Variant(x)));
+
+  { ---- the FLOAT KEYWORDS, which this test never had a row for ---- }
+  { The absence is why `Real(d)` was refused outright with `expected
+    expression` while `var vr: Real` had declared fine for as long as the type
+    has existed: the cast arm's case label read
+    `tkSingle_T, tkDouble_T, tkExtended_T` and `Real` was the fourth float
+    keyword nobody listed. Every other name in this test is an IDENTIFIER, so
+    the keyword-spelled ones were outside the population it swept -- the door
+    that refuses is not the door this test was written to watch.
+
+    Sized as decl = cast, never against a literal, and for a sharper reason
+    than the rows above: `Real` is the target's NATIVE float depth, so it is
+    4 bytes where there is no hardware double (ESP, riscv32) and 8 here. A
+    literal would pass on x86-64 and be wrong on the targets the type exists
+    for. }
+  d := 1.5;
+  ChkI('Real', SizeOf(Real(d)), SizeOf(vr));
+  ChkI('Single', SizeOf(Single(d)), SizeOf(vsg));
+  ChkI('Double', SizeOf(Double(d)), SizeOf(vdb));
+  ChkI('Extended', SizeOf(Extended(d)), SizeOf(vex));
 
   { ---- and the widths themselves, which are fixed by the language ---- }
   ChkI('ByteBool is 1', SizeOf(vbb), 1);

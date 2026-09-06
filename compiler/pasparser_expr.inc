@@ -1895,7 +1895,7 @@ begin
         CurASTNode := node;
       end;
     end;
-    tkSingle_T, tkDouble_T, tkExtended_T:
+    tkSingle_T, tkDouble_T, tkExtended_T, tkReal_T:
     begin
       { Value typecast to a float type, `Single(expr)` / `Double(expr)`. Unlike
         the integer/char puns this is a real conversion (int->float, or
@@ -1913,7 +1913,21 @@ begin
         kind before ParseExpr fixes both: a variant temp becomes a real Double
         temp, and the store path then emits the variant unbox by itself.
         bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting }
-      if CurTok.Kind = tkSingle_T then castTk := tySingle else castTk := tyDouble;
+      { `Real` was the one float keyword with no arm here, so `r := Real(d)` --
+        a plain Double-to-Real cast that fpc 3.2.2 compiles -- was refused with
+        `expected expression` while `var r: Real` declared fine. A name that
+        answers at the DECLARATION door and is refused at the CAST door is the
+        family bug-p-thirteen-builtin-type-names-answer-at-some-doors-and-are-
+        refused-at-others is about, and this was the fourteenth.
+
+        It takes RealTypeKind rather than tyDouble: `Real` is the target's
+        native float depth, and ESP and riscv32 have no hardware double, so
+        spelling tyDouble here would silently widen the cast on exactly the
+        targets the type exists to keep narrow. That is the same rule
+        BuiltinScalarTypeKind's `real` row already states. }
+      if CurTok.Kind = tkSingle_T then castTk := tySingle
+      else if CurTok.Kind = tkReal_T then castTk := RealTypeKind
+      else castTk := tyDouble;
       LastExprTk := castTk;
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       LastExprTk := castTk;
