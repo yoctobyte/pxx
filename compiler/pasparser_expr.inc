@@ -3775,54 +3775,49 @@ begin
         Exit;
       end;
 
-      { A value cast to an ordinal type NAMED BY AN IDENTIFIER -- `WideChar(x)` (fpjson's
-        \u escape decoder). The builtin casts above key on the type KEYWORD token
-        (tkInteger_T etc.), so a type whose name merely lexes as an identifier -- WideChar,
-        QWord, NativeInt -- had no cast at all and came out as "undefined variable".
+      { THE IDENT-SPELLED ORDINAL CAST DOOR USED TO BE HERE, and it was the
+        SECOND of the two name-keyed scalar cast doors in this function. It
+        recognised via OrdinalNameToTk and built AN_PTR_CAST; the door below
+        (`castTk := BuiltinScalarTypeKind(name)`) recognises a strict SUPERSET
+        of the same names and builds the same node with strictly more work
+        around it -- the operator-Explicit conversion, the Pointer/AN_ADDR
+        spelling, the enum identity. Measured, not assumed: OrdinalNameToTk is
+        31 names, BuiltinScalarTypeKind 51, the first a strict subset with no
+        shared name disagreeing.
+        refactor-p-five-dispatch-sites-for-one-named-type-cast
 
-        AN_PTR_CAST with ASTIVal = -1 is the real-width-truncating value cast (the same node
-        `Byte(x)` builds), not the Integer/LongWord value-pun. A variable, routine or user
-        type alias of the same name still wins. }
-      if ((qUnit = -2) or ((FindSym(name) < 0) and (FindProc(name) < 0) and
-                           (FindTypeAlias(name) < 0))) and
-         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-         (OrdinalNameToTk(name) <> tyUnknown) then
-      begin
-        tk := OrdinalNameToTk(name);
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-        { a promotable operand demotes to a real machine integer BEFORE the
-          width-truncating cast — otherwise the cast truncates the SLOT ADDRESS.
-          This is the site every IDENT-spelled ordinal name reaches (Int64,
-          LongInt, Cardinal, NativeInt, Word, Byte...); only `Integer`/`Byte`/
-          `LongWord` have their own keyword TOKEN and their own branch, which is
-          why fixing that one made Integer(n) right while Int64(n) stayed
-          wrong. See PromoDemoteToInt64. }
-        CurASTNode := PromoDemoteToInt64(CurASTNode);
-        { …and the same two-sites trap applies to the VARIANT conversion: this
-          is where `Int64(v)` / `QWord(v)` / `NativeInt(v)` land, so fixing only
-          the keyword-token arms left exactly `Int64(v)` still answering the tag
-          word. Convert here and WRAP the converted temp in the cast below
-          rather than exiting — the wrap is then a no-op retag (or the 16-bit
-          truncation WideChar wants) and the -3 WideChar marker survives.
-          See VariantCastToTemp. }
-        vcNode := VariantCastToTemp(CurASTNode, tk);
-        if vcNode >= 0 then CurASTNode := vcNode;
-        node := AllocNode(AN_PTR_CAST);
-        ASTLeft[node] := CurASTNode;
-        { -3 = a WIDECHAR value cast: same width-truncating value cast as -1
-          (every consumer treats them alike), but string contexts recognise it
-          and convert the UTF-16 code unit to UTF-8 (__pxxWideCharToUTF8 /
-          the surrogate-aware pair helper) instead of mistreating the ordinal
-          as a managed-string pointer. }
-        if CaseEqual(name, 'widechar') then
-          ASTIVal[node] := -3
-        else
-          ASTIVal[node] := -1;
-        ASTTk[node] := Ord(tk);
-        CurASTNode := node;
-        LastExprTk := tk;
-        Exit;
-      end;
+        Deleted after a TWO-ARMED poison control, because "the rows did not
+        move" alone cannot tell a correct fall-through from a third path
+        answering by luck. Poisoning the door below (castTk := tyUInt8 for one
+        name) is INERT while this door exists -- it catches the name first --
+        and with this door gone it changes that name's rows. The same poison on
+        `int64` SEGFAULTS the self-host, from the compiler's own source rather
+        than from a probe. Both directions, so the arm that answers is named
+        rather than inferred.
+
+        Equivalence measured over 31 names x 4 constant values + a runtime
+        operand + the string-context rows (163 rows, byte-identical), 93 rows
+        with a VARIANT operand (the one place the two doors differed in
+        structure: this one wrapped the converted temp, the other exits), the
+        nine widechar tests, and the three committed differentials.
+
+        THE -3 WIDECHAR MARKER WENT WITH IT, and that is the hazard this
+        ticket named. It was already redundant: NodeIsWideCharVal answers on
+        `ASTTk = tyWideChar` as well, and every node this door stamped -3 on
+        also carried that kind, so the marker could never be the deciding arm.
+        Two spellings proved it -- `UnicodeChar(x)` reached this door and was
+        NEVER stamped -3 (the guard read the NAME, not the kind) yet behaved
+        identically to `WideChar(x)` in every string context. NilPy's frontend
+        keeps its own verbatim copy of this door and its own -3
+        (pyparser.inc), per the duplicate-the-parser-per-language rule, so the
+        -3 arm of NodeIsWideCharVal is still live -- for N, not for P.
+
+        The System-qualifier exemption `(qUnit = -2)` went with it too. The
+        door below does not spell one, and it did not need one: with a
+        shadowing `var Int64: LongInt`, `System.Int64(65769)` still answers
+        65769 exactly as fpc 3.2.2 does, and the unqualified `Int64(65769)` is
+        still a syntax error on both -- so the shadow is real and the probe
+        is aimed at it. }
 
       { TypeInfo(T) -- FPC's System intrinsic. Enum types (the original support) yield
         the address of the enum RTTI blob {name, count, names[]} directly, unchanged --
