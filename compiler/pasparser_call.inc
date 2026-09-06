@@ -794,6 +794,51 @@ begin
 end;
 
 
+{ The BOUNDS of the dimension a PARTIAL N-D subscript has not consumed --
+  `Low(m[5])`, `High(m[5])` and `Length(m[5])` over
+  `array[5..9, 2..3, 7..10] of LongInt`, where fpc 3.2.2 answers 2, 3 and 2 and
+  pxx answered 5, -1 and 0 at every depth.
+
+  A SIBLING OF NDRowSourceInfo ABOVE, NOT A WIDENING OF IT, and the difference
+  is the whole reason this exists. That one answers "how many elements does the
+  sub-array HOLD" -- the flat product over dims k..n-1 -- which is exactly what
+  a const-array parameter needs and exactly what `Length` must not be told:
+  `Length(m[5])` on the 3-D array above is 2, the span of dim 1 alone, not 8.
+  One column, two questions, and a reader that answered the wrong one would be
+  right on every 2-D array and wrong on every deeper one.
+
+  Nothing new is recorded to make this work. `ASTNDRowSubs[node]` already holds
+  k (BuildPartialNDIndex stamps it with the arithmetic, one routine for both,
+  because they are one fact stated twice) and NodeArrNDInfo already holds the
+  dimension rows. They had simply never been asked TOGETHER -- the bounds
+  intrinsics guard their whole-array arms on
+  `(ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx)`, so a subscripted
+  operand fell past every arm to the runtime Length tail, which reads a
+  [data-8] header a static array has none of.
+
+  `k >= NDInfoNDims` is a REFUSAL and not a bug: every dimension consumed means
+  the operand is an ELEMENT, and Low/High/Length of an element is a question
+  about the element's own type, which the arms further down already answer.
+  bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds }
+function NDRowDimBounds(node: Integer; var rowLo, rowSpan: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  rowLo := 0;
+  rowSpan := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_INDEX then Exit;
+  k := ASTNDRowSubs[node];
+  if k <= 0 then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if not NodeArrNDInfo(ASTLeft[node]) then Exit;
+  if k >= NDInfoNDims then Exit;
+  rowLo := NDInfoLo[k];
+  rowSpan := NDInfoSpan[k];
+  Result := rowSpan > 0;
+end;
+
+
 { ---- The ONE read-or-write decision for a property access ------------------
   A property access chooses its READ or its WRITE accessor by looking for `:=`,
   and for an INDEXED property that `:=` sits after the whole subscript group,

@@ -4,8 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "`var m: array[5..9] of array[2..3] of LongInt` — `Low(m[5])` answers 5 and `High(m[5])` answers -1 where fpc 3.2.2 says 2 and 3. Low's two whole-array arms ask about the SYMBOL rather than the operand, so they fire on `Low(m[i])` exactly as on `Low(m)`; High's equivalents each carry an `(ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx)` guard and Low's do not. ADDING THE MISSING GUARD MAKES IT WRONG DIFFERENTLY, NOT RIGHT: pxx FLATTENS nested static dimensions, so `m[5]` is not a row value in this compiler's model at all and the guarded Low would fall to the `else 0` tail. That sentence is the whole content of this row and a microfix destroys it."
-status: backlog
-owner: unassigned
+status: working
+owner: frankB
 ---
 
 # Low/High of a nested static array's row answer the outer array's bounds

@@ -6228,6 +6228,29 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_dynamic_array_of_fixed_rows_has_row_bounds \
 	  "$$($(TESTTMP)/test_dynarr_rowbounds26)" \
 	  "$$(cat test/test_a_dynamic_array_of_fixed_rows_has_row_bounds.expected)"
+	@# ...and the STATIC sibling of the row above, which it does not cover. pxx
+	@# FLATTENS nested static dimensions, so there is no symbol, no type and no
+	@# node that represents "one row of m" -- `Low(m[5])` answered the OUTER lower
+	@# bound 5, `High(m[5])` answered -1 and `Length(m[5])` answered 0, at every
+	@# depth and for both spellings, against fpc's 2, 3 and 2.
+	@# TWO WRONG ANSWERS, ONE MISSING CONCEPT: High's whole-array arms carry an
+	@# `is the operand this identifier` guard and fell past to the Length-1 tail;
+	@# Low's do not and fired as if the subscript were not there. Copying the
+	@# guard across would have moved Low from 5 to the else-0 tail, so the
+	@# asymmetry was never the fix -- the bound comes from the BASE's dimension
+	@# row plus ASTNDRowSubs, two things already recorded and never asked
+	@# together.
+	@# ROWS 7..9 ARE A 3-D ARRAY ON PURPOSE: NDRowSourceInfo, one function above
+	@# the new reader and over the same data, returns the FLAT PRODUCT over the
+	@# unconsumed dimensions -- right for the const-array parameter that asks it,
+	@# wrong for Length. On a 2-D array the two numbers are equal, so a reader
+	@# answering the other question would be right on every array anyone had
+	@# probed. Twelve of sixteen rows fail with the arm reverted; the survivors
+	@# are the three whole-array controls and the one zero-based low bound, whose
+	@# right answer collides with the broken path's.
+	@# bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds
+	./$(COMPILER) test/test_low_high_and_length_of_a_partial_subscript_answer_the_remaining_dimension.pas $(TESTTMP)/test_partialsubbounds26
+	tools/expect_same.sh test_partialsubbounds26 "$$($(TESTTMP)/test_partialsubbounds26 | tail -n 2)" "$$(printf 'fails=0\nPARTIALSUBBOUNDS OK')"
 	# `TAB.Create(a, b, c)` -- Delphi's dynamic-array constructor, which is the
 	# element list wearing a constructor's spelling. THE ARGUMENT AND NESTED ROWS
 	# ARE THE POINT: both literal spellings can only be retagged from an

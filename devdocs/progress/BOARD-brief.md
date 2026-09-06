@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:22 blocked:6 backlog:14 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:45 backlog-pascal:28 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3462 rejected:79`
+`working:23 unfinished:22 blocked:6 backlog:15 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:45 backlog-pascal:27 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3462 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,6 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization` [P] — owner: frankS
 - `bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature` [P] — owner: frankS
+- `bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds` [P] — owner: frankB
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -94,9 +95,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard4-6-5
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 70] [T]` regression-test-threads-test-threadsafe-class-finalize-kinds
+- `[p 70] [T]` regression-test-threads-test-threadsafe-class-finalize-race-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
-- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
 _389 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

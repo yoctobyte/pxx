@@ -787,6 +787,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
     frRowLen, frRowLo: Integer;          { `d[i]` over a dyn array of fixed rows: the row's extent and low bound }
+    ndrLo, ndrSpan: Integer;             { `m[5]` over a FLATTENED multi-dim static array: the bounds of the dimension the subscripts have not consumed -- see NDRowDimBounds }
     dynCtorAi: Integer;                  { `TDynArr.Create(...)`: the ArrType row the type NAME resolved to -- the element type is read from there and not from a destination, because the node may never have one }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
@@ -5705,6 +5706,27 @@ begin
           ASTIVal[CurASTNode] := frRowLo + frRowLen - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if NDRowDimBounds(valNode, ndrLo, ndrSpan) then
+        begin
+          { ...and the STATIC sibling of the arm above: `High(m[5])` over
+            `array[5..9, 2..3] of T`, which pxx FLATTENS, so there is no symbol,
+            no type and no node in this compiler that represents "one row of m".
+            The bound therefore cannot come from the operand at all -- it comes
+            from the BASE's dimension row and the count of subscripts already
+            spelled, which is what NDRowDimBounds asks for.
+            Every whole-array arm above carries
+            `(ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx)`, so a
+            subscripted operand reached the Length-1 tail and answered -1.
+            THE LOW CHAIN'S EQUIVALENT ARMS DO NOT CARRY THAT GUARD -- they test
+            the SYMBOL and fire on `Low(m[5])` exactly as on `Low(m)`, which is
+            why Low answered 5 where High answered -1: two different wrong
+            answers from one missing concept. Adding the guard alone would have
+            moved Low from 5 to 0 without ever reaching 2, which is why this arm
+            and that guard land together and neither is a fix on its own. }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := ndrLo + ndrSpan - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
                 TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk, hlBoundEid) then
         begin
@@ -5897,6 +5919,22 @@ begin
           queue. }
         if NodeFixedRowInfo(valNode, frRowLen, frRowLo) then
           ASTIVal[CurASTNode] := frRowLo
+        else if NDRowDimBounds(valNode, ndrLo, ndrSpan) then
+          { `Low(m[5])` over a FLATTENED multi-dim static array -- the static
+            sibling of the arm above, and it is asked BEFORE the two whole-array
+            arms below on purpose. Those two test the SYMBOL the operand starts
+            at and never ask whether the operand IS that identifier, so they
+            fire on `Low(m[5])` exactly as on `Low(m)` and answered the outer
+            lower bound, 5 against fpc's 2. The High chain's equivalents each
+            carry `(ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx)`
+            and these do not; that asymmetry is real and it is NOT the cause.
+            Copying the guard across alone would have sent `Low(m[5])` to the
+            `else 0` tail -- 0 against fpc's 2 -- so the guard was never the fix
+            and this arm is what makes it safe to leave the two arms below
+            exactly as they are: nothing reaches them with a subscripted operand
+            any more. See NDRowDimBounds.
+            bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds }
+          ASTIVal[CurASTNode] := ndrLo
         else if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
            (SymArrNDims[idx] <= 1) then
         begin
@@ -6099,6 +6137,22 @@ begin
             See NodeFixedRowInfo. }
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := frRowLen;
+          ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if NDRowDimBounds(valNode, ndrLo, ndrSpan) then
+        begin
+          { `Length(m[5])` over a FLATTENED multi-dim static array, and this is
+            the arm that says why the reader beside NDRowSourceInfo is a SIBLING
+            rather than a widening of it. That one returns the flat product over
+            the dimensions still unconsumed, which is what a const-array
+            parameter needs; Length wants dim k's SPAN alone. On a 2-D array the
+            two agree, so a reader that answered the other question would be
+            right everywhere anyone had looked and wrong from three dimensions
+            on: fpc gives Length(m[5]) = 2 for
+            `array[5..9, 2..3, 7..10] of LongInt`, not 8. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := ndrSpan;
           ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
