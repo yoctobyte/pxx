@@ -117,3 +117,54 @@ one at 35, and the higher number is the one to enter through. Whoever takes
 either should take both. I am not starting that tonight; the claim is here so
 the pairing is not re-derived, and it is free for the taking — message me and
 it is yours.
+
+## 2026-09-06 (frankA) — re-derived at HEAD before touching anything, and the title's number counts one thing while the file offers two
+
+**Every line number in the table at the top of this ticket is stale.** It names
+`:1478 :1571 :4074 :6725 :6434`; at HEAD the recognisers are at
+`OrdinalNameToTk` **4313/4315**, `BuiltinScalarTypeKind` **7379**, and the
+`FindTypeAlias` scalar arm around **7052**. Not repaired in place — a line
+number does not error, it points somewhere, and repairing it here would make a
+set of numbers that have already drifted twice look freshly measured. Derive
+them; do not read them. The boundary that does not rot is the next top-level
+declaration: `ParseFactorCore` runs to the `end;` at **9018**, with
+`function ProcIsConstructor` at **9029**.
+
+**AND THE TITLE'S "FIVE" COUNTS RECOGNITION, NOT CONSTRUCTION.** At HEAD,
+`pasparser_expr.inc` has **14 `AllocNode(AN_PTR_CAST)` sites**, listed by
+walking the file rather than by grepping a spelling:
+
+| line | `ASTIVal` | recognised by |
+| --- | --- | --- |
+| 1696, 1717, 1777, 1823, 1947 | −1 | the type-KEYWORD token (byte/integer/char/string arms) |
+| 4334 | −1 / **−3** for `widechar` | `OrdinalNameToTk` @4315 |
+| 6755 | — | `IsRecordType` @6750 — record-name cast, **non-scalar, out of scope** |
+| 6915 | — | `EnsureArrayPtrAlias` @6848 — array cast, **non-scalar, out of scope** |
+| 6994, 7145 | −1 | the string-alias and string-cast-of-a-pointer-slot special cases |
+| 7052 | −1 | `FindTypeAlias` — an alias whose target is scalar |
+| 7159 | — | (pointer-alias construction, out of scope) |
+| 7333 | **−2** | the PChar/`^Char`-alias adapter, out of scope |
+| 7470 | −1 | `BuiltinScalarTypeKind` @7379 |
+
+**Neither count is wrong and the difference is the whole shape of the work.**
+Five is the number of rules that decide *a name is a scalar type to cast to*;
+fourteen is the number of places that *build a cast node*. This ticket's own
+body already said *"four of them build the identical node"*, so it always knew
+the two counts differed — it just never said which one was in the title. Written
+down here before any code, because conflating a recognition count with a
+construction count is exactly the failure this session spent the day naming on
+`perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` (92 `CaseEqual`
+sites vs 25 `else-if` arms), and I would otherwise be the next person to do it.
+
+**The `ASTIVal` column is the reason the collapse cannot be a pure merge.** The
+scalar sites do not all stamp −1: `widechar` stamps **−3** and the `^Char`-alias
+adapter stamps **−2**, and `ir.inc` reads that field with a **fourth** meaning
+(`>= 0` is an alias row index). A resolver returning `(castKind, enumId,
+aliasIdx)` has to answer for that encoding rather than assume −1, or the collapse
+silently retypes a WideChar cast.
+
+**Sequencing.** frankD holds a parked 614-line deletion inside this same
+function (11 NilPy-guarded builtin arms, 2730–3344). Told frankD I am entering
+after it lands rather than before; a collapse of the outer chain against a
+pending deletion of eleven of its arms is a conflict neither diff would show.
+
