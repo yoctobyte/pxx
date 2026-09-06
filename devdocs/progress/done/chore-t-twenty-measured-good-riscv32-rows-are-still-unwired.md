@@ -4,7 +4,7 @@ title: "20 riscv32 rows match the x86-64 oracle today and nothing enforces it �
 track: T
 prio: 55
 type: chore
-status: open
+status: done
 owner: unassigned
 created: 2026-09-06
 found-by: frank-subcoord (the rv32 skip census)
@@ -58,3 +58,6 @@ what let a hang hide for as long as it did: a reason that is true of the group
 when written goes stale per-row, and nothing re-reads it because it sounds
 settled. The two `extern_c` rows already show the right form — they name the
 refusal, and the refusal is checkable in one command.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

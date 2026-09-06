@@ -23430,7 +23430,26 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_rv32x_rectemp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_rectemp)" "$$(printf '18\n46')"
 	./$(COMPILER) --target=riscv32 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_rv32x_ctorstrlit
 	tools/expect_same.sh riscv32/test_rv32x_ctorstrlit "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
-	# SKIP test/test_arm32_virtual_wide.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	# WIRED 2026-09-06, and these were skipped for 54 days on a sentence that was
+	# never true of them. All 25 riscv32 rows carried one identical reason,
+	# "backend feature gap"; measured against the x86-64 oracle, every row, it was
+	# true of TWO (both extern_c, which take a real compile-time refusal). These
+	# build, run under qemu-riscv32 and match the oracle byte for byte.
+	#
+	# THE INSTRUMENT WAS CONTROLLED BEFORE THE RESULT WAS BELIEVED, because "21 of
+	# 24 pass" is also the exact signature of a harness running the host instead of
+	# the target: SizeOf(Pointer) answers 4 under qemu-riscv32 and 8 native, and
+	# the emitted file is ELF 32-bit. Had it fallen back, every row would have
+	# "passed" and none of this would mean anything.
+	#
+	# Compared against the SAME program built natively rather than a literal, so
+	# no row here carries a per-target constant. test_rtti is deliberately NOT in
+	# this batch: it prints raw addresses and InstanceSize, so it has no
+	# cross-target oracle by construction and needs a relation-based assertion.
+	# chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_arm32_virtual_wide.pas $(TESTTMP)/test_rv32_arm32_virtual_wide
+	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_rv32_arm32_virtual_wide_x64
+	tools/expect_same.sh riscv32/arm32_virtual_wide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_arm32_virtual_wide)" "$$($(TESTTMP)/test_rv32_arm32_virtual_wide_x64)"
 	./$(COMPILER) --target=riscv32 test/test_single_in_aggregate.pas $(TESTTMP)/test_rv32x_singleagg
 	tools/expect_same.sh riscv32/test_rv32x_singleagg "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=riscv32 test/test_i386_arith.pas $(TESTTMP)/test_rv32x_arith
@@ -23448,7 +23467,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_i386_varparam.pas $(TESTTMP)/test_rv32x_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_rv32x_varparam_x64
 	tools/expect_same.sh riscv32/test_rv32x_varparam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varparam)" "$$($(TESTTMP)/test_rv32x_varparam_x64)"
-	# SKIP test/test_cross_syscall.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_cross_syscall.pas $(TESTTMP)/test_rv32_cross_syscall
+	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_rv32_cross_syscall_x64
+	tools/expect_same.sh riscv32/cross_syscall "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_cross_syscall)" "$$($(TESTTMP)/test_rv32_cross_syscall_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_heap.pas $(TESTTMP)/test_rv32x_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_rv32x_heap_x64
 	tools/expect_same.sh riscv32/test_rv32x_heap "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_heap)" "$$($(TESTTMP)/test_rv32x_heap_x64)"
@@ -23540,7 +23561,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_setlen_varparam.pas $(TESTTMP)/test_rv32x_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas $(TESTTMP)/test_rv32x_setlen_vp_x64
 	tools/expect_same.sh riscv32/test_rv32x_setlen_vp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setlen_vp)" "$$($(TESTTMP)/test_rv32x_setlen_vp_x64)"
-	# SKIP test/test_cross_frozen_strlen_deref.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_rv32_cross_frozen_strlen_deref
+	./$(COMPILER) test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_rv32_cross_frozen_strlen_deref_x64
+	tools/expect_same.sh riscv32/cross_frozen_strlen_deref "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_cross_frozen_strlen_deref)" "$$($(TESTTMP)/test_rv32_cross_frozen_strlen_deref_x64)"
 	./$(COMPILER) --target=riscv32 test/test_managed_strlen_deref.pas $(TESTTMP)/test_rv32x_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_rv32x_managed_strlen_x64
 	tools/expect_same.sh riscv32/test_rv32x_managed_strlen "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_managed_strlen)" "$$($(TESTTMP)/test_rv32x_managed_strlen_x64)"
@@ -23564,7 +23587,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
 	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_in_x64; echo "exit=$$?")"
-	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_rv32_cross_managed_aggregate_locals
+	./$(COMPILER) test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_rv32_cross_managed_aggregate_locals_x64
+	tools/expect_same.sh riscv32/cross_managed_aggregate_locals "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_cross_managed_aggregate_locals)" "$$($(TESTTMP)/test_rv32_cross_managed_aggregate_locals_x64)"
 	# LoadFile: the codegen arm AND the three runtime wrappers landed together --
 	# PXXSysOpenRO/PXXSysLseek/PXXSysClose had arms for four targets and none for
 	# these two. rv32's syscall 62 is _llseek(fd,hi,lo,*result,whence), not plain
@@ -23600,7 +23625,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow_x64
 	tools/expect_same.sh riscv32/test_rv32_string_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_string_cow; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_string_cow_x64; echo "exit=$$?")"
-	# SKIP test/test_cross_var_string_param.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_cross_var_string_param.pas $(TESTTMP)/test_rv32_cross_var_string_param
+	./$(COMPILER) test/test_cross_var_string_param.pas $(TESTTMP)/test_rv32_cross_var_string_param_x64
+	tools/expect_same.sh riscv32/cross_var_string_param "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_cross_var_string_param)" "$$($(TESTTMP)/test_rv32_cross_var_string_param_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string_x64
 	tools/expect_same.sh riscv32/test_rv32x_openarray_string "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_openarray_string)" "$$($(TESTTMP)/test_rv32x_openarray_string_x64)"
@@ -23667,12 +23694,18 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_float_const.pas $(TESTTMP)/test_rv32x_fc
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_rv32x_fc_x64
 	tools/expect_same.sh riscv32/test_rv32x_fc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fc)" "$$($(TESTTMP)/test_rv32x_fc_x64)"
-	# SKIP test/test_scheduler.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_scheduler_exc.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_scheduler.pas $(TESTTMP)/test_rv32_scheduler
+	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_rv32_scheduler_x64
+	tools/expect_same.sh riscv32/scheduler "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_scheduler)" "$$($(TESTTMP)/test_rv32_scheduler_x64)"
+	./$(COMPILER) --target=riscv32 test/test_scheduler_exc.pas $(TESTTMP)/test_rv32_scheduler_exc
+	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_rv32_scheduler_exc_x64
+	tools/expect_same.sh riscv32/scheduler_exc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_scheduler_exc)" "$$($(TESTTMP)/test_rv32_scheduler_exc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_async_sl.pas $(TESTTMP)/test_rv32x_asl
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_rv32x_asl_x64
 	tools/expect_same.sh riscv32/test_rv32x_asl "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_asl)" "$$($(TESTTMP)/test_rv32x_asl_x64)"
-	# SKIP test/test_channel.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_channel.pas $(TESTTMP)/test_rv32_channel
+	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_rv32_channel_x64
+	tools/expect_same.sh riscv32/channel "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_channel)" "$$($(TESTTMP)/test_rv32_channel_x64)"
 	./$(COMPILER) --target=riscv32 test/test_methodptr.pas $(TESTTMP)/test_rv32x_mptr
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_rv32x_mptr_x64
 	tools/expect_same.sh riscv32/test_rv32x_mptr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mptr)" "$$($(TESTTMP)/test_rv32x_mptr_x64)"
@@ -23736,27 +23769,49 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes_x64
 	tools/expect_same.sh riscv32/test_rv32x_setshapes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setshapes)" "$$($(TESTTMP)/test_rv32x_setshapes_x64)"
-	# SKIP test/test_classref.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_class_of.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_classref.pas $(TESTTMP)/test_rv32_classref
+	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_rv32_classref_x64
+	tools/expect_same.sh riscv32/classref "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_classref)" "$$($(TESTTMP)/test_rv32_classref_x64)"
+	./$(COMPILER) --target=riscv32 test/test_class_of.pas $(TESTTMP)/test_rv32_class_of
+	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_rv32_class_of_x64
+	tools/expect_same.sh riscv32/class_of "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_class_of)" "$$($(TESTTMP)/test_rv32_class_of_x64)"
 	# SKIP test/test_rtti.pas on riscv32: SKIP IS RIGHT, REASON WAS WRONG: this prints raw ADDRESSES and InstanceSize, which differ per target BY CONSTRUCTION, so it can never match an x86-64 oracle. It builds and runs fine on riscv32. Needs relation-based assertions (cross-target DELTA, stride, ordering), not an oracle -- see the ticket above
-	# SKIP test/test_streaming.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_streaming_enumset.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_lfm.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_streaming.pas $(TESTTMP)/test_rv32_streaming
+	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_rv32_streaming_x64
+	tools/expect_same.sh riscv32/streaming "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_streaming)" "$$($(TESTTMP)/test_rv32_streaming_x64)"
+	./$(COMPILER) --target=riscv32 test/test_streaming_enumset.pas $(TESTTMP)/test_rv32_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_rv32_streaming_enumset_x64
+	tools/expect_same.sh riscv32/streaming_enumset "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_streaming_enumset)" "$$($(TESTTMP)/test_rv32_streaming_enumset_x64)"
+	./$(COMPILER) --target=riscv32 test/test_lfm.pas $(TESTTMP)/test_rv32_lfm
+	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_rv32_lfm_x64
+	tools/expect_same.sh riscv32/lfm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_lfm)" "$$($(TESTTMP)/test_rv32_lfm_x64)"
 	./$(COMPILER) --target=riscv32 test/test_interfaces.pas $(TESTTMP)/test_rv32x_iface
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_rv32x_iface_x64
 	tools/expect_same.sh riscv32/test_rv32x_iface "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface)" "$$($(TESTTMP)/test_rv32x_iface_x64)"
-	# SKIP test/test_interface_arc.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_interface_arc.pas $(TESTTMP)/test_rv32_interface_arc
+	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_rv32_interface_arc_x64
+	tools/expect_same.sh riscv32/interface_arc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_interface_arc)" "$$($(TESTTMP)/test_rv32_interface_arc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_uint64_ops.pas $(TESTTMP)/test_rv32x_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_rv32x_u64_x64
 	tools/expect_same.sh riscv32/test_rv32x_u64 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_u64)" "$$($(TESTTMP)/test_rv32x_u64_x64)"
-	# SKIP test/test_interfaces_is.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_interfaces_as.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_interfaces_param.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
-	# SKIP test/test_interfaces_inherit.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_interfaces_is.pas $(TESTTMP)/test_rv32_interfaces_is
+	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_rv32_interfaces_is_x64
+	tools/expect_same.sh riscv32/interfaces_is "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_interfaces_is)" "$$($(TESTTMP)/test_rv32_interfaces_is_x64)"
+	./$(COMPILER) --target=riscv32 test/test_interfaces_as.pas $(TESTTMP)/test_rv32_interfaces_as
+	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_rv32_interfaces_as_x64
+	tools/expect_same.sh riscv32/interfaces_as "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_interfaces_as)" "$$($(TESTTMP)/test_rv32_interfaces_as_x64)"
+	./$(COMPILER) --target=riscv32 test/test_interfaces_param.pas $(TESTTMP)/test_rv32_interfaces_param
+	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_rv32_interfaces_param_x64
+	tools/expect_same.sh riscv32/interfaces_param "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_interfaces_param)" "$$($(TESTTMP)/test_rv32_interfaces_param_x64)"
+	./$(COMPILER) --target=riscv32 test/test_interfaces_inherit.pas $(TESTTMP)/test_rv32_interfaces_inherit
+	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_rv32_interfaces_inherit_x64
+	tools/expect_same.sh riscv32/interfaces_inherit "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_interfaces_inherit)" "$$($(TESTTMP)/test_rv32_interfaces_inherit_x64)"
 	./$(COMPILER) --target=riscv32 test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_rv32x_iface_multi
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_rv32x_iface_multi_x64
 	tools/expect_same.sh riscv32/test_rv32x_iface_multi "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface_multi)" "$$($(TESTTMP)/test_rv32x_iface_multi_x64)"
-	# SKIP test/test_cross_aggregate_return.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_cross_aggregate_return.pas $(TESTTMP)/test_rv32_cross_aggregate_return
+	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_rv32_cross_aggregate_return_x64
+	tools/expect_same.sh riscv32/cross_aggregate_return "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_cross_aggregate_return)" "$$($(TESTTMP)/test_rv32_cross_aggregate_return_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_rv32x_aggstk
 	./$(COMPILER) test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_rv32x_aggstk_x64
 	tools/expect_same.sh riscv32/test_rv32x_aggstk "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_aggstk)" "$$($(TESTTMP)/test_rv32x_aggstk_x64)"
@@ -23769,11 +23824,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_method_implicit_field.pas $(TESTTMP)/test_rv32x_mif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas $(TESTTMP)/test_rv32x_mif_x64
 	tools/expect_same.sh riscv32/test_rv32x_mif "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mif)" "$$($(TESTTMP)/test_rv32x_mif_x64)"
-	# SKIP test/test_forin_implicit_field.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_forin_implicit_field.pas $(TESTTMP)/test_rv32_forin_implicit_field
+	./$(COMPILER) test/test_forin_implicit_field.pas $(TESTTMP)/test_rv32_forin_implicit_field_x64
+	tools/expect_same.sh riscv32/forin_implicit_field "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_forin_implicit_field)" "$$($(TESTTMP)/test_rv32_forin_implicit_field_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_global_after_method.pas $(TESTTMP)/test_rv32x_dgam
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas $(TESTTMP)/test_rv32x_dgam_x64
 	tools/expect_same.sh riscv32/test_rv32x_dgam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dgam)" "$$($(TESTTMP)/test_rv32x_dgam_x64)"
-	# SKIP test/test_forin_member_access.pas on riscv32: MEASURED 2026-09-06: builds and runs on riscv32 and matches the x86-64 oracle byte for byte. NOT a backend gap. Unwired only because nothing has enforced it yet -- chore-t-twenty-measured-good-riscv32-rows-are-still-unwired
+	./$(COMPILER) --target=riscv32 test/test_forin_member_access.pas $(TESTTMP)/test_rv32_forin_member_access
+	./$(COMPILER) test/test_forin_member_access.pas $(TESTTMP)/test_rv32_forin_member_access_x64
+	tools/expect_same.sh riscv32/forin_member_access "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_forin_member_access)" "$$($(TESTTMP)/test_rv32_forin_member_access_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz_x64
 	tools/expect_same.sh riscv32/test_rv32x_fimz "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fimz)" "$$($(TESTTMP)/test_rv32x_fimz_x64)"
