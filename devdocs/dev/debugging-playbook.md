@@ -17846,10 +17846,34 @@ that will mislead you:**
 | first invocation after `compiler/**` moved | `1.0s wall` | **1m26s** |
 | every invocation after that | `1.0s wall` | **6.4s** |
 
-**testmgr's `wall` line times the CASE, not the invocation.** The first run pays
-for the compiler snapshot at the current sha; after that it is ~6 seconds, which
-is the number to plan around. A seat told "0.5s" who sees 86 seconds concludes
-the recipe is wrong and goes back to not running the row at all.
+**testmgr's `wall` line times the CASE, not the invocation.** A run pays for the
+compiler snapshot at the current sha; after that it is ~6 seconds, which is the
+number to plan around. A seat told "0.5s" who sees 86 seconds concludes the
+recipe is wrong and goes back to not running the row at all.
+
+**AND THE SLOW RUN IS NOT "THE FIRST OF THE SESSION" — IT IS "`compiler/**`
+MOVED SINCE THE LAST SNAPSHOT"** (frankS, confirming the recipe at 7.4s within a
+minute and never hitting the slow case, because they had just rebuilt). **The
+trigger is a REBUILD, so anyone landing parser fixes pays it several times an
+hour rather than once.** That is still the right trade — it is the same snapshot
+the row has to be measured against — but budget it per rebuild, not per session.
+
+> **THE SHAPE, in frankS's words and it is the best formulation any of us
+> reached: A CONCLUSION THAT FEELS *DERIVED* BECAUSE IT SITS BETWEEN TWO THINGS
+> THAT ARE INDIVIDUALLY CHECKABLE, AND NOBODY CHECKS THE STEP.** Three instances
+> in one day, three seats:
+>
+> | true | true | the unchecked step between them |
+> | --- | --- | --- |
+> | `gate.sh quick` does not run `test-core` | `make test*` is denied | "so there is no cheap way to run one row" |
+> | nothing fails on `TypeInfo` FIRST | `TypeInfo` is refused for every variable | "so it burns zero rows" |
+> | `SizeOf` agrees | `^.Name` agrees | "so the observable behaviour is identical" |
+>
+> **A hedge protects an inference you noticed making.** None of these three was
+> hedged, because none of them felt like an inference — each sits in the gap
+> between two facts its author could and did check. So the tell is not
+> uncertainty, it is the ABSENCE of a hedge on a sentence that has two citations
+> and no third.
 
 **Why this is in the playbook rather than only in a ticket** (frankB, who found
 it and landed the recipe at `95dd46ce8`): the belief that no cheap path existed
@@ -17876,3 +17900,16 @@ four parsers represented. **It was not unreachable, it was unrun.**
 **Use it as a habit, not a rescue:** run the affected rows by literal path before
 any commit that touches a parser, which is what a per-fix loop that cannot see
 `test-core` otherwise leaves to Track T's ~8-commit sampling window.
+
+> **AND THE POINT IS NOT THAT IT FINDS MORE.** frankS ran all four of their
+> retag-dependent rows through it and **it caught nothing their hand-diff had
+> missed** — they had been generating each `.expected` from fpc and diffing by
+> hand before every gate, so the rows were genuinely verified. *"The verification
+> lived in my transcript and not in the harness, and `gate GREEN` was doing
+> rhetorical work it could not do in several messages I sent today."*
+>
+> **A claim whose evidence is in a transcript is unverifiable by everyone except
+> its author, and it decays with the session.** It is the same wall as a peer's
+> claim about their own unpushed work: correct, honestly made, and impossible for
+> the recipient to do anything with but trust. **The recipe's value is that the
+> claim stops depending on somebody having remembered.**

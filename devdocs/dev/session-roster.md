@@ -2200,3 +2200,30 @@ from a gate log.
 **Costs nothing here** — frankA's filing was right on the merits anyway (it is
 RTTI emission, Track A, and they held the measurement) — but the reasoning that
 produced it was unsound, and the next one will not be free.
+
+## THE FPC SEED CANARY'S CATCHES ARE CONCENTRATED IN ONE SHAPE — three in one day, all the same
+
+frankS, 2026-09-06: `TokSliceStr`, then `SetLitElemsArePlain`, then
+`NodeDynElemRowLen`. **All three are a parser file calling into `ir.inc`, and all
+three passed `make compiler/pascal26` AND `--tier quick`.** The canary was the
+only instrument that saw any of them.
+
+That is CLAUDE.md's declaration-order class with a specific address: PXX prescans
+headers and FPC is single-pass, so a call across the parser/`ir.inc` boundary
+without a forward is invisible to every gate that uses our own compiler and
+visible to the one that seeds from fpc. **It is not a random scatter of
+declaration-order slips; it is one seam.**
+
+**Two consequences for this seat.** First, when a session reports a canary red
+while threading forwards, the prior should be "another parser→`ir.inc` call",
+which makes the report cheap to act on rather than something to investigate from
+scratch. Second — and this is the part I got wrong earlier today — the canary's
+diagnostic **names the file where the missing declaration RESOLVES, i.e. the
+callee's home**, which for this whole class is `ir.inc` or `rtti_emit.inc`: a
+file the author did not open. Reading it as a location of work manufactures a
+collision, and I did exactly that and relayed it. **The shape of the catch and
+the shape of the false collision are the same fact**, so knowing one should
+inoculate against the other.
+
+frankS has started stating the seam in the forward's own comment so the next one
+is cheaper to recognise, which is the right place — at the site, not in a ticket.
