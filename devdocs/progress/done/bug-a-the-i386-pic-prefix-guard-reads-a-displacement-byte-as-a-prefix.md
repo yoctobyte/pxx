@@ -2,13 +2,13 @@
 track: A
 prio: 45
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankA
 tags: [emit-obj, elf, i386, pic]
 blocked-by: []
-summary: "`I386PrefixBefore` decides whether a legacy prefix precedes an instruction by reading the byte before it, and cannot tell a prefix from the last byte of the PREVIOUS instruction. Measured: `Halt(code)` in PXXIoCheck compiles to `mov -0x10(%ebp),%eax` / `mov [glob],%eax`, and the `f0` of the displacement `-0x10` reads as LOCK -- so the PC-relative rewrite is refused and the object keeps ONE absolute .text relocation, which is what `test-emit-obj` asserts must be zero. THE COUNT IS DATA-DEPENDENT AND THE ROW FLAPS: adding one unrelated local to PXXIoCheck moves `code` off -0x10 and the count goes 1 -> 0; removing it goes back to 1. So `done/bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils`'s '62 -> 0' was TRUE WHEN MEASURED and is not a stable property -- any lib/rtl change that shifts a frame offset onto a prefix byte value re-reds this row. The guard is deliberately conservative (its own comment says a backward scan cannot be made sound, and a false ACCEPTANCE is a silent wrong-width access) so the fix is to stop scanning: announce the prefix from the call site, the pattern this same file already uses for X386AddrImmPic."
+summary: "RESOLVED (see the commit recorded below). `I386PrefixBefore` decided whether a legacy prefix precedes an instruction by reading the byte before it, and cannot tell a prefix from the last byte of the PREVIOUS instruction. Measured: `Halt(code)` in PXXIoCheck compiles to `mov -0x10(%ebp),%eax` / `mov [glob],%eax`, and the `f0` of the displacement `-0x10` read as LOCK -- so the PC-relative rewrite was refused and the object kept ONE absolute .text relocation, which is what test-emit-obj asserts must be zero. THE COUNT WAS DATA-DEPENDENT AND THE ROW FLAPPED: one extra unrelated local in PXXIoCheck moved `code` off -0x10 and the count went 1 -> 0, so `done/bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils`\'s \'62 -> 0\' was TRUE WHEN MEASURED and was not a stable property. FIXED BY INVERTING THE FAILURE DIRECTION, not by the announce-every-prefix design this ticket first proposed and parked as needing an exhaustive audit: X386InstrStart records where the instruction BEGAN, the guard exits early only when the position matches, and a site that never sets it leaves a smaller offset and therefore REFUSES exactly as before -- so completeness is coverage, not soundness, and adoption is incremental. Adopted by the moffs family (A0/A1/A2/A3) through EmitMovGlobAcc, 42 sites; the prefixed 66 A3 store is deliberately not in it. Now 0, and 0 on the perturbed tree too, so the flap is gone as well as the count. test-emit-obj remains red for an OLDER reason this one was hiding: the xtensa link shim provides no ESP-IDF, 25 undefined references from the pin and from HEAD alike."
 ---
 
 # The i386 PIC prefix guard reads a displacement byte as a prefix
@@ -110,3 +110,59 @@ than a grep — a probe that a missed site FAILS on, not just a count.
 Note `awk` and not `strtonum`: this box runs mawk, where `strtonum` is undefined
 and a scan written with it fails rather than answering — the Makefile row beside
 this one records the same trap.
+
+## RESOLVED — the guard now asks the call site instead of the buffer
+
+Fixed the same evening it was filed, and the park reason above is superseded
+rather than wrong: the repair it argued against (announce every PREFIX) really
+does need the exhaustive audit, because a missed announcement flips the guard to
+ACCEPT and that is the silent wrong-width access. **The repair that landed
+inverts the failure direction, which is what makes it affordable.**
+
+`X386InstrStart` records where the instruction being emitted BEGAN.
+`I386PrefixBefore(pos)` exits early only when `pos` matches it. A site that
+never sets it leaves an earlier, SMALLER offset — code offsets only grow — so
+`pos` does not match, the byte test runs, and that site refuses exactly as it
+does today. **Completeness is a coverage property, not a soundness one.**
+Adoption is incremental and a miss costs position-independence, not correctness.
+
+Adopted by the moffs accumulator family through `EmitMovGlobAcc`: A0/A1/A2/A3,
+one opcode byte then the moffs, 42 sites. The 16-bit `66 A3` store is not in the
+family and is deliberately not routed there — it has a prefix, and in
+`EmitObjMode` it never reaches the sniffer at all because `EmitMovGlobAx16`
+emits its whole PIC form itself. `xtensaenc.inc`'s `$A0`/`$A1` are xtensa
+opcodes and are untouched. Cleared where `CodeLen` rewinds.
+
+### Measured — and the row that matters is the flap, not the count
+
+| `lib/rtl/textfile.pas` | old compiler | new compiler |
+| --- | --- | --- |
+| unmodified | 1 | **0** |
+| one extra local in `PXXIoCheck` | 0 | **0** |
+| restored | 1 | **0** |
+
+The count no longer moves with an axis that has nothing to do with
+position-independence. A before/after pair on the unmodified row alone would
+not have shown that — it would have looked like any other fix, and this row
+could reach 0 on its own.
+
+PC32 floor 3147 on the same object, so "zero absolute" is not passing on an
+object where nothing was emitted.
+
+### What is still red on `test-emit-obj`, and it is older than this
+
+`make test-emit-obj` now runs past the i386 relocation assertion and every other
+i386 row, and stops later at the xtensa link — a failure this one was hiding.
+`test/test_emit_obj.pas` pulls in the PAL socket/timer backend and the recipe's
+shim provides no ESP-IDF, so the link wants `lwip_*`, `esp_timer_get_time` and
+`vTaskDelay`. **25 undefined references from the PINNED compiler and 25 from
+HEAD, on both xtensa ABIs; riscv32 links clean.** Filed as
+[[bug-a-the-emit-obj-xtensa-link-shim-does-not-provide-the-pal-backends-esp-idf-symbols]].
+
+Verified: `make compiler/pascal26` converged, `189e9b74036e`. `gate.sh quick`'s
+only FAIL was a silent-assertion lint on `Makefile:15977` from `fecdfe6dc`,
+which is not this change and is fixed alongside; `self-host fixedpoint` and
+`testmgr --tier quick` both PASS.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

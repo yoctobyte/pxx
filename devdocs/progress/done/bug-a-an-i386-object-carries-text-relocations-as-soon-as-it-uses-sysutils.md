@@ -3,7 +3,7 @@ type: bug
 track: A
 prio: 40
 tags: [emit-obj, elf, i386, pic, rtl]
-summary: "RESOLVED cd4af7824, AND THE `0` IS NOT A STABLE PROPERTY -- see the 2026-09-06 correction at the foot and [[bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix]]; test-emit-obj is red again at 1 relocation without any of this work regressing. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and `gcc -m32 -pie -Wl,-z,text` goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (`push imm32`, `mov [reg],imm32`) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 I/O unlock stub's hand-counted `jnz` landed inside the store family's wrapper, popped the caller's return address into eax, stored through it and returned to garbage."
+summary: "RESOLVED cd4af7824, AND THE `0` WAS NOT A STABLE PROPERTY UNTIL [[bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix]] MADE IT ONE the same day -- see the 2026-09-06 correction at the foot; the row had gone red again at 1 relocation without any of this work regressing, because the prefix guard false-refused on a displacement byte and the count moved with unrelated stack offsets. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and `gcc -m32 -pie -Wl,-z,text` goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (`push imm32`, `mov [reg],imm32`) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 I/O unlock stub's hand-counted `jnz` landed inside the store family's wrapper, popped the caller's return address into eax, stored through it and returned to garbage."
 status: done
 owner: frankA
 ---
@@ -190,3 +190,17 @@ announcement turns a conservative refusal into a silent wrong-width access.
 
 This ticket stays `done`. The work in it is correct and the acceptance was met
 when it was measured; what is corrected is the claim that the number stays put.
+
+### FOLLOW-UP the same day — the flap is fixed, so the acceptance bullet holds now
+
+`bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix` landed
+`X386InstrStart`: a call site records where its instruction began and
+`I386PrefixBefore` stops guessing about the byte in front of the opcode. The
+perturbation that used to move the count no longer does — 0 unmodified, 0 with
+the extra local, 0 restored, where this ticket's compiler gave 1 / 0 / 1.
+
+So the first acceptance bullet above is a property again rather than a
+measurement, and this correction records the interval in which it was not.
+`test-emit-obj` is still red, for an older reason this row was hiding: the
+xtensa link shim provides no ESP-IDF and the PAL backend imports it —
+[[bug-a-the-emit-obj-xtensa-link-shim-does-not-provide-the-pal-backends-esp-idf-symbols]].
