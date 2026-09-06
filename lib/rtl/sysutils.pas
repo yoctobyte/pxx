@@ -327,6 +327,10 @@ type
   EOutOfMemory      = class(Exception) end;
   EAssertionFailed  = class(Exception) end;
   ENotImplemented   = class(Exception) end;
+  { fpc 3.2.2 sysutilh.inc:225 declares it straight off Exception, not off
+    ENotImplemented -- the two read as synonyms and are siblings. fcl-passrc's
+    pparser.pp raises it for a second source file. }
+  ENotSupportedException = class(Exception) end;
   EArgumentException = class(Exception) end;
   { Delphi/FPC make this a DESCENDANT of EArgumentException, not a sibling, so
     `on E: EArgumentException` catches it. Generics.Defaults raises it 3 times;

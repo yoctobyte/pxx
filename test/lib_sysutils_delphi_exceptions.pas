@@ -100,6 +100,42 @@ begin
   ChkB('argexc_is_not_oor',
        EArgumentException.Create('x') is EArgumentOutOfRangeException, False);
 
+  { ---- 1b. ENotSupportedException, and the ancestry nobody would guess ----
+    fpc 3.2.2 sysutilh.inc:225 declares it `class(Exception)`. It reads as a
+    synonym of ENotImplemented and is its SIBLING, so `on E: ENotImplemented`
+    does NOT catch it -- assert that, because getting it wrong makes a handler
+    silently not fire, which is this file's own standing lesson one block up.
+    Added for fcl-passrc's pparser.pp, which raises it for a second source
+    file ([[feature-pascal-corpus-expansion]] rung 7). }
+  raised := False; cls := ''; msg := '';
+  try
+    raise ENotSupportedException.Create('second source file');
+  except
+    on E: Exception do
+    begin
+      raised := True; cls := E.ClassName; msg := E.Message;
+    end;
+  end;
+  ChkB('notsup_caught', raised, True);
+  Chk('notsup_classname', cls, 'ENotSupportedException');
+  Chk('notsup_message', msg, 'second source file');
+  { ASSERTED WITH A HANDLER, NOT WITH `is`, and the reason is worth the line:
+    fpc REJECTS `is` between unrelated classes at COMPILE time ("Class or
+    Object types ... are not related"), so the obvious spelling would cost this
+    file the property its header claims -- compiles under fpc 3.2.2 unmodified.
+    We accept it and answer False, which is us accepting what fpc rejects and
+    therefore not a defect; it is simply not assertable HERE. A handler is the
+    better assertion anyway, because a handler silently not firing is the
+    actual failure mode. }
+  cls := '';
+  try
+    raise ENotSupportedException.Create('sibling');
+  except
+    on E: ENotImplemented do cls := 'caught by ENotImplemented';
+    on E: Exception do cls := E.ClassName;
+  end;
+  Chk('notsup_not_caught_as_notimplemented', cls, 'ENotSupportedException');
+
   { ---- 2. CreateRes / CreateResFmt: dereference and construct ---- }
   msg := '';
   try
