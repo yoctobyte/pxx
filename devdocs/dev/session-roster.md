@@ -503,3 +503,60 @@ all three commits already ancestors, the rebase clean — and the holder pulled,
 every compiler source, rebuilt from the merged tree and re-ran three tests plus two
 cross-frontend probes against **that** binary rather than trusting "applied clean". If a
 false alarm were free to dismiss, the true one would be too.
+
+## `ListAgents` REPORTS THREE STATES AND ONE OF THEM MAY BE THE DISCRIMINATOR — a candidate instrument, with the check that would settle it
+
+CLAUDE.md's standing position is that **a blocked session and a session that ended its turn
+are the same silence from outside**, that commit count and tree state cannot separate them,
+and that the only instrument that fails differently is the peer's own transcript — which
+costs a message and which the peer must read for you, because *a session cannot see its own
+blockage.*
+
+**`ListAgents` reports a per-session state with three values, and they are not all the same
+silence.** Observed 2026-09-06:
+
+```
+frankS frankH frankA frankB frank-optimize   busy
+frankD frankwasm                             idle
+frankC                                       WAITING
+```
+
+**frankC is the session independently known to be unanswered across three of frankuser's
+hourly passes**, and it is the only one showing `waiting`. frankD and frankwasm — one that
+finished a ticket and stopped, one deliberately stood down — both show `idle`.
+
+**THAT IS A CORRELATION WITH ONE CONFIRMING CASE AND I AM NOT CLAIMING IT IS THE
+SEMANTICS.** `waiting` may mean *a prompt is pending*, or it may mean something adjacent
+that frankC happens to satisfy — awaiting input of any kind, a stalled tool call, a
+particular idle shape. **One agreement between an instrument and a fact I already knew is
+exactly the reading that feels like corroboration and is not**, and this seat has spent a
+night writing down why.
+
+**The check that settles it, and it is cheap because the asking is already in the
+protocol:** the next time a session shows `waiting`, ask it to read its transcript, and the
+next time one shows `idle`, ask the same. If `waiting` sessions find a pending prompt or a
+rejected call and `idle` ones find *"I finished and stopped"*, the state is the
+discriminator and it is free — **the first instrument for this question that costs no
+message.** If an `idle` session turns out to be sitting on a prompt, it is not, and it must
+never be used to decide that a session is fine.
+
+**Until that check has run both directions, use it only to RANK who to ask first, never to
+conclude that anybody is or is not blocked.** A cheap instrument used for triage is a
+gain; the same instrument used as a verdict is how *"no commits in N hours"* became a false
+alarm twice in one night.
+
+**And it changes nothing about the keys rule.** Whatever state a row shows, the answer is
+still to ask for the record — **never Escape, never a cancel, not even the deny
+direction** — because a state field, like a pane, is not a receipt.
+
+### The other thing that listing answers for free, and this one is not a hypothesis
+
+**A CHECKOUT IS NOT A SESSION.** `~/franks-ab`, `~/franka-29`, `~/frank-rust`, `~/frank1`
+and `claude-A-uforth` all appear as `owner:` on live tickets and **none of them has a
+session behind it.** So Track B and parts of Track N have rows on the board owned by names
+that cannot answer. That is not a defect in the tickets — `owner:` is attribution, and a
+parked ticket with an owner is free to take, which CLAUDE.md already says. **It is a fact
+this seat should carry when it routes:** *"tell the holder"* has no meaning for those rows,
+and a residual left for an absent owner is a residual with no owner at all. Check the
+listing before writing *"X holds that"* — [[a-hold-ships-with-the-event-that-retires-it]]
+assumes an X that can end its own turn.
