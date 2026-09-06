@@ -7094,6 +7094,20 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_free_on_a_computed_receiver_evaluates_it_once \
 	  "$$($(TESTTMP)/test_freecomputed26)" \
 	  "$$(cat test/test_free_on_a_computed_receiver_evaluates_it_once.expected)"
+	@# A `Text` HANDLE REACHED THROUGH A FIELD WAS NOT A HANDLE AT ALL. The Text
+	@# lowering was keyed on a Syms[] index, a field has no row, so the CONSOLE
+	@# path took the call: `WriteLn(F, x)` printed the Text record to stdout and
+	@# left the file EMPTY at exit 0, and `ReadLn(F, s)`/`EOF(F)` read stdin and
+	@# hung. fcl-passrc's TFileLineReader is exactly this shape.
+	@# The global-var rows are the control -- the bare-symbol fast path is
+	@# untouched and these rows say so. The `Write` member is the second
+	@# control: it must stay reachable through `Self.` while `Write(F, ...)`
+	@# takes the intrinsic. Every row asserts the TEXT READ BACK, because a
+	@# write that went to the console leaves a file that opens fine and is empty.
+	@./$(COMPILER) test/test_a_text_file_reached_through_a_field.pas $(TESTTMP)/test_textfield26
+	@tools/expect_same.sh test_a_text_file_reached_through_a_field \
+	  "$$(TESTTMP=$(TESTTMP) $(TESTTMP)/test_textfield26)" \
+	  "$$(cat test/test_a_text_file_reached_through_a_field.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

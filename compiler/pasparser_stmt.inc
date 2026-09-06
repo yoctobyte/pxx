@@ -3666,14 +3666,19 @@ end;
 
 { Rewrite `write[ln](f, v0, v1, ...)` over a Text handle into a sequence of
   TextWrite calls; for writeln the final value goes through TextWriteLn so the
-  newline lands once after the last value. `fileSym` is the Text var; the caller
-  has left CurTok on its identifier. }
-function ParseTextWriteRest(isLn: Boolean; fileSym: Integer): Integer;
+  newline lands once after the last value.
+
+  `fileNode` is the handle DESIGNATOR, already parsed and already consumed by
+  the caller, and it is cloned per call because the AST is a tree. It used to be
+  a Syms[] index, which is why a Text FIELD was not recognised as a handle at
+  all: the console path took the call, `WriteLn(F, x)` printed the Text record
+  to stdout and left the file empty, exit 0. See IOHandleDesigAt.
+  bug-p-a-text-file-reached-through-a-field-is-not-recognised-as-a-file-handle }
+function ParseTextWriteRest(isLn: Boolean; fileNode: Integer): Integer;
 var
   procWrite, procWriteLn, callNode, sNode, exprNode: Integer;
   width, decw, headSeq, tailSeq, lastCall, emptyStr, newSeq: Integer;
 begin
-  Next;  { consume the Text file identifier }
   procWrite := FindProc('TextWrite');
   procWriteLn := FindProc('TextWriteLn');
   if (procWrite < 0) or (procWriteLn < 0) then
@@ -3695,7 +3700,7 @@ begin
       end;
     end;
     sNode := TextStrArg(exprNode, width, decw, 'write(Text)');
-    callNode := GenMakeCall6(procWrite, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+    callNode := GenMakeCall6(procWrite, tyUnknown, CloneAST(fileNode),
                              sNode, -1, -1, -1, -1);
     newSeq := GenMakeSeq(callNode, -1);
     if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -3713,7 +3718,7 @@ begin
         (SLen=0) feeds TextWriteLn so just the '\n' is emitted. }
       emptyStr := AllocNode(AN_STR_LIT);
       ASTSOffset[emptyStr] := 0; ASTSLen[emptyStr] := 0; ASTTk[emptyStr] := Ord(tyString);
-      callNode := GenMakeCall6(procWriteLn, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procWriteLn, tyUnknown, CloneAST(fileNode),
                                emptyStr, -1, -1, -1, -1);
       headSeq := GenMakeSeq(callNode, -1);
     end;
@@ -3733,14 +3738,16 @@ end;
   decide whether to emit it is deleted, not adjusted, which is the tell that
   this was one defect and not three (normalise-dont-special-case.md).
   Measured against FPC 3.2.2, VALUE and CURSOR alike:
-  test/test_read_text_value_cursor.pas. }
-function ParseTextReadRest(isLn: Boolean; fileSym: Integer): Integer;
+  test/test_read_text_value_cursor.pas.
+
+  `fileNode` is the handle DESIGNATOR, already consumed by the caller, cloned
+  per use -- see ParseTextWriteRest's note on why it is not a Syms[] index. }
+function ParseTextReadRest(isLn: Boolean; fileNode: Integer): Integer;
 var procRead, procVal, procReadChar, procNumTok, procStrTo: Integer;
     callNode, destNode, headSeq, tailSeq, newSeq: Integer;
     trTmpSym, trCodeSym, trValTmp, trIdent, trAsn: Integer;
     trTk: TTypeKind;
 begin
-  Next;  { consume the Text file identifier }
   procRead := FindProc('TextReadLn');
   if procRead < 0 then Error('read(Text): textfile RTL not loaded');
   procNumTok := FindProc('TextReadNumTok');
@@ -3770,7 +3777,7 @@ begin
       if procVal < 0 then Error('read(Text): Val builtin not loaded');
       trTmpSym := AllocVar('', tyAnsiString);
       trCodeSym := AllocVar('', tyInteger);
-      callNode := GenMakeCall6(procNumTok, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procNumTok, tyUnknown, CloneAST(fileNode),
                                GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -3813,7 +3820,7 @@ begin
       procReadChar := FindProc('TextReadChar');
       if procReadChar < 0 then
         Error('read(Text): TextReadChar not in the textfile RTL');
-      callNode := GenMakeCall6(procReadChar, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procReadChar, tyUnknown, CloneAST(fileNode),
                                destNode, -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -3847,7 +3854,7 @@ begin
         be a second copy of a conversion that exists.
         bug-p-readln-from-a-text-file-into-a-frozen-string-segfaults }
       trTmpSym := AllocVar('', tyAnsiString);
-      callNode := GenMakeCall6(procStrTo, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procStrTo, tyUnknown, CloneAST(fileNode),
                                GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -3865,7 +3872,7 @@ begin
         second `read(f, s)` yields '' until a `readln` steps over it — TextReadLn
         here made `read` and `readln` lower identically, and the classic
         `read(f, s); readln(f)` idiom then skipped every other line. }
-      callNode := GenMakeCall6(procStrTo, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procStrTo, tyUnknown, CloneAST(fileNode),
                                destNode, -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -3883,7 +3890,7 @@ begin
   if isLn then
   begin
     trTmpSym := AllocVar('', tyAnsiString);
-    callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+    callNode := GenMakeCall6(procRead, tyUnknown, CloneAST(fileNode),
                              GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
     newSeq := GenMakeSeq(callNode, -1);
     if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -4068,7 +4075,19 @@ begin
     fileSym := TextIOFileSym;
     if fileSym >= 0 then
     begin
-      Result := ParseTextReadRest(isLn, fileSym);
+      Next;                    { consume the Text file identifier }
+      Result := ParseTextReadRest(isLn, GenMakeIdent(fileSym, tyRecord));
+      Exit;
+    end;
+    { ...and the same over a handle reached through a FIELD (`r.F`, `Self.F`, a
+      bare implicit-Self field), which has no Syms[] row for TextIOFileSym to
+      find. Parsed with the expression parser rather than more token surgery:
+      IOHandleDesigAt has already established that what follows is a designator
+      of Text type ending at the separator. }
+    if IOHandleDesigAt(TokPos - 1, IsRecordType('text')) then
+    begin
+      ParseExpr;
+      Result := ParseTextReadRest(isLn, CurASTNode);
       Exit;
     end;
     { read(f, ...) over a `file of T` handle → the record RTL. `readln` has no
@@ -4157,7 +4176,15 @@ begin
     vidx := TextIOFileSym;
     if vidx >= 0 then
     begin
-      Result := ParseTextWriteRest(isLn, vidx);
+      Next;                    { consume the Text file identifier }
+      Result := ParseTextWriteRest(isLn, GenMakeIdent(vidx, tyRecord));
+      Exit;
+    end;
+    { ...and a handle reached through a FIELD — see the read twin. }
+    if IOHandleDesigAt(TokPos - 1, IsRecordType('text')) then
+    begin
+      ParseExpr;
+      Result := ParseTextWriteRest(isLn, CurASTNode);
       Exit;
     end;
     { write(f, ...) over a `file of T` handle → the record RTL, same placement

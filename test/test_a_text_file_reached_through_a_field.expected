@@ -1,0 +1,5 @@
+var    : {var one}{var two}
+record : (rec one)(rec two)
+field  : [field line][field line/self]
+self   : <field line><field line/self>
+member : 6

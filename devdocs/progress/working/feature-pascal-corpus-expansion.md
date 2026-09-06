@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: working
 owner: frankD
-summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles end to end (`code=720664B data=163024B bss=127228B procs=1902`, 4m33s), and so does `generics.defaults` (`procs=1780`, 16s). READ THE 2026-09-05 BLOCKQUOTE AT THE TOP OF `LIVE STATUS` BEFORE ANY OTHER FIGURE IN THIS FILE -- every other wall table here is a dated snapshot and they disagree by design. THE LAST WALL ON 6b WAS NOT IN THE FRONTEND, IT WAS THE PIN: `for-in: enumerator has no readable Current` fell to ONE LINE in `lib/rtl/classes.pas` (`property Current: T read GetCurrent;` on `IEnumerator<T>`), deliberately omitted since 2026-08-30 because Track B builds `lib/rtl` with $(PXX_STABLE) and the pin rejected a property in an interface; the parser fix sat in `done/` doing nothing for this corpus until pin v404 (8844c8c42) carried it. ATTRIBUTED BY ABLATION, not by plausibility -- same binary, same source, that line removed reproduces the exact wall at :1481, rc=1. THE CLASS TO CARRY: \"fixed at HEAD, inert until pinned\" -- any compiler fix a $(PXX_STABLE) consumer needs is closed while still unusable there, the ticket folder gives the wrong answer and the pin gives the right one (`devdocs/dev/track-b-workarounds.md` names this state; THIS instance was missing from that registry because the workaround was an OMISSION and a missing declaration leaves no code to spot). STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30, b613b5fcf broke it the next day, nobody re-ran it, and 6b then appeared to stop inside 6a's file, so the ladder had moved BACKWARDS while reading as a floor. Re-run the rung before you trust any row here. RUNG 7 (`fcl-passrc`, 60k LOC) IS IN PROGRESS as of 2026-09-06, not merely next -- rungs 1-6 green, and rung 7's first wall is CLEARED (`c4036925a`, a const section ate the `resourcestring` that ended it). The rung reaches `pscanner.pp:2899` as of 2026-09-06 evening, +2825 lines, through FOUR walls cleared in one arc (`c4036925a`, `87681a64a`, and the bare-self bracket door): the resourcestring-eating const section, `array of const` in a procedural type, a user ENUM losing its name to one of the compiler's own internal records, and an `array of const` LITERAL parsed as a SET at a bare self-method call. **TWO OF THE FOUR WERE INVISIBLE UNTIL THE ONE BEFORE THEM LANDED, and one of them was a wall that only LOOKED separate**: `no overload of ResolveStack matches` at :1994 was a cascade of the TToken mistyping and vanished with it, so the wall count over-reported the defect count. **AND THE SILENT/REFUSED RATIO IS THE THING TO CARRY OFF THIS RUNG.** The set-literal wall was found only because fcl-passrc passes `['#0']`, two characters, which a set cannot hold; the same defect with a single-character or integer element COMPILES and hands the callee `Length` 1026585632 where fpc says 3. A corpus finds the refusing member of a defect class and says nothing about the silent one, which is larger. Wall 3 IS characterised and filed: bug-p-a-property-default-value-clause-is-read-as-the-default-indexed-property-marker. `default <named const>`, `default <expr>` and `nodefault` are all refused (fpc compiles all three), AND the same one-line arm conflates two unrelated clauses -- a scalar `default 16` sets propIsDefault, so declared BEFORE a genuine `property Items[i]; default;` it STEALS the slot and `t[2]` is refused where fpc prints 100. ORDER-DEPENDENT: write the indexed property first and the bug is invisible. `--mimic-fpc` IS REQUIRED for this rung and its absence presents as `FPC_FULLVERSION has no integer value`, an invocation error wearing the shape of a frontend bug. The source is at /usr/share/fpcsrc, NOT under library_candidates/, so this file's gitignored-corpus caveat does not apply to rung 7. SECOND DOOR: backlog-pascal/feature-pascal-corpus-passrc is the SAME RUNG at prio 30 and `ready` will offer it independently -- take this ticket, not that one. NO coordinate on this corpus is trustworthy: `near:` has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles end to end (`code=720664B data=163024B bss=127228B procs=1902`, 4m33s), and so does `generics.defaults` (`procs=1780`, 16s). READ THE 2026-09-05 BLOCKQUOTE AT THE TOP OF `LIVE STATUS` BEFORE ANY OTHER FIGURE IN THIS FILE -- every other wall table here is a dated snapshot and they disagree by design. THE LAST WALL ON 6b WAS NOT IN THE FRONTEND, IT WAS THE PIN: `for-in: enumerator has no readable Current` fell to ONE LINE in `lib/rtl/classes.pas` (`property Current: T read GetCurrent;` on `IEnumerator<T>`), deliberately omitted since 2026-08-30 because Track B builds `lib/rtl` with $(PXX_STABLE) and the pin rejected a property in an interface; the parser fix sat in `done/` doing nothing for this corpus until pin v404 (8844c8c42) carried it. ATTRIBUTED BY ABLATION, not by plausibility -- same binary, same source, that line removed reproduces the exact wall at :1481, rc=1. THE CLASS TO CARRY: \"fixed at HEAD, inert until pinned\" -- any compiler fix a $(PXX_STABLE) consumer needs is closed while still unusable there, the ticket folder gives the wrong answer and the pin gives the right one (`devdocs/dev/track-b-workarounds.md` names this state; THIS instance was missing from that registry because the workaround was an OMISSION and a missing declaration leaves no code to spot). STANDING LESSON FOR THIS FILE: corroboration speaks to the READING and says nothing about the AGE -- rung 6a was recorded green by two independent sessions with byte-identical figures on 2026-08-30, b613b5fcf broke it the next day, nobody re-ran it, and 6b then appeared to stop inside 6a's file, so the ladder had moved BACKWARDS while reading as a floor. Re-run the rung before you trust any row here. RUNG 7 (`fcl-passrc`, 60k LOC) IS IN PROGRESS as of 2026-09-06 with its largest unit GREEN, not merely next -- rungs 1-6 green, and rung 7's first wall is CLEARED (`c4036925a`, a const section ate the `resourcestring` that ended it). **RUNG 7's LARGEST UNIT IS DONE as of 2026-09-06: `pscanner.pp` (5333 lines) COMPILES, LINKS AND RUNS** -- a driver that constructs a `TPascalScanner` over a real file and pulls tokens prints fpc's exact output (`ident: K` / `number: 42`), from FOURTEEN walls. **`compiles` WAS THE WEAKER CLAIM AND IT WAS WRONG BY ONE DEFECT**: the unit reached zero errors and the driver then HUNG, because a `Text` handle reached through a FIELD was not recognised as a file handle at all -- `TFileLineReader` is exactly that shape -- so the console path took the call, `WriteLn(F, x)` printed the Text record to stdout and left the file empty at exit 0, and `ReadLn(F, s)` read stdin. **Always drive the corpus unit, never only build it**; a library that compiles and does nothing is the failure a corpus rung exists to catch and the one a wall count cannot see. Earlier in the same arc the rung reached `pscanner.pp:2899`, +2825 lines, through FOUR walls cleared (`c4036925a`, `87681a64a`, and the bare-self bracket door): the resourcestring-eating const section, `array of const` in a procedural type, a user ENUM losing its name to one of the compiler's own internal records, and an `array of const` LITERAL parsed as a SET at a bare self-method call. **TWO OF THE FOUR WERE INVISIBLE UNTIL THE ONE BEFORE THEM LANDED, and one of them was a wall that only LOOKED separate**: `no overload of ResolveStack matches` at :1994 was a cascade of the TToken mistyping and vanished with it, so the wall count over-reported the defect count. **AND THE SILENT/REFUSED RATIO IS THE THING TO CARRY OFF THIS RUNG.** The set-literal wall was found only because fcl-passrc passes `['#0']`, two characters, which a set cannot hold; the same defect with a single-character or integer element COMPILES and hands the callee `Length` 1026585632 where fpc says 3. A corpus finds the refusing member of a defect class and says nothing about the silent one, which is larger. Wall 3 IS characterised and filed: bug-p-a-property-default-value-clause-is-read-as-the-default-indexed-property-marker. `default <named const>`, `default <expr>` and `nodefault` are all refused (fpc compiles all three), AND the same one-line arm conflates two unrelated clauses -- a scalar `default 16` sets propIsDefault, so declared BEFORE a genuine `property Items[i]; default;` it STEALS the slot and `t[2]` is refused where fpc prints 100. ORDER-DEPENDENT: write the indexed property first and the bug is invisible. `--mimic-fpc` IS REQUIRED for this rung and its absence presents as `FPC_FULLVERSION has no integer value`, an invocation error wearing the shape of a frontend bug. The source is at /usr/share/fpcsrc, NOT under library_candidates/, so this file's gitignored-corpus caveat does not apply to rung 7. SECOND DOOR: backlog-pascal/feature-pascal-corpus-passrc is the SAME RUNG at prio 30 and `ready` will offer it independently -- take this ticket, not that one. NO coordinate on this corpus is trustworthy: `near:` has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -2316,3 +2316,75 @@ Practical rule for rows added under this ticket from here on: when a row is
 written for construct X, write the sibling spelling of X in the same file, and
 assert a VALUE on both rather than a clean compile. A refusal-only row is green
 for the whole of the second failure mode above.
+
+# 2026-09-06 (frankD) — RUNG 7: `pscanner.pp` COMPILES, LINKS AND **RUNS**
+
+Fourteen walls to zero. `/usr/share/fpcsrc/3.2.2/packages/fcl-passrc/src/pscanner.pp`,
+5333 lines, `--mimic-fpc -Fu<that dir>`:
+
+```
+ok: rung7a  [code=548632B  data=116044B  bss=88828B  procs=1129]
+```
+
+**AND THEN IT HUNG, WHICH IS THE FINDING WORTH MORE THAN THE ZERO.** A driver
+that constructs a `TPascalScanner` over a real file and pulls tokens never
+returned. fpc's build of the same driver prints `ident: K` / `number: 42` /
+`tokens>0: TRUE` and exits 0. Ours now prints the same three lines.
+
+The cause was one missing lookup, and it had two faces:
+
+```pascal
+{ TFileLineReader (pscanner.pp:433): FTextFile is a Text FIELD }
+WriteLn(F, 'x')       -> printed `3x` ON THE CONSOLE, left the file EMPTY, exit 0
+ReadLn(F, s) / EOF(F) -> read STDIN, so EOF never came and the program HUNG
+```
+
+`IOHandleSymAt` asks `FindSym`; a field has no `Syms[]` row; `TextIOFileSym`
+answered -1; the CONSOLE path took the call. The whole Text lowering was keyed
+on a symbol index (`GenMakeIdent(fileSym, tyRecord)`, seven sites), so there was
+nowhere for a field to go. Fixed by threading the handle as a NODE and adding a
+designator-level detector.
+
+## What this rung is now teaching, and it is not about pscanner
+
+**A CORPUS RUNG MEASURED BY "DOES IT COMPILE" IS MEASURING THE WRONG THING, AND
+EVERY ROW OF THIS LADDER HAS BEEN SCORED THAT WAY.** Zero errors is where this
+unit's most expensive defect STARTED: the compile was clean, the link was clean,
+the binary ran, and the library did nothing. A wall count cannot see it —
+there is no wall. Neither can `expect_same` on a compile, nor an exit code,
+because the failing shape *creates the output file and leaves it empty at rc=0*.
+
+**Always drive the unit.** For a parser library that is ten lines: build an
+input, run the public entry point, assert a value fpc also produces. Every rung
+above 4 should have one and none of them does.
+
+The two halves also differ in how they present, which is the reusable half:
+
+| | how it fails | how it looks |
+| --- | --- | --- |
+| write to an unrecognised handle | goes to the console | file exists, is EMPTY, rc=0 |
+| read from an unrecognised handle | reads stdin | HANGS, or "0 lines" under a redirect |
+
+The write half is the dangerous one and the read half is the one that gets
+found. Under a harness that redirects stdin from `/dev/null` the read half stops
+hanging and reports **zero lines** — a plausible number — so a CI runner would
+have turned the loud failure into the quiet one.
+
+## The six landed fixes on this rung
+
+| # | fix | commit |
+| --- | --- | --- |
+| 1 | a const section ate the `resourcestring` that ended it | `c4036925a` |
+| 2 | `array of const` in a procedural type | `87681a64a` |
+| 3 | a bracket argument at a bare-self method call | (bracket door) |
+| 4 | a nested routine reaches all five of its class's member kinds | (member kinds) |
+| 5 | a nested routine assigns the enclosing function's result by NAME | `f45be9b78` |
+| 6 | `uses sysutils` closed the dynamic-array Delete/Insert | `f5ad23c32` |
+| 7 | `.Free` on a computed receiver, evaluated exactly once | `a5588f5c6` |
+| 8 | a `Text` handle reached through a FIELD | this commit |
+
+Plus `181576cdc` (frankB, the decl-path bracket instance) and `475528dae`
+(frankH, removing the sysutils declarations at the source).
+
+**The next unit on this rung is not pscanner.** `pastree.pp` and `pparser.pp`
+are the remaining bulk, and neither has been attempted.

@@ -3294,6 +3294,73 @@ begin
     Result := vidx;
 end;
 
+function IOHandleDesigAt(ti, recId: Integer): Boolean;
+{ The DESIGNATOR twin of IOHandleSymAt: is the argument starting at token `ti` a
+  dotted chain (`r.F`, `Self.F`, a bare implicit-Self field) whose final type is
+  `recId`, ending at the argument separator?
+
+  IOHandleSymAt answers about a SYMBOL and cannot answer about a field, because
+  a field has no Syms[] row. That was not a cosmetic limit. Measured 2026-09-06
+  against fpc 3.2.2, with `F: Text` a class field:
+
+    WriteLn(F, 'FIELD LINE');   -> printed `3FIELD LINE` ON THE CONSOLE and left
+                                   the file created and EMPTY, exit 0. The `3`
+                                   is the Text record itself, formatted as an
+                                   ordinary write argument.
+    while not EOF(F) ... ReadLn(F, s)  -> reads STDIN, so EOF never comes and
+                                   the program HANGS.
+
+  Both because the handle went unrecognised and the console path took the call.
+  A silent wrong destination and a hang, from one missing lookup — and
+  fcl-passrc's TFileLineReader (pscanner.pp:433) is exactly this shape, which is
+  what found it.
+
+  Token-level and conservative: anything it cannot resolve answers False and the
+  behaviour is what it was. It does NOT accept an index or a dereference in the
+  chain (`fs[i]`, `p^.F`) — those need the expression parser to answer and are
+  left for whoever meets them.
+  bug-p-a-text-file-reached-through-a-field-is-not-recognised-as-a-file-handle }
+var k, rec, si: Integer; nm: AnsiString;
+begin
+  Result := False;
+  if recId = REC_NONE then Exit;
+  if (ti < 0) or (ti >= TokCount) then Exit;
+  if Tokens[ti].Kind <> tkIdent then Exit;
+  { the chain must START with a dot; the bare spelling is IOHandleSymAt's, and
+    leaving it there keeps the console path byte-identical for every program
+    that already worked }
+  nm := GetTokenStr(ti);
+  si := FindSym(nm);
+  rec := REC_NONE;
+  if si >= 0 then rec := SymOwnRecOf(si);
+  { ...and the fallbacks are tried when the SYMBOL LOOKUP ANSWERED REC_NONE, not
+    only when it found nothing. `Self` IS a symbol in a method and SymOwnRecOf
+    answers REC_NONE for it, so an `else` here left `Self.F` unrecognised while
+    the bare field worked -- measured: `WriteLn(Self.F, 'two')` printed `3two` on
+    the console and left the file empty, with `WriteLn(F, 'one')` two lines away
+    writing correctly. Two spellings of one construct, one of them silently
+    wrong, which is the shape a bare-name-only guard produces every time. }
+  if rec = REC_NONE then
+  begin
+    if (CurMethClass >= REC_UCLASS_BASE) and CaseEqual(nm, 'Self') then
+      rec := CurMethClass
+    else if CurMethClass >= REC_UCLASS_BASE then
+      rec := RecFieldRecId(CurMethClass, nm);
+  end;
+  k := ti;
+  while (rec <> REC_NONE) and (k + 2 < TokCount) and
+        (Tokens[k + 1].Kind = tkDot) and (Tokens[k + 2].Kind = tkIdent) do
+  begin
+    rec := RecFieldRecId(rec, GetTokenStr(k + 2));
+    k := k + 2;
+  end;
+  if (k = ti) and (si >= 0) then Exit;
+  { a bare name that IS a symbol is IOHandleSymAt's answer, not this one; a bare
+    name with no symbol can only be a field, which is exactly the gap. }
+  if not ((k + 1 < TokCount) and (Tokens[k + 1].Kind in [tkComma, tkRParen])) then Exit;
+  Result := rec = recId;
+end;
+
 { Does the call starting at the CURRENT token pass a file handle as its FIRST
   argument? Asked with the routine name still unconsumed and `(` at Tokens[TokPos],
   so the first argument is Tokens[TokPos + 1].
@@ -3310,7 +3377,13 @@ begin
   Result := False;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen) then Exit;
   Result := (IOHandleSymAt(TokPos + 1, IsRecordType('text')) >= 0) or
-            (IOHandleSymAt(TokPos + 1, IsRecordType('filerec')) >= 0);
+            (IOHandleSymAt(TokPos + 1, IsRecordType('filerec')) >= 0) or
+            { ...and the same question for a handle reached through a field --
+              see IOHandleDesigAt. Without this arm a class with its own `Write`
+              member takes the member for `Write(FLog, x)` on the same reasoning
+              the bare case already rejects. }
+            IOHandleDesigAt(TokPos + 1, IsRecordType('text')) or
+            IOHandleDesigAt(TokPos + 1, IsRecordType('filerec'));
 end;
 
 function IntrinsicNamesSelfMethodHere: Boolean;
