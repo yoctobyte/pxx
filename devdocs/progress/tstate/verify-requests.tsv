@@ -40,3 +40,4 @@
 # the last PRE-rewrite full (b4904151c, 20:30): two C tests fixed, one new red
 # (test_pointer_to_a_named_fixed_array, bisected to 5d840acdd, not the rewrite),
 # every other standing red identical. Plus two GREEN natives at descendants.
+5411e996794f3edaebc0791f47e588b614af6936	full	seven	beta 0.1 release candidate: every red from the 18:37Z full tier is fixed and the fleet is holding pushes to clear the 60s commitment window
