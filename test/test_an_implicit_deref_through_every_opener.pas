@@ -60,11 +60,31 @@ begin
   WriteLn('cast3    ', PPPRec(qqq)^^.a, ' ', PPPRec(qqq)^^.b, ' ', PPPRec(qqq)^^.GetA, ' ', PPPRec(qqq)^^.PA);
   WriteLn('callres1 ', GetP.a,          ' ', GetP.b,          ' ', GetP.GetA,          ' ', GetP.PA);
   { `GetPP^.a` -- a call result at pointer depth 2, one caret written and one
-    implicit -- is deliberately NOT a row here and is the one cell of the census
-    still red: it prints 4306192 / 0 against fpc's 11 / 22. `GetPP^^.a` fully
-    written out is correct, so the depth is recorded somewhere; where it is lost
-    between there and this walk is NOT established. Filed rather than guessed:
+    implicit -- was deliberately NOT a row here: it was the one cell of the
+    census still red, printing 4306192 / 0 against fpc's 11 / 22, and for a
+    while afterwards it was REFUSED instead, by an arm meant for a chain short
+    by TWO that could not tell that case from this one. Both are fixed
+    (287b1eb36), so the row exists now.
+
+    THE CAUSE WAS NOT THE DEPTH VALUE, WHICH IS WHERE THE TICKET AND I WERE BOTH
+    LOOKING. ResolveNodeRec enumerated exactly two node kinds for what a deref
+    chain bottoms out on -- AN_IDENT and AN_PTR_CAST -- and a call bottoms out
+    on AN_CALL, so it answered REC_NONE and the arm declined. A guard built by
+    ENUMERATING kinds goes wrong by the kind nobody listed, which is the same
+    sentence as the member-kind note above, one axis over: member kinds there,
+    node kinds here.
     bug-p-a-call-result-at-pointer-depth-2-does-not-take-the-implicit-deref }
+  WriteLn('callres2 ', GetPP^.a,        ' ', GetPP^.b,        ' ', GetPP^.GetA,        ' ', GetPP^.PA);
+
+  { ...and the row that must STAY refused. `GetPPP^.a` is short by TWO and fpc
+    3.2.2 refuses it (`Illegal qualifier`), so it is not a row here -- a test
+    cannot assert a compile error in the middle of a program -- but it is the
+    control the fix above had to survive, and it is asserted by
+    test_a_half_dereferenced_call_result_is_refused.pas, whose whole body is
+    `WriteLn(GetPPP^.a)`. If a later change makes the row above resolve by
+    WIDENING rather than by counting, that test goes red and this one stays
+    green, which is the split the two files exist for. Its var and cast twins
+    are test_a_half_dereferenced_chain_is_refused_var/_cast. }
 
   { negative control: the value is already a RECORD, the rule must not fire }
   WriteLn('varexpl  ', p^.a,            ' ', p^.b,            ' ', p^.GetA,            ' ', p^.PA);
