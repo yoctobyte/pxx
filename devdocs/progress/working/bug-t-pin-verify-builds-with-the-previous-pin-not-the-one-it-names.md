@@ -2,10 +2,10 @@
 track: T
 prio: 80
 type: bug
-status: backlog
+status: working
 found: 2026-09-02
 found-by: claude-T
-owner: ""
+owner: frank-subcoord
 blocked-by: []
 summary: "verify_pin() does clone.checkout(<the pinned TREE>), which also checks out stable_linux_amd64/** as of that tree. A pin commit is always a DESCENDANT of the tree it pins, so the checked-out binary is the PREVIOUS pin. Every pin verify therefore builds its $(PXX_STABLE) targets with pin v(N-1) while recording the verdict under vN. Evidence: one run logs `verifying PIN v400 (67ae9a62d567)` and then `testmgr: pin=399 sha256=954adef93a7b`; `pin=400` appears ZERO times in the whole watcher log. The already-closed bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label saw this exact symptom (`ver said v347 while the verified tree carried pin 346`) and fixed the LABEL."
 ---
@@ -168,3 +168,55 @@ hour by each deriving it independently.
 **Positive control for that helper**, from the table above: given `v401` it must
 return `07d196aa4`, not `766b99f98`, and `git rev-list --count 07d196aa4..766b99f98`
 must be 4.
+
+---
+
+## The gap is 17 commits at v407, and the ticket predicted the direction
+
+Re-measured 2026-09-06 (frank-subcoord, on claiming this). The table above
+recorded 2–4 commits between the pin COMMIT and the pinned TREE across
+v399–v401, and predicted the distance "grows with fleet activity rather than
+shrinking". Confirmed, and by more than the original range suggests:
+
+| pin | commit | tree (pin.log's sha column) | commits between |
+| --- | --- | --- | --- |
+| v401 | `766b99f98` | `07d196aa4` | 4 |
+| v406 | `ab72ab352` | `1b903c1dd` | 6 |
+| **v407** | **`51901941e`** | **`04559b9d6`** | **17** |
+
+The v401 positive control this ticket specifies still passes exactly:
+`git rev-list --count 07d196aa4..766b99f98` = 4.
+
+**What is inside the v407 gap and NOT in the pinned binary** includes
+`2f1fe06b9 fix(P): a routine-local type section is parsed in PASS 2, so its
+specialize splice must move the spans` — a compiler fix. Anything resolving
+"the pin" to `51901941e` believes those 17 commits are in the binary
+`095ef4811a5b`. They are not.
+
+## Caught live, in a request, in the direction that helps
+
+frankuser queued a full tier in `verify-requests.tsv` at `51901941ef5d` with the
+reason *"pin v407 (binary 095ef4811a5b) was cut at this tree"*. It is not the
+tree — it is the pin COMMIT (`chore(stable): pin v407 -- binary sha256
+095ef4811a5b`); pin.log's sha column gives the tree as `04559b9d6`
+(`docs(roster): the night a correct measurement froze the fleet`).
+
+**The error landed on the useful side.** Because `stable_linux_amd64` at the pin
+commit holds v407, that request measures the v407 binary — which is what anyone
+asking "is this pin good?" wants. `verify_pin` checks out the TREE and therefore
+builds every `$(PXX_STABLE)` job with **v406** while filing the verdict under
+v407. So a hand-written request got the right answer by naming the object this
+ticket says is the wrong one, and the automated path gets the wrong answer by
+naming the right one.
+
+That is empirical support for **option 2** (verify at the pin COMMIT) over
+option 1, and it is worth more than the abstract argument: at the pin commit the
+pinned binary is vN by construction, with no restore step that can itself fail.
+The cost option 2 was charged with — "the pin commit's tree may carry other
+changes" — is now measured at 17 commits, so it is a real cost and not a
+rounding error. **Neither option is free, and the choice is between building the
+right binary against a slightly newer tree (option 2) and reconstructing a state
+that never existed (option 1).**
+
+Three sessions confused these two objects in one evening. The naming remedy this
+ticket already proposes is the load-bearing part.
