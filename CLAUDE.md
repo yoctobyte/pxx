@@ -731,8 +731,21 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   mid-sweep. **Banking your work does not FEEL like touching the instrument, and
   it is** — which is why nobody scanning for instrument hazards looks under
   "push often". The collision window only exists if you start a measurement with
-  work already unpushed, so push first, let the pull settle, rebuild on the
-  settled tree, then start. **Residual, for a sweep of hours:** a restart does
+  work already unpushed. **The sequence is PUSH -> LET THE PULL SETTLE ->
+  REBUILD -> MEASURE, and the REBUILD is the step that gets dropped**, because
+  a push IS a pull: `sync.sh` banks your work by moving your tree, so the sync
+  that makes you safe is itself the instrument-mover for whatever you measure
+  next. Measured 2026-09-06, AFTER this very clause landed at `fe0c7e2cd` and
+  43 minutes before pin v405: a seat followed the ordering, pushed, gated
+  without rebuilding, and got `self-host fixedpoint` RED — four commits touching
+  `compiler/**` had arrived in the pull, so `compiler/pascal26` was built from
+  the old sources while the pinned-seeded chain compiled the new ones. **Two
+  valid fixedpoints, not a miscompile.** The rule was present, correct, and
+  inline in a paragraph about something else; that is why the sequence is on its
+  own line now. **The red it produces is CORRECT AND MEANS NOTHING**, it is
+  indistinguishable at a glance from the serious version, and it arrives right
+  after a successful landing — when the tree feels settled precisely because you
+  just settled it. **Residual, for a sweep of hours:** a restart does
   not wait for it. `git commit` alone does not move the tree — only the pull
   does — so commit locally and push when it ends; the exposure is the sweep's
   length and there is no fully safe option, only a bounded one. A sweep reading
