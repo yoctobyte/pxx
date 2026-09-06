@@ -615,7 +615,7 @@ var
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
-  savedBodyUnitIdx, tmplDeclUnit: Integer;   { a specialization's method body parses as its DECLARING unit — see below }
+  savedBodyUnitIdx, tmplDeclUnit, savedSpecHost: Integer;   { a specialization's method body parses as its DECLARING unit — see below }
   savedMIO: Integer;   { MethImplOwnerCi across this decl -- see defs.inc }
   inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
@@ -3055,14 +3055,23 @@ begin
       routine that comes back through here.
       bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site }
     savedBodyUnitIdx := CurrentUnitIdx;
+    savedSpecHost    := SpecBodyHostUnitIdx;
     if methOwnerCi >= 0 then
     begin
       tmplDeclUnit := SpecTemplateDeclUnit(
                         GetTokenStrFromRaw(UClsNOff[methOwnerCi], UClsNLen[methOwnerCi]));
-      if tmplDeclUnit >= 0 then CurrentUnitIdx := tmplDeclUnit;
+      if tmplDeclUnit >= 0 then
+      begin
+        { Becoming the declaring unit is only half of the scope. The other half
+          is where the specialization was WRITTEN, which is where its own
+          synthesized rows were minted -- see ClassRowVisibleHere. }
+        SpecBodyHostUnitIdx := CurrentUnitIdx;
+        CurrentUnitIdx := tmplDeclUnit;
+      end;
     end;
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     CurrentUnitIdx := savedBodyUnitIdx;
+    SpecBodyHostUnitIdx := savedSpecHost;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     { ASK THE LANDING-PAD QUESTION AGAIN, from inside CompileAST, once the
       hidden argument temps exist. Requested only when the prologue said NO -- a

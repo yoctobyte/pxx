@@ -2314,6 +2314,9 @@ const
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;
   MAX_GENERIC_METHOD_SPECS = 256;   { see GMSpecMeth }
+  { "not inside a specialization's method body". NOT -1: -1 is a real scope --
+    the main program -- and is exactly the value this has to tell apart. }
+  SPEC_HOST_NONE = -2;
   MAX_PENDING_GFSPECS = 256;
   { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
     generic type) inside ONE template body -- see the nested-specialization
@@ -6290,6 +6293,18 @@ var
   { Set >= 0 (to the class ci) only while a class BODY is being parsed, so a type
     declared there registers against it. -1 everywhere else. }
   ParsingClassBodyCi : Integer;
+
+  { The unit a SPECIALIZATION WAS WRITTEN IN, while its method body is being
+    parsed as the template's DECLARING unit; SPEC_HOST_NONE outside one.
+
+    Those two units are both real and neither is redundant. The body is the
+    declaring unit's code -- that is what ParseSubroutine's CurrentUnitIdx
+    switch is for -- but a specialization's SYNTHESIZED rows (the class minted
+    for `TFPGListEnumeratorSpec = specialize TFPGListEnumerator<T>`) are minted
+    where the specialization is WRITTEN, which is the importing program. So the
+    body needs to reach both, and this remembers the second one.
+    bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site }
+  SpecBodyHostUnitIdx : Integer;
   { The other half of the same scope. A class's own body is TWO ranges of
     source: the declaration, and the out-of-line method implementations. This
     one is the class ci while a `TOuter.Meth` header and body are being parsed

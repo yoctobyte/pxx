@@ -1436,6 +1436,23 @@ function ClassRowVisibleHere(ci: Integer; const lo: AnsiString): Boolean;
 begin
   ClassRowVisibleHere := True;
   if ClassNameIsAmbientIntrinsic(lo) or DeclVisibilityProbe then Exit;
+  { A SPECIALIZATION'S OWN MINTED ROWS ARE NOT "THE PROGRAM'S DECLARATIONS".
+
+    While a specialization's method body is parsed, CurrentUnitIdx is the
+    TEMPLATE'S declaring unit, so the veto below -- correct, and the reason it
+    exists is a segfault -- also hid the rows the specialization itself minted,
+    which live in the scope that WROTE the specialization. Measured on real FPC
+    `fgl.pp`: `Result := TFPGListEnumeratorSpec.Create(Self)` in TFPGList's own
+    body reported `undefined variable`, against a class row that existed, with
+    `unit=-1` against `CurrentUnitIdx=62`.
+
+    This does NOT re-open the shadowing half. FindUClass tries CurrentUnitIdx
+    rows FIRST and returns on a hit, so a same-named class in the declaring unit
+    still wins; what this restores is a name that exists ONLY in the host scope,
+    which is what a synthesized specialization row is.
+    bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site }
+  if (SpecBodyHostUnitIdx <> SPEC_HOST_NONE) and
+     (UClsUnitIdx[ci] = SpecBodyHostUnitIdx) then Exit;
   if (CurrentUnitIdx >= 0) and (UClsUnitIdx[ci] < 0) then
   begin
     ClassRowVisibleHere := False;
@@ -8612,6 +8629,7 @@ procedure ResetDeclScopeSentinels;
 begin
   ParsingClassConstCi := -1;
   ParsingClassBodyCi  := -1;
+  SpecBodyHostUnitIdx := SPEC_HOST_NONE;
   MethImplOwnerCi     := -1;
   QualTypeOwnerCi     := -1;
 end;

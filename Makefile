@@ -9694,6 +9694,17 @@ test-core: $(COMPILER)
 	# neighbour check: the erase spans two ranges in two sections, and one token
 	# too many takes an ordinary member with it. On the pinned compiler this dies
 	# at ugmun.pas:10.
+	# A template's method body parses as its DECLARING unit -- and that is not the
+	# whole scope. A specialization's SYNTHESIZED rows (the class minted for a
+	# nested `TEnumSpec = specialize TEnum<T>`) are minted where the specialization
+	# is WRITTEN, so becoming the declaring unit hid them: TList's own
+	# `TEnumSpec.Create` came out as `undefined variable` against a class row that
+	# existed. Found on real fgl.pp (TFPGListEnumeratorSpec) -- but THAT arm skips
+	# on any checkout without the FPC RTL source, which is most of them, so the
+	# regression is guarded here where it needs no corpus. Two classes share the
+	# nested NAME because the fix must not let one answer for the other.
+	./$(COMPILER) -Futest/generic_nestedspec_units test/test_generic_body_sees_its_specializations_nested_type.pas $(TESTTMP)/test_gen_nestedspec26
+	tools/expect_same.sh test_gen_nestedspec26 "$$($(TESTTMP)/test_gen_nestedspec26)" "$$(printf '33 44\n55\n66')"
 	./$(COMPILER) -Futest/generic_unused_units test/test_generic_method_unused_is_erased.pas $(TESTTMP)/test_gen_unused26
 	tools/expect_same.sh test_gen_unused26 "$$($(TESTTMP)/test_gen_unused26)" "$$(printf '1 2\n10\n42\n11 22')"
 	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
