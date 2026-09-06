@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every `t_*` case a devtest DEFINES must also be RUN by that devtest.
+"""Every case a devtest DEFINES must also be RUN by that devtest.
 
 WHY THIS EXISTS
 ===============
@@ -52,6 +52,32 @@ than adding a second checker.
 
 It says nothing about whether a case is a GOOD case, whether it can fail, or
 whether it is aimed at anything. Registration only.
+
+THE APERTURE, WHICH THIS FILE GOT WRONG ABOUT ITSELF
+====================================================
+
+Two naming conventions are in use, not one. This lint knew only `t_*` and was
+therefore **blind to 20 harnesses and 149 cases** that name their cases `case_*`
+-- among them every guard three seats have written this week. It did not error,
+did not warn, and did not report a smaller number: `audit()` returns 0 cases for
+a file it cannot read and `main()` skips it, so 20 harnesses left the denominator
+silently and the summary said `OK -- 404 case(s) across 45 harness(es)`, which is
+a true sentence about a population that excludes the files in question.
+
+**That is verbatim the failure this file's own docstring is about** -- *"a count
+missing a member reads exactly like a count of everything"* -- committed by the
+count that names it. Found 2026-09-06 when a new `case_*` harness was passed to
+it explicitly and it answered `NO HARNESSES MATCHED`; the aggregate run had been
+answering OK about the other 45 the whole time.
+
+Both prefixes are now recognised (65 harnesses, 553 cases, and **nothing new was
+flagged** -- the 20 were correctly registered all along, merely unaudited). And
+because a third convention would arrive exactly as silently, the summary now
+prints how many `*devtest*.py` files defined **zero** recognised cases. That
+number is the aperture: it is 79 today, all of them genuinely single-assertion
+scripts or helper tools (checked -- no third convention has three or more
+same-prefixed top-level functions anywhere), and a convention appearing tomorrow
+makes it rise instead of hiding.
 """
 
 import ast
@@ -60,22 +86,29 @@ import os
 import sys
 
 
+# Both conventions in use. A prefix this tuple does not name is INVISIBLE -- the
+# file is silently counted as having no cases -- which is why the summary reports
+# the zero-case file count rather than only the harnesses it understood.
+CASE_PREFIXES = ("t_", "case_")
+
+
 def _case_defs(tree):
     return sorted(n.name for n in tree.body
-                  if isinstance(n, ast.FunctionDef) and n.name.startswith("t_"))
+                  if isinstance(n, ast.FunctionDef)
+                  and n.name.startswith(CASE_PREFIXES))
 
 
 def _referenced(tree):
-    """Every `t_*` named outside the body of a `t_*` function."""
+    """Every case name mentioned outside the body of a case function."""
     seen = set()
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("t_"):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith(CASE_PREFIXES):
             continue
         for sub in ast.walk(node):
-            if isinstance(sub, ast.Name) and sub.id.startswith("t_"):
+            if isinstance(sub, ast.Name) and sub.id.startswith(CASE_PREFIXES):
                 seen.add(sub.id)
             elif (isinstance(sub, ast.Constant) and isinstance(sub.value, str)
-                  and sub.value.startswith("t_")):
+                  and sub.value.startswith(CASE_PREFIXES)):
                 seen.add(sub.value)
     return seen
 
@@ -91,7 +124,7 @@ def _self_discovering(tree, referenced):
     grew the guard. Caught by a control that stopped controlling.
 
     A harness that truly discovers its cases never NAMES one. So: it calls
-    globals(), and it references no `t_*` by name.
+    globals(), and it references no case by name.
     """
     if referenced:
         return False
@@ -125,11 +158,15 @@ def main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     paths = argv[1:] or sorted(glob.glob(os.path.join(root, "tools", "*devtest*.py")))
 
-    harnesses = cases = auto = 0
+    harnesses = cases = auto = nocases = 0
     bad = []
     for p in paths:
         n, missing, disc = audit(p)
         if not n:
+            # NOT nothing: a file whose cases use a prefix CASE_PREFIXES does not
+            # name lands here and leaves the denominator without a sound. Counted
+            # so the aperture is printed rather than assumed.
+            nocases += 1
             continue
         harnesses += 1
         cases += n
@@ -158,6 +195,10 @@ def main(argv):
 
     print("devtest-case-registration: OK -- %d case(s) across %d harness(es) are all "
           "run (%d harness(es) discover their own)." % (cases, harnesses, auto))
+    print("devtest-case-registration: prefixes audited %s; %d file(s) matched the "
+          "glob and defined no case under them -- if that number JUMPS, a new "
+          "naming convention has appeared and is unaudited."
+          % ("/".join(CASE_PREFIXES), nocases))
     return 0
 
 
