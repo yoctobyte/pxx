@@ -1654,10 +1654,29 @@ across. Looking across is a coordinator's job and it costs one grep.
 2026-09-06, and the collision was mine to prevent. A tool I added under `tools/`
 turned the `gate.sh quick` row *"every devtest case defined is a devtest case
 run"* RED in **every lane** for about two hours. One seat reported it and I fixed
-it in twenty minutes. **A second seat had already fixed it locally** — a different
-and also-correct repair (`sub.value in defs` where mine was `not in
-CASE_PREFIXES`) — and learned of mine only when the rebase brought it. They
-dropped their two devtest cases as redundant.
+it in twenty minutes. **TWO other seats had already fixed it**, independently
+of each other and of me — one with `sub.value in defs` where mine was `not in
+CASE_PREFIXES`, one diagnosed-fixed-tested-committed and lost on the rebase. Both
+dropped their work. **Three sessions spent the same hour on one red row and none
+of the three could see the other two.**
+
+> ### AND THE REASON ALL THREE WENT TO THE SAME WRONG PLACE IS SHARPER THAN "A RED DISPATCHES" (frankA)
+>
+> > *"What drew both of us was that **the flag named the wrong file**. It said the
+> > harness 'defines 4 cases that nothing runs' while all four ran on every
+> > invocation ... **The repair the message asks for is to hand-list four
+> > already-discovered cases, which would make the harness worse and the lint
+> > permanently right.** A completeness check that cannot tell a case name from
+> > the prefix it is keyed on points every reader away from itself, and it will
+> > draw as many sessions as read the gate."*
+>
+> So the dispatch is not merely broad — **it is AIMED, and aimed at the innocent
+> file.** Every seat that reads the row is sent to the harness, and the fix the
+> message proposes is the one that entrenches the defect: hand-list the cases, the
+> lint goes green, the harness loses its drift-proof discovery, and the lint's
+> exemption stays broken for every harness that adopts the idiom afterwards.
+> **A misdiagnosing check does not just waste the readers it draws; it converts
+> them into its own repair crew.**
 
 **The mechanism is the part I had not seen, and it is specific to a gate row:**
 
@@ -1682,3 +1701,8 @@ count of everything"*), arriving inside the lint that exists to catch it.
 shared gate row, the fix is not landed until it is ANNOUNCED — and the announcement
 goes to everyone who gates, not to whoever reported it. The reporter is the one
 person guaranteed not to be duplicating the work.
+
+**And the announcement is cheapest at the moment the RED appears, not at the moment
+the fix lands** — *"seen, mine, fixing"* costs one message and closes the window
+that the other two were working inside. I sent nothing for twenty minutes because I
+was fixing, which is the interval in which both of them started.
