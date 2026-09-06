@@ -2886,6 +2886,9 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_procedural_assign_calls_when_result_fits.pas $(TESTTMP)/test_pvfit26
 	@$(TESTTMP)/test_pvfit26 | diff -u test/test_procedural_assign_calls_when_result_fits.expected - \
 	  || { echo 'test_procedural_assign_calls_when_result_fits: FAIL - call-vs-address for a bare routine name'; exit 1; }
+	@./$(COMPILER) test/test_a_bare_routine_name_fits_the_slot_or_is_taken.pas $(TESTTMP)/test_barefit26
+	@$(TESTTMP)/test_barefit26 | diff -u test/test_a_bare_routine_name_fits_the_slot_or_is_taken.expected - \
+	  || { echo 'test_a_bare_routine_name_fits_the_slot_or_is_taken: FAIL - a result of the WRONG procedural shape must be taken, not called'; exit 1; }
 	@# A parameterless procedural value called with NO argument list, for every
 	@# designator spelling. `m;` worked and `h.nul;`, `h.p;` and `a[0];` were all
 	@# read as the start of an assignment, because the decision was made before

@@ -8310,7 +8310,8 @@ begin
                    (CurTok.Kind = tkIdent) and (argIdx < 0) and
                    (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) and
                    (not ProcResultSatisfiesKind(FindProc(CurTok.SVal),
-                                                IntToTypeKind(ASTTk[valNode]))) then
+                                                IntToTypeKind(ASTTk[valNode]),
+                                                PasNodeProcSig(valNode))) then
                 begin
                   CurASTNode := AllocNode(AN_PROCADDR);
                   ASTIVal[CurASTNode] := FindProc(CurTok.SVal);

@@ -1185,7 +1185,34 @@ end;
   their own -- the symbol in hand is the record or the array, whose own
   TypeKind and SymProcSig say nothing about the slot being written.
   bug-p-delphi-mode-binds-a-bare-routine-name-only-for-a-variable-target }
-function ProcResultSatisfiesKind(pi: Integer; targetTk: TTypeKind): Boolean;
+function ProcSigCompatible(aPi, bPi: Integer): Boolean;
+{ Two procedural signatures describe the same shape: same function-ness, same
+  return type, same parameter count and the same parameter kinds in order.
+  STRUCTURAL, not identity -- `ParseProcTypeSignature` mints a fresh
+  `$proctype` Procs[] row per declaration, so two spellings of one shape are
+  different rows and an identity test would call them incompatible.
+
+  It exists because the question "does this routine's RESULT fit this
+  procedural slot?" had no way to be asked: ProcResultSatisfiesKind answered
+  "the result is A procedural value" and its own comment claimed that was
+  "deliberately NARROW ... only when the routine's result actually FITS the
+  target". The narrow test was never written.
+  bug-p-a-bare-routine-name-whose-result-is-itself-procedural-is-called-not-taken }
+var i: Integer;
+begin
+  Result := False;
+  if (aPi < 0) or (aPi >= ProcCount) or (bPi < 0) or (bPi >= ProcCount) then Exit;
+  if Procs[aPi].IsFunc <> Procs[bPi].IsFunc then Exit;
+  if Procs[aPi].IsFunc and (Procs[aPi].RetType <> Procs[bPi].RetType) then Exit;
+  if Procs[aPi].ParamCount <> Procs[bPi].ParamCount then Exit;
+  if Procs[aPi].ParamCount > MAX_PROC_PARAMS then Exit;
+  for i := 0 to Procs[aPi].ParamCount - 1 do
+    if Procs[aPi].Params[i].TypeKind <> Procs[bPi].Params[i].TypeKind then Exit;
+  Result := True;
+end;
+
+function ProcResultSatisfiesKind(pi: Integer; targetTk: TTypeKind;
+                                 targetSig: Integer): Boolean;
 begin
   Result := False;
   if (pi < 0) or (pi >= ProcCount) then Exit;
@@ -1202,7 +1229,19 @@ begin
       frontend until the Pascal return-type parse started carrying
       LastTypeProcSig onto it for bug-p-result-is-not-a-method-pointer-lvalue --
       the two fixes are the same missing fact read by two different consumers. }
-    Result := (Procs[pi].RetType = tyPointer) and (ProcRetProcSig[pi] >= 0);
+    { …AND THE RESULT MUST FIT THIS TARGET, WHICH IS WHAT THE NOTE ABOVE ALREADY
+      CLAIMED. The test was `RetType = tyPointer and ProcRetProcSig >= 0` --
+      "returns A procedural value", any procedural value -- so a routine whose
+      result is a DIFFERENT procedural shape than the slot read as a CALL and
+      the returned routine was stored into a slot it does not fit. Measured
+      against fpc 3.2.2 -Mdelphi, `TOuter = function: TInner`:
+      `fo := MkOuter` CALLED MkOuter (side-effect counter 1 against fpc's 0),
+      stored the TInner into the TOuter slot with no diagnostic, and the next
+      `fo()` segfaulted. The paramless-ordinal control on the row above
+      (`f := Src`) was 0 in both, which is what says the fit test and not the
+      rule. bug-p-a-bare-routine-name-whose-result-is-itself-procedural-is-called-not-taken }
+    Result := (Procs[pi].RetType = tyPointer) and (ProcRetProcSig[pi] >= 0) and
+              ProcSigCompatible(ProcRetProcSig[pi], targetSig);
 end;
 
 function ProcResultSatisfiesTarget(pi, targetIdx: Integer): Boolean;
@@ -1211,7 +1250,8 @@ function ProcResultSatisfiesTarget(pi, targetIdx: Integer): Boolean;
 begin
   Result := False;
   if (targetIdx < 0) or (targetIdx >= SymCount) then Exit;
-  Result := ProcResultSatisfiesKind(pi, Syms[targetIdx].TypeKind);
+  Result := ProcResultSatisfiesKind(pi, Syms[targetIdx].TypeKind,
+                                    SymProcSig[targetIdx]);
 end;
 
 { `obj.M` / `TClass.M` with no `@` and no argument list, read as a method
