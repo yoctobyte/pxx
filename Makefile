@@ -7477,6 +7477,31 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_indexing_a_bare_implicit_self_method_result \
 	  "$$($(TESTTMP)/test_bareselfidx26)" \
 	  "$$(cat test/test_indexing_a_bare_implicit_self_method_result.expected)"
+	@# TList.Count IS WRITABLE, as in FPC (`read FCount write SetCount`). It had
+	@# the getter and no setter, so the ordinary FPC idiom for unwinding a
+	@# partially built list -- release the tail, then `L.Count := OldCount` --
+	@# was refused with `property is read-only`. fcl-passrc pparser.pp:4768.
+	@# THE TWO HALVES ARE NOT SYMMETRIC AND THAT IS THE BEHAVIOUR: shrinking goes
+	@# through Delete so an owning descendant's Notify(lnDeleted) fires per
+	@# dropped element; growing exposes empty slots that must read nil and does
+	@# NOT notify. One row each.
+	@# `notify fired` IS THE ROW THAT CANNOT BE CHECKED BY LOOKING AT THE LIST,
+	@# and it was ABLATED to prove it: with SetCount written as a bare SetLength,
+	@# every other row here still passes and only this one moves, 3 -> 0. That is
+	@# the leak shape -- right Count, right surviving elements, every dropped
+	@# element leaked in an owning list -- so the assertion has to be about the
+	@# callback, not the container.
+	@# `new slot nil` is only evidence because the list is filled with non-nil
+	@# values first and `kept = 1` is asserted beside it; a probe whose right
+	@# answer is the default cannot fail.
+	@# TFPList is its own row because pxx's hierarchy is INVERTED from FPC's --
+	@# here TFPList descends from TList, in FPC TList wraps a TFPList, and FPC's
+	@# TFPList.SetCount does not notify while its TList.SetCount does. Measured
+	@# byte-identical to fpc 3.2.2 -Mobjfpc on all four rows.
+	@./$(COMPILER) test/test_tlist_count_is_writable.pas $(TESTTMP)/test_tlistcount26
+	@tools/expect_same.sh test_tlist_count_is_writable \
+	  "$$($(TESTTMP)/test_tlistcount26)" \
+	  "$$(cat test/test_tlist_count_is_writable.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

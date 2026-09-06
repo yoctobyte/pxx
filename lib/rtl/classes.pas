@@ -322,7 +322,16 @@ type
     procedure Insert(Index: Integer; Item: Pointer);
     function IndexOf(Item: Pointer): Integer;
     function Remove(Item: Pointer): Integer;
-    property Count: Integer read FCount;
+    { Count IS WRITABLE, as in FPC: `property Count: Integer read FCount write
+      SetCount`. It was read-only here, so the FPC idiom for truncating a list
+      back to a mark -- `for i:=Old to L.Count-1 do TFoo(L[i]).Release;
+      L.Count:=Old;` -- was refused with `property is read-only`, a diagnostic
+      about the DECLARATION for what is really a missing accessor. fcl-passrc
+      pparser.pp:4768 does exactly that in ParseVarList's error path, and it is
+      the ordinary way to unwind a partially built list.
+      feature-b-tlist-count-is-writable }
+    procedure SetCount(NewCount: Integer);
+    property Count: Integer read FCount write SetCount;
     property Items[Index: Integer]: Pointer read GetItem write SetItem; default;
     { The FPC idiom `L.List^[i]`. A dynamic array's handle IS the address of
       element 0 with an 8-byte stride, which is the layout PPointerList
@@ -788,6 +797,40 @@ begin
   Notify(FItems[Index], lnDeleted);
   for i := Index to FCount - 2 do FItems[i] := FItems[i + 1];
   FCount := FCount - 1;
+end;
+
+procedure TList.SetCount(NewCount: Integer);
+{ FPC's TList.SetCount shrinks through Delete and grows through the backing
+  list, and the two halves are NOT symmetric — that asymmetry is the whole
+  behaviour, so it is spelled out here rather than collapsed into one resize.
+
+  SHRINKING NOTIFIES. Every removed element goes through Delete, so an owning
+  descendant's Notify(lnDeleted) fires exactly as it would for the same number
+  of Delete calls. A plain SetLength would silently drop the elements and leave
+  such a list leaking, and nothing in an output assertion could see it.
+
+  GROWING ZEROES. New slots read nil, not whatever the capacity happened to
+  hold. `SetLength` on a dynamic array of Pointer already guarantees that, which
+  is why there is no FillChar here — but the guarantee is the contract, not an
+  accident of the implementation, so do not swap this for a raw capacity bump.
+  Growing does NOT notify: FPC adds no elements, it exposes empty slots.
+
+  Deleting from the END each time keeps Delete's element shuffle at zero work,
+  so the shrink is linear rather than quadratic. }
+var i: Integer;
+begin
+  if NewCount < 0 then Exit;
+  if NewCount < FCount then
+  begin
+    for i := FCount - 1 downto NewCount do Delete(i);
+    Exit;
+  end;
+  if NewCount > FCount then
+  begin
+    if NewCount > Length(FItems) then SetLength(FItems, NewCount);
+    for i := FCount to NewCount - 1 do FItems[i] := nil;
+    FCount := NewCount;
+  end;
 end;
 
 procedure TList.Insert(Index: Integer; Item: Pointer);

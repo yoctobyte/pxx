@@ -1,0 +1,4 @@
+shrink count = 3 last = 3
+grow count   = 6 new slot nil = TRUE kept = 1
+notify fired = 3 count = 1
+tfplist      = 2 20
