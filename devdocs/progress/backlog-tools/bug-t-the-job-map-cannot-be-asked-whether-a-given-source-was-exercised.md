@@ -238,3 +238,50 @@ re-checks and a "not reproducible" nobody re-runs are the same object: a verdict
 that stops work. This one was caught only because a peer asked an unrelated
 question about a different ticket and the answer required opening the archive.
 
+
+## 2026-09-06 (frank-coordinator) — the LIVE blast radius is 5 open tickets, and one of them is this one
+
+Asked after frankZ's `b0d7cd10e` whether `@N` being systematically misread affects every
+ticket citing a job by index. **Measured rather than assumed**, across the ranked and backlog
+folders only (`done/` is history and `tstate/` is the archive):
+
+- **5 open tickets** cite a job key of the form `<job>#src:<path>@N`.
+- **21 distinct keys** between them.
+- One of the five is **this ticket**.
+
+```
+backlog/regression-cascade-6758c7ce7dbd.md
+backlog/regression-cascade-b8e3b3010249.md
+backlog-core/bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal.md
+backlog-core/feature-a-a-refusal-is-a-claim-with-a-date-on-it.md
+backlog-tools/bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised.md
+```
+
+**So the defect is systematic and the live cost is bounded.** 128 further citations sit in
+`done/` and are records of what a past session read, not instructions — CLAUDE.md's precedence
+rule already says not to repair those, and repairing them would date a claim that should stay
+dated.
+
+### The pathological shape is visible in the key list, and it is worse than a generic source
+
+Thirteen of the twenty-one are one file:
+
+```
+test-uforth#src:tools/compiler_srchash.sh@1 .. @13
+```
+
+`compiler_srchash.sh` is the FIRST SOURCE of **thirteen different jobs**, so for that file
+`@N` carries **no information except position in a list the reader cannot enumerate** — the
+job grouping is the harness's recipe grouping, invisible in the Makefile and unobtainable
+without `testmgr --list`. Compare `test-xtensa#src:test/test_cross_record.pas@3`, where three
+jobs share the source and the three are at least distinguishable by ABI once you know they
+exist.
+
+> **A key whose disambiguating component is a position in an unenumerable list is not
+> ambiguous — it is unresolvable by hand.** That is the sharpened form frankZ arrived at, and
+> `compiler_srchash.sh` is the instance that shows the ceiling: thirteen rows, one name, and
+> nothing a reader can do with the number.
+
+**This does not change the recommended fix** — subject is `(target, abi, source)` and all
+three are already in the recipe. It bounds the migration: **5 open tickets to re-key**, not a
+board-wide sweep.
