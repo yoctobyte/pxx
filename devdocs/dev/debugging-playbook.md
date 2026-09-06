@@ -11707,3 +11707,108 @@ the control.**
 The corollary for whoever routes: send the narrowing AND the reason not to trust it,
 and say plainly that a second narrowing from the same instrument is not a second
 opinion.
+
+## WHEN A MINIMISATION DROPS THE THING THE SUSPECT COMMIT IS ABOUT, THE MINIMISATION IS WHAT IS WRONG — read the candidate's own subject line as the list of variables you must keep
+
+Measured 2026-09-06 (frankA), reducing a corpus regression to something anyone could run.
+The failing corpus rows were two faces of one defect. Written as a **single file**, both
+faces compile and run clean under pxx. That reduction was built first, watched to pass,
+and was one step from being reported as *"reduces to nothing — the corpus is doing
+something the reduction is not."*
+
+**The suspect commit's subject named what had been removed:** *"a generic template's
+method body parses as its DECLARING unit"*. There is no declaring unit in a single file.
+The reduction had deleted the independent variable.
+
+> **A repro that passes is evidence about the reduction before it is evidence about the
+> defect.**
+
+The positive procedure, which is the part worth carrying: **read the candidate commit's
+summary as a list of variables the minimisation must preserve.** "Declaring unit" is one
+word in a subject line and it is the whole experiment. This is
+`a-comment-can-break-a-build`'s minimisation caveat with something to actually do —
+suspecting your minimisation is a mood; enumerating the suspect's own nouns is a check.
+
+Correctly reduced, both faces became **a unit plus a program, ~15 lines each, no corpus**,
+both accepted and run by fpc 3.2.2, and the corpus dependence was gone. The same session
+also ran the reduction against the PIN, which answers one face differently again (a
+duplicate-definition warning rather than a refusal) — confirming the reduction was not
+exercising some older latent gap that happened to sit nearby.
+
+### And the same night, the same family from the other end: restoring a source line is not rebuilding
+
+frankS, minimising the same defect, measured two reductions as NOT reproducing and
+concluded the shape was wrong. **The probed source line had been restored without a
+rebuild**, so every reading came from a binary that still had the fix disabled. The tell
+was not the failure itself — it was that **a positive control later failed rows that had
+just been certified as passing.** Same animal as the `git fetch` rule in CLAUDE.md: the
+instrument did not error, it answered correctly about the previous build.
+
+## A SENTINEL MUST NOT COLLIDE WITH THE VALUE IT EXISTS TO DISCRIMINATE AGAINST
+
+`SpecBodyHostUnitIdx` had to record "no host scope remembered", where a scope index of
+`-1` means *the program* — a real, reachable, meaningful scope, and **precisely the one
+the field exists to tell apart from "unset"**. The sentinel is `-2`.
+
+This is `## AND CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT` in the data
+model rather than in a test: wherever a type's default, a zero, a `-1` or a pointer width
+is *also* a legal value of the field, "unset" and "set to that" are indistinguishable and
+every reader of the field is a guard that cannot fail. Ask the same question of a new
+field that you ask of a new assertion — **if the machinery never wrote here, would this
+value still read as an answer?**
+
+## A SPECIALIZATION'S SYNTHESIZED ROWS ARE MINTED WHERE THE SPECIALIZATION IS WRITTEN — so changing whose scope a body parses in reclassifies things nobody declared
+
+The defect behind the `test-fgl` and `test-core` fgl reds, 2026-09-06, fixed at
+`05ae03c3d`. `a0780b56d` made a generic template's method body parse as its **declaring
+unit**, which is correct and is the whole point of that fix. The consequence nobody had a
+reason to predict is that a specialization mints class rows — the substituted type
+argument, and any nested `specialize` inside the template's own body — **at the site where
+the specialization is written**, i.e. the program. So one veto that is right on its own
+terms,
+
+```
+if (CurrentUnitIdx >= 0) and (UClsUnitIdx[ci] < 0) then hidden   { a unit cannot see the program's classes }
+```
+
+started hiding the template's own materialised members from the template's own body.
+That veto is not incidental: ignoring it **segfaulted** (a NilPy `class Text` capturing
+the RTL file record), so it cannot simply be dropped.
+
+**Two observables, one veto**, and the two faces are why the corpus split looked
+mechanism-shaped and was not:
+
+| site | source | reported |
+|---|---|---|
+| `fgl.pp:892` | `Result := T(FList.Items[FPosition]^);` | `undefined variable (IFoo)` / `(TThing)` — the **type argument** |
+| `fgl.pp:981` | `Result := TFPGListEnumeratorSpec.Create(Self);` | `undefined variable (TFPGListEnumeratorSpec)` — a **nested specialization** |
+
+Both are *a type NAME in expression position resolving as a VARIABLE* — see
+`## ONE DEFECT, TWO OBSERVABLES, SELECTED BY THE DESTINATION'S PRIOR STATE`, arriving from
+a different direction the same night. **It is NOT a two-phase declaring-site /
+specializing-site name split**, which was the coordinator's hypothesis and is the tidier
+story; it is one scope that stopped being reachable. The fix remembers the host scope and
+lets the veto see it, and `FindUClass` already tries `CurrentUnitIdx` rows first and
+returns on a hit, so the shadowing half — including the two rows that exist to catch a
+"fix" that merely hides the program's copy — is untouched.
+
+**THE INSTRUMENT THAT SETTLED IT WAS THREE `WriteLn`s AT THE ERROR SITE.** Twenty minutes
+had gone into the alias table first, *because a nested type name reads like an alias*. The
+probe printed `undefined=TFPGListEnumeratorSpec CurrentUnitIdx=62 MethImplOwnerCi=45`,
+`class row=46 unit=-1`, and **zero alias rows** — the last of which is the one that could
+not be reached by reading. `PXXDBG` exists for exactly this and so does a temporary
+`WriteLn`; the table you are already looking in cannot tell you it is the wrong table.
+
+### The corpus split does not partition by what it looks like it partitions by
+
+```
+PASS  fpslist   map_int   map_str
+FAIL  ifclist   list_int  list_str  objectlist
+```
+
+`list_int` and `list_str` specialize on `Integer` and `String`; `map_int` and `map_str`
+specialize on the same builtins and pass. **So it is not builtin-versus-declared** — that
+was a plausible reading of four rows and it is wrong. The split is by which fgl class the
+driver uses, and therefore by which of the two faces that class's body contains. Four rows
+is enough data to support a wrong partition and not enough to refute one; the two failure
+SITES settled it in one look.

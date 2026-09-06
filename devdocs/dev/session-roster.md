@@ -401,3 +401,41 @@ sentence.
   T being down. **Check the exit code, not the word.**
 - **Third-party source NEVER enters the repo** (owner, 2026-08-17, emphatic).
   Fetched on demand, gitignored, pinned, with a `PROVENANCE.md`.
+
+## A BOUNDED ASK AND AN UNBOUNDED ASK ON THE SAME TOPIC ARE ONE DISPATCH
+
+Measured 2026-09-06, this seat, and it is a collision this seat exists to prevent and
+caused. Two messages went out in the same minute about one RED:
+
+- to the session holding the only full corpus: **a bounded ask** — *"the few-minute
+  contribution only you can make is the pass/fail split"*, explicitly not the diagnosis,
+  explicitly *"not now" is a complete answer.*
+- to the session holding the topic: **the mechanism hypothesis and the range**, unbounded.
+
+Both sessions did excellent work and **both built corpus-free reductions of the same
+defect.** One bisected it to a single commit with a direct A/B and reduced both faces to
+~15 lines; the other reverted the hunk under a binary-sha control, found the mechanism,
+fixed it and wired a regression test. Neither wasted a night and neither did anything
+wrong — the corpus holder explicitly declined to fix, *"so nobody works the same question
+twice"* — but the reduction was built twice, and that is the duplicate this seat is for.
+
+**The error is believing that a NARROW framing partitions the work. It does not.** A
+bounded ask on a live defect expands, because the person who measures the split is one
+step from the bisect and the step is obviously worth taking. Scope lives in the QUESTION,
+not in the sentence asking it, and a question one step from an answer has no bounded form.
+
+**How to apply.** Before sending, ask *what is the next obvious step after the thing I am
+asking for* — if that step is the other session's work, the two asks are one dispatch and
+must be sequenced, not framed. Concretely:
+
+- **Send one ask per topic, and name the other holder inside it.** *"frankS holds the
+  mechanism and is on it now; the split is the one piece it cannot measure — send it the
+  result rather than continuing."* Naming the other session is what makes a bound hold,
+  because it tells the receiver where the work goes next.
+- **Or sequence: ask the instrument-holder first, relay the answer, then hand the
+  mechanism on.** One extra hop, no overlap.
+- **A bound stated as effort — "a few minutes", "only this piece" — is not a bound.** It
+  describes cost, and cost is not what expands.
+
+Related: [[a-hold-ships-with-the-event-that-retires-it]] — same shape, one level up. A
+hold with no retiring event never retires; an ask with no named next holder never stops.
