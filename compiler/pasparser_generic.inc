@@ -4227,8 +4227,42 @@ var i, k, q, j, nSpec, nArg, base: Integer;
     specArgKinds: array[0..MAX_INLINE_SPECS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
     specNArgs: array[0..MAX_INLINE_SPECS-1] of Integer;
     specNames: array[0..MAX_INLINE_SPECS-1] of AnsiString;
+    { which arities this NAME is declared at, anywhere in the unit -- index is
+      the type-parameter count, slot 0 unused }
+    declArity: array[0..MAX_TEMPLATE_PARAMS] of Boolean;
 begin
   fname := GenericFuncs[gfi].Name;
+  { A generic routine name may be OVERLOADED on its type-parameter count, and
+    the registrations are one per DECLARATION, so `gfi` speaks for exactly one
+    of them. Without this pre-pass the arity diagnostic below reads a use of a
+    sibling overload as a wrong-arity use of THIS one and states a count that
+    is false about the program -- tgenfunc8.pp declares Add<T>, Add<S,T> and
+    Add<T> and was told `Add takes 1 type argument(s), not 2` while two lines
+    away sat the overload that takes exactly 2. Scan the whole stream, not just
+    forward from TokPos: an overload declared BEFORE this one is as real as one
+    declared after. bug-p-... (see the skip row for tgenfunc8.pp) }
+  for q := 0 to MAX_TEMPLATE_PARAMS do declArity[q] := False;
+  i := 0;
+  while i + 2 < TokCount do
+  begin
+    if (i > 0) and (Tokens[i].Kind = tkIdent) and
+       ((Tokens[i - 1].Kind = tkFunction) or (Tokens[i - 1].Kind = tkProcedure)) and
+       CaseEqual(GetTokenStr(i), fname) and (Tokens[i + 1].Kind = tkLt) then
+    begin
+      k := 1;
+      j := i + 2;
+      while (j < TokCount) and (Tokens[j].Kind <> tkGt) and
+            (Tokens[j].Kind <> tkSemicolon) and (Tokens[j].Kind <> tkLParen) do
+      begin
+        if Tokens[j].Kind = tkComma then Inc(k);
+        Inc(j);
+      end;
+      if (j < TokCount) and (Tokens[j].Kind = tkGt) and
+         (k >= 1) and (k <= MAX_TEMPLATE_PARAMS) then
+        declArity[k] := True;
+    end;
+    Inc(i);
+  end;
   nSpec := 0;
   i := TokPos;
   while i + 4 < TokCount do
@@ -4289,15 +4323,25 @@ begin
       number of type arguments is not this routine's specialization, and
       mangling it anyway would invent a name nothing declares.
 
-      With the `specialize` KEYWORD written, though, a name match at the wrong
-      arity cannot be anything else, so say so. Declining silently left the run
-      in the stream to be read as an expression, and the reader was told
-      `undefined variable (specialize)` -- a true statement about the token that
-      survived, naming neither the routine nor the count. The keyword is the
-      whole discriminator: without it the same tokens are a legal comparison
-      chain (`a < b > (c)`), which is why the bare surface stays quiet and falls
-      through. }
-    if matched and (nArg <> GenericFuncNParams[gfi]) and hasKw then
+      With the `specialize` KEYWORD written it is at least not a comparison, so
+      it is worth a word. Declining silently left the run in the stream to be
+      read as an expression, and the reader was told `undefined variable
+      (specialize)` -- a true statement about the token that survived, naming
+      neither the routine nor the count. The keyword is the whole
+      discriminator: without it the same tokens are a legal comparison chain
+      (`a < b > (c)`), which is why the bare surface stays quiet and falls
+      through.
+
+      But the keyword does NOT make this routine the only candidate, which is
+      what `declArity` is for. A name match at the wrong arity is a wrong-arity
+      use only if NOTHING declares that name at that arity; when something does,
+      the use belongs to a sibling overload and that overload's own pass over
+      this same stream will rewrite it. Saying `takes 1, not 2` about a program
+      that declares a 2-parameter overload two lines down is a false statement
+      about the source, and it is worse than the silence it replaced because it
+      sounds specific. }
+    if matched and (nArg <> GenericFuncNParams[gfi]) and hasKw and
+       (not declArity[nArg]) then
       Error('generic routine ' + fname + ' takes ' +
             AIntToStr(GenericFuncNParams[gfi]) + ' type argument(s), not ' +
             AIntToStr(nArg));

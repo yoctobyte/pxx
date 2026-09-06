@@ -9976,6 +9976,22 @@ test-core: $(COMPILER)
 	@# a comparison chain.
 	@$(TESTTMP)/test_gra26 | diff -u test/test_generic_routine_type_parameter_arity.expected - \
 	  || { echo 'test_generic_routine_type_parameter_arity: FAIL - a generic routine lost a type parameter'; exit 1; }
+	./$(COMPILER) test/test_generic_routine_overloaded_on_type_parameter_count.pas $(TESTTMP)/test_gravl26
+	@# .expected is fpc 3.2.2's own output. One generic-routine NAME declared at
+	@# several type-parameter counts. The inline-use rewrite runs once per
+	@# REGISTRATION, so while scanning for uses of Wrap<T> it walks over every use
+	@# of Wrap<S, T> -- and used to refuse them with `Wrap takes 1 type
+	@# argument(s), not 2`, a false statement about a program that declares the
+	@# two-parameter overload a few lines down. Row C is the ORDER control: B is
+	@# declared before the routine whose scan sees it and C after, so a pre-pass
+	@# starting at the scanning declaration's own position gets B right and C
+	@# wrong, and B alone cannot tell those apart.
+	@$(TESTTMP)/test_gravl26 | diff -u test/test_generic_routine_overloaded_on_type_parameter_count.expected - \
+	  || { echo 'test_generic_routine_overloaded_on_type_parameter_count: FAIL - a generic routine name lost an overload'; exit 1; }
+	@# and the positive control: an arity NOTHING declares must still be refused
+	@# by name and count, or the relaxation above is just a deleted diagnostic.
+	! ./$(COMPILER) test/test_generic_routine_arity_with_no_such_overload_fail.pas $(TESTTMP)/test_gravlneg26 > $(TESTTMP)/test_gravlneg.log 2>&1
+	grep -q "generic routine Wrap takes 1 type argument(s), not 2" $(TESTTMP)/test_gravlneg.log
 	tools/expect_same.sh test_gen_xmeth26 "$$($(TESTTMP)/test_gen_xmeth26)" "$$(printf '5\nab\n15\n42\n3\n13\n42')"
 	./$(COMPILER) -Futest/generic_nestedspec_units test/test_generic_body_sees_its_specializations_nested_type.pas $(TESTTMP)/test_gen_nestedspec26
 	tools/expect_same.sh test_gen_nestedspec26 "$$($(TESTTMP)/test_gen_nestedspec26)" "$$(printf '33 44\n55\n66')"

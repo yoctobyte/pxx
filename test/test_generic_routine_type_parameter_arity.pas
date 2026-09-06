@@ -34,7 +34,11 @@ program test_generic_routine_type_parameter_arity;
   accord, reading the function's own name as the generic template -- we accept
   it, which is not a defect), and an arity mismatch under the `specialize`
   keyword is refused with `generic routine Pair takes 2 type argument(s), not
-  1`. Both are compile-time outcomes rather than printed values. }
+  1`. Both are compile-time outcomes rather than printed values. That refusal
+  is asserted in test_generic_routine_arity_with_no_such_overload_fail.pas, and
+  it holds only when NOTHING declares the name at the arity asked for -- a name
+  overloaded across type-parameter counts is legal, and is
+  test_generic_routine_overloaded_on_type_parameter_count.pas. }
 {$mode objfpc}
 uses ugra;
 var a, b, c: Integer;
