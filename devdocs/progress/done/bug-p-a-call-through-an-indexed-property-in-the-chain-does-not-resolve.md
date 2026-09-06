@@ -149,4 +149,4 @@ compile would pass over the silent arm** — the assertion has to be the returne
 value, with an argument whose right answer is not the failure value.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6453a7ad0.
