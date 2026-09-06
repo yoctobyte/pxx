@@ -120,6 +120,17 @@ implementation
   alike; confirmed here against both i386's own header and the kernel's generic
   syscall.tbl (`403 32 clock_gettime64`).
 
+  PPOLL IS THE SAME ARGUMENT AND WAS LEFT OUT OF IT FOR A WEEK (fixed
+  2026-09-06). NR_PPOLL used to be the LEGACY number on the 32-bit targets —
+  i386 309, arm32 336, riscv32 73 — and the legacy ppoll takes a 32-bit
+  timespec while TPyPalTimespec is two Int64. So the kernel read tv_sec from
+  the low half of our first field and tv_nsec from its HIGH half, which is
+  always zero: every sub-second timeout became a poll that returned
+  immediately, and riscv32 (which has no legacy ppoll at all) answered ENOSYS.
+  ppoll_time64 is 414 on all three, takes the __kernel_timespec we already
+  build, and needs no second record. One struct, one number, three targets —
+  which is what the clock entry above bought and this one now does too. 
+
   VERIFIED HOW, name by name — this is the part a reader needs, because a wrong
   number is invisible on five of six targets and issues an UNRELATED syscall:
     x86-64   header  /usr/include/x86_64-linux-gnu/asm/unistd_64.h  (228, 217)
@@ -128,6 +139,19 @@ implementation
     riscv32  header  same, 32-bit arm of the gate above  (403, 61)
     arm32    clock_gettime64 403 — from the uniform time64 block, cross-checked
              against two independent sources above.
+    arm32    getdents64 217 — filled 2026-09-06. It was -1 for a week because
+             the machine that added os.listdir had no arm/syscall.tbl and
+             would not derive a number from a sibling, which was the right
+             call: the i386/arm32 +27 offset that holds for openat, unlinkat,
+             renameat, ppoll and readlinkat does NOT hold here (i386 220,
+             arm32 217), and the derived 247 is another syscall entirely.
+             Three instruments now agree and they fail differently:
+             devdocs/dev/syscall-maps/arm32.txt (a qemu -strace SWEEP, not a
+             header read) has `217 getdents64'; the original ticket's own text
+             cites 217 while arguing the offset does not extend; and
+             os.listdir was run end to end under qemu-arm and returned the
+             right names. A wrong number here does not fail — it issues an
+             unrelated syscall — so the end-to-end run is the one that counts.
              getdents64 = -1, DELIBERATELY. This machine carries no arm32
              syscall table (arch/arm/tools/syscall.tbl is absent from the
              installed headers) and the number cannot be derived from i386.
@@ -188,7 +212,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
-  NR_PPOLL     = 309;
+  NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 305;
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 220;
@@ -207,10 +231,10 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
-  NR_PPOLL     = 336;
+  NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 332;
   NR_CLOCK_GETTIME = 403;
-  NR_GETDENTS64 = -1;
+  NR_GETDENTS64 = 217;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -260,7 +284,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = -1;
   NR_FACCESSAT = 48;
-  NR_PPOLL     = 73;
+  NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 78;
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 61;

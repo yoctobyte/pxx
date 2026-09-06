@@ -404,3 +404,4 @@
 2026-09-05T18:15:57Z  v404  fe1e9c37d322c62f5f7b1a88a0afcccb7a504f1f4e3c56adb4f42d0d2b8b277a  5b5fdb0b32d30418cafe9d5c631237a94893490b  tickets(B,P): dwscript-rtti's blocking analysis is stale in both halves — the block is gone, the segfault is a different bug
 2026-09-06T07:42:36Z  v405  8f21d04df6264cc5edc4350a33f481f8a12849d5923dd2d45b11f82bce0c9e87  36eb642d624059572f80acb9f05d41740894c2e4  tickets(P): the remaining four intrinsic spellings have four doors and three are open at once
 2026-09-06T18:41:48Z  v406  4bfd73d70588a0775a262a67df4c9e9daeabc15a55f6b79191ccde668d624ff0  1b903c1ddaf29931876cca6ff1d559dff174ed6f  docs(P): the program-scope rows are load-bearing, and the silent face is unsized
+2026-09-06T19:59:07Z  v407  095ef4811a5bf6c94951711497646957e742370346d51926d1dcccb651680be7  04559b9d6c5a9da084888f174e179b5ef5dc6894  docs(roster): the night a correct measurement froze the fleet
