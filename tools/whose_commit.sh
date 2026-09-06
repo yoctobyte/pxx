@@ -15,7 +15,14 @@
 # WHO authored it. A cherry-pick or one session applying another's patch puts
 # the wrong tree behind the sha. Corroborate with the Claude-Session trailer.
 set -u
-CREATE='(commit|commit \(amend\)|commit \(initial\)|rebase \((pick|continue|fixup|squash|reword)\))'
+# `rebase` is not the only prefix a rebase step wears: run under `git pull
+# --rebase`, git prefixes the step with the PULL's action, so the entry reads
+# `pull --rebase -q (pick): <subject>` and a `^rebase \(` pattern denies it.
+# Six spellings are live in these checkouts right now. Hence `pull\b[^:()]*`.
+# A BARE `pull ...` with no step suffix stays excluded -- that is membership,
+# and matching it names every checkout that ever pulled the sha.
+STEP='\((pick|continue|fixup|squash|reword|edit|revert)\)'
+CREATE="(commit|commit \(amend\)|commit \(initial\)|(rebase|pull\b[^:()]*) $STEP)"
 root=${PXX_CHECKOUT_ROOT:-$HOME}
 
 [ $# -gt 0 ] || { echo "usage: $0 <sha>..." >&2; exit 2; }

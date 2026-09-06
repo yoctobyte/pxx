@@ -636,7 +636,16 @@ checkout's HEAD — so match on a **CREATING VERB**, not on presence. **`commit`
 alone is not that set**, and this rule said it was until 2026-09-06.
 `tools/sync.sh` rebases nearly every sync, and a replayed commit's `git commit`
 sha is the DOOMED one — the surviving sha, the only one on origin and the only
-one you ever quote, is born under `rebase (pick)` or `rebase (continue)`.
+one you ever quote, is born under a REBASE STEP. **And a rebase step run under
+`git pull --rebase` is not spelled `rebase (...)` at all**: git prefixes the
+step with the PULL's action, so the entry reads `pull --rebase -q (pick):
+<subject>` and six such spellings are live in these checkouts. A bare
+`pull ...` with no step suffix is membership and stays excluded.
+**Do not write this verb set from memory — the reflogs enumerate themselves,
+`git reflog --format=%gs | sed 's/:.*//' | sort -u` across every checkout, and
+that one command beat two rounds of careful reasoning by two sessions on
+2026-09-06.** Both of us listed the verbs we could think of and both lists were
+short.
 Measured 2026-09-06: 33 of one session's 69 commits answered a rebase verb, so
 `grep '^<sha> commit'` denied **46% of its arc, the pin the fleet was running on
 included** — it reported the tree that authored pin v405 as no tree at all.
