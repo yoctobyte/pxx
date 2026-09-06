@@ -8,17 +8,23 @@ created: 2026-09-06
 found-by: frankA
 tags: [erlang, cross-target, i386, aarch64, arm32, skeleton]
 blocked-by: []
-summary: "test_erlang_skeleton.erl now REACHES main on i386/aarch64/arm32 and computes a WRONG VALUE before faulting -- i386 prints `fact(5) is 1` where native prints 120, then SIGSEGVs partway through the next line; aarch64 and arm32 SIGILL. Measured 2026-09-06 at 3180c85fb with the frontend's x86-64-only refusal temporarily lifted. THIS IS A NEWLY VISIBLE DEFECT, NOT A NEW ONE: until the entry-stub extraction landed, every non-x86-64 Erlang binary died on a hand-written x86-64 program tail before its first syscall, so nothing it printed could be observed. Rust and Zig came out of that same experiment producing output IDENTICAL to their native runs on all three targets, which is what makes this Erlang's own defect and not a shared one. The refusal in eparser.inc stays in place and is load-bearing until this is fixed."
+summary: "test_erlang_skeleton.erl now REACHES main on i386/aarch64/arm32 and computes a WRONG VALUE before faulting -- i386 prints `fact(5) is 1` where native prints 120, then SIGSEGVs partway through the next line; aarch64 and arm32 SIGILL. Measured 2026-09-06 on the compiler built by `refactor(A): one mirror pair for the entry stub, adopted by the three skeleton drivers`, with the frontend's x86-64-only refusal temporarily lifted. THIS IS A NEWLY VISIBLE DEFECT, NOT A NEW ONE: until the entry-stub extraction landed, every non-x86-64 Erlang binary died on a hand-written x86-64 program tail before its first syscall, so nothing it printed could be observed. Rust and Zig came out of that same experiment producing output IDENTICAL to their native runs on all three targets, which is what makes this Erlang's own defect and not a shared one. The refusal in eparser.inc stays in place and is load-bearing until this is fixed."
 ---
 
 # The Erlang skeleton computes a wrong value cross-target
 
-## Measured 2026-09-06, at `3180c85fb`, compiler `70aadc213f6d`
+## Measured 2026-09-06, compiler sha256 `70aadc213f6d`
+
+On the tree carrying `refactor(A): one mirror pair for the entry stub, adopted by
+the three skeleton drivers` — cited by SUBJECT rather than by a sha, because at
+the time of writing that commit was local and unpushed, and `tools/sync.sh`
+rebases nearly every sync, so any sha quoted here before the push is the doomed
+one.
 
 Taken with `eparser.inc`'s `if TargetArch <> TARGET_X86_64` refusal replaced by
 `if False then` in the working tree, rebuilt, measured, then reversed by
 re-editing that one line. The post-experiment rebuild reproduced the
-pre-experiment binary sha exactly (`e38b3d05b304`), which is the control on the
+pre-experiment binary digest exactly (sha256 `e38b3d05b304`), which is the control on the
 restore.
 
 | target | `test_erlang_skeleton.erl` |
@@ -37,7 +43,7 @@ one is first.
 
 ## Why this is only visible now, and why that matters for ranking
 
-Before `3180c85fb`, `eparser.inc:543` emitted four literal x86-64 instructions
+Before that commit, `eparser.inc:543` emitted four literal x86-64 instructions
 (`call main; xor edi,edi; mov eax,231; syscall`) as the whole program tail,
 unconditionally, with no `case TargetArch of` around them. Every non-x86-64
 binary therefore died on an illegal instruction **before its first syscall** —
