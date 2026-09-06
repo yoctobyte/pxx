@@ -10389,7 +10389,15 @@ test-core: $(COMPILER)
 	@# parameterless record constructor for unrelated reasons and that refusal
 	@# arrives after the warning, so asserting it here would make fixing THAT
 	@# look like a regression in THIS.
-	-./$(COMPILER) test/test_a_record_class_constructor_is_warned_about.pas $(TESTTMP)/test_recclassctorwarn26 > $(TESTTMP)/recclassctorwarn.log 2>&1
+	@# `|| true` AND NOT MAKE'S `-` PREFIX, and the difference is not style.
+	@# Track T's harness splits a recipe into LINES and runs each itself, so the
+	@# `-` -- which is make's, not the shell's -- never reaches it: this row
+	@# auto-filed a p70 regression on its first ever run
+	@# (regression-test-core-test-a-record-class-constructor-is-warned-about,
+	@# 2026-09-06). A row whose rc is meaningful to make and meaningless to the
+	@# harness is a row that reds for everyone else and passes locally. The
+	@# ignoring has to be inside the SHELL command for both readers to agree.
+	./$(COMPILER) test/test_a_record_class_constructor_is_warned_about.pas $(TESTTMP)/test_recclassctorwarn26 > $(TESTTMP)/recclassctorwarn.log 2>&1 || true
 	grep -q 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/recclassctorwarn.log \
 	  || { echo "class-ctor-warn: the RECORD member loop's terminus is silent -- the class one was fixed and its sibling was not:"; cat $(TESTTMP)/recclassctorwarn.log; exit 1; }
 	./$(COMPILER) test/test_an_abstract_override_keeps_its_parents_vmt_slot.pas $(TESTTMP)/test_absoverride26

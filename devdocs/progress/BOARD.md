@@ -73,7 +73,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (13)
+## backlog (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,7 +81,6 @@ _none_
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
-| regression-test-core-test-a-record-class-constructor-is-warned-about | P | 70 | regression | first-ever red: test-core#src:test/test_a_record_class_constructor_is_warned_about.pas at ad2735420d6b in step 1/2, `./compiler/pascal26 test/test_a_record_class_constructor_is_warned_about.pas /tmp/test_recclassctorwarn26 > /tmp/reccla…` (auto-filed by twatch) | — |
 | regression-test-core-test-libwriteln-parity | T | 70 | regression | regression: test-core#src:test/test_libwriteln_parity.pas at fa5e9ef55813 in step 2/2, `tools/expect_same.sh test_libwln26 "$(/tmp/test_libwln26)" "$(cat test/test_libwriteln_parity.expected)"` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
@@ -930,9 +929,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3437)
+## done (3438)
 
-3437 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3438 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1037,7 +1036,6 @@ _none_
 - [p 70] [T] regression-cascade-6758c7ce7dbd
 - [p 70] [T] regression-cascade-b8e3b3010249
 - [p 70] [T] regression-optdiff-shard6-12
-- [p 70] [P] regression-test-core-test-a-record-class-constructor-is-warned-about [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-libwriteln-parity
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
