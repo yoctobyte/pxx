@@ -3,6 +3,7 @@ prio: 65
 blocked-by: []
 track: P
 status: working
+owner: "frankS"
 summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **377 pass, 0 fail, 123 skip, 50 auto-gated of 550** at `e929e720f` / compiler `d1d15deee084` (frankS, `63350e13c`), superseding 368 at `36d7e5fd4`. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
 ---
 
@@ -43,10 +44,11 @@ that traces to `ErrorAddr` or `GetFPCHeapStatus`, re-add the edge and say which 
 
 - **Type:** feature (frontend conformance corpus)
 - **Track:** P (Pascal frontend)
-- **Status:** working
+- **Status:** working — filed 2026-07-10. Rung 1 of
   [[feature-pascal-corpus-expansion]].
 - **Owner:** frankS
 
+## Idea
 FPC ships `tests/test/**` — thousands of small `.pp` programs, each exercising
 one language feature (`tbs*`, `tobject*`, `tgeneric*`, `terror*` for expected
 failures, etc.). It is the **c-testsuite analog for Pascal**, but authoritative
