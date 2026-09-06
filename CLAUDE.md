@@ -468,6 +468,27 @@ at all, would this row still pass?"** — wherever a type's default, a zero, a
 `sizeof(int)` or a pointer width is also the expected value, the answer is yes.
 Re-derive any size row expecting 4 or `sizeof(void*)` before trusting it.
 
+**AND THE COLLISION CAN BE MANUFACTURED BY THE READOUT, WHICH THE QUESTION ABOVE
+DOES NOT CATCH** — there the machinery did nothing; here it does plenty and the
+INSTRUMENT collapses the two answers on the way out. Measured 2026-09-06
+(frankB): `High`/`Low` of the sized booleans were recorded in a ticket's table
+AND in a compiler comment as fpc answering `TRUE`/`FALSE`, agreeing with us.
+Both readings came from `WriteLn`. Cast to `Int64` first and fpc actually gives
+**9223372036854775807 / −9223372036854775808 for all four widths** — a value
+that does not fit the type the expression has, which fpc's own assembler then
+refuses. `Ord` and `WriteLn` truncate those extremes to the type's width, which
+is **exactly the −1 and 0 we return**, so the probe reported parity on the one
+row where the two compilers disagree completely. **It sat in a ticket for two
+months, and an implementer matching the recorded table would have shipped the
+wrong values believing they had parity.** The tell was visible without any cast:
+fpc's `WriteLn(Low(ByteBool))` prints `TRUE` while fpc's own `Ord` of it is `0`
+— **one compiler, two doors, two answers.** So ask the third question too:
+**"could the way I am PRINTING this turn a disagreement into an agreement?"**
+Any readout that formats, truncates, or narrows to the subject's own type can,
+and a differential probe is where it costs the most. Widen the readout — cast to
+the widest type, print the raw bits — before recording a row as parity. Record
+the METHOD beside the number, never the number alone.
+
 ## Debugging — measure, do not reason
 
 **The expensive bugs here do not crash; they produce a plausible wrong value far
