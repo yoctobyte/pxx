@@ -3,8 +3,8 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: done
+owner: frankD
 created: 2026-09-06
 summary: "`L.Objects[i].Free` and `b.Pick(i).Free` are refused with `\"Free\": no such member on this record/class`, while `b.FA[i].Free` on the same objects compiles. The boundary is exactly BuiltinFreeHere's `PureDesignator(node)` guard, and the guard is CORRECT for the desugaring it protects: GenMakeFreeObjectExpr CloneASTs the operand up to three times (nil test, Destroy, FreeMem), so a getter or a function call would run three times. The fix is to stop cloning — materialise a non-designator receiver into a temp, or route the whole thing through an RTL helper that takes the instance once. THE STATED BLOCKER IS FALSE AND WAS MEASURED AS SUCH 2026-09-06: `AllocTemp` (symtab.inc:6200) does have zero callers, and it is merely an unused ALIAS for `AllocVar('', tyInteger)` -- the hidden-local pattern itself has **193 sites** in `compiler/**` (58 tyPointer, 27 tyAnsiString, 23 tyInteger, ...), at least four of them in the Pascal frontend (`pasparser_stmt.inc:2463`, `:3685`, `:7565`, `pasparser_expr.inc:10838`), and the canonical spelling is `sym := AllocVar('', tk)` then `GenMakeAssign(GenMakeIdent(sym, tk), value)` then `GenMakeIdent(sym, tk)` -- exactly `GenMakeStrArgTemp` (pasparser_stmt.inc:357). So there IS an established pattern; a zero-caller count on a NAME was read as a missing CAPABILITY. The real work is the desugaring, not the temp. Two of fcl-passrc pscanner.pp's seven remaining walls are `FStreams.Objects[i].Free` / `FMacros.Objects[i].Free`."
 ---
@@ -103,3 +103,63 @@ every site as covered. The absent thing is a capability, not a call.
 the receiver is evaluated **once** — a getter with a side effect (a counter it
 increments) freed through this path, asserting the counter is 1 and not 3. A
 compile-only row cannot see the defect this ticket's guard exists to prevent.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Resolution 2026-09-06 — the temp went in, the guard came out, and there was a third piece
+
+**Route 1 of the two the ticket listed.** `GenMakeFreeObjectExpr`
+(`pasparser_stmt.inc`) materialises a non-designator receiver into a hidden
+`tyClass` local before building the nil test, and clones the LOCAL. The temp
+carries the resolved rec (`Syms[t].RecName := ResolveNodeRec(objNode);
+SymSyncTypeRef(t)`) because both downstream readers need it: `GenMakeMethodCall0`
+dispatches Destroy, and the tkFreeMem lowering injects `PXXClassFinalize` only
+when the argument node is tyClass (`ir.inc:13578`). Three lines, the same shape
+as the `with`-temp at `pasparser_stmt.inc:4356`, exactly as the corrected
+summary said.
+
+`BuiltinFreeHere`'s `PureDesignator(node)` condition is gone. **Order matters
+and the ticket was right to say so**: removing the guard without the temp turns
+a refusal into a silently wrong program — three getter calls, and for a
+function receiver three objects created with only the last freed.
+
+**THE THIRD PIECE WAS NOT IN THE PLAN AND IT IS THE REUSABLE PART.** With the
+temp in, `b.Objects[2].Free;` stopped reporting `"Free": no such member` and
+started reporting
+
+```
+error: expected ':=' before ';'
+```
+
+because `GenMakeFreeObjectExpr` now returns an `AN_SEQ` (assignment, then the
+`AN_IF`) and the statement parser has a **recognition door** at
+`pasparser_stmt.inc:8482` listing the node kinds a desugaring may hand back in
+lvalue position: `ASTNodeIsCall(valNode) or (ASTKind[valNode] = AN_IF)`. A kind
+missing from that list gets no diagnostic — it falls through to `Expect(':=')`
+and reports assignment for a construct with no assignment in it. One door, one
+line, widened with `AN_SEQ` and a comment naming it as an enumerated predicate.
+**The ticket's two routes both change the node the desugaring returns, so both
+would have hit this**, and neither mentioned it.
+
+## Gate, as the ticket specified it
+
+`test/test_free_on_a_computed_receiver_evaluates_it_once.pas`, wired in the
+Makefile, byte-identical to fpc 3.2.2 `-Mobjfpc`:
+
+```
+field elem  freed=1 calls=0     { pure designator: no temp, no getter }
+call        freed=3 calls=1     { b.Pick(1).Free   — ONE evaluation }
+property    freed=6 calls=2     { b.Objects[2].Free — ONE evaluation }
+```
+
+**The counter is the assertion and `freed` alone cannot see the defect.** With
+the receiver cloned three times the objects still get freed and `freed` still
+reaches 6 — the sum is right and the evaluation count is not — so a test
+checking only the destructor totals passes on the broken desugaring. That is
+the ticket's own "a compile-only row cannot see the defect this guard exists to
+prevent", one level sharper: a VALUE row cannot see it either.
+
+Rung 7 of [[feature-pascal-corpus-expansion]] — fcl-passrc `pscanner.pp`, 5333
+lines — compiles and links clean with this. It does **not yet run**: filed
+separately.

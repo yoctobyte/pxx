@@ -7044,6 +7044,17 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_dynamic_array_delete_survives_a_string_delete_in_scope \
 	  "$$($(TESTTMP)/test_dyndelshadow26)" \
 	  "$$(cat test/test_a_dynamic_array_delete_survives_a_string_delete_in_scope.expected)"
+	@# `.Free` ON A COMPUTED RECEIVER, AND THE COUNTER IS THE POINT. The old
+	@# refusal (`"Free": no such member`) protected a desugaring that CloneASTs
+	@# its operand three times; a non-designator receiver is materialised into a
+	@# hidden local now. `freed` reaches 6 either way -- the sum is right and
+	@# the evaluation count is not -- so both getter rows assert that FCalls
+	@# moved by exactly ONE. Row 1 is the pure-designator control: no temp, no
+	@# getter, calls=0, and it is the row that already worked.
+	@./$(COMPILER) test/test_free_on_a_computed_receiver_evaluates_it_once.pas $(TESTTMP)/test_freecomputed26
+	@tools/expect_same.sh test_free_on_a_computed_receiver_evaluates_it_once \
+	  "$$($(TESTTMP)/test_freecomputed26)" \
+	  "$$(cat test/test_free_on_a_computed_receiver_evaluates_it_once.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

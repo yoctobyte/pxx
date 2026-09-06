@@ -3611,10 +3611,22 @@ function BuiltinFreeHere(node, recId: Integer; const fieldName: AnsiString;
     - the token after the name ends a statement, so this is `x.Free;` and not
       a value position or a call with arguments. Same guard the existing case
       uses;
-    - the base is a plain DESIGNATOR. GenMakeFreeObjectExpr CloneASTs its
-      operand up to three times (nil test, Destroy, FreeMem), so a
-      side-effecting base would run three times. An ident/field/index/deref/cast
-      chain is a re-read, which is free.
+  THE FOURTH CONDITION IS GONE AND ITS REMOVAL IS THE FIX, not a relaxation.
+  It read `PureDesignator(node)`, and it was correct for the desugaring it
+  protected: GenMakeFreeObjectExpr CloneASTs its operand three times (nil test,
+  Destroy, FreeMem), so a getter or a call would have run three times. But the
+  guard turned that into a REFUSAL of everyday Pascal — `L.Objects[i].Free`,
+  `b.Pick(i).Free`, and fcl-passrc pscanner.pp's `FStreams.Objects[i].Free` at
+  :2729 and :2899 — reported as `"Free": no such member on this record/class`,
+  a message about member lookup for a defect about evaluation, so the text
+  pointed away from the cause. `b.FA[i].Free` on the same objects compiled,
+  which is the three-row boundary in the ticket.
+
+  GenMakeFreeObjectExpr now materialises a non-designator receiver into a
+  hidden local and clones the LOCAL, so there is nothing left for this
+  condition to protect. Deleting it without that change would have turned a
+  refusal into a silently wrong program — three getter calls, one object freed.
+  bug-p-free-on-a-computed-receiver-is-refused-because-the-desugaring-clones-it
 
   Destroy is deliberately not included: `Free` is the nil-guarded wrapper, and
   desugaring a direct `.Destroy` to the same thing would change its meaning. }
@@ -3625,8 +3637,7 @@ begin
     CaseEqual(fieldName, 'Free') and
     (FindUMeth(recId - REC_UCLASS_BASE, 'Free') < 0) and
     (afterNameTok < TokCount) and
-    (Tokens[afterNameTok].Kind in [tkSemicolon, tkEnd, tkElse]) and
-    PureDesignator(node);
+    (Tokens[afterNameTok].Kind in [tkSemicolon, tkEnd, tkElse]);
 end;
 
 procedure RequireValueHasMembers(recId: Integer; const fieldName: AnsiString);

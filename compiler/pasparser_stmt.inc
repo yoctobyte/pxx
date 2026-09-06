@@ -1930,12 +1930,38 @@ end;
 
 function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer;
 { `TClass(expr).Free;` — nil-guarded [Destroy;] FreeMem over an expression
-  value (ftpsend's `TFTPListRec(FList[n]).Free`). Each occurrence is a
-  CloneAST of the operand (the AST is a tree, not a DAG), so a side-effecting
-  operand re-evaluates — fine for the cast-of-lvalue statements this serves.
-  No nil write-back: there is no lvalue (FPC's Free never nils anyway). }
+  value (ftpsend's `TFTPListRec(FList[n]).Free`). The operand appears in THREE
+  positions (nil test, Destroy receiver, FreeMem argument) and the AST is a
+  tree, not a DAG, so each is a CloneAST.
+
+  A COMPUTED RECEIVER IS THEREFORE MATERIALISED INTO A HIDDEN LOCAL FIRST, and
+  that is the whole of this routine's contract with its callers. Cloning a
+  getter or a function call three times is not a waste, it is an observable
+  behaviour change: `L.Objects[i].Free` would call the getter three times, and
+  `b.Pick(i).Free` would run Pick three times and free only the last object.
+  BuiltinFreeHere used to refuse both to protect this, which is why everyday
+  Pascal — `FStreams.Objects[i].Free` in fcl-passrc's pscanner.pp, at :2729 and
+  :2899 — answered `"Free": no such member on this record/class`, a message
+  about member lookup for a defect about evaluation.
+
+  The temp carries tyClass AND the resolved rec, because both downstream
+  readers need it: GenMakeMethodCall0 dispatches Destroy from `ci`, and the
+  tkFreeMem lowering injects PXXClassFinalize only when the argument node is
+  tyClass (ir.inc:13578). Same three lines as the `with`-temp at :4356.
+  bug-p-free-on-a-computed-receiver-is-refused-because-the-desugaring-clones-it }
 var freeArg, freeCall, nilLit, cond, thenSeq, pairNode, ifNode: Integer;
+    tmpSym, tmpIdent, preAssign: Integer;
 begin
+  preAssign := -1;
+  if not PureDesignator(objNode) then
+  begin
+    tmpSym := AllocVar('', tyClass);
+    Syms[tmpSym].RecName := ResolveNodeRec(objNode);
+    SymSyncTypeRef(tmpSym);
+    tmpIdent := GenMakeIdent(tmpSym, tyClass);
+    preAssign := GenMakeAssign(tmpIdent, objNode);
+    objNode := GenMakeIdent(tmpSym, tyClass);
+  end;
   freeArg := AllocNode(AN_ARG);
   ASTLeft[freeArg] := CloneAST(objNode);
   freeCall := AllocNode(AN_CALL);
@@ -1962,7 +1988,7 @@ begin
   ifNode := AllocNode(AN_IF);
   ASTLeft[ifNode] := cond;
   ASTRight[ifNode] := pairNode;
-  Result := ifNode;
+  Result := chainSeq(preAssign, chainSeq(ifNode, -1));
 end;
 
 { Synthetic label: a GotoLabel slot with no name; AN_LABEL/AN_GOTO reference it
@@ -8453,7 +8479,19 @@ begin
               if ASTNodeIsCall(valNode) or
                  { with-scoped `Free;` desugars to a nil-guarded IF — a
                    statement, never an lvalue }
-                 (ASTKind[valNode] = AN_IF) then
+                 (ASTKind[valNode] = AN_IF) or
+                 { ...and `<computed>.Free;` to `tmp := <computed>;` followed by
+                   that IF, so the same desugaring arrives as an AN_SEQ. THIS IS
+                   A RECOGNITION DOOR: it enumerates the node kinds a desugaring
+                   may hand back in lvalue position, and it has no diagnostic
+                   when a new one is missing — the statement parser simply falls
+                   through to `Expect(':=')` and reports `expected ':=' before
+                   ';'`, a message about assignment for a construct with no
+                   assignment in it. That is exactly what materialising the Free
+                   receiver produced before this line existed. Neither kind can
+                   be a real lvalue, so widening is safe; the cost is that the
+                   next desugaring pays the same debugging. }
+                 (ASTKind[valNode] = AN_SEQ) then
                 node := valNode
               else if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
               begin
