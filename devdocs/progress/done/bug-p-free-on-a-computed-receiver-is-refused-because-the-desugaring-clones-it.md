@@ -105,7 +105,7 @@ increments) freed through this path, asserting the counter is 1 and not 3. A
 compile-only row cannot see the defect this ticket's guard exists to prevent.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a5588f5c6.
 
 ## Resolution 2026-09-06 — the temp went in, the guard came out, and there was a third piece
 
