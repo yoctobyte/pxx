@@ -13831,6 +13831,13 @@ test-core: $(COMPILER)
 	@# inside builtinheap.pas. Do not add a second control here.
 	./$(COMPILER) -dCLIDEF -Futest/units test/test_a_units_define_and_packing_do_not_reach_the_units_it_uses.pas $(TESTTMP)/test_defscope26
 	tools/expect_same.sh test_defscope26 "$$($(TESTTMP)/test_defscope26 | tail -n 2)" "$$(printf 'fails=0\nDEFSCOPE OK')"
+	@# ...and the fifth member of the same leak family, which CANNOT be an fpc
+	@# differential and is split out rather than left uncovered: fpc defaults
+	@# assertions OFF and pxx defaults them ON deliberately, so a correct fpc and
+	@# the pxx LEAK print the same string. A row that cannot tell the defect from
+	@# the oracle is not a differential row, it is two answers that collide.
+	./$(COMPILER) -Futest/units test/test_a_used_unit_keeps_its_own_assertion_default.pas $(TESTTMP)/test_assertdefault26
+	tools/expect_same.sh test_assertdefault26 "$$($(TESTTMP)/test_assertdefault26 | tail -n 2)" "$$(printf 'fails=0\nASSERTDEFAULT OK')"
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
 	# mistakes reports the first and hides three behind it, which is how a

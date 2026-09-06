@@ -2047,6 +2047,7 @@ begin
     HERE and not in PasInitDefines, which runs BEFORE option parsing, and not
     later, because the next thing that happens is source being read. }
   PasSnapshotDefineBaseline;
+  PasSnapshotDirectiveBaseline;
 
   { The MAIN input must EXIST. LoadFile answers "" for an unopenable path, which
     is indistinguishable from a genuinely empty file — and an empty NilPy source

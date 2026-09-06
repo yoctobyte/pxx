@@ -4415,7 +4415,9 @@ var
   unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
   unitTnm: AnsiString;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
-  savedPackRecords, savedPackEnum: Integer;
+  savedPackRecords, savedPackEnum, savedNChecks, savedMaxStackFrame: Integer;
+  savedHMinus, savedScopedEnums, savedQChecks, savedAssertions: Boolean;
+  savedRChecks, savedIChecks, savedInterfacesCom: Boolean;
   savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
@@ -5683,21 +5685,27 @@ begin
       general cross-unit mechanism, for anyone who wants one, is {$CLAIM}. }
     if savedCurrentUnitIdx < 0 then PasSnapshotDefineBaseline;
     PasResetDefinesToBaseline;
-    { THE SAME LEAK, IN THE RECORD LAYOUT, and it is the worse half because it
-      is an ABI: `{$PACKRECORDS 1}` in ua made ub's `record a: Byte; b: LongInt`
-      five bytes where fpc builds eight, silently, in a unit that never asked.
-      Reset to the per-file defaults PasInitDefines sets rather than saved from
-      the caller, because that IS the rule -- a unit starts at the default and
-      its own directive applies to it alone. Same root exception as the defines
-      above, for the same reason and measured the same way. Restored below
-      beside the modes. }
+    { THE SAME LEAK, IN EVERY OTHER PER-FILE DIRECTIVE, and the record-layout
+      one is the worst of them because it is an ABI: `{$PACKRECORDS 1}` in ua
+      made ub's `record a: Byte; b: LongInt` five bytes where fpc builds eight,
+      in a unit that never asked, with no {$ifdef} involved. `{$R+}` and `{$Q+}`
+      made the child RAISE range and overflow errors fpc does not raise, and
+      `{$ASSERTIONS OFF}` silenced the child's Assert against pxx's own default.
+      All measured; see PasSnapshotDirectiveBaseline for the table.
+      Same root exception as the defines above, for the same reason. }
     savedPackRecords := PackRecordsVal;
     savedPackEnum := PackEnumVal;
-    if savedCurrentUnitIdx >= 0 then
-    begin
-      PackRecordsVal := 8;
-      PackEnumVal := 4;
-    end;
+    savedHMinus := HMinusVal;
+    savedScopedEnums := ScopedEnumsVal;
+    savedQChecks := QChecksVal;
+    savedAssertions := AssertionsVal;
+    savedRChecks := RChecksVal;
+    savedNChecks := NChecksVal;
+    savedIChecks := IChecksVal;
+    savedInterfacesCom := InterfacesComMode;
+    savedMaxStackFrame := MaxStackFrameSize;
+    if savedCurrentUnitIdx < 0 then PasSnapshotDirectiveBaseline
+    else PasResetDirectivesToBaseline;
 
     { …and the per-library MANIFEST goes on top of that snapshot: the nearest
       pxxlib.cfg at or above this unit's own directory supplies its defines,
@@ -5877,6 +5885,15 @@ begin
     DelphiMode := savedDelphiMode;
     PackRecordsVal := savedPackRecords;
     PackEnumVal := savedPackEnum;
+    HMinusVal := savedHMinus;
+    ScopedEnumsVal := savedScopedEnums;
+    QChecksVal := savedQChecks;
+    AssertionsVal := savedAssertions;
+    RChecksVal := savedRChecks;
+    NChecksVal := savedNChecks;
+    IChecksVal := savedIChecks;
+    InterfacesComMode := savedInterfacesCom;
+    MaxStackFrameSize := savedMaxStackFrame;
     PyExprMode := savedPyExprMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
     InUnitImpl := savedUnitImplCU;

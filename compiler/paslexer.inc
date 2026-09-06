@@ -309,6 +309,66 @@ begin
   Result := PasDefineInTable(name) or PasClaimed(name);
 end;
 
+{ ---- the per-FILE directive state, as one baseline ----------------------
+
+  Every value below is a directive whose scope is ONE SOURCE FILE under FPC:
+  the unit that writes {$R+} gets range checks and the units it uses do not.
+  pxx held them as plain globals with no per-unit save at all -- only
+  CaseSensitiveMode, NestedComments, DelphiMode and PyExprMode were saved around
+  a used unit -- so they leaked DOWNWARD into every used unit and stayed leaked
+  afterwards. Measured 2026-09-06, one parent unit and one child:
+
+    {$PACKRECORDS 1}    the child's `record a: Byte; b: LongInt` was 5 bytes
+                        where fpc builds 8 -- an ABI, with no {$ifdef} in it
+    {$R+}               the child raised a range error fpc does not raise
+    {$Q+}               the child raised an overflow fpc does not raise
+    {$ASSERTIONS OFF}   the child's Assert stopped firing, against pxx's own
+                        default of ON
+
+  A BASELINE RATHER THAN LITERAL DEFAULTS, and that is the part worth reading:
+  several of these are set from the COMMAND LINE before any source is read
+  (AssertionsVal is `not NoAssertionsFlag`), so resetting a used unit to the
+  written-here constant would quietly cancel the user's own flag for every unit
+  but the main one. Snapshotting whatever the driver left, once, cannot get that
+  wrong and needs no list of which values a flag touches.
+
+  Deliberately NOT included: the Stmt* companions (StmtRChecks, StmtNChecks,
+  StmtIChecks, StmtCallDepth). Those track state WITHIN a statement, not within
+  a file, and a used unit is never entered mid-statement. }
+procedure PasSnapshotDirectiveBaseline;
+begin
+  DirBasePackRecords := PackRecordsVal;
+  DirBasePackEnum := PackEnumVal;
+  DirBaseHMinus := HMinusVal;
+  DirBaseScopedEnums := ScopedEnumsVal;
+  DirBaseQChecks := QChecksVal;
+  DirBaseAssertions := AssertionsVal;
+  DirBaseRChecks := RChecksVal;
+  DirBaseNChecks := NChecksVal;
+  DirBaseIChecks := IChecksVal;
+  DirBaseInterfacesCom := InterfacesComMode;
+  DirBaseMaxStackFrame := MaxStackFrameSize;
+  DirBaseValid := True;
+end;
+
+procedure PasResetDirectivesToBaseline;
+begin
+  { A compilation that never snapshotted (no Pascal frontend, or a path that
+    reaches a unit before the driver got there) must not be reset to zeros. }
+  if not DirBaseValid then Exit;
+  PackRecordsVal := DirBasePackRecords;
+  PackEnumVal := DirBasePackEnum;
+  HMinusVal := DirBaseHMinus;
+  ScopedEnumsVal := DirBaseScopedEnums;
+  QChecksVal := DirBaseQChecks;
+  AssertionsVal := DirBaseAssertions;
+  RChecksVal := DirBaseRChecks;
+  NChecksVal := DirBaseNChecks;
+  IChecksVal := DirBaseIChecks;
+  InterfacesComMode := DirBaseInterfacesCom;
+  MaxStackFrameSize := DirBaseMaxStackFrame;
+end;
+
 { Freeze the define table as the COMMAND-LINE BASELINE — see PasDefineBase* in
   defs.inc. Called once by the driver after -d, the target defines and the
   frontend defines have all been seeded, and before a single source byte is

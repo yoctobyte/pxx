@@ -5,6 +5,9 @@ unit udefscopeparent;
   point: under FPC neither reaches the used unit, and under pxx both did. }
 {$define PARENTDEF}
 {$PACKRECORDS 1}
+{$R+}
+{$Q+}
+{$ASSERTIONS OFF}
 interface
 
 uses udefscopechild;
@@ -13,6 +16,9 @@ function ChildSeesParentDefine: AnsiString;
 function ChildSeesCommandLineDefine: AnsiString;
 function ChildSeesItsOwnDefine: AnsiString;
 function ChildRecordSize: Integer;
+function ChildRangeCheck: AnsiString;
+function ChildOverflowCheck: AnsiString;
+function ChildAssertions: AnsiString;
 function ParentRecordSize: Integer;
 function ParentStillSeesItsOwnDefine: AnsiString;
 function ParentSeesChildDefine: AnsiString;
@@ -33,6 +39,15 @@ begin ChildSeesItsOwnDefine := SeesItsOwnDefine; end;
 
 function ChildRecordSize: Integer;
 begin ChildRecordSize := ChildRecSize; end;
+
+function ChildRangeCheck: AnsiString;
+begin ChildRangeCheck := RangeCheckLeaked; end;
+
+function ChildOverflowCheck: AnsiString;
+begin ChildOverflowCheck := OverflowCheckLeaked; end;
+
+function ChildAssertions: AnsiString;
+begin ChildAssertions := AssertionsLeaked; end;
 
 { ...and the parent's OWN packing must survive its own `uses`. A fix that
   clears state instead of saving and restoring it passes every row above and

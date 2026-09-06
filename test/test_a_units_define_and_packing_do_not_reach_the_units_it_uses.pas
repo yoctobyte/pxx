@@ -15,11 +15,24 @@ program test_a_units_define_and_packing_do_not_reach_the_units_it_uses;
 
       fpc 3.2.2 -Mobjfpc:  no        pxx before this fix:  yes
 
-  THE SECOND HALF IS THE WORSE ONE and it is not in the ticket's title:
-  `{$PACKRECORDS 1}` leaked exactly the same way, so a used unit's
-  `record a: Byte; b: LongInt` was FIVE bytes where fpc builds eight. That is an
-  ABI, in a unit that never asked for it, and no arm of any {$ifdef} is involved.
-  Row 4 is that measurement.
+  THE DEFINE IS THE SMALLEST HALF, and none of the rest is in the ticket's
+  title. Every per-file directive leaked the same way, because the save list
+  around a used unit covered four values and stopped there:
+
+    {$PACKRECORDS 1}   the child's `record a: Byte; b: LongInt` was FIVE bytes
+                       where fpc builds eight -- an ABI, in a unit that never
+                       asked, with no arm of any {$ifdef} involved   (row 4)
+    {$R+}              the child raised a range error fpc does not    (row 8)
+    {$Q+}              the child raised an overflow fpc does not      (row 9)
+    {$ASSERTIONS OFF}  the child's Assert stopped firing -- NOT a row here, and
+                       it cannot be: fpc defaults assertions off and pxx
+                       defaults them on, deliberately, so the leak and a correct
+                       fpc print the same thing. It is asserted from a pxx-only
+                       program, test_a_used_unit_keeps_its_own_assertion_default
+
+  The two check rows are the ones a reader should find most alarming: a used
+  unit compiled with checks it never asked for fails at RUNTIME, in code its
+  author read as check-free.
 
   FOUR DIRECTIONS, because a fix that CLEARS the table instead of saving and
   restoring it passes the obvious two and fails the other two:
@@ -101,6 +114,13 @@ begin
     the parent afterwards. }
   Check('7: a child define does not leak back up',
         ParentSeesChildDefine, 'child-define-scoped');
+
+  { 8, 9: the same leak where it costs a RAISE rather than a value. The parent
+    sets {$R+} and {$Q+}; the child asked for neither and must not get them. }
+  Check('8: a parent range check does not reach the unit it uses',
+        ChildRangeCheck, 'range-check-did-not-leak');
+  Check('9: a parent overflow check does not reach the unit it uses',
+        ChildOverflowCheck, 'overflow-check-did-not-leak');
 
   WriteLn('fails=', fails);
   if fails = 0 then WriteLn('DEFSCOPE OK');

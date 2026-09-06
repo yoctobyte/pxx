@@ -3304,6 +3304,22 @@ var
   PasDefineBaseHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   PasDefineBaseCharLen : Integer;
   PasDefineBaseCount   : Integer;
+  { …and the per-FILE directive state, same argument — see
+    PasSnapshotDirectiveBaseline in paslexer.inc. DirBaseValid guards the
+    zero-initialised state: a compilation that never snapshotted must not have a
+    used unit reset to PackRecords=0. }
+  DirBaseValid         : Boolean;
+  DirBasePackRecords   : Integer;
+  DirBasePackEnum      : Integer;
+  DirBaseHMinus        : Boolean;
+  DirBaseScopedEnums   : Boolean;
+  DirBaseQChecks       : Boolean;
+  DirBaseAssertions    : Boolean;
+  DirBaseRChecks       : Boolean;
+  DirBaseNChecks       : Integer;
+  DirBaseIChecks       : Boolean;
+  DirBaseInterfacesCom : Boolean;
+  DirBaseMaxStackFrame : Integer;
   { {$CLAIM name} — a define that outlives the unit that set it
     (feature-p-defineglobal-a-define-that-crosses-unit-boundaries; the spelling
     was settled in decide-a-cross-unit-define-name-and-semantics, which retired
