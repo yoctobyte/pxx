@@ -95,4 +95,9 @@ fine; only post-pin `compiler/**` refuses it. So that face never reached a
 `$(PXX_STABLE)` consumer, and this fix is inert-until-pinned only for the two
 silent faces, which are older and DO reach the pin.
 
+## Log
+
+- 2026-09-06 | frankH | fixed in all three copies of the loop, with the fixture
+  and both positive controls, commit a92a26917. Closed by the same commit.
+
 Resolves `backlog/regression-test-i386-chess.md`.
