@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 7d3h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `d68ed2fe803c` | 2026-09-06T13:44:28Z | RED (native) | 165.1s | `bb18f83c859e` RED |
+| seven | `2dc166c300b3` | 2026-09-06T13:48:38Z | RED (native) | 167.0s | `bb18f83c859e` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `bb18f83c859e` on seven, 2026-09-06T13:32:07Z (12m ago).**
+**Newest full tier in the fleet: `bb18f83c859e` on seven, 2026-09-06T13:32:07Z (16m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `bb18f83c859e` | RED | 12m | — (newest) |
+| seven | `bb18f83c859e` | RED | 16m | — (newest) |
 | plexus | `27424c927b65` | RED | 7d3h | 7d3h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -119,12 +119,9 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `2a4cd0bcf664`, last good `c1fe3e414d25`, 5 commit(s) in range
 - **test-core#src:test/test_libwriteln_parity.pas** — test/test_libwriteln_parity.pas tools/expect_same.sh +1 (seven): bad `fa5e9ef55813`, last good `47b8c3285253`, 4 commit(s) in range
 - **test-core#src:test/test_interface_containers.pas@2** — test/test_interface_containers.pas tools/expect_same.sh (seven): bad `918842a5fd43`, last good `12af8ef60bfd`, 3 commit(s) in range
-- **test-threads#src:test/test_threadsafe_class_finalize_kinds.pas** — test/test_threadsafe_class_finalize_kinds.pas tools/expect_same.sh (seven): bad `918842a5fd43`, last good `12af8ef60bfd`, 3 commit(s) in range
-- **test-threads#src:test/test_threadsafe_class_finalize_race.pas** — test/test_threadsafe_class_finalize_race.pas tools/expect_same.sh (seven): bad `e678b743d3bb`, last good `918842a5fd43`, 2 commit(s) in range
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `e678b743d3bb`, last good `918842a5fd43`, 2 commit(s) in range
 - **test-core#src:test/test_nd_subarray_as_param.pas** — test/test_nd_subarray_as_param.pas tools/expect_same.sh +2 (seven): bad `0aff068c6d08`, last good `bb18f83c859e`, 2 commit(s) in range
 - **test-core#src:test/test_promoint_bitwise.pas** — test/test_promoint_bitwise.pas tools/expect_same.sh (seven): bad `0aff068c6d08`, last good `bb18f83c859e`, 2 commit(s) in range
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (seven): bad `d68ed2fe803c`, last good `b3f70093e7d8`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
