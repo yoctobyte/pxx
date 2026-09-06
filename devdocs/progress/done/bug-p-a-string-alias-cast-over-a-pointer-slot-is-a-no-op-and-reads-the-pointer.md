@@ -229,4 +229,4 @@ binary sha back to `b8985660920b` byte-identical.
   E is the positive control for the discriminator; C is the literal store.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9c7a6c559.
