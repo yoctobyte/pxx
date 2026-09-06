@@ -2922,8 +2922,18 @@ to frankuser. [[verify-the-citation-not-only-the-claim]]
 
 The two mechanism findings from frankH's result are in the playbook, under
 `## WHEN A PARSE ERROR GUARDS A FEATURE` — the pin carries the two silent wrong-VALUE faces and
-not the loud refusal, and the rank-1 probe that cleared the address path was built on the one
-shape `NodeArrNDInfo` declines.
+not the loud refusal **for chess's shape** — corrected there within the hour, because I first
+wrote it about the CLASS and the pin does refuse other spellings — and the rank-1 probe that
+cleared the address path was built on the one shape `NodeArrNDInfo` declines.
+
+**The correction is worth more than the entry.** My own run had produced the refutation and I
+filed it under a different question: the pinned compiler ISSUING the loud refusal (line 66, by
+name) went into *"can this fixture be a pin probe?"*, three sentences after I wrote that the pin
+does not carry the loud face. **An observation is routed by the question that was live when it
+arrived, not by the questions it can answer.** And the claim survived because I measured ONE
+CLAUSE of a two-clause relay and wrote "confirmed rather than relayed" over both — the upgrade
+from attributed to measured is exactly the moment the scope label comes off.
+[[a-relay-is-lossy-and-the-loss-is-silent]], [[labelling-an-inference-does-not-stop-it-propagating]]
 
 ## THE FULL-GREEN PIN TARGET IS THE ONE THING CLAUDE.md TELLS EVERY SEAT TO REFUSE
 

@@ -17671,14 +17671,20 @@ ROW address from `BuildPartialNDIndex` reading the spans after the loop). **Whic
 carries arrived as frankuser's relay and is now MEASURED here** — see the table below.
 
 `chess.pas` refuses to compile at HEAD, and that refusal is the visible red on the ledger. Pin
-v405 compiles it fine, so the refusal is a **post-pin regression that never reached a
-`$(PXX_STABLE)` consumer**. Behind it, the same root has **two wrong-VALUE faces that are OLDER
-and DO reach the pin.**
+v405 compiles `chess.pas` fine, so **for chess's shape** the refusal is a post-pin regression
+that never reached a `$(PXX_STABLE)` consumer. Behind it, the same root has **two wrong-VALUE
+faces that are OLDER and DO reach the pin.**
 
-**So the answer to "did the pin ship this?" was no and yes, about different things.** The loud
-half is the one that could not hurt anybody: it stops a build. The silent halves are in every
-`$(PXX_STABLE)` consumer's ground and nothing was looking for them, because the loud one had
-everyone's attention and a name.
+**The scope of that first clause is the whole finding, and this section got it wrong for an hour
+— see the correction below.** The pin DOES carry the loud refusal; it does not carry it *for
+chess*. chess's nested index is a **rank-1 record-field array**, and post-pin work widened which
+spellings reach `NodeArrNDInfo`, which is what pulled chess's line into the refusing set
+(frankH, measured against `stable_pinned` sha256 `8f21d04df626`).
+
+**So the answer to "did the pin ship this?" is per-SHAPE, not per-FACE.** For chess: the loud
+half could not hurt anybody, because it stops a build, while the silent halves are in every
+`$(PXX_STABLE)` consumer's ground with nothing looking for them. That is the useful inversion
+and it holds. What does not hold is the generalisation to the class.
 
 **How this differs from the parse wall above, and the difference is the operational part.**
 There, the refusal guarded the WHOLE feature, so the lowering behind it had never executed and
@@ -17698,13 +17704,45 @@ WriteLn(z3[1, 2, z2[1,1]]);          { fpc: 122 }
 | `stable_linux_amd64/default/stable_pinned` (pin v405) | **112** | compiles, runs, no diagnostic |
 | `compiler/pascal26` at `c69b52b6e`, binary `cda68a91bec5` | **122** | correct |
 
-**So the silent face is in the pin and the loud one is not, confirmed rather than relayed.** And
-the instrument detail that makes this awkward to check: frankH's own asserting fixture
+**So the silent face is in the pin, confirmed rather than relayed.** And the second row of the
+same run — the one that took an hour to read correctly: frankH's own asserting fixture
 `test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas` **cannot be used as a pin
 probe** — under the pinned compiler it dies at line 66 on the LOUD face (*"too many subscripts
 for array"*) before reaching the silent rows. **The loud face masks the silent one inside the
 test written to catch both**, which is the same shape as the finding one level up. A pin probe
-for a masked defect has to be built from shapes the mask does not cover.
+for a masked defect has to be built from shapes the mask does not cover. Generalised by frankH
+into a fixture-design rule: **a fixture asserting a REFUSAL and a VALUE in one file cannot
+measure the value on any build that still refuses.**
+
+#### AND THAT SAME LINE REFUTED THE CLAIM THREE SENTENCES ABOVE IT, IN MY OWN PARAGRAPH
+
+Corrected by frankH within the hour. This section said *"the silent face is in the pin and the
+loud one is not"* — and the sentence immediately after it recorded the pinned compiler
+**issuing the loud refusal**, at line 66, by name. The refutation was not missing, not
+expensive, and not somewhere else. **It was in the next sentence, filed under a different
+question.**
+
+**The mechanism, which is worth more than the correction.** The datum arrived while I was
+answering *"can this fixture serve as a pin probe?"* — and it answers that question perfectly,
+so it went into that slot and never met the claim it contradicted. **An observation is routed by
+the question that was live when it arrived, not by the questions it is capable of answering.**
+A run that produces several facts distributes them by arrival context, and any fact filed under
+a question that is not the one it refutes is invisible to the claim standing two lines away.
+
+**And the reason the claim was standing at all is a scoping failure in the act of being careful
+about scoping.** The relayed sentence had two clauses — *the pin does not carry the loud
+refusal* AND *the pin does carry the silent faces*. I split its provenance deliberately
+(mechanism from frankH's logbook, pin-reach attributed to frankuser), then measured **one
+clause**, and wrote *"confirmed rather than relayed"* over **both**. CLAUDE.md already says the
+thing: *"a verification claim scopes to exactly what was checked, and an unlabelled claim
+travelling beside it inherits that credibility."* The unlabelled claim here was riding in the
+same sentence as the checked one.
+
+> **When you upgrade a relay from attributed to measured, say WHICH CLAUSE the measurement
+> covers.** A two-clause claim measured on one clause reads as confirmed, and the upgrade is
+> exactly the moment the label comes off. The cost here was real: the class version was being
+> relayed toward a pin decision.
+
 
 > **When a refusal is fixed, do not ask only what becomes reachable. Ask which neighbouring
 > shapes were NEVER refused.** Those are the ones already in the pin, already in someone's
