@@ -124,10 +124,38 @@ the argument loop is the case it did not carry across. That comment also says
 this helper exists "to stop the argument loop being written a fourth time",
 which makes it the right and only place to add the question.
 
-Establish before writing it: the direct path emits an array temp for a PLAIN
-`array of Integer` literal, not a TVarRec vector, so `ParamIsVarRecArray` is
-only half the test — find what the direct path consults for a non-const open
-array and carry both.
+**The other half, now read.** The direct path's decision is four-way, not two
+(`pasparser_expr.inc:7688`):
+
+```pascal
+  if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
+    CurASTNode := ParseVarRecLiteralAST
+  else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
+    CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
+      OpenArrayCtorRowLen(procIdx, slotIdx),
+      ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+  else
+  begin
+    node := TryDelphiBareProcArg;
+    if node >= 0 then CurASTNode := node else ParseArgExpr;
+  end;
+  SetLitCheckArg(CurASTNode, procIdx, slotIdx);
+```
+
+`ParamIsOpenArrayScalar` → `ParseArrayCtorAST` is the arm that serves
+`array of Integer`; `ParamIsVarRecArray` → `ParseVarRecLiteralAST` serves
+`array of const`. `BuildIndirectCallAST` has neither, and no
+`TryDelphiBareProcArg` and no `SetLitCheckArg` either — it calls `ParseExpr`
+and nothing else. So the indirect path is missing the whole decision, and the
+two bugs this ticket covers are two arms of it.
+
+**Fix it by extracting, not by copying the block.** Four behaviours keyed on
+`(procIdx, slotIdx)` in one path and zero in the other is the shape
+`devdocs/dev/normalise-dont-special-case.md` exists to refuse, and copying the
+block makes a second copy that will drift — `TryDelphiBareProcArg` and
+`SetLitCheckArg` are exactly the kind of later addition that lands in one copy
+only. One helper taking `(procIdx, slotIdx)` and returning the parsed node,
+called from both loops.
 
 Note what this predicts and what should be checked before fixing: any callee
 parameter whose `[...]` argument needs a non-set reading has the same hole at an
