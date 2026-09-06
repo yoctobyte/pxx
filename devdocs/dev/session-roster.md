@@ -1217,7 +1217,46 @@ record; a successor session's paraphrase is a reconstruction. When the author is
 gone, quote the artefact and say that is what you are doing.
 
 **Consequence for my own routing:** *"ask the seat"* is not free advice to give a
-worker. Before recommending it, check whether the session that did the work is
-still the session sitting there — the current id is in any recent commit's trailer,
-and if it differs from the one on the commit in question, the ask will come back
-empty. I spent a peer's turn learning this; it should cost the next reader a grep.
+worker. Before recommending it, establish whether the session that did the work is
+still the session sitting there.
+
+> ### THE FIRST VERSION OF THAT CHECK WAS WRONG, AND WRONG IN THE DIRECTION IT EXISTED TO PREVENT
+>
+> I wrote: *"the current id is in any recent commit's trailer, and if it differs
+> from the one on the commit in question, the ask will come back empty."*
+> **That reads the seat's most recent COMMIT, and a seat that has turned over but
+> not yet committed in its new session still has its predecessor's id on it.** So
+> when the commit you are asking about is that predecessor's, the two ids MATCH,
+> the check reports continuity that does not exist, and you confidently recommend
+> asking a seat with no memory — the exact failure, arriving through the
+> instrument meant to prevent it. It fires in the least recoverable window: a
+> fresh session with nothing landed, which is also when a seat is most likely to
+> be asked about history rather than about what it is doing. (frankH, who found
+> it in the check written from their own correction an hour earlier.)
+>
+> **THE ASYMMETRY DECIDES WHICH WAY TO FAIL, and only one direction is sound:**
+>
+> | observation | what it proves |
+> | --- | --- |
+> | ids **differ** | the memory is gone. Sound. |
+> | ids **match** | **nothing.** Consistent with a live session AND with a fresh one that has not committed. |
+>
+> **A commit is the wrong probe.** A session's own current id is the one thing it
+> always knows about itself, costs one line, and cannot be stale by construction.
+> So: **ask the seat for its ID, which never expires — not for its recollection,
+> which does.** Those are two different questions and only the second one comes
+> back silent. Failing that, treat *"no commit from this seat carrying an id I
+> have seen this session"* as **UNKNOWN**, which is both correct and cheap. The
+> broken version converted unknown into a confident yes.
+
+**AND THE SAME STALENESS APPLIES TO A LANE, WHICH IS THE THING THIS SEAT ACTUALLY
+HOLDS.** In the same exchange I described frankH as *"working Track A interner and
+growth perf"* and cited three commits for it — and said so to a third party. The
+group had closed; the seat had been on the age queue since, across `lib/rtl/
+sysutils.pas`, two embed tickets, two newly filed Track P bugs, and a scout of
+`MAX_TEMPLATE_TOKENS`. **The commits were real and the tense was invented.** A
+commit says a seat WAS somewhere; only the seat says where it IS. Deriving a lane
+from commits is right (names do not map to tracks) and it dates from the newest
+commit in the window I happened to read — so **relay a lane as "as of <sha>,
+<time>", or ask.** A stale lane published to a peer is a collision-avoidance
+answer that is wrong in the direction of clearing traffic.
