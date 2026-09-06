@@ -8187,6 +8187,117 @@ begin
             ' wants ', Procs[cpi].ParamCount, ' got ', n);
 end;
 
+{ Free the CAUGHT exception object parked in ownTmp, guarded by clsTmp's
+  "this is a user class instance" bit (BSS_EXC_CLS, which AN_RAISE normalises
+  to REC_NONE for anything below REC_UCLASS_BASE, so `raise 42` is excluded
+  exactly rather than guessed at from the pointer's shape).
+
+  ONE SEQUENCE, TWO PATHS. The handler's normal fall-through calls this with
+  onUnwind=False; the handler body's unwind pad calls it with True. It was one
+  path and a leak until 2026-09-06: an exception raised from INSIDE a handler
+  leaves through the exception path, skips the fall-through entirely, and
+  dropped the object it was handling on the floor -- 2001 live blocks per 1000
+  trips, the object plus its message string.
+  bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object
+
+  ONUNWIND ADDS THE ONE GUARD THAT MAKES THE UNWIND PATH SAFE, and without it
+  this is a DOUBLE FREE and not a fix. A bare `raise;` also leaves through the
+  exception path, and there the original object is still IN FLIGHT -- the OUTER
+  handler will free it. So the unwind pad frees only when a DIFFERENT object is
+  in flight than the one it holds: re-read BSS_EXC_OBJ and compare pointers. A
+  new `raise E.Create(..)` overwrote that slot (AN_RAISE writes it); a bare
+  `raise;` left it untouched (its codegen writes neither slot). The comparison
+  separates them exactly and stores no ownership bit anywhere.
+
+  That the machinery owns the object at all is settled:
+  decide-does-raise-of-an-existing-object-transfer-ownership took option (a)
+  from the FPC oracle -- FPC frees a raised object it did not construct, so
+  `raise` transfers ownership unconditionally.
+
+  The body is the `.Free` desugar's order and must stay so: finalize UNLOCKED
+  (its kind-4 COM pass runs a destructor chain and a self-locking free, and
+  putting THAT under the lock is the deadlock reverted cb2ed843 hit), then the
+  managed half under the emitted lock on x86-64 --threadsafe, then the memory
+  through the tkFreeMem SITE so the free gets codegen's acquire/release wrap
+  and the magazine fast path. Calling PXXObjFree instead would free with no
+  lock at all -- bug-a-two-threads-raising-object-exceptions-corrupt-the-heap. }
+procedure IREmitCaughtExcFree(ownTmp, clsTmp: Integer; onUnwind: Boolean);
+var skipLabel, cfPi, cfCall, last, curTmp, excReleaseProc: Integer;
+begin
+  if (ownTmp < 0) or (clsTmp < 0) then Exit;
+  excReleaseProc := FindProc('PXXObjFree');
+  if excReleaseProc < 0 then Exit;
+  skipLabel := IRNewLabel;
+  last := IRAppend(IR_JUMP_IF_FALSE, skipLabel,
+            IRAppend(IR_BINOP,
+              IRAppend(IR_LOAD_SYM, clsTmp, -1, -1, 0, Ord(tyInteger)),
+              IRAppend(IR_CONST_INT, -1, -1, -1, REC_UCLASS_BASE, Ord(tyInteger)),
+              Ord(tkGe), 0, Ord(tyBoolean)),
+            -1, 0, 0);
+  if onUnwind then
+  begin
+    { What is in flight NOW, not what was when the handler was entered. }
+    curTmp := AllocVar('', tyPointer);
+    last := IRAppend(IR_EXC_STORE, curTmp, -1, -1, 0, 0);
+    last := IRAppend(IR_JUMP_IF_FALSE, skipLabel,
+              IRAppend(IR_BINOP,
+                IRAppend(IR_LOAD_SYM, curTmp, -1, -1, 0, Ord(tyPointer)),
+                IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                Ord(tkNeq), 0, Ord(tyBoolean)),
+              -1, 0, 0);
+  end;
+  if isNilPy then
+  begin
+    { HEADERED population keeps PXXObjFree, which routes to PXXObjRelease and
+      its refcount discipline. An instance here may still be referenced, and
+      only the rc knows. }
+    last := IRAppendCall(excReleaseProc,
+              IRAppend(IR_ARG,
+                IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer)),
+              -1, Ord(tyUnknown));
+    IRIVal[last] := 1;   { statement: emit for effect, not a value }
+    IRMarkStatementNode(last);
+  end
+  else
+  begin
+    cfPi := FindProc('PXXClassFinalize');
+    if cfPi >= 0 then
+    begin
+      cfCall := IRAppendCall(cfPi,
+                  IRAppend(IR_ARG,
+                    IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyPointer)),
+                  -1, Ord(tyNativeInt));
+      IRIVal[cfCall] := 1;   { statement: emit for effect }
+      IRMarkStatementNode(cfCall);
+    end;
+    if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+    begin
+      cfPi := FindProc('PXXClassFinalizeManaged');
+      if cfPi >= 0 then
+      begin
+        HeapLockedCallProcIdx1 := cfPi + 1;
+        cfCall := IRAppendCall(cfPi,
+                    IRAppend(IR_ARG,
+                      IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                      -1, -1, 0, Ord(tyPointer)),
+                    -1, Ord(tyNativeInt));
+        IRIVal[cfCall] := 1;   { statement: emit for effect }
+        IRMarkStatementNode(cfCall);
+      end;
+    end;
+    last := IRAppend(IR_CALL, -Ord(tkFreeMem),
+              IRAppend(IR_ARG,
+                IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer)),
+              -1, 0, Ord(tyUnknown));
+    IRIVal[last] := 1;   { statement: emit for effect, not a value }
+    IRMarkStatementNode(last);
+  end;
+  last := IRAppend(IR_LABEL, -1, -1, -1, skipLabel, 0);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
@@ -8246,7 +8357,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
     excObjSym, excMatched, excSkipLabel, excOwnTmp, excReleaseProc: Integer;
-    excClsTmp, excSkipFreeLabel: Integer;
+    excUnwindLabel: Integer;   { the handler BODY's own unwind pad -- see IREmitCaughtExcFree }
+    excClsTmp: Integer;
     excRelProc, excRelArg, excRelCall: Integer;
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
@@ -15832,148 +15944,42 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           0.07-0.10s. Same output, sink=5000000 both.
           bug-a-an-exception-handler-arm-finalizes-its-managed-temp-after-the-merge }
         pcBase := PostCallIntfCount;
+        { THE HANDLER BODY GETS ITS OWN UNWIND PAD, which is what makes the
+          caught object survive an exception raised from INSIDE the handler.
+          Same shape as AN_TRY_FINALLY below -- EXC_ENTER, body, EXC_LEAVE on
+          both exits, the cleanup emitted twice, a bare re-raise on the unwind
+          arm -- because the two ARE one construct: a region whose cleanup must
+          run whichever way control leaves it. The free differs between the two
+          arms by exactly one runtime guard, and IREmitCaughtExcFree's header
+          is where that guard is explained.
+
+          Before this, the free was emitted ONLY on the fall-through, so an
+          exception leaving the handler body skipped it: 2001 live blocks per
+          1000 trips, the object plus its message string.
+          bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object }
+        excUnwindLabel := -1;
+        if excOwnTmp >= 0 then
+        begin
+          excUnwindLabel := IRNewLabel;
+          last := IRAppend(IR_EXC_ENTER, excUnwindLabel, -1, -1, 0, 0);
+        end;
         last := IRDropManagedResult(ASTLeft[handlerNode], IRLowerAST(ASTLeft[handlerNode]));
         IRMarkStatementNode(last);
         IRFlushPostCallIntf(pcBase);
         if excOwnTmp >= 0 then
-        begin
-          excReleaseProc := FindProc('PXXObjFree');
-          if excReleaseProc >= 0 then
-          begin
-            excSkipFreeLabel := IRNewLabel;
-            last := IRAppend(IR_JUMP_IF_FALSE, excSkipFreeLabel,
-                      IRAppend(IR_BINOP,
-                        IRAppend(IR_LOAD_SYM, excClsTmp, -1, -1, 0, Ord(tyInteger)),
-                        IRAppend(IR_CONST_INT, -1, -1, -1, REC_UCLASS_BASE, Ord(tyInteger)),
-                        Ord(tkGe), 0, Ord(tyBoolean)),
-                      -1, 0, 0);
-            { THE MANAGED HALF, EXACTLY AS THE `Free` DESUGAR EMITS IT.
-              PXXObjFree runs PXXClassFinalize, whose managed pass is compiled
-              out under PXX_TS_HARDLOCK -- x86-64 --threadsafe -- because there
-              the heap lock is the codegen BSS spinlock and Pascal cannot take
-              it. The Free desugar compensates by emitting PXXClassFinalizeManaged
-              as a SECOND call under the emitted lock (HeapLockedCallProcIdx1,
-              ~line 11592). This site did not, so every managed field of every
-              CAUGHT exception leaked -- and an exception class with a string
-              message is the ordinary case, not a corner.
-
-              MEASURED, 3000 raises of a class with one AnsiString field:
-
-                --threadsafe   allocs=10975 frees=8230  live=2745
-                plain          allocs=10975 frees=10972 live=3
-
-              Same allocation count, so this is the free side alone. The string
-              must be built at RUNTIME to see it at all: a folded literal is a
-              static-rc string that nothing frees either way, and the first
-              probe measured nothing for that reason.
-
-              THE GUARD IS ThreadSafeMode, AND THAT IS ONLY SOUND BECAUSE THE
-              DIRECTIVE NOW REQUIRES THE FLAG. It is a compiler flag while the
-              skip it compensates for is keyed to a DEFINE, and those two had
-              drifted: `{$threadsafe on}` set the mode without setting
-              PXX_TS_HARDLOCK, so on a directive-only build PXXClassFinalize
-              still ran its own pass and this call was a SECOND one -- measured
-              live=-2740, a double free. lexer.inc's directive handler refuses
-              that build now, the way it already refused it on the other three
-              targets, which is what makes mode and define agree again.
-
-              The lock wrap is the call site's job and not the callee's:
-              PXXClassFinalize's kind-4 (COM) pass runs a destructor chain and a
-              self-locking free, and putting THAT under the lock is the deadlock
-              the reverted cb2ed843 hit. Ordered before the free.
-
-              STILL BROKEN, same lowering, not this: PXXObjFree's own inner
-              PXXFree runs with no lock at all, so two threads each raising an
-              object corrupt the free list --
-              bug-a-two-threads-raising-object-exceptions-corrupt-the-heap.
-              That one needs the proc split, not a wrap. }
-            if isNilPy then
-            begin
-              { HEADERED population keeps PXXObjFree, which routes to
-                PXXObjRelease and its refcount discipline. An instance here may
-                still be referenced, and only the rc knows. }
-              last := IRAppendCall(excReleaseProc,
-                        IRAppend(IR_ARG,
-                          IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
-                          -1, -1, 0, Ord(tyPointer)),
-                        -1, Ord(tyUnknown));
-              IRIVal[last] := 1;   { statement: emit for effect, not a value }
-              IRMarkStatementNode(last);
-            end
-            else
-            begin
-              { PASCAL population: finalize, then free THROUGH THE tkFreeMem
-                SITE, which is the whole point of not calling PXXObjFree here.
-
-                PXXObjFree's plain arm is `PXXClassFinalize(p); PXXFree(p)`, and
-                on x86-64 the heap lock is emitted by CODEGEN at the tkGetMem /
-                tkFreeMem IR sites -- it is NOT taken inside the runtime
-                helpers. So a free reached by CALLING an RTL routine takes no
-                lock at all and mutates the free list bare. Two threads each
-                raising an object therefore corrupted the heap
-                (bug-a-two-threads-raising-object-exceptions-corrupt-the-heap):
-                MEASURED, 20000 raises per thread, single-threaded phase clean
-                20000/20000 and the two-thread phase SIGSEGV 3 of 3.
-
-                Emitting `-Ord(tkFreeMem)` instead gets the acquire/release wrap
-                AND the magazine fast path for free, because it is the same node
-                the `.Free` desugar falls through to. This is that desugar's
-                shape reproduced, not a new one -- the two paths destroy the
-                same kind of object and had drifted into two mechanisms, which
-                is what normalise-dont-special-case.md is about.
-
-                WHY NOT WRAP THE PXXObjFree CALL, the fix that looks smaller:
-                PXXObjFree runs PXXClassFinalize FIRST, whose kind-4 (COM) pass
-                runs a destructor chain and a self-locking free. Putting that
-                under the lock is precisely the deadlock the REVERTED cb2ed843
-                hit, and it is why PXXClassFinalize and PXXClassFinalizeManaged
-                are two procs with opposite lock requirements today. The halves
-                have to be separated before the free, not wrapped together.
-
-                ORDER IS THE DESUGAR'S: finalize (unlocked, COM chain safe),
-                then the managed half under the lock, then the memory. The
-                previous code here ran the managed half BEFORE PXXObjFree's
-                inner finalize, i.e. reversed, which is a second way these two
-                paths disagreed about one operation. }
-              cfPi := FindProc('PXXClassFinalize');
-              if cfPi >= 0 then
-              begin
-                cfCall := IRAppendCall(cfPi,
-                            IRAppend(IR_ARG,
-                              IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
-                              -1, -1, 0, Ord(tyPointer)),
-                            -1, Ord(tyNativeInt));
-                IRIVal[cfCall] := 1;   { statement: emit for effect }
-                IRMarkStatementNode(cfCall);
-              end;
-              if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
-              begin
-                cfPi := FindProc('PXXClassFinalizeManaged');
-                if cfPi >= 0 then
-                begin
-                  HeapLockedCallProcIdx1 := cfPi + 1;
-                  cfCall := IRAppendCall(cfPi,
-                              IRAppend(IR_ARG,
-                                IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
-                                -1, -1, 0, Ord(tyPointer)),
-                              -1, Ord(tyNativeInt));
-                  IRIVal[cfCall] := 1;   { statement: emit for effect }
-                  IRMarkStatementNode(cfCall);
-                end;
-              end;
-              last := IRAppend(IR_CALL, -Ord(tkFreeMem),
-                        IRAppend(IR_ARG,
-                          IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
-                          -1, -1, 0, Ord(tyPointer)),
-                        -1, 0, Ord(tyUnknown));
-              IRIVal[last] := 1;   { statement: emit for effect, not a value }
-              IRMarkStatementNode(last);
-            end;
-            last := IRAppend(IR_LABEL, -1, -1, -1, excSkipFreeLabel, 0);
-          end;
-        end;
+          last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+        IREmitCaughtExcFree(excOwnTmp, excClsTmp, False);
         last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
         last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+        if excOwnTmp >= 0 then
+        begin
+          { The handler body left through the exception path. NO EXC_CLEAR on
+            this arm: an exception is in flight and the slots belong to it. }
+          last := IRAppend(IR_LABEL, -1, -1, -1, excUnwindLabel, 0);
+          last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+          IREmitCaughtExcFree(excOwnTmp, excClsTmp, True);
+          last := IRAppend(IR_RAISE, -1, -1, -1, REC_NONE, 0);
+        end;
         if handlerNextLabel >= 0 then
           last := IRAppend(IR_LABEL, -1, -1, -1, handlerNextLabel, 0);
         handlerNode := ASTRight[handlerNode];

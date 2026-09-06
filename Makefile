@@ -21095,6 +21095,18 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_unwind_temp_leak.pas $(TESTTMP)/teutl
 	tools/assert_no_leak.sh exception_unwind_temp 200 $(TESTTMP)/teutl
 	tools/expect_same.sh exception_unwind_temp_out "$$($(TESTTMP)/teutl | grep -v '^pxx-census:')" "UNWIND TEMP OK"
+	# An exception raised from INSIDE a handler must not drop the object that
+	# handler was handling. The free was emitted only on the normal fall-through,
+	# so leaving through the exception path skipped it. MEASURED, same test both
+	# ways: live=4002 built by the PINNED (pre-fix) compiler, live=2 built at
+	# HEAD, allocs=7707 on both — the free side alone, and the row is known to be
+	# able to fail rather than assumed to be. The bare `raise;` and `raise 42`
+	# rows are the two controls: the object is still in flight there, so a fix
+	# that freed unconditionally shows up as a segfault or a negative live count.
+	# bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_escaping_a_handler_frees_the_caught_object.pas $(TESTTMP)/teeah
+	tools/assert_no_leak.sh exception_escaping_handler 50 $(TESTTMP)/teeah
+	tools/expect_same.sh exception_escaping_handler_out "$$($(TESTTMP)/teeah | grep -v '^pxx-census:')" "$$(printf 'escape 500\nreraise 500\nnested 500\nint 500\nplain 500\nEXCESCAPE OK')"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
 	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"

@@ -132,3 +132,39 @@ widening turns it back into two mechanisms for one concept.
 Do NOT take a whole-protocol version of B (retain at EVERY raise, release at
 handler entry): worked through and it breaks the re-raise chain — the outer
 handler's entry release frees X before the outer handler runs.
+
+## 2026-09-06 — the distinction this ticket calls unavailable EXISTS, and the Pascal side now uses it
+
+Recorded by frankH while fixing the Pascal sibling
+(`bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object`,
+now `done/`). **Nothing here is implemented for NilPy** — this ticket keeps its
+own blocker — but the ticket above says the pad "cannot tell them apart", and
+that turned out not to be true.
+
+The two rows in this ticket's own table are exactly the two the Pascal fix had
+to separate, and the discriminator is one load and one branch:
+
+**Re-read `BSS_EXC_OBJ` in the pad and compare it with the pointer the binder
+holds.** A `raise Other(..)`, or a callee raising, overwrote that slot —
+`AN_RAISE` writes it. A bare `raise;` / `raise e` left it untouched — its
+codegen writes neither slot, deliberately, so the class survives a re-raise. So
+`BSS_EXC_OBJ <> binder` is precisely "the binder holds something that is NOT in
+flight", which is row two, which is the release this ticket wants.
+
+Why the current answer is a skip rather than a test: `SymSkipScopeExitRelease`
+is a **static** predicate over a symbol kind, and the distinction is **dynamic** —
+the same binder, in the same frame, is row one on one unwind and row two on the
+next. A static predicate can only take the conservative arm, and it did, which
+is why the skip was right and is not a fix.
+
+Measured on the Pascal side, 500 trips of each shape, one program: escape 3
+live, bare re-raise 3 live, `raise <Integer>` from a handler survives (the
+in-flight thing is a VALUE and the class bit excludes it). Positive control run
+rather than reasoned — the same test built by the PINNED compiler reports
+`live=4002`.
+
+Measured on the NilPy side, same shape as a `.py` program, 200 trips: **585 live
+before and 585 after**, byte-identical, because for a bound `except V as e:`
+handler `excOwnTmp` is never allocated and no pad is emitted at all. So this row
+is untouched and still open; what changed is that its blocking premise is now
+known to be false.
