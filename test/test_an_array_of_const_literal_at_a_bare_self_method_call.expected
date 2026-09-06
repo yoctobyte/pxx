@@ -1,0 +1,5 @@
+qualified n=3 t0=2 tlast=2
+bare n=3 t0=2 tlast=2
+ints n=2 t0=0 tlast=0
+wide kind=0 num=1001 n=1 t0=11 pos=0
+widepos kind=1 num=7 n=2 t0=11 pos=42

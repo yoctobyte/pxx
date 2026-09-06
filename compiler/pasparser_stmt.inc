@@ -7885,7 +7885,28 @@ begin
                 smMai := 1;
                 while CurTok.Kind <> tkRParen do
                 begin
-                  ParseExpr;
+                  { THE BRACKET DOOR, which this loop did not have. `[...]` at an
+                    argument position is a SET to ParseExpr and an `array of
+                    const` / open-array LITERAL to the callee, and only the
+                    parameter can say which. Every other call path asks; this
+                    one -- the bare `Log(...)` inside a sibling method, implicit
+                    Self -- hand-rolled its loop and asked nothing, so
+                    fcl-passrc's `Log(mtError, n, fmt, ['#0'])` died as `set
+                    item must be one character`.
+
+                    THE REFUSAL IS THE LUCKY CASE and it is why this was found
+                    at all: '#0' is two characters. `['x']` is a legal
+                    single-character set, so it COMPILED and the callee read
+                    Length 1026585632 off a set where fpc reads 3 -- no
+                    diagnostic, wrong number. Any single-char or integer
+                    element has that shape.
+
+                    smMai already counts from 1 because param 0 is the implicit
+                    Self, so it is the callee slot this argument fills; the loop
+                    incremented it and never asked it anything.
+                    bug-p-an-array-of-const-literal-is-a-set-at-a-bare-self-method-call }
+                  smArgSeq := TryParseBracketArgForSlot(smpii, smMai);
+                  if smArgSeq >= 0 then CurASTNode := smArgSeq else ParseExpr;
                   smArgSeq := AllocNode(AN_ARG);
                   ASTLeft[smArgSeq] := CurASTNode;
                   ASTRight[smLastArg] := smArgSeq;

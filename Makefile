@@ -6860,6 +6860,17 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_user_enum_named_like_a_compiler_internal_record \
 	  "$$($(TESTTMP)/test_enumtok26)" \
 	  "$$(cat test/test_a_user_enum_named_like_a_compiler_internal_record.expected)"
+	@# AN `array of const` LITERAL AT A BARE SELF-METHOD CALL. `[...]` is a SET
+	@# to the expression parser and an open array to the callee; every call
+	@# path asks the parameter except the implicit-Self one, which hand-rolled
+	@# its loop. Rows pass elements a set would ACCEPT (single-char strings,
+	@# integers) and assert a Length and an element type -- with `['x']` the
+	@# broken parse compiled and the callee read Length 1026585632 off a set,
+	@# so a refusal-only row was green throughout the bug.
+	@./$(COMPILER) test/test_an_array_of_const_literal_at_a_bare_self_method_call.pas $(TESTTMP)/test_bareself26
+	@tools/expect_same.sh test_an_array_of_const_literal_at_a_bare_self_method_call \
+	  "$$($(TESTTMP)/test_bareself26)" \
+	  "$$(cat test/test_an_array_of_const_literal_at_a_bare_self_method_call.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
