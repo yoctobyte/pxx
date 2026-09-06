@@ -353,3 +353,60 @@ refused 0, plus a poisoned-helper run that moved 6 rows) is the shape.
   (frankD) is a third instance of this shape in a different loop: four
   hand-written lookaheads with a terminus that happens to parse. Cited here so
   the general case has three witnesses and not two.
+
+## 2026-09-06 (frankA) — the count reached SEVEN, and that is the argument this ticket was missing
+
+The table two sections up said five; it is seven, and the last two arrived after
+it was written.
+
+| # | commit | what |
+| --- | --- | --- |
+| 1 | `4be17cb8f` | the CONST fold asked the builtin table BEFORE the alias table |
+| 2 | `96d805e3d` | a FLOAT target reinterpreted at the builtin-name door |
+| 3 | `96d805e3d` | an ENUM ALIAS lost its identity |
+| 4 | `96d805e3d` | a VARIANT ALIAS read the tag word instead of boxing |
+| 5 | `1e0323c82` | `Real(d)` was REFUSED — the fourth float keyword with no arm |
+| 6 | `8d5f89579` | an `operator Explicit` answered at one door only |
+| 7 | `0a9ae4cca` | #3 was HALF a fix: a packed enum is not tyInteger |
+
+**EACH OF THESE IS A CASE THE MERGED RESOLVER COULD NOT HAVE HAD.** That
+sentence is the whole argument and it was not in this ticket. Seven in one day
+against four in the ticket's entire recorded history is what moves this from a
+tidy-up to the fix — and #7 is the sharpest of them, because it is *me* opening
+a new instance of this ticket's own defect **while working on this ticket**, at
+the site I had just repaired, hours after reading the sibling door's comment
+predicting it.
+
+Three helpers came out of it, and they are the collapse arriving arm by arm
+rather than all at once: `FloatCastToTemp` (3 callers, was 4 transcriptions),
+`TryExplicitOpCast` (2 callers), and the alias table's `AliasEnumId` column read
+in place of a `kind = tyInteger` guard. **The two doors' scalar arms now differ
+by strictly less than they did**, which is what makes the remaining collapse
+mechanical rather than a rewrite.
+
+### THE ACCEPTANCE INSTRUMENT EXISTED AND WAS GREEN THROUGH ALL SEVEN
+
+`tools/scalar_cast_door_probe.py` is named for this family and sweeps exactly
+its axis — a name direct, versus a user alias declared to it. It was green
+throughout, and it was correct about what it swept. Its population was:
+
+- **29 names, all ONE CATEGORY** (integer / char / boolean). No float name, no
+  variant, no enum, and none of the four float KEYWORDS.
+- **the operand is always an `Int64`.** A record with an `operator Explicit`, an
+  already-variant value and a `Double` reach different arms entirely.
+- **the result is always STORED in a variable of the cast type.** That is
+  CLAUDE.md's compatibility test, correct for the truncation question the probe
+  asks — and it is **the one position that HIDES a reinterpret**, because the
+  store coerces. `c := Currency(i)` was right at both doors the whole time.
+
+Extended in `b44b796c2` with a category family that varies target category,
+operand kind, result position and `{$PACKENUM 1}`. Against a binary built at
+`4be17cb8f` it reports 4 DIFFER and 7 route mismatches and names all seven
+defects; clean at HEAD.
+
+**A probe named for a defect family is not coverage of it** — and the way to
+check is to run it against a binary that HAS the defect, which costs one
+`git checkout <sha> -- compiler/` and one rebuild.
+
+**Any collapse lands against this probe**, both families, plus the six tests
+this session added. That is now a real gate rather than "nothing moved".
