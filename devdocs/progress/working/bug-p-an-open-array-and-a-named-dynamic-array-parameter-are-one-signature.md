@@ -3,7 +3,7 @@ track: P
 prio: 25
 type: bug
 blocked-by: []
-summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` were ONE signature in pxx and are two overloads in fpc. FIXED for every binding fpc's own row exercises: `FindProcOverloadRec` now reads `ProcParamDynDepth` beside `Params[j].IsArray` (both sides must be array params; a dyn depth is only ever ASSERTED, so 0 on both sides of a forward/body pair is today's answer and no split), and the argument side gained two channels — `MatchArgDynDepth` (this argument is certainly a named dynamic array) and its MIRROR `MatchArgOpenCtor` (certainly an anonymous element list), read by `MatchParamExact` so they RANK and never refuse. tarrconstr6 burned. STILL OPEN, and measured: `Test(Nil)` takes whichever overload is declared FIRST (1 open-first, 2 dyn-first) where fpc always binds the dynamic one. Arms written in `MatchParamExact` and `MatchArgNilOk` did NOT fire and were removed — with PXXDBG=a.nilarg a nil argument against an array parameter produces no trace line in either the one- or the two-candidate program, so the phase that resolves it has not been identified yet."
+summary: "`procedure P(a: array of LongInt)` and `procedure P(a: TLongIntArray)` were ONE signature in pxx and are two overloads in fpc. FIXED for every binding fpc's own row exercises: `FindProcOverloadRec` now reads `ProcParamDynDepth` beside `Params[j].IsArray` (both sides must be array params; a dyn depth is only ever ASSERTED, so 0 on both sides of a forward/body pair is today's answer and no split), and the argument side gained two channels — `MatchArgDynDepth` (this argument is certainly a named dynamic array) and its MIRROR `MatchArgOpenCtor` (certainly an anonymous element list), read by `MatchParamExact` so they RANK and never refuse. tarrconstr6 burned. STILL OPEN, and measured: `Test(Nil)` takes whichever overload is declared FIRST (1 open-first, 2 dyn-first) where fpc always binds the dynamic one. Arms written in `MatchParamExact` and `MatchArgNilOk` did NOT fire and were removed. THE PHASE IS NOW IDENTIFIED (2026-09-06): `MatchParamCompatible` is `TypesCompatible(...) or MatchArgNilOk(...)`, pxx short-circuits `or` (FPC's {$B-}), and `TypesCompatible` already answers TRUE for an array parameter against nil's tyPointer — so the FIRST candidate is granted outright and the named-dyn one is never asked. That is also why `a.nilarg` printed nothing: the trace sits BELOW the short-circuit. The residual is a ranking that does not exist rather than one that ranks wrong, so the fix belongs in the compatible phase, not in `MatchParamExact`."
 status: working
 owner: frankS
 ---
@@ -197,3 +197,46 @@ resolved in an earlier phase that has not been identified. Both arms were
 REMOVED rather than left in place — dead code that reads as live is worse than
 an open gap — and each site now carries a comment saying what was measured.
 Whoever takes this starts by finding that phase, not by writing a third arm.
+
+## The phase, measured — 2026-09-06 (frankS), compiler `4b22a668e6ab`
+
+frankB asked the right question about the earlier evidence: was `PXXDBG=a.nilarg`
+a trace point I added, or one that already existed? It already existed
+(`de4693979`, 2026-08-21), and it sits after three early bails inside
+`MatchArgNilOk` — so its silence was weaker evidence than I read it as. That
+caution is what produced the finding.
+
+A temporary trace placed AHEAD of the `or` in `MatchParamCompatible`
+(symtab.inc), on the two-candidate program:
+
+```
+PXXDBG a.nilarg PRE Test param 0 paramtk=11 argtk=17 isarray=TRUE proc#=136 dyndepth=0 typescompat=TRUE
+```
+
+**Exactly one line, and `dyndepth=0` names it as the OPEN-array candidate.**
+`TypesCompatible` answers TRUE, the `or` short-circuits, `MatchArgNilOk` is
+never CALLED — a different fact from being called and bailing, and the one a
+reader needs. The named-dyn candidate is never asked at all.
+
+Oracle, both declaration orders (fpc 3.2.2 vs pxx `4b22a668e6ab`):
+
+```
+open-first   fpc: dyn  0     pxx: open 0
+dyn-first    fpc: dyn  0     pxx: dyn  0
+```
+
+So fpc binds the named dynamic array in BOTH orders and pxx binds by
+DECLARATION ORDER — the same axis that made the first version of this ticket's
+fix look complete on one source order.
+
+**What this changes about the fix.** There is no ranking between two array
+shapes for a nil argument to lose: the compatible phase grants the first
+candidate and stops. An arm in `MatchParamExact` cannot fire because the call
+never gets that far. Whoever takes this is adding a preference where today there
+is a first-hit, which is a different and larger change than the two channels
+this ticket already landed — and it is the same shape as the residual on
+[[refactor-a-the-assignment-kind-funnel-needs-a-third-discriminator-not-a-third-special-case]]:
+a coarse kind channel granting a match the finer channel would have declined.
+
+Not taken here. frankB said they would take the nil row if their group surfaced
+the phase; the phase is above, and this ticket stays free.

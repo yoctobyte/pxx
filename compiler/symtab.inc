@@ -9814,13 +9814,22 @@ begin
   if ByRefArgNeedsLvalue(i, j) then Exit;
   { An array parameter bails whatever its spelling, and that is NOT because a
     named dynamic array has no nil state -- it has one, and FPC binds
-    `P(a: TDynArr)` given nil. It is because nothing reaches here for an array
-    parameter at all: measured 2026-09-06 with PXXDBG=a.nilarg, a nil argument
-    against an array parameter produces no trace line in either the one- or the
-    two-candidate program, so a refinement written here would be dead code that
-    reads as live. The nil ranking gap is recorded on
-    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature
-    with the phase still unidentified. }
+    `P(a: TDynArr)` given nil. A refinement written here is dead code, and the
+    REASON is one line up in MatchParamCompatible: it is
+    `TypesCompatible(...) or MatchArgNilOk(...)`, pxx short-circuits `or`
+    (FPC's {$B-}), and TypesCompatible already answers TRUE for an array
+    parameter against nil's tyPointer -- so this function is never CALLED for
+    the case, which is a different fact from it being called and bailing.
+    Measured 2026-09-06 with a temporary trace ahead of that `or`: exactly one
+    line, `paramtk=11 argtk=17 isarray=TRUE dyndepth=0 typescompat=TRUE`, for
+    the OPEN-array candidate only -- the named-dyn one is never asked, and the
+    program binds whichever overload is declared FIRST (fpc binds the named
+    dynamic array in BOTH declaration orders). So the resolving phase is the
+    COMPATIBLE one, granting the first candidate outright; there is no ranking
+    between two array shapes for a nil argument to lose. Recorded on
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature.
+    The earlier reading of the same absence -- "nothing reaches here" -- was
+    right about this line and wrong about why, which is the half a reader needs. }
   if Procs[i].Params[j].IsArray then Exit;
   Result := ProcParamIsNilable(i, j);
 end;
@@ -11265,14 +11274,17 @@ begin
      (ProcParamDynDepth[i * MAX_PROC_PARAMS + j] > 0) then
     Result := False;
   { NO `nil` ARM HERE, AND THAT IS MEASURED RATHER THAN FORGOTTEN. FPC binds
-    `Test(Nil)` to the DYNAMIC overload (an open array is a (pointer, high)
-    pair with no nil state); pxx takes whichever is declared first -- 1 with the
-    open one first, 2 with the dynamic one first. An arm written here does not
-    fire: the call is resolved before this function sees it, in a phase not yet
-    identified, and MatchArgNilOk gets no trace line for an array parameter in
-    either program. Written down rather than guessed at, on
-    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature,
-    which is where the phase hunt belongs. }
+    `Test(Nil)` to the DYNAMIC overload in BOTH declaration orders (an open
+    array is a (pointer, high) pair with no nil state); pxx takes whichever is
+    declared first. An arm written here does not fire, and the PHASE is now
+    identified: MatchParamCompatible grants the first candidate outright,
+    because its `TypesCompatible(...) or MatchArgNilOk(...)` short-circuits on
+    TypesCompatible answering TRUE for an array parameter against nil's
+    tyPointer. Measured 2026-09-06 with a temporary trace ahead of that `or`:
+    ONE line, for the open-array candidate only -- the named-dyn candidate is
+    never asked, so there is no ranking for it to lose and nothing for this
+    EXACT phase to arbitrate. The fix belongs where the compatible phase picks,
+    not here. bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
 end;
 
 function ParamSpellingForReport(pi, j: Integer): AnsiString;
