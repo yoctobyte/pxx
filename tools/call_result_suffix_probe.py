@@ -49,20 +49,22 @@ type
   end;
   PBox = ^TBox;
   PStr = ^ShortString;
+  PPChar = ^PChar;
 var
-  gr: TRec; ga: TArr; gb: TBox; gs: ShortString;
+  gr: TRec; ga: TArr; gb: TBox; gs: ShortString; gq: PChar;
 function TBox.GetIt(i: LongInt): LongInt; begin Result := data[i] + 100; end;
 function FR: PRec;  begin Result := @gr; end;
 function FA: PArr;  begin Result := @ga; end;
 function FB: PBox;  begin Result := @gb; end;
 function FS: PStr;  begin Result := @gs; end;
-var vr: PRec; va: PArr; vb: PBox; vs: PStr;
+function FQ: PPChar; begin Result := @gq; end;
+var vr: PRec; va: PArr; vb: PBox; vs: PStr; vq: PPChar;
 begin
   gr.a := 11; gr.d := 2.5;
   ga[0] := 20; ga[1] := 21; ga[2] := 22; ga[3] := 23;
   gb := TBox.Create; gb.data[0] := 30; gb.data[1] := 31;
-  gs := 'abcde';
-  vr := @gr; va := @ga; vb := @gb; vs := @gs;
+  gs := 'abcde'; gq := 'hello';
+  vr := @gr; va := @ga; vb := @gb; vs := @gs; vq := @gq;
 """
 
 # (label, call-route expression, variable-route expression, absent helper it probes)
@@ -74,6 +76,14 @@ ROWS = [
     ('prop-named', 'FB^.Items[1]', 'vb^.Items[1]', '-'),
     ('method',     'FB^.GetIt(0)', 'vb^.GetIt(0)', '-'),
     ('frozen-str', 'FS^[2]',       'vs^[2]',       'TypeIsFrozenString'),
+    # A RESULT WITH MORE THAN ONE POINTER LEVEL. `^PChar` is the shape where
+    # `f()^` and `f()[i]` each SPEND one level, and the seven rows above cannot
+    # see it: every one of them has a single-level result, for which spending a
+    # level and handing back the seed are the same answer. 217e530a0 gave the
+    # merged walker's `^` arm the seed depth and left its `[` arm handing the
+    # seed back unspent, and this probe was GREEN on that -- the population had
+    # no member that could tell the two apart.
+    ('ptr-depth',  'FQ^[1]',       'vq^[1]',       'seed depth / ProcRetPtrDepth'),
     # the must-differ control: the two routes are DELIBERATELY not the same
     # access, so a run in which nothing is compared still reports a mismatch.
     ('__CONTROL__', 'FA^[0]',      'va^[3]',       'must differ'),

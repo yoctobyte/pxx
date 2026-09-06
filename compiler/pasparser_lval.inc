@@ -8492,6 +8492,43 @@ end;
   `tyRecord` and the record. Three readers: the resolver's decline-signature
   restore, the `[i]` fallback where the base is still a plain pointer, and the
   record-name caret arm. }
+procedure SeedSpendOneLevel(var tk: TTypeKind; var recName: Integer;
+                            var seedDepth: Integer;
+                            seedTk: TTypeKind; seedRec, seedBaseTk, seedBaseRec: Integer);
+{ ONE LEVEL OFF THE SEED'S POINTER SHAPE, FOR BOTH ARMS THAT SPEND ONE.
+
+  `f()^` and `f()[i]` each consume exactly one level of the result's pointer
+  depth -- indexing a `^PChar` result yields a PChar, and dereferencing it does
+  too. The seed carries the remaining levels and the ultimate base, so spending
+  one is Dec + "am I still a pointer, or am I the base now".
+
+  IT LIVES HERE BECAUSE THE TWO ARMS ALREADY DRIFTED ONCE, IN THE LOOP THIS
+  REFACTOR IS ABOUT. The deleted call-result loop carried this in both arms,
+  and 217e530a0 gave the merged walker's `^` arm the seed's depth while its `[`
+  arm kept handing back the seed UNSPENT -- so `GetQ^[1]` for
+  `function GetQ: ^PChar` stayed a PChar and printed 1869376613111 where fpc
+  prints `e`. The `midx` row (`b.Get^[1]`, the same chain off a METHOD) was
+  green throughout, which is what said the arm and not the shape.
+
+  That is the third time in this one loop that a fix landed on one of two arms:
+  the movedOff guard, the low-bound fold, and now the seed. Prose asking the
+  next author to remember the sibling has failed three times, so the rule is a
+  procedure with one body instead.
+  refactor-p-three-hand-rolled-postfix-loops }
+begin
+  tk := seedTk; recName := seedRec;
+  if seedDepth <= 0 then Exit;
+  Dec(seedDepth);
+  if seedDepth >= 1 then
+  begin
+    tk := tyPointer; recName := seedBaseRec;
+  end
+  else if seedBaseTk <> Ord(tyUnknown) then
+  begin
+    tk := IntToTypeKind(seedBaseTk); recName := seedBaseRec;
+  end;
+end;
+
 procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
                                  var recName: Integer;
                                  aliasIdx: Integer;
@@ -8586,18 +8623,11 @@ begin
           bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
         if seedDepth > 0 then
         begin
-          Dec(seedDepth);
+          SeedSpendOneLevel(tk, recName, seedDepth,
+                            seedTk, seedRec, seedBaseTk, seedBaseRec);
           ASTSOffset[indexNode] := seedDepth;
           ASTSLen[indexNode]    := seedBaseTk;
           if seedBaseRec > 0 then ASTIVal[indexNode] := seedBaseRec;
-          if seedDepth >= 1 then
-          begin
-            tk := tyPointer; recName := seedBaseRec;
-          end
-          else if seedBaseTk <> Ord(tyUnknown) then
-          begin
-            tk := IntToTypeKind(seedBaseTk); recName := seedBaseRec;
-          end;
           ASTTk[indexNode] := StrValTk(tk);
         end;
         node := indexNode;
@@ -8713,8 +8743,13 @@ begin
       end
       else if tk = tyPointer then
       begin
-        tk := seedTk;
-        recName := seedRec;
+        { `f()[i]` SPENDS A LEVEL exactly as `f()^` does. Handing back the seed
+          unspent left `GetQ^[1]` a PChar. seedDepth is 0 for both cast openers,
+          so SeedSpendOneLevel is `tk := seedTk; recName := seedRec` for them and
+          this arm is unchanged there -- verified by the cast differential being
+          byte-identical across the fix. }
+        SeedSpendOneLevel(tk, recName, seedDepth,
+                          seedTk, seedRec, seedBaseTk, seedBaseRec);
       end
       else if IsNodeArray(ASTLeft[indexNode]) then
       begin

@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > ## RE-LANED T -> P, WINDOW IS ONE CODE COMMIT, AND IT IS NOT frankS's REVERTED REFUSAL (frank-coordinator, 2026-09-06)
@@ -94,3 +95,38 @@ expect_same: MISMATCH [test_ptrfnres26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved — the `[` arm was not given the seed's depth
+
+`217e530a0` widened the shared walker's seed from a PAIR to a SHAPE so a call
+result could carry its pointer depth, and I gave that to the `^` arm and not to
+the `[` arm. The loop it replaced had it in both, with a comment saying so in the
+arm I dropped it from: *"`f()[i]` spends a level exactly as `f()^` does --
+indexing a `^PChar` result yields a PChar, not another `^PChar`."* The merged `[`
+arm handed the seed back unspent, so `GetQ^[1]` for `function GetQ: ^PChar`
+stayed a PChar and printed its address, 1869376613111, where fpc prints `e`.
+
+The `midx` row -- `b.Get^[1]`, the same chain off a METHOD -- was green
+throughout, which is what says the arm and not the shape.
+
+**THE DIFFERENTIAL THAT WAS SUPPOSED TO CATCH THIS WAS GREEN, AND ITS POPULATION
+IS WHY.** All seven rows of `tools/call_result_suffix_probe.py` had a
+SINGLE-level pointer result, and for those, spending a level and handing back the
+seed are the same answer. The probe varied the SUFFIX and held pointer depth at
+one, so no row could tell the two arms apart. One `^PChar` row now does: it
+reports `186937661 | e  ROUTES DISAGREE` on the pre-fix binary and passes after.
+
+**AND THIS IS THE THIRD FIX TO LAND ON ONE OF THOSE TWO ARMS AND NOT ITS
+SIBLING** -- the movedOff guard, the low-bound fold, and now the seed -- all
+three in the loop whose own ticket is about that habit, and each time the prose
+asking the next author to check the sibling was already sitting beside the arm
+that got the fix. The level-spend is now `SeedSpendOneLevel`, one procedure with
+one body called by both arms. It cannot be given to one of them any more. Prose
+that has failed three times is not a guard.
+
+Gate: `gate.sh quick` with the tree dirty, 16 PASS including both FPC seed
+checks; the only RED is the fleet-wide `pinned builds live lib/rtl`.
+`cast_suffix_walk_probe.py` byte-identical to its pre-merge baseline -- the cast
+openers pass seedDepth 0, for which the helper reduces to exactly what that arm
+already did.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
