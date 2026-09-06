@@ -14723,3 +14723,49 @@ its string-literal skipping desyncs (a `''` escape, or an apostrophe in the wron
 reported a `{$mode delphi}` directive for `compiler/elfwriter.inc`, whose only `{$mode}` text is
 prose inside a comment 5000 lines away. **10 is an upper bound with known false positives.** Too
 small and too noisy for a checker; the MECHANISM is the deliverable, and it is now written down.
+
+## A REGRESSION REPORT NAMES THE SHA IT *TESTED*, NEVER THE SHA THAT *BROKE IT* — and the window is between two verdicts OF THE SAME TIER
+
+Track T samples the tip every ~8 commits, so **every auto-filed red carries a sha that is a
+SAMPLING POINT, not a cause.** The filename, the `sha:` frontmatter and the `NEW-RED:` line all name
+the tree that was measured. Nothing in the report is a claim about which commit did it — and the
+report reads exactly like one, because a sha next to a failure is the shape of an attribution.
+
+Measured 2026-09-06. `NEW-RED: test-core#src:test/test_builtin_type_names_cast_and_declare.pas`
+arrived tagged `b6815e5b8` — *"a cast to Variant boxes instead of punning"* — landed minutes
+earlier by a session that was still busy. The fleet's monitor read it as *"covered by the session
+that caused it"* and took no action, which is the correct action **if the premise holds**. The
+previous verdict on the same tier says it does not:
+
+```
+GREEN  9046a2fdd  04:52:57Z   (native)
+RED    b6815e5b8  05:14:02Z   (native)
+git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code
+```
+
+**Fourteen, not one.** And the adjacency argument picked the weaker candidate: the failing test is
+about builtin type NAMES, and `86f935479` — *"`Low` of a string TYPE NAME answers, at every
+spelling and in both resolvers"* — sits inside the window and touched both resolvers. That is not a
+cause either. **It is the demonstration that as soon as a topical argument exists, the adjacency
+argument selects against it, and neither one is a bisect.**
+
+### Two traps in computing the window, and the second one is quiet
+
+1. **The tier must match.** A `full` GREEN does not bound a `native` RED and vice versa — they are
+   different populations, and the newest report of *any* tier is the one you will reach for because
+   it is the newest. Filter by `tier:` first, then take the newest preceding verdict.
+2. **Not every commit in the window can fail a test.** Six of these fourteen were prose, tickets and
+   board regeneration. Say which of the window can *physically* cause the failure before handing
+   anyone a list — a 14-commit window that is really an 8-commit window is a different amount of
+   work, and quoting the raw count overstates the problem in the direction that gets it deferred.
+
+**And do not hand-bisect it. T bisects backwards on its own** — that is the documented behaviour and
+the whole reason a ~8-commit sampling gap is acceptable. The value a reader adds is the WINDOW and
+the candidate filter, recorded on the ticket so nobody re-derives them; the value they destroy is a
+premature attribution that closes the row before the bisect runs.
+
+> **The general form, and it is the third instance in one night of one shape:** *a report's
+> timestamp, a sha's adjacency, and a peer's busy-ness are all facts about WHEN, and every one of
+> them gets read as a fact about WHY.* CLAUDE.md already records two false alarms from attributing
+> by timing and topic. The instrument that separates them is free in all three cases — the previous
+> same-tier verdict, the reflog that names the authoring checkout, and asking the peer.
