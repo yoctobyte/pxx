@@ -6233,6 +6233,33 @@ def note_idle_abort(clone, host, phase, target):
     return n
 
 
+def note_idle_tier_try(clone, host, sha, tier):
+    """Record that the IDLE LADDER entered a tier run, before it runs.
+
+    `last_breadth_try` does this for the RESERVED breadth path (and its
+    docstring gives the reason: a remote reader cannot see the daemon's phase
+    heartbeat, which is a file in the clone). The idle-ladder path -- the one
+    that actually produced every `full` on a busy day -- recorded nothing at
+    all, and `note_idle_abort` is called only for `verify-request` and
+    `pin-verify`. So the one phase under investigation was the only one that
+    left no trace.
+
+    Measured 2026-09-06: the fleet spent an evening on "why has no full tier
+    run since 18:37Z" and could not answer, from published state, whether a
+    full had even been ENTERED. A full never started and one started-then-
+    aborted are indistinguishable in the archive, and only the second is what a
+    commitment window describes -- so the two candidate explanations could not
+    be separated by the instrument. `idle_yield` could not fill the gap either:
+    it holds ONE phase at a time and pin-verify overwrites it.
+
+    Written BEFORE the run for the same reason `last_breadth_try` is: an
+    attempt that never lands is exactly the case this has to record.
+    """
+    st = load_state(clone, host)
+    st["last_idle_tier_try"] = {"sha": sha, "tier": tier, "date": utcnow()}
+    save_state(clone, host, st)
+
+
 def clear_idle_yield(clone, host):
     """Spend the yield. It buys ONE turn, not a handover: without this the
     phase that yielded would stay locked out for as long as the counter stood,
@@ -8640,6 +8667,11 @@ def main():
                 # only phase whose wall exceeds the mean gap between pushes, so
                 # it is the only one that never finishes under pure preemption.
                 # Everything else here stays fully preemptive.
+                # Publish the ATTEMPT before the run. Without this the
+                # idle ladder is the only tier-running phase that leaves no
+                # trace, so "was the full rung ever entered" is unanswerable
+                # from tstate -- see note_idle_tier_try().
+                note_idle_tier_try(clone, host, tested, nxt)
                 r = test_sha(clone, host, st, tested, nxt, full=True,
                              abort_check=make_preempted(
                                  clone, tested,
