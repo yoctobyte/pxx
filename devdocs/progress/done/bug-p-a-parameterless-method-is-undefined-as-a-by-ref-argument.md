@@ -110,6 +110,13 @@ one. Separate work, separate lane (B/RTL).
   wording is still `undefined variable`, which is wrong wording on a correct
   refusal and predates this fix.
 
+## Log
+
+- 2026-09-06 — fixed and closed in one session, commit `8e8a56847`
+  (`fix(P): a parameterless METHOD was undefined as a by-ref argument, and the
+  gate was enumerating types`). The rung-7 follow-on — the RTL class the next
+  wall wanted — is `888cfe4c3`. Citing the FIX, not the close.
+
 Both cross-reference the free-function twins
 ([[bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument]]),
 and those two now cross-reference back.
