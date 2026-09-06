@@ -34,6 +34,7 @@
   feature-p-a-local-var-section-array-initializer }
 {$mode objfpc}
 program test_a_routine_local_var_array_initializer;
+uses SysUtils;
 type
   TCC = (ccNone, ccReg, ccCdecl);
   TBase = class end;
@@ -42,6 +43,20 @@ type
 
 { CONTROL 1: the file-scope spelling, which already worked }
 var GNames: array[TCC] of string = ('', 'register', 'cdecl');
+
+{ THE WIDTH ROWS, GLOBAL AND LOCAL, and they exist because the first version of
+  this fix shipped a regression THIS FILE COULD NOT SEE. The helper that routes
+  an element to its table took `val: Integer` while both tables hold Int64, so
+  every 64-bit element was truncated — on the GLOBAL path, which the change was
+  only meant to pass through. Three test-core rows went red and none of them was
+  local. Every element above is a string, a small integer or a class reference:
+  all of them survive a narrowing to 32 bits intact, so the file was green.
+  BOTH VALUES ARE CHOSEN SO TRUNCATION IS NOT SILENT. 35.75's IEEE low word is
+  exactly zero, so a lost high word reads 0.00 rather than a near-miss; and
+  6000000000 mod 2^32 = 1705032704, nowhere near it. A value whose high word is
+  already zero would pass either way. }
+var GDbl: array[0..1] of Double = (35.75, -1.5);
+var GQwd: array[0..1] of Int64  = (6000000000, -6000000000);
 
 function LocalStrings(c: TCC): string;
 var Names: array[TCC] of string = ('', 'register', 'cdecl');
@@ -73,6 +88,20 @@ begin
   LocalClasses := K[0].ClassName + '/' + K[1].ClassName;
 end;
 
+function LocalDbl: string;
+var D: array[0..1] of Double = (35.75, -1.5);
+    t: string;
+begin
+  t := FloatToStrF(D[0], ffFixed, 15, 2);
+  LocalDbl := t + ' ' + FloatToStrF(D[1], ffFixed, 15, 2);
+end;
+
+function LocalQwd: Int64;
+var Q: array[0..1] of Int64 = (6000000000, -6000000000);
+begin
+  LocalQwd := Q[0] + Q[1] + Q[0];
+end;
+
 { CONTROL 2: the local CONST spelling, which already worked }
 function LocalConst(c: TCC): string;
 const Names: array[TCC] of string = ('', 'register', 'cdecl');
@@ -96,5 +125,9 @@ begin
   WriteLn('local cls  = ', LocalClasses);
   WriteLn('global     = ', GNames[ccReg], '/', GNames[ccCdecl]);
   WriteLn('localconst = ', LocalConst(ccReg), '/', LocalConst(ccCdecl));
+  WriteLn('local dbl  = ', LocalDbl);
+  WriteLn('local qwd  = ', LocalQwd);
+  WriteLn('global dbl = ', FloatToStrF(GDbl[0], ffFixed, 15, 2), ' ', FloatToStrF(GDbl[1], ffFixed, 15, 2));
+  WriteLn('global qwd = ', GQwd[0], ' ', GQwd[1]);
   WriteLn('reentry    = ', Reentry, ' ', Reentry, ' ', Reentry);
 end.

@@ -7408,6 +7408,17 @@ test-core: $(COMPILER)
 	@# A routine-local DYNAMIC array is still refused, deliberately: its element
 	@# list is an AST node (pending-init kind 10) and FlushLocalInits reads kinds
 	@# 0/1/2/4/5/9, none holding a node. fcl-passrc pparser.pp:635.
+	@# THE WIDTH ROWS ARE HERE BECAUSE THE FIRST VERSION OF THIS FILE COULD NOT
+	@# SEE THE REGRESSION IT SHIPPED. RegisterVarInitElem took `val: Integer`
+	@# while both init tables hold Int64, so every 64-bit element was truncated --
+	@# on the GLOBAL path this change only meant to pass through. Three test-core
+	@# rows went red and none was local. Every element the file asserted was a
+	@# string, a small integer or a class reference, all of which survive a
+	@# narrowing to 32 bits intact, so it stayed green at any width. Both values
+	@# are chosen so truncation is not silent: 35.75's IEEE low word is exactly
+	@# zero (a lost high word reads 0.00, not a near-miss) and 6000000000 mod
+	@# 2^32 = 1705032704. Re-narrowing the parameter was measured to fail exactly
+	@# these four rows and no others.
 	@./$(COMPILER) test/test_a_routine_local_var_array_initializer.pas $(TESTTMP)/test_lvarrinit26
 	@tools/expect_same.sh test_a_routine_local_var_array_initializer \
 	  "$$($(TESTTMP)/test_lvarrinit26)" \

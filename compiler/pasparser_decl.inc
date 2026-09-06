@@ -2418,8 +2418,8 @@ begin
   end;
 end;
 
-procedure RegisterVarInitElem(symIdx, elemIdx, gKind, val, valAux, tkOrd: Integer;
-                              isLocal: Boolean);
+procedure RegisterVarInitElem(symIdx, elemIdx, gKind: Integer; val: Int64;
+                              valAux, tkOrd: Integer; isLocal: Boolean);
 { Record ONE initializer element for a `var` declaration, into whichever table
   the declaration's SCOPE calls for: LocalInit* inside a routine, PendingInit*
   at file scope.
@@ -2444,6 +2444,17 @@ procedure RegisterVarInitElem(symIdx, elemIdx, gKind, val, valAux, tkOrd: Intege
   nothing that holds a node. The caller refuses that combination before getting
   here; this asserts it rather than silently writing a row the flush will read
   as an integer literal.
+  `val` IS Int64 AND MUST STAY Int64. It was Integer for four hours and that
+  TRUNCATED EVERY 64-BIT INITIALIZER ELEMENT on the GLOBAL path this helper was
+  only meant to pass through unchanged: PendingInitVal and LocalInitVal are both
+  `array of Int64`, and a float element arrives here as ExDecDoubleToBits' full
+  IEEE pattern, so the narrowing threw away the high word and 35.75 read back as
+  0.00 while 6000000000 read back as 1705032704 (= it mod 2^32). Three test-core
+  rows, none of them local and none of them mine to change. The declaration is
+  split across two lines rather than sharing one type with its neighbours
+  precisely so the width is stated for `val` alone and cannot be re-absorbed into
+  the Integer run by a later edit.
+  regression-test-core-test-cross-{float-const,global-init}, -single-const-value
   feature-p-a-local-var-section-array-initializer }
 var lk: Integer;
 begin

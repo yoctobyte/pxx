@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_float_const26 "$(/tmp/test_float_const26)" "$(printf 'pi=3.14159 scale=2.00\ncoef=8.25\ntab=35`. The job's own `src` (`test/test_cross_float_const.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -42,3 +43,31 @@ expect_same: MISMATCH [test_float_const26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolution — 2026-09-06, frankD (Track P, not T; the fallback lane was right to distrust itself)
+
+**One character wide.** `RegisterVarInitElem`, added by b612f30e8 to route a
+`var` initializer element to LocalInit* or PendingInit*, declared its value
+parameter `val` as **Integer**. `PendingInitVal` and `LocalInitVal` are both
+`array of Int64`, and a float element arrives as `ExDecDoubleToBits`' full IEEE
+pattern, so the narrowing threw away every high word — `35.75` read back `0.00`
+(its low 32 bits are exactly zero) and `6000000000` read back `1705032704`
+(= it mod 2^32). Fixed by widening the parameter; the declaration is now split
+across two lines so `val`'s width is stated alone and cannot be re-absorbed into
+the Integer run by a later edit.
+
+**The commit that broke these was gated green and the gate was not lying.**
+`gate.sh quick` does not run `test-core`, so all three of these rows — and the
+fixture the same commit added — sat outside it. Worse, the new fixture could not
+have caught this at any width: every element it asserted was a string, a small
+integer or a class reference, and all of those survive a truncation to 32 bits
+intact. It has width rows now, global and local, with values CHOSEN so
+truncation is not silent (35.75's low word is zero; 1705032704 is nowhere near
+6000000000), and the narrowing was re-applied to confirm they fail.
+
+**The change was only ever meant to pass the global path through unchanged, and
+that is the whole lesson**: the three red rows are all GLOBAL. A helper extracted
+from N call sites re-declares every parameter's type, and a type that was
+implicit in the old inline code — `initVal: Int64`, assigned straight into an
+Int64 slot — becomes an explicit choice nobody re-derives.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
