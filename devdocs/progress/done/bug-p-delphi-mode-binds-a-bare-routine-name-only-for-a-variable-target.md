@@ -148,4 +148,4 @@ waiting on an owner-only pin). AND `PXX_ALLOW_FULL_SUITE=1 make test` — the
 change is in the assignment statement path, which every Pascal program reaches.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f919f0cb1.
