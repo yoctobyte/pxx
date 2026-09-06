@@ -160,4 +160,4 @@ Newest full remains `6d04b14cd88d`. This rests on `gate.sh quick`, the
 fixedpoint, and 31 executed qemu assertions — not on a tier.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e2e08c77e.
