@@ -1,0 +1,7 @@
+bytes len=2 d0=3 d1=1
+longs len=3 v0=10 v2=30
+arg sum=15
+nested sum=66
+strings len=2 s0=Alpha s1=Beta
+mat len=2 row0len=2 row1len=3 m11=4
+lower len=1 v0=7

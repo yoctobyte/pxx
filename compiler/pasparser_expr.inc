@@ -710,6 +710,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
     frRowLen, frRowLo: Integer;          { `d[i]` over a dyn array of fixed rows: the row's extent and low bound }
+    dynCtorAi: Integer;                  { `TDynArr.Create(...)`: the ArrType row the type NAME resolved to -- the element type is read from there and not from a destination, because the node may never have one }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
  szDeclTk: TTypeKind; szNameConsumed: Boolean;
@@ -7366,6 +7367,49 @@ begin
             bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
           name := GetTokenStrFromRaw(UClsNOff[nestCtorCi], UClsNLen[nestCtorCi]);
         end;
+      end;
+      { `TAB.Create(1 + 2, i)` -- Delphi's DYNAMIC-ARRAY constructor, and it is
+        not a constructor at all: it is the element list `[1 + 2, i]` wearing a
+        method call's spelling. fpc-testsuite tarrconstr1 / tarrconstr6.
+
+        So this arm parses the argument list with the SAME routine the
+        declaration-form initialiser uses and hands the result to the SAME
+        retag, rather than growing a third way to build a dynamic-array
+        literal. `[...]` in a statement, `(...)` in a declaration and
+        `T.Create(...)` here are now one node built one way; the alternative
+        was three call sites that agree today.
+
+        THE TYPE NAME IS WHY THIS CANNOT WAIT FOR AN_ASSIGN. The literal
+        spellings are retagged from the ASSIGNMENT's left-hand side, which is
+        the only place their element type is known. Here the element type is on
+        the row `FindArrayType` just returned, and it is known BEFORE the node
+        has a destination -- which is the whole point, because tarrconstr6
+        passes `TLongIntArray.Create(1, 2, 3)` as an ARGUMENT and there is no
+        assignment to read it off. A construct that only works when assigned is
+        exactly the half-a-feature this file's siblings keep recording.
+
+        Refuses a dynamic array of FIXED ROWS for the reason ir.inc's AN_ASSIGN
+        arm refuses it: a row is bytes inside the outer block, not a handle, so
+        the open-array constructor lowering has nothing to build and the retag
+        would emit silent garbage. Named here as well as there because the two
+        paths reach the lowering independently. }
+      if (idx < 0) and (procIdx < 0) and (CurTok.Kind = tkIdent) and
+         (FindArrayType(name) >= 0) and ArrTypeIsDyn[FindArrayType(name)] and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+         ((GetTokenStr(TokPos+1) = 'Create') or (GetTokenStr(TokPos+1) = 'create')) then
+      begin
+        dynCtorAi := FindArrayType(name);
+        Next;   { the array type name }
+        Next;   { '.' }
+        Next;   { 'Create' }
+        if ArrTypeElemRowLen[dynCtorAi] > 0 then
+          Error('a dynamic array of fixed rows cannot be built by ' + name +
+                '.Create -- assign the rows after SetLength');
+        CurASTNode := ParseDynArrayInitElemsAST(0);
+        RetagSetLitAsArrayCtor(CurASTNode,
+                               IntToTypeKind(ArrTypeElemTk[dynCtorAi]),
+                               ArrTypeDynDepth[dynCtorAi]);
+        Exit;
       end;
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and

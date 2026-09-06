@@ -6228,6 +6228,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_dynamic_array_of_fixed_rows_has_row_bounds \
 	  "$$($(TESTTMP)/test_dynarr_rowbounds26)" \
 	  "$$(cat test/test_a_dynamic_array_of_fixed_rows_has_row_bounds.expected)"
+	# `TAB.Create(a, b, c)` -- Delphi's dynamic-array constructor, which is the
+	# element list wearing a constructor's spelling. THE ARGUMENT AND NESTED ROWS
+	# ARE THE POINT: both literal spellings can only be retagged from an
+	# assignment's left-hand side, so a constructor that carries its own element
+	# type has to work where there is no assignment, and `TMat.Create(TLIA.Create
+	# (1,2), ...)` is both at once. fpc-testsuite tarrconstr1. Note fpc REFUSES
+	# `TLIA.Create()` (empty parens) -- we accept it, which is not a defect, and
+	# there is no oracle value for it so no row asserts it.
+	./$(COMPILER) test/test_a_dynamic_array_type_name_can_construct_a_literal.pas $(TESTTMP)/test_dynarr_ctor26
+	tools/expect_same.sh test_a_dynamic_array_type_name_can_construct_a_literal \
+	  "$$($(TESTTMP)/test_dynarr_ctor26)" \
+	  "$$(cat test/test_a_dynamic_array_type_name_can_construct_a_literal.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
