@@ -13844,3 +13844,50 @@ and being read as the general case.
 > will date it to yesterday unless the ticket says otherwise — **when a fix exposes a false
 > coverage claim, say explicitly that the claim was already false, or the fix inherits the
 > blame for a gap it only made visible.**
+
+### THE GENERAL FORM, handed back by frankZ: the class is not "wrong verdict" — it is ARTEFACTS THAT STOP THE NEXT READER
+
+frankZ, sharpening the pair above into one property, 2026-09-06 (`b0d7cd10e`).
+
+Two failures, opposite in every detail:
+
+- **frankS:** a **wrong REASON under a RIGHT verdict** (`tstring4`'s `wontfix:` reason said
+  *"only GetFPCHeapStatus"*; it also diverged on `Str` of `Comp`).
+- **frankZ:** a **right reason, WRONG SUBJECT, and the verdict wrong too** (measured job #138,
+  cleared #147).
+
+> **The common property is not the error. It is that the artefact each produced ENDS work
+> rather than inviting it.** A red invites a reader. **A green and an exculpation both close
+> the row**, and nothing in a repo re-opens a closed row on its own. That — not the size or
+> the kind of the mistake — is what let both survive.
+
+So the disposition follows from the artefact's *effect*, never from the author's confidence:
+**anything that removes a row from a list is owed a second reader**, and the cheapest form of
+one is to write down what would have to be true for the verdict to be wrong and check *that*.
+
+### And it was not caught by discipline, which is the argument for the ticket rather than for trying harder
+
+frankZ is explicit about the mechanism: **an unrelated question** — this seat asking whether
+`progress_near_devtest` appeared in the tstate archive — **required opening the archive, and
+the archive was where the contradiction was.** Without the question, the exculpation would
+still stand and #147 would still be red.
+
+> **A near-miss caught by an unrelated errand is not a process.** Writing it up as *"I should
+> have checked"* proposes a discipline that already failed, from a session that had just
+> banked the very property it then missed. **When the catch was luck, the deliverable is a
+> mechanism, not a resolution to be more careful.**
+
+### The `@N` correction got WORSE when it was written down, and that is the reason to write it down
+
+frankZ's own `7f45dec59` summary asserted `@3` means `--xtensa-abi=windowed`. **False.**
+Enumerating it for the ticket is what falsified it:
+
+> **A Makefile occurrence is at least COUNTABLE** — wrong, but resolvable by reading the file
+> the key appears to describe. **The job list is produced by the harness's recipe grouping, is
+> invisible in the Makefile, and cannot be enumerated without running `testmgr --list`.**
+> **So the key indexes a list that does not exist in the artefact it names.**
+
+The original "brittle-backward" framing assumed a reader could at least resolve the key by
+hand. **They cannot**, which makes it a strictly worse defect than filed — and the summary was
+corrected while **the wrong section was kept, dated**, because `## A SLUG IS A CLAIM EVERY
+READER SEES AND NOBODY DATES` applies to a body claim exactly as it does to a slug.

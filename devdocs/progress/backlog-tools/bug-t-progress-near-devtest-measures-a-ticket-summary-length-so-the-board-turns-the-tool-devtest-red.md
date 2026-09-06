@@ -98,6 +98,12 @@ global minimum**. That is luck. The second-worst is `feature-pascal-corpus-expan
 > outside the first 25. A guard whose population is a 4% slice chosen by board order is not
 > measuring the property it names; it is sampling.
 
+**One caveat frankZ attached to its own measurement, and it matters for exactly one of the
+options.** The slice property was measured on this checkout's board only, so *"the outlier
+happens to be inside the first 25"* is **one observation, not a stable fact** — it moves
+whenever a ticket is filed or closed. A **fixed corpus does not need either number to be
+stable.** A **threshold bump needs both to be**, and neither is.
+
 **That is now the sharper half of the fork.** A fixed synthetic corpus fixes both directions
 at once — reproducible numbers, and a population chosen deliberately rather than by whatever
 `Board()` enumerates first. Raising the floor fixes neither: the outlier moves out of the
