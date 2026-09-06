@@ -11760,7 +11760,7 @@ was not the failure itself — it was that **a positive control later failed row
 just been certified as passing.** Same animal as the `git fetch` rule in CLAUDE.md: the
 instrument did not error, it answered correctly about the previous build.
 
-## A SENTINEL MUST NOT COLLIDE WITH THE VALUE IT EXISTS TO DISCRIMINATE AGAINST
+## A KEY MUST BE ABLE TO DISTINGUISH THE THINGS IT IS USED TO LOOK UP — the sentinel case is the version where the key happens to be an integer
 
 `SpecBodyHostUnitIdx` had to record "no host scope remembered", where a scope index of
 `-1` means *the program* — a real, reachable, meaningful scope, and **precisely the one
@@ -12098,3 +12098,76 @@ correctly and only one of them is telling you the file is wrong.
 Nothing else in the loop can see this class — not the fixedpoint, not `--tier quick` — and
 the canary sees it only while the change is uncommitted. That is the entire argument for
 gating dirty, in one measured line.
+
+## THE SECOND INSTANCE OF THE KEY RULE, AND IT IS WHY THE GENERAL FORM IS THE KEEPER
+
+Two hours after `SPEC_HOST_NONE = -2` (an integer key that could not tell *the program*
+from *unset*), the same failure in a different table, found by the session that fixed the
+first one:
+
+`ScanRangeForNestedSpecs` registers a nested specialization's prerequisite under
+**`aliasNm` — the alias as written** — and both guards are **name-only**, including
+`NestedSpecKnown`, which asks `FindSpecialization`/`FindUClass` about the NAME. So
+`TEnumSpec` identifies the nested specialization **globally**, with nothing in the key
+derived from the argument the outer class was specialized on, while the outer body is
+streamed **once per outer specialization**.
+
+```pascal
+type
+  TI = specialize TList7<Integer>;
+  TS = specialize TList7<String>;    { second mint of the same alias name }
+```
+```
+pascal26:0:  error: incompatible types: cannot assign Integer to AnsiString
+pascal26:15: warning: duplicate definition of 'TEnumSpec.GetCurrent' ...
+```
+
+**The key is a NAME and the thing it must distinguish is a TYPE ARGUMENT.** Same failure,
+different table — which is why the heading above is now the general form: *a key that
+cannot distinguish the things it is used to look up.* The sentinel case is the version
+where the key happens to be an integer and the collision is with a magic value; here the
+key is a string and the collision is with every other instantiation. Ask of any lookup key,
+not just of any sentinel: **what two distinct things could arrive here wearing the same
+key?**
+
+### AND THE CORPUS ROW UNDER-REPORTS IT — the inverse of the usual worry
+
+On real `fgl`, with `TFPGList<Integer>` and `TFPGList<String>` in one program, this defect
+is **three warnings, and the program compiles, runs and prints the right answer.** That is
+**luck about that particular pair of bodies staying type-compatible, not a property** — and
+`for i in list` binding to the wrong enumerator body is a silent wrong answer waiting for
+the right pair. The *reduction* fails hard; the corpus does not.
+
+Everywhere else in this file a corpus is the wider population that catches what a reduction
+misses. **Here it is the narrower reading**, because a real library's instantiations happen
+to be compatible and a minimal pair chosen to differ is not. So a green corpus row is not
+evidence about a keying defect — **ask what the corpus's instantiations have in common
+that a hostile pair would not.**
+
+## "IT PASSED AT THE PIN" AND "IT PASSED FOR THE REASON IT NAMES" ARE DIFFERENT CLAIMS — a construct that does not PARSE passes every `%FAIL` row it appears in
+
+Measured 2026-09-06 (frankS), re-running the FPC generics corpus after fetching it.
+`tgenfunc13` was **REJECTED at the pin and ACCEPTED at HEAD** — which reads exactly like a
+behaviour regression on a `{ %fail }` row and is not one.
+
+**The pin refused it because the generic-method header did not parse at all.** So it was
+**passing a `%FAIL` row by accident rather than by rule**, and making the header parse
+removed the accident. A `%FAIL` row asserts only *the compile must be refused*; it does not
+assert **which** refusal, so **any** unimplemented construct anywhere in the file satisfies
+it. **A whole class of `%FAIL` rows is therefore green for a reason unrelated to what it
+tests, and they go red the moment the unrelated gap is closed** — which makes the red a
+signal that a feature LANDED.
+
+The right disposition is not to re-refuse it. The shared premise was measured rather than
+cited from a sibling row: **constraints on generic METHODS are parsed and DROPPED**, so a
+contradictory pair (`<T: class>` declared, `<T: record>` implemented, specialized with
+`Integer`) compiles and runs. The skip line carries a **re-measure trigger** for the day
+constraint checking lands, which is the form that does not rot: see
+`## A HOLD SHIPS WITH THE EVENT THAT RETIRES IT` in the roster.
+
+Beside it, the disposition discipline the same pass produced — **two skips REMOVED, not
+added**: `tgenfunc9` and `tgenfunc3` both pass and their skips are gone, and `tgenfunc3`'s
+said *"generic class functions not supported"*, which is precisely the gap that had just
+been fixed without anyone knowing that row existed. **A skip line is a claim with a date on
+it, and re-running the corpus is how it gets audited.** Families after the pass:
+`tgeneric*` **75 pass / 0 fail** (was 1 fail), `tgenfunc*` **6 pass / 0 fail** (was 4 pass).
