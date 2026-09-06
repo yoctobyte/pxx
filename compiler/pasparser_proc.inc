@@ -844,6 +844,7 @@ var
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, isOut, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
+  isClassCtorImpl, isClassDtorImpl: Boolean;   { `class constructor`/`class destructor` IMPLEMENTATION header -- see where they are set }
   isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
@@ -906,6 +907,17 @@ begin
     isClassKeyword := True;
     Next;
   end;
+  { `class constructor TC.Init` / `class destructor TC.Done`. The keyword after
+    `class` is an IDENT here, not a token, and the Next below consumes it
+    whatever it is -- so this is the only point at which the two spellings are
+    still distinguishable, and without capturing it the body compiles into code
+    nothing reaches. What makes it RUN is the registration at the end of this
+    routine.
+    bug-p-a-class-constructor-is-accepted-and-never-runs }
+  isClassCtorImpl := isClassKeyword and (CurTok.Kind = tkIdent) and
+                     CaseEqual(CurTok.SVal, 'constructor');
+  isClassDtorImpl := isClassKeyword and (CurTok.Kind = tkIdent) and
+                     CaseEqual(CurTok.SVal, 'destructor');
   isFunc := CurTok.Kind = tkFunction;
   Next;
   { Read/Write/Readln/Writeln lex as dedicated intrinsic tokens (paslexer.inc),
@@ -3338,6 +3350,39 @@ begin
 
   { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
   ProcBodyEnd[procIdx] := CodeLen;
+
+  { A `class constructor` RUNS -- once, automatically -- and this is where it is
+    wired to something. It joins InitProcs[], the list a unit's `initialization`
+    section joins, which pasparser_prog.inc calls in dependency order before the
+    program body; a `class destructor` joins FiniProcs[], run in REVERSE order at
+    exit. Registered from the IMPLEMENTATION header rather than the class body,
+    for the same reason a unit's init section is: the list holds bodies, and the
+    class body has none.
+
+    FPC's rule is "before the class is first USED", which is finer than "before
+    the program body". The two differ only for a use that happens inside an
+    earlier entry of this same list, and the ordering there is already right:
+    the class ctor's body is parsed in the implementation section, so it is
+    registered BEFORE its own unit's `initialization` -- which is the one place
+    a use could plausibly beat it. Measured against fpc 3.2.2: fpc also prints
+    the class ctor's output before the program body's first line.
+    bug-p-a-class-constructor-is-accepted-and-never-runs }
+  if isClassCtorImpl and (procIdx >= 0) then
+  begin
+    if InitProcCount < 256 then
+    begin
+      InitProcs[InitProcCount] := procIdx;
+      Inc(InitProcCount);
+    end;
+  end
+  else if isClassDtorImpl and (procIdx >= 0) then
+  begin
+    if FiniProcCount < 256 then
+    begin
+      FiniProcs[FiniProcCount] := procIdx;
+      Inc(FiniProcCount);
+    end;
+  end;
   { DWARF -g: this proc is in the main source file iff we are still parsing main-
     file tokens (units lex past DbgMainTokEnd). Drives DW_TAG_subprogram emission.
     Snapshot its params+locals now, before the scope (Syms[]) is torn down. }

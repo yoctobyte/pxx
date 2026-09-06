@@ -7,8 +7,8 @@ status: backlog
 owner: ""
 created: 2026-09-06
 found-by: frankD
-blocked-by: [bug-p-a-class-constructor-is-accepted-and-never-runs]
-summary: "A class body recognises `class` only through a hand-maintained lookahead list -- `class const` (pasparser_decl.inc:6772), `class var` (:6796), `class property` (:6808), `class procedure`/`class function` (:6828) -- and every other `class X` spelling falls past all four to the member-loop terminus. It worked because the terminus was a bare `else Next` that stepped over the `class` and left something the remaining arms could parse, so FPC's `class generic function` and `class class function` (its generic-class-method spellings) have never had an opener and have always been handled by accident. Narrowing the terminus in 76efae23e turned that accident into two regressions within an hour -- the full suite caught `class generic function`, frankS's conformance corpus caught `class class function` in tgenfunc3/tgenfunc4 -- both fixed at 7d263221f by putting tkClass back in the skip list, which restores the accident rather than removing it. THE LIST IS THE DEFECT: it is an enumeration that must be extended for every new `class X`, with no diagnostic when it is not, and `class` sitting in a skip list DOCUMENTED as section keywords now hides that. The fix is a tkClass opener that consumes the keyword and re-dispatches, so an unknown `class X` is refused by the arm that owns X."
+blocked-by: []
+summary: "UNBLOCKED AND ONE ARM LONGER, 2026-09-06: the blocker closed by ADDING a fifth arm (`class constructor`/`class destructor`, in BOTH member loops) rather than by replacing the enumeration, so this ticket's argument is stronger and its example list is now historical -- the two spellings it cited as falling through are handled, and the list that let them fall through is unchanged. A class body recognises `class` only through a hand-maintained lookahead list -- `class const` (pasparser_decl.inc:6772), `class var` (:6796), `class property` (:6808), `class procedure`/`class function` (:6828) -- and every other `class X` spelling falls past all four to the member-loop terminus. It worked because the terminus was a bare `else Next` that stepped over the `class` and left something the remaining arms could parse, so FPC's `class generic function` and `class class function` (its generic-class-method spellings) have never had an opener and have always been handled by accident. Narrowing the terminus in 76efae23e turned that accident into two regressions within an hour -- the full suite caught `class generic function`, frankS's conformance corpus caught `class class function` in tgenfunc3/tgenfunc4 -- both fixed at 7d263221f by putting tkClass back in the skip list, which restores the accident rather than removing it. THE LIST IS THE DEFECT: it is an enumeration that must be extended for every new `class X`, with no diagnostic when it is not, and `class` sitting in a skip list DOCUMENTED as section keywords now hides that. The fix is a tkClass opener that consumes the keyword and re-dispatches, so an unknown `class X` is refused by the arm that owns X."
 ---
 
 # `class` in a class body is recognised by enumeration, not by structure
@@ -243,3 +243,25 @@ happened to be refactoring. Blocked-by added rather than guessed.
 **What is NOT blocked:** the `class 42` refusal already works, and the four-arm
 list can be extended safely at any time for a spelling that is purely additive.
 The block is only on the arms where refusing changes an accepted program.
+
+## 2026-09-06 — unblocked, and the list grew rather than went away
+
+`bug-p-a-class-constructor-is-accepted-and-never-runs` closed by **implementing**
+the construct: an opener arm for `class` + `constructor`/`destructor` in the
+class body's list and another in the record body's, plus registration of the
+implementation body in `InitProcs[]`/`FiniProcs[]`.
+
+**That is a fifth arm, not a structure.** Every word of this ticket still holds,
+and one line of evidence has moved: the two spellings named above as "handled by
+accident" (`class generic function`, `class class function`) are still the live
+examples, while `class constructor` has graduated from example to arm. The
+enumeration is now five long, in two copies, with no diagnostic when it is not
+extended — which is what this ticket says is the defect.
+
+The termini also changed shape: both interim warnings are gone (they said
+`NEVER RUNS`, which the fix made false), so an unhandled `class X` is once again
+stepped over in silence. **That is the pre-warning behaviour and it is this
+ticket's territory, not a regression in the one that closed** — the warning was
+only ever about the two spellings now handled.
+
+*Noted by the author of the fifth arm.*

@@ -4653,6 +4653,7 @@ var
   rmDefIsStr, rmDefIsFloat, rmDefIsSet: Boolean;
   curTk, retTk: TTypeKind;
   rmSawStatic: Boolean;
+  rmClassCtorDtor: Boolean;   { `class constructor`/`class destructor` in a record -- inherently static, see the check below }
   rmMandatory: Integer;
 begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
@@ -4666,7 +4667,14 @@ begin
   rmDefIsStr := False; rmDefIsFloat := False; rmDefIsSet := False;
   { A record CONSTRUCTOR fills a fresh receiver rather than returning anything, so it
     registers exactly like a procedure whose Self is the record. Only the CALL differs. }
-  isCtor := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor');
+  { `class constructor` is NOT an instance constructor: it takes no receiver and
+    allocates nothing. RecordMethodClassPrefix is True here only for a `class X`
+    spelling, so the pair identifies it exactly -- no second flag needed. }
+  rmClassCtorDtor := RecordMethodClassPrefix and (CurTok.Kind = tkIdent) and
+                     (CaseEqual(CurTok.SVal, 'constructor') or
+                      CaseEqual(CurTok.SVal, 'destructor'));
+  isCtor := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')
+            and not RecordMethodClassPrefix;
   if isCtor then isFunc := False
   else isFunc := CurTok.Kind = tkFunction;
   Next;
@@ -4873,7 +4881,12 @@ begin
     runs, so `record helper` and `type helper for LongInt` stay refused exactly
     as terecs5 requires -- neither of those targets has a metaclass either.
     bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
-  if RecordMethodClassPrefix and not rmSawStatic and
+  { ...but a `class constructor`/`class destructor` IS static by construction --
+    it has no receiver and is never called through one -- and Delphi does not
+    spell `static` on it. terecs_u1.pp is the corpus case and it does not.
+    Demanding the keyword here refused the exact source this rule was written to
+    keep compiling. }
+  if RecordMethodClassPrefix and not rmSawStatic and not rmClassCtorDtor and
      (UClsHelperTk[ci] <> Ord(tyClass)) then
     Error('a class method of a record must be declared static');
 
@@ -5546,6 +5559,24 @@ begin
       RecordMethodClassPrefix := False;
       continue;
     end;
+    { ...and `class constructor` / `class destructor` in a record, which is the
+      spelling terecs_u1.pp uses ({$mode delphi}) and the reason the interim
+      WARNED rather than refused: it is valid Delphi somebody meant to write.
+      Same treatment as the class-body arm -- a static record method, not a
+      constructor -- and ParseSubroutine registers the IMPLEMENTATION body in
+      InitProcs/FiniProcs, which is what makes it run.
+      bug-p-a-class-constructor-is-accepted-and-never-runs }
+    if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(TokPos), 'constructor') or
+        CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+    begin
+      Next;
+      RecordMethodClassPrefix := True;
+      ParseRecordMethodDecl(ci, isObjectType);
+      RecordMethodClassPrefix := False;
+      continue;
+    end;
 
     { `class operator + (const a, b: TPt): TPt;` inside a record — the SIGNATURE only. pxx
       keys an operator on its OPERAND TYPES, so the in-record declaration carries nothing the
@@ -5603,31 +5634,17 @@ begin
         `Error` below cannot reach a construct the corpus uses.
         bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
       begin
-        { `class constructor` / `class destructor` reach here because the four
-          `class X` arms above test tkProcedure and tkFunction only. The keyword is
-          stepped over and the ORDINARY constructor arm takes the bare
-          `constructor`, so the class-ness is discarded and FPC's semantics -- run
-          once, automatically, before the class is first used -- are attached to
-          nothing. The body compiles into code that cannot be reached: an explicit
-          `TC.Init;` is refused with `expected ':=' before ';'`.
-
-          WARNED RATHER THAN REFUSED, DELIBERATELY, and the corpus is why. Refusing
-          would reject terecs_u1.pp -- a Delphi record with `class constructor
-          Create` and `class destructor Destroy` that fpc compiles. That is valid
-          Delphi somebody MEANT to write, so it is compat, not a mistake to make
-          visible. But accepting in SILENCE is the worse half: class-level state
-          stays at its zero value and the program runs on it. A warning keeps the
-          code compiling and stops the failure being silent, which is all the
-          interim has to do. The fork between refusing and implementing FPC's
-          once-before-first-use semantics stays open and is stated on the ticket.
+        { `class constructor` / `class destructor` no longer reach here: each
+          member loop has its own opener arm for them, above, and each registers
+          the IMPLEMENTATION body in InitProcs/FiniProcs so it actually RUNS.
+          They used to fall through to this terminus, which stepped over the
+          `class` and let the ORDINARY constructor arm take what was left -- the
+          class-ness discarded, the body compiled into code nothing could reach,
+          and class-level state left at its zero value with no diagnostic. The
+          interim WARNING that stood here between d754eeef1 and the fix is gone
+          with it: a warning saying "NEVER RUNS" would now be false, and a false
+          diagnostic is worse than none.
           bug-p-a-class-constructor-is-accepted-and-never-runs }
-        if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
-           (Tokens[TokPos].Kind = tkIdent) and
-           (CaseEqual(GetTokenStr(TokPos), 'constructor') or
-            CaseEqual(GetTokenStr(TokPos), 'destructor')) then
-          Warn('class constructor/destructor is parsed but NEVER RUNS here'
-               + ' -- class-level state it sets stays at its zero value'
-               + ' (bug-p-a-class-constructor-is-accepted-and-never-runs)');
         Next;
       end
     else
@@ -6569,6 +6586,7 @@ var
   parentIntfCi, ancCur, ij, implOrig: Integer; alreadyImpl: Boolean;
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
+  isClassCtorDtor: Boolean;   { `class constructor`/`class destructor` -- see the opener arm }
   isOverloadDir: Boolean;   { the `overload` directive on this declaration — its absence is what HIDES the inherited methods of the name }
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
@@ -7527,9 +7545,36 @@ begin
             Next;
 
           isClassMethod := False;
+          isClassCtorDtor := False;
           if (CurTok.Kind = tkClass) and ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
           begin
             isClassMethod := True;
+            Next; { consume 'class' }
+          end
+          { ...and `class constructor` / `class destructor`, which are neither
+            constructors nor ordinary class methods: FPC runs them ONCE,
+            automatically, around the program rather than at a call site. They
+            were not in this opener at all, so they fell past every arm to the
+            member-loop terminus, which stepped over the `class` and let the
+            ORDINARY constructor arm take what was left. The class-ness was
+            discarded and the routine was wired to nothing: the body compiled,
+            `TC.Init;` was refused with `expected ':=' before ';'`, and class
+            state a class constructor sets stayed at its zero value with no
+            diagnostic until d754eeef1 added a warning.
+
+            Registered here as a STATIC class method and NOT as a constructor --
+            UMthIsCtor drives instance allocation, which this must never do --
+            so the name resolves like any `class procedure`. What makes it RUN
+            is the implementation header, in ParseSubroutine: it registers the
+            body in InitProcs/FiniProcs, the same list a unit's
+            `initialization` section uses.
+            bug-p-a-class-constructor-is-accepted-and-never-runs }
+          else if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkIdent) and
+                  (CaseEqual(GetTokenStr(TokPos), 'constructor') or
+                   CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+          begin
+            isClassMethod := True;
+            isClassCtorDtor := True;
             Next; { consume 'class' }
           end;
 
@@ -7541,8 +7586,11 @@ begin
             isDestructor := False;
             if CurTok.Kind = tkIdent then
             begin
-              isConstructor := CaseEqual(CurTok.SVal, 'constructor');
-              isDestructor := CaseEqual(CurTok.SVal, 'destructor');
+              { `class constructor` is NOT a constructor -- see the opener
+                above. Leaving isConstructor True here would give it
+                UMthIsCtor, and a `TC.Init` call would allocate an instance. }
+              isConstructor := CaseEqual(CurTok.SVal, 'constructor') and not isClassCtorDtor;
+              isDestructor := CaseEqual(CurTok.SVal, 'destructor') and not isClassCtorDtor;
               Next;
             end
             else
@@ -8098,31 +8146,17 @@ begin
               tkVar, no others.
               bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
             begin
-              { `class constructor` / `class destructor` reach here because the four
-                `class X` arms above test tkProcedure and tkFunction only. The keyword is
-                stepped over and the ORDINARY constructor arm takes the bare
-                `constructor`, so the class-ness is discarded and FPC's semantics -- run
-                once, automatically, before the class is first used -- are attached to
-                nothing. The body compiles into code that cannot be reached: an explicit
-                `TC.Init;` is refused with `expected ':=' before ';'`.
-
-                WARNED RATHER THAN REFUSED, DELIBERATELY, and the corpus is why. Refusing
-                would reject terecs_u1.pp -- a Delphi record with `class constructor
-                Create` and `class destructor Destroy` that fpc compiles. That is valid
-                Delphi somebody MEANT to write, so it is compat, not a mistake to make
-                visible. But accepting in SILENCE is the worse half: class-level state
-                stays at its zero value and the program runs on it. A warning keeps the
-                code compiling and stops the failure being silent, which is all the
-                interim has to do. The fork between refusing and implementing FPC's
-                once-before-first-use semantics stays open and is stated on the ticket.
+              { `class constructor` / `class destructor` no longer reach here: each
+                member loop has its own opener arm for them, above, and each registers
+                the IMPLEMENTATION body in InitProcs/FiniProcs so it actually RUNS.
+                They used to fall through to this terminus, which stepped over the
+                `class` and let the ORDINARY constructor arm take what was left -- the
+                class-ness discarded, the body compiled into code nothing could reach,
+                and class-level state left at its zero value with no diagnostic. The
+                interim WARNING that stood here between d754eeef1 and the fix is gone
+                with it: a warning saying "NEVER RUNS" would now be false, and a false
+                diagnostic is worse than none.
                 bug-p-a-class-constructor-is-accepted-and-never-runs }
-              if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
-                 (Tokens[TokPos].Kind = tkIdent) and
-                 (CaseEqual(GetTokenStr(TokPos), 'constructor') or
-                  CaseEqual(GetTokenStr(TokPos), 'destructor')) then
-                Warn('class constructor/destructor is parsed but NEVER RUNS here'
-                     + ' -- class-level state it sets stays at its zero value'
-                     + ' (bug-p-a-class-constructor-is-accepted-and-never-runs)');
               Next;
             end
           else

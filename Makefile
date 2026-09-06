@@ -10714,40 +10714,43 @@ test-core: $(COMPILER)
 	@# wrongly at one call site would reject only there.
 	./$(COMPILER) test/test_a_named_dynamic_array_parameter_still_takes_nil_as_a_default.pas $(TESTTMP)/test_dynarraydefault26
 	tools/expect_same.sh test_dynarraydefault26 "$$($(TESTTMP)/test_dynarraydefault26 | tail -n 2)" "$$(printf 'fails=0\nDYNARRAYDEFAULT OK')"
-	@# bug-p-a-class-constructor-is-accepted-and-never-runs -- THE WARNING, which
-	@# is an INTERIM and not the fix. `class constructor` is not in the class
-	@# body's hand-maintained `class X` list, so it falls to the member-loop
-	@# terminus, the `class` is stepped over, and the ordinary constructor arm
-	@# takes what is left: class-level state stays at its zero value and the
-	@# program runs on it. Refusing would reject terecs_u1.pp, a {$$mode delphi}
-	@# record fpc compiles, so the interim warns. THREE ROWS, because a warning
-	@# fails no build and can therefore rot in silence: it must FIRE (twice, one
-	@# per keyword), it must NOT fire on any other `class X` opener, and it must
-	@# fire at the RECORD terminus too -- a separate member loop with its own
-	@# terminus, which is the sibling arm this repo keeps finding unfixed.
-	./$(COMPILER) test/test_a_class_constructor_that_never_runs_is_warned_about.pas $(TESTTMP)/test_classctorwarn26 > $(TESTTMP)/classctorwarn.log 2>&1 \
-	  || { echo "class-ctor-warn: the warning became a REFUSAL -- terecs_u1.pp is why it must not:"; cat $(TESTTMP)/classctorwarn.log; exit 1; }
-	tools/expect_same.sh test_classctorwarn26 "$$(grep -c 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/classctorwarn.log)" "2"
-	tools/expect_same.sh test_classctorwarn26_run "$$($(TESTTMP)/test_classctorwarn26 | tail -n 2)" "$$(printf 'fails=0\nCLASSCTORWARN OK')"
-	./$(COMPILER) test/test_an_ordinary_class_member_draws_no_class_constructor_warning.pas $(TESTTMP)/test_noclassctorwarn26 > $(TESTTMP)/noclassctorwarn.log 2>&1 \
-	  || { echo "class-ctor-warn: the NEGATIVE CONTROL stopped compiling:"; cat $(TESTTMP)/noclassctorwarn.log; exit 1; }
-	tools/expect_same.sh test_noclassctorwarn26 "$$(grep -c 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/noclassctorwarn.log)" "0"
-	tools/expect_same.sh test_noclassctorwarn26_run "$$($(TESTTMP)/test_noclassctorwarn26 | tail -n 2)" "$$(printf 'fails=0\nNOCLASSCTORWARN OK')"
-	@# The record terminus. rc is deliberately IGNORED: pxx refuses a
-	@# parameterless record constructor for unrelated reasons and that refusal
-	@# arrives after the warning, so asserting it here would make fixing THAT
-	@# look like a regression in THIS.
-	@# `|| true` AND NOT MAKE'S `-` PREFIX, and the difference is not style.
-	@# Track T's harness splits a recipe into LINES and runs each itself, so the
-	@# `-` -- which is make's, not the shell's -- never reaches it: this row
-	@# auto-filed a p70 regression on its first ever run
-	@# (regression-test-core-test-a-record-class-constructor-is-warned-about,
-	@# 2026-09-06). A row whose rc is meaningful to make and meaningless to the
-	@# harness is a row that reds for everyone else and passes locally. The
-	@# ignoring has to be inside the SHELL command for both readers to agree.
-	./$(COMPILER) test/test_a_record_class_constructor_is_warned_about.pas $(TESTTMP)/test_recclassctorwarn26 > $(TESTTMP)/recclassctorwarn.log 2>&1 || true
-	grep -q 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/recclassctorwarn.log \
-	  || { echo "class-ctor-warn: the RECORD member loop's terminus is silent -- the class one was fixed and its sibling was not:"; cat $(TESTTMP)/recclassctorwarn.log; exit 1; }
+	@# bug-p-a-class-constructor-is-accepted-and-never-runs -- FIXED, and these
+	@# rows replace the three that asserted the interim WARNING. `class
+	@# constructor` and `class destructor` were not in either member loop's
+	@# hand-maintained `class X` list, so they fell to the terminus, the `class`
+	@# was stepped over and the ORDINARY constructor arm took what was left: the
+	@# class-ness discarded, the body compiled into code nothing could reach,
+	@# class state left at zero. Each loop now has an opener that registers a
+	@# STATIC class method (a constructor would allocate), and ParseSubroutine
+	@# registers the IMPLEMENTATION body in InitProcs[]/FiniProcs[] -- the list a
+	@# unit's `initialization` section joins -- which is what makes it RUN.
+	@# ORDER IS THE CLAIM: `N=5 by the time main runs` would also be true of a
+	@# hand-written call on main's first line, so the fixture accumulates a
+	@# TRACE and main's first act is to append to it. Both files are
+	@# byte-identical under fpc 3.2.2. Neither asserts the class DESTRUCTOR: fpc
+	@# does not run it in either shape and pxx does, which is the source's own
+	@# meaning and not a divergence to chase back.
+	./$(COMPILER) test/test_a_class_constructor_runs_once_before_the_program_body.pas $(TESTTMP)/test_classctorruns26
+	tools/expect_same.sh test_classctorruns26 "$$($(TESTTMP)/test_classctorruns26 | tail -n 2)" "$$(printf 'fails=0\nCLASSCTORRUNS OK')"
+	@# THE SECOND SITE: the record member loop is a separate loop with its own
+	@# terminus, and fixing one arm of a double case is the shape this repo keeps
+	@# finding. terecs_u1.pp -- delphi mode, `class constructor Create` and
+	@# `class destructor Destroy` in a record -- is the corpus file this arm
+	@# exists for, and the names here are its names on purpose. Two unrelated
+	@# refusals had to be kept apart from it: pxx refuses a parameterless record
+	@# CONSTRUCTOR and requires a record's class METHODS to be `static`, and a
+	@# class constructor is neither.
+	./$(COMPILER) test/test_a_record_class_constructor_runs_before_the_program_body.pas $(TESTTMP)/test_recclassctorruns26
+	tools/expect_same.sh test_recclassctorruns26 "$$($(TESTTMP)/test_recclassctorruns26 | tail -n 2)" "$$(printf 'fails=0\nRECCLASSCTORRUNS OK')"
+	@# ...and the negative control, repurposed. It used to assert the compile log
+	@# was silent of the warning; a log that can no longer contain the string is
+	@# a guard that cannot fail. What it asserts now is that every OTHER `class X`
+	@# opener -- var, const, property, procedure, function, and the generic
+	@# spellings, in a class body and a record body -- still does its job. An arm
+	@# written one token too wide swallows a neighbour, and a member consumed by
+	@# the wrong arm does not fail to compile: it compiles into something else.
+	./$(COMPILER) test/test_every_other_class_opener_is_unaffected_by_the_class_constructor_arm.pas $(TESTTMP)/test_classopeners26
+	tools/expect_same.sh test_classopeners26 "$$($(TESTTMP)/test_classopeners26 | tail -n 2)" "$$(printf 'fails=0\nCLASSOPENERS OK')"
 	./$(COMPILER) test/test_an_abstract_override_keeps_its_parents_vmt_slot.pas $(TESTTMP)/test_absoverride26
 	tools/expect_same.sh test_absoverride26 "$$($(TESTTMP)/test_absoverride26 | tail -n 2)" "$$(printf 'fails=0\nABSTRACTOVERRIDE OK')"
 	./$(COMPILER) test/test_a_procedural_member_is_callable_through_a_selector_chain.pas $(TESTTMP)/test_chaincall26

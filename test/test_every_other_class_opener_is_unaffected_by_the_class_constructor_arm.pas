@@ -1,15 +1,21 @@
-program test_an_ordinary_class_member_draws_no_class_constructor_warning;
+program test_every_other_class_opener_is_unaffected_by_the_class_constructor_arm;
 { bug-p-a-class-constructor-is-accepted-and-never-runs -- THE NEGATIVE CONTROL.
 
-  The warning is emitted from the member-loop terminus, which is also where
-  `class var` and every other unrecognised `class X` opener lands. A guard
-  written one token too wide would fire on all of them and nobody would notice,
-  because a warning does not fail a build. So this file is every OTHER `class`
-  opener the parser sees, in both a class body and a record body and once
-  through a generic, and the Makefile asserts its compile log is silent.
+  The `class X` opener in each member loop is a hand-maintained list, and the
+  fix added an arm to it. An arm written one token too wide swallows a
+  neighbour: `class var`, `class const`, `class property`, `class procedure`,
+  `class function` and the generic spellings all reach the same test, and a
+  member consumed by the wrong arm does not fail to compile -- it compiles into
+  something else.
 
-  Drawn from the population the question is about: these are the spellings that
-  reach the same arm, not a sample of unrelated code. }
+  This file is every OTHER `class` opener the parser sees, in a class body, a
+  record body and once through a generic, and it RUNS them: drawn from the
+  population the question is about, not a sample of unrelated code.
+
+  It was the control for the interim WARNING (asserting the compile log was
+  silent) and that assertion is retired with the warning. A log that can no
+  longer contain the string is a guard that cannot fail; what the rows below
+  assert instead is that each spelling still does its job. }
 type
   TC = class
     class var N: Integer;
@@ -63,5 +69,5 @@ begin
   Check('record class procedure', TR.H, 9);
   Check('record class property', TR.RP, 9);
   WriteLn('fails=', fails);
-  if fails = 0 then WriteLn('NOCLASSCTORWARN OK');
+  if fails = 0 then WriteLn('CLASSOPENERS OK');
 end.
