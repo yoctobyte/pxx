@@ -60,6 +60,17 @@ refuse deliberately rather than returning a plausible wrong answer — FreeRTOS
 gives you tasks, not processes, and POSIX-shaped code meets a clear refusal
 instead of silence. That is a design decision, not a gap.
 
+**On ESP, Pascal is the only frontend that gets there.** Measured, one
+hello-world per frontend across four ESP configurations: Pascal runs, backed by
+29 executed emulator assertions. C faults with an internal error on three of the
+four and refuses cleanly on the fourth. Nil-Python, Zig and Rust refuse on all
+four — mostly honestly, saying that a heap arena needs `mmap`, or that the
+skeleton supports x86-64 only. Those are frontends working correctly in cells
+nobody has built out yet, not twelve failures. But **"all frontends" is not a
+sentence that belongs anywhere near the ESP story**, and only the Pascal row
+means *runs*: a future row that merely compiles is a different claim and needs a
+different word.
+
 **wasm32 is real but unwired.** Its two test suites are green and both are run
 by hand — no continuous tier covers it, so it carries less evidence than the
 other six. It is also where the honest caveat lives: both suites were fully
@@ -181,7 +192,22 @@ are counted. Two further categories are not:
   failure, not a skip, not counted anywhere. An absence no number reports.
 
 So a green run is real evidence about the first two categories and silent about
-the last two. Our cross-target C vararg check, for instance, reports **6 built,
+the last two.
+
+**A concrete case, because it is the honest shape of the problem.** Twenty-eight
+riscv32 test rows are skipped with one shared sentence — *"backend feature gap"*.
+Counting two that were un-skipped in August, thirty rows have carried it. **Seven
+have ever been checked. Five of those seven did not hold**: two named a code path
+that turned out never to have existed, one row hangs forever rather than being
+unsupported, and two simply pass. That leaves **twenty-three nobody has looked
+at.**
+
+We are not claiming those twenty-three are wrong — nobody has measured them.
+We are saying the sentence they share has a five-in-seven record, and that a
+green riscv32 column therefore means less than it appears to. One of the
+unchecked rows is a timer test that hangs on riscv32 because a syscall the
+target lacks returns an error nothing reads, handing the caller a timer that
+never fires. Our cross-target C vararg check, for instance, reports **6 built,
 1 refused, 7 examined** rather than "pass" — deliberately, because an earlier
 version of it recorded a target as *legitimately excluded* when that target
 could in fact build and pass. It was green for a day. Carrying the denominator
