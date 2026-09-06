@@ -213,6 +213,16 @@ one-line logbook pointer.
   coherent pair.** The one thing still REVERTED rather than patched around is a
   change that breaks `compiler.pas`'s own fixedpoint; that is not a rollback,
   it is the single property a pin exists to carry.
+  **AND NEVER WAIT FOR A PIN** (owner, 2026-09-06): *"sometimes we had a worker
+  stop because it was waiting for a pin that never happened."* That is the THIRD
+  failure mode of this rule and it is the one nobody wrote down — not
+  under-pinning (49h with none) and not over-pinning (nearly blessing a bad
+  fixedpoint), but **a session stalling itself on an event only the owner can
+  cause.** A worker waiting on a pin is indistinguishable from a worker working,
+  costs the whole session, and produces nothing to notice it by. **Land forward,
+  say in the resolution what is inert until the next pin, and take the next
+  ticket.** If your work genuinely cannot be verified until pinned, that is a
+  sentence in the ticket, not a reason to hold the seat.
   **The cost of not pinning is not hypothetical: a fix is INERT UNTIL PINNED.**
   Two dated casualties in 48h — `IEnumerator<T>.Current` inert for a MONTH with
   its parser fix closed in `done/`, and `8374118ec` landing three hours after
