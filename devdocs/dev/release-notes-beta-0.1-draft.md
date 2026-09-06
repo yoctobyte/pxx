@@ -1,0 +1,199 @@
+# pxx / pascal26 — beta 0.1
+
+**Draft for review. Not published.**
+
+An arbitrary point in a long piece of work. There is a real backlog, some of it
+in this document. There is also a compiler that compiles real programs for seven
+targets and rebuilds itself byte-for-byte, and it is about time somebody could
+try it.
+
+Everything below was measured against the pinned build **v406**, commit
+`ab72ab352`, compiler binary sha256 `4bfd73d70588`.
+
+---
+
+## What it is
+
+A self-hosting compiler for a Pascal dialect, seeded from FPC, with its own
+runtime library, its own ELF writer, seven code generators, and four additional
+language frontends sharing one AST and one IR.
+
+The goal is **languages × platforms** — every frontend on every target. That is
+the goal, not the state. This release is a snapshot of how far along it is.
+
+`pascal26` reproduces itself exactly: compiled by itself, it emits a
+byte-identical binary. That is the strongest single guarantee here and also a
+narrow one — it says the compiler is self-consistent at the default optimisation
+level. **It does not say the compiler is correct**, and for the C, Python, Rust
+and Zig frontends it says nothing at all, because `compiler.pas` is Pascal.
+
+## Targets
+
+`x86-64` (default), `i386`, `aarch64`, `arm32`, `riscv32`, `xtensa`, `wasm32`.
+
+The same six-line program, compiled by the pinned build and run under emulation:
+
+```pascal
+begin writeln(6*7) end.
+```
+
+```
+native    42
+aarch64   42
+riscv32   42
+```
+
+and in C, through the same compiler:
+
+```c
+#include <stdio.h>
+int main(void) { printf("%d\n", 6*7); return 0; }
+```
+
+```
+native    42
+aarch64   42
+```
+
+**xtensa is an ESP target and ESP is not a Unix.** 33 platform-layer entries
+refuse deliberately rather than returning a plausible wrong answer — FreeRTOS
+gives you tasks, not processes, and POSIX-shaped code meets a clear refusal
+instead of silence. That is a design decision, not a gap.
+
+**wasm32 is real but unwired.** Its two test suites are green and both are run
+by hand — no continuous tier covers it, so it carries less evidence than the
+other six. It is also where the honest caveat lives: both suites were fully
+green while a `Variant` written through a pointer put its payload over its own
+tag, giving 42 natively and 0 on wasm32. Fixed, and the fix is in this pin. A
+green suite is evidence about what it tests.
+
+## What it compiles
+
+The compiler itself. zlib, matching the gcc oracle on the program's **output**.
+A chess perft. All **36 of 36** demo programs under `examples/` build against
+this pin — adventure games, a TUI, a bignum library, a small VM.
+
+## Optimisation
+
+`-O0` through `-O3`. `-O2` is the default and the proven one; `-O3` is
+experimental. **`-O4` does not exist** — the compiler answers `unknown option`.
+If you see it named anywhere, that is a document being aspirational.
+
+---
+
+# Limitations
+
+Written per frontend, and only where somebody measured it. A beta is allowed a
+backlog of things that *refuse* — you get a diagnostic and can work around it.
+The list worth your attention is the shorter one: things that compile, run, and
+are quietly wrong.
+
+## C
+
+Four known limitations. **One of them tells you.**
+
+**`setvbuf` returns success and does nothing.** It discards all four arguments
+and returns 0, which C99 defines as success. This is first on the list because
+it is the only one that *punishes* care: the programmer who correctly checks the
+return value is the one who is misled. There is no defensive style that helps.
+
+**`long double` is 8 bytes; gcc's is 16.** `sizeof(long double)` and
+`sizeof(struct { long double x; })` are both 16 under gcc and both 8 here, from
+the same source, with no diagnostic. A single translation unit is
+self-consistent; an aggregate containing one disagrees about its own size the
+moment it crosses a boundary into gcc-compiled code.
+
+**`__thread` and `_Thread_local` are ignored — but they now warn.** Every thread
+shares one copy of a variable declared per-thread; the object contains no
+`.tbss` or `.tdata` section at all. Since this pin the compiler says so, once
+per compilation. It is the only one of the four you can discover from a message.
+Pascal takes the other road and *refuses* `threadvar` outright.
+
+**An internal integer-formatting helper has an unbounded loop** on a base value
+no ordinary program supplies. Listed for completeness; it is parked deliberately
+as a diagnostic aid for a defect not yet identified.
+
+The current set is derived, not transcribed — these queries are the list:
+
+```sh
+grep -rl '^## RELEASE-RISK: SILENT-WRONG' devdocs/progress/
+grep -rl '^## RELEASE-RISK: DIAGNOSED'    devdocs/progress/
+```
+
+C on wasm32 is **freestanding only**: `int main(void){return 42;}` builds and
+exits 42, and anything reaching for `<stdio.h>` refuses with a diagnostic naming
+why.
+
+## Pascal
+
+FPC and Delphi modes, and explicitly not every dialect of either. We do not
+chase FPC bug-for-bug; we care that correct Pascal compiles correctly.
+
+One alias-resolution defect is fixed in this pin. A census settled its scope:
+**exactly one affected name in everything pxx ships — `IUnknown`, and it failed
+loudly** — because the alias table only ever admitted class types. What remains
+genuinely **unmeasured** is third-party Pascal that declares a class or
+interface alias re-using a builtin name. Unmeasured is the accurate word; it is
+not a claim that the case is fine.
+
+## Nil-Python
+
+Upward compatible with CPython, in one direction only: a program CPython accepts
+must behave the same here. Accepting **more** than CPython is deliberate and is
+not a bug. The deliberate divergences are written down in
+`devdocs/dev/nilpy-semantics-divergences.md`; anything differing that is *not*
+in that file is a bug and we want to hear about it.
+
+## Rust and Zig
+
+Work in progress, and mentioned only so their presence in the tree is not
+mistaken for a claim. Both are early — a handful of tests on one target each,
+against thousands on fourteen for Pascal. Do not plan around them.
+
+## One compiler-wide defect worth knowing before you script anything
+
+**A successful-looking compile does not currently prove an output file exists.**
+
+```
+$ pascal26 hello.pas /nonexistent-dir/out
+ok: /nonexistent-dir/out  [code=65304B  data=2792B  bss=43524B  procs=136]
+$ echo $?
+0
+```
+
+No file was written. The verb, the byte counts and the exit status all come from
+the in-memory image; none is checked against the filesystem. If you drive
+`pascal26` from a build script, test for the artefact rather than trusting the
+exit code. Filed, and not fixed in this pin.
+
+---
+
+# How much of this is tested
+
+Worth stating plainly, because "the suite is green" is a weaker sentence than it
+sounds and we would rather you knew the shape of it.
+
+Continuous testing reports **failures** and **skips-it-knows-about**, and both
+are counted. Two further categories are not:
+
+- **Self-skipping test arms**, which decline for reasons the harness never sees.
+- **Whole suites in no tier at all** — wasm32 and two ESP configurations. Not a
+  failure, not a skip, not counted anywhere. An absence no number reports.
+
+So a green run is real evidence about the first two categories and silent about
+the last two. Our cross-target C vararg check, for instance, reports **6 built,
+1 refused, 7 examined** rather than "pass" — deliberately, because an earlier
+version of it recorded a target as *legitimately excluded* when that target
+could in fact build and pass. It was green for a day. Carrying the denominator
+is what caught it.
+
+---
+
+## Reporting
+
+Bugs, and especially anything in the "compiles and is wrong" shape, are the most
+useful thing you can send. Something that refuses with a clear message is
+already on a list; something that runs and lies is not.
+
+Beta 0.1. There is a backlog and this document names part of it. The compiler
+does real work.
