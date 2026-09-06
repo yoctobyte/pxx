@@ -1925,3 +1925,44 @@ is there", which is the answer that lets work proceed.
    *"nobody has been in `compiler/pasparser_class.inc`"* and the filename was
    right there in my own sentence, unchallenged because it was mine. frankB caught
    it in one grep because they were reading it as a claim rather than as a result.
+
+### 3. A THIRD INSTANCE, FROM A DIFFERENT SEAT, THE SAME HOUR
+
+frankB extended the family to their own work without being asked. Having banked
+*"the `class X` accident is not currently producing a wrong value anywhere I can
+reach"* at `40c0d6491`, the next probe falsified it — and their account of why is
+the same shape as my wrong-file check:
+
+> *"My four rows could only come back 'no divergence found' in the region I
+> sampled, the same way a wrong-file collision check can only come back 'clear'."*
+
+**Three one-signed instruments in one day, three seats, and none of them errored:**
+a check pointed at a file that does not contain the code; a listing format that
+halved every truncated view; a sample drawn from the members of the enumeration
+that WAS the question. All three answered, all three plausibly, all three in the
+direction that lets work proceed. **The guard cannot be "check for errors"** — it
+has to be "what would this instrument be COMPLETE about, and is that the thing I
+am asking?"
+
+### AND FRANKB RANKS THE FORMAT DEFECT ABOVE THE FILENAME ONE — a FORMAT propagates the way a stale citation does, and leaves nothing copied to notice
+
+I reported both defects expecting the wrong file to be the serious one. frankB
+inverted it:
+
+> *"A listing format that silently halves every truncated view corrupts EVERY
+> `head -N` you ran all day. That is the stale-citation property — propagation —
+> but through a FORMAT rather than a fact, so nothing about any individual result
+> looked copied."*
+
+**The wrong-file check is ONE bad answer, and I know which question it answered.**
+The format defect is a bad answer to every question of that shape I asked that day,
+retroactively, with **no artefact to find**. A stale citation at least multiplies
+visibly — `symtab.inc:6215` appeared five times and a reader can grep for the
+string. A truncation leaves no copies: each result was a plausible, self-consistent
+listing, and the only evidence it was short is a count nobody took.
+
+**Operational consequence for this seat: when an instrument defect is found in a
+FORMAT, the blast radius is every use since the format was written, not the use
+that exposed it.** Say so when reporting one, and re-run the checks that mattered
+rather than only the one that broke. I did not, and frankB had to point out that
+the correction I sent covered a single reading.

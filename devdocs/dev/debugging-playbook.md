@@ -16507,3 +16507,101 @@ census: is this corpus made of things that fail loudly?
 reason** — not a bigger one. Seven files and six files settled this; seventy of the
 first kind would not have.
 
+
+## AN ENUMERATION IS PRECISELY THE THING YOU CANNOT SAMPLE — any subset of it behaves consistently, because consistency within a list is what a list is
+
+frankB, 2026-09-06, falsifying their own banked claim within one probe of banking
+it. `40c0d6491` recorded that a class-body lookahead accident *"is not currently
+producing a wrong value anywhere I can reach"*. The very next probe reached one:
+`class constructor` compiles, never runs, and cannot be called — pxx prints `N=0`
+where fpc prints `class ctor ran` and `N=5`, and an explicit `TC.Init;` is refused
+with `expected ':=' before ';'`. Accepted, silent, and unreachable. Filed p55,
+`5911a4803`.
+
+**The claim was measured, and it was measured over the wrong four rows.** The
+defect is a hand-maintained lookahead list: the class-body member loop recognises
+`class const`, `class var`, `class property`, `class procedure`/`class function`,
+and nothing else. frankB sampled the arms that DO have handling — generic methods
+— and every one of them behaved. That is not luck:
+
+> *"An enumeration is precisely the thing you cannot sample: any subset of it
+> behaves consistently, because consistency within a list is what a list is."*
+
+**This is a DIFFERENT error from the corpus-habits one**, and frankB drew the line
+themselves: *"there the sample was drawn from the wrong population; here the
+population WAS the question and I sampled it anyway."* When the finding is
+*"which spellings does this list contain"*, the members are not evidence about the
+list — they ARE the list, and the answer lives entirely in the complement.
+
+**And it is one-signed, which is why nothing looked wrong.** frankB's four rows
+*"could only come back 'no divergence found' in the region I sampled — the same
+way a wrong-file collision check can only come back 'clear'."* See
+"EVERY INSTRUMENT THAT LIES, LIES BY BEING CORRECT ABOUT SOMETHING ELSE".
+
+**The operational tell, and it survives the specific case:** the ticket's proposed
+fix was to add the missing spellings, and `class 42` already refuses — so the gap
+is not "spellings that fall off the end". **The gap is spellings where an arm DOES
+take the token and cannot honour the `class`**: `class constructor` falls past all
+four arms to the member-loop terminus, which steps over the `class`, and the
+ORDINARY constructor arm then takes the bare `constructor` and discards the
+class-ness. A wrong answer produced by a working arm, not by a missing one.
+When you audit an enumeration, enumerate what the terminus hands on to, not only
+what the arms accept.
+
+## A "NOT SUPPORTED" MESSAGE ABOUT A SHAPE THE COMPILER SUPPORTS RECRUITS THE READER TO REIMPLEMENT A WORKING PATH
+
+frankS, 2026-09-06, `0f7da3f4f`. `var v: array of array[0..2] of LongInt` answered
+**"mixed static/dynamic nested arrays not supported"** — and that sentence was
+false about the capability. `type TR = array[0..2] of LongInt; var v: array of TR`
+compiles and runs correctly today, through the alias arm that models the element
+as a ROW. **The refusal was about the SPELLING and the message was about the
+FEATURE.**
+
+**A diagnostic is a routing instrument, and this is the misdiagnosing-check
+failure relocated into the compiler.** A check that names the wrong file converts
+the readers it draws into its own repair crew; a diagnostic that says "not
+supported" about a supported shape does the same to every programmer who meets it,
+and it does not merely block them — **it sends them to build what already exists,
+with the compiler's own authority behind the errand.** The cost is not the failed
+compile; it is the second implementation, which then becomes the fourth mechanism
+answering one question.
+
+**The tell is cheap and nobody runs it: try the other spelling before believing
+your own refusal.** If a neighbouring spelling of the same construct compiles, the
+message is about a parse arm and must say so — *"this spelling is not recognised;
+`type TR = ...; var v: array of TR` does this today"* routes the reader to the
+working path in one line. Third instance of this asymmetry in `pasparser_decl.inc`
+in one day, second in this direction; the morning's mirror image was
+`array[0..2] of array of T`.
+
+**And the refusal that is CORRECT still needs the same care.** In the same commit
+frankS chose a diagnostic over a feature — a dynamic array of fixed rows cannot
+take an element list, because a row is bytes inside the outer block rather than a
+handle — and the honest form of that is naming what remains: fpc refuses the
+STATEMENT spelling (so pxx now agrees) and ACCEPTS the DECLARATION spelling, which
+is a real gap and is recorded as a named wall at a line number in the test rather
+than as "not supported".
+
+## A PARAMETERLESS RECURSIVE FUNCTION IS NOT A CALL — it is Pascal's result variable, and the parse error it produces says nothing about recursion
+
+frankS, 2026-09-06, `0f7da3f4f`. `itemNode := ParseDynArrayInitElemsAST` written
+inside `ParseDynArrayInitElemsAST`'s own body is **an assignment FROM the function
+result**, not a recursive call. In a parameterless function the two are spelled
+identically and only the position tells them apart, so the intended recursion:
+
+- read an **uninitialised Integer** (the result slot, never assigned on that path),
+- **consumed no tokens**, and
+- left the loop facing the `(` the call would have entered — reported as
+  **`expected ')' before '('`**.
+
+**The failure arrives in the FEEDBACK rather than in the value**, which is why it
+belongs beside the wrong-value family and not with the crashes: the compiler
+compiled, answered, and was correct about something else — the diagnostic is a
+true statement about the token stream and a completely misleading one about the
+cause. Nothing in it points at recursion, and a nested initialiser is exactly
+where a reader expects a depth problem to surface as a parse error.
+
+**The fix is also the documentation:** giving the function a `nest` parameter makes
+the recursion a call by construction and records the depth. **Any parameterless
+Pascal function that means to recurse should take an argument it does not need**,
+or the language will silently read your call as a read.
