@@ -12225,6 +12225,79 @@ been fixed without anyone knowing that row existed. **A skip line is a claim wit
 it, and re-running the corpus is how it gets audited.** Families after the pass:
 `tgeneric*` **75 pass / 0 fail** (was 1 fail), `tgenfunc*` **6 pass / 0 fail** (was 4 pass).
 
+### POSTSCRIPT 2026-09-06 — the same rule with a far wider aperture, and it is now GATED rather than noticed
+
+`109fbebb1` (frankS), auditing the framing above rather than leaving it as one anecdote.
+Every curated `%FAIL` row was re-run and the reason for its refusal recorded: **225 rows,
+191 refused**, grouping as 41 impossible-operator-overload, 12 syntax-shaped, 11
+undefined-variable — and **4 "this file is a unit, not a program."**
+
+> **FPC's `dotest` compiles a unit STANDALONE. pxx has no standalone-unit compile and
+> answers with a REFUSAL. Under the `%FAIL` contract — *the compile must be rejected* — that
+> refusal satisfies the row, so EVERY unit-source `%FAIL` row passes VACUOUSLY, whatever it
+> contains.**
+
+`tgenfunc13` above was one construct passing for the wrong reason. This is **an entire FILE
+KIND** doing it: not a gap that happens to sit in the file, but a property of the source's
+*shape* that the harness never asked about. 4 curated rows today, **9 in the corpus, growing
+as `CATEGORIES` expands.** `tgeneric105` was being counted as a pass on exactly this, and
+`tgenfunc14/17/18` carried curated skip reasons describing **a dialect-pass the compiler
+never reached the source to have** — the row is refused at "not a program", so the constraint
+repeat and the type-parameter rename those skips cited were never exercised by the run that
+was citing them. **A skip line can be a true statement about a construct and a false
+statement about what the run measured.**
+
+Now auto-gated beside `%OPT` / `%RECOMPILE`, which is the correct shelf: **suite
+infrastructure we deliberately do not model, not a triaged gap.** Eight skip lines went dead
+and were removed, **verified dead by removal rather than assumed** — `tgenfunc*` 6/0,
+`toperator*` 87/0, `terecs*` 26/0, unchanged across the deletion.
+
+**And the residual got an OWNER instead of being dropped.** `tgenfunc17/18`'s claim — a
+generic ROUTINE whose implementation renames the type parameter is accepted deliberately —
+was the only one not recorded anywhere that runs, so it became `test_gen_rename26`, a unit
+plus a program that exercises it. **Measured while writing it, and it drew a distinction the
+skip lines had not: the METHOD form is NOT this rule.** `generic function TR.Id<S>` against a
+`<T>` declaration is REJECTED with `unknown type: S`; only the routine-in-a-unit shape is
+accepted. **Asserting the claim as the skip line worded it would have produced a test that
+fails** — the vacuous row had been protecting a slightly wrong sentence for as long as it
+had been green.
+
+**Still open and named rather than silently left: the 12 syntax-shaped refusals are the same
+class.** A `%FAIL` row refused with `expected ':' before 'X'` is refused by a **parse gap**,
+and whether that gap is the row's subject needs reading each one. Unowned as of this writing.
+
+## A RULE SPELLED PER CALLER FAILS BY AN ABSENT COPY, NOT A DIVERGENT ONE — so the sites that are wrong AGREE PERFECTLY, and reading them against each other finds nothing
+
+Measured 2026-09-06 (frankS, `109fbebb1`), and it is the second instance of frankB's
+absent-copy rule in two days.
+
+**The unit rule above was already spelled — once.** `terecs_u1.pp`'s own curated skip line
+reads *"harness — this file is a UNIT and the runner has no standalone-unit output"*. It is
+**correct**, it is **well written**, and it covered **exactly one row** out of nine.
+
+> **When a rule lives as a copy at each call site, its failure mode is not a copy that
+> DISAGREES — it is a copy that is MISSING. The sites that are wrong say nothing at all, so
+> they are perfectly consistent with each other, and the usual instrument for auditing
+> duplicated policy — diff the copies, find the odd one out — returns clean.**
+
+The one correct site is not a control either: it reads as evidence the rule is *handled*.
+**A single true statement of a rule is indistinguishable from a rule that is enforced**, and
+the more precisely it is worded the more it reassures.
+
+**The discriminator is not comparison; it is asking a different question of all the sites at
+once.** Nobody would have found this by reading skip lines against one another — the audit
+that found it asked *"why is each of these 191 rows refused?"*, a question none of the
+individual sites answers about itself. **Enumerate by CAUSE and count the groups**; the
+group that turns out to be one property of the input rather than a property of the test is
+the vacuous one. Then move the rule from prose into a **gate**, where an absent copy is not
+possible — which is the whole difference between `terecs_u1`'s comment and the auto-gate that
+replaced it.
+
+Related, and the same animal from the other end: `## AN INSTRUMENT THAT READS TEXT CANNOT
+TELL AN ASSERTION FROM A DESCRIPTION OF ONE`, and CLAUDE.md's *two readings that can go wrong
+the same way are one reading* — here it is **N sites that can be wrong the same way are one
+site**, and the count of them is not corroboration.
+
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
 
 Measured 2026-09-06 (frank-optimize), and it cost a day and a wrong diagnosis in every part
