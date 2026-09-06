@@ -17270,6 +17270,61 @@ advisable:
 Both warnings arrive at the END of the run, so an unfenced run costs its full wall-clock to
 learn that it measured a moving target.
 
+## A RED FROM A COMMIT-THEN-MEASURE-THEN-PUSH CYCLE IS A VERDICT ABOUT A TREE NOBODY ELSE HAS
+
+Measured 2026-09-06 (frankB, via frankuser), and it is the residual CLAUDE.md's own
+push-before-measure clause LEAVES OPEN rather than a contradiction of it.
+
+For a sweep long enough that a restart could take the work, that clause says: **"commit locally
+and push when it ends"** — bounded exposure, and frankB followed it exactly. **The cost is that
+the tier then measures a tree DELIBERATELY held behind origin.** frankB's
+`test_libwriteln_parity` red was measured at `f8c2bbf72`, a local commit; frankA's fix
+`f4b288b16` arrived in the pull that `sync.sh` did *afterwards*. `merge-base --is-ancestor
+f4b288b16 f8c2bbf72` is **NO**, so the red is a correct verdict about a tree that never existed
+anywhere else. Re-run at HEAD after a rebuild: **GREEN, 1/1.**
+
+**This is not the ordinary stale-tree hazard, where the divergence is a RISK.** Here the
+ordering GUARANTEES it: the whole point of holding the push is that your tree is not origin's,
+so every verdict taken during the hold is about a private tree by construction.
+
+> **The only honest way to report such a red is WITH THE SHA IT WAS MEASURED AT.**
+
+frankB's own account of what went wrong is the durable part: they gave the row and not the sha,
+*"which is what let 'known' carry weight it had not earned."* **A verdict is a snapshot of a
+tree, and reporting it without the tree lets the reader supply the current one** — which is the
+same animal as a ledger, an unowned list or a red inventory being read as state.
+
+CLAUDE.md already requires the sha beside every NUMBER you report. **This extends it to
+VERDICTS**, which do not feel like numbers and get relayed as facts: *"test X is red"* has no
+slot for a tree, so the tree gets dropped and the reader fills it in with HEAD.
+
+## A ZERO OVER A LARGE N IS A CLAIM ABOUT THE POPULATION THAT REACHED THE RULE — and the headline N is the pre-exclusion one
+
+Measured 2026-09-06 (frankB, `aacf8f6b8`), **caught by the author in their own favourable
+number, before shipping it.**
+
+A census's frontend half returned **`refuse=0` over 691 sources.** Vacuous: **2169 of its 2181
+whole-array destinations are C and NilPy, which `CProgramMode`/`PyProgramMode` exclude from the
+check by construction.** The population where the rule actually applies is **twelve.** That
+zero *"would read identically with the rule set to refuse everything"* — a guard that cannot
+fail, printing PASS, with a large and entirely honest N attached.
+
+**The shape is common and the tell is structural: an exclusion applied UPSTREAM of the rule
+shrinks the effective population invisibly, and the number that gets quoted is the one from
+before the exclusion.** 691 sources and 2181 destinations are both true; neither is the
+denominator of the claim. **Ask what the denominator would be if the rule did nothing, and
+whether your N is that number or the one you started with.**
+
+The disposition is the model: the claim for Rust and Zig became **"no signal, from here"**
+rather than a clear, and it went into the ticket that way. **"No signal" and "no violations"
+are different findings** and only one of them is supported by twelve rows.
+
+**And the direction matters more than the catch.** CLAUDE.md observes that the accept-side
+control is the one nobody writes, *because writing it feels like weakening the check*. A zero
+from your own census is the most agreeable possible result, arrives with no prompt to doubt it,
+and is exactly where the discipline usually fails. A seat auditing a number that favoured it,
+unprompted, is that discipline running in the direction it normally does not.
+
 ## A ROW IS RED ONLY WHERE IT IS BUILT — coverage asymmetry reads as target-specificity, and the job label is honest
 
 Measured 2026-09-06 (frankA, via frankuser). `test-i386#examples/chess/chess.pas` was RED and

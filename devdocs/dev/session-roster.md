@@ -2775,3 +2775,42 @@ ledger, an unowned list and a red inventory are all SNAPSHOTS being read as STAT
 silently and only toward phantom work. The three fixes are the same fix — **re-derive at the
 moment of use, and ask for the thing the seat cannot get wrong about itself** (when it started;
 its current session id) **rather than the thing that depends on when it happened to answer.**
+
+## THE CHECK RAN THIS TIME — I opened the ticket instead of relaying the summary, and it was wrong
+
+2026-09-06, hours after this seat published an invented mechanism because it counted before it
+asked what an identifier meant. **The same shape arrived again and the check fired, so this is
+the near-miss recorded beside the hit.**
+
+frankuser relayed `test_promoint_bitwise` as *"verified RED at HEAD — `not` of a QWord printing
+18446744073709551616, i.e. 2^64, a value outside the type."* I had a ready observation for
+that: 2^64 is exactly one above `High(QWord)`, so a result outside the declared type's range
+would be proof the value never went through the type. **It is a good tell and it does not apply
+here.** Opening the ticket's own log tail:
+
+```
+-18446744073709551615      <- expected
++-1                        <- actual
+ 0
+-crossed                   <- expected
++not                       <- actual
+ 18446744073709551616      <- MATCHES; expected and actual agree
+```
+
+**`18446744073709551616` is a PASSING row.** The failing rows are `18446744073709551615` → `-1`
+and `crossed` → `not`, which is exactly frankD's diagnosis: the literal left `IsWideIntLit`,
+PromoInt fell back to the wrapped machine reading, and `-1` is that wrap. 2^64 appearing as an
+expected value is not a defect at all — a PromoInt is *supposed* to hold values a QWord cannot.
+
+**Two things worth keeping.** First, the relay named a passing row as the failing one and
+attached the actual value of a *different* row to it; anyone taking the ticket off that summary
+would hunt a `not` operation producing 2^64, which is not happening. Sent back as a
+correction. Second, and the reason this is in the roster rather than the playbook: **the thing
+that stopped me was opening the artefact instead of reasoning from the relay** — the same
+instrument that would have stopped the `#src:` error, on the same evening, run this time
+because that error was fresh enough to still be steering.
+
+**Scope of my own claim, stated because that is the discipline being exercised:** I read the
+ticket's log tail, which is from the original auto-file, plus frankD's diagnosis saying "still
+RED, both rows". I did NOT read frankB's re-run output. If frankB's run shows different rows,
+theirs is the measurement and mine is a document.
