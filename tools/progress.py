@@ -2937,14 +2937,47 @@ def set_field(path: Path, marker: str, value: str) -> None:
 
     The key is matched only INSIDE the frontmatter block: a `status:` line in
     prose must not be mistaken for the field.
+
+    A TICKET CAN CARRY BOTH FORMS, AND THEN THE BULLET USED TO WIN AND THE
+    FRONTMATTER WENT STALE. That is the same defect as the one above, one case
+    later: `claim` printed success, wrote `- **Owner:** frankH` into the prose
+    bullet, and left `owner: ""` in the frontmatter -- which is the field
+    `ready`, `check` and every holdings report actually read. The row is then
+    invisible in BOTH directions: not offered to anyone (it is in working/) and
+    not attributed to anyone (owner is empty), and it is indistinguishable from
+    a row somebody parked and forgot.
+
+    Measured 2026-09-06 across devdocs/progress/: 10 tickets carried both forms
+    and 5 disagreed -- every one of them with an EMPTY frontmatter key and a
+    named bullet, two naming live sessions. This ticket
+    (feature-dynamic-compiler-tables) was one of them, held all night and
+    reported as unheld to the coordinator's Track A holdings list.
+
+    So the frontmatter is now AUTHORITATIVE whenever it exists, and the bullet
+    is updated too rather than instead -- writing both is what stops them
+    disagreeing again. The bullet-only path remains for legacy tickets that
+    have no frontmatter at all.
     """
     text = path.read_text(encoding="utf-8")
+    key = marker.lower()
+    fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    has_fm_key = bool(fm and re.search(rf"(?mi)^{re.escape(key)}:.*$", fm.group(1)))
     pat = re.compile(rf"^(\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*).*$", re.I | re.M)
+    if has_fm_key:
+        # frontmatter first (authoritative), then the bullet if the body has one,
+        # so the two forms cannot drift apart.
+        line = f"{key}: {value}"
+        block = re.sub(rf"(?mi)^{re.escape(key)}:.*$", line, fm.group(1), count=1)
+        text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
+        head_len = len(f"---\n{block}\n---\n")
+        head, body = text[:head_len], text[head_len:]
+        body = pat.sub(rf"\g<1>{value}", body, count=1)
+        text = head + body
+        path.write_text(text, encoding="utf-8")
+        return
     text, hits = pat.subn(rf"\g<1>{value}", text, count=1)
     if not hits:
-        key = marker.lower()
         line = f"{key}: {value}"
-        fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
         if fm and re.search(rf"(?mi)^{re.escape(key)}:.*$", fm.group(1)):
             block = re.sub(rf"(?mi)^{re.escape(key)}:.*$", line, fm.group(1), count=1)
             text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
@@ -3186,8 +3219,34 @@ def cmd_claim(args: argparse.Namespace) -> int:
     src = find_ticket(args.slug)
     dst = PROG / "working" / f"{args.slug}.md"
     if src == dst:
-        print(f"{args.slug} already in working/", file=sys.stderr)
-        return 1
+        # ALREADY IN working/ IS NOT ALREADY CLAIMED. This used to return here
+        # without writing anything, which is precisely the case that leaves a
+        # row in working/ with an EMPTY owner -- invisible in both directions:
+        # `ready` will not offer it (it is not open) and no holdings report
+        # attributes it (owner is blank). Re-claiming is also the documented way
+        # to resume parked work, so it has to be able to record the owner.
+        # Refuse only when someone ELSE holds it: taking a row is allowed, but
+        # silently is not.
+        _t = dst.read_text(encoding="utf-8")
+        _fm = re.match(r"---\n(.*?)\n---\n", _t, re.S)
+        cur = ""
+        if _fm:
+            _m = re.search(r"(?mi)^owner:\s*(.*)$", _fm.group(1))
+            if _m:
+                cur = _m.group(1).strip().strip('"')
+        if not cur:
+            cur = (first_bullet_value(_t, "Owner") or "").strip()
+        if cur and cur != args.owner and cur != "—":
+            print(f"{args.slug} is in working/ and owned by {cur}.", file=sys.stderr)
+            print(f"owner: is ATTRIBUTION, not a lock -- message {cur}, then re-run to take it.", file=sys.stderr)
+            return 1
+        set_field(dst, "Status", "working")
+        set_field(dst, "Owner", args.owner)
+        subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        was = "unowned" if not cur else "already yours"
+        print(f"{args.slug} was already in working/ ({was}); owner set to {args.owner}.", file=sys.stderr)
+        _warn_claim_is_local(args.slug, args.owner)
+        return 0
     move_ticket(src, dst)
     set_field(dst, "Status", "working")
     set_field(dst, "Owner", args.owner)

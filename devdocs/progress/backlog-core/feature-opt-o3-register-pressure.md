@@ -2,7 +2,7 @@
 prio: 20
 track: A
 status: backlog
-owner: ""
+owner: "frank-optimize-b4"
 ---
 
 > **RELEASED FROM working/ 2026-08-30 by frank-optimize-b4**, same day it was
