@@ -1,5 +1,17 @@
 program TestGenericFunc;
 
+{ `specialize Max<Integer> as MaxIntF;` below is the specialization-ALIAS
+  DECLARATION. Its SIBLING SPELLING is the parameterless CALL,
+  `specialize F<T>` with no `()`, tested in
+  test_a_parameterless_generic_routine_is_called_without_parentheses.pas.
+  The two differ by exactly ONE TOKEN -- `as` here, `(` (or nothing) there --
+  so the call-site predicate that recognises one is the predicate that must
+  decline the other. Changing it on either side breaks the other side three
+  phases downstream, with a diagnostic about the declaration section ending:
+  that is what happened at eb2447470 and was fixed at 8d37fac6b. This file is
+  where the breakage SHOWS; the reasoning lives in the sibling's header. }
+
+
 generic function Max<T>(A, B: T): T;
 begin
   if A < B then Result := B else Result := A;

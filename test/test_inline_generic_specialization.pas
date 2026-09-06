@@ -18,6 +18,13 @@
 
   Rows a-d are oracled against FPC 3.2.2 -Mobjfpc (the same shapes the
   gen-func-int / gen-func-string / gen-swap-var probe cases carry).
+  Row e's `specialize F<C> as Name;` has a SIBLING SPELLING one token away:
+  the parameterless CALL `specialize F<T>`, tested in
+  test_a_parameterless_generic_routine_is_called_without_parentheses.pas.
+  One call-site predicate has to recognise that and decline this; eb2447470
+  moved it one way and took row e with it, fixed at 8d37fac6b. Read that
+  file's header before touching the predicate.
+
   compat-pascal-inline-generic-specialization }
 program test_inline_generic_specialization;
 
