@@ -466,6 +466,16 @@ if [ "${RETRY_SKIPS:-0}" = "1" ]; then
   echo "test-pascal-conformance-retry: 3 of 24 were exactly that (tarray2 printed a PChar as its pointer, tforin24 printed garbage"
   echo "test-pascal-conformance-retry: for an enum name, tclass12a printed double where FPC prints 80-bit Extended) -- and all three"
   echo "test-pascal-conformance-retry: already said so in their own skip reasons. Diff each row against fpc 3.2.2 before burning it."
+  # AND THAT DIFF HAS BEEN RUN, so nobody has to pay for it twice. frankS,
+  # 2026-09-06: every compile-clean `gap:` row diffed against fpc 3.2.2 --
+  # ZERO OF NINE match on output. There are no stale rows in the standing list
+  # (tarray2, tclass12a, tforin12, tforin24, tgeneric16, tstring4). A seat that
+  # re-derives this pays for a negative that is already published.
+  # The first attempt of that diff reported fpc=127 on all nine -- an
+  # environment failure wearing the shape of a verdict -- and left build
+  # artefacts in library_candidates/; see tools/stray_fpc_artefacts.py, which
+  # also carries the measured rule for where fpc puts them.
+  echo "test-pascal-conformance-retry: MEASURED 2026-09-06 (frankS): all nine compile-clean gap rows diffed against fpc 3.2.2, ZERO matched on output -- no stale rows in that list."
   echo "test-pascal-conformance-retry: this is NOT the conformance verdict; run without --retry-skips for that."
   finish_diagmap
   exit 0

@@ -17625,3 +17625,95 @@ place. **"It works without the workaround now" is a claim about today's tree;
 "this change retired the workaround" needs the probe to fail without the
 change** — the ordinary positive-control rule, applied to a deletion rather than
 to an assertion, which is where nobody looks for it.
+
+## A FIRST-ERROR HISTOGRAM RANKS BY WHAT FAILS EARLIEST, NOT BY WHAT BLOCKS MOST
+
+And **fixing anything reshuffles the census that justified not fixing it.** It is
+a map of what to do next; it is never evidence that something is not worth doing.
+
+Measured 2026-09-06 (frankS), as a retraction of their own negative from the same
+morning. The question was whether `TypeInfo(<variable>)` — refused for every
+variable shape — was blocking any corpus row. The method was sound on its face:
+compile all ten skip-listed rows that mention `TypeInfo(`, read the **first**
+error from each. None named TypeInfo. Conclusion relayed to two seats: *"it burns
+zero rows and is worth doing only on its own merits."*
+
+**tforin1 fails at line 21 on `for i in IntRange`** — a named subrange as a
+for-in source. That was fixed an hour later, and **tforin1's next stop is line
+26: `GetEnumName(TypeInfo(c), ord(c))` on a variable.** The row was behind the
+thing the census measured. The instrument did not err; it answered honestly about
+the front of each file.
+
+**Why this is not "just be careful".** A first-error census has a property that
+looks like rigour and is the opposite: **it is a function of the tree, and the
+tree is what you are changing.** Every fix moves rows onto new mechanisms, so the
+census that says "X blocks nothing" is only ever true of the tree that existed
+before the last landing, and it is consulted *after* landings. It is also the
+cheapest census to run, so it is the one that gets quoted.
+
+**The two readings, and only the first is legitimate:**
+
+| claim | supported? |
+| --- | --- |
+| *"nothing fails on X FIRST, so X is not the next thing to fix"* | yes — this is exactly what a first-error histogram is for |
+| *"nothing fails on X, so X blocks nothing"* | **no** — it cannot see past the first wall in any file |
+
+**What would settle the second question** is not a better histogram. It is fixing
+the front walls and re-running, or reading each row to the end by hand — i.e. the
+work itself. **A census cannot bound what it stands behind.** Compare *a derived
+census tells you WHERE the doors are, not what SHAPE reaches each one*: same
+animal, one dimension over — here the census cannot see what is BEHIND each door
+it did report.
+
+**And the corollary for relay:** a negative derived this way must travel with its
+horizon attached. *"None of the ten fails on TypeInfo"* is true and quotable;
+*"it burns zero rows"* is the same sentence with the horizon stripped off, and it
+is the one that gets pasted.
+
+## A `.ppu` IS NOT BELIEVED OVER A CHANGED SOURCE — IT IS BELIEVED UNDER CHANGED FLAGS
+
+The hazard everybody states is *"a stale `.ppu` gets used instead of the `.pas`"*,
+and it is **false**. Measured 2026-09-06, which matters because the true version
+is invisible to the check people rely on.
+
+FPC records the source's timestamp inside the ppu and rebuilds on any mismatch,
+in **either** direction — a source touched to an *older* time still produces
+`File uk.pas is newer than the one used for creating PPU file` and a recompile.
+The message says newer; the behaviour is *not identical, so rebuild*. **A source
+edit is caught.**
+
+**An option change is not, and it is silent:**
+
+```pascal
+unit uk;  {$ifdef FOO} const K = 1; {$else} const K = 2; {$endif}
+```
+
+```
+fpc -dFOO t.pas ; ./t   ->  1     (writes uk.ppu)
+fpc       t.pas ; ./t   ->  1     SAME DIRECTORY -- the ppu is reused
+fpc       t.pas ; ./t   ->  2     clean directory
+```
+
+No error, no warning, no recompile. **The ppu carries the defines it was built
+with and nothing compares them to the ones you asked for**, so the compile
+answers correctly about a configuration you are not in. Any differential harness
+that varies flags across rows **in one directory** has this exposure, and the
+source-time check that everyone cites cannot see it.
+
+**Where the artefacts land, measured, three rows** — the rule that travels is
+right in two of them and the exception is the one every harness leans on:
+
+| invocation | binary, `.o`, `.ppu` land in |
+| --- | --- |
+| `fpc -o/abs/dir/p src/p.pas` | `/abs/dir/` |
+| `fpc -op3 src/p.pas` | **`src/`** — a RELATIVE `-o` resolves against the SOURCE directory |
+| `fpc src/p.pas` | **`src/`** |
+
+**The cwd is not consulted in any row.** So an absolute `-o` into scratch already
+contains them (which is why `tools/fpc_diff_probe.sh` has never had this
+problem), and a relative `-o` protects nothing while looking as if it does. The
+explicit spellings are `-FE<dir>` (binary + `.o`) and `-FU<dir>` (`.ppu`).
+
+`tools/stray_fpc_artefacts.py` reports what is already sitting in a tree, with
+its own self-check; it deletes nothing, because an artefact may belong to a run
+in progress and only the seat that made it knows.
