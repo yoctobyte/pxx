@@ -11305,18 +11305,30 @@ begin
      MatchArgOpenCtor[j] and
      (ProcParamDynDepth[i * MAX_PROC_PARAMS + j] > 0) then
     Result := False;
-  { NO `nil` ARM HERE, AND THAT IS MEASURED RATHER THAN FORGOTTEN. FPC binds
-    `Test(Nil)` to the DYNAMIC overload in BOTH declaration orders (an open
-    array is a (pointer, high) pair with no nil state); pxx takes whichever is
-    declared first. An arm written here does not fire, and the PHASE is now
-    identified: MatchParamCompatible grants the first candidate outright,
-    because its `TypesCompatible(...) or MatchArgNilOk(...)` short-circuits on
-    TypesCompatible answering TRUE for an array parameter against nil's
-    tyPointer. Measured 2026-09-06 with a temporary trace ahead of that `or`:
-    ONE line, for the open-array candidate only -- the named-dyn candidate is
-    never asked, so there is no ranking for it to lose and nothing for this
-    EXACT phase to arbitrate. The fix belongs where the compatible phase picks,
-    not here. bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
+  { NO `nil` ARM HERE, AND IT IS THE SECOND READING THAT MADE THAT RIGHT. FPC
+    binds `Test(Nil)` to the DYNAMIC overload in BOTH declaration orders (an
+    open array is a (pointer, high) pair with no nil state); pxx took whichever
+    was declared first, and the fix went in at MatchProcCall phase 1c3 rather
+    than here (frankB, 8b9616041).
+
+    The first version of this comment said an arm here "does not fire" because
+    the call never reaches the exact phase. THAT IS FALSE and the ordering is
+    the other way round -- MatchProcCall's Phase 1 uses MatchParamExact and runs
+    BEFORE the compatible phase, so an arm here fires perfectly well. It must
+    not, which is a different fact and one that took a measurement: make
+    nil-at-a-named-dyn-array EXACT and `P(a: Pointer)` beside
+    `P(const a: TLA)` flips to the dyn candidate when the pointer one is
+    declared second, where both compilers bind the POINTER in both orders and
+    pxx already agreed. One declaration-order bug traded for another, in a
+    program with no array overload PAIR in it at all. The preference has to be
+    weaker than exact, so it belongs in the compatible phase.
+
+    What IS true about this site: MatchArgNilOk is never CALLED for an array
+    parameter, because MatchParamCompatible is
+    `TypesCompatible(...) or MatchArgNilOk(...)`, pxx short-circuits `or`
+    (FPC's {$B-}), and TypesCompatible already answers TRUE for an array
+    parameter against nil's tyPointer.
+    bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature }
 end;
 
 function ParamSpellingForReport(pi, j: Integer): AnsiString;
