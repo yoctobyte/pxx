@@ -58,3 +58,27 @@ correctly.
 [[bug-p-an-exact-case-match-in-an-outer-scope-beats-a-case-insensitive-one-in-a-nearer-scope]]
 is the lookup half; this is the declaration half, and only the declaration half
 can name the file that is wrong.
+
+## The census instrument landed 2026-09-06 — `PXXDBG=a.casedup`
+
+`SymHashInsert` reports every symbol registered under a name that differs only
+in case from one already visible: `samescope=1` is this ticket's population,
+`samescope=0` is ordinary shadowing of an outer name. It is a committed channel
+and not a local print, deliberately — frankS's condition for running it over the
+fpc-testsuite corpus, and the right one: *a measurement taken with an
+uncommitted compiler is one nobody can reproduce.*
+
+`test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas`
+is its positive control, drawn from this population rather than from the
+shadowing one, and it is wired into `test-core` with a matching silent-when-off
+control. **When the diagnostic lands, that file must be REFUSED and its
+assertion inverts** — it asserts the channel, never the values.
+
+### First count: `compiler/compiler.pas` — 21 pairs, ZERO same-scope
+
+So our own compiler has no instance of THIS defect. What it does have is the
+same collision across scopes under `{$CASESENSITIVE ON}`, which fpc ignores;
+that is a different bug and is filed as
+[[bug-a-the-compilers-own-source-means-two-different-things-to-fpc-and-to-pxx]].
+
+The corpus count is still open, and it is the one that decides error-or-warning.

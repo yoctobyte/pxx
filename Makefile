@@ -5841,6 +5841,32 @@ test-core: $(COMPILER)
 	@# fpc rejects outright as a duplicate identifier.
 	./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26
 	tools/expect_same.sh test_caseshadow26 "$$($(TESTTMP)/test_caseshadow26 | tail -n 2)" "$$(printf 'fails=0\nCASESHADOW OK')"
+	@# bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols
+	@# THE TWO CENSUS CHANNELS for that ticket, asserted here because a debug
+	@# channel that has quietly stopped firing reports a clean tree, and a clean
+	@# tree is the answer the census wants to hear.
+	@# PXXDBG=a.casedup is the DECLARATION half: a name registered while one
+	@# differing only in case is already visible. samescope=1 is the ticket's
+	@# population (a parameter and a local of ONE routine, which fpc refuses as a
+	@# duplicate identifier); samescope=0 is ordinary correct shadowing.
+	@# PXXDBG=a.casebind is the LOOKUP half: a binding taken through the
+	@# case-insensitive disjunct, with `outer=` naming the exact candidate the
+	@# pre-2026-09-06 two-walk order would have bound instead. An `outer=` line
+	@# is where the two orders DISAGREE -- it is the population the resolution
+	@# fix moved, which is not the population that reported the bug.
+	@# THE SILENT ROWS ARE THE CONTROL AND THEY ARE NOT DECORATION: both channels
+	@# sit in FindSym and SymHashInsert, two of the hottest routines in the
+	@# compiler, behind an integer compare. A channel that prints with PXXDBG
+	@# unset is a correctness bug in the compiler, not a noisy log.
+	./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26
+	tools/expect_same.sh test_casedup26 "$$($(TESTTMP)/test_casedup26 | tail -n 2)" "$$(printf 'fails=0\nCASEDUP FIXTURE OK')"
+	@out=$$(PXXDBG=a.casedup ./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26 2>&1 | grep -c 'a.casedup n idx=.* vs=N .*samescope=1'); \
+	  [ "$$out" = "1" ] || { echo "a.casedup: want exactly 1 samescope=1 line for the parameter/local pair, got $$out"; exit 1; }
+	@out=$$(PXXDBG=a.casebind ./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26 2>&1 | grep -c 'a.casebind counter -> Counter .*outer=counter'); \
+	  [ "$$out" -ge 1 ] || { echo "a.casebind: want at least one outer= line on the caseshadow fixture, got $$out"; exit 1; }
+	@out=$$(./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26 2>&1 | grep -c PXXDBG); \
+	  [ "$$out" = "0" ] || { echo "a.casebind/a.casedup print with PXXDBG unset: $$out lines"; exit 1; }
+	@echo "case-only name census channels ok: a.casedup samescope=1, a.casebind outer=, both silent when off"
 	# feature-a-x86-64-object-output-is-position-dependent
 	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
 	# TRAILS the displacement. A rip-relative displacement is measured from the

@@ -6774,6 +6774,12 @@ end;
 var
   PxxDbgTopics : AnsiString;
   PxxDbgLoaded : Boolean;
+  { a.casebind's and a.casedup's decisions, cached — see DbgCaseBindMaybe and
+    DbgCaseDupMaybe in symtab.inc. 0 is "not asked yet" because a Pascal global
+    starts at zero, and neither FindSym nor SymHashInsert may pay a topic-string
+    parse per call; 1 is asked-and-off. }
+  DbgCaseBindMode : Integer;
+  DbgCaseDupMode : Integer;
 
 { ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================
 

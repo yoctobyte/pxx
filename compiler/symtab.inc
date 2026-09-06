@@ -4771,6 +4771,53 @@ end;
   functions), NOT when the name is first assigned — the linear scans were
   bounded by SymCount, so a lookup made while a registration is still filling
   in its fields must not see the in-flight slot. }
+{ PXXDBG=a.casedup — one line per symbol registered under a name that differs
+  ONLY IN CASE from one already visible in the same hash chain.
+
+  This is the CENSUS half of
+  bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols, and
+  the reason it is a channel rather than a diagnostic is written into that
+  ticket: a refusal is a NARROWING and nobody has enumerated the population.
+  Report first, decide error-or-warning from the count.
+
+  `samescope=1` is the ticket's population -- a parameter and a local, or two
+  locals, of ONE routine, which fpc refuses outright as a duplicate identifier
+  and we silently keep as two variables. `samescope=0` is ordinary shadowing of
+  an outer name and is CORRECT; it is printed anyway because the two are one
+  question at the declaration and separating them is the reader's job, not the
+  instrument's.
+
+  It fires whatever the case mode is, which is the point: under
+  {$CASESENSITIVE ON} -- and compiler.pas itself is compiled that way -- the two
+  names never collide in FindSym at all, so a.casebind is structurally blind to
+  exactly the file that needs this most. Two instruments, two questions. }
+procedure DbgCaseDupMaybe(idx: Integer);
+var j, base: Integer;
+begin
+  if DbgCaseDupMode = 0 then
+  begin
+    if PxxDbgEnabled('a.casedup') then DbgCaseDupMode := 2
+    else DbgCaseDupMode := 1;
+  end;
+  if DbgCaseDupMode = 1 then Exit;
+  base := 0;
+  if (CurProc >= 0) and (CurProc < ProcCount) then base := Procs[CurProc].ScopeBase;
+  j := SymHashPrev[idx];
+  while j >= 0 do
+  begin
+    if CaseEqual(Syms[j].Name, Syms[idx].Name) and
+       (not StrEqual(Syms[j].Name, Syms[idx].Name)) then
+    begin
+      WriteLn('PXXDBG a.casedup ', Syms[idx].Name, ' idx=', idx,
+              ' vs=', Syms[j].Name, ' vsidx=', j,
+              ' samescope=', Ord((CurProc >= 0) and (j >= base)),
+              ' proc=', CurProc, ' at=', CurSrcBaseName, ':', CurTok.Line);
+      Exit;
+    end;
+    j := SymHashPrev[j];
+  end;
+end;
+
 procedure SymHashInsert(idx: Integer);
 var b: Integer;
 begin
@@ -4789,6 +4836,9 @@ begin
   SymHashBkt[idx] := b;
   SymHashPrev[idx] := SymHashHead[b];
   SymHashHead[b] := idx;
+  { PXXDBG=a.casedup — see above. AFTER the link, so the walk starts at what
+    was the head. 1 is asked-and-off, so an unset PXXDBG costs one compare. }
+  if DbgCaseDupMode <> 1 then DbgCaseDupMaybe(idx);
 end;
 
 { Truncate the symbol table to newCount, unlinking the removed range from the
@@ -4834,6 +4884,112 @@ begin
     DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
     and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
              and (SymDeclTok[i] > CurBodyHdrTok));
+end;
+
+{ PXXDBG=a.casebind — every binding that FindSym resolves through the
+  CASE-INSENSITIVE disjunct rather than an exact one, and, when one exists, the
+  EXACT candidate further out in the chain that the pre-2026-09-06 two-walk
+  order would have bound instead.
+
+  It exists because the fix in FindSym below is a REORDERING, and the population
+  a reordering moves is not the population that reported the bug. Two files of
+  our own — compiler/builtin/pyeval.pas and lib/rtl/strutils.pas — were working
+  ONLY because of the old order, and both were found by an uncommitted WriteLn,
+  which is a measurement nobody else can reproduce. That is the whole reason
+  this is a committed channel and not a patch someone carries.
+
+  READ AN `outer=` LINE AS "the two orders disagree here", never as "this is
+  broken": the nearer binding is the correct one and fpc agrees with it, so an
+  `outer=` line names a routine whose author probably believed they had two
+  variables and has one. A line WITHOUT `outer=` is ordinary case-insensitive
+  Pascal — `writeln` against `WriteLn` — and is the overwhelming majority.
+
+  PXXDBG=a.casebind:<name> is the TARGETED form: every resolution of that one
+  name, exact matches included, with `chain=` giving how many candidates were
+  skipped before the one that bound. That is the form that answers "was the
+  nearer symbol even IN the chain", and a delta print structurally cannot —
+  a delta print is silent when nothing moved and silent when the candidate
+  never arrived, and those are different facts. }
+procedure DbgCaseBindReport(hit: Integer; const lo: AnsiString);
+var j, outer, chain: Integer; why: Char;
+begin
+  { How many nearer candidates were passed over. Recomputed here rather than
+    counted in FindSym's loop: that loop runs on every name in every compile and
+    this runs only when the channel is on. }
+  chain := 0;
+  j := SymHashHead[SymNameFoldHash(lo)];
+  while (j >= 0) and (j <> hit) do
+  begin
+    chain := chain + 1;
+    j := SymHashPrev[j];
+  end;
+  { The candidate the OLD exact-first walk would have taken: the first EXACT
+    name match still further out, under the identical gates. }
+  outer := -1;
+  j := SymHashPrev[hit];
+  while j >= 0 do
+  begin
+    if StrEqual(Syms[j].Name, lo) and IsBlockVisible(SymBlockId[j], CurBlockId)
+       and SymBindableHere(j) then
+    begin
+      outer := j;
+      j := -1;
+    end
+    else
+      j := SymHashPrev[j];
+  end;
+  Write('PXXDBG a.casebind ', lo, ' -> ', Syms[hit].Name,
+        ' idx=', hit, ' kind=', Ord(Syms[hit].Kind), ' chain=', chain,
+        ' at=', CurSrcBaseName, ':', CurTok.Line);
+  { WHY each nearer candidate was passed over, up to four. This is the whole
+    value of the targeted form: `chain=1` says a nearer symbol existed and did
+    not bind, and by itself that is three different facts -- the name did not
+    match at all, so this is a hash-bucket neighbour (n); the names differ only
+    in CASE and the candidate was registered case-SENSITIVE, so only an exact
+    spelling reaches it (c -- a NilPy user symbol, or anything declared while
+    CaseSensitiveMode was on); the symbol sits in a --lazy-var block this site
+    cannot see (b); or section visibility / declare-before-use hides it (v).
+    Reading `chain=1` and guessing which is how an afternoon goes. }
+  chain := 0;
+  j := SymHashHead[SymNameFoldHash(lo)];
+  while (j >= 0) and (j <> hit) and (chain < 4) do
+  begin
+    chain := chain + 1;
+    if not CaseEqual(Syms[j].Name, lo) then why := 'n'
+    else if not (StrEqual(Syms[j].Name, lo) or not SymCaseSensitive[j]) then
+      why := 'c'
+    else if not IsBlockVisible(SymBlockId[j], CurBlockId) then why := 'b'
+    else if not SymBindableHere(j) then why := 'v'
+    else why := '?';
+    Write(' skip=', Syms[j].Name, '/', j, '/', why);
+    j := SymHashPrev[j];
+  end;
+  if outer >= 0 then
+    Write(' outer=', Syms[outer].Name, ' outeridx=', outer,
+          ' outerkind=', Ord(Syms[outer].Kind));
+  WriteLn;
+end;
+
+procedure DbgCaseBindMaybe(hit: Integer; const lo: AnsiString);
+{ The channel's decision, kept out of FindSym so the hot path is one integer
+  compare against DbgCaseBindMode. PxxDbgEnabled re-parses PXXDBG on every call
+  and FindSym is one of the most-called routines in the compiler. }
+begin
+  if DbgCaseBindMode = 0 then
+  begin
+    { The arg form first: PxxDbgEnabled('a.casebind') is FALSE for the topic
+      `a.casebind:foo`, which is exactly the case the arg form is. }
+    if PxxDbgArg('a.casebind') <> '' then DbgCaseBindMode := 3
+    else if PxxDbgEnabled('a.casebind') then DbgCaseBindMode := 2
+    else DbgCaseBindMode := 1;
+  end;
+  if DbgCaseBindMode = 1 then Exit;
+  if DbgCaseBindMode = 3 then
+  begin
+    if not PxxDbgWants('a.casebind', lo) then Exit;
+  end
+  else if StrEqual(Syms[hit].Name, lo) then Exit;
+  DbgCaseBindReport(hit, lo);
 end;
 
 function FindSym(const name: AnsiString): Integer;
@@ -4899,6 +5055,9 @@ begin
        and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
+      { PXXDBG=a.casebind — see DbgCaseBindReport above. 1 is asked-and-off, so
+        an unset PXXDBG costs one integer compare per resolution. }
+      if DbgCaseBindMode <> 1 then DbgCaseBindMaybe(i, lo);
       Result := i;
       Exit;
     end;
