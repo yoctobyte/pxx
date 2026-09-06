@@ -45,6 +45,7 @@ type
     every overload of the thing it is passed to fails to match. (That is exactly how fpjson's
     VarRecToJSON failed: "Mismatch in MatchProcCall: CreateJSON, arg[0] = 0".) }
   PVarRecInt64  = ^Int64;
+  PVarRecQWord  = ^QWord;
   PVarRecDouble = ^Double;
   PVarRecStr    = ^string;
 
@@ -69,7 +70,13 @@ type
     VBoolean: Boolean;
     VChar: Char;
     VPointer: Pointer;
-    VPChar: Pointer;
+    { PChar, not a bare Pointer — for the reason the boxed-member note above
+      already gives, one field further on. `writeln(Args[i].VPChar)` on a
+      Pointer prints the ADDRESS; on a PChar it prints the text, which is what
+      FPC does and what fpc-testsuite tarray2 asserts. Every existing reader
+      already writes `PChar(v.VPChar)`, so typing it costs nothing and removes
+      three casts' worth of opportunity to forget one. }
+    VPChar: PChar;
     VInt64: PVarRecInt64;      { boxed: the union slot is only pointer-sized }
     VExtended: PVarRecDouble;  { likewise }
     { The rest of FPC's union. Adding a field here is SAFE and costs nothing:
@@ -78,8 +85,12 @@ type
       exactly what FPC's variant record is. These exist so code that reads an element BY TAG
       (fpjson's VarRecToJSON does, exhaustively) compiles; a tag this compiler never emits is
       simply a branch that never runs. }
-    VObject: Pointer;
-    VClass: Pointer;
+    { Likewise TObject / TClass rather than Pointer: `Args[i].VObject.ClassName`
+      is what a reader writes, and a Pointer has no members, so it answered the
+      empty string instead of the class name. Nothing outside this record reads
+      either field today, so the typing is free. }
+    VObject: TObject;
+    VClass: TClass;
     VString: PVarRecStr;       { FPC's PShortString; a string pointer here }
     VCurrency: PVarRecDouble;  { FPC's PCurrency; this RTL models Currency as Double }
     VVariant: Pointer;
@@ -88,7 +99,11 @@ type
     VPWideChar: Pointer;
     VWideString: Pointer;
     VUnicodeString: Pointer;
-    VQWord: PVarRecInt64;      { boxed }
+    { PQWord, not PInt64 -- the tag exists precisely to say the slot is
+      UNSIGNED, and reading it through a PInt64 gives back a negative number
+      for every value above High(Int64), which is the whole population the
+      separate tag is for. }
+    VQWord: PVarRecQWord;      { boxed }
   end;
 
 const
@@ -3912,16 +3927,18 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
-{$ifndef PXX_TS_HARDLOCK}
-            { The record element's interface members. Skipped on x86-64
-              --threadsafe: several callers of this walk (IR_SETLEN_DYN,
-              IR_DYNUNIQUE) hold the codegen spinlock, and _Release re-enters it
-              through FreeMem — the identical residual, for the identical
-              reason, that ManagedElemKindLocked already keeps for kind-4
-              ELEMENTS. Leak, not hang.
+            { The record element's interface members. NO LONGER GATED on
+              x86-64 --threadsafe. It was, because IR_SETLEN_DYN and
+              IR_DYNUNIQUE hold the codegen spinlock across this walk and
+              _Release re-enters it through FreeMem -- and the lock is
+              reentrant since feature-a-make-the-heap-lock-reentrant, which is
+              the condition this ticket's own resolution named for lifting it.
+              The scalar record path hoists its interface pass OUT of the
+              locked region instead (decide-interface-members-in-aggregates-
+              lock-strategy); that option does not exist here, because this
+              walk's callers are already inside the lock when they reach it.
               bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
             PXXRecordReleaseIntf(itemAddr, baseRecDesc);
-{$endif}
             PXXRecordRelease(itemAddr, baseRecDesc);
             i := i + 1;
           end;
@@ -4117,11 +4134,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
-{$ifndef PXX_TS_HARDLOCK}
-        { The record element's interface members — see PXXDynArrayReleaseDepth
-          for why this one arm is gated on x86-64 --threadsafe. }
+        { The record element's interface members -- see PXXDynArrayReleaseDepth
+          for why this arm is no longer gated on x86-64 --threadsafe. }
         PXXRecordReleaseIntf(itemAddr, baseRecDesc);
-{$endif}
         PXXRecordRelease(itemAddr, baseRecDesc);
         i := i + 1;
       end;
@@ -4502,9 +4517,17 @@ begin
     i := i + 1;
   end;
 
-{$ifndef PXX_TS_HARDLOCK}
+  { NO {$ifndef PXX_TS_HARDLOCK} ANY MORE. It was here because on x86-64
+    --threadsafe the heap lock is the codegen spinlock and this call's own
+    FreeMem re-enters it; the compensation was for the `Free` desugar to
+    emit a SECOND, lock-wrapped call, which every OTHER route to
+    PXXClassFinalize did not do -- so every managed field of an instance
+    finalized any other way leaked. The lock is reentrant since
+    feature-a-make-the-heap-lock-reentrant, so the call belongs here, once,
+    for every route. HeapLockedCallProcIdx1 still wraps it: the walk must
+    be mutually excluded, it just no longer has to be the OUTERMOST thing
+    holding the lock. }
   PXXClassFinalizeManaged(inst);
-{$endif}
 end;
 
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
