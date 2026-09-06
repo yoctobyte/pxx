@@ -6685,6 +6685,50 @@ describes a compiler that may no longer exist. A stale prize is more expensive
 than a stale number, because it does not look like a claim to re-check — it
 looks like work waiting to be done, and the backlog protects it.
 
+## MOVING A RATCHET'S BASELINE HONESTLY: move the number, keep the measurement, record why — a threshold that is only ever tightened stops being a guard and becomes a wall
+
+`tools/size_canary.py` compares five bare images against
+`tools/size_baseline.json` and fails on a relative or absolute jump. Its own
+docstring is emphatic about the one thing readers get wrong: it is **"A DELTA
+baseline, not a target ... it freezes today's numbers and blesses none of
+them."** The baseline is not a claim that the current sizes are good. It is a
+claim about what *changed*.
+
+That distinction is what makes re-baselining a legitimate operation rather than
+a cover-up, and there is a procedure that keeps it legitimate. All three parts,
+or none:
+
+1. **MOVE THE NUMBER.** `--update` writes the new measurement. Do not widen the
+   THRESHOLD to admit the growth — a threshold is the sensitivity of the
+   instrument and a baseline is its zero. Widening the threshold to pass one
+   commit degrades every future commit's detection, permanently and silently;
+   moving the baseline degrades nothing.
+2. **PRESERVE THE MEASURED NUMBER**, not a rounded or aspirational one. The
+   baseline's only job is to be what was actually there, so the next delta is
+   real.
+3. **RECORD THE REASON AND THE PROVENANCE.** Which commit the new numbers were
+   measured at, by sha AND SUBJECT, and why the growth is accepted. The sha
+   alone is not enough here: this repo rebases nearly every sync, so a pre-push
+   `log -1` reads a doomed id — the ~100%-ghost-rate rule — and a baseline whose
+   provenance is a ghost cannot be checked by anyone later. `head_id()` returns
+   `(sha12, date, subject)` for exactly that reason, and `render()` prints the
+   subject beside the sha so a stale baseline is visible without a `git` call.
+
+**The failure this prevents is not a missed regression — it is the ratchet
+being abandoned.** A canary whose baseline nobody dares move goes red on
+legitimate growth, gets read as noise, and is then either disabled or routinely
+overridden; at that point it is measuring nothing while still printing a
+verdict, which is the condition
+"A canary nobody has watched fail is indistinguishable from one that is not
+measuring" describes from the other end. A baseline that moves on a recorded
+reason stays believed, and a believed guard is the only kind that gets acted on.
+
+Reused 2026-09-06 for the emit-obj import ratchet, which is why this is here as
+a pattern rather than in one tool's docstring: the procedure is a property of
+ratchets, and the next one will be written by someone who never opens
+`size_canary.py`.
+
+
 ## An A/B comparison is only valid when B is A minus exactly ONE thing
 
 The same session's first model priced "make the register authoritative" at
