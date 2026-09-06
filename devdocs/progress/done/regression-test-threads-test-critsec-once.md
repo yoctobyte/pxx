@@ -43,3 +43,6 @@ expect_same: MISMATCH [test_critsec_once26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-threads#src:test/test_critsec_once.pas` passes at b2a41d5f4fb9 (tier native); it was red at 0dd59f05cc3a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
