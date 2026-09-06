@@ -236,9 +236,29 @@ if [ -n "$REPORT" ]; then
   printf '# status\tname\tcategory\ttag\treason\n' > "$REPORT"
 fi
 if [ -n "$DIAGMAP" ]; then
-  : > "$DIAGMAP"
+  # WRITE TO A PARTIAL NAME AND RENAME AT THE END. A KILLED RUN MUST LEAVE NO
+  # MAP, NOT A SHORT ONE. frankS lost two background jobs to the OOM killer in
+  # one hour while sweeping, and a TRUNCATED map is the worst possible input to
+  # skip_diag_diff.py: it is well-formed, it parses, every row in it is correct,
+  # and the rows the run never reached come back as GONE. The diff tool cannot
+  # defend against this -- `if not old or not new` catches the EMPTY map and
+  # nothing distinguishes a half map from a complete one -- so the defence
+  # belongs where the completeness is KNOWN, which is here.
+  #
+  # frankS guarded it at the call site with exactly this shape. Moving it into
+  # the runner makes it unconditional: a caller who does not know to do it gets
+  # the protection anyway, and a caller who does can stop.
+  DIAGMAP_FINAL="$DIAGMAP"
+  DIAGMAP="$DIAGMAP.partial"
   printf '# name\tfirst-diagnostic  (run: %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DIAGMAP"
 fi
+
+# Rename the map into place. Called on EVERY normal exit path and on none of the
+# abnormal ones -- the whole point is that a kill leaves `.partial` behind.
+finish_diagmap() {
+  [ -n "${DIAGMAP_FINAL:-}" ] || return 0
+  mv -f "$DIAGMAP" "$DIAGMAP_FINAL"
+}
 
 pass=0; fail=0; skip=0; auto=0; failed=""; idx=-1
 retried=0; stale=0; stillgap=0; stale_list=""; retrying=0   # --retry-skips tallies (set -u is on)
@@ -447,8 +467,10 @@ if [ "${RETRY_SKIPS:-0}" = "1" ]; then
   echo "test-pascal-conformance-retry: for an enum name, tclass12a printed double where FPC prints 80-bit Extended) -- and all three"
   echo "test-pascal-conformance-retry: already said so in their own skip reasons. Diff each row against fpc 3.2.2 before burning it."
   echo "test-pascal-conformance-retry: this is NOT the conformance verdict; run without --retry-skips for that."
+  finish_diagmap
   exit 0
 fi
+finish_diagmap
 echo "$LABEL: $pass pass, $fail fail, $skip skip, $auto auto-gated (of $((pass+fail+skip+auto)))"
 if [ "$fail" != "0" ]; then
   echo "$LABEL: FAILURES:$failed"

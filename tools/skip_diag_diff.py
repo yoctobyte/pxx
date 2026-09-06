@@ -32,6 +32,48 @@ retry sweep's zero was a true answer to a different question, and quoting it
 against a defect class that sweep cannot observe is the same error as quoting a
 green from a guard that cannot fail.
 
+RUN IN ANGER, 2026-09-06 (frankS): pinned v404 vs HEAD 67d173f13, both
+--retry-skips --diag-map, 114 rows each side. 9 MOVED, 0 NEW, 0 GONE, no
+sentinel rows -- and it corrected four reasons the exit-code sweep cannot see.
+
+FOUR OF THE NINE MOVED OFF ONE SHARED BLOCKER, and that is the class worth
+naming. `undefined variable (erroraddr)` -- a pinned-RTL gap at line 82 -- was
+the first diagnostic for texception3, tobject1, tstring4 and others. HEAD fixed
+it, and those rows showed their REAL blockers for the first time. THREE OF THEM
+STILL FAIL, so the exit-code channel saw nothing at all while the mechanism
+changed completely.
+
+  A SHARED BLOCKER MAKES A WHOLE GROUP'S REASONS UNVERIFIABLE AT ONCE, AND
+  CLEARING IT UN-HIDES THEM ALL IN ONE COMMIT.
+
+That is the opposite of the failure mode this tool was built for: not a reason
+going stale one row at a time, but a batch of reasons that were never testable
+becoming testable together. It also means a MOVED count spikes after an RTL or
+pin change for a reason that is not decay -- read the diagnostics, not the count.
+
+THE DIAGNOSTIC CAN RETIRE A REASON. IT CAN NEVER RETIRE A TAG. (frankS's rule,
+and the reason four corrected reasons kept their `wontfix:`/`gap:` labels.) A
+first-error diagnostic proves nothing about the lines after it, so "the stated
+premise is false" and "the disposition is wrong" are different claims and only
+the first is in evidence. tclass13 is the case: tagged wontfix on "needs FPC
+typinfo/RTTI", and `GetEnumName(TypeInfo(TCol), Ord(cGreen))` was MEASURED to
+print byte-identically to fpc -- the premise is dead, and whether the row should
+still be skipped is a separate question nobody has answered.
+
+A NEGATIVE THAT BOUNDS THE WORK: of the 29 rows compiling clean at HEAD, every
+single reason already said so ("compiles and runs", "accepts-invalid",
+"dialect-pass"). Nobody needs to audit that set. The mismatches cluster where
+they clustered before.
+
+A TRUNCATED MAP IS THE WORST INPUT TO THIS TOOL AND IT CANNOT DEFEND ITSELF.
+An interrupted run leaves a map that is well-formed, parses, and is correct row
+by row -- the rows it never reached simply come back as GONE. `if not old or not
+new` below catches the EMPTY map; nothing here can distinguish a half map from a
+complete one. So the defence lives in the producer: since 2026-09-06
+`run_pascal_conformance.sh` writes `<path>.partial` and renames only after its
+summary line, so a killed run leaves NO map rather than a short one. If you hand
+a map to this tool from anywhere else, guarantee completeness at that call site.
+
 WHAT THIS REPORTS, AND WHY THE THREE OUTCOMES STAY SEPARATE
 -----------------------------------------------------------
   MOVED  in both maps, different diagnostic -- THE SIGNAL. The row still fails
