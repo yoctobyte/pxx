@@ -79,3 +79,45 @@ that never gets revisited** — a green nobody re-checks and a "not reproducible
 nobody re-runs are the same object, a verdict that stops work. Mine was caught
 only because a peer asked an unrelated question whose answer required opening
 the archive. That is not a repeatable mechanism.
+
+---
+
+## CORRECTION, same night: the devtest fork above was settled, and I had the wrong budget
+
+Appended rather than repaired, because a corrected claim with no history reads
+as a current-looking assertion nobody will check.
+
+**`f98e1105b` settled it and the answer is the cumulative one I talked myself
+out of.** The section above says *"405s local is nowhere near 3600s, so the
+cumulative story does not obviously work"*. That reasoning was wrong, and not
+by a little: **the budget for this job class is 600s, not 3600s** —
+`CLASSES["guards"]["timeout"] = 600` at `testmgr.py:365`. `DEFAULT_DEADLINE =
+3600.0` is a real constant that answers a different question, and I grepped it,
+found it, and attached it to the wrong thing.
+
+So `f98e1105b`'s 354.5s and my 405.1s are both *near* a 600s budget that rises
+monotonically as devtests are added — which is exactly the cumulative story.
+**My caution was the error, not the safeguard**: I hedged toward "needs more
+measurement" on the strength of a number I had not checked was the applicable
+one, and hedging on a wrong premise is not caution.
+
+**That makes four instruments in one night, not three**, and this one is the
+purest of them: `grep` returned a true line, about a constant that exists, which
+governs something else. It did not error. It answered.
+
+The four reds it was hiding are confirmed and were real — `f98e1105b` names
+`testmgr_hardcoded_tmp` and `progress_near` in the same words I measured them,
+plus the gtk-root regex behind `host_dev_lib_skip`, where **five jobs were
+SKIPPED as "host dev dependency absent" on a box that has gtk installed.** Its
+line is worth carrying: *a false skip is worse than a false red — a red is loud
+and a skip is silent.*
+
+**My calibration numbers were used and one of them moved.** The outlier I
+measured at `feature-pascal-corpus-expansion` 0.113 was 0.076 hours later, and
+`f98e1105b` used that drift as the argument for a fixed corpus over a threshold
+bump. IDF is computed over the corpus, so filing or closing ANY ticket moves
+EVERY score — which is the mechanism behind the instability I had flagged
+without being able to name.
+
+**Nothing in the section above is a task any more.** All of it was taken by
+other seats within forty commits.
