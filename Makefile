@@ -6962,6 +6962,34 @@ test-core: $(COMPILER)
 	@# ...and the file must COMPILE with no row selected, or all three greps above
 	@# are measuring an unrelated error in a file that never reached the check.
 	./$(COMPILER) test/test_a_class_with_no_default_property_cannot_be_subscripted.pas $(TESTTMP)/test_nodefprop26
+	@# A CLASS PROPERTY CANNOT BE STREAMED, and `published` and `stored` are two
+	@# spellings of that ONE rule -- a class property has no instance, so nothing
+	@# about streaming applies to it. pxx refused the publish half already and
+	@# would have accepted the stored half, which is one concept on two paths with
+	@# the second left broken. BOTH ROWS ARE ASSERTED BECAUSE ONE CANNOT SHOW THEY
+	@# ARE ONE RULE: a file asserting only `stored` passes against a tree where the
+	@# two arms have drifted apart again.
+	@# The argument is INTERNAL CONSISTENCY, not fpc parity -- us accepting what
+	@# fpc rejects is not a defect on its own, and the sibling arm already in the
+	@# tree is what makes this normalise-dont-special-case rather than a chosen
+	@# divergence. It also retires a false pass: fpc-testsuite tclass14a is a
+	@# %FAIL row that was green because pxx died at `stored` in ANY property, so
+	@# the row never reached a class property at all -- a %FAIL row satisfied by a
+	@# blocker UPSTREAM of its own subject is a guard that cannot fail.
+	@# ONE ROW PER COMPILE (-dROW_A/B) because Error() halts, so two rows in one
+	@# file would leave the second assertion unable to fail.
+	@for r in ROW_A ROW_B; do \
+	  ./$(COMPILER) -d$$r test/test_a_class_property_cannot_be_streamed.pas $(TESTTMP)/test_clsprop26 > $(TESTTMP)/test_clsprop_$$r.log 2>&1; \
+	  grep -q 'a class property cannot be' $(TESTTMP)/test_clsprop_$$r.log \
+	  || { echo "test_a_class_property_cannot_be_streamed: FAIL - $$r compiled, or refused for another reason"; exit 1; }; \
+	done
+	@# ...and ROW C, the positive control and the entire risk of the two refusals
+	@# above: a class property with NO streaming clause is legal and common, and a
+	@# refusal written one token too wide takes it with them. Asserted by
+	@# compiling and RUNNING, not just compiling.
+	./$(COMPILER) test/test_a_class_property_cannot_be_streamed.pas $(TESTTMP)/test_clsprop26
+	@$(TESTTMP)/test_clsprop26 > /dev/null \
+	  || { echo 'test_a_class_property_cannot_be_streamed: FAIL - a plain class property stopped working'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

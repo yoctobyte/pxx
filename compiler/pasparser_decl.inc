@@ -5726,7 +5726,7 @@ end;
   a read/write name always lands in the METHOD slot, which is the correct
   reading for an interface property with no further work.
   bug-p-a-property-in-an-interface-declaration-is-rejected }
-procedure ParsePropertyTailDirectives(var isDefaultIndexed: Boolean);
+procedure ParsePropertyTailDirectives(var isDefaultIndexed: Boolean; isClassProp: Boolean);
 { Everything a property declaration may carry after its accessors: `stored`,
   `default <value>` / `nodefault`, and the hint directives. One copy, called from
   both the ordinary and the REDECLARATION branch of ParsePropertyDecl, which had
@@ -5776,6 +5776,29 @@ var discarded: Int64;
 begin
   if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stored') then
   begin
+    { A CLASS PROPERTY CANNOT BE STORED, and that is the SAME RULE as the
+      `published` refusal in the member loop rather than a second one. A class
+      property has no instance, so nothing about streaming applies to it --
+      which is why fpc refuses both spellings and why the two fpc-testsuite
+      %FAIL rows say it in one sentence twice:
+
+        tclass14a  "class properties are not for sreaming therefore 'stored'
+                    is not supported"
+        tclass14b  "class properties are not for sreaming therefore publishing
+                    them is not supported"
+
+      We already implemented the `published` half (`a class property cannot be
+      published`, the member loop's `class property` arm) and would have
+      accepted this one, which is one concept on two paths with the second left
+      broken -- normalise-dont-special-case. THE ARGUMENT IS INTERNAL
+      CONSISTENCY, NOT FPC PARITY: us accepting what fpc rejects is not a defect
+      by itself, and without the sibling arm already in the tree this would have
+      stayed a divergence we chose. frankS found the sibling.
+
+      Wording deliberately mirrors the other arm so the two read as one rule.
+      feature-p-a-property-stored-clause-is-not-supported }
+    if isClassProp then
+      Error('a class property cannot be stored');
     Next;
     if CurTok.Kind = tkSemicolon then
       Error('"stored" needs a constant, a field name or a parameterless boolean method')
@@ -5822,7 +5845,7 @@ begin
   end;
 end;
 
-procedure ParsePropertyDecl(ci: Integer; curPublished: Integer);
+procedure ParsePropertyDecl(ci: Integer; curPublished: Integer; isClassProp: Boolean);
 var
   propName, readName, writeName: AnsiString;
   pnOff, pnLen, rnOff, rnLen, wnOff, wnLen: Integer;
@@ -5859,7 +5882,7 @@ begin
   if propRedecl then
   begin
     Next;                                { the ';' after the name }
-    ParsePropertyTailDirectives(propIsDefault);
+    ParsePropertyTailDirectives(propIsDefault, isClassProp);
 
     propBase := FindUProp(ci, propName);
     if propBase < 0 then
@@ -5946,7 +5969,7 @@ begin
     end;
   end;
 
-  ParsePropertyTailDirectives(propIsDefault);
+  ParsePropertyTailDirectives(propIsDefault, isClassProp);
   i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
   UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
   UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
@@ -5993,6 +6016,7 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   curPublishedExplicit: Boolean;  { the section was an EXPLICIT `published` marker (not the implicit default) — the class-property publish check keys on it }
+  sawClassProp: Boolean;          { this member began with `class property` — both the publish and the `stored` refusal key on it }
   curVis: Integer;   { current member visibility (VIS_*) for the class body section; stamped onto each field/method (enforced only under StrictVisibility) }
   curStrictVis: Boolean;  { the pending section was introduced by `strict` }
   etid, propEnumId, propSetEnumId: Integer;
@@ -6332,7 +6356,7 @@ begin
             bug-p-a-property-in-an-interface-declaration-is-rejected }
           if CurTok.Kind = tkProperty then
           begin
-            ParsePropertyDecl(ci, 0);
+            ParsePropertyDecl(ci, 0, False);   { an interface has no class properties }
             continue;
           end;
           mIsFunc := CurTok.Kind = tkFunction;
@@ -6900,10 +6924,12 @@ begin
             one — class properties are not streamable (tclass14b %FAIL). The
             implicit default section stays lenient (pxx treats every class as
             $M+, so erroring there would reject plain Delphi code). }
+          sawClassProp := False;
           if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkProperty) then
           begin
             if curPublishedExplicit then
               Error('a class property cannot be published');
+            sawClassProp := True;   { …and `stored` is the same rule; see ParsePropertyTailDirectives }
             Next;   { consume `class`; the property branch parses the rest }
           end;
 
@@ -7413,7 +7439,7 @@ begin
             end;
           end
           else if CurTok.Kind = tkProperty then
-            ParsePropertyDecl(ci, curPublished)
+            ParsePropertyDecl(ci, curPublished, sawClassProp)
           else if CurTok.Kind = tkIdent then
           begin
             ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False, False,

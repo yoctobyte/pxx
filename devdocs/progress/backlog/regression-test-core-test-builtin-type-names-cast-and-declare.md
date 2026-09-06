@@ -93,3 +93,69 @@ expect_same: MISMATCH [test_typenames26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-09-06 (frankB) — the window is ONE code commit, and the failing row is named
+
+**`b6815e5b8` is the only code commit between the last GREEN native verdict and
+the first RED one.** Read off this repo's own tstate commits rather than
+bisected:
+
+```
+git log --oneline f1148d82c..b6815e5b8
+  b6815e5b8  fix(P): a cast to Variant boxes instead of punning, and stops segfaulting
+  121704e88  tstate(seven): f1148d82c2d4 GREEN (native)      <- bookkeeping, cannot fail a test
+```
+
+`121704e88` records **native GREEN at `f1148d82c2d4`**, and
+`git merge-base --is-ancestor 86f935479 f1148d82c` is TRUE — so the tree that
+passed the native tier ALREADY CONTAINED `86f935479`. **The topical candidate is
+exonerated by a verdict, not by an argument.** The window's own advice was to
+prefer the topical match over the adjacent one; here the adjacent one is what
+survives, and the reason is that the previous verdict was later than the 14
+commits made it look. `9046a2fdd` was not the last green tree — `f1148d82c2d4`
+was.
+
+**The failing row, which the ticket did not have:**
+
+```
+FAIL OleVariant: got 16 want 8
+1 FAILURES
+```
+
+That is `test_builtin_type_names_cast_and_declare.pas:95`,
+`ChkI('OleVariant', SizeOf(vov), SizeOf(Variant(x)))` — `SizeOf(vov)` for
+`vov: OleVariant` is **16** and `SizeOf(Variant(x))` is **8**. The declared type
+and the CAST to the same type now report different sizes. Every other row in the
+file passes; it is one row, and it is the Variant one.
+
+**THIS IS NOT THE `SizeOf` LATITUDE CLAUSE AND SHOULD NOT BE CLOSED AS IT.**
+CLAUDE.md's rule is that `SizeOf(expr)` answering a different width from FPC's
+is implementation latitude — a truthful instrument reporting OUR representation.
+This row makes no comparison to FPC at all: it asserts that **our** `OleVariant`
+and **our** `Variant(x)` agree with each other, which is a RELATION between two
+of our own answers and exactly the assertion shape CLAUDE.md asks for. A cast
+whose result is not the size of the type it names is an internal inconsistency,
+and the 8 is a pointer, which is what "boxes instead of punning" would produce.
+
+**Confirmed as a real regression rather than an environment artefact**, by two
+full-suite runs from this session an hour apart, same harness, same box:
+
+| tree | `test_typenames26` |
+| --- | --- |
+| `f919f0cb1` + uncommitted work (07:0xZ) | **ALL OK**, 0 MISMATCH in the whole run, 2258 ok rows |
+| `800a34274` + uncommitted work (08:0xZ) | **1 FAILURES** |
+
+`b6815e5b8` is in the second tree and not the first. Nothing in either of my own
+uncommitted changes touches Variant, sizing or casts — they are property-clause
+parsing — and the compiled test binary is byte-identical in size across both
+runs (`code=163608B data=7360B bss=52308B procs=555`), which is what a changed
+compile-time CONSTANT looks like: same instruction, different immediate.
+
+**Re-lane decision the ticket asked for:** the bisect landed on the Variant arm,
+so per this ticket's own instruction it may be Track A's. Left in P with the
+evidence rather than re-laned by me, because the commit that caused it is
+`fix(P)` and its author is the person who can settle it in one read.
+
+Not claimed. Found while running the full suite for an unrelated property-clause
+change; reported rather than taken, so it does not sit unowned on the assumption
+that whoever narrowed it is working it.
