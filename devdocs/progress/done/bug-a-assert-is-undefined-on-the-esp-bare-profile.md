@@ -3,7 +3,7 @@ slug: bug-a-assert-is-undefined-on-the-esp-bare-profile
 track: A+S
 prio: 45
 type: bug
-status: backlog
+status: done
 found: 2026-09-06
 found-by: frankF
 owner: ""
@@ -132,3 +132,32 @@ to do by hand.
 compile-only version passed every check I had — both chips built, the no-assert
 program stayed byte-identical to the canary baseline — and produced no output at
 all on the device.
+
+## RESOLVED 2026-09-06 (frankF)
+
+`compiler/builtin/espassert.pas` carries `__pxxAssert` for this profile;
+`pasparser_prog.inc` pulls it on demand from the ESP-class token scan, gated on
+`EspBareBoot` and never ambient. `test/test_esp_bare_assert.pas` plus two
+`test-esp-bare` rows diff the device serial against the x86-64 oracle.
+
+Measured on both chips under Espressif qemu, compiler `c756f893d9b4`,
+`converged after 1 round(s)`:
+
+    boom (test_esp_bare_assert.pas, line 50).    byte-identical to the oracle
+    NOT REACHED does not print                   so Halt(227) genuinely stops
+    Assertion failed (a4.pas, line 5).           the no-message form, also exact
+
+Zero cost to a program without one: the empty program stays 46436B/75 procs on
+esp32s3 and 57900B/72 on esp32c3, which are the size-canary baseline numbers,
+and `var assert: Integer` does not pull the unit.
+
+`gate.sh quick` GREEN **run before committing**, which is the only way the FPC
+seed canary executes at all — it is skipped on a clean tree, and it PASSED.
+
+**Not tier-verified.** Tonight's landing hold expired rather than a full tier
+publishing, and the one requested full published a verdict with no manifest.
+Newest full remains `6d04b14cd88d`. This rests on `gate.sh quick`, the
+fixedpoint, and 31 executed qemu assertions — not on a tier.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
