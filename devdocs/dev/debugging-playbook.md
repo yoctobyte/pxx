@@ -18039,3 +18039,49 @@ RTL's own — every one attributed to the user's file. `readelf` does not compla
 and gdb resolves happily to the wrong text. It is a row in `tools/dwarf_smoke.sh`
 now, which is the right disposal: a defect whose only two states are "no
 locations" and "3662 wrong locations" cannot be guarded by reading output.
+
+## AN ENUMERATED PREDICATE'S STALENESS IS INDISTINGUISHABLE FROM A DEFECT IN A NEIGHBOURING SUBSYSTEM
+
+Not *"a hand-maintained list goes stale"* — everyone already believes that and it
+changes nothing. **The reportable property is that when it does, the symptom
+arrives somewhere else, wearing another subsystem's clothes.**
+
+frankD, five instances in one afternoon, 2026-09-06:
+
+| the enumeration | what it did not name | how it presented |
+| --- | --- | --- |
+| `IsVarArgLvalueCast` | `AN_CLASS_CAST` (it named `AN_PTR_CAST`) | — |
+| the member-shadow rule | fields, properties, class vars (it named `FindUMeth`) — **in two copies that had drifted apart** | — |
+| the statement parser's four `Free` recognisers | the receiver-less spelling; all four keyed on a receiver | a diagnostic about assignment |
+| `ASTNodeIsWholeArray` | every spelling but `AN_IDENT` — **its own header says an array's TypeKind is its element's** | a SEGFAULT in the `:= nil` arm |
+| the class-body member opener | `class constructor` | accepted and never run |
+
+**Every one was silent when it was wrong, and three of the four with a
+characterised symptom reported a diagnostic about something else entirely.**
+
+**Why that is the useful half.** A stale list that produced a message naming
+itself would be a five-minute fix, found the first time anyone hit it. What
+actually happens is that the missing arm falls through to a *neighbouring* rule
+whose diagnostic is about its own subject — assignment, an lvalue, a type
+mismatch — so the bug is filed against the neighbour. **The enumeration is never
+in the report, which is why these accumulate.** Compare *the report's own wording
+picks the axis you vary*: this is the upstream cause of that, and *a fall-through
+is not a diagnostic, it is a diagnostic's absence wearing one.*
+
+**What to do with it:**
+
+- **When a diagnostic is about the wrong subject, look one level up for a list.**
+  A message that names assignment for a construct containing no assignment, or an
+  lvalue for something that is not one, is the fall-through signature.
+- **Adding an arm to such a list is EVIDENCE, not a workaround** — say so in the
+  resolution rather than closing over it. frankD, whose ticket it is: *"adding an
+  arm to the enumeration is not a workaround, it is the ticket's own evidence
+  arriving again."* A resolution that records the arm strengthens the collapse
+  ticket; one that quietly adds it removes the only trace.
+- **Look for the second copy.** The member-shadow rule existed twice and the two
+  had drifted, so a fix to one is a fix to half a defect.
+- **The rule beside it is probably one too.** frankD's prediction, worth testing
+  rather than trusting: pxx's *"a record's class methods must be `static`"* is
+  itself an enumerated predicate wearing a different hat, and will need the same
+  widening the next time a member kind arrives that is neither an instance method
+  nor a static one.

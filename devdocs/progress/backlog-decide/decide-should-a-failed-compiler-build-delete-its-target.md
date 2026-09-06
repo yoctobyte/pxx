@@ -8,7 +8,7 @@ created: 2026-09-06
 found-by: frankS
 owner: ""
 blocked-by: []
-summary: "A failed `make compiler/pascal26` leaves the PREVIOUS binary on disk -- the Makefile has no `.DELETE_ON_ERROR` -- so the probe you run next executes the code your change was replacing and prints a plausible correct answer. Measured 2026-09-06: frankS nearly certified a positive control on output produced by the previous build. It is a fifth route to a stale binary beside CLAUDE.md's four, and the only one CAUSED BY THE THING BEING TESTED, so the failures are perfectly correlated -- the worse the change, the more certain you are to measure the old compiler. THE FORK: add `.DELETE_ON_ERROR` (a failed build leaves NO binary, so the wrong measurement becomes impossible rather than merely discouraged) versus leave it and rely on a one-line rule. THE COST IS THE REASON THIS IS A DECISION AND NOT A FIX: every failed edit would then cost a pin-seeded rebuild instead of a 12-second one, and a failed edit is the COMMON case in this loop, not the rare one. Fleet-wide trade, nobody's lane to take alone. Recommendation: the rule, not the Makefile change."
+summary: "A failed `make compiler/pascal26` leaves the PREVIOUS binary on disk -- the Makefile has no `.DELETE_ON_ERROR` -- so the probe you run next executes the code your change was replacing and prints a plausible correct answer. Measured 2026-09-06: frankS nearly certified a positive control on output produced by the previous build. It is a fifth route to a stale binary beside CLAUDE.md's four, and the only one CAUSED BY THE THING BEING TESTED, so the failures are perfectly correlated -- the worse the change, the more certain you are to measure the old compiler. THE FORK: add `.DELETE_ON_ERROR` (a failed build leaves NO binary, so the wrong measurement becomes impossible rather than merely discouraged) versus leave it and rely on a one-line rule. THE COST IS THE REASON THIS IS A DECISION AND NOT A FIX: every failed edit would then cost a pin-seeded rebuild instead of a 12-second one, and a failed edit is the COMMON case in this loop, not the rare one. Fleet-wide trade, nobody's lane to take alone. Recommendation: the rule, not the Makefile change -- held WEAKLY, because the two rates are not commensurable: A's cost is certain and measurable while A's benefit is measured by SELF-REPORT, which is blind precisely to the cases where the hazard did its damage (a seat that does not catch it files a CONCLUSION, not a correction). Two instances in one day is a floor over the visibly-failed subset, not a rate."
 ---
 
 # Should a failed compiler build delete its target?
@@ -62,13 +62,47 @@ most frequent action, to close a hazard that a one-line habit also closes.
 frankS's own position, and the reason they filed rather than did it: *"that is a
 trade the whole fleet pays and I do not think it is mine to make."*
 
+## THE TWO RATES BEING COMPARED ARE NOT COMMENSURABLE — read this before the recommendation
+
+Added 2026-09-06 after frankuser corrected the first version of this ticket, and
+it is the paragraph most likely to decide the fork, so it goes above the
+recommendation rather than below it.
+
+The cost of A is **measurable and certain**: every failed edit pays a pin-seeded
+rebuild, and a failed edit is the common case.
+
+The benefit of A is measured by **self-report, and self-report is blind precisely
+to the cases where the hazard did its damage.** Both known instances share one
+property: the seat **caught it themselves and then said so**. That is the only
+path by which an instance becomes countable. **A seat that does not catch it does
+not file a correction — it files a CONCLUSION**, and the conclusion is specific,
+plausible and wrong. frankB's is the illustration: the old terminus warning fired,
+*"which is precisely what a non-firing arm would look like"*. Undetected instances
+leave a ticket, a resolution or a closed row, not a confession.
+
+**So "twice in one day" is not a rate. It is a floor over the subset that failed
+visibly enough to notice.**
+
+> **Options weighed on observed frequency will systematically favour the status
+> quo whenever one side's frequency is countable and the other's is not.** That is
+> the asymmetry, and it decides forks quietly and by accident. Whoever settles
+> this should decide **which error they would rather make**, not which number is
+> larger — because only one of the two numbers exists.
+
 ## Recommendation
 
-**B.** The verb guard is already in `CLAUDE.md` for a different reason, so this is
-a short addition to an existing paragraph rather than a new rule, and it costs the
-common case nothing. A is the better guard in isolation and the worse trade at
-this loop's frequency — and the argument for A gets stronger if anyone measures
-how often a failed compile is actually followed by a probe run, which nobody has.
+**B, held weakly, and the weakness is the point.** The verb guard is already in
+`CLAUDE.md` for a different reason, so B is a short addition to an existing
+paragraph and costs the common case nothing. A is the better guard in isolation
+and the worse trade at this loop's frequency.
+
+**But that comparison is exactly the one the paragraph above says cannot be made
+on frequency**, so read this as "the cheap half first, and A stays live" rather
+than as a settled call. A concrete thing that would move it: **any instance where
+the hazard was NOT self-caught** — a wrong conclusion traced back to a stale
+binary after the fact, found in a ticket rather than in a confession. One of those
+is worth more than ten more self-reports, because it is the only evidence that
+can come from the invisible half.
 
 The prose half is the owner's call regardless: `CLAUDE.md` is not edited by
 agents, so the sentence goes up as an ask rather than as a commit.
