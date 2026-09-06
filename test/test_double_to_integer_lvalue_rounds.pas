@@ -29,7 +29,7 @@ program test_double_to_integer_lvalue_rounds;
                          The VALUE is chosen to agree with the variant sibling
                          above: round half-to-EVEN, one rule for both paths.
 
-  DISCRIMINATION. With the bug present this test reports 19 failures against
+  DISCRIMINATION. With the bug present this test reports 24 failures against
   the pinned compiler, so the rows below are a guard that can fail. But note
   what the control also showed: a 32-bit target stores the LOW HALF of the
   payload, and that half is 0 for a great many doubles -- `I := 7.5` answered
@@ -37,8 +37,13 @@ program test_double_to_integer_lvalue_rounds;
   non-discriminating here, not merely the literal-zero one. There is exactly
   one such row and it is labelled where it sits; do not add more without
   saying so. }
+type
+  TRec = record A: Integer; B: Comp; end;
 var
   D: Double;
+  arr: array[0..3] of Integer;
+  dyn: array of Integer;
+  Rec: TRec;
   S: Single;
   E: Extended;
   Co: Comp;
@@ -48,6 +53,12 @@ var
   Wo: Word;
   Sm: SmallInt;
   fails: Integer;
+
+function RetInt(F: Double): Integer;
+begin
+  { the function RESULT is an integer lvalue too -- same funnel }
+  Result := F;
+end;
 
 procedure Chk(const what: string; got, want: Int64);
 begin
@@ -93,6 +104,28 @@ begin
         the bug present (measured against the pin). It guards the value, not
         the fix. Never count it as coverage. --- }
   D := 0.0;  I := D;  Chk('zero', I, 0);
+
+  { --- EVERY LVALUE SHAPE, and this is the load-bearing part of the test.
+        The fix is ONE rewrite in ir.inc's AN_ASSIGN arm, and it is correct
+        only because all of these funnel through that node -- which is the
+        claim that arm's own comment makes ("two dozen places build an
+        AN_ASSIGN and exactly one lowers it"). If a later change gives any
+        shape below its own store path, the rewrite silently stops applying
+        to it and nothing else here would notice. Measured: all six answer 5
+        at HEAD and none of them do under the pin. --- }
+  D := 4.7;
+  arr[1] := D;   Chk('static array elem', arr[1], 5);
+  SetLength(dyn, 3);
+  dyn[0] := D;   Chk('dynamic array elem', dyn[0], 5);
+  Rec.A := D;    Chk('record field',       Rec.A,  5);
+  Rec.B := D;    Chk('record Comp field',  Rec.B,  5);
+  Chk('function Result', RetInt(D), 5);
+
+  { A float argument bound to an integer PARAMETER is a different question and
+    deliberately not covered here: pxx REJECTS `T(D)` with a diagnostic and so
+    does fpc ("Incompatible type for arg no. 1"). Both refuse, so there is no
+    conversion to assert -- recorded so the gap is known to be absent rather
+    than untested. }
 
   { --- scope, asserted so a later change cannot hide behind this test --- }
   D := 4.7;  Chk('Trunc still truncates', Trunc(D), 4);
