@@ -96,3 +96,57 @@ The sweep reported a failure here and it was my 90-second timeout: run under
 byte-identical to the oracle. Recorded because the next reader of that table
 would otherwise chase a defect that does not exist — a timeout does not error,
 it answers.
+
+## 2026-09-06 (frankF) — the FRONTEND x ESP-TARGET cell, attempted rather than triaged
+
+Under a release advertising "all frontends and all targets" this is the cell
+nobody had printed. One hello-world per frontend, `d6de711d1`,
+`compiler/pascal26 = c9de36a3754e`, `converged after 1 round(s)`.
+
+| frontend | esp32s3 bare | esp32c3 bare | riscv32 IDF | xtensa IDF (call0 / windowed) |
+| --- | --- | --- | --- | --- |
+| Pascal | **OK** | **OK** | **OK** | **OK / OK** |
+| C | refuses (entry stub) | `compiler error: PXXMemZero not found` | same | same |
+| NilPy | refuses (heap arena needs mmap) | refuses (same) | refuses (same) | refuses (same) |
+| Zig | refuses (x86-64 only) | refuses | refuses | refuses |
+| Rust | refuses (x86-64 only) | refuses | refuses | refuses |
+
+**Pascal is the only frontend that reaches an ESP target at all**, on either
+profile and either ISA. That is the whole row, and it is worth having written
+down before anyone writes "all frontends, all targets" in release copy.
+
+**Most of these are not defects, and the distinction is the useful part.**
+Zig and Rust are Track X and answer *"only the x86-64 target is supported by the
+skeleton"* — an honest refusal from an experimental frontend, which is a
+frontend working. NilPy answers *"a heap arena needs mmap, which this profile
+has not"* — a true statement about a real constraint
+([[bug-a-nilpy-on-cross-targets-four-remaining-walls]]). A refusal that names
+its reason is not a red; it is a target that has not been reached yet, and the
+release copy should say which frontends reach ESP rather than implying five do.
+
+**Two things here ARE defects:**
+
+1. **C on esp32c3 answers `compiler error: PXXMemZero not found`** — an
+   internal-fault-shaped diagnostic for `#include <stdio.h>` plus a `printf`.
+   Already filed and correctly diagnosed:
+   [[bug-s-c-on-the-esp-profile-cannot-reach-crtl]] (S, p45) — the symbol exists
+   unconditionally in `builtinheap.pas`, so the lookup is not reaching it. This
+   attempt adds one row that ticket does not have: **the two ESP ISAs give
+   DIFFERENT diagnostics for the same source.** esp32s3 bare refuses cleanly
+   with the entry-stub message; esp32c3 bare reaches the compiler error. Same
+   source, same profile, one chip apart.
+
+2. **NilPy's refusal on the xtensa IDF profile says "which BARE METAL has
+   not"** — and that build is not bare metal. riscv32 gets the correct wording
+   (*"which this profile has not"*), so the xtensa arm hardcodes the word. Same
+   "xtensa MEANS bare metal" conflation that
+   [[feature-a-complete-the-builtin-unit-on-the-esp-class-targets]] was filed
+   for and closed; this is message text left behind, not a returning defect.
+   Small, but it tells a reader the wrong thing about why their IDF build failed.
+
+**Method note.** Every cell is a real invocation, not a table maintained by
+hand. Executables for the bare profile; `--emit-obj` for IDF, because that is
+the shipping path there. The Pascal row is corroborated by 29 executed qemu
+assertions the same evening ([[bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it]]),
+so its OK is "runs and matches the x86-64 oracle", while every other OK in this
+table would only have meant "compiled".
