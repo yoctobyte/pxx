@@ -439,3 +439,48 @@ must be sequenced, not framed. Concretely:
 
 Related: [[a-hold-ships-with-the-event-that-retires-it]] — same shape, one level up. A
 hold with no retiring event never retires; an ask with no named next holder never stops.
+
+## A DIRTY TREE IN A SILENT SESSION IS UNBANKED WORK, AND THAT IS A COST THE OWNER SHOULD WEIGH
+
+CLAUDE.md establishes that **a clean tree is not evidence about a session** — it is the
+signature of having just landed, and it was read as never having started. The complement
+is not written down anywhere and it is the half that has a cost attached:
+
+> **A session that has been silent for hours and whose tree is DIRTY is holding work that
+> nothing else can see.** Not a local commit — uncommitted edits, which are one step
+> further from banked than the local commit CLAUDE.md already warns about.
+
+Measured 2026-09-06. A read-only sweep of every checkout (`git status --porcelain`, `git
+rev-list --count origin/master..HEAD`) found **no unpushed commits anywhere** — which is
+the reassuring headline and is not the whole reading. One session, already recorded for
+the owner as unanswered across three passes, held **two modified `compiler/**` files, a
+ticket moved into `working/`, and two untracked probe sources**, with its last commit two
+and a half hours old.
+
+**Why this changes what to tell the owner.** "Session X is silent" is a status. "Session X
+is silent AND holds N uncommitted files under `compiler/`" is a status with a **decay
+term**: a session is restarted without warning and the restart takes the work with it, and
+the next session is told by CLAUDE.md to distrust a diff it cannot explain. So the sweep
+should report both numbers, and the second one is the one that argues for looking sooner.
+
+**What this does NOT license, and the temptation is real.** It is not a reason to send
+keys — **not Escape, not a cancel, not the deny direction**, and a dirty tree makes that
+worse rather than better, because a session mid-edit and a session sitting on a dialog are
+the same silence and the same keystroke either cancels one tool call or destroys work in
+progress. It is not a reason to commit or stash on the session's behalf: **never `git add
+-A` in a shared checkout**, and a park belongs to whoever wrote it. It is not a reason to
+read the diff content — line ranges and file names answer the coordination question, and
+they are what this sweep reads.
+
+**The one thing it IS: a number to carry upward.** Report `N modified under compiler/**`
+beside the silence, say the tree survives on disk, and say plainly that nobody but the
+owner can clear the session. Then stop.
+
+**And the same sweep is the cheapest topic-collision instrument there is.** Reading only
+`git diff --stat` and **hunk headers** — line ranges and the `@@ ... begin` context, never
+content — across dirty trees found a session inserting at `@@ -2484,0 +2485,10` in
+`pasparser_call.inc` where a commit had landed at `@@ -2484,0 +2485,9` hours earlier: the
+same insertion point, to the line, and the third change to one overload-decision point in
+one night. Git would have shown that as a rebase conflict at push time, after the work was
+finished; the semantic half — *which argument list is your comparison reading* — it would
+never have shown at all. **Say how you looked when you report it, and offer to stop.**
