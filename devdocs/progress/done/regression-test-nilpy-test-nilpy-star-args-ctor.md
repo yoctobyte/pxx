@@ -37,3 +37,6 @@ pascal26:76: error: no overload of m matches these arguments
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_star_args_ctor.npy` passes at ef03a6282980 (tier full); it was red at 18f97d8f5f1f. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
