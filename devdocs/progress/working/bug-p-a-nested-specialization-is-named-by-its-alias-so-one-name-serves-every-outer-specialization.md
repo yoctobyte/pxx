@@ -1,6 +1,6 @@
 ---
 slug: bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization
-title: "A nested specialization is minted under its ALIAS name, so specializing the outer class twice collides -- warnings on fgl, a hard type error on a reduction"
+title: "A specialization is minted under its ALIAS name rather than its canonical key -- two aliases of one specialization are two classes, so `a is TOtherAlias` is FALSE where fpc says TRUE"
 track: P
 prio: 55
 type: bug
@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-06
-summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, so `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically. MECHANISM CORRECTED 2026-09-06 BY MEASUREMENT: not ScanRangeForNestedSpecs and not NestedSpecKnown, which are not on this path -- the mint trace is EMPTY. The rename that would fix it ALREADY EXISTS and already computes the right names (`TI$TEnumSpec`, `TS$TEnumSpec`); it is unreachable behind two gates, HoistUsed being settable only from NestedSpecArg (a nested name used as a type ARGUMENT, never as a return/field/var type) and EmitHoistedDecls being called only from the DEFERRAL arm. Parked: lifting either gate renames every nested type in every generic class, fgl and rtl-generics included, so it wants a full tier."
+summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, so `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically. MECHANISM CORRECTED 2026-09-06 BY MEASUREMENT: not ScanRangeForNestedSpecs and not NestedSpecKnown, which are not on this path -- the mint trace is EMPTY. The rename that would fix it ALREADY EXISTS and already computes the right names (`TI$TEnumSpec`, `TS$TEnumSpec`); it is unreachable behind two gates, HoistUsed being settable only from NestedSpecArg (a nested name used as a type ARGUMENT, never as a return/field/var type) and EmitHoistedDecls being called only from the DEFERRAL arm. Parked: lifting either gate renames every nested type in every generic class, fgl and rtl-generics included, so it wants a full tier. TOP-LEVEL HALF ADDED 2026-09-06 at 4142d4f20747, and it is a WRONG VALUE in fifteen lines rather than a warning on fgl: `TIntBox = specialize TBox<Integer>` and `TIntBox2 = specialize TBox<Integer>` are ONE type in Pascal and TWO classes here, so `a1 is TIntBox2` answers FALSE where fpc 3.2.2 answers TRUE -- while `a2 := a1` is accepted by both, which is the combination that hides it. AND THE CANONICAL KEY ALREADY EXISTS AND IS ALREADY CORRECT: an INLINE `specialize TBox<Int64>` mints `TBox$Int64` and two of them share identity properly; only the ALIAS spelling mints under the alias name. So the fix is to route ParseSpecialization's `specName` through the existing key and register the alias with RegisterUClassAlias -- not to invent a keying. Explains tgeneric16.pp's one remaining divergent line, whose skip reason blamed inheritance and is about aliasing."
 ---
 
 # The shape
@@ -207,3 +207,70 @@ it:**
 
 Both are the same question asked of a reduction rather than of a guard: **if the
 machinery did nothing at all, would this row still pass?**
+
+# The TOP-LEVEL half, measured 2026-09-06 (frankS), compiler 4142d4f20747
+
+**The same rule, one scope out, and here it is a WRONG VALUE in fifteen lines
+rather than a warning on fgl.** An alias is not a class; two aliases of the same
+specialization name ONE type. pxx mints one class per alias.
+
+```pascal
+program b; {$mode objfpc}{$H+}
+type
+  generic TBox<T> = class(TObject) V: T; end;
+  TIntBox  = specialize TBox<Integer>;
+  TIntBox2 = specialize TBox<Integer>;     { the SAME type as TIntBox }
+var a1: TIntBox; a2: TIntBox2;
+begin
+  a1 := TIntBox.Create;
+  a2 := TIntBox2.Create;
+  a2 := a1;                                { accepted by both }
+  WriteLn(a1 is TIntBox2);                 { pxx FALSE, fpc 3.2.2 TRUE }
+end.
+```
+
+Assignment between them is ACCEPTED and the `is` test is FALSE, which is the
+combination that makes it dangerous: the two views agree everywhere except at
+the one place a program asks.
+
+## THE CANONICAL KEY ALREADY EXISTS AND IS ALREADY CORRECT
+
+This is the fact the nested half did not have, and it moves the fix from
+"invent a keying" to "route one caller through the keying that is already
+there". An INLINE specialization is minted under `Template$Args` and two of them
+share identity properly; only the ALIAS spelling mints under the alias name:
+
+| spelling | pxx `ClassName` | fpc 3.2.2 |
+| --- | --- | --- |
+| `var x: specialize TBox<Int64>` (twice) | `TBox$Int64`, `TBox$Int64` | `TBox<System.Int64>` ×2 |
+| `var z: specialize TBox<Integer>` | `TBox$Integer` | `TBox<System.LongInt>` |
+| `TIntBox = specialize TBox<Integer>` | **`TIntBox`** | `TBox<System.LongInt>` |
+| `TIntBox2 = specialize TBox<Integer>` | **`TIntBox2`** | `TBox<System.LongInt>` |
+
+`x is specialize TBox<Int64>` is TRUE (the canonical key works). `z is TIntBox`
+is FALSE (the alias minted a second class). fpc answers TRUE to both.
+
+So the shape of the fix is: mint under the canonical `Template$Args` key
+ALWAYS, and register the alias name through `RegisterUClassAlias` rather than as
+a class of its own — `ParseSpecialization`'s `specName` parameter is the single
+place the alias name enters.
+
+## WHY IT IS STILL PARKED, AND WHAT WOULD UNPARK IT
+
+`ClassName` becomes `TFPGList$Integer` where it now reads `TIntegerList` — for
+EVERY alias-bound specialization in fgl, rtl-generics and every consumer of
+them. That is closer to fpc (which prints `TFPGList<System.LongInt>`, also not
+the alias) and it is still a visible change to a value programs log and
+sometimes branch on, over a population nobody has enumerated. Same reason the
+nested half is parked, and now for a second gate. It wants a full tier, and the
+enumeration wants the delta instrument rather than the outcome: print every
+(alias, canonical) pair the change would collapse, over the test and examples
+trees, before touching the mint.
+
+## What it explains
+
+`tgeneric16.pp`'s one remaining divergent line. The skip reason called it
+"ClassName of a class inheriting a specialization"; it is not about
+inheritance at all. `TIntegerStack = specialize TAdvStack<Integer>` is an ALIAS,
+so fpc prints the specialization's own name and pxx prints the alias's. Same
+root, and the row is not burnable until this is decided.
