@@ -173,6 +173,43 @@ trip it, which is correct. **The diagnostic was not** — it said *"a record wit
 management operator"*, naming four operators where the rule uses two, so a
 `Copy`-only record satisfied the stated rule and compiled anyway.
 
+### The class: a predicate's NAME leaking into a user-facing string
+
+frankS's framing, and it is sharper than "the message was vague":
+
+> A predicate's name leaking into a diagnostic is a different risk class from
+> the same name leaking into a call site, because a call site has the body one
+> jump away and a diagnostic has nothing.
+
+**Nothing here lied and nothing was vague.** `RecHasManagementOp` was a true
+sentence about a predicate that tests two operators; the message quoted it; a
+reader concluded, correctly from that sentence, that the door was shut for all
+four. The error was checkable only by reading the predicate BODY — and a
+diagnostic's reader is precisely the person who cannot. **A refusal message is
+the only spelling of the rule anyone outside the code ever sees**, so an
+80%-accurate internal name stops being a convenience the moment it escapes into
+one and becomes documentation.
+
+This is `the name is not the thing` from CLAUDE.md, with the extra clause that
+the blast radius depends on where the name escapes to.
+
+**A second member of the class, one level down** (frankS, `cd3709f60`): a
+three-clause guard that fired and named its SUBJECT but not WHICH CLAUSE. They
+re-read the arm three times, reasoned to the wrong half, and spent a build
+correctly plumbing a destination encoding that was never the problem — the
+source had been flattened to 2-D. What settled it in one build was printing the
+guard's own inputs into the diagnostic: `ndims=2 elemdyn=0 dstrowlen=3`. So the
+playbook's *do not theorise about an inferred value, print it* applies to **a
+guard's inputs**, not only to a type.
+
+**The three sibling refusals in `WrapManagementOpsRange` are deliberately NOT
+re-worded** (agreed with frankS, who is not near that code and is not taking
+them). They say "a field of a record with a management operator" and carry the
+same imprecision. Only the one that provably misled someone was fixed. They are
+the population for the next instance: **fixing all four speculatively would make
+the class invisible**, and if one of them misleads someone the report will name
+it. Do not tidy them.
+
 **FIXED, since it is what caused the misreading above** rather than merely
 describing it. The predicate was named `RecHasManagementOp` and tests
 `OPK_INITIALIZE`/`OPK_FINALIZE` only; it is now `RecHasScopeManagementOp` and
