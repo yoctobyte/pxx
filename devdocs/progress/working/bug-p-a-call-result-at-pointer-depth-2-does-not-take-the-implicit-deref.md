@@ -2,9 +2,9 @@
 track: P
 prio: 45
 type: bug
-status: open
+status: working
 blocked-by: []
-owner: 
+owner: frankD
 summary: "`GetPP^.a` where `GetPP: PPRec` and `PPRec = ^PRec = ^^TRec` is now REFUSED (`this value is still a POINTER here -- it needs another ^`) on a program fpc 3.2.2 compiles and runs, printing 11 and 22. That refusal arrived with frankB's f9476d579, which is right about the two-short chain and wrong about this one-short chain, and it fires HERE and nowhere else because this is the one opener where the depth is lost -- so the refusal and this bug are one defect seen from two sides. The field chain used to print 4306192 / 0 instead; the METHOD and PROPERTY chains (`GetPP^.GetA`, `GetPP^.PA`) still do. Controls, all measured at 85c81be85 / faa41e4b920f: `GetPP^^.a` written out in full is CORRECT; the pointer-VARIABLE twins `pp^.a` and `ppp^^.a` still print 11, so the refusal is opener-specific; and the two-short `GetPPP^.a` is refused by pxx AND by fpc (Illegal qualifier), which is frankB's arm doing its job. WHERE the depth is lost is NOT established: PXXDBG a.symptr shows the Result symbol carrying `depth=2 baseRec=23`, and seeding recId from ProcRetPtrBaseRec in the dot arm changed nothing -- but that probe cannot discriminate, because if the depth IS recorded then recId was already correct and the probe is a no-op. Pre-existing: the wrong VALUE is identical on pin v404; the refusal is not, it is new."
 ---
 
