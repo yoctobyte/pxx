@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 7d9h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `a8179a73ea84` | 2026-09-06T19:21:47Z | RED (native) | 189.4s | `6d04b14cd88d` RED |
+| seven | `c543b335fb2f` | 2026-09-06T19:55:22Z | RED (full) | 600.8s | `c543b335fb2f` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `6d04b14cd88d` on seven, 2026-09-06T18:37:24Z (1h ago).**
+**Newest full tier in the fleet: `c543b335fb2f` on seven, 2026-09-06T19:55:22Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `6d04b14cd88d` | RED | 1h | — (newest) |
-| plexus | `27424c927b65` | RED | 7d9h | 7d8h |
+| seven | `c543b335fb2f` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 7d9h | 7d9h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -43,82 +43,8 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **CASCADE 42 jobs** (seven): bad `b8e3b3010249`, last good `9d5a4e27029e`, 16 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `demos#00`
-  - `lib-test#src:examples/json/jsondemo.pas`
-  - `lib-test#src:examples/net/httpdemo.pas`
-  - `lib-test#src:examples/shell/nilsh.npy`
-  - `lib-test#src:test/lib_base64.pas`
-  - `lib-test#src:test/lib_codecs.npy`
-  - `lib-test#src:test/lib_dns_resolved.pas@2`
-  - `lib-test#src:test/lib_http.pas`
-  - `lib-test#src:test/lib_http_async.pas`
-  - `lib-test#src:test/lib_http_cookie.pas`
-  - `lib-test#src:test/lib_http_gzip.pas`
-  - `lib-test#src:test/lib_http_keepalive.pas`
-  - `lib-test#src:test/lib_http_pool.pas`
-  - `lib-test#src:test/lib_http_pool_concurrent.pas`
-  - `lib-test#src:test/lib_http_redirect.pas`
-  - `lib-test#src:test/lib_http_serve.pas`
-  - `lib-test#src:test/lib_httpjson.pas`
-  - `lib-test#src:test/lib_https_mock.pas`
-  - `lib-test#src:test/lib_markdown.pas`
-  - `lib-test#src:test/lib_mimic_bisect.npy`
-  - `lib-test#src:test/lib_mimic_codecs.npy`
-  - `lib-test#src:test/lib_mimic_collections_abc.npy`
-  - `lib-test#src:test/lib_mimic_colorsys.npy`
-  - `lib-test#src:test/lib_mimic_copy.npy`
-  - `lib-test#src:test/lib_mimic_six.npy`
-  - `lib-test#src:test/lib_mimic_six_moves.npy`
-  - `lib-test#src:test/lib_mimic_string_template.npy`
-  - `lib-test#src:test/lib_mimic_urllib_error.npy`
-  - `lib-test#src:test/lib_mimic_urllib_parse.npy@2`
-  - `lib-test#src:test/lib_mimic_warnings.npy`
-  - `lib-test#src:test/lib_mimic_weakref.npy`
-  - `lib-test#src:test/lib_mimic_xml_dom.npy`
-  - `lib-test#src:test/lib_mimic_xml_dom_minidom.npy@2`
-  - `lib-test#src:test/lib_mimic_xml_etree_elementtree.npy`
-  - `lib-test#src:test/lib_mimic_xml_sax_saxutils.npy`
-  - `lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy`
-  - `lib-test#src:test/lib_pyexec.npy@2`
-  - `lib-test#src:test/lib_typinfo_props.pas`
-  - `lib-test#src:tools/crtl_reachability.py`
-  - `test-fpjson#src:tools/install_lib_candidates.sh`
-  - `test-pascal-conformance#shard4/6`
-  - `test-pascal-conformance#shard5/6`
-  </details>
-- **CASCADE 23 jobs** (seven): bad `6758c7ce7dbd`, last good `b8e3b3010249`, 105 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-emit-obj#src:test/c_obj_data_dup_a.c`
-  - `test-emit-obj#src:test/test_emit_obj.pas@3`
-  - `test-emit-obj#src:tools/compiler_srchash.sh`
-  - `test-pascal-conformance#shard1/6`
-  - `test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh`
-  - `test-sqlite-threads-arm32#src:tools/compiler_srchash.sh`
-  - `test-sqlite-threads-i386#src:tools/compiler_srchash.sh`
-  - `test-sqlite-threads-x86_64#src:tools/compiler_srchash.sh`
-  - `test-uforth#src:tools/compiler_srchash.sh@1`
-  - `test-uforth#src:tools/compiler_srchash.sh@10`
-  - `test-uforth#src:tools/compiler_srchash.sh@11`
-  - `test-uforth#src:tools/compiler_srchash.sh@12`
-  - `test-uforth#src:tools/compiler_srchash.sh@13`
-  - `test-uforth#src:tools/compiler_srchash.sh@2`
-  - `test-uforth#src:tools/compiler_srchash.sh@3`
-  - `test-uforth#src:tools/compiler_srchash.sh@4`
-  - `test-uforth#src:tools/compiler_srchash.sh@5`
-  - `test-uforth#src:tools/compiler_srchash.sh@6`
-  - `test-uforth#src:tools/compiler_srchash.sh@7`
-  - `test-uforth#src:tools/compiler_srchash.sh@8`
-  - `test-uforth#src:tools/compiler_srchash.sh@9`
-  - `test-xtensa#src:test/test_cross_record.pas@3`
-  - `test-zlib#src:tools/compiler_srchash.sh`
-  </details>
-- **test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1** — test/test_nilpy_dotted_package_import.npy tools/expect_same.sh (seven): bad `6d04b14cd88d`, last good `c69b52b6ea35`, 9 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_dotted_package_import.npy@2** — test/test_nilpy_dotted_package_import.npy tools/expect_same.sh (seven): bad `6d04b14cd88d`, last good `c69b52b6ea35`, 9 commit(s) in range
-- **test-core#src:test/c_cross_time_and_exit_through_the_pal.c** — test/c_cross_time_and_exit_through_the_pal.c tools/expect_same.sh +3 (seven): bad `a8179a73ea84`, last good `8bef014c7f6c`, 2 commit(s) in range
+- **lib-test#src:test/lib_sysutils_delphi_exceptions.pas** — test/lib_sysutils_delphi_exceptions.pas tools/expect_same.sh (seven): bad `c543b335fb2f`, last good `6d04b14cd88d`, 20 commit(s) in range
+- **test-debug-g#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (seven): bad `c543b335fb2f`, last good `a8179a73ea84`, 8 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
