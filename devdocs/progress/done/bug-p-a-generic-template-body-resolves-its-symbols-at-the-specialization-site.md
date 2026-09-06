@@ -488,4 +488,4 @@ Split out as its own row so it is not lost and is not claimed:
 [[bug-p-tgeneric4-is-a-fail-row-that-pxx-now-compiles-and-runs-correctly]].
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8b4c2831d.
