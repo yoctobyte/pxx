@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:21 blocked:7 backlog:14 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:33 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3408 rejected:78`
+`working:20 unfinished:21 blocked:7 backlog:15 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:32 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3409 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -82,9 +82,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-562162b03a02
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
-- `[p 70] [T]` regression-cascade-c999836a2981
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [P]` regression-test-core-test-builtin-type-names-cast-and-declare
+- `[p 70] [P]` regression-test-core-test-generic-method-across-a-uses-clause
+- `[p 70] [P]` regression-test-core-test-generic-method-unused-is-erased
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [T]` regression-test-core-test-pointer-function-result-keeps-its-depth
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
@@ -95,6 +96,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
-- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
 _378 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
