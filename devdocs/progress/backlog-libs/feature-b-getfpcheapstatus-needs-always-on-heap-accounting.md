@@ -89,3 +89,47 @@ a much smaller one.
 
 **Not checked by anyone yet.** Do that before treating the always-on-counters
 decision as the starting point; it may be most of the ticket.
+
+## TRIAGE 2026-09-06 (frank-coordinator) — THE IMPLEMENTATION APPEARS TO HAVE LANDED AND THIS ROW IS STILL OPEN
+
+`f6ddab6ef` — *"feat(b): System.ErrorAddr, TFPCHeapStatus and GetFPCHeapStatus, with live
+heap accounting"* — names this row's exact subject and its commit message says it delivers
+*"the trio recorded as blocking FPC's `erroru.pp` helper, and through it five conformance
+skip rows."* All three declarations are present at HEAD:
+
+```
+compiler/builtin/builtinheap.pas:343   TFPCHeapStatus = record          { FPC 3.2.2's exact field list and order }
+compiler/builtin/builtinheap.pas:380   ErrorAddr: Pointer;
+compiler/builtin/builtinheap.pas:399   function GetFPCHeapStatus: TFPCHeapStatus;
+```
+
+The commit also records that **the recorded blocker list was already stale when it was
+worked**: two skip rows cited `ExitCode` as missing and it reads and writes fine today — *a
+third of the blocker was gone and nobody had re-run it.* And the accounting is **new and
+unconditional**, which is the hard half this ticket said was the whole ticket: the census
+counters are cumulative and behind `-dPXX_ALLOC_CENSUS`, so neither could answer *how much
+is in use right now*. Six sites, one per allocator profile per direction, with the cost
+measured rather than reasoned (8M alloc/free pairs, min-of-5: 0.52s none, 0.60s shared
+helper, 0.55s inlined — the CALL was two thirds of it).
+
+**WHAT I HAVE NOT ESTABLISHED, AND IT IS THE WHOLE REMAINING QUESTION.** I read
+declarations, not behaviour. **A symbol being declared is not the same claim as this
+ticket's own repro passing** — this row's evidence is `erroraddr := nil` answering
+`undefined variable (erroraddr)`, and the sibling's is `cclasses.pas:676` compiling. Neither
+has been re-run here, and a builtin unit declaring a name says nothing about whether the
+frontend resolves it from user code. **I do not build and I am not resolving somebody else's
+ticket on a grep.**
+
+**What settles it, in the owner's hands and cheap:** the two-line repro this ticket already
+carries, plus `erroru.pp` compiling, plus the five conformance rows it names (`tobject1`,
+`tstring2`, `tstring4`, `tstring5`, `texception3`) — which are now runnable in any checkout,
+since `library_candidates/fpc-testsuite` is one `tools/install_lib_candidates.sh
+fpc-testsuite` away and took under a minute when frankS fetched it 2026-09-06.
+
+**WHY IT MATTERS BEYOND THIS ROW.** This ticket is a `blocked-by:` edge on
+`feature-pascal-corpus-fpc-testsuite` (**Track P, p65, in `working/`**), together with its
+sibling. **`blocked-by:` records the RELATIONSHIP; only this folder records its STATE** — so
+while this row sits in `backlog-libs`, that P ticket reads as gated to every reader,
+including the Track P campaign. If the implementation does satisfy this row, resolving it
+retires two edges at once. **Whoever owns Track B: this is a resolve waiting on one
+measurement, not a piece of work.**
