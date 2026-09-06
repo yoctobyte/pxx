@@ -62,4 +62,4 @@ comment's example is a differing *type* spelling, not a differing arity, and
 requiring equal arity may cost nothing it was protecting.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0cdd83c71.
