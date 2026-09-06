@@ -62,3 +62,22 @@ behaviour change to a tool people use, decided by a devtest — the tail wagging
 The summary is long because it is TRUE, which is what CLAUDE.md requires of it. Trimming
 a ticket's summary to green a tool devtest would be fixing the measured object to suit
 the instrument.
+
+## It is a FIFTH cause of `tools-devtest#00`, not a separate matter
+
+`make tools-devtest` globs `tools/*devtest*.py` (Makefile, the `tools-devtest` recipe), so
+this case is inside the job that
+`chore-t-tools-devtest-00-is-six-reds-with-four-causes` [T p75] censused on 2026-09-03. It is
+**not** one of that ticket's six — those are `sync_pending_commit_devtest`,
+`devtest_sync_fold`, `exit_observable_devtest`, `test_wiring_gate_devtest`,
+`testmgr_hardcoded_tmp_devtest` and the bench fingerprint. This one appeared **after** the
+census, when the summary it measures crossed the floor.
+
+Noted on that ticket's summary rather than in its slug: `six-reds-with-four-causes` was true
+on 2026-09-03 and repairing it in place would make a dated claim look freshly measured.
+
+**One caveat on scope, and it is the only claim here I did not measure.** The three numbers
+above were measured on this checkout with `python3 tools/progress_near_devtest.py`. That the
+`#00` job on seven is also red for this reason follows from the glob and from the corpus
+being the committed board, but **no tstate report was read** — `tstate/` is not in this
+checkout. If someone with the archive can confirm it, that closes the inference.
