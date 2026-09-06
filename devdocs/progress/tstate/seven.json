@@ -14700,8 +14700,8 @@
   "sha": "cf9b14600039c2f62d7251b0e05330fb74827be9"
  },
  "last_slow": {
-  "date": "2026-09-04T17:45:42Z",
-  "sha": "b040c90e6c8b8f8705fa3c1a9cdb76e57912a59f"
+  "date": "2026-09-06T22:19:14Z",
+  "sha": "a5d72988efe676357f48fc389e4558b119404cb2"
  },
  "open_regressions": [
   {
