@@ -10154,6 +10154,20 @@ test-core: $(COMPILER)
 	@# True is both the right answer and the failure value. Rows G/H carry the
 	@# positive argument so the file cannot be read as asserting "always False".
 	@# Every row is fpc 3.2.2 -Mdelphi's own output for the same program.
+	@# bug-p-an-abstract-override-in-the-middle-of-a-chain-hides-the-concrete-override-below-it
+	@# `override; abstract;` in the middle of a chain minted a NEW VMT slot
+	@# instead of inheriting its parent's, so for A -> B -> C a call through an
+	@# A-typed reference to a C instance ran A's body. A PRECEDENCE, under a
+	@# comment that is TRUE: `abstract` sets isVirtual ("abstract implies
+	@# virtual"), the test was a bare `if isVirtual`, and the abstract row took
+	@# the allocate arm ahead of the override arm. Row A is the control that
+	@# must not move -- a ROOT `virtual; abstract;` still allocates. Rows G/H
+	@# are the spellings that PASSED under the bug (`TC(a).F`, `TB(c).F`
+	@# dispatch through the slot the abstract row minted), so a test using a
+	@# derived-typed receiver sees nothing. E/F are slot numbering: a sibling
+	@# virtual beside the abstract override must keep its own slot.
+	./$(COMPILER) test/test_an_abstract_override_keeps_its_parents_vmt_slot.pas $(TESTTMP)/test_absoverride26
+	tools/expect_same.sh test_absoverride26 "$$($(TESTTMP)/test_absoverride26 | tail -n 2)" "$$(printf 'fails=0\nABSTRACTOVERRIDE OK')"
 	./$(COMPILER) test/test_a_procedural_member_is_callable_through_a_selector_chain.pas $(TESTTMP)/test_chaincall26
 	tools/expect_same.sh test_chaincall26 "$$($(TESTTMP)/test_chaincall26 | tail -n 2)" "$$(printf 'fails=0\nCHAINCALL OK')"
 	./$(COMPILER) test/test_sizeof_through_a_pointer_to_a_string_n.pas $(TESTTMP)/test_sizeof_deref_strn26

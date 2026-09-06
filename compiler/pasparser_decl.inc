@@ -7489,7 +7489,30 @@ begin
             UMthPub[mmi] := curPublished;
             UMthVis[mmi] := curVis;
 
-            if isVirtual then
+            { OVERRIDE BEATS THE VIRTUAL THAT `abstract` IMPLIES, and the
+              precedence is the whole bug. `procedure Say; override; abstract;`
+              sets BOTH flags -- isAbstract sets isVirtual above, correctly,
+              because an abstract method IS dispatched -- and this test used to
+              be a bare `if isVirtual`, so the abstract row took the ALLOCATE
+              arm and minted a fresh slot instead of inheriting its parent's.
+
+              THE COMMENT ABOVE IS TRUE AND THE INFERENCE FROM IT IS NOT.
+              "abstract implies virtual" is right; "therefore allocate a slot"
+              does not follow, because `virtual` and `override` differ in
+              exactly one respect -- whether the slot is NEW -- and abstract
+              says nothing about that. Only the ROOT spelling `virtual;
+              abstract;` allocates, and it still does: isOverride is False
+              there.
+
+              What it cost: for A -> B -> C with B declaring `override;
+              abstract;` and C supplying a body, B minted slot 1, C's override
+              found slot 1 through B, and A's slot 0 still pointed at TA.Say.
+              So a call through an A-typed reference to a C instance ran A's
+              body and printed a plausible wrong answer with no diagnostic,
+              while `TB(a).Say` and `TC(a).Say` both reached C -- the two
+              spellings that look like the harder cases were the ones that
+              worked. bug-p-an-abstract-override-in-the-middle-of-a-chain-hides-the-concrete-override-below-it }
+            if isVirtual and (not isOverride) then
             begin
               slot := UClsVirtCount[ci];
               UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
