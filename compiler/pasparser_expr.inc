@@ -8204,10 +8204,18 @@ begin
           exprNode := ASTLeft[currArg];
           if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
           begin
+            { AN_SLICE is here because A SLICE OF AN LVALUE IS AN LVALUE: `a[3..6]`
+              names the caller's own elements, and passing it to `var u: array of
+              Char` must let the callee write them. That is the entire reason the
+              slice is a node and not a `Copy` desugar -- a copy is a perfectly
+              good VALUE and discards exactly this. Refusing it here would have
+              left the const direction working and the var direction refused,
+              which is the half-a-feature shape this file keeps recording. }
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
                     (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
                     (ASTKind[exprNode] = AN_METHODREF) or
-                    (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
+                    (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR) or
+                    (ASTKind[exprNode] = AN_SLICE)) then
             begin
               { ONE rule, not a list of type kinds: only an explicit `var`/`out`
                 needs a true lvalue. See ByRefArgNeedsLvalue for why the

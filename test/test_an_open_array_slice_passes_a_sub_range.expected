@@ -1,0 +1,13 @@
+static whole=21 len=6
+static 2..4=9 len=3
+static 1..2=3 len=2
+static 6..6=6 len=1
+neg whole=250 len=5
+neg -1..1=150 len=3
+dyn whole=2100 len=6
+dyn 1..3=900 len=3
+ptr 0..2=6 len=3
+ptr 3..5=15 len=3
+var slice=abCDEFghij
+var again=ABCDEFghij
+var whole=ABCDEFGHIJ

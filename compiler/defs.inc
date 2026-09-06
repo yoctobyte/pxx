@@ -542,6 +542,28 @@ const
     would have put a value-consuming node inside that set. }
   AN_LABELADDR    = 101; { ASTSOffset/SLen = label name in TokChars; &&label -> its code address }
   AN_GOTO_INDIRECT = 102; { ASTLeft = address expression; goto *expr }
+  AN_SLICE        = 103; { `a[lo..hi]` passed to an open-array parameter: Left = the base
+                           (a static array, a dynamic array, a typed pointer, or a string),
+                           Right = AN_PAIR(lo, hi). ASTTk = the ELEMENT kind.
+
+                           A SLICE IS NOT A VALUE, IT IS A VALUE PLUS A WRITE-BACK
+                           OBLIGATION, and that is why it is a node rather than a desugar.
+                           `Copy(a, lo, hi - lo + 1)` is the obvious lower level and was
+                           measured before minting this (2026-09-06, aa3669390683): it
+                           handles the CONST direction over a DYNAMIC array correctly,
+                           REFUSES a static array outright (`dynamic-array Copy needs a
+                           dynamic-array first argument`) -- which is tarray7's first
+                           slice -- and cannot carry the `var` direction at all, because a
+                           copy discards exactly the obligation that `uppercase(f[1..10])`
+                           consists of. No existing node carries an obligation, so there
+                           is no lower level to write this at.
+
+                           NOT an AN_INDEX whose subscript is secretly an AN_PAIR. That
+                           shape reads as an ordinary element load in every site that does
+                           not know to look, and IRLowerCallArg enumerates argument SHAPES
+                           -- so the failure mode would be a wrong answer with no
+                           diagnostic, in the one function whose job is to tell shapes
+                           apart. fpc-testsuite tarray7. }
   AN_ADDR         = 35;
   AN_DEREF        = 36;
   AN_SET_LIT      = 37;

@@ -2273,6 +2273,23 @@ begin
     Result := IRLowerAddress(ASTLeft[node]);
     Exit;
   end;
+  { THE ADDRESS OF A SLICE IS THE ADDRESS OF ITS FIRST ELEMENT: `a[lo..hi]` starts
+    at `&a[lo]`. Retagging the node to AN_INDEX over the low bound and re-entering
+    is deliberate -- the index arm below already knows how to subtract a base's low
+    bound, apply the element stride, walk a `p^[i]` pointer base and a frozen-string
+    base, and every one of those is a thing a slice can be taken of. A slice arm
+    that computed `base + lo * elemSize` itself would be a second copy of that
+    knowledge and would be the one that stayed wrong when the first was fixed.
+
+    This is also what makes the `var` direction free. The copy-OUT queue stores the
+    ARGUMENT NODE and re-lowers it with IRLowerAddress at flush time, so a slice
+    written back lands at `&a[lo]` for the same reason it was read from there --
+    one answer, asked twice. }
+  if ASTKind[node] = AN_SLICE then
+  begin
+    Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
   { A method REFERENCE in an ADDRESS position -- `TMethod(TSel(obj.M)).Code`,
     which is how rtl-generics reads a comparer's code half. There was a VALUE
     arm (the code half alone, in IRLowerAST) but no ADDRESS arm, so reading a
@@ -4295,6 +4312,8 @@ function StaticArraySourceInfo(argAST: Integer; var cnt: Integer;
                                var elemTk: TTypeKind; var elemRec: Integer;
                                var elemSz: Integer): Boolean;
 var sasSym, sasRec, sasCap: Integer; sasField: AnsiString;
+    sasSliceBase: Integer;   { `a[lo..hi]`: the base under the slice's `base[lo]` node }
+    sasSliceLo, sasSliceHi: Int64;   { `a[lo..hi]`: the folded bounds -- Int64 because ASTConstIntValue answers in the constant's own width, and the SLICE LENGTH is what narrows to Integer, not the bounds }
 begin
   Result := False;
   cnt := 0; elemTk := tyUnknown; elemRec := REC_NONE; elemSz := 0;
@@ -4329,6 +4348,106 @@ begin
   else if ASTKind[argAST] = AN_INDEX then
   begin
     if not NDRowSourceInfo(argAST, cnt, elemTk, elemRec) then Exit;
+    Result := True;
+  end
+  { `a[lo..hi]` -- A SLICE IS ITS BASE WITH TWO NUMBERS CHANGED, so it is answered
+    by asking about the base and then overriding the COUNT. Everything else the
+    caller needs -- element kind, element record, element size, the frozen-string
+    capacity fixed up below -- is the base's and is already correct.
+
+    Answering here rather than in a new arm of IRLowerCallArg is the whole point:
+    the two copy paths (a frame buffer, and a heap dyn temp when the copy is
+    large) and the `var` copy-OUT registration are all gated on this function
+    succeeding and on IRLowerAddress of the same node, and IRLowerAddress knows a
+    slice starts at its first element. So a slice rides the four paths that
+    already exist and are already tested, and NOTHING in IRLowerCallArg changed.
+
+    CONSTANT BOUNDS ONLY, and it refuses rather than guesses. `cnt` reaches
+    AllocArray as a frame-buffer size and PendOAWBSize as a byte count, both
+    compile-time Integers, so a runtime bound has nowhere to be stored. A slice
+    with a runtime bound falls out of here as False, which reaches the
+    IR_UNSUPPORTED tail -- a named refusal naming the node, not a wrong length.
+    fpc accepts runtime bounds and burning that is the next increment;
+    fpc-testsuite tarray7 spells every one of its slices with constants. }
+  else if ASTKind[argAST] = AN_SLICE then
+  begin
+    if ASTRight[argAST] < 0 then Exit;
+    { THREE BASE SHAPES, AND THE FIRST ONE IS THE ONLY ONE THAT ALREADY HAD AN
+      ANSWER. A slice can be taken of a static array (this function's own
+      subject), of a typed POINTER over a heap block, and of a DYNAMIC array --
+      tarray7 spells all three within twenty lines, and only the static one is
+      something a whole-array argument can be, which is why the other two have no
+      existing path to inherit. The pointer and dynamic arms therefore read the
+      element kind off the SYMBOL and derive the size, rather than borrowing a
+      shape resolver that is (correctly) about static arrays. }
+    sasSliceBase := ASTLeft[ASTLeft[argAST]];   { Left is `base[lo]`; its Left is the base }
+    if not StaticArraySourceInfo(sasSliceBase, cnt, elemTk, elemRec, elemSz) then
+    begin
+      if ASTKind[sasSliceBase] <> AN_IDENT then Exit;
+      sasSym := ASTIVal[sasSliceBase];
+      if (sasSym < 0) or (sasSym >= SymCount) then Exit;
+      if Syms[sasSym].IsArray and (Syms[sasSym].ArrLen < 0) and
+         (SymDynDepth[sasSym] = 1) and (SymDynElemRowLen[sasSym] = 0) then
+      begin
+        { a DYNAMIC array: its ELEMENTS are what the slice names, so the element
+          kind is the symbol's ElemType exactly as for a static array. Depth 1
+          and no fixed row on purpose -- a deeper element is a HANDLE and a fixed
+          row is bytes inside the block, and neither is a thing this copy knows
+          the width of. Both refuse here rather than copy a wrong stride. }
+        elemTk  := Syms[sasSym].ElemType;
+        elemRec := Syms[sasSym].ElemRecName;
+      end
+      else if (Syms[sasSym].TypeKind = tyPointer) and
+              (Syms[sasSym].PtrElemTk <> tyUnknown) then
+      begin
+        { a typed POINTER over a heap block: `b: PInteger; b[0..2000]`. The
+          pointee kind is the element kind. tyUnknown is the untyped-Pointer
+          sentinel AND what a path that never recorded a pointee leaves behind,
+          so requiring a POSITIVE pointee keeps a missing write from becoming a
+          stride of whatever tyUnknown measures. }
+        elemTk  := Syms[sasSym].PtrElemTk;
+        elemRec := Syms[sasSym].PtrElemRec;
+      end
+      { A STRING BASE IS REFUSED, AND IT IS NOT THE SLICE THAT IS BROKEN.
+        `uppercase(f[1..10])` (tarray7's last two rows) needs `@f[lo]`, and a
+        string variable assigned a LITERAL reports the LITERAL's address as its
+        own. Measured 2026-09-06 at compiler d52be707f9cd, with no slice in the
+        program at all: for `f, h: string` and `g: AnsiString` all assigned
+        'abcd', `@f[1]`, `@g[1]` and `@h[1]` are ALL 4357408 -- one address for
+        three variables -- while fpc reports three. The VALUES are independently
+        correct (`f[1] := 'Z'` leaves g and h alone), so the storage is separate
+        and only the ADDRESS is wrong; a string built at runtime instead of from
+        a literal reports correctly. Taking the address of a string element does
+        not uniquify the string.
+
+        A slice can only be as right as that address, and its `var` copy-OUT
+        WRITES through it -- so with the string arm enabled the write landed in
+        the shared literal and every other variable holding that literal changed
+        with it. Left platonic and refused rather than worked around, per
+        CLAUDE.md's rule for hitting a compiler bug:
+        bug-a-the-address-of-a-string-element-is-the-literals-address.
+
+        NOTE WHAT THE CORPUS ROW DID HERE. tarray7 EXITS 0 with the string arm
+        enabled, because it slices `f[1..10]` -- the whole string -- so the write
+        went to the literal and was read back from the literal, self-consistently.
+        `f[2..5]` in a test of my own is what separated them. A row that asserts
+        values can still be asserting them about the one case whose bounds cannot
+        be wrong. }
+      else
+        Exit;
+      elemSz := TypeStorageSize(elemTk, elemRec);
+      if elemSz <= 0 then Exit;
+    end;
+    if not ASTConstIntValue(ASTLeft[ASTRight[argAST]], sasSliceLo, 0) then Exit;
+    if not ASTConstIntValue(ASTRight[ASTRight[argAST]], sasSliceHi, 0) then Exit;
+    if sasSliceHi < sasSliceLo then Exit;
+    cnt := Integer(sasSliceHi - sasSliceLo) + 1;
+    { elemSz is the base's and is already right; the frozen-string fixup below
+      re-derives it from sasCap, which this arm leaves at 0 -- so a slice of an
+      `array[..] of string[N]` would take the kind-only width the fixup exists to
+      correct. Refused for now rather than silently truncated, which is the
+      defect that fixup's own comment records at length. }
+    if TypeIsFrozenString(elemTk) then begin Result := False; Exit; end;
     Result := True;
   end;
   if not Result then Exit;
@@ -4468,6 +4587,24 @@ var argTk: TTypeKind;
   isComIntfArg: Boolean;
   pvSinkIsProcVar: Boolean;
 begin
+  { A SLICE THIS FUNCTION CANNOT BUILD IS REFUSED HERE, BY NAME, AND NOT LEFT TO
+    FALL THROUGH. Measured 2026-09-06: with the string base merely declining to
+    resolve, `Upper(g[4..7])` still COMPILED -- the argument fell past both
+    open-array blocks into the generic path, which passed something plausible and
+    silently dropped the write-back, so the program ran, exited 0 and changed
+    nothing. That is strictly worse than the garbage length it replaced, because
+    a wrong length is at least visible.
+
+    So the refusal is stated at the top rather than implied by an arm that does
+    not fire. A fall-through is not a diagnostic; it is a diagnostic's absence
+    wearing one. }
+  if (argAST >= 0) and (ASTKind[argAST] = AN_SLICE) then
+  begin
+    if not StaticArraySourceInfo(argAST, caCount, caElemTk, caElemRec, caElemSz) then
+      Error('a slice a[lo..hi] needs constant bounds and an array, dynamic array '
+            + 'or typed-pointer base; a STRING base is blocked on '
+            + 'bug-a-the-address-of-a-string-element-is-the-literals-address');
+  end;
   { A by-VALUE OPEN ARRAY gets its OWN COPY — FPC's rule, and the one parameter
     kind pxx got wrong. `procedure P(x: array of Integer)` then `x[0] := 666`
     was visible to the caller, silently, because a dynamic-array argument passes

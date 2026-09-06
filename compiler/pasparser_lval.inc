@@ -528,6 +528,7 @@ var
   cpIsAssign: Boolean;
   cpName: AnsiString;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
+  sliceLo, slicePair, sliceNode: Integer;   { `a[lo..hi]`: the low bound already parsed as a subscript, and the AN_PAIR that carries both bounds }
   baseNode, baseRec, fIdx, aliasIdx: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean; mcFin: Boolean;
@@ -2108,6 +2109,65 @@ begin
         flattened 1-D index: m[i0,i1,..]/r.m[..] (commas) and m[i0][i1]..
         (consecutive brackets). Handled here so no bogus intermediate m[i0] is
         built. NodeArrNDInfo fills NDInfo* (dims) for the base. }
+      { `a[lo..hi]` -- a SLICE, not a subscript. Detected here because this is
+        the one place that has already parsed the first subscript expression and
+        can still see whether a `..` follows it; every other spelling of "an
+        open-array argument" is decided far downstream in IRLowerCallArg, which
+        by then has only a node kind to go on.
+
+        The node is RETAGGED rather than freshly allocated: AN_INDEX and
+        AN_SLICE hold the same Left, and the subscript already parsed is the
+        slice's LOW bound, so there is nothing to rebuild. Same retag-not-
+        rebuild argument as AN_SET_LIT -> AN_ARRAY_CTOR.
+
+        NO ELEMENT-KIND RESOLUTION HERE ON PURPOSE. The lowering already knows
+        how to get an element kind, size and base address out of a whole-array
+        argument (StaticArraySourceInfo and its siblings); a slice differs from
+        a whole array in exactly two numbers -- where it starts and how many --
+        so resolving the element kind a second time in the parser would be a
+        second answer to a question that already has one. ASTTk carries the
+        base's element kind only where it is free (an AN_IDENT base), for
+        overload matching. }
+      if CurTok.Kind = tkDotDot then
+      begin
+        sliceLo := CurASTNode;
+        Next;                       { '..' }
+        ParseExpr;
+        slicePair := AllocNode(AN_PAIR);
+        ASTLeft[slicePair]  := sliceLo;
+        ASTRight[slicePair] := CurASTNode;
+        { LEFT IS THE FIRST ELEMENT'S LVALUE, NOT THE BASE -- the AN_INDEX just
+          built IS `base[lo]`, so keep it and hang the slice off it.
+
+          The first shape had Left = the base and let IRLowerAddress synthesize
+          `base[lo]` on demand. That ALLOCATED AN AST NODE DURING LOWERING, and
+          the `var` copy-OUT re-lowers this same node AFTER the call to find
+          where to write back -- so the write-back's address came from a node
+          minted at flush time. Measured 2026-09-06: `Touch(f[1..10])` wrote 'Z'
+          into f correctly AND into an unrelated AnsiString `g` that merely held
+          the same literal; the same program with the slice replaced by
+          `f[1] := 'Z'` was correct. Building it ONCE, here, removes the
+          allocation from the lowering entirely -- and the read and the write-back
+          now share one node rather than two nodes that agreed by construction. }
+        { The subscript the loop parsed was never stored -- the branches below
+          assign ASTRight[indexNode] and this one bypasses them -- so `base[lo]`
+          is only an lvalue once its LOW BOUND is actually in it. Without this
+          the node lowered as an index with no offset:
+          `invalid IR node reference in index offset`. }
+        ASTRight[indexNode] := sliceLo;
+        sliceNode := AllocNode(AN_SLICE);
+        ASTLeft[sliceNode]  := indexNode;
+        ASTRight[sliceNode] := slicePair;
+        if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+           (ASTIVal[node] < SymCount) then
+          ASTTk[sliceNode] := Ord(Syms[ASTIVal[node]].ElemType);
+        Expect(tkRBrack, ']');
+        node := sliceNode;
+        tk := IntToTypeKind(ASTTk[sliceNode]);
+        CurASTNode := node;
+        LastExprTk := tk;
+        continue;
+      end;
       ndFlat := ParseNDSubscriptTail(indexNode, node, isND);
       if ndFlat >= 0 then
         ASTRight[indexNode] := ndFlat

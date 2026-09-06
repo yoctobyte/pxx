@@ -1751,10 +1751,19 @@ begin
 
               THE FIELDS SET HERE ARE EXACTLY THE ALIAS ARM'S, deliberately: the
               symbol the two spellings produce must be indistinguishable, because
-              three separate functions answer "how deep is this array"
-              (NodeDynDepth, DynArrayNodeDepth, NodeArrNDInfo) and two of them
-              are already known to disagree. A construct whose two spellings
-              build one symbol cannot be the place a fourth divergence appears.
+              TWO separate functions answer "how deep is this array"
+              (NodeDynDepth in ast_arena.inc, NodeArrNDInfo in pasparser_call.inc)
+              and they answer it differently -- NodeArrNDInfo refuses to answer
+              for a rank-1 array at all. A construct whose two spellings build one
+              symbol cannot be the place a third divergence appears.
+
+              CORRECTED 2026-09-06: this said THREE and named DynArrayNodeDepth,
+              which `45391912a` deleted on 2026-09-03 -- three days before the
+              count was relayed to me and an hour before I committed it. The
+              conclusion is unchanged and the premise was weaker than stated. A
+              comment naming a function that does not exist is invisible to the
+              build, the gate, and a reviewer reading the diff, which is exactly
+              how it travelled.
               refactor-a-two-dyn-array-depth-functions-that-drift }
             if VDDynDepth > 1 then
               Error('array of array of <fixed array type> not supported');

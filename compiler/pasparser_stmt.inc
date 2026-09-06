@@ -7808,7 +7808,7 @@ begin
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
                       (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
-                      (ASTKind[exprNode] = AN_METHODREF)) then
+                      (ASTKind[exprNode] = AN_METHODREF) or (ASTKind[exprNode] = AN_SLICE)) then
               begin
                 { The OVERLOADED-call twin of the check in pasparser_expr.inc,
                   and the reason both now call one predicate: the two copies had

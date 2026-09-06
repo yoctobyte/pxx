@@ -6240,6 +6240,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_dynamic_array_type_name_can_construct_a_literal \
 	  "$$($(TESTTMP)/test_dynarr_ctor26)" \
 	  "$$(cat test/test_a_dynamic_array_type_name_can_construct_a_literal.expected)"
+	# `a[lo..hi]` passed to an open-array parameter. A SLICE IS NOT A VALUE, IT IS
+	# A VALUE PLUS A WRITE-BACK OBLIGATION -- the `var` rows are what no `Copy()`
+	# desugar could carry. EVERY SLICE ROW IS PAIRED WITH ITS WHOLE-ARRAY SIBLING
+	# and none of them spans the whole base: while this was built, a whole-base
+	# slice was correct while a proper sub-range was not, and tarray7 spells only
+	# the whole-base case for strings. A row whose bounds cannot be wrong cannot
+	# report that the bounds are wrong. The `neg` rows use (i+5)*10 rather than
+	# i*10 because the symmetric version sums to 0 -- the same 0 a slice returning
+	# nothing prints.
+	./$(COMPILER) test/test_an_open_array_slice_passes_a_sub_range.pas $(TESTTMP)/test_slice26
+	tools/expect_same.sh test_an_open_array_slice_passes_a_sub_range \
+	  "$$($(TESTTMP)/test_slice26)" \
+	  "$$(cat test/test_an_open_array_slice_passes_a_sub_range.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

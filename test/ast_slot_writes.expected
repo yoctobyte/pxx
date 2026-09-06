@@ -1001,6 +1001,7 @@ AN_PAIR Left pair1
 AN_PAIR Left rbVal
 AN_PAIR Left rngGt
 AN_PAIR Left seqN
+AN_PAIR Left sliceLo
 AN_PAIR Left smRaiseCall
 AN_PAIR Left startNode
 AN_PAIR Left stepNode
@@ -1014,6 +1015,7 @@ AN_PAIR Left thenSeq
 AN_PAIR Left vtRaiseCall
 AN_PAIR Right -1
 AN_PAIR Right AllocNode(AN_INT_LIT)
+AN_PAIR Right CurASTNode
 AN_PAIR Right DefaultArgValueNode(mpi, rbK)
 AN_PAIR Right DefaultArgValueNode(procIdx, k)
 AN_PAIR Right ParseSetElementAST
@@ -1103,6 +1105,8 @@ AN_SET_EXCL Right CurASTNode
 AN_SET_LIT Left -1
 AN_SET_SIGNAL Left opNode
 AN_SET_SIGNAL Right valNode
+AN_SLICE Left indexNode
+AN_SLICE Right slicePair
 AN_STR_FROM_CHAR Left node
 AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
