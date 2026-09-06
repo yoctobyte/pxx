@@ -3,8 +3,8 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-blocked-by: [bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]
-summary: "ATTEMPTED 2026-09-01, RE-MEASURED 2026-09-05 -- premise CURRENT, two of three walls down. uPSUtils compiles CLEAN on the pinned stable (-Mobjfpc, no other flags). uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661); (3) STILL OPEN and now LOCATED, in the compiler, not here: `tstring` is `10: (tstring: Pointer)` in a variant record, so `tbtstring(vari^.tstring)` reinterprets a POINTER SLOT as a managed string, and pxx treats that cast as a value-level no-op. The attempt stops at line 2753 with `SetLength expects a string variable in IR codegen`; the idiom appears 93 times in uPSCompiler.pas alone and is how the codebase stores every string. THE REFUSAL IS THE LOUD HALF ONLY -- measured 2026-09-05, the same cast in an rvalue position does NOT refuse, it returns the pointer: `t(p) := 'abc'; writeln(t(p))` prints `4261104` and `Length(t(p))` answers the pointer, against fpc's `abc` and `3`, while the STORE is correct (`p = Pointer(s)` is TRUE). So lifting the refusal alone would turn a hard stop into silent wrong values across all 93 sites. Boundary varied and measured: casts over a string variable, a `^AnsiString` deref and an AnsiString record field ALL work; only a Pointer-typed slot fails, with or without indirection. Compiler gap filed in the owning lane as [[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]], with the measured finding that a parser-only retype is insufficient (the IR still lowers a pointer load). uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, the reversible half of the ticket's own two options."
+blocked-by: [bug-p-at-over-a-class-base-consumes-only-one-selector]
+summary: "RE-MEASURED 2026-09-06 at d4fe6ede3 / compiler e7d85ae887d9 -- premise CURRENT, and THREE of the four recorded walls are now down. uPSUtils still compiles CLEAN. (1) missing PByteArray -- fixed. (2) a value cast to a string alias dropped a following INDEX -- fixed 9339d6661. (3) THE STRING-ALIAS-CAST-OVER-A-POINTER-SLOT WALL IS FIXED and this summary said otherwise: [[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]] is in done/, and verified by RUNNING it rather than by reading the folder -- `t(p) := 'abc'; writeln(t(p))` now prints `abc` (was `4261104`), Length answers 3 (was the pointer), SetLength answers `ab` (was a hard refusal), all four rows byte-identical to fpc 3.2.2. (4) A NEW WALL WAS FOUND AND FIXED IN THE SAME SESSION: uPSCompiler catches `EZeroDivide` and stopped at `on: unknown exception class`, because pxx had NO float exception family at all -- EInvalidOp descended from Exception, EZeroDivide/EOverflow/EUnderflow did not exist, and three FLOAT runtime errors raised INTEGER classes, so `on E: EMathError` caught nothing. Fixed in lib/rtl/sysutils.pas at d4fe6ede3, all 7 hierarchy rows and 10 test lines identical to fpc, guarded by test/lib_math_exception_tree.pas. uPSCompiler's wall has therefore moved 2753 -> 3776 -> 5031, and the CURRENT one is `@Func.Attributes.Items[i].AType.OnApplyAttributeToProc`: `@` over a CLASS base consumes only ONE selector, filed as [[bug-p-at-over-a-class-base-consumes-only-one-selector]] and now this ticket's blocked-by. AND THE uPSRuntime CLAIM WAS STALE TOO: this summary said uPSRuntime `stops earlier on a {$IF} comparison`. With `--mimic-fpc` that wall is gone -- it now parses to line 3049 and stops on `function read(var Data; Len: Cardinal): Boolean`, a nested helper, because `read`/`write`/`readln`/`exit`/`halt` cannot be DECLARED as user routines here while fpc accepts all five (`writeln` we refuse and so does fpc -- that row is parity). Filed as [[bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines]]. So the two remaining walls are both compiler-lane, both located, both with reduced repros, and NEITHER is a library gap. NOT vendored -- probed against a shallow clone outside the repo (44 units in Source/)."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -428,3 +428,53 @@ answering the pointer, because the IR lowers the load from the symbol. Tried,
 measured, reverted — a wrong number is not improved by becoming an OOB read.
 
 This ticket is now `blocked-by` that one rather than by an unlocated wall.
+
+## 2026-09-06 (frankH) — three walls down, both survivors are compiler-lane
+
+Picked up off `ticket_age` as the oldest unblocked row. The staleness check at
+the head found the `blocked-by` blocker in `done/`, which made the summary's
+headline claim false, so re-measuring was the deliverable.
+
+**Verified by running, not by reading the folder** — `done/` is a claim about
+the past and the repro is a claim about this binary:
+
+```
+rvalue : abc        (recorded: 4261104, the pointer as a number)
+length : 3          (recorded: the pointer)
+setlen : ab         (recorded: SetLength expects a string variable in IR codegen)
+store  : TRUE
+```
+
+All four identical to `fpc 3.2.2 -Mdelphi`.
+
+### The wall ladder, uPSCompiler.pas
+
+| at | wall |
+| --- | --- |
+| 2753 | string-alias cast over a pointer slot — **fixed** (`9339d6661`) |
+| 3776 | `on: unknown exception class` (`EZeroDivide`) — **fixed here** (`d4fe6ede3`) |
+| 5031 | `@Func.Attributes.Items[i].AType.OnApplyAttributeToProc` — **open** |
+
+The middle one was not a missing name. pxx had **no float exception family**:
+`EInvalidOp` descended from `Exception`, `EZeroDivide`/`EOverflow`/`EUnderflow`
+did not exist, and `reZeroDivide`/`reOverflow`/`reUnderflow` all raised *integer*
+classes — so `on E: EMathError`, which is how real code catches any float error
+and exactly what uPSCompiler writes, caught nothing at all. Silent, not a
+diagnostic. Fixed against the oracle, guarded by
+`test/lib_math_exception_tree.pas`, whose two `FALSE` rows are the actual test.
+
+### uPSRuntime — the `{$IF}` wall never existed under `--mimic-fpc`
+
+This ticket recorded uPSRuntime as *"not reached: it stops earlier on a `{$IF}`
+comparison"*. That was measured without the flag. With `--mimic-fpc` it parses
+to **line 3049**, exactly as [[feature-embed-dwscript-rtti]] predicted when it
+found the same `{$IF CompilerVersion>21.0}` refusal sitting inside `{$IFNDEF
+FPC}`. The real wall is a nested `function read(...): Boolean` — see
+[[bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines]], where the
+five-name divergence set is enumerated and `writeln` is the parity row that stops
+the fix being "un-reserve the builtins".
+
+### What is left
+
+Both remaining walls are **Track P compiler gaps with reduced repros**, and
+neither is a library gap. Nothing here needs `lib/` work to proceed.
