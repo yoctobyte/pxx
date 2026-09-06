@@ -14073,3 +14073,90 @@ removing fixed tables from `defs.inc`.
 > interaction**, and it surfaced because the routing carried the SHAPE of the pending work
 > ("~10 new columns on MAX_TEMPLATE_TOKENS") rather than only its slug. A route that names the
 > mechanism gets an answer; a route that names the ticket gets an acknowledgement.
+
+## AN OFFSET-0 SYMPTOM CERTIFIES ITS OWN BUG — the first field is correct through a broken record row, so every test that reads it passes
+
+frankS, 2026-09-06 (`a952d4591`). Five lines of top-level Pascal, no class, no generics:
+
+```pascal
+PItem = ^TItem;
+TItem = record ... next: PItem; end;
+TIter = PItem;              { an alias of a FORWARD pointer alias }
+```
+
+`TIter` copies the triple **while `PItem` is still unresolved**, and the end-of-section repair
+pass finds its rows **BY TARGET NAME** — which only the `X = ^T` spelling records. So the
+`TIter` row was invisible to the repair and kept `REC_NONE` for the life of the program.
+
+> **`it^.data` is CORRECT through the broken row, because `data` sits at offset 0.** Only the
+> SECOND field moves. So **any test that reads the first field passes and certifies the
+> defect** — and the first field is what a reduction reaches for, what an example uses, and
+> what a reviewer checks.
+
+This is the `## CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT` family with the
+collision supplied by **memory layout** rather than by a type default: at offset 0, "the record
+type was resolved" and "no record type was recorded" produce the same address. **Any
+record-shaped probe must read a field that is not first**, and any green on a one-field record
+says nothing at all.
+
+### And the repair was keyed on a SPELLING, not on the thing
+
+The fixup pass matches by target name, which **only `X = ^T` writes**. `TIter = PItem` is the
+same relationship expressed differently and leaves no key. **A repair pass that indexes on one
+syntactic form silently declines every synonym**, and declines *quietly* — there is no unmatched
+row to report, because the row was never in the index.
+
+## THREE FOR THREE: EVERY DEFECT FOUND THROUGH A GENERICS ROW TONIGHT WAS NOT A GENERICS BUG
+
+Recorded as a **confirmed prediction**, which is rarer than a finding. The generalisation
+banked earlier the same night — *a corpus row's skip reason names the ROW's subject, not the
+DEFECT's* — was written from one instance (`tgeneric15`, a VMT ordering bug). It then held for
+two more without being consulted: `tgeneric8` reduced to five lines of top-level Pascal with no
+class in it, and the `tgeneric83/84/85` cluster turned out to be a bare unspecialized generic
+name in **type position**.
+
+> **Where a corpus is partitioned by feature, the partition labels every defect it finds.**
+> Three for three in one session is not luck; it is what the sampling frame does. The control
+> remains a specimen from OUTSIDE the partition with the same body.
+
+### The six-row "cluster" was not one cluster, and measuring split it three ways
+
+Six `{%FAIL}`-but-compiles-clean rows, described to this seat as candidates for **one tag**.
+Measured individually: `tgeneric26` is a genuine **dialect pass** (a type parameter in a variant
+part, which fpc forbids, works and aliases correctly); `tgeneric83/84/85` are **one defect and
+not the one they claimed**; `tgeneric21` said *"semantics unverified"* and now is — **we accept
+the nested-generic declaration and refuse every use, so we do not support nested generics, we
+merely fail to reject them.**
+
+**A group is only valid for the property it was formed on**, and *"all six share an observable"*
+is not *"all six share a cause"* — the observable here was the weakest possible one, a
+`%FAIL` row passing, which `## A %FAIL ROW ASSERTS ONLY THAT THE COMPILE IS REJECTED` already
+says carries no information about WHICH refusal.
+
+## `grep -c '<tag>:'` COUNTS THE STRING IN PROSE, AND SKIP REASONS ARE PROSE ABOUT TAGS
+
+Same session, same hour. `grep -c 'gap:'` on `pxx.skip` gave **91**. Counting by **prefix**
+gives **88 gap, 22 wontfix, 5 decided, 2 accepts-invalid = 117**. Several reasons say *"gap"*
+while being tagged `wontfix`.
+
+> **The instrument answered a different question and did not error** — the same shape as
+> CLAUDE.md's `ls devdocs/progress/*/` open-ticket count, one file down. **A tag is a position,
+> not a substring**, and any file whose values are prose about the vocabulary will do this.
+
+**And the taxonomy has FOUR tags, not the three everyone was working from.** `decided:` (5 rows,
+old-style TP `object` types) and `accepts-invalid:` (2 rows, access control unenforced by
+policy) are neither gap nor wontfix — so **any earlier burn report reading "gap + wontfix"
+does not cover the file.** An enumeration nobody re-derives becomes a closed world by habit.
+
+### And the sizing probe that nearly certified itself: 8-vs-4 LOOKS LIKE A MEASUREMENT
+
+The first probe for the `tgeneric83/84/85` defect used `T = Integer`, where the true pointee
+size is **8** and the blank answer is **4**. The rule as written warns when the expected value
+**equals** the failure value. Here they differ — **and both are plausible sizes**, so `4` read
+as *"a size, just wrong"* rather than *"nothing was recorded."* Only re-cutting the record at
+**32 bytes** separated them.
+
+> **The condition is weaker and more dangerous than "expected == default": it is "expected and
+> default are both plausible answers to the question asked."** A wrong-looking number invites a
+> hunt for the arithmetic error; only a number that **cannot be a size at all** for this input
+> names the blank. Pick the probe whose failure value is ABSURD, not merely different.
