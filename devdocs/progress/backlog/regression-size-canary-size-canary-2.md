@@ -111,3 +111,6 @@ finding rests on that single premise.
 The header says so: nothing day-to-day depends on this path. That is exactly why it has
 sat since **2026-09-05T19:19:45Z** with no owner. An advisory red is the one that gets
 stepped over, and this one is carrying a real number.
+
+## Log
+- 2026-09-06 — the seven watcher saw `size-canary#src:tools/size_canary.py` GREEN at 6bf8fa1546d8 (tier native) and did NOT close this: this is a repeat stub (`regression-size-canary-size-canary-2`, not `regression-size-canary-size-canary`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
