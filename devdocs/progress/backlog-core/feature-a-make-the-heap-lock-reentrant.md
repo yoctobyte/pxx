@@ -9,7 +9,7 @@ owner: frankH
 created: 2026-09-06
 found-by: owner (decision), vehicle filed by frankuser
 blocked-by: []
-summary: "DECIDED 2026-09-06 (decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, arm (a)). The reentrancy half of feature-a-reentrant-heap-lock-and-per-thread-arenas -- parked by the owner 2026-08-21 with an explicit unpark trigger, 'a deadlock, or a new managed member kind whose release cannot be hoisted out of the lock' -- is unparked because a deadlock arrived: PXXClassFinalizeManaged re-enters itself through kind 6 via PyObjFinalize on a twelve-line NilPy program, one instance, one thread, exit 212. THIS IS THE VEHICLE TICKET: it closes THREE open leaks under one lock and unblocks __del__. A DEPTH COUNTER LOCAL TO THE WRAPPER IS NOT A SUBSTITUTE and this is measured -- the nested PXXClassFinalize runs its kind-4 pass whose FreeMem takes the lock at a DIFFERENT codegen site, so a wrapper-local counter still deadlocks there. The cost objection on record ('every acquire grows an owner check, on the allocator's hot path') was formed BEFORE the magazine landed and has never been measured: GetMem/FreeMem on x86-64 now have a lock-free per-thread fast path emitted at the call sites, so the check is paid on the SLOW path. It may still be real on i386/aarch64/arm32, which keep the global lock. Take that number; do not re-open the fork on it."
+summary: "DECIDED 2026-09-06 (decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, arm (a)) and LANDED THE SAME DAY in three steps. The reentrancy half of feature-a-reentrant-heap-lock-and-per-thread-arenas -- parked by the owner 2026-08-21 with an explicit unpark trigger, 'a deadlock, or a new managed member kind whose release cannot be hoisted out of the lock' -- is unparked because a deadlock arrived. BSS_HEAP_OWNER/BSS_HEAP_DEPTH sit ON TOP of BSS_HEAP_LOCK, so the contended path and its exit-212 diagnosis are untouched; identity is EmitIoLockStubs' sequence (cached TLS tid, trusted only when rsp is inside that block's recorded stack bounds, else gettid), because gs:[0] is INHERITED across clone and recording the tid harder at thread start cannot help a thread that has no thread-start of ours. IT CLOSES TWO ROWS, MEASURED WITH A DISCRIMINATING CONTROL: the threadsafe dyn-array Variant/interface leak goes 7939 -> 3 live at the SAME allocation count, and the same program under -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis -- so the reentrancy is load-bearing rather than assumed; and the NilPy threadsafe class-field leak goes 19760 kB -> 1048 kB maxrss. THE COST OBJECTION HAD SUBSTANCE AND THIS SUMMARY USED TO SAY IT WAS NEVER MEASURED: it is +7% with the magazine on and +14% off, 1M construct/free iterations, min-of-5 interleaved, allocation-saturated upper bound on a shared box. Fork NOT re-opened -- the owner ruled with the objection in front of him. Narrowing avenue if it ever matters: only acquires inside a HeapLockedCallProcIdx1 region can nest, so every other site could keep the inline TTAS."
 ---
 
 # Make the heap lock reentrant
@@ -213,3 +213,70 @@ Only sites reachable inside a `HeapLockedCallProcIdx1` region can actually nest,
 so a reachability analysis would let the other sites keep today's inline TTAS.
 That is a real optimisation and a real complication; it should follow a
 measurement on a workload someone cares about, not this microbenchmark.
+
+## 2026-09-06 — STEPS 2 AND 3: the consumers, and the control that was missing
+
+### Step 2 — `PXXClassFinalize` finalizes its own managed fields again
+
+`{$ifndef PXX_TS_HARDLOCK}` is gone from `builtinheap.pas`'s
+`PXXClassFinalizeManaged(inst)` call, and `HeapLockedCallProcIdx1` is now
+stamped **once per compilation** in `EmitHeapLockStubs` rather than lazily by the
+`Free` desugar. Both of the desugar's duplicate second emissions are deleted —
+the `Free` one and the caught-exception one this session added earlier — because
+a second call is now a DOUBLE finalize, which is a double free rather than a leak.
+
+Stamping once is the load-bearing half: `HeapLockedCallProcIdx1` keys on the
+CALLEE, so one stamp wraps **every** call to `PXXClassFinalizeManaged` in the
+lock, including the one `PXXClassFinalize` now makes itself. Stamped by the
+desugar, a program that never desugars a `Free` never stamped it and the managed
+walk ran unlocked.
+
+NilPy under `--threadsafe`, 200000 constructions, maxrss:
+
+| | |
+| --- | --- |
+| pinned (pre-change) | **19760 kB** |
+| HEAD | **1048 kB** |
+
+### Step 3 — `ManagedElemKindLocked` stops degrading kinds 4 and 6
+
+The `if ThreadSafeMode then kind := 0` for COM interfaces and Variants is
+deleted. That degradation existed because `_Release -> Destroy -> FreeMem`
+re-entered the non-reentrant lock; it does not any more.
+
+`test_threadsafe_dynarray_releases_variant_and_interface_elements.pas`, 1000
+trips of each shape, `-dPXX_ALLOC_CENSUS`:
+
+| | allocs | frees | live |
+| --- | --- | --- | --- |
+| pinned (pre-fix) | 13891 | 5952 | **7939** |
+| HEAD | 13891 | 13888 | **3** |
+| HEAD `-dPXX_NO_REENTRANT_HEAPLOCK` | — | — | **rc=212, the deadlock** |
+
+Same allocation count on the two that finish, so it is the free side alone.
+
+### THE THIRD ROW IS THE POINT, AND IT IS THE CONTROL STEP 1 COULD NOT PRODUCE
+
+Step 1 shipped saying the reentrancy was not exercised by anything that needed
+it, because the probe I had — removing the `{$ifndef}` and running the twelve-line
+NilPy repro — gave rc=0 **and so did the pinned compiler on the same source**.
+A control that does not discriminate. It was not a small probe, it was the wrong
+population: that shape never re-enters.
+
+`-dPXX_NO_REENTRANT_HEAPLOCK` is the A/B switch that fixes it — same tree, same
+sources, reentrancy off — and it is kept, deliberately, as the positive control
+and as a one-flag bisect, the same role `-dPXX_NO_HEAP_MAG` plays for the
+magazine. **Lifting the degradation with it set makes this exact program hit
+Runtime error 212, with the heap-lock diagnosis on stderr.** Checked the message
+and not just the code, per frankuser's caution: a 212 arriving for another
+reason would pass the control and prove nothing. Exit 212 has one producer,
+`EmitHeapLockSlowStub`, and the stderr text names the heap lock.
+
+### Still open, deliberately
+
+Record COM-interface fields — the third row named at the bottom of the dyn-array
+bug — are NOT done here. `builtinheap.pas` still carries two
+`{$ifndef PXX_TS_HARDLOCK}` guards on `PXXRecordReleaseIntf` inside the
+dyn-array-of-records walks. They are the same shape and should fall the same
+way; they are left for a change that can measure them on their own rather than
+riding in on a commit whose control is about elements.

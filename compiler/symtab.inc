@@ -3532,9 +3532,11 @@ function ManagedElemKindLocked(elemTk, elemRec: Integer): Integer;
   refusing kind 5 too would leak for a hazard it cannot have. }
 begin
   ManagedElemKindLocked := ManagedElemKind(elemTk, elemRec);
-  if ((ManagedElemKindLocked = 4) or (ManagedElemKindLocked = 6)) and
-     ThreadSafeMode then
-    ManagedElemKindLocked := 0;
+  { THE DEGRADATION IS GONE: the heap lock is reentrant since
+    feature-a-make-the-heap-lock-reentrant, so an interface or variant element
+    whose release re-enters FreeMem no longer hangs. It leaked the whole array
+    on every release before -- bug-a-threadsafe-builds-leak-every-variant-and-
+    interface-element-of-a-dynamic-array, 3848 live per 1000 trips against 4. }
 end;
 
 function RecordNeedsZeroInit(recId: Integer): Boolean;

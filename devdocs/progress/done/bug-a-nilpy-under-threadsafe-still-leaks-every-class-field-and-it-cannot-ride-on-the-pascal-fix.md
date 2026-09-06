@@ -2,8 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: [feature-a-make-the-heap-lock-reentrant]
-summary: "NilPy under --threadsafe on x86-64 leaks every managed field of every reclaimed instance: 7672 kB -> 399524 kB on 200k constructions (re-measured 2026-09-02 at 94075d508), same shape and same size as the Pascal leak fixed 2026-08-31. THE FIX IS BUILT AND MEASURED AND CANNOT LAND YET. The ticket's own premise -- that there is no single place to put the acquire -- was wrong: HeapLockedCallProcIdx1 keys on the CALLEE, so removing the {$ifndef PXX_TS_HARDLOCK} at builtinheap.pas:4245, stamping that global once per compilation and deleting the Free desugar's now-duplicate second emission takes the leak to 7844 kB and keeps the three Pascal threadsafe finalize rows green 3/3. It also DEADLOCKS on a twelve-line program: a class whose field is a class instance, one instance, one thread, Runtime error 212. Only a class-instance field does it -- int, string, list and dict fields all release cleanly, and the same shape in Pascal runs rc=0, so the recursion is exactly PXXClassFinalizeManaged re-entering itself through kind 6 via PyObjFinalize. Reverted, not landed: a deadlock is worse than a leak. The way out is a fork (reentrant lock, which the owner parked, vs deferring the nested release), filed as decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, which now blocks this."
+summary: "FIXED 2026-09-06 -- 19760 kB -> 1048 kB maxrss on 200000 NilPy constructions under --threadsafe. The already-built fix landed once the owner ruled arm (a) and the heap lock gained owner+depth: the {$ifndef PXX_TS_HARDLOCK} is off builtinheap's PXXClassFinalizeManaged call so PXXClassFinalize finalizes its own managed fields for EVERY route to it, HeapLockedCallProcIdx1 is stamped once per compilation in EmitHeapLockStubs (it keys on the CALLEE, so one stamp wraps every call including PXXClassFinalize's own), and both duplicate second emissions are deleted because a second call is now a double finalize. CORRECTION TO THIS TICKET'S OWN ACCOUNT: the twelve-line repro does NOT deadlock at HEAD -- it runs rc=0 with reentrancy switched off too, measured, and so does a deeper shape. The reentrancy is load-bearing on the SIBLING row (the dyn-array Variant/interface leak), where turning it off gives rc=212. The fork's decision stands; this ticket's repro was the wrong instrument for it. Inert until the next pin."
 status: backlog
 owner: frankS
 ---
@@ -275,3 +274,56 @@ Two arms, one parked by the owner and one with a semantic cost — that is a for
 of intent rather than a defaulted decision, so it is filed as
 [[decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock]] and
 this ticket is `blocked-by` that.
+
+## 2026-09-06 — FIXED. The reverted change came back, on a lock that re-enters.
+
+The owner ruled arm (a) of the fork this was blocked on, the heap lock gained
+owner+depth (`feature-a-make-the-heap-lock-reentrant`), and this ticket's own
+already-built fix landed essentially as described:
+
+- `{$ifndef PXX_TS_HARDLOCK}` removed from `builtinheap.pas`'s
+  `PXXClassFinalizeManaged(inst)` call, so `PXXClassFinalize` finalizes its own
+  managed fields again, for **every** route to it and not only for the `Free`
+  desugar;
+- `HeapLockedCallProcIdx1` stamped **once per compilation** in
+  `EmitHeapLockStubs`, which is the load-bearing half — it keys on the CALLEE, so
+  one stamp wraps every call to `PXXClassFinalizeManaged` in the lock, including
+  the one `PXXClassFinalize` now makes itself. Stamped lazily by the desugar, a
+  program that never desugars a `Free` never stamped it and the walk ran
+  unlocked;
+- both duplicate second emissions deleted — the `Free` desugar's, and the
+  caught-exception one added earlier the same day — because a second call is now
+  a DOUBLE finalize, i.e. a double free rather than a leak.
+
+200000 NilPy constructions under `--threadsafe`, maxrss:
+
+| | |
+| --- | --- |
+| pinned (pre-change) | **19760 kB** |
+| HEAD | **1048 kB** |
+
+### A correction to this ticket's own account, worth having
+
+**The twelve-line repro does not deadlock at HEAD**, and that is measured rather
+than inferred. With the `{$ifndef}` removed and the stamp in place, it runs rc=0
+with reentrancy switched OFF (`-dPXX_NO_REENTRANT_HEAPLOCK`) as well as on, and a
+deeper NilPy shape — nested class fields plus a list and a dict — does the same.
+So the recursion this ticket describes is not reachable by that program on
+today's tree, and the leak fix above did not need the reentrant lock.
+
+Where the reentrancy IS load-bearing, demonstrated with a control that
+discriminates, is the sibling row:
+`bug-a-threadsafe-builds-leak-every-variant-and-interface-element-of-a-dynamic-array`.
+Lifting `ManagedElemKindLocked`'s degradation with reentrancy off makes that
+program hit rc=212 with the heap-lock diagnosis; with it on, 7939 live becomes 3.
+
+That does not make the fork's decision wrong — it makes this ticket's repro the
+wrong instrument for it. Recorded because the next reader would otherwise take
+"twelve lines, one thread, exit 212" as still reproducible and spend an hour on
+a program that no longer does it.
+
+### Inert until pinned
+
+This is a compiler-side change with a `lib/**` consumer (`builtinheap.pas` is a
+compiler build input), so `$(PXX_STABLE)` consumers do not get it until the next
+pin. Not waiting for one — landing forward and saying so, per the pin rules.

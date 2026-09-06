@@ -4517,9 +4517,17 @@ begin
     i := i + 1;
   end;
 
-{$ifndef PXX_TS_HARDLOCK}
+  { NO {$ifndef PXX_TS_HARDLOCK} ANY MORE. It was here because on x86-64
+    --threadsafe the heap lock is the codegen spinlock and this call's own
+    FreeMem re-enters it; the compensation was for the `Free` desugar to
+    emit a SECOND, lock-wrapped call, which every OTHER route to
+    PXXClassFinalize did not do -- so every managed field of an instance
+    finalized any other way leaked. The lock is reentrant since
+    feature-a-make-the-heap-lock-reentrant, so the call belongs here, once,
+    for every route. HeapLockedCallProcIdx1 still wraps it: the walk must
+    be mutually excluded, it just no longer has to be the OUTERMOST thing
+    holding the lock. }
   PXXClassFinalizeManaged(inst);
-{$endif}
 end;
 
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);

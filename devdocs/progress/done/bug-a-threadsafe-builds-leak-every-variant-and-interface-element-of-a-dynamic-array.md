@@ -2,9 +2,10 @@
 type: bug
 track: A
 prio: 5
-summary: under --threadsafe a dynamic array of Variants or of COM interfaces never releases its elements — 3848 live blocks per 1000 trips against 4 in a default build; deliberate (it prevents a deadlock) and correct as a choice, but the residual leak had no ticket and no number
+summary: "FIXED 2026-09-06 -- 7939 live -> 3 at the SAME allocation count (13891), 1000 trips of a dyn array of Variants and of COM interfaces. ManagedElemKindLocked's ThreadSafeMode degradation of kinds 4 and 6 is deleted because the heap lock is reentrant (feature-a-make-the-heap-lock-reentrant, owner decision arm (a)); _Release -> Destroy -> FreeMem still re-enters the lock and the lock now survives it. The trade this ticket declined to dispute was correct and is simply no longer necessary. POSITIVE CONTROL: the same program with -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis on stderr (message checked, not just the code), so the reentrancy is load-bearing rather than assumed. NOT closed by this: the record COM-interface fields named at the bottom, which still carry two {$ifndef PXX_TS_HARDLOCK} guards on PXXRecordReleaseIntf and are left for a change that can measure them on their own."
 tags: [memory-leak, threadsafe, variant, interfaces, dynarray]
 blocked-by: [feature-a-make-the-heap-lock-reentrant]
+status: done
 ---
 
 ## Measured
@@ -80,3 +81,49 @@ measurement.
 
 STATIC arrays are NOT gated and do not leak: their scope-exit walk is emitted
 outside any lock. Only the dynamic-array paths hold it.
+
+## 2026-09-06 — FIXED. The degradation is gone because the lock re-enters.
+
+The owner ruled arm (a) of
+`decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock`, the
+heap lock gained owner+depth (`feature-a-make-the-heap-lock-reentrant`), and
+`ManagedElemKindLocked`'s `if ThreadSafeMode then kind := 0` for kinds 4 and 6
+is deleted. Nothing about the trade this ticket declined to dispute has changed
+— `_Release -> Destroy -> FreeMem` still re-enters the same lock. **The lock now
+survives it.**
+
+`test/test_threadsafe_dynarray_releases_variant_and_interface_elements.pas`,
+1000 trips of each shape, `-dPXX_ALLOC_CENSUS`:
+
+| | allocs | frees | live |
+| --- | --- | --- | --- |
+| pinned (pre-fix) | 13891 | 5952 | **7939** |
+| HEAD | 13891 | 13888 | **3** |
+| HEAD `-dPXX_NO_REENTRANT_HEAPLOCK` | — | — | **rc=212, the deadlock** |
+
+Same allocation count on the two that finish, so this is the free side alone,
+which is what this ticket said it would be.
+
+**The third row is what makes the first two mean something.** With reentrancy
+switched off in the same tree, this exact program hits the heap-lock deadlock
+diagnosis — so the row cannot pass for a reason unrelated to the fix, and the
+reentrancy is demonstrated load-bearing rather than assumed. Verified by the
+stderr TEXT and not only by the exit code: 212 arriving for another reason would
+pass the control and prove nothing.
+
+### The route this ticket recommended is NOT the one taken, and it was right to name both
+
+It said: a reentrant heap lock, **or** a separate unlocked interface/variant
+pass — noting the unlocked pass was proven twice already (class fields,
+`PXXRecordRetainIntf`/`ReleaseIntf`) and this was the third site. The fork chose
+the lock. The standing objection to the unlocked-pass route is what decided it:
+every future release site must then remember to run outside the lock, which is
+per-site discipline that arm (a) exists to delete.
+
+### Not closed by this: the record COM-interface fields
+
+`builtinheap.pas` still carries two `{$ifndef PXX_TS_HARDLOCK}` guards on
+`PXXRecordReleaseIntf` inside the dyn-array-of-records walks — the row named at
+the bottom of this ticket. Same shape, should fall the same way, deliberately
+left for a change that can measure it on its own rather than riding in on a
+commit whose control is about elements.

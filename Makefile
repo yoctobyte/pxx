@@ -21447,6 +21447,18 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_escaping_a_handler_frees_the_caught_object.pas $(TESTTMP)/teeah
 	tools/assert_no_leak.sh exception_escaping_handler 50 $(TESTTMP)/teeah
 	tools/expect_same.sh exception_escaping_handler_out "$$($(TESTTMP)/teeah | grep -v '^pxx-census:')" "$$(printf 'escape 500\nreraise 500\nnested 500\nint 500\nplain 500\nEXCESCAPE OK')"
+	# --threadsafe: a dynamic array of Variants or of COM interfaces must release
+	# its ELEMENTS. ManagedElemKindLocked used to degrade kinds 4 and 6 to 0 under
+	# ThreadSafeMode because _Release -> Destroy -> FreeMem re-entered the
+	# non-reentrant heap lock — it would HANG rather than leak, so it leaked the
+	# whole array on every release. MEASURED, same file three ways: pinned
+	# allocs=13891 frees=5952 live=7939; HEAD live=3 at the SAME alloc count;
+	# HEAD -dPXX_NO_REENTRANT_HEAPLOCK rc=212 with the heap-lock diagnosis. That
+	# third row is the positive control and it is why this is not just a live
+	# count. feature-a-make-the-heap-lock-reentrant
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --threadsafe test/test_threadsafe_dynarray_releases_variant_and_interface_elements.pas $(TESTTMP)/tsdynel
+	tools/assert_no_leak.sh threadsafe_dynarray_elements 50 $(TESTTMP)/tsdynel
+	tools/expect_same.sh threadsafe_dynarray_elements_out "$$($(TESTTMP)/tsdynel | grep -v '^pxx-census:')" "TSDYN OK 0"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
 	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"

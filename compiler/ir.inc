@@ -8626,21 +8626,11 @@ begin
       IRIVal[cfCall] := 1;   { statement: emit for effect }
       IRMarkStatementNode(cfCall);
     end;
-    if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
-    begin
-      cfPi := FindProc('PXXClassFinalizeManaged');
-      if cfPi >= 0 then
-      begin
-        HeapLockedCallProcIdx1 := cfPi + 1;
-        cfCall := IRAppendCall(cfPi,
-                    IRAppend(IR_ARG,
-                      IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
-                      -1, -1, 0, Ord(tyPointer)),
-                    -1, Ord(tyNativeInt));
-        IRIVal[cfCall] := 1;   { statement: emit for effect }
-        IRMarkStatementNode(cfCall);
-      end;
-    end;
+    { The managed half is PXXClassFinalize's own job since
+      feature-a-make-the-heap-lock-reentrant -- it calls PXXClassFinalizeManaged
+      itself, under the lock, for every route to it. This site emitted a second
+      call because the `Free` desugar did; both are gone, and emitting one here
+      now would double-finalize every managed field of a caught exception. }
     last := IRAppend(IR_CALL, -Ord(tkFreeMem),
               IRAppend(IR_ARG,
                 IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
@@ -14162,17 +14152,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             the managed half still runs inside PXXClassFinalize, unlocked,
             because those frees are self-locking in Pascal (PXX_TS_SOFTLOCK).
             bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign }
-          if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
-          begin
-            cfPi := FindProc('PXXClassFinalizeManaged');
-            if cfPi >= 0 then
-            begin
-              HeapLockedCallProcIdx1 := cfPi + 1;
-              cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
-              cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
-              IRIVal[cfCall] := 1;   { statement: emit for effect }
-            end;
-          end;
+          { NO SECOND CALL HERE ANY MORE. PXXClassFinalize makes it itself, for
+            every route to it rather than only for this desugar, and
+            HeapLockedCallProcIdx1 -- stamped once per compilation in
+            EmitHeapLockStubs -- still puts it under the lock. Emitting it here
+            as well would be a DOUBLE finalize of every managed field, which is
+            a double free and not a leak. feature-a-make-the-heap-lock-reentrant }
         end;
         { NilPy compilation: instances are constructed through PXXObjAlloc and
           live at base+16 of their block (feature-nilpy-object-reclamation), so

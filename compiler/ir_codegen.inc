@@ -3424,13 +3424,25 @@ procedure EmitHeapLockStubs;
   turn the heap magazine OFF, so under either instrument EVERY allocation takes
   this lock and pays the identity check. That is a measurement-speed cost, not a
   shipped one. }
-var jePatch, jzPatch, callStart, unlockJnzPatch: Integer;
+var jePatch, jzPatch, callStart, unlockJnzPatch, cfmPi: Integer;
 begin
   if HeapLockAddr <> 0 then Exit;
   if not ThreadSafeMode then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   BSS_HEAP_OWNER := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_DEPTH := BSSSize; Inc(BSSSize, 8);
+
+  { STAMPED HERE, ONCE PER COMPILATION, and that is the point rather than a
+    convenience. HeapLockedCallProcIdx1 keys on the CALLEE, so one stamp wraps
+    EVERY call to PXXClassFinalizeManaged in the lock -- including the one
+    PXXClassFinalize now makes itself. It used to be stamped by the `Free`
+    desugar, which meant a program that never desugars a Free never stamped it,
+    and the managed walk then ran unlocked. Four drivers reach this procedure
+    and none of them has to know. }
+  cfmPi := FindProc('PXXClassFinalizeManaged');
+  if cfmPi >= 0 then HeapLockedCallProcIdx1 := cfmPi + 1;
+
+  if PasDefineExists('PXX_NO_REENTRANT_HEAPLOCK') then Exit;   { A/B probe }
 
   HeapLockAddr := CodeLen;
   EmitAsmX64(['push rax', 'push rcx', 'push rsi', 'push r11']);
