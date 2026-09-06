@@ -466,6 +466,12 @@ if [ "${RETRY_SKIPS:-0}" = "1" ]; then
   echo "test-pascal-conformance-retry: 3 of 24 were exactly that (tarray2 printed a PChar as its pointer, tforin24 printed garbage"
   echo "test-pascal-conformance-retry: for an enum name, tclass12a printed double where FPC prints 80-bit Extended) -- and all three"
   echo "test-pascal-conformance-retry: already said so in their own skip reasons. Diff each row against fpc 3.2.2 before burning it."
+  echo "test-pascal-conformance-retry: AND A ROW THAT PRINTS NOTHING IS THE WORSE CASE, because its EXPECTED output and its"
+  echo "test-pascal-conformance-retry: FAILURE output are the same thing. tgenfunc12 prints nothing and exits 0 under fpc and"
+  echo "test-pascal-conformance-retry: under pxx -- and so would a program whose specializations were silently deleted from the"
+  echo "test-pascal-conformance-retry: token stream. Diffing it against fpc cannot separate them. Before burning an output-free"
+  echo "test-pascal-conformance-retry: row, run a POSITIVE CONTROL: a copy with WriteLn in each body the row is about, and"
+  echo "test-pascal-conformance-retry: require the same lines in the same order under both compilers. (frankS, 2026-09-06.)"
   # AND THAT DIFF HAS BEEN RUN, so nobody has to pay for it twice. frankS,
   # 2026-09-06: every compile-clean `gap:` row diffed against fpc 3.2.2 --
   # ZERO OF NINE match on output. There are no stale rows in the standing list

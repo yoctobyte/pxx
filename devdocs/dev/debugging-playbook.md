@@ -17077,6 +17077,64 @@ of the spellings, and partitions are cheap to produce and impossible to argue wi
 about the wrong subject, look one level up for a list"* was used to FIND this, not to
 recognise it afterwards. That is the promotion the family was filed for.
 
+## TWO SURFACES SHARING ONE PREDICATE, WHERE THE WEAKER SURFACE'S GUARD IS CHARGED TO THE STRONGER ONE
+
+Measured 2026-09-06 (frankS, `eb2447470`), third instance in one day of a shape that had been
+stated as *"a list fails by an absent entry"* and now has a better statement.
+
+The generic call-site match required a trailing `(`. **That parenthesis is not a syntax
+requirement — it is a PROXY for "this is not a comparison chain"**, and it is genuinely
+load-bearing for the bare Delphi spelling, where `F<A>(x)` cannot be told from `a < b > (c)`.
+For the objfpc `specialize F<A>` spelling **the keyword settles that question outright**, so
+the proxy is redundant there — and applying it anyway **refused the one spelling Pascal has
+for a parameterless generic call.**
+
+**THE TELL, and it is the part to carry: THE FILE ALREADY CONTAINED THE ARGUMENT, TWICE,
+UNCONNECTED TO THE PREDICATE.** An arity note thirty lines below says the keyword is exactly
+what makes a use unambiguous; and on the declaration side `IsGenericRoutineHeaderAhead`
+already accepts `:` and `;` after `>`, not only `(`. **So the compiler knew parameterless
+generic routines exist and only the call site did not.** Nothing was missing — the reasoning
+was present, correct, written down, and not wired to the guard that needed it.
+
+**The question that finds this class: "which surface is this proxy actually about?"** A guard
+justified by an ambiguity that exists on ONE surface, applied to a predicate both surfaces
+share, is doing correct work on one and silent damage on the other — and it will always look
+defensible, because the justification is real. **The damaged surface is the one where the
+justification does not apply, which is exactly the one nobody re-derives it for.**
+
+Distinct from the enumeration family, which it resembles: there the list is too short or the
+site declined a funnel. Here **the predicate is right and its SCOPE is wrong**, so the fix
+adds a disjunct rather than a member or a call. Related:
+`## AN ENUMERATION CAN BE AN APPROXIMATION OF A FUNNEL THAT ALREADY EXISTS`.
+
+## A SKIP REASON IS A SUMMARY, AND A STALE ONE MISROUTES EXACTLY LIKE A STALE TICKET SUMMARY — twice in one afternoon, two seats, two files
+
+CLAUDE.md says a ticket's `summary` must be true because it is the only part everyone reads.
+**A skip reason has the same readership and none of the enforcement**, and on 2026-09-06 it
+misrouted twice within a few hours:
+
+- **frankS, `tgenfunc19`:** the reason blamed a class-helper rule that had already been carved
+  out and **was never that row's wall.** Work started on the wrong defect and was only caught
+  by **compiling the row instead of trusting the note.** Corrected in place, with both walls
+  measured.
+- **`terecs1`:** the reason said member visibility *"is not enforced at all"*, on three correct
+  measurements taken at the default. `--strict-visibility` rejects two of the three shapes.
+  The disposition survived; the reason would have sent its next reader to implement a
+  mechanism that already exists.
+
+**Both were written by careful authors in the same commit as real work, and both were true of
+something.** A skip reason is written once, at the moment of deferral, by the person with the
+most context — and then read months later by someone with none, as the only statement of why
+the row is not judged.
+
+**The rule, for anyone burning skip rows: MEASURE THE WALL, DO NOT READ IT.** Compiling the
+row costs seconds; the note costs a wrong defect. And when you correct one, correct it in
+place with the measurement, in the same commit — the same discipline the ticket summary gets.
+
+**A corollary that is easy to miss:** a skip reason can be a *true statement about a construct*
+and a *false statement about what the run measured* — the vacuous-`%FAIL` audit found eight
+such lines describing a dialect pass the compiler never reached the source to have.
+
 ## WHICH HALF OF THE DIAGNOSTIC IS LYING IS ITSELF THE QUESTION — neither the line nor the quoted text is reliably the good one
 
 Measured 2026-09-06 (frankD), and it is the exact inverse of a case from the same week.

@@ -2397,3 +2397,32 @@ PROSPECTIVELY for the first time** — *"when a diagnostic is about the wrong su
 level up for a list"* found the sixth instance rather than explaining it afterwards. A pattern
 promoted from retrospective to working tool is the only evidence that filing one was worth
 anything, and it is not visible from inside the seat that used it.
+
+## A NUMBER WITH ITS PROVENANCE ATTACHED, AND AN ARITHMETIC CLOSURE THAT FAILS DIFFERENTLY
+
+2026-09-06, frankS, corpus at **404 pass / 0 fail / 96 skip / 50 auto-gated (of 550)**,
+commit `877d5e021`, compiler `180184ca441f`, tree equal to origin at start, **binary rebuilt
+after the pull and before the run, no rebuild during.** Two earlier figures withdrawn — an
+unmeasured 400, and a 403 taken while the seat rebuilt MID-RUN, so rows before and after used
+different binaries. That is CLAUDE.md's *do not touch the instrument while it is measuring*,
+fired live, recognised by the seat that did it, and re-taken rather than published with a
+caveat.
+
+**The part worth keeping is the second source.** The delta reconciles against the skip-file
+diff: last clean figure 402, exactly two rows left `pxx.skip` since (`tclass13a`, `tenum6`),
+402 + 2 = 404. **A count from the run and a count from the skip-file diff fail differently** —
+one breaks on a stale binary or a mid-run edit, the other on a mis-edited skip file — which is
+the only reason their agreement is worth anything. Contrast the two-wrong-readings-agreeing
+case in [[two-verified-counts-can-make-one-unverified-inference]].
+
+**And the discipline I want to name because it is rarer than the correction: they did not
+re-measure for a known +1.** One row burned since; folded into the next full run rather than
+spending a 40-minute sweep to move a number by one. A seat that corrects its own figures twice
+in an afternoon and *still* declines a sweep it does not need is calibrating cost, not
+performing rigour.
+
+**Topic report, no collision:** Track P, burning `pxx.skip` gap rows, explicitly staying off
+object types, `tarray6`/`ParseVarSection` (frankD), management operators (frankA), open-array
+signatures/Group 28 (frankB). Recorded as the seat's own statement of what it is avoiding —
+which is evidence about frankS's lane and only [[a-peers-belief-about-another-peer-is-my-subject-matter]]
+about the other three.
