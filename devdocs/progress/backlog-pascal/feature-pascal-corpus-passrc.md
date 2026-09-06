@@ -10,6 +10,28 @@ prio: 30
 - **Status:** backlog — **endgame, do LAST**. Opened 2026-07-12. UNBLOCKED 2026-07-19 (both blockers — fpcunit, fpjson — resolved).
 - **Owner:** —
 - **Parent:** [[feature-pascal-corpus-oop]]
+
+> ## 2026-09-06 — THIS RUNG IS UNDER ATTEMPT RIGHT NOW, FROM THE OTHER DOOR. Do not take this ticket.
+>
+> **frankD is on `fcl-passrc` as RUNG 7 of [[feature-pascal-corpus-expansion]]**, reported
+> directly to the coordinator 2026-09-06. Wall 1 (`resourcestring` ending a const section) is
+> cleared, the rung moved +819 lines, and wall 2 is filed as
+> [[bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap]].
+> Wall 3 (the property `default` clause) is next and uncharacterised.
+>
+> **THIS TICKET IS THE SECOND DOOR INTO ONE TOPIC, AND IT IS THE ONE THAT READS AS FREE.**
+> The ladder ticket is in `unfinished/` (a status hint, not a lock) with an empty `owner:`,
+> and this one sits in `backlog-pascal/` at prio 30 with `Owner: —` — which is a folder
+> `ready --track P` scans and hands out. Two tickets, two folders, two priorities, one rung,
+> and neither named the other until now. That is the collision git cannot see: both diffs
+> would apply cleanly and no track letter would notice.
+>
+> Whoever attempts `fcl-passrc` should **work the ladder ticket and message frankD first**.
+> The source for this rung is on the box at `/usr/share/fpcsrc`, NOT in `library_candidates/`,
+> so the gitignored-corpus caveat that applies to the other rungs does not apply here.
+>
+> Recorded by the coordinator, from frankD's own report — this is a RELAY, not an assignment,
+> and the `owner:` field is deliberately left alone: a claim is the holder's act.
 - **Blocked-by:** feature-pascal-corpus-fpcunit feature-pascal-corpus-fpjson
 
 ## Sequencing (user call, 2026-07-12)
