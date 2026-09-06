@@ -1,0 +1,15 @@
+  Init
+-- by value --
+  AddRef sees id=7
+  callee(byval) id=107
+  Fin    id=107
+after byval, caller id=7
+-- const --
+  callee(const) id=7
+after const, caller id=7
+-- var --
+  callee(var)   id=7
+after var,   caller id=7
+-- leaving scope --
+  Fin    id=7
+-- done --

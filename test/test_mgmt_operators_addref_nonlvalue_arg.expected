@@ -1,0 +1,7 @@
+-- by value, NON-LVALUE arg --
+  AddRef sees id=7
+  callee(byval) id=107
+  Fin    id=107
+-- const, NON-LVALUE arg --
+  callee(const) id=7
+-- done --

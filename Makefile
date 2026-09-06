@@ -14036,8 +14036,8 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a class holding a managed record in a field compiled -- fpc runs those at Create/Free, not at scope"; exit 1; \
 	fi
-	if ./$(COMPILER) test/test_mgmt_operators_addref_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
-	  echo "FAIL: class operator AddRef compiled while nothing dispatches the by-value parameter copy"; exit 1; \
+	if ./$(COMPILER) test/test_mgmt_operators_addref_small_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
+	  echo "FAIL: a management operator on a record passed by value at <=8 bytes compiled -- there is no address for it to act on and the callee gets a pointer where its ABI says bytes"; exit 1; \
 	fi
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
@@ -14047,8 +14047,36 @@ test-core: $(COMPILER)
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
-	./$(COMPILER) test/test_mgmt_operators_addref_refused.pas $(TESTTMP)/test_mgmt_op_ar26 2>&1 \
-	  | grep -q "feature-pascal-management-operators-copy-and-addref"
+	# Matches the SIZE wording, not just the ticket slug: the blanket
+	# "AddRef is recognised but not dispatched" refusal this fixture used to
+	# assert ALSO cites that slug, so a slug-only grep would score the old
+	# refusal as a pass for the new one and the row could not tell a revert
+	# from a fix. An expected-failure row passes on ANY refusal unless it reads
+	# which.
+	./$(COMPILER) test/test_mgmt_operators_addref_small_refused.pas $(TESTTMP)/test_mgmt_op_ar26 2>&1 \
+	  | grep -q "8 bytes or less"
+	# ... and OVER 8 bytes the same operators dispatch and match fpc 3.2.2 byte
+	# for byte: AddRef on the COPY after the source's bytes are in it (it adds
+	# 100, so the callee sees 107 and the caller still 7), the copy Finalized at
+	# 107 when the call returns, and NEITHER operator for a const or var
+	# parameter -- those two rows are the controls that make the by-value row
+	# mean something. Uses a LOCAL: pxx finalizes a global record at exit and fpc
+	# does not, which would otherwise be in every row.
+	./$(COMPILER) test/test_mgmt_operators_addref.pas $(TESTTMP)/test_mgmt_operators_addref26
+	tools/expect_same.sh test_mgmt_operators_addref26 "$$($(TESTTMP)/test_mgmt_operators_addref26)" "$$(cat test/test_mgmt_operators_addref.expected)"
+	# The OTHER axis: the ARGUMENT's shape. The rows above all pass an LVALUE, so
+	# a const/var parameter never builds a temp and never reaches the arm the
+	# AddRef hook lives in -- three parameter modes, one argument shape, and the
+	# hook's first cut was wrong on the shape. Given a NON-LVALUE (a function
+	# result) a const parameter takes a temp too, and fpc still runs no operator;
+	# a by-value parameter takes the same arm and fpc DOES run AddRef. Opposite
+	# answers from one arm, which is why the discriminator is whether
+	# var/out/const was WRITTEN and not whether a temp was needed.
+	# This .expected is NOT fpc's byte for byte, unlike every other row here: two
+	# lines of Make's own result-variable lifecycle are missing, a pre-existing
+	# gap the PINNED compiler shares. The fixture header names them.
+	./$(COMPILER) test/test_mgmt_operators_addref_nonlvalue_arg.pas $(TESTTMP)/test_mgmt_operators_addref_nonlvalue26
+	tools/expect_same.sh test_mgmt_operators_addref_nonlvalue26 "$$($(TESTTMP)/test_mgmt_operators_addref_nonlvalue26)" "$$(cat test/test_mgmt_operators_addref_nonlvalue_arg.expected)"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26

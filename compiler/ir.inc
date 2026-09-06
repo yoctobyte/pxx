@@ -1166,6 +1166,19 @@ begin
     recId := PostCallIntfRec[PostCallIntfCount];
     if recId <> REC_NONE then
     begin
+      { `class operator Finalize` on the by-value copy, FIRST -- the operator
+        runs before the record's managed fields are released, which is the
+        PRE-order fpc uses on the way out (measured for nesting when the
+        scope-exit arm was built; the same order applies here because the
+        operator may still want to read a field it is about to lose).
+
+        A record may be queued for this arm with NO managed fields at all, so
+        the release below is now conditional: the queue's admission test is
+        `RecordHasManagedFields OR RecordHasFinalizeOp` and this must answer for
+        both halves. }
+      IRRecUnaryOpCall(recId, OPK_FINALIZE,
+                       IRAppend(IR_LEA, sym, -1, -1, 0, Ord(tyPointer)));
+      if not RecordHasManagedFields(recId) then continue;
       { A by-VALUE RECORD argument temp with managed fields. FPC finalizes a
         value parameter in the CALLEE, so the copy's references die when the
         call returns; here the temp was a caller local and lived to the
@@ -4586,6 +4599,7 @@ var argTk: TTypeKind;
   arcArg1, arcArg2, arcArg3, arcCall: Integer;
   isComIntfArg: Boolean;
   pvSinkIsProcVar: Boolean;
+  tempIsByValueCopy: Boolean;
 begin
   { A SLICE THIS FUNCTION CANNOT BUILD IS REFUSED HERE, BY NAME, AND NOT LEFT TO
     FALL THROUGH. Measured 2026-09-06: with the string base merely declining to
@@ -5662,6 +5676,22 @@ begin
 
   argTk := IntToTypeKind(ASTTk[argAST]);
   needTemp := False;
+  { `needTemp` IS NOT "THIS IS A BY-VALUE COPY" -- it is reached for four
+    different reasons below and only three of them are by-value. The odd one out
+    is a genuine `const`/`var` parameter handed a NON-LVALUE (a function result,
+    a constructed value): that argument has no address of its own, so it gets a
+    temp purely to have something to point AT, and the parameter is still
+    by-reference. fpc runs NO management operator there.
+
+    Measured 2026-09-06, which is the only reason this flag exists: with the
+    AddRef emission keyed on `needTemp` alone, `TakeConst(Make)` -- a `const`
+    parameter, a function-result argument -- printed `AddRef sees id=7` and the
+    callee then saw id=107 where fpc 3.2.2 runs no operator at all and the
+    callee sees 7. The by-value/const/var rows of test_mgmt_operators_addref did
+    NOT catch it: all three pass an lvalue, so no temp is built for the const
+    and var rows and the arm is never reached. The test varied the PARAMETER
+    MODE and held the ARGUMENT SHAPE fixed at "lvalue"; this is the other axis. }
+  tempIsByValueCopy := False;
   argRecId := REC_NONE;
   { A whole array variable is never a record-by-value argument: its node carries
     the element's tyRecord tag, but the value is the array, not one record.
@@ -5678,14 +5708,48 @@ begin
       { C struct-by-value: a record param is by-ref ABI (8-byte pointer slot),
         so ALWAYS copy the record to a temp and pass &temp — true by-value with
         correct field access for any size. C-mode-gated -> Pascal byte-identical. }
-      needTemp := True
+    begin
+      needTemp := True;
+      { Genuinely by-value, and inert: C has no management operators, so nothing
+        downstream of this flag can fire in C mode. Set truthfully anyway rather
+        than left False for being unreachable — a flag that is wrong wherever it
+        happens not to be read is a trap for whoever reads it next. }
+      tempIsByValueCopy := True;
+    end
     else if isRefArg then
     begin
+      { WHY THE FLAG IS SET HERE AND NOT INSIDE THE TWO ARMS: `isRefArg` covers
+        BOTH a genuine `var`/`out`/`const` and a by-value record promoted to
+        by-ref by the >8-byte ABI, and the two arms below are about whether a
+        temp is NEEDED, which is a different question from whether the temp is a
+        by-value COPY. Keying the flag on the arm conflates them.
+
+        MEASURED 2026-09-06, both directions, which is why this is not folded
+        into the arms:
+          - `TakeConst(Make)` — genuine const, non-lvalue: fpc runs NO operator.
+          - `TakeVal(Make)`   — by-value, non-lvalue: fpc DOES run AddRef, the
+            callee sees 107, and the copy is finalized at 107.
+        Both take the `not IsASTLValue` arm, and they need opposite answers. A
+        first cut of this guard read the arm instead of the declaration and so
+        fixed the first case by breaking the second — the fixture could not see
+        it, because every row it had passed an lvalue.
+
+        So the question is only ever "was `var`/`out`/`const` WRITTEN", and that
+        is ProcParamExplicitByRef. Out of range reads as by-ref, i.e. no
+        operator: the conservative direction, since a spurious AddRef on a
+        caller's aliased record is far worse than a missing one on a temp. }
+      tempIsByValueCopy :=
+        (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+        (not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx]);
       if not IsASTLValue(argAST) then
+        { A temp so the by-ref slot has something to point at. Whether it is
+          also a by-value copy is the flag above, not this condition. }
         needTemp := True
-      else if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
-              not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx] then
-        { A plain (no var/const/out) record param over 8 bytes is promoted to
+      else if tempIsByValueCopy then
+        { Reads the flag rather than restating its expression -- this arm and
+          the flag asked the identical question in two spellings, which is the
+          shape that drifts.
+          A plain (no var/const/out) record param over 8 bytes is promoted to
           by-ref purely for ABI efficiency (avoid a large by-value copy through
           registers/stack) -- `isRefArg` is True here for that reason alone, NOT
           because the user asked for aliasing. An lvalue argument passed
@@ -5718,7 +5782,36 @@ begin
         for records of 8 bytes or less, which is the size class where the copy
         is cheapest. }
       if (RecSize(argRecId) > 8) or (TargetArch = TARGET_WASM32) then
+      begin
         needTemp := True;
+        tempIsByValueCopy := True;   { no `var`/`const`/`out` was written: by-value }
+      end;
+
+      { A management operator on the by-value copy needs the copy to HAVE AN
+        ADDRESS, and at or under 8 bytes it does not: the backend pushes the
+        record's own bytes as one or two words, so the "copy" is that push and
+        there is no slot to hand AddRef or to finalize.
+
+        FORCING needTemp HERE DOES NOT WORK AND WAS MEASURED, not assumed: the
+        callee then receives the temp's ADDRESS where its ABI says bytes, and
+        `in callee id=` printed 4311096 against fpc's 107 while AddRef and
+        Finalize themselves ran correctly on the temp. A silently wrong field
+        value in the callee is far worse than the refusal below.
+
+        Refused rather than skipped, because skipping is invisible: the operator
+        would simply never fire, and only for records at or under 8 bytes, so
+        the same program would behave differently by the SIZE of its record.
+        The >8-byte path above is byte-identical to fpc 3.2.2 today.
+        feature-pascal-management-operators-copy-and-addref }
+      if (not needTemp) and (argRecId <> REC_NONE) and
+         ((FindOpOverload(OPK_ADDREF, Ord(tyRecord), argRecId) >= 0) or
+          RecordHasFinalizeOp(argRecId)) then
+        Error('a record with a management operator cannot be passed BY VALUE at '
+            + '8 bytes or less yet: the copy is pushed as machine words and has '
+            + 'no address for AddRef/Finalize to act on. Pass it as `const` or '
+            + '`var` (fpc runs neither operator there), or give the record more '
+            + 'than 8 bytes '
+            + '(feature-pascal-management-operators-copy-and-addref)');
     end;
   end;
 
@@ -5833,7 +5926,49 @@ begin
       Inc(PostCallIntfCount);
     end
     else
+    begin
       IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
+      { A record with no managed FIELDS can still have a Finalize OPERATOR, and
+        it needs the same end-of-statement queueing for the same reason: fpc
+        finalizes a value parameter in the callee, so the copy dies with the
+        call. Measured 2026-09-06 -- fpc prints the operator's Finalize between
+        the callee's last line and the caller's next, and pxx printed it
+        nowhere at all, because a by-value copy is a skParam and the parser-side
+        wrapper only walks skLocal/skGlobal.
+
+        Gated on the same predicate as the AddRef emission below, and for the
+        same measured reason: fpc finalizes a value PARAMETER, and a temp built
+        only to give a non-lvalue an address for a `const`/`var` parameter is
+        not one. }
+      if RecordHasFinalizeOp(argRecId) and
+         ArgTempTakesManagementOps(cpi, pathIdx, tempIsByValueCopy) then
+      begin
+        if PostCallIntfCount > High(PostCallIntfSym) then
+          Error('too many pending by-value record argument temps');
+        PostCallIntfSym[PostCallIntfCount] := tmpSym;
+        PostCallIntfRec[PostCallIntfCount] := argRecId;
+        Inc(PostCallIntfCount);
+      end;
+    end;
+
+    { `class operator AddRef(var a: TFoo)` -- THE BY-VALUE PARAMETER EVENT, and
+      only that. Emitted AFTER the copy above, because fpc hands AddRef the
+      COPY with the source's bytes already in it: measured with an operator that
+      adds 100 to a field, fpc printed `AddRef sees id=7`, the callee then saw
+      107, and the caller's original stayed 7. So it acts on the destination and
+      never on the source.
+
+      The copy is NOT Initialize'd -- fpc runs AddRef INSTEAD, not as well, and
+      a const or var parameter runs neither. That is why this sits here at the
+      by-value temp and not in the scope-entry wrapper.
+
+      A fresh IR_LEA rather than reusing tmpAddr: that node is an operand of the
+      copy above and carries the IRArgRecId stamp applied below, which the
+      variadic-tail path reads. }
+    if (not isComIntfArg) and (argRecId <> REC_NONE) and
+       ArgTempTakesManagementOps(cpi, pathIdx, tempIsByValueCopy) then
+      IRRecUnaryOpCall(argRecId, OPK_ADDREF,
+                       IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)));
 
     { Stamp the record identity on the value node the backends inspect. tmpAddr
       is an IR_LEA tagged tyPointer -- correct, and it is why an argument in a
@@ -8105,6 +8240,86 @@ begin
   callN := IRAppendCall(cpIdx, a0, -1, Ord(tyNativeInt));
   IRIVal[callN] := 1;   { statement: emit for effect }
   IRRecCopyOpCall := callN;
+end;
+
+function IRRecUnaryOpCall(recId, opKind, addr: Integer): Integer;
+{ Emit a call to a ONE-OPERAND management operator -- `class operator
+  AddRef(var a: TFoo)` or `Finalize(var a: TFoo)` -- on the record at `addr`.
+  Returns the call node, or -1 when the record declares no such operator.
+
+  `var` is by reference, so this passes the ADDRESS, exactly as
+  IRRecCopyOpCall does for both of its operands.
+
+  This exists because the by-value PARAMETER copy is lowered here and nowhere
+  else. The parser-side wrapper (WrapManagementOpsRange) only ever considers
+  skLocal and skGlobal symbols, so a `skParam` is outside it entirely -- which
+  is why a by-value record parameter had NO lifecycle at all before this: no
+  AddRef, and no Finalize either. Hooking it here rather than teaching that
+  wrapper about parameters is deliberate and is the safer of the two: the temp
+  this acts on is DEFINITIONALLY a by-value copy the caller just made, so no
+  by-ref discriminator is needed. Doing it parser-side would have required
+  telling a genuine `var`/`out` record parameter from a by-value one that is
+  passed by reference only because the >8-byte record ABI forces it -- the
+  distinction ProcParamExplicitByRef exists for -- and getting that wrong
+  finalizes the CALLER's live record through a `var` parameter, which is
+  silent corruption rather than a visible failure.
+  feature-pascal-management-operators-copy-and-addref }
+var opIdx, a0, callN: Integer;
+begin
+  IRRecUnaryOpCall := -1;
+  if recId = REC_NONE then Exit;
+  opIdx := FindOpOverload(opKind, Ord(tyRecord), recId);
+  if opIdx < 0 then Exit;
+  a0 := IRAppend(IR_ARG, addr, -1, -1, 0, Ord(tyPointer));
+  callN := IRAppendCall(opIdx, a0, -1, Ord(tyNativeInt));
+  IRIVal[callN] := 1;   { statement: emit for effect }
+  IRRecUnaryOpCall := callN;
+end;
+
+function RecordHasFinalizeOp(recId: Integer): Boolean;
+{ True when the record declares `class operator Finalize`. Kept beside the
+  emitter rather than inlined at the two sites that ask, because a by-value
+  argument temp must be QUEUED for the post-call finalize on exactly the
+  condition the flush later acts on -- two spellings of one predicate is how
+  the queue and the flush drift apart. }
+begin
+  RecordHasFinalizeOp := (recId <> REC_NONE) and
+                         (FindOpOverload(OPK_FINALIZE, Ord(tyRecord), recId) >= 0);
+end;
+
+function ArgTempTakesManagementOps(cpi, pathIdx: Integer;
+                                   byValueCopy: Boolean): Boolean;
+{ Does this argument temp represent a BY-VALUE PARAMETER, i.e. the one event
+  fpc runs AddRef and the callee-side Finalize for?
+
+  Two independent reasons a temp can exist without being that, and they need
+  two different tests because they are wrong in two different places:
+
+  1. A `const`/`var` parameter handed a NON-LVALUE gets a temp purely so the
+     by-ref parameter has something to point at. `byValueCopy` is False there,
+     set at the arm that made the decision. MEASURED: without this,
+     `TakeConst(Make)` ran AddRef and the callee read 107 against fpc's 7.
+
+  2. `byValueCopy` is itself only as good as ProcParamExplicitByRef, which is
+     never written for an interface or `virtual; abstract` method's parameters
+     (frankB, 2026-09-06), so a genuine `const` there looks silently-promoted
+     and comes through as True. ProcParamIsConst IS written at those two sites
+     in pasparser_decl.inc -- from the same mPConst[] array, on the adjacent
+     line -- so it still discriminates where the other column has gone blank.
+     Asking BOTH is not redundancy: they fail on different populations, and the
+     one that fails is the one nobody has a test for.
+
+  The residual, stated because it is invisible otherwise: a genuine `var` record
+  parameter on an interface or abstract method has NO trustworthy column here
+  and will take the by-value path. That is the same root cause as pxx passing it
+  a copy in the first place, it is frankB's fix, and this predicate gets tighter
+  for free the moment that column is written -- no change needed here. }
+begin
+  ArgTempTakesManagementOps := byValueCopy;
+  if not byValueCopy then Exit;
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+     ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx] then
+    ArgTempTakesManagementOps := False;
 end;
 
 procedure IRWidenOrdinalFloatBinop(node: Integer; wantTk: TTypeKind);

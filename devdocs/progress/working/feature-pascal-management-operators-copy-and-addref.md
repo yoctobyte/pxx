@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: frankA
 blocked-by: []
-summary: "COPY IS DONE 2026-09-06 (frankA); ADDREF REMAINS. `class operator Copy(constref src; var dst)` now dispatches at the record-assignment lowering and matches fpc 3.2.2 byte for byte at three sites -- a plain local, an ARRAY ELEMENT destination and a FIELD of another record (test_mgmt_operators_copy, refused outright on the pin). COPY REPLACES THE COPY, measured: an operator body that assigns neither field leaves the destination holding its OWN values, so the hook returns the call INSTEAD of IR_COPY_REC, never alongside it; and the destination arrives UNFINALIZED, holding its previous value, so there is no release-then-copy the way IR_COPY_REC_MANAGED does for ARC fields. THIS TICKET'S OWN `What FPC does` SECTION WAS WRONG AND IS CORRECTED IN PLACE: it said Copy `replaces` AddRef and that both fire wherever a record value is duplicated. Measured with three programs differing only in which operators are declared, they are DISJOINT SITES and neither ever displaces the other -- Copy is the ASSIGNMENT event, AddRef is the BY-VALUE PARAMETER event and only that, and a const or var parameter runs neither. That is why Copy could land alone. STILL REFUSED: AddRef, by name, at its declaration; test_mgmt_operators_copy_refused expired the day Copy landed and was re-aimed as test_mgmt_operators_addref_refused. CORPUS: tmoperator8 still stops at line 63, now on the AddRef refusal rather than the Copy one -- it declares all four operators, so the row does not clear and is not claimed to. NOT ESTABLISHED: whether the two assignment arms hooked are the whole population (78 IR_COPY_REC mentions), and whether a record with a genuinely managed FIELD alongside the operators routes its copy through a different helper."
+summary: "BOTH HALVES DONE 2026-09-06 (frankA), ABOVE 8 BYTES. `class operator Copy(constref src; var dst)` dispatches at the record-assignment lowering; `class operator AddRef` dispatches at the BY-VALUE PARAMETER copy. Both match fpc 3.2.2 byte for byte (test_mgmt_operators_copy at three assignment sites; test_mgmt_operators_addref across by-value/const/var; test_mgmt_operators_addref_nonlvalue_arg across the argument SHAPE) and all are refused outright on the pin. THE BY-VALUE PARAMETER HAD NO LIFECYCLE AT ALL, not merely a missing AddRef -- the copy is an skParam and the parser-side wrapper walks skLocal/skGlobal only, so the callee-side Finalize was missing too and AddRef could not land alone; both are now emitted at the caller's private temp, Finalize FIRST (pre-order) on the post-call queue. THE HOOK IS KEYED ON WHETHER `var`/`out`/`const` WAS WRITTEN, NEVER ON WHETHER A TEMP WAS BUILT: a temp is built for four different reasons and only three are by-value. Measured both directions -- a const parameter given a NON-LVALUE takes a temp and fpc runs no operator (the first cut fired there: callee read 107 against fpc's 7), while a by-value parameter given a non-lvalue takes the SAME arm and fpc DOES run AddRef. REFUSED AT OR UNDER 8 BYTES, by name and by size: the backend pushes the record as machine words so the copy has no address: forcing a temp there was MEASURED to break the ABI (callee read 4311096 for 107) and was reverted for an explicit refusal. RESIDUAL, NOT MINE: a genuine `var` record parameter on an INTERFACE or `virtual; abstract` method has no trustworthy discriminator here, because ProcParamExplicitByRef is never written by the parameter parsers in pasparser_decl.inc (frankB, 2026-09-06); the `const` half is excluded independently via ProcParamIsConst, which IS written at those sites, and the guard tightens for free when that column is fixed. CORPUS: tmoperator8 declares all four operators and must be RE-MEASURED, not assumed cleared -- it stopped at the AddRef refusal, which is gone, so whatever it hits next is unknown. NOT ESTABLISHED: whether the two assignment arms hooked are the whole population (78 IR_COPY_REC mentions), and whether a record with a genuinely managed FIELD alongside the operators routes its copy through a different helper."
 ---
 
 # `class operator Copy` / `AddRef` are recognised but never dispatched
@@ -185,3 +185,84 @@ the Copy work brings it closer, and nothing in it blocks AddRef either.
 `tmoperator8` stops at line 63 as before, now on the AddRef refusal instead of
 the Copy one. It declares all four operators. Advancing the refusal by one
 operator is not clearing the row and is not recorded as such.
+
+## AddRef — landed 2026-09-06 (frankA)
+
+### What the measurement changed
+
+The by-value parameter had **no lifecycle at all**, which is not what this
+ticket predicted. The copy is an `skParam`, and `WrapManagementOpsRange`
+(`pasparser_proc.inc` ~631) tests `isTarget` = `skLocal`/`skGlobal`, so the
+callee-side **Finalize was missing too**. AddRef could not be added to a working
+mechanism because there was no mechanism; both operators are now emitted at the
+caller's private temp in `IRLowerCallArg`, and `IRFlushPostCallIntf` runs the
+operator's Finalize **before** the ARC release (pre-order), with the release
+itself now conditional on the record actually having managed fields.
+
+### The guard, and why it is not "a temp was built"
+
+`needTemp` is reached for four reasons and only three are by-value. The one that
+is not: a genuine `const`/`var` parameter handed a **non-lvalue** gets a temp
+purely so the by-ref slot has something to point at.
+
+Keying the emission on `needTemp` was wrong, and the fixture could not see it —
+every row passed an lvalue, so the const and var rows never built a temp and
+never reached the arm. **A control that cannot reach the arm is not a control.**
+The fixture varied the parameter MODE and held the argument SHAPE fixed.
+
+Measured, both directions, on the same day:
+
+| parameter | argument | fpc 3.2.2 | first cut | now |
+| --- | --- | --- | --- | --- |
+| `const` | lvalue | no operator | no operator | no operator |
+| `const` | `Make` (rvalue) | **no operator** | **AddRef, callee 107** | no operator |
+| by-value | lvalue | AddRef, callee 107 | AddRef, callee 107 | AddRef, callee 107 |
+| by-value | `Make` (rvalue) | **AddRef, callee 107** | *(none)* | AddRef, callee 107 |
+
+Rows 2 and 4 take the **same arm** and need **opposite answers**, so the arm
+cannot be the discriminator. The question is only ever *was `var`/`out`/`const`
+written*, which is `ProcParamExplicitByRef`. A first attempt at the fix read the
+arm and so repaired row 2 by breaking row 4 — caught only because row 4 was
+measured against fpc rather than assumed.
+
+`test_mgmt_operators_addref_nonlvalue_arg` exists to hold that axis.
+
+### Blocked-adjacent: a column that is False for two different reasons
+
+`ProcParamExplicitByRef` is never written by the parameter parsers in
+`pasparser_decl.inc` (frankB, 2026-09-06), so on an **interface** or
+`virtual; abstract` method it reads False for a genuine `var`/`const` exactly as
+it does for a silently-promoted by-value param — and this guard would then run an
+operator where fpc runs none.
+
+The `const` half is excluded independently: `ProcParamIsConst` **is** written at
+those two sites (`pasparser_decl.inc:6996`, `:7787`), from the same `mPConst[]`
+array on the adjacent line. Asking both columns is not redundancy — they go
+blank on different populations. The `var` half has no local signal and waits on
+frankB's fix; the guard tightens for free when that column is written, with no
+change here.
+
+### The 8-byte floor is a refusal, not a gap
+
+At or under 8 bytes the backend pushes the record's own bytes as machine words,
+so the copy has no address for an operator to act on. Forcing `needTemp` there
+was **measured**, not reasoned: the callee then receives the temp's address where
+its ABI says bytes and read `id=4311096` against fpc's 107, while AddRef and
+Finalize themselves ran correctly. A silently wrong field in the callee is worse
+than a refusal, so that was reverted and the refusal names the size and the
+ticket. `test_mgmt_operators_addref_small_refused` greps the **size wording**,
+not the slug — the pin's old blanket refusal cites the same slug, so a slug-only
+grep would score a revert as a pass.
+
+### Left open
+
+- **`tmoperator8` must be RE-MEASURED.** It stopped at the AddRef refusal, which
+  no longer exists; what it hits next is unknown and is not claimed cleared.
+- A managed record **function result** runs neither Initialize nor Finalize —
+  filed as
+  [[bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize]],
+  pre-existing (the pin shares it), and the reason
+  `test_mgmt_operators_addref_nonlvalue_arg.expected` is deliberately not fpc's
+  output byte for byte.
+- Whether the two hooked assignment arms are the whole population (78
+  `IR_COPY_REC` mentions).

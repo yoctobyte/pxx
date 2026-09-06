@@ -426,10 +426,6 @@ begin
     precedence rule between two operators described a choice that has no site
     at which it could arise.
     feature-pascal-management-operators-copy-and-addref }
-  if opKey = OPK_ADDREF then
-    Error('operator AddRef is recognised but not dispatched yet — it fires on '
-          + 'the by-value parameter copy, which is a separate slice from Copy '
-          + '(feature-pascal-management-operators-copy-and-addref)');
   if opKey = OPK_COPY then
   begin
     { `class operator Copy(constref src: TFoo; var dst: TFoo)` — FPC's shape.
@@ -446,10 +442,15 @@ begin
     if not Procs[procIdx].Params[1].IsRef then
       Error('class operator Copy takes its destination as a var parameter');
   end;
-  if (opKey = OPK_INITIALIZE) or (opKey = OPK_FINALIZE) then
+  if (opKey = OPK_INITIALIZE) or (opKey = OPK_FINALIZE) or (opKey = OPK_ADDREF) then
   begin
     { `class operator Initialize(var a: TFoo)` — exactly one VAR parameter of
-      the record type, and no result. FPC's own shape. }
+      the record type, and no result. FPC's own shape.
+
+      AddRef has the SAME shape and joins this arm rather than getting a fourth
+      copy of the identical four checks. It differs only in WHERE it fires — the
+      by-value parameter copy, see IRRecUnaryOpCall — never in how it is
+      declared. }
     if Procs[procIdx].ParamCount <> 1 then
       Error('a management operator must take exactly one parameter');
     if Procs[procIdx].IsFunc then

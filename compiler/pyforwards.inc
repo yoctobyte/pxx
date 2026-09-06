@@ -148,7 +148,10 @@ function TryScalarNamedCast(castTk: TTypeKind; semId: Integer): Boolean; forward
 function ConstCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean; forward;   { the ONE const-cast width door: it owns the alias-before-builtin order so a call site cannot invert it }
 function TryExplicitOpCast(n: Integer; castTk: TTypeKind): Integer; forward;   { `operator Explicit` on a record/class operand is the conversion CALL, not a reinterpret; shared by both name doors }
 function FloatCastToTemp(n: Integer; castTk: TTypeKind): Integer; forward;   { a cast to a FLOAT type is a conversion through a hidden temp, not a reinterpret; shared by the alias door and the builtin-name door }
-function PromoDemoteToInt64(n: Integer): Integer; forward;   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
+function PromoDemoteToInt64(n: Integer): Integer; forward;
+function IRRecUnaryOpCall(recId, opKind, addr: Integer): Integer; forward;   { a one-operand management operator (AddRef/Finalize) called on the record at an address; defined beside IRRecCopyOpCall, below the by-value-argument and post-call-flush sites that use it }
+function RecordHasFinalizeOp(recId: Integer): Boolean; forward;   { does this record declare `class operator Finalize`; the by-value argument temp must be QUEUED on exactly the condition the post-call flush later acts on }   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
+function ArgTempTakesManagementOps(cpi, pathIdx: Integer; byValueCopy: Boolean): Boolean; forward;   { is this argument temp a BY-VALUE parameter -- the only event fpc runs AddRef/callee-Finalize for -- or merely an address for a const/var parameter given a non-lvalue }
 {$ifndef PXX_NO_NILPY}
 function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-kind widening (pyparser.inc) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
