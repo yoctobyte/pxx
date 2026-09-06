@@ -113,9 +113,30 @@ _SESSION_RE = re.compile(r"session_([A-Za-z0-9]{6,})")
 # The middle row is the trap: it resolves more shas AND makes 289 of them name
 # two seats, which is a confident wrong answer wearing the shape of an improved
 # one. The pick-family is the whole gain and it costs nothing.
+# A REBASE STEP RUN UNDER `git pull --rebase` IS NOT SPELLED `rebase (pick)`.
+# git prefixes the step's reflog action with the PULL's action, so the entry
+# reads `pull --rebase -q (pick): <subject>`. Anchoring on `^rebase \(` denies
+# every one of them. Measured 2026-09-06 across every sibling checkout: six
+# distinct spellings in use (`pull --rebase (pick)`, `pull -q --rebase (pick)`,
+# `pull --rebase -q (pick)`, `pull --rebase --autostash (pick)`, and the two
+# `... origin master (pick)` forms), and on origin/master they resolve 1779
+# commits that the `rebase (`-anchored set denies -- 8442 -> 10221, +21%, with
+# ZERO ambiguity. Control against an instrument that fails differently: of those
+# 1779, 103 carry a Claude-Session id whose seat is independently established
+# from the already-matched population; 103 agree, 0 disagree.
+#
+# THE SPELLINGS WERE ENUMERATED FROM THE REFLOGS, NOT FROM THE ONES ANYONE COULD
+# THINK OF. Both this matcher and tools/whose_commit.sh had independently
+# reasoned their way to the same too-narrow set, which is what a verb list
+# derived from imagination looks like. `sed 's/:.*//' | sort -u` over every
+# checkout's reflog is the whole method and it takes one command.
+#
+# Still EXCLUDED, deliberately: a bare `pull ...` with no step suffix. Those are
+# membership -- every puller's ref moves through every sha -- and matching them
+# names everyone.
 _AUTHORING_ACT = re.compile(
     r"^(commit|commit \(amend\)|commit \(initial\)|"
-    r"rebase \((pick|reword|squash|fixup|amend|continue)\))")
+    r"(rebase|pull\b[^:()]*) \((pick|reword|squash|fixup|amend|continue)\))")
 
 WINDOW_MIN = 360
 
