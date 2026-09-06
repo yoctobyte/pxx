@@ -3,7 +3,7 @@ slug: bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankS
@@ -60,3 +60,6 @@ Worth checking in the same pass whether the cosmetic-difference cases the
 fallback was written for are still reachable once arity is required — the
 comment's example is a differing *type* spelling, not a differing arity, and
 requiring equal arity may cost nothing it was protecting.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
