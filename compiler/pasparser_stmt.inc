@@ -7954,132 +7954,77 @@ begin
           end;
 
           if (node = -1) and (Tokens[TokPos].Kind = tkLParen) and
-             (not StatementIsAssignment) and
              ((IsRecordType(name) <> REC_NONE) or (FindTypeAlias(name) >= 0)) then
           begin
-            { A cast-headed statement with no `:=` in it is a CALL, so hand the
-              whole thing to the expression parser, which already builds this
-              chain correctly (it is what the right-hand side of an assignment
-              uses). The two lvalue paths below cannot: they resolve every `.name`
-              as a FIELD and end on Expect(:=). Same shape as the class-cast path
-              above, which delegates its selectors and keeps the node when it
-              comes back a call. }
-            Inc(StmtCallDepth);   { it IS a statement: a procedure call is fine }
+            { A cast-headed statement handed WHOLE to the expression parser,
+              which already builds this chain correctly -- it is what the right
+              side of an assignment uses. The hand-rolled lvalue paths below
+              cannot: they resolve every `.name` as a FIELD and end on a hard
+              Expect(:=). Same shape as the class-cast path above, which
+              delegates its selectors and keeps the node when it comes back a
+              call.
+
+              THE ASSIGNMENT CASE IS DELEGATED TOO, which is the merge
+              refactor-p-one-lvalue-path-for-statements-and-expressions asks
+              for, and the `not StatementIsAssignment` gate is gone.
+
+              StmtCallDepth is raised for BOTH cases, and the target parse is
+              exactly what it was invented to wrap. Its declaration in defs.inc
+              says so: "Only the statement's own expression is wrapped, never
+              the RHS after a trailing `:=`, which is a real value context."
+              It has ONE reader in the whole tree -- ParseFactor's no-result
+              call check -- so it does not decide anything about how a
+              designator parses; it decides whether a VOID call is allowed to
+              be the thing that came back. An assignment target needs that
+              exemption MORE than a bare call statement does, because a
+              property store IS a void setter call: measured, delegating with
+              the flag down refused `PTC(raw)^.P := 21` with "TC.SetV is a
+              procedure and has no result to use in an expression", on the very
+              rows this merge exists to keep working.
+
+              The RHS is parsed after the flag is lowered, so a void call on
+              the right of `:=` is still refused.
+
+              Three ways this returns, and the third is why the convention had
+              to land first (see the AN_ASSIGN-over-a-call guard at this
+              function's single exit):
+                - a call, `:=` consumed -> the delegated walk did the store
+                - a call, no `:=`       -> a procedure-call statement
+                - an lvalue, `:=` here  -> build the AN_ASSIGN over it
+
+              AND THE RECORD-NAME CAST-TARGET ARM IS GONE -- 110 lines that
+              rebuilt the in-place value cast, the pointee-tagged deref and the
+              suffix walk a second time. It is dead BY GUARD SUBSUMPTION, not by
+              reading: its test was `IsRecordType(name) >= REC_UCLASS_BASE`, and
+              this one is `IsRecordType(name) <> REC_NONE`, over the same
+              `node = -1` and the same tkLParen, so every input that reached it
+              is now taken here first. A canary planted inside it never fired --
+              through the self-host, the 44-row target differential and the four
+              cast tests -- which corroborates the subsumption rather than
+              standing in for it.
+
+              THE POINTER-ALIAS ARM BELOW STAYS, AND ITS OWN CANARY IS WHY. It
+              fired during self-host, because it is entered on more than
+              FindTypeAlias: a BUILT-IN pointer name (EnsureBuiltinPtrAlias) and
+              the PChar adapter both have no alias row at the moment this guard
+              is tested, so they fall past the delegation and the arm is live.
+              The merge is therefore PARTIAL, and the measurement is what says
+              so. refactor-p-one-lvalue-path-for-statements-and-expressions }
+            Inc(StmtCallDepth);
             ParseExpr;
             Dec(StmtCallDepth);
             node := CurASTNode;
-            if not ASTNodeIsCall(node) then
-              Error('statement is neither a call nor an assignment');
-          end;
-
-          if node = -1 then
-          begin
-            { Record-name typecast as an lvalue statement — TRec(ptr)^.field := val.
-              Mirrors the expression-side record cast: reinterpret ptr as ^TRec and
-              carry the pointee rec on the deref node so ResolveNodeRec resolves the
-              field offset. A class name went to AN_CLASS_CAST above. }
-            if (IsRecordType(name) >= REC_UCLASS_BASE) and (Tokens[TokPos].Kind = tkLParen) then
+            if CurTok.Kind = tkAssign then
             begin
-              castRec := IsRecordType(name);
-              Next; { consume record type name }
-              Expect(tkLParen, '(');
+              Next;
+              valNode := node;
               ParseExpr;
-              Expect(tkRParen, ')');
-              indexNode := AllocNode(AN_PTR_CAST);
-              ASTLeft[indexNode] := CurASTNode;
-              { 0 is alias row ZERO to ir.inc, not "no alias" -- the same field
-                the pointer-alias arm below fills with a real index. Mint one.
-                See EnsureRecPtrAlias. }
-              ASTIVal[indexNode] := EnsureRecPtrAlias(castRec);
-              if ASTIVal[indexNode] < 0 then ASTIVal[indexNode] := 0;
-              ASTTk[indexNode]   := Ord(tyPointer);
-              valNode := indexNode;
-              if CurTok.Kind = tkDot then
-              begin
-                { `TRec(q).field := v` — in-place value typecast, same shape as
-                  the expression side: rec-tagged deref of @operand so the field
-                  offset resolves (bug-pascal-record-cast-field-offset). }
-                fieldNode := AllocNode(AN_ADDR);
-                ASTLeft[fieldNode] := ASTLeft[valNode];
-                ASTTk[fieldNode] := Ord(tyPointer);
-                valNode := AllocNode(AN_DEREF);
-                ASTLeft[valNode] := fieldNode;
-                ASTIVal[valNode] := castRec;     { pointee rec for ResolveNodeRec }
-                ASTTk[valNode] := Ord(tyRecord);
-              end;
-              { The suffix chain after the cast. `^` is answered here (a cast's
-                pointee rec is carried on the deref node, which is this arm's
-                own business); everything else — `.field`, `[i]`, an N-D or
-                jagged subscript, a property, a chain of them — goes to
-                ParseClassRecordSelectors, the node-keyed selector walker the
-                expression side and the call-result path already share.
-
-                It used to be a hand-rolled `while CurTok.Kind in [tkCaret,
-                tkDot]` that knew `^` and `.field` and NOT `[`. So
-                `TRec(r).b[0] := 5` stopped at the `[` and reported
-                `Expected: :=, but got: [` — while the identical expression as
-                an RVALUE parsed, and so did the same target one field
-                shallower. That is FPC's own cutils.pas:330
-                (`TLongWordRec(reverse_longword).b[0] := ...`), where the
-                right-hand side of the very same line parsed and the left did
-                not.
-
-                Adding a `tkLBrack` arm to that loop would have made a FIFTH
-                hand-rolled postfix walker, and the ~120 lines it would have to
-                grow to be right (N-D folding of both `m[i,j]` and `m[i][j]`,
-                partial-row subscripts, the jagged comma sugar, string-value
-                indexing, default properties) already exist once.
-                bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed;
-                devdocs/dev/normalise-dont-special-case.md }
-              ParseCastTargetSuffix(valNode, castTk, castRec,
-                                    Ord(tyUnknown), REC_NONE, False);
-              { THE DELEGATED WALK MAY HAVE PERFORMED THE WHOLE STORE.
-                ParseClassRecordSelectors asks PropAccessIsWrite for itself, and
-                when the target is a property it emits the SETTER call and
-                consumes the `:=` and the value with it. Both cast arms then ran
-                `Expect(tkAssign)` on a token that was no longer there, so
-                `PTC(raw)^.P := 21`, `PTC(raw)^.A[2] := 22` and
-                `PTC(raw)^[3] := 23` were all refused with `expected ':=' before
-                ';'` -- fpc accepts all three, and all three are correct through
-                the plain-variable spelling `pc^...`. Pre-dates pin v403.
-
-                The convention is the one this file already uses ~150 lines
-                below for the non-cast spellings: A CALL NODE IN TARGET POSITION
-                IS THE STATEMENT. The extra conjunct is what makes it sound
-                here, and the three cases are worth spelling out because the
-                node kind alone does not separate them:
-
-                  - a property STORE: call node, `:=` consumed -> the statement
-                  - a bare `PTC(raw)^.Proc;`: call node, no `:=` -> also the
-                    statement, and this arm used to refuse it
-                  - `PTC(raw)^.Func := 5`: call node, `:=` STILL THERE -> falls
-                    through to Expect and builds an AN_ASSIGN over the call,
-                    which is refused. MEASURED, not assumed: before this change
-                    that spelling reported `IR_UNSUPPORTED ... could not lower
-                    AST node (kind 8)` -- an internal error for a user mistake,
-                    identical on the pin -- because the single-exit guard tests
-                    the RETURNED node for being a call and here the returned
-                    node is the ASSIGN. Extended at that guard rather than here,
-                    so every branch that builds an assign over a call is
-                    covered; `o.GetV := 5` and `pc^.GetV := 5` already said
-                    "cannot assign to the result of a function call" and still
-                    do.
-
-                So the test is "did the `:=` survive", which is the same fact a
-                consumed-assignment out-parameter would carry, read off the one
-                place that cannot disagree with itself -- the token stream.
-                refactor-p-one-lvalue-path-for-statements-and-expressions }
-              if ASTNodeIsCall(valNode) and (CurTok.Kind <> tkAssign) then
-                node := valNode
-              else
-              begin
-                Expect(tkAssign, ':=');
-                ParseExpr;
-                node := AllocNode(AN_ASSIGN);
-                ASTLeft[node]  := valNode;
-                ASTRight[node] := CurASTNode;
-              end;
-            end;
+              node := AllocNode(AN_ASSIGN);
+              ASTLeft[node]  := valNode;
+              ASTRight[node] := CurASTNode;
+            end
+            else if not ASTNodeIsCall(node) then
+              Error('statement is neither a call nor an assignment');
           end;
 
           if node = -1 then

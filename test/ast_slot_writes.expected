@@ -1,5 +1,4 @@
 AN_ADDR Left ASTLeft[node]
-AN_ADDR Left ASTLeft[valNode]
 AN_ADDR Left AllocNode(AN_GUIDCONST)
 AN_ADDR Left CurASTNode
 AN_ADDR Left ParseLValueAST(sa1, sa2)

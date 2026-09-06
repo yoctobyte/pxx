@@ -39,7 +39,7 @@ type
   PA = ^TA;
 var
   b: TB;
-  iv: Integer;
+  iv, x: Integer;
   q: Pointer;
   vpa: PA;
   s: array[0..9] of Char;
@@ -57,6 +57,24 @@ begin
   WriteLn('reccast2=', TA(b).ppi^^);
   WriteLn('alias=', PA(q)^.pi^);
   WriteLn('aliasc=', PA(q)^.pc^);
+
+  { the ASSIGN face of the same reads. WriteLn re-derives its argument's type,
+    so it printed the right value off a node tagged with the CAST's record;
+    `x := <chain>` is the face that reads ASTTk, and it is the one that was
+    refused -- "incompatible types: cannot assign record to Integer" for
+    `PA(q)^.pi^`, on the pinned compiler too, while the store face of the same
+    chain said the same thing the other way round. The pointer-alias postfix
+    loop restores the alias's element type whenever ResolveDerefShape answers
+    tyInteger/REC_NONE/0/0, which is BOTH that resolver's decline signature and
+    its TRUE answer for a `^Integer` field -- so a correct answer was
+    overwritten with the record PA points at. It now restores only while the
+    walk is still ON the cast, which is the bit ParseCastTargetSuffix already
+    had. The `var` and `vardrf` rows are the control: same chain, other
+    openers, right throughout. }
+  x := b.pi^;        WriteLn('varasg=', x);
+  x := vpa^.pi^;     WriteLn('vardrfasg=', x);
+  x := TA(b).pi^;    WriteLn('reccastasg=', x);
+  x := PA(q)^.pi^;   WriteLn('aliasasg=', x);
 
   { stores }
   TA(b).pi^ := 7;    WriteLn('sreccast=', iv);

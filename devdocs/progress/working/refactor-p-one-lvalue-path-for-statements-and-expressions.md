@@ -699,3 +699,69 @@ side effect that names itself, so a store that reaches the setter and a store
 that goes somewhere else are distinguishable even when the resulting VALUE is
 the same. `arr[3]` is written both by the setter and by a raw subscript, so a
 value diff cannot see the difference; the trace can.
+
+## 2026-09-06 — the merge landed, and it is PARTIAL because a canary said so
+
+`ParseStatementAST`'s cast-headed delegation lost its `not StatementIsAssignment`
+conjunct, so an assignment TARGET headed by a record-name or type-alias cast is
+now parsed by the expression parser and the statement builds the `AN_ASSIGN`
+over whatever comes back. **The record-name cast-target arm — 110 lines that
+rebuilt the in-place value cast, the pointee-tagged deref and the suffix walk a
+second time — is deleted.**
+
+### The deletion is by GUARD SUBSUMPTION, and the canary only corroborates
+
+The deleted arm's test was `IsRecordType(name) >= REC_UCLASS_BASE`; the
+delegation's is `IsRecordType(name) <> REC_NONE`, over the same `node = -1` and
+the same `tkLParen`. The first implies the second, and the delegation runs
+first, so no input can reach the arm. A canary planted inside it never fired —
+through the self-host, the 44-row target differential, the four cast tests and
+a 57-row before/after over every Pascal fixture in the test tree containing a
+cast in target position — which is agreement with the subsumption, not a
+substitute for it.
+
+### The pointer-alias arm STAYS, and the canary is the reason
+
+Planted in both arms, the ALIAS one fired **during the self-host itself**. The
+delegation's guard asks `FindTypeAlias(name) >= 0`, and that arm is entered on
+more: `EnsureBuiltinPtrAlias` mints a row for a BUILT-IN pointer name after the
+guard has already said no, and the PChar adapter has no alias row at all. So the
+merge is partial, and the measurement — not a reading of the two conditions — is
+what says which half.
+
+### The merge found a live bug in the path it delegates TO
+
+`PA(q)^.pi^` with `pi: ^Integer` was refused in **both** faces —
+`x := PA(q)^.pi^` "cannot assign record to Integer", `PA(q)^.pi^ := 11`
+"cannot assign Integer to record" — on the pinned compiler too, while every
+other opener (`b.pi^`, `vpa^.pi^`, `TA(b).pi^`) was right throughout.
+
+`pasparser_expr.inc`'s pointer-alias postfix loop restores the alias's element
+type whenever `ResolveDerefShape` answers tyInteger / REC_NONE / 0 / 0 — which
+is BOTH that resolver's decline signature AND its true answer for a `^Integer`
+field, so a correct answer was overwritten with the record `PA` points at.
+`ParseCastTargetSuffix` already gates its copy of this restore on `not
+delegated`; this loop had the bit only on the arm where `.name` is NOT a field,
+which is the one arm a plain field never takes. The bit is now set by every
+suffix that is not a `^` (`pcDelegated` → `pcMovedOff`), which is the fact it
+was always about: the walk has LEFT the cast.
+
+**A statement-side merge is how this was found.** The store face was going
+through `ParseCastTargetSuffix`, which had the gate; delegating moved it onto
+the expression copy, which did not. The 44-row differential could not see it —
+its record openers are `r`, `pr^`, `ppr^^`, `TRec(raw)^`, `PRec(raw)^` and none
+of them dereferences a POINTER FIELD reached through the cast. The 57-row
+before/after over the test tree did, on `test_cast_field_deref`, which is the
+test whose own header documents the three sibling instances of this same
+mistake. Rows added to it for the ASSIGN face (`x := <chain>`), which is the
+face that reads `ASTTk`; `WriteLn` re-derives and printed the right value off a
+wrongly-tagged node throughout. The pin refuses the new rows, which is the
+positive control.
+
+### What is left
+
+- `ParseCastTargetSuffix`'s `aliasSeeded` parameter now has one caller and it
+  passes a literal `True`; the record-name mode of that routine is unreachable.
+- The pointer-alias statement arm itself, which needs the delegation guard to
+  ask the same question `EnsureBuiltinPtrAlias` answers rather than
+  `FindTypeAlias` alone.

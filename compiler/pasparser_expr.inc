@@ -538,7 +538,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     rcDelegated: Boolean;   { the record-name cast handed its chain to the shared walker }
-    pcDelegated: Boolean;   { …and the pointer-alias cast below, which is the same fact about the other opener }
+    pcMovedOff: Boolean;    { the pointer-alias cast walk has left the CAST -- see its loop }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     ndFlat: Integer;   { flattened N-D subscript tail from ParseNDSubscriptTail, or -1 }
@@ -7327,7 +7327,7 @@ begin
             Exit;
           end;
           { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
-          pcDelegated := False;
+          pcMovedOff := False;
           while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
           begin
             if CurTok.Kind = tkCaret then
@@ -7341,7 +7341,7 @@ begin
                 so ask the shared resolver rather than the alias row. Identical
                 fact to the record-name cast's twin above; the THIRD opener to
                 need it and the first to get the shared body instead of a copy. }
-              if pcDelegated then
+              if pcMovedOff then
               begin
                 StampDerefFromShape(indexNode, node, tk, recName);
                 Continue;
@@ -7394,6 +7394,7 @@ begin
             end
             else if CurTok.Kind = tkLBrack then
             begin
+              pcMovedOff := True;   { see the twin note in the `.name` arm below }
               { A CLASS value with a DEFAULT PROPERTY means the accessor, not a
                 raw subscript. The `.name` arm below has delegated to
                 ParseClassRecordSelectors since it was written; this one never
@@ -7418,7 +7419,6 @@ begin
               begin
                 node := ParseClassRecordSelectors(node, recName, tk);
                 recName := ResolveNodeRec(node);
-                pcDelegated := True;
                 if CurTok.Kind <> tkCaret then Break;
                 Continue;
               end;
@@ -7522,6 +7522,21 @@ begin
             end
             else { tkDot }
             begin
+              { EVERY suffix that is not a `^` LEAVES THE CAST, so the alias
+                seed below stops being the answer here and not only after a
+                delegation. `PA(q)^.pi^` with `pi: ^Integer` was refused --
+                `x := PA(q)^.pi^` "cannot assign record to Integer", the store
+                face "cannot assign Integer to record" -- because the caret
+                arm's restore fires on tyInteger/REC_NONE/0/0, which is BOTH
+                the resolver's decline signature AND its true answer for a
+                `^Integer` field, so it overwrote a correct answer with the
+                cast's record. Refused on the pin too, in both faces, while
+                `vpa^.pi^` off a plain variable is right throughout.
+                ParseCastTargetSuffix already gates its copy of this restore on
+                the same bit (`not delegated`); this loop had the bit only for
+                the delegating path, which is the one arm where `.name` is NOT
+                a field. refactor-p-one-lvalue-path-for-statements-and-expressions }
+              pcMovedOff := True;
               { Not a field -> not this loop's job. See the twin note in the
                 record-name cast above: the hand-rolled builder here can only
                 make AN_FIELD, so a METHOD at the end of the chain silently
@@ -7534,7 +7549,6 @@ begin
               begin
                 node := ParseClassRecordSelectors(node, recName, tk);
                 recName := REC_NONE;
-                pcDelegated := True;
                 { ParseClassRecordSelectors' own loop is [tkDot, tkLBrack] with
                   NO tkCaret in it, so Break'ing here left a following `^` in
                   the token stream and nobody consumed it: `PTC(raw)^.GetP^` and
