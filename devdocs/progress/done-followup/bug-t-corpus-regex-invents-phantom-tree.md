@@ -153,13 +153,32 @@ trailing-dot case is the regression control and was verified to FAIL under the
 pre-fix regex; the interior-dot case passes under the pre-fix regex too and its
 docstring says so, so nobody counts it as a control it cannot be.
 
-### The residual, NOT fixed here, and it has no owner yet
+### The residual — CORRECTED, and the correction is the more useful half
 
-A recipe's own SKIP line can never be counted as a skip HOLE. `_self_skipped`
-returns the whole matched line, which always begins `<target>: SKIP`, while
-`SKIP_HOLE_PREFIXES` matches at position 0. So every self-skipping recipe arm —
-`test-zlib`'s own `gcc oracle not found`, and the five gtk skips on the
-18:37:24Z report — is counted in `skips` and never in `skip_holes`. Five of
-seven skips there were invisible to the coverage number. Flagged to frankB, who
-holds the neighbouring absence-detector defect; it is a design question about
-hole accounting, not a typo.
+**What I first wrote here was wrong and had exactly the shape I had corrected
+somebody else's version of three hours earlier: a true general claim carrying a
+false supporting instance.** I said the five uncounted gtk jobs on the
+18:37:24Z report were recipe self-skips, invisible because `_self_skipped`
+returns a line beginning with the target name. frankB checked and they are not.
+Verified here first-hand rather than relayed:
+
+- None of those seven skips is a recipe self-skip. The report's own reason list
+  (lines 25-27) has three groups, all harness-originated.
+- The five gtk jobs carry `host dev dependency absent: …/compiler/gtk.h`,
+  emitted at `testmgr.py:1849`, which is in none of `SKIP_HOLE_PREFIXES`.
+  `testmgr.py:1543` has the same problem in the other direction:
+  `"host tool absent:".startswith("tool absent:")` is False.
+- So the 2-vs-7 gap is a prefix mismatch between emitter and classifier, both
+  inside `testmgr.py`, and both emitters' own text says verbatim *"That is
+  coverage this box is not providing, not a verdict on the tree."* The emitter
+  says hole, the classifier says not-a-hole, and the report published both.
+
+frankB holds that fix. **`SKIP_HOLE_PREFIXES` must NOT be loosened** — the
+comment above it records that folding a recipe's own guard into corpus-absence
+is the seven-week `(corpus absent)` bug the tuple exists to end.
+
+The general statement survives and is now its own ticket with no instance
+claimed: a recipe self-skip can never be a hole BY CONSTRUCTION, which is right
+for a recipe guarding an optional probe and wrong for `test-zlib`'s
+`gcc oracle not found`. That wants a channel from the recipe, not a looser
+match in the harness — `bug-t-a-recipe-cannot-declare-its-own-skip-a-coverage-hole`.
