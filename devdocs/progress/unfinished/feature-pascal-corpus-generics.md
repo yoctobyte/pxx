@@ -1170,6 +1170,7 @@ does not fix them). Once it lands, resume at `generics.collections`.
 | the note said | actual state 2026-08-30 |
 | --- | --- |
 | *"Still parked — blocked behind the alias-cast bug"* | [[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] landed at `6cc4afc17`, 2026-08-29 22:32. Unblocked for hours before I opened this. |
+| **PARK CONDITION SUPERSEDED** — this row is a RECORD, not a live gate | frankA established it on 2026-08-30 (section of that date below) and marked it in prose; the literal marker the checker reads did not exist until 2026-09-06, so a correct fix kept reading as an unfixed park. Marker added by frankD; no claim changed. |
 | *"`generics.collections`' `unknown type: TKey` is already re-diagnosed as cross-unit Delphi generics (`81dffa9cb`). Left alone."* | That re-diagnosis was FIXED at `625991d20` — and **the wall survived it unchanged**. The note sends the next holder to a closed ticket. |
 
 Same shape the umbrella [[feature-pascal-corpus-oop]] already documents: *a
@@ -1259,6 +1260,7 @@ history, and this section is a snapshot like every other.
 ## 2026-08-30 (frankA) — park cleared, frontmatter drift fixed, still unfinished
 
 `progress check` flagged this ticket as STALE-PARK-HELD: its prose names
+PARK CONDITION SUPERSEDED -- frankA established this on 2026-08-30 (see the section of that date below) and marked it in prose; the literal marker the checker reads did not exist until 2026-09-06, so a correct fix kept reading as an unfixed park. Marker added by frankD, no claim changed.
 `bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate` next to a blocking
 phrase, and that ticket is in `done/`. Confirmed — it landed at `6cc4afc17` on
 2026-08-29, and the entry above has been marked in place rather than rewritten,

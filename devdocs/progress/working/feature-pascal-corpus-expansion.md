@@ -30,6 +30,7 @@ summary: "RUNG 6 IS COMPLETE as of 2026-09-05: `generics.collections` compiles e
 ## 2026-08-29 (frankP) — the "two ordering defects, one restructuring" note is STALE
 
 The park note below lists **wall 6's Delphi ordering defect as open**, and the
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 rung-9 note near the bottom of this file tells whoever takes
 [[bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized]] to *"read
 wall 6's ticket alongside this one and ask whether a single restructuring closes
@@ -39,6 +40,7 @@ next holder looking for a shared fix that does not exist.
 **Wall 6 is closed** ([[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]],
 now in `done/`, commit `35f485537`, 2026-08-28). It was closed by giving the
 prerequisite scan a THIRD source — this template's not-yet-buffered method impls
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 read straight out of `Tokens[]`, bounded by the `GenMethImplSOff` header offsets
 the rewrite recorded — **not** by changing when or where
 `DelphiRewriteGenericUses` emits. So the two defects shared a symptom
@@ -122,6 +124,7 @@ writing that code with no corpus in sight.
 
 `bug-p-mutually-referencing-generics-are-rejected-as-circular` resolved. A
 prerequisite found in a METHOD BODY is materialisation-time and is now emitted
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 without deferring; only class-body (declaration-time) edges defer. The
 distinction needed no new state — the scans already run class body first, so the
 boundary is one index — which is also what kept it inside Track P, since the
@@ -131,8 +134,10 @@ boundary is one index — which is also what kept it inside Track P, since the
 
 The new stop is the same ordering family a third time, and it is filed:
 [[bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists]]
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 (p60). The rewrite emits a template's alias right behind *that template's own*
 declaration, so a prerequisite naming a template declared LATER in the same type
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 section lands before it exists:
 
 | | line |
@@ -153,6 +158,7 @@ reaching one of its own.
 
 `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` is
 resolved — the mode-Delphi ordering defect. The prerequisite scan now also reads
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 this template's not-yet-buffered method impls, bounded by the header offsets the
 rewrite recorded (`GenMethImplSOff`), never by argument shape. The banked warning
 held: the tempting raw-token sweep over-approximates on `T`/`U` and would have
@@ -191,9 +197,11 @@ stashed:
 
 ~271 lines, past all seven sites. **The new stop is wall 6**, already diagnosed
 and parked in
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 `unfinished/bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body`
 — not a new wall, and its ticket already carries the warning not to weaken the
 prerequisite scan to make the corpus advance.
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 
 `generics.collections.pas` still holds **18** of the 25 `CreateRes(@…)` sites.
 Probed directly after this fix (2026-08-28): it still cannot be assessed, and now
@@ -731,7 +739,9 @@ advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
 it meets an ALREADY-DIAGNOSED ticket:
 [[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]],
 parked in `unfinished/` with its repro and diagnosis banked. So the next step is
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 to un-park that ticket, not to diagnose anything new.
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 
 **Wall 3 IS wall 6 — resolved, not merely suspected.** The question was asked of
 the two DEFECTS rather than the two row numbers (the snapshot tables below number
@@ -1209,6 +1219,7 @@ another generic's body), mutually-referencing generics rejected as circular, and
 — in one fix closing two tickets — a generic specialized before its declaration
 (`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` +
 `bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists`).
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 
 `generics.defaults.pas` moved `:2960 → :3231 → :994 → :3250 → :3341` across the
 day. Note the `:994` — the third fix moved the failure *backwards*, because a
@@ -1240,12 +1251,14 @@ with this section.** It lists three open items; two were already closed before
 this session started:
 
 | park note said | actual state on 2026-08-29 |
+| **PARK CONDITION SUPERSEDED** — dated ladder history, not a live gate | The only live resume condition is the one in the LIVE STATUS blockquote at the top; every wall named here was cleared on the date its section carries. |
 | --- | --- |
 | wall 6 Delphi half, `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` — open in `unfinished/` | **done** |
 | wall 7, `bug-p-a-resourcestring-is-not-addressable` (p55) | **done**, `c9cf8c457` |
 | `bug-p-two-different-nested-specializations-of-one-template-collide` (p65) | still open, in `backlog/` |
 
 A park note is a snapshot of the moment it was written and the tickets it names
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 keep moving without it. **Re-measure before reading it as a plan** — that is what
 this session did, and the corpus had advanced past everything the note describes.
 
@@ -1295,6 +1308,7 @@ one remaining park item; it is the next rung's subject.
 Still open and untouched: [[bug-p-two-different-nested-specializations-of-one-template-collide]].
 
 ### PARKED again 2026-08-29 (frankA) — rung 6 done, rung 9 open and unclaimed
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 
 Out of `working/` because it is a live lock and nothing is happening on it.
 Everything is pushed. Nothing is reverted or half-applied; no code is mid-edit.
@@ -1309,6 +1323,7 @@ Its first job is a two-unit reduction, which has not been built.
 Also still open: [[bug-p-two-different-nested-specializations-of-one-template-collide]].
 
 **Read the 2026-08-29 section above before the park note at the TOP of this
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 ticket** — that older note was stale on two of its three items by the time it
 was read, which is the failure mode this one will have too. Re-measure the
 corpus first; it takes one compile.
@@ -1424,6 +1439,7 @@ specialization. Start from the bisection above, not from the error text.
 ### PARKED 2026-08-30 (frankA) — released from `working/`, probe complete
 
 The re-probe above is finished and the ladder's next step is blocked on
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 [[bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use]].
 Released from `working/` rather than held, because a lock held by a session
 that is not working the ticket reads as "someone is on it" while nothing
@@ -1451,6 +1467,7 @@ include without the reuse is **clean**; the reuse without any include
 [[bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use]].
 
 **The corpus wall is untouched by that fix** — re-probed after it landed,
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 `generics.collections` still stops at `unknown type: TKey` in
 `generics.defaults.pas`, same line, same message.
 
@@ -1734,6 +1751,7 @@ So on the condition as written, the park is discharged.
 ### But the park was re-written mid-park, and the new condition is live
 
 The Status line says *"parked **2026-08-30** — rung 6 blocked on
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 [[decide-revisit-object-types-rtl-generics-fired-the-trigger]]"*. That ticket is
 open in `backlog/` at **U p70**. It post-dates all seven.
 
@@ -1804,6 +1822,7 @@ neither read for edit nor touched — frank-rust has held it uncommitted since
 ## 2026-08-30 (coordinator) — RUNG 6's BLOCKER MOVED; retarget before anyone reads the park
 
 The `Status:` line at the top of this file says rung 6 is *"blocked on
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 decide-revisit-object-types-rtl-generics-fired-the-trigger"*. **That is now stale
 and points at settled work.** frank-user resolved
 `bug-p-object-value-types-standard-meaning` in `d23f52948` (board move
@@ -2007,6 +2026,7 @@ P bug. Not urgent at p15, but it will mislead whoever reaches it.
 **Ownership:** `owner: frankA` is stale — frankA has taken
 `bug-c-a-c-function-s-calling-convention-depends-on-the-target`. Re-`claim`
 before the first commit; resuming parked work is the one transition with no
+PARK CONDITION SUPERSEDED -- dated ladder history, not a live gate. The only live resume condition for this ticket is the one in the LIVE STATUS blockquote at the top; every wall named below was cleared on the date its section carries.
 prompt to re-claim.
 
 ## CORRECTION to the note above: I described option B, which the owner REJECTED
