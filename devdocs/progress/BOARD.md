@@ -70,7 +70,7 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
 | feature-esp-gpio-and-adc-callback-slices | B+S | 30 | feature | ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3) | — |
 | feature-port-freebsd-native | A | 25→55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
-| feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
+| feature-release-checksums-repro | A | 50→55 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
 ## backlog (14)
@@ -96,10 +96,11 @@ _none_
 
 _none_
 
-## backlog-umbrella (7)
+## backlog-umbrella (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| umbrella-a-stranger-can-get-a-working-compiler-from-a-release | T | 55 | umbrella | GOAL, not a unit of work. Owner, 2026-09-06: 'project goal, let's slowly prepare for a release.' The target is not a tag and not a document -- it is a person who has never seen this repo getting a compiler that works, from an artefact they can verify. SLOWLY is part of the instruction: this ranks steadily in the background, it does not displace development. Attach whatever an ATTEMPT breaks on; do not pre-populate it from the backlog by guessing. | bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest, decide-release-signing-key-custody, feature-release-checksums-repro |
 | umbrella-compile-and-run-dosbox | C | 50 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross, feature-a-port-alloca-to-i386-arm32-and-riscv32, refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies |
 | umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released, bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it, feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray, feature-a-reentrant-heap-lock-and-per-thread-arenas, feature-pascal-management-operators-copy-and-addref, feature-pascal-management-operators-nested-and-array |
@@ -486,7 +487,7 @@ _none_
 | decide-p-a-terminal-folder-that-is-unranked-is-the-wrong-home-for-a-measurement-that-explains-a-live-red | U | 30 | decide | FORK, not settled. `bug-p-a-generic-routines-implementation-type-parameters-are-not-checked-against-its-interface` reproduces at HEAD and the scope rule points straight at `rejected/` — a type parameter renamed between a routine's interface and its implementation is produced by a mistake and nothing else, and CLAUDE.md is explicit that us accepting what FPC rejects is not a defect. What blocks the rejection is that its own summary names TWO LIVE CONFORMANCE FAILS (tgenfunc17.pp, tgenfunc18.pp, in an otherwise 347/2 run), and `rejected/` is not ranked — so rejecting leaves two red rows with nothing pointing at why, and the next reader files it again. Options: (a) `known-incompat/` with the two rows cited as expected FAILs; (b) implement the check anyway. Generalises past this ticket: a terminal folder that is LOADED but UNRANKED is the right home for a wrong report and the wrong home for a correct measurement that explains a live red. | — |
 | decide-posix-master-vs-fpc-named-master-for-the-socket-facades | U | 25 | decide | `Posix.*` is master, or the FPC-named units are? The tree has already answered, the other way | — |
 | decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative | U | 55 | decide | pxx installs its per-thread block on GS (thread_emit.inc:142, `GS, not fs: fs belongs to libc, and a pxx program may link one`) and the x86-64 psABI puts ELF TLS on FS. Measured 2026-09-06: a pxx-native thread gets a DISTINCT non-zero GS base (main 42D110 in .bss, child 7BDB21FF7A80 off its own stack) with FS 0 in both, so the mechanism works -- for pxx-compiled code. The fork is what happens at the boundary: GS-relative thread-locals cannot be reached by TLS relocations in a gcc-built object, and --emit-obj exists precisely to be linked into foreign programs. Nobody has ruled on this and bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared cannot be implemented without the ruling. A second measured fact bears on it: a thread pxx did NOT create inherits the parent's GS base (glibc pthread_create gives main and child the identical 4298F0), so any GS scheme is also deciding what a foreign-created thread gets. | — |
-| decide-release-signing-key-custody | U | 25→50 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
+| decide-release-signing-key-custody | U | 25→55 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-shift-native-width-was-never-re-confirmed-on-the-full-table | U | 45 | decide | decide-shift-operator-promotion-width (2026-08-10) ruled that shifts happen at NATIVE width. The next day its implementer measured that the cost table the user was shown listed ONE divergence from FPC and the real number is four, wrote 'the call is worth re-confirming rather than assuming', and filed nothing — the note lives inside a file in decided/, which by construction nobody re-opens. Two agents have since hit the divergence in the wild and filed it as a bug. One question for the user: keep native width for a DECLARED narrow variable, or promote only UNTYPED operands. Untyped operands are already settled and are not in scope. | — |
 | decide-should-a-failed-compiler-build-delete-its-target | U | 40 | decide | A failed `make compiler/pascal26` leaves the PREVIOUS binary on disk -- the Makefile has no `.DELETE_ON_ERROR` -- so the probe you run next executes the code your change was replacing and prints a plausible correct answer. Measured 2026-09-06: frankS nearly certified a positive control on output produced by the previous build. It is a fifth route to a stale binary beside CLAUDE.md's four, and the only one CAUSED BY THE THING BEING TESTED, so the failures are perfectly correlated -- the worse the change, the more certain you are to measure the old compiler. THE FORK: add `.DELETE_ON_ERROR` (a failed build leaves NO binary, so the wrong measurement becomes impossible rather than merely discouraged) versus leave it and rely on a one-line rule. THE COST IS THE REASON THIS IS A DECISION AND NOT A FIX: every failed edit would then cost a pin-seeded rebuild instead of a 12-second one, and a failed edit is the COMMON case in this loop, not the rare one. Fleet-wide trade, nobody's lane to take alone. Recommendation: the rule, not the Makefile change -- held WEAKLY, because the two rates are not commensurable: A's cost is certain and measurable while A's benefit is measured by SELF-REPORT, which is blind precisely to the cases where the hazard did its damage (a seat that does not catch it files a CONCLUSION, not a correction). Two instances in one day is a floor over the visibly-failed subset, not a rate. | — |
 | decide-should-the-full-suite-hook-match-argv-rather-than-the-whole-command-string | U | 40 | decide | `.claude/hooks/no-full-suite.sh` matches the whole Bash command string, and a heredoc commit message is part of that string. So a commit message that NAMES a full-tier recipe in order to explain that it was NOT run is refused -- and so is a markdown document quoting a corpus glob. Two independent instances on 2026-09-05, neither running any test. The cost is not the keystroke: the hook penalises precisely the practice CLAUDE.md asks for, which is writing the gate justification into the commit message, and the workaround (`-F` a file, or the Write tool) is invisible to the next person, who learns only that mentioning a tier in prose is painful. NOBODY MAY NARROW THIS ON THEIR OWN JUDGEMENT -- it is permission machinery and the direction of the change is 'less strict', so it is an owner call. The fork: match argv only, keep matching the whole string, or exempt the commit-message path. | — |
@@ -1082,6 +1083,7 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
+- [p 60] [T] bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest (unblocks 1)
 - [p 60] [A] feature-a-make-the-heap-lock-reentrant (unblocks 1)
 - [p 60] [A] bug-a-the-address-of-a-string-element-is-the-literals-address
 - [p 60] [A] bug-a-the-compiler-prints-ok-and-exits-0-when-it-wrote-no-output-file
@@ -1096,7 +1098,6 @@ _none_
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid
-- [p 60] [T] bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [T] bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy
 - [p 60] [T] bug-t-tools-devtest-is-a-growing-sequential-sweep-behind-one-budget
@@ -1110,6 +1111,7 @@ _none_
 - [p 60] [U] task-u-evaluate-the-2026-08-31-ticket-rules-next-week
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
+- [p 55] [U] decide-release-signing-key-custody (unblocks 2)
 - [p 55] [U] decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 2)
 - [p 55] [U] decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2 (unblocks 1)
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
@@ -1156,7 +1158,6 @@ _none_
 - [p 55] [T] feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing
 - [p 55] [A] refactor-a-the-assignment-kind-funnel-needs-a-third-discriminator-not-a-third-special-case
 - [p 55] [T] regression-cascade-154d1aa3fba6-has-no-ticket-and-its-range-cannot-explain-its-jobs
-- [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
@@ -1490,6 +1491,7 @@ _none_
 - **2** — decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - **2** — decide-how-a-type-carries-an-identity-its-kind-cannot-hold
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
+- **2** — decide-release-signing-key-custody
 - **2** — decide-t-the-full-suite-hook-refuses-prose-about-the-suite
 - **2** — feature-web-track-w-bootstrap
 - **2** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
@@ -1500,6 +1502,7 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
+- **1** — bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
@@ -1507,7 +1510,6 @@ _none_
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
-- **1** — decide-release-signing-key-custody
 - **1** — decide-should-an-open-array-parameter-become-a-two-word-descriptor
 - **1** — decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - **1** — decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2
@@ -1527,6 +1529,7 @@ _none_
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
 - **1** — feature-port-openbsd-libc
+- **1** — feature-release-checksums-repro
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
