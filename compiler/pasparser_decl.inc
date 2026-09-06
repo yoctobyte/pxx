@@ -6679,6 +6679,7 @@ var
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
   savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
+  baseQualCi: Integer;   { `class(TOuter.TInner)` — see the ancestor list }
   gmKw: Integer;       { first token of a generic METHOD header — see ExpandGenericMethod }
   mrIntfCi, mrMOff, mrMLen, mrIOff, mrILen, mrK: Integer;  { method resolution clause — see MethResolCls }
   mrResolved: Integer;
@@ -7325,7 +7326,20 @@ begin
             list is an implemented interface; a class name is the parent. }
           repeat
             if CurTok.Kind <> tkIdent then Error('expected base class or interface name');
-            tmpCi := FindUClass(CurTok.SVal);
+            { `class(TOuter.TInner)` -- a QUALIFIED NESTED TYPE in the ANCESTOR
+              position. This loop read one identifier and handed the `.` to the
+              Expect(tkRParen) below, so tclass13a.pp answered `expected ')'
+              before '.'`: a diagnostic about the parenthesis for a name that
+              was never looked up. Every OTHER position already took the
+              qualified spelling -- `var n: tc.tnest`, `tc.tnest.Create`,
+              `SizeOf`, `Default`, `Low`/`High` -- which is what makes this an
+              absent copy rather than a missing capability. `is`/`as` was the
+              third one missing it; both now ask the same function.
+              EatQualifiedNestedClassRef (pasparser_class.inc) consumes nothing
+              unless the run resolves to a class-like row. }
+            baseQualCi := EatQualifiedNestedClassRef;
+            if baseQualCi >= 0 then tmpCi := baseQualCi
+            else tmpCi := FindUClass(CurTok.SVal);
             { TObject is a registered builtin class row now, so exclude it from
               the parent lookup by name — a real-parent link would relocate
               every `class(TObject)` VMT and break the implicit-root model

@@ -388,6 +388,50 @@ begin
   Result := FindSym(ClassConstMangle(ClassConstCi[reg], nm));
 end;
 
+function EatQualifiedNestedClassRef: Integer;
+{ CurTok begins a `TOuter.TInner[.TDeeper…]` run naming a nested CLASS or
+  RECORD: consume the qualifier and return the row it names, leaving CurTok on
+  the FINAL member. -1 with NOTHING consumed otherwise, so a caller can use it
+  as the test as well as the strip -- EatQualifiedTypePrefix's own contract, one
+  level up, for the callers that want a class ROW rather than a name.
+
+  Those callers exist because a qualified nested type appears in three positions
+  that do not route through ParseTypeKind: the ANCESTOR list (`class(tc.tnest)`,
+  tclass13a.pp) and the right operand of `is` and `as`. Each read ONE identifier
+  and handed the `.` to whatever came next, so each answered `expected ')'
+  before '.'` -- the parenthesis blamed for a name that was never looked up,
+  three times, in three files. Every other position already took the spelling.
+
+  TWO THINGS EatQualifiedTypePrefix DOES NOT DO FOR THESE CALLERS, and both are
+  why this wrapper is not a one-line alias.
+
+  It reports success for a run that did NOT resolve -- a nested subrange, enum
+  or array is not a UClass row, and then QualTypeOwnerCi holds the OWNER. A
+  caller reading it as "the type" would silently make the OWNER the base class.
+  The guard below is ScanNestedTypeRun's own condition (FindNestedType on the
+  outer row), deliberately not FindNestedClassLikeCi's: that function's alias
+  half is not owner-scoped, so a hit there leaves the run unconsumed and
+  QualTypeOwnerCi again holding the owner.
+
+  And it does not restore QualTypeOwnerCi -- by design, since a caller routing
+  into ParseTypeKind needs it to survive. These callers do their own lookup, so
+  the save/restore belongs here rather than copied into each of them; leaking it
+  leaves a class's private alias visible to the next unqualified name in the
+  file. bug-p-a-qualified-nested-type-cannot-be-a-base-class-or-an-is-operand }
+var eqnName: AnsiString; eqnSaved: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
+  if NestedOwnerCi(CurTok.SVal) < 0 then Exit;
+  if FindNestedType(NestedOwnerCi(CurTok.SVal), GetTokenStr(TokPos + 1)) < 0 then Exit;
+  eqnSaved := QualTypeOwnerCi;
+  eqnName := CurTok.SVal;
+  if EatQualifiedTypePrefix(eqnName) then Result := QualTypeOwnerCi;
+  QualTypeOwnerCi := eqnSaved;
+end;
+
 function FindQualifiedClassConstSym(const tname, cname: AnsiString): Integer;
 { `TFoo.K` in a CONSTANT expression: the backing symbol of an UNTYPED class or
   record const named through its owning type, or -1.

@@ -10681,7 +10681,14 @@ begin
   begin
     isIsTest := CaseEqual(CurTok.SVal, 'is');
     Next;
-    isci := FindUClass(CurTok.SVal);
+    { `o is tc.tnest` / `o as tc.tnest` -- a QUALIFIED NESTED TYPE as the right
+      operand, the third position that reads a class name without routing
+      through ParseTypeKind. It read one identifier and left the `.` to the
+      expression parser, so a legal test answered `expected ')' before '.'`.
+      Same function as the ancestor list now asks; it consumes nothing unless
+      the run resolves. }
+    isci := EatQualifiedNestedClassRef;
+    if isci < 0 then isci := FindUClass(CurTok.SVal);
     Next;
     left := CurASTNode;
     if isIsTest then

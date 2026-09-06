@@ -16224,6 +16224,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_qualclsconst26 "$$($(TESTTMP)/test_qualclsconst26)" "$$(cat test/test_a_class_const_is_a_constant_when_named_through_its_type.expected)"
 	! ./$(COMPILER) test/test_a_class_name_is_not_an_integer_constant_fail.pas $(TESTTMP)/test_clsnameint26 > $(TESTTMP)/test_clsnameint.log 2>&1
 	grep -q "not a constant" $(TESTTMP)/test_clsnameint.log
+	./$(COMPILER) test/test_a_qualified_nested_type_can_be_a_base_class.pas $(TESTTMP)/test_qualnestbase26
+	tools/expect_same.sh test_qualnestbase26 "$$($(TESTTMP)/test_qualnestbase26)" "$$(cat test/test_a_qualified_nested_type_can_be_a_base_class.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
