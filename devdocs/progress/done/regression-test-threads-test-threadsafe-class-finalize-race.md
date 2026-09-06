@@ -44,3 +44,6 @@ expect_same: MISMATCH [test_tscfr26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-threads#src:test/test_threadsafe_class_finalize_race.pas` passes at 918842a5fd43 (tier full); it was red at 918842a5fd43. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
