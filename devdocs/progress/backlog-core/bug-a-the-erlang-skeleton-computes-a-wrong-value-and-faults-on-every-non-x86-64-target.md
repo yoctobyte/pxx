@@ -76,9 +76,34 @@ agreeing with a default, and prints the same thing everywhere when it is right.
 reading before the fix and keep it in the ticket, because a row added afterwards
 that passes on the broken compiler is not testing what it claims.
 
-## The riscv32 compile failures are a separate question
+## The riscv32 compile failures — HALF OF THIS IS NOW ANSWERED, AND IT WAS NOT ZIG
 
-`test_zig_skeleton.zig` and `test_erlang_skeleton.erl` both fail to COMPILE for
-riscv32 (Rust compiles and runs there). Not diagnosed; noted here so it is not
-re-derived, and it is the same class of newly-visible finding — the refusal ran
-before the compile could be attempted.
+This section originally said `test_zig_skeleton.zig` and
+`test_erlang_skeleton.erl` both fail to compile for riscv32, undiagnosed. The
+Zig half is fixed and its cause was not the Zig frontend: riscv32 calls
+builtinheap's `PXXWriteDecW` for every integer write and the driver pulled no
+unit at all
+(`bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions`).
+Zig now runs identically to its native output on i386, aarch64, arm32 AND
+riscv32.
+
+**Worth keeping because I nearly wrote the wrong ticket from it.** The
+measurement "Zig does not compile for riscv32" was true, and a per-target
+exclusion drafted from it would have recorded riscv32 as the Zig frontend's
+problem. A per-target exclusion written from a failing compile records the
+target the defect was VISIBLE on, which is not the same as the target — or the
+component — it is about.
+
+`test_erlang_skeleton.erl` is very likely the same missing unit pull, since
+`eparser.inc` pulls nothing either and the program prints integers. NOT fixed
+and NOT confirmed: Erlang is separately broken cross-target (this ticket), and
+fixing its unit pull would only let it reach the wrong value faster.
+
+## A second Zig finding from the same matrix, undiagnosed
+
+`test_zig_advanced.zig` SIGILLs on aarch64, arm32 and riscv32 — dies before any
+output, where `test_zig_skeleton.zig` and `test_zig_structs.zig` are identical
+to native on all four. So something in the wider Zig surface still emits an
+instruction those targets do not have. Noted, not diagnosed; it is not covered
+by `test-skeleton-frontends-cross-target`, which carries only the two green Zig
+programs, and that omission is deliberate rather than accidental.

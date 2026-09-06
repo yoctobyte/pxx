@@ -27501,6 +27501,67 @@ test-packenum-gcc-oracle: $(COMPILER)
 	test "$$ran" -ge 1 || \
 	  { echo "test-packenum-gcc-oracle: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }
 
+.PHONY: test-skeleton-frontends-cross-target
+test-skeleton-frontends-cross-target: $(COMPILER)
+	@# THE SAME PROGRAM, EVERY TARGET THE FRONTEND ACCEPTS, compared whole
+	@# against its own native run. A RELATION, never a constant: no expected
+	@# text appears in this recipe, so it is correct on every target, prints
+	@# nothing to keep in sync, and cannot pass by agreeing with a default.
+	@#
+	@# It exists because until 2026-09-06 there was nothing to compare. The
+	@# Rust and Zig drivers refused every non-x86-64 target, and the refusal was
+	@# LOAD-BEARING -- each of them hand-wrote an x86-64 program tail
+	@# unconditionally, so a lifted refusal produced a clean compile and a
+	@# binary that died before its first syscall. Both now go through
+	@# EmitEntryStubCall / PatchEntryStubCall and EmitExitReg, and the refusals
+	@# are narrowed to exactly the targets these rows measure.
+	@#
+	@# THE REFUSAL IS WHY THIS ROW HAS TO EXIST RATHER THAN BE OPTIONAL: an
+	@# expected-failure row scores a refusal as a pass, so for as long as the
+	@# frontend refused a target, every cross-target claim about it was true by
+	@# construction and measured nothing. The must-run assert below is the
+	@# guard against that coming back -- a re-widened refusal would otherwise
+	@# make this row green by skipping everything.
+	@#
+	@# COMPILE FAILURE IS A FAILING ROW, not a skip. Two of these programs
+	@# failed to compile on riscv32 while this was being written, and the cause
+	@# was neither frontend: riscv32 calls builtinheap's PXXWriteDecW for every
+	@# integer write and the drivers pulled no unit. A skip would have recorded
+	@# that as "not applicable" and the defect would have stayed invisible for
+	@# exactly the same reason the refusal hid the last one.
+	@# bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it
+	@overall=0; ran=0; \
+	for src in test/test_rust_else_if.rs test/test_rust_advanced.rs \
+	           test/test_rust_option.rs test/test_rust_result.rs \
+	           test/test_zig_skeleton.zig test/test_zig_structs.zig; do \
+	  nm=$$(basename $$src); \
+	  ./$(COMPILER) $$src $(TESTTMP)/xtnat26 >/dev/null 2>&1 \
+	    || { echo "test-skeleton-frontends-cross-target: NATIVE compile failed for $$nm"; overall=1; continue; }; \
+	  nat="$$($(TESTTMP)/xtnat26 2>&1; echo rc=$$?)"; \
+	  for t in i386 aarch64 arm32 riscv32; do \
+	    case $$t in \
+	      aarch64) run="qemu-aarch64" ;; \
+	      arm32)   run="qemu-arm" ;; \
+	      riscv32) run="qemu-riscv32" ;; \
+	      *)       run="" ;; \
+	    esac; \
+	    if [ -n "$$run" ] && ! command -v $$run >/dev/null 2>&1; then \
+	      echo "test-skeleton-frontends-cross-target: $$t SKIPPED ($$run absent) -- $$nm NOT verified"; \
+	      continue; \
+	    fi; \
+	    if ! ./$(COMPILER) --target=$$t $$src $(TESTTMP)/xtcross26 >/dev/null 2>&1; then \
+	      echo "test-skeleton-frontends-cross-target: $$nm does not COMPILE for $$t"; \
+	      overall=1; continue; \
+	    fi; \
+	    got="$$(timeout 60 $$run $(TESTTMP)/xtcross26 2>&1; echo rc=$$?)"; \
+	    ran=$$((ran+1)); \
+	    tools/expect_same.sh "xtarget-$$nm-$$t" "$$got" "$$nat" || overall=1; \
+	  done; \
+	done; \
+	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 16 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
+	if [ $$overall -ne 0 ]; then echo "test-skeleton-frontends-cross-target: RED"; exit 1; fi; \
+	echo "test-skeleton-frontends-cross-target: GREEN -- $$ran (program,target) pairs matched their native run"
+
 .PHONY: test-record-layout-cross-frontend
 test-record-layout-cross-frontend: $(COMPILER)
 	@# THE SAME AGGREGATE THROUGH THREE FRONTENDS OF ONE COMPILER, one target at

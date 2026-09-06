@@ -1607,6 +1607,49 @@ begin
   MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall;
 end;
 
+function TargetCodegenCallsHeapRuntime: Boolean;
+{ Does this target's CODEGEN call routines that live in builtinheap, for
+  constructs whose source says nothing about the heap?
+
+  Asked as the QUESTION and not as a routine name, because the first version of
+  this predicate was `TargetWritePathNeedsHeapRuntime` and it was too narrow
+  within the hour. Two mechanisms are known and they have DIFFERENT target sets,
+  which is exactly why naming it after either one produces a guard that answers
+  correctly for the case you had in hand:
+
+    PXXWriteDecW   riscv32 routes EVERY ordinal write through it
+                   (ir_codegen_riscv32.inc, the `Is64BitRISCV32(tk) or
+                   TypeIsOrdinal(tk)` arm). i386 and arm32 reach it only for a
+                   WIDTH on a 64-bit value and have inline writers otherwise;
+                   x86-64 and aarch64 never do.
+    PXXMemMove     the aggregate-result epilogue lowers onto it on aarch64,
+                   arm32 and riscv32 -- measured -- and cparser.inc's hosted
+                   branch names xtensa for the same reason.
+
+  So the union is aarch64/arm32/riscv32/xtensa, and a frontend cannot see any of
+  it. A driver that never pulls builtinheap produces a working binary on the
+  targets whose codegen happens to be inline and an internal-fault-shaped
+  `compiler error: <routine> not found` on the rest, for a program whose source
+  mentions neither strings nor the heap.
+
+  Measured 2026-09-06: `fn main() { println!("{}", x); }` compiled and ran on
+  x86-64/i386/aarch64/arm32 and failed on riscv32, while the SAME print from
+  Pascal worked there -- a Pascal program pulls builtinheap ambiently and a
+  skeleton driver does not. Then, with only the write mechanism covered,
+  test_rust_option.rs (a record return, no printing) failed on aarch64 and
+  arm32 and passed on i386 and riscv32: a second mechanism with a set that
+  overlaps the first without containing it.
+
+  xtensa is in the list on cparser.inc's authority and NOT on a reading of my
+  own -- both frontends that ask this still refuse xtensa, so the entry is
+  currently unexercised. Said here rather than left for someone to assume the
+  whole list was measured.
+  bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+begin
+  Result := (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32) or
+            (TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA);
+end;
+
 procedure EmitExitReg;
 { EmitExit for a RUNTIME code — `Halt(n)` where n is an expression. The caller
   has already evaluated it into the target's natural result register (rax / eax /

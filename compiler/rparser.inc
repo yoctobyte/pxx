@@ -5756,7 +5756,7 @@ begin
 end;
 
 procedure ParseRustProgram;
-var callPatch, callAnchor, mainIdx, jmpPatch: Integer; wantStr: Boolean;
+var callPatch, callAnchor, mainIdx, jmpPatch: Integer; wantStr, needHeapRt: Boolean;
 begin
   { Rust IS CASE-SENSITIVE, and nothing said so. The same hole ParseCProgram
     had: DeclCaseSensitive (symtab.inc) is written for exactly this split and
@@ -5770,8 +5770,24 @@ begin
     answering. Measured on this compiler before the fix: `const N: i32 = 5;`
     with a `let n = 100;` in main printed 100 for `N`. }
   CaseSensitiveMode := True;
-  if TargetArch <> TARGET_X86_64 then
-    Error('Rust frontend: only the x86-64 target is supported by the skeleton (feature-rust-frontend-skeleton)');
+  { NARROWED from x86-64-only, and the list is a MEASUREMENT, not an intention:
+    every target named here was compiled and RUN, and its output compared whole
+    against the native run rather than eyeballed. What made the old refusal
+    necessary was this driver hand-writing an x86-64 program tail whatever the
+    target said; it now goes through EmitEntryStubCall / PatchEntryStubCall and
+    EmitExitReg, which cover all six.
+
+    xtensa and wasm32 stay refused because nothing has been run on them here --
+    not because either is known bad. An unmeasured target and a broken one look
+    identical from a refusal list, so the distinction is written down instead:
+    lifting one of these two is a measurement someone still has to take, and the
+    honest order is measure-then-narrow, never the reverse. That order is what
+    this ticket is about -- a refusal removed before the thing it refuses works
+    turns a loud stop into a plausible wrong answer.
+    bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
+  if not (TargetArch in [TARGET_X86_64, TARGET_I386, TARGET_AARCH64,
+                         TARGET_ARM32, TARGET_RISCV32]) then
+    Error('Rust frontend: the skeleton supports x86-64, i386, aarch64, arm32 and riscv32; this target has not been measured (feature-rust-frontend-skeleton)');
 
   { The shared checklist: BSS_INITIAL_RSP, the per-arch entry stub, the emitted
     div0 stub, the signal runtime and the --threadsafe I/O lock stubs. This
@@ -5786,6 +5802,12 @@ begin
     is dead weight for this frontend rather than a step it is missing.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   wantStr := RNeedsStringRuntime;
+  { A SECOND, INDEPENDENT reason to pull the same two units, and it is not about
+    strings at all -- see TargetCodegenCallsHeapRuntime (emit.inc). Kept as a
+    separate flag rather than folded into wantStr because it must NOT turn on
+    wantAnsiRuntime: that registers the PXXStr* forwards, which is a different
+    claim about the program and one this reason does not support. }
+  needHeapRt := TargetCodegenCallsHeapRuntime;
   EmitProgramPrologue(False, wantStr, True, jmpPatch);
 
   { Rust's "body" is a call and an exit -- not a parse, and since the shared
@@ -5822,8 +5844,21 @@ begin
     the unit bodies are reached only by call and never fallen into. Order:
     builtinheap first, mirroring every other driver -- builtin's own bodies
     use the allocator. }
-  if wantStr then
+  if wantStr or needHeapRt then
   begin
+    { SOFTFLOAT FIRST, and this is not optional once builtinheap is in: those
+      unit bodies contain float code, and riscv32 has no FPU, so pulling them
+      without the kernels turns `PXXWriteDecW not found` into `the soft-float
+      kernel __pxx_l2d is not linked` -- a second internal-fault-shaped
+      diagnostic naming a `uses softfloat` clause this frontend has no syntax
+      for. Same rule and same order as the C driver's hosted branch
+      (cparser.inc, the `(riscv32 or xtensa) and not EspBareBoot` arm), which
+      is where this was already written down for exactly one frontend.
+      MEASURED, not predicted: pulling the two units alone moved the error
+      rather than clearing it. }
+    if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       (not EspBareBoot) then
+      ParseUsesUnitAmbient('softfloat');
     ParseUsesUnitAmbient('builtinheap');
     ParseUsesUnitAmbient('builtin');
   end;

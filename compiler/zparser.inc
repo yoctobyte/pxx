@@ -1979,8 +1979,21 @@ begin
     answering. Measured on this compiler before the fix: `fn f(N: i64)` with a
     local `var n: i64 = 100;` returned `n + n`, so f(5) gave 200, not 105. }
   CaseSensitiveMode := True;
-  if TargetArch <> TARGET_X86_64 then
-    Error('Zig frontend: only the x86-64 target is supported by the skeleton (feature-zig-frontend)');
+  { NARROWED from x86-64-only -- see the same block in rparser.inc for why the
+    list is a measurement rather than an intention.
+
+    RISCV32 WAS GOING TO BE EXCLUDED HERE, on the measurement that
+    test_zig_skeleton.zig failed to compile for it. That measurement was real
+    and its CAUSE was not Zig: this driver pulled no unit at all, and riscv32
+    calls builtinheap's PXXWriteDecW for every integer write. The unit pull
+    below closes it, so riscv32 is in the list on a fresh reading and not on
+    the old one. Kept as a note because the near-miss is the lesson: a
+    per-target exclusion written from a failing compile records the target the
+    defect was VISIBLE on, which is not the same as the target it is about.
+    bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
+  if not (TargetArch in [TARGET_X86_64, TARGET_I386, TARGET_AARCH64,
+                         TARGET_ARM32, TARGET_RISCV32]) then
+    Error('Zig frontend: the skeleton supports x86-64, i386, aarch64, arm32 and riscv32; this target has not been measured (feature-zig-frontend)');
 
   mainIsVoid := False;
   { The errno-style error slot for !T functions — a BSS global (CurProc is
@@ -2034,6 +2047,33 @@ begin
     the same one they were extracted along: EmitExit materialises the code
     itself, EmitExitReg must not touch the register the call just filled. }
   if mainIsVoid then EmitExit(0) else EmitExitReg;
+
+  { This driver pulled NO unit at all, which is right on five targets and fatal
+    on the sixth: riscv32 calls builtinheap's PXXWriteDecW for every integer
+    write, so `std.debug.print("{d}", .{x})` had nothing to call. Position and
+    order mirror the Rust driver's: after the exit above, so the unit bodies are
+    reached only by call and never fallen into, and builtinheap first because
+    builtin's own bodies use the allocator. wantAnsiRuntime stays False -- this
+    reason does not claim the program uses managed strings.
+    bug-a-a-frontend-cannot-see-that-riscv32-writes-integers-through-a-library-routine }
+  if TargetCodegenCallsHeapRuntime then
+  begin
+    { SOFTFLOAT FIRST, and this is not optional once builtinheap is in: those
+      unit bodies contain float code, and riscv32 has no FPU, so pulling them
+      without the kernels turns `PXXWriteDecW not found` into `the soft-float
+      kernel __pxx_l2d is not linked` -- a second internal-fault-shaped
+      diagnostic naming a `uses softfloat` clause this frontend has no syntax
+      for. Same rule and same order as the C driver's hosted branch
+      (cparser.inc, the `(riscv32 or xtensa) and not EspBareBoot` arm), which
+      is where this was already written down for exactly one frontend.
+      MEASURED, not predicted: pulling the two units alone moved the error
+      rather than clearing it. }
+    if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       (not EspBareBoot) then
+      ParseUsesUnitAmbient('softfloat');
+    ParseUsesUnitAmbient('builtinheap');
+    ParseUsesUnitAmbient('builtin');
+  end;
 
   while CurTok.Kind <> tkEOF do
   begin
