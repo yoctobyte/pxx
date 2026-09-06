@@ -57,6 +57,20 @@ reflog and in **no other checkout**; `commit:` on its pre-rebase id `f7ee1414a`.
 frankD's own statement, which is the sentence worth keeping: **"that is not a gap
 in the method, it is the method meeting `tools/sync.sh`."**
 
+DANGLING SHAS BY DESIGN
+
+`f7ee1414a` above is a DOOMED PRE-REBASE ID and is quoted deliberately: it is
+the exhibit, not a citation. It is not on origin, and it is not even a valid
+object in every checkout — `git cat-file` answers `Not a valid object name` here,
+because the id only ever existed in frankD's own store. That is the whole point
+the ticket is making, so the marker is added rather than the sha corrected.
+
+Added by frankA 2026-09-06, on the checker's own instruction — its message says
+to add this line when a dead sha is quoted on purpose. Worth doing rather than
+leaving: a check that fires forever on a ticket that is RIGHT is how a real hit
+gets scrolled past, and this one had been the only remaining DANGLING-SHA in the
+whole run.
+
 **So the miss is structured, not random**, and it is concentrated exactly where
 it costs: a push that had nothing to rebase over keeps its sha and resolves, and
 a push that raced anything does not — which is nearly every recent one. The 2026-09-02
