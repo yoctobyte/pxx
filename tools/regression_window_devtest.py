@@ -14,7 +14,16 @@ disagreement FIRES on the measured shape and is SILENT when the two sources
 agree -- a tool that announced a disagreement every run would be scrolled past
 within a week, which is the failure this repo names in as many words.
 
-The other three shapes, each with its negative control:
+A SECOND ONE-SIGNED SOURCE, found by the tool committing it: a TIER verdict is
+an aggregate over jobs, so once any job is red the tier's last GREEN stops
+advancing while the watcher's per-job bisect keeps narrowing. A window taken from
+the frozen tier bound is too wide by however long the tier has been red -- again
+always too wide, again plausible. So a ticket bound AHEAD of the log's GREEN is a
+refinement and wins; one BEHIND it is a real conflict; and one git cannot resolve
+is neither. All three are asserted below, because collapsing any pair of them
+re-creates the defect.
+
+The other shapes, each with its negative control:
   * a window with NO bounding GREEN must say so, never widen to everything;
   * a `full` GREEN must not bound a `native` RED -- different populations;
   * the ticket's own `## Range` field is the first thing printed, and a
@@ -165,8 +174,8 @@ def case_the_TICKETS_OWN_RANGE_is_printed_before_anything_is_computed():
 
 
 def case_a_ticket_RANGE_that_contradicts_the_log_is_a_finding():
-    # Neither source silently wins. The stub has a bisector behind it; the log
-    # is the verdict record. A disagreement is information about the run.
+    # An OLDER ticket bound is a real conflict: a bisect that narrows can only
+    # move forward, so a last-good behind the log's GREEN cannot be a refinement.
     repo, s = _repo()
     rows = [_row(s[2], "2026-09-06T05:09:23Z", "native", "GREEN"),
             _row(s[3], "2026-09-06T05:14:02Z", "native", "RED")]
@@ -177,7 +186,54 @@ def case_a_ticket_RANGE_that_contradicts_the_log_is_a_finding():
     out, _ = _run(repo, str(t))
     assert "THE TICKET AND THE LOG DISAGREE" in out, (
         "overrode the watcher's own field without saying so:\n" + out)
-    return "a ticket Range contradicting the log is reported, not overridden"
+    assert "NARROWER" not in out, "read an older bound as a refinement:\n" + out
+    return "a ticket bound OLDER than the log's GREEN is a conflict, not a refinement"
+
+
+def case_the_TIER_AGGREGATE_trap_a_newer_ticket_bound_is_NARROWER_and_wins():
+    # THE DEFECT THIS TOOL COMMITTED ON ITS SECOND REAL TICKET. A tier verdict is
+    # an aggregate over jobs, so once ANY job is red the tier's last GREEN stops
+    # advancing -- while the watcher's per-job bisect keeps narrowing. Taking the
+    # tier bound then gives a window too wide by however long the tier has been
+    # red, and the error is one-signed, exactly like the reports/ bias.
+    # Here: the log's last GREEN is s[0] and the ticket bisected forward to s[2],
+    # so the true window holds no code commit at all besides s[2]..s[3].
+    repo, s = _repo()
+    rows = [_row(s[0], "2026-09-06T04:00:00Z", "native", "GREEN"),
+            _row(s[1], "2026-09-06T04:30:00Z", "native", "RED"),   # a DIFFERENT job
+            _row(s[3], "2026-09-06T05:14:02Z", "native", "RED")]
+    _state(repo, rows, rows)
+    t = repo / "ticket.md"
+    t.write_text("# regression\n\n## Range\n"
+                 f"bad `{s[3][:12]}`, last good `{s[2][:12]}`, 1 commit(s) in range\n")
+    out, _ = _run(repo, str(t))
+    assert "NARROWER, and it wins" in out, (
+        "took the frozen tier bound over a forward bisect:\n" + out)
+    assert "2 commit(s) LATER" in out, out
+    assert f"window {s[2][:9]}..{s[3][:9]}" in out, (
+        "reported the narrower bound and then used the wide one:\n" + out)
+    assert f"CODE   {s[2][:7]}" not in out, (
+        "the ticket's own last-good leaked into its window as a suspect:\n" + out)
+    return "a ticket bound ahead of a frozen tier GREEN is used, not disputed"
+
+
+def case_a_ticket_bound_ABSENT_from_the_checkout_is_not_read_as_agreement():
+    # git cannot answer, and "cannot compare" must not collapse into "agree" --
+    # silence and confirmation are the same output otherwise.
+    repo, s = _repo()
+    rows = [_row(s[2], "2026-09-06T05:09:23Z", "native", "GREEN"),
+            _row(s[3], "2026-09-06T05:14:02Z", "native", "RED")]
+    _state(repo, rows, rows)
+    t = repo / "ticket.md"
+    t.write_text("# regression\n\n## Range\n"
+                 f"bad `{s[3][:12]}`, last good `deadbeefcafe`, 1 commit(s) in range\n")
+    out, _ = _run(repo, str(t))
+    assert "could not be compared" in out, out
+    assert "field and the verdict log agree" not in out, (
+        "read an unanswerable comparison as agreement:\n" + out)
+    assert "NARROWER" not in out and "DISAGREE" not in out, (
+        "claimed a relation git could not answer:\n" + out)
+    return "a bound git cannot resolve is reported as unknown, never as agreement"
 
 
 def case_only_code_commits_are_offered_as_suspects():
@@ -222,6 +278,8 @@ CASES = [case_the_MEASURED_shape_a_stale_reports_bound_is_reported,
          case_a_FULL_green_does_not_bound_a_NATIVE_red,
          case_the_TICKETS_OWN_RANGE_is_printed_before_anything_is_computed,
          case_a_ticket_RANGE_that_contradicts_the_log_is_a_finding,
+         case_the_TIER_AGGREGATE_trap_a_newer_ticket_bound_is_NARROWER_and_wins,
+         case_a_ticket_bound_ABSENT_from_the_checkout_is_not_read_as_agreement,
          case_only_code_commits_are_offered_as_suspects,
          case_a_window_of_ONLY_prose_is_called_out_not_reported_as_a_clean_range,
          case_a_missing_verdict_log_refuses_rather_than_falling_back]

@@ -86,7 +86,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-core-test-generic-method-across-a-uses-clause
 - `[p 70] [P]` regression-test-core-test-generic-method-unused-is-erased
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
-- `[p 70] [T]` regression-test-core-test-pointer-function-result-keeps-its-depth
+- `[p 70] [P]` regression-test-core-test-pointer-function-result-keeps-its-depth
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2

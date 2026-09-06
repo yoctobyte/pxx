@@ -42,6 +42,25 @@ Two further failures from the same hour, both encoded as checks here:
   anything**, and treats a disagreement with it as a finding rather than as a
   correction.
 
+A THIRD FAILURE, COMMITTED BY THIS TOOL ON ITS SECOND REAL TICKET, and it is the
+same animal as the first: **A TIER VERDICT IS AN AGGREGATE OVER JOBS, SO ITS
+"last GREEN" STOPS ADVANCING AT THE FIRST RED.** Once any job goes red, every
+later verdict on that tier is RED, and a window computed from the tier's last
+GREEN is too wide for every job that fails afterwards -- by however many commits
+the tier has been red. Measured on
+`regression-test-core-test-pointer-function-result-keeps-its-depth`: the tier's
+last native GREEN was `f1148d82c` (05:09) and the tier had been RED for a
+DIFFERENT job ever since, so this tool answered a 31-commit window with 9 code
+commits. The watcher's own per-job bisect said `d0f14a2608ad`, **26 commits
+later, one commit in range**, and it was right.
+
+Same sign as the `reports/` bias -- always too wide, always plausible. So when the
+ticket's `## Range` names a last-good that is a DESCENDANT of the log's last
+GREEN, the ticket is not disagreeing, it is NARROWER, and it wins: a per-job
+bisect is a strictly better instrument than a tier aggregate for a per-job
+question. Only a last-good that is an ancestor of, or unrelated to, the log's
+GREEN is a real disagreement.
+
 USAGE
     tools/regression_window.py devdocs/progress/backlog/regression-....md
     tools/regression_window.py --bad b6815e5b8 --tier native --host seven
@@ -128,6 +147,17 @@ def _git(gitdir, *args):
     r = subprocess.run(("git", "-C", str(gitdir)) + args,
                        capture_output=True, text=True)
     return r.returncode, r.stdout
+
+
+def _is_ancestor(gitdir, a, b):
+    """True if a is an ancestor of b. None if git cannot answer (missing sha)."""
+    r = subprocess.run(("git", "-C", str(gitdir), "merge-base", "--is-ancestor", a, b),
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        return True
+    if r.returncode == 1:
+        return False
+    return None
 
 
 def _classify(gitdir, good, bad):
@@ -252,26 +282,52 @@ def main(argv=None):
     print()
 
     # ---- 4. AGAINST THE TICKET'S OWN FIELD ---------------------------------
+    # A tier verdict is an AGGREGATE over jobs: once any job is red the tier is
+    # red, so the tier's last GREEN stops advancing while the watcher's per-job
+    # bisect keeps narrowing. A ticket bound that is a DESCENDANT of the log's
+    # GREEN is therefore not a contradiction -- it is a better instrument for a
+    # per-job question, and it wins.
+    bound = green
     if ticket_range:
-        if not green["sha"].startswith(ticket_range["good"][:9]) and \
-           not ticket_range["good"].startswith(green["sha"][:9]):
+        tg, lg = ticket_range["good"], green["sha"]
+        same = lg.startswith(tg[:9]) or tg.startswith(lg[:9])
+        newer = None if same else _is_ancestor(gitdir, lg[:12], tg)
+        if same:
+            print("== the ticket's field and the verdict log agree ==\n")
+        elif newer is True:
+            n = _git(gitdir, "log", "--oneline", f"{lg[:12]}..{tg}")[1]
+            print("== the ticket's bound is NARROWER, and it wins ==")
+            print(f"  verdict log last {tier} GREEN: {lg[:9]}")
+            print(f"  ticket `## Range` last good:  {tg[:9]}  "
+                  f"-- {len(n.splitlines())} commit(s) LATER")
+            print("  Not a disagreement. A tier verdict is an aggregate over jobs, so")
+            print(f"  the tier's last GREEN froze when SOME job went red; this row's own")
+            print("  bisect kept narrowing. A per-job bisect beats a tier aggregate for")
+            print("  a per-job question -- the window below uses the ticket's bound.")
+            bound = {"sha": tg, "date": "(from the ticket's bisect)"}
+            print()
+        elif newer is False:
             print("== !! THE TICKET AND THE LOG DISAGREE ==")
-            print(f"  ticket `## Range` last good: {ticket_range['good'][:9]}")
-            print(f"  verdict log last {tier} GREEN: {green['sha'][:9]}")
-            print("  One of them is wrong and the ticket is the one with a bisector")
-            print("  behind it. Settle this before publishing either.")
+            print(f"  ticket `## Range` last good: {tg[:9]}  (NOT a descendant of the")
+            print(f"     log's GREEN {lg[:9]} -- it is older, or on another line)")
+            print("  A bisect that narrows can only move FORWARD, so this is a real")
+            print("  conflict, not a refinement. Settle it before publishing either.")
             print()
         else:
-            print("== the ticket's field and the verdict log agree ==\n")
+            print("== the ticket's bound could not be compared ==")
+            print(f"  `{tg[:9]}` is not in this checkout, so its relation to the log's")
+            print(f"  GREEN {lg[:9]} is unknown. Not treated as agreement.")
+            print()
 
     # ---- 5. WHAT IN THE WINDOW CAN PHYSICALLY FAIL A TEST ------------------
-    cls = _classify(gitdir, green["sha"][:12], red["sha"][:12])
+    cls = _classify(gitdir, bound["sha"][:12], red["sha"][:12])
     if cls is None:
         print("== window contents ==\n  git could not walk this range in "
               f"{gitdir} (shallow clone, or a sha not present here)")
         return 0
     code, prose = cls
-    print(f"== window contents: {len(code) + len(prose)} commit(s), "
+    print(f"== window {bound['sha'][:9]}..{red['sha'][:9]}: "
+          f"{len(code) + len(prose)} commit(s), "
           f"{len(code)} that can fail a test ==")
     for sha, subj in code:
         print(f"  CODE   {sha}  {subj}")
