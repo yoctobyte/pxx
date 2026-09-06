@@ -16332,6 +16332,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_qwordbool26 "$$($(TESTTMP)/test_qwordbool26)" "$$(cat test/test_qwordbool_is_the_fourth_sized_boolean.expected)"
 	./$(COMPILER) test/test_a_parameterless_generic_routine_is_called_without_parentheses.pas $(TESTTMP)/test_genparamless26
 	tools/expect_same.sh test_genparamless26 "$$($(TESTTMP)/test_genparamless26)" "$$(cat test/test_a_parameterless_generic_routine_is_called_without_parentheses.expected)"
+	./$(COMPILER) test/test_a_one_character_named_constant_is_a_string_initialiser.pas $(TESTTMP)/test_charconstinit26
+	tools/expect_same.sh test_charconstinit26 "$$($(TESTTMP)/test_charconstinit26)" "$$(cat test/test_a_one_character_named_constant_is_a_string_initialiser.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

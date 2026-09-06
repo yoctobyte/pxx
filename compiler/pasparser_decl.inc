@@ -2318,6 +2318,40 @@ begin
       sLen := StrConstSLen[sci];
       Next;
       TakeStrInitSpan := True;
+    end
+    else
+    begin
+      { ...and a ONE-CHARACTER const is not in that table at all, which is why
+        `const c1 = 'A'; A: array[0..1] of ShortString = (c1, c2)` was still
+        refused after the four sites were funnelled through here. Nothing is
+        wrong with either decision that produces this: ParseConstSection routes
+        a single-char literal to `AddConst(name, tyChar, Ord(...))` ON PURPOSE
+        (bug-pascal-ord-of-a-one-char-string-const-is-its-address -- `Ord(C)`
+        must be the character's ordinal and not a string's address), and this
+        helper looks in the string table because that is where the multi-char
+        ones live. TWO CORRECT DECISIONS, EACH RIGHT ALONE, that between them
+        refuse a program: the length of the literal picks the storage class,
+        and only one storage class was reachable from here.
+        THE CONTROL THAT SEPARATES THEM, measured: the same declaration with
+        two-character values compiles. Length is the only variable.
+        A char has no span to point at -- it is an ordinal, not text -- so this
+        arm MINTS one, which is the single place this helper copies rather than
+        re-points. Same thing AppendStrInitText already does for its own
+        callers, and the cost is one byte of TokChars per use.
+        bug-p-a-one-character-named-constant-is-not-a-string-initialiser }
+      sci := FindSym(CurTok.SVal);
+      if (sci >= 0) and (Syms[sci].Kind = skConst) and
+         (Syms[sci].TypeKind = tyChar) and
+         (Syms[sci].ConstVal >= 0) and (Syms[sci].ConstVal <= 255) then
+      begin
+        if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+        sOff := TokCharLen;
+        TokChars[TokCharLen] := Chr(Syms[sci].ConstVal);
+        Inc(TokCharLen);
+        sLen := 1;
+        Next;
+        TakeStrInitSpan := True;
+      end;
     end;
   end;
 end;
@@ -2355,6 +2389,27 @@ begin
       end;
       Next;
       AppendStrInitText := True;
+    end
+    else
+    begin
+      { The one-character const, in the copying twin. Extended in the SAME
+        commit as TakeStrInitSpan's arm and not after it, because this pair is
+        a documented double case: the note on the concatenation arm says
+        fixing only the single-operand side would leave
+        `const c1 = 'A'; X: ShortString = c1 + 'b'` refused while
+        `X: ShortString = c1` compiled. That is the sibling this file already
+        knows about, so leaving it for later would be leaving a known one. }
+      sci := FindSym(CurTok.SVal);
+      if (sci >= 0) and (Syms[sci].Kind = skConst) and
+         (Syms[sci].TypeKind = tyChar) and
+         (Syms[sci].ConstVal >= 0) and (Syms[sci].ConstVal <= 255) then
+      begin
+        if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+        TokChars[TokCharLen] := Chr(Syms[sci].ConstVal);
+        Inc(TokCharLen); Inc(sLen);
+        Next;
+        AppendStrInitText := True;
+      end;
     end;
   end;
 end;
@@ -4034,9 +4089,18 @@ begin
             StrConst registration, untouched, in the arm further down.
             bug-p-a-typed-string-constant-cannot-be-assigned }
           Expect(tkEq, '=');
-          if (CurTok.Kind <> tkString) and
-             ((CurTok.Kind <> tkIdent) or (FindStrConst(CurTok.SVal) < 0)) then
-            Error('typed string constant: expected a string or char literal');
+          { NO PRE-GUARD HERE. There was one, and it restated the acceptance
+            test of the two helpers below -- `tkString, or an ident that
+            FindStrConst knows` -- which is the shape that cannot stay correct:
+            it is a COPY of a predicate that lives somewhere else, so it does
+            not move when that predicate does. It did not move. When
+            TakeStrInitSpan learned to accept a one-character named const, this
+            gate went on refusing it two lines earlier and the helper never ran,
+            so the fix looked inert at exactly one of its four call sites.
+            Nothing is lost by deleting it: both arms below already fail with
+            this same message when neither helper can take the token, and they
+            fail on the CURRENT predicate rather than on a snapshot of it.
+            bug-p-a-one-character-named-constant-is-not-a-string-initialiser }
           if (Tokens[TokPos].Kind = tkPlus) then
           begin
             { The CONCATENATION arm copies characters rather than taking a span,
