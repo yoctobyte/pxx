@@ -52,18 +52,6 @@ ALLOWED = {
         "that dir to job_history()/job_selectors(). The fixture IS the "
         "subject: the case proves the readers can see a requested run's reds, "
         "so it must supply the archive rather than read the real one.",
-    "twatch_live_code.py":
-        "reads runs-<host>.ndjson to join a PUBLISHED code_fp against "
-        "twatch.py's git history, answering which twatch.py a remote daemon "
-        "is executing. It wants rows exactly as the archive has them, so "
-        "materialize_tstate() would not help: the question is about another "
-        "BOX, not about this checkout's view of state. Arrived with 0d50638ac "
-        "on 2026-09-06 and reddened tools-devtest#00 the same way two other "
-        "files did that evening -- gate.sh quick does not run that job, so "
-        "all three authors landed green. Third instance in one night is why "
-        "the umbrella now models this as a source of reds rather than as "
-        "three mistakes. Added by frankH, not the author: say so if you "
-        "meant to route it through the helper instead.",
     "twatch.py":
         "the WRITER — it publishes tstate, and owns states_at/materialize_tstate",
     "twatch_web.py":
@@ -317,8 +305,44 @@ def case_helper_falls_back_rather_than_raising():
     return "missing ref / non-repo -> None"
 
 
+def case_allowed_has_no_duplicate_key():
+    """A repeated key silently DISCARDS a reason, and the reason is the point.
+
+    ALLOWED is a dict literal, so a second entry for the same file wins and
+    the first vanishes with no error. What vanishes is an argued
+    justification -- the only thing distinguishing this list from a mute
+    suppression list -- while the sweep above stays green either way, because
+    it asks whether the KEY is present.
+
+    Measured 2026-09-06: twatch_live_code.py was added twice within the hour,
+    by frankH and then by its author overruling that entry. Python took the
+    author's, correctly. But the superseded reason sat ABOVE it and was the
+    one a reader or a grep hit first -- and it was the WRONG one, asserting
+    that materialize_tstate() would not help because the question is about
+    another box. It inverts: the tool is most useful in the watcher clone,
+    which sits DETACHED at the sha under test, so a worktree read there gets
+    that sha's archive and resolves a stale code_fp confidently to the wrong
+    commit. A file whose job is recording true reasons had two, contradicting
+    each other, with the false one first and nothing failing.
+
+    So this case asserts what the sweep cannot: not that every key is argued,
+    but that every key is argued ONCE.
+    """
+    import re
+    src = pathlib.Path(__file__).read_text(encoding="utf-8")
+    i = src.index("ALLOWED = {")
+    body = src[i:src.index("\n}", i)]
+    keys = re.findall(r'^    "([^"]+)":', body, re.M)
+    dupes = sorted({k for k in keys if keys.count(k) > 1})
+    assert not dupes, (
+        "duplicated in ALLOWED, so an argued reason is being discarded "
+        "silently: %s" % ", ".join(dupes))
+    return "%d keys, each argued once" % len(keys)
+
+
 CASES = [
     case_no_unlisted_tool_reads_tstate_by_path,
+    case_allowed_has_no_duplicate_key,
     case_the_detector_can_still_fail,
     case_the_shared_helper_exists_and_is_whole,
     case_detachment_is_detected,
