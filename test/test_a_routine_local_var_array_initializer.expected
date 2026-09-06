@@ -1,0 +1,8 @@
+local str  = register/cdecl
+local int  = 789
+local grid = 14
+local char = AD
+local cls  = TBase/TDer
+global     = register/cdecl
+localconst = register/cdecl
+reentry    = 11 11 11

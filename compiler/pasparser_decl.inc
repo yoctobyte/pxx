@@ -2418,6 +2418,72 @@ begin
   end;
 end;
 
+procedure RegisterVarInitElem(symIdx, elemIdx, gKind, val, valAux, tkOrd: Integer;
+                              isLocal: Boolean);
+{ Record ONE initializer element for a `var` declaration, into whichever table
+  the declaration's SCOPE calls for: LocalInit* inside a routine, PendingInit*
+  at file scope.
+
+  It exists because the choice was made SEVEN times inline in ParseVarSection's
+  array loop, and every one of them wrote PendingInit* unconditionally — so a
+  routine-local `var a: array[...] of T = (...)` had nowhere to go and the whole
+  form was refused with *"local var-section ARRAY initializer not supported"*.
+  The GLOBAL spelling of the same declaration has always worked, and so has the
+  local `const` spelling, which forks exactly like this at each of its own
+  element sites. The capability was present twice over; only this fork was
+  missing.
+
+  `gKind` is the GLOBAL kind numbering, because that is what every call site
+  already spoke. The local table numbers a metaclass reference 5 where the
+  global one numbers it 8 (CompilePendingGlobalInits and FlushLocalInits are
+  two emitters that must not drift, and they did not agree on this one), so the
+  translation lives here — once — rather than at each caller.
+
+  Kind 10 (a dynamic-array ELEMENT built from an element list, carried as an AST
+  node) has no local counterpart: FlushLocalInits reads kinds 0/1/2/4/5/9 and
+  nothing that holds a node. The caller refuses that combination before getting
+  here; this asserts it rather than silently writing a row the flush will read
+  as an integer literal.
+  feature-p-a-local-var-section-array-initializer }
+var lk: Integer;
+begin
+  if isLocal then
+  begin
+    if gKind = 10 then
+      Error('a dynamic-array element list is not supported in a routine-local var initializer');
+    if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+    lk := gKind;
+    if lk = 8 then lk := 5;   { metaclass reference: the two tables number it differently }
+    LocalInitSym[LocalInitCount]    := symIdx;
+    LocalInitElem[LocalInitCount]   := elemIdx;
+    LocalInitFOff[LocalInitCount]   := -1;
+    LocalInitFLen[LocalInitCount]   := 0;
+    LocalInitPStart[LocalInitCount] := 0;
+    LocalInitPCount[LocalInitCount] := 0;
+    LocalInitKind[LocalInitCount]   := lk;
+    LocalInitVal[LocalInitCount]    := val;
+    LocalInitValAux[LocalInitCount] := valAux;
+    LocalInitTk[LocalInitCount]     := tkOrd;
+    Inc(LocalInitCount);
+  end
+  else
+  begin
+    EnsurePendingInitCapacity(PendingInitCount);
+    PendingInitSym[PendingInitCount]    := symIdx;
+    PendingInitElem[PendingInitCount]   := elemIdx;
+    PendingInitFOff[PendingInitCount]   := -1;
+    PendingInitFLen[PendingInitCount]   := 0;
+    PendingInitPStart[PendingInitCount] := 0;
+    PendingInitPCount[PendingInitCount] := 0;
+    PendingInitFIdx[PendingInitCount]   := PI_ELEM_NONE;
+    PendingInitKind[PendingInitCount]   := gKind;
+    PendingInitVal[PendingInitCount]    := val;
+    PendingInitValAux[PendingInitCount] := valAux;
+    PendingInitTk[PendingInitCount]     := tkOrd;
+    Inc(PendingInitCount);
+  end;
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
@@ -2425,6 +2491,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
     initDepth, scOff, scLen: Integer;
     vNDims, vRowSpan: Integer;   { the declared array's dimension count and INNERMOST span, for a char-array row literal }
+    vIsLocal: Boolean;   { this declaration is inside a routine: elements go to LocalInit*, not PendingInit* }
     declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
     grpIdx: array[0..MAX_DECL_NAMES-1] of Integer;  { the previous declaration group's symbols }
     grpN: Integer;                                   { ...and how many; 0 before the first }
@@ -2699,8 +2766,24 @@ begin
 	          Eat(tkSemicolon);
 	          Continue;
 	        end;
-	        if isArr or isDyn then
-	          Error('local var-section ARRAY initializer not supported; assign in statements');
+	        { A FIXED ARRAY falls THROUGH to the shared initializer loop below, which
+	          reads its dimensions off the SYMBOL and now forks each element into
+	          LocalInit* (see RegisterVarInitElem). It used to be refused here with
+	          *"local var-section ARRAY initializer not supported; assign in
+	          statements"* — a message that reads like a missing capability and was
+	          a missing FORK: the same declaration at file scope has always worked,
+	          and so has the local `const` spelling.
+
+	          A DYNAMIC array keeps a refusal, narrowed to what is actually absent.
+	          Its element list is carried as an AST node (pending-init kind 10) and
+	          FlushLocalInits reads kinds 0/1/2/4/5/9 — nothing that holds a node —
+	          so there is no local table row to write. fpc accepts it; we do not
+	          yet, and the message now says which half is missing.
+	          feature-p-a-local-var-section-array-initializer }
+	        if isDyn then
+	          Error('a routine-local dynamic-array initializer is not supported yet; assign in statements');
+	        if not isArr then
+	        begin
 	        if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
 	        LocalInitSym[LocalInitCount]  := idx;
 	        LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
@@ -2721,6 +2804,7 @@ begin
 	        Inc(LocalInitCount);
 	        Eat(tkSemicolon);
 	        Continue;
+	        end;   { not isArr }
 	      end;
 	      if isDyn then
 	      begin
@@ -2786,6 +2870,11 @@ begin
 	        single Char, and the bare-literal arm to refuse an N-D array. }
 	      vNDims := SymArrNDims[idx];
 	      if vNDims < 2 then vNDims := 1;
+	      { WHICH TABLE the elements below go into. Read once, here, rather than at
+	        each registration: the seven sites that used to write PendingInit*
+	        unconditionally are exactly why a routine-local array initializer was
+	        refused instead of supported. }
+	      vIsLocal := CurProc >= 0;
 	      if CurTok.Kind = tkLParen then
 	      begin
 	        { …or a RECORD var: `var R: TRec = (n: 7; s: 'seven')`. FPC treats a
@@ -2849,20 +2938,10 @@ begin
 	            begin
 	              if (CurTok.Kind <> tkLParen) and (CurTok.Kind <> tkLBrack) then
 	                Error('dynamic array element initializer must be nil or an element list');
-	              EnsurePendingInitCapacity(PendingInitCount);
-	              PendingInitSym[PendingInitCount]  := idx;
-	              PendingInitElem[PendingInitCount] := arrLo + initElem;
-	              PendingInitFOff[PendingInitCount] := -1;
-	              PendingInitFLen[PendingInitCount] := 0;
-	              PendingInitPStart[PendingInitCount] := 0;
-	              PendingInitPCount[PendingInitCount] := 0;
-	              PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
-	              PendingInitKind[PendingInitCount] := 10;
-	              PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST(0);
+	              initVal := ParseDynArrayInitElemsAST(0);
 	              if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
-	              PendingInitValAux[PendingInitCount] := 0;
-	              PendingInitTk[PendingInitCount]   := Ord(elemTk);
-	              Inc(PendingInitCount);
+	              RegisterVarInitElem(idx, arrLo + initElem, 10, initVal, 0,
+	                                  Ord(elemTk), vIsLocal);
 	            end;
 	            Eat(tkComma);
 	            Inc(initElem);
@@ -2880,7 +2959,7 @@ begin
 	              Error('too many array initializer elements');
 	            if not TakeStrInitSpan(scOff, scLen) then
 	              Error('array constant: expected a string or char literal');
-	            SpreadCharLiteral(idx, arrLo + initElem, vRowSpan, scOff, scLen, False);
+	            SpreadCharLiteral(idx, arrLo + initElem, vRowSpan, scOff, scLen, vIsLocal);
 	            initElem := initElem + vRowSpan;
 	          end
 	          else if CurTok.Kind = tkLParen then begin Next; Inc(initDepth); end
@@ -2888,7 +2967,6 @@ begin
 	          else if CurTok.Kind = tkComma then Next
 	          else
 	          begin
-	            EnsurePendingInitCapacity(PendingInitCount);
 	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
 	            if elemTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
 	            begin
@@ -2904,13 +2982,8 @@ begin
 	                ParseConstSection's array-constant string handling. }
 	              if not TakeStrInitSpan(scOff, scLen) then
 	                Error('array constant: expected a string or char literal');
-	              PendingInitSym[PendingInitCount]    := idx;
-	              PendingInitElem[PendingInitCount]   := arrLo + initElem;
-	              PendingInitFOff[PendingInitCount]   := -1;
-	              PendingInitKind[PendingInitCount]   := 1;
-	              PendingInitVal[PendingInitCount]     := scOff;
-	              PendingInitValAux[PendingInitCount] := scLen;
-	              PendingInitTk[PendingInitCount]     := Ord(elemTk);
+	              RegisterVarInitElem(idx, arrLo + initElem, 1, scOff, scLen,
+	                                  Ord(elemTk), vIsLocal);
 	            end
 	            else if (elemTk = tyPointer) and (CurTok.Kind = tkIdent) and
 	                    (FindUClass(CurTok.SVal) >= 0) then
@@ -2918,25 +2991,16 @@ begin
 	              { CLASS-REFERENCE element (an initialised VAR array of metaclasses) --
 	                the same shape the const path handles; see there. fpjson declares
 	                DefaultJSONInstanceTypes as a Var, and MinJSONInstanceTypes as a Const. }
-	              PendingInitSym[PendingInitCount]  := idx;
-	              PendingInitElem[PendingInitCount] := arrLo + initElem;
-	              PendingInitFOff[PendingInitCount] := -1;
-	              PendingInitKind[PendingInitCount] := 8;
-	              PendingInitVal[PendingInitCount]  := FindUClass(CurTok.SVal);
-	              PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+	              RegisterVarInitElem(idx, arrLo + initElem, 8, FindUClass(CurTok.SVal), 0,
+	                                  Ord(tyPointer), vIsLocal);
 	              Next;
 	            end
 	            else
 	            begin
 	              initVal := ParseInitValTk(tk);
-	              PendingInitSym[PendingInitCount]  := idx;
-	              PendingInitElem[PendingInitCount] := arrLo + initElem;
-	              PendingInitFOff[PendingInitCount] := -1;
-	              PendingInitKind[PendingInitCount] := 0;
-	              PendingInitVal[PendingInitCount]  := initVal;
-	              PendingInitTk[PendingInitCount]   := Ord(elemTk);
+	              RegisterVarInitElem(idx, arrLo + initElem, 0, initVal, 0,
+	                                  Ord(elemTk), vIsLocal);
 	            end;
-	            Inc(PendingInitCount);
 	            Inc(initElem);
 	          end;
 	        end;
@@ -2953,7 +3017,7 @@ begin
 	        if isArr and (elemTk = tyChar) and (vNDims = 1) and
 	           TakeStrInitSpan(scOff, scLen) then
 	        begin
-	          SpreadCharLiteral(idx, arrLo, arrHi - arrLo + 1, scOff, scLen, False);
+	          SpreadCharLiteral(idx, arrLo, arrHi - arrLo + 1, scOff, scLen, vIsLocal);
 	          SkipHintDirectives;
 	          Eat(tkSemicolon);
 	          Continue;

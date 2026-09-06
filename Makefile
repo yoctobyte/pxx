@@ -7371,6 +7371,28 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_class_const_bounds_a_field_array \
 	  "$$($(TESTTMP)/test_ccbound26)" \
 	  "$$(cat test/test_a_class_const_bounds_a_field_array.expected)"
+	@# A ROUTINE-LOCAL `var A: array[...] of T = (...)`, which was refused with
+	@# "local var-section ARRAY initializer not supported; assign in statements"
+	@# -- a message that reads like a missing capability and was a missing FORK.
+	@# ParseVarSection's array loop already derives its dimensions from the
+	@# SYMBOL; it just wrote PendingInit* at every element site, and a routine has
+	@# no pending-init table. RegisterVarInitElem makes that choice once.
+	@# THE TWO CONTROLS ARE THE SPELLINGS THAT ALREADY WORKED and both were
+	@# MEASURED at the reverted binary: `global` (file scope) and `localconst`
+	@# (the local const) print correctly with the fix backed out, so they are
+	@# pre-existing capability this change threads a flag through, not something
+	@# it supplies. If either moves, the fork is wrong rather than incomplete.
+	@# `reentry` is the SEMANTIC row and it was measured, not assumed: an
+	@# initialised local could be a static initialised once or an assignment on
+	@# entry. fpc 3.2.2 -Mobjfpc prints 11 11 11 for a mutated-and-recalled
+	@# initialised local; so does pxx. The row asserts that agreement.
+	@# A routine-local DYNAMIC array is still refused, deliberately: its element
+	@# list is an AST node (pending-init kind 10) and FlushLocalInits reads kinds
+	@# 0/1/2/4/5/9, none holding a node. fcl-passrc pparser.pp:635.
+	@./$(COMPILER) test/test_a_routine_local_var_array_initializer.pas $(TESTTMP)/test_lvarrinit26
+	@tools/expect_same.sh test_a_routine_local_var_array_initializer \
+	  "$$($(TESTTMP)/test_lvarrinit26)" \
+	  "$$(cat test/test_a_routine_local_var_array_initializer.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
