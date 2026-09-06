@@ -5,7 +5,7 @@ type: bug
 status: open
 blocked-by: []
 owner: 
-summary: "`GetPP^.a` where `GetPP: PPRec` and `PPRec = ^PRec = ^^TRec` prints 4306192 and `.b` prints 0, where fpc 3.2.2 prints 11 and 22 — one dereference short, applied to the pointer VALUE. The last red cell of the implicit-deref census: every other opener (pointer variable at depths 1-3, pointer-alias cast at 1-3, call result at depth 1) now agrees with fpc for all three member kinds. `GetPP^^.a` written out in full is CORRECT, so the depth is recorded somewhere and is lost between there and ApplyCallResultPtrSuffix's dot arm. WHERE it is lost is NOT established: PXXDBG a.symptr shows the Result symbol carrying `depth=2 baseRec=23`, and seeding recId from ProcRetPtrBaseRec in the dot arm changed nothing — but that probe cannot discriminate, because if the depth IS recorded then recId was already correct and the probe is a no-op. Pre-existing: identical on pin v404."
+summary: "`GetPP^.a` where `GetPP: PPRec` and `PPRec = ^PRec = ^^TRec` is now REFUSED (`this value is still a POINTER here -- it needs another ^`) on a program fpc 3.2.2 compiles and runs, printing 11 and 22. That refusal arrived with frankB's f9476d579, which is right about the two-short chain and wrong about this one-short chain, and it fires HERE and nowhere else because this is the one opener where the depth is lost -- so the refusal and this bug are one defect seen from two sides. The field chain used to print 4306192 / 0 instead; the METHOD and PROPERTY chains (`GetPP^.GetA`, `GetPP^.PA`) still do. Controls, all measured at 85c81be85 / faa41e4b920f: `GetPP^^.a` written out in full is CORRECT; the pointer-VARIABLE twins `pp^.a` and `ppp^^.a` still print 11, so the refusal is opener-specific; and the two-short `GetPPP^.a` is refused by pxx AND by fpc (Illegal qualifier), which is frankB's arm doing its job. WHERE the depth is lost is NOT established: PXXDBG a.symptr shows the Result symbol carrying `depth=2 baseRec=23`, and seeding recId from ProcRetPtrBaseRec in the dot arm changed nothing -- but that probe cannot discriminate, because if the depth IS recorded then recId was already correct and the probe is a no-op. Pre-existing: the wrong VALUE is identical on pin v404; the refusal is not, it is new."
 ---
 
 # The last red cell of the opener × chain census
@@ -58,3 +58,42 @@ rather than only when `recId = REC_NONE`.
 Reached from `refactor-p-three-hand-rolled-postfix-loops`: the call-result walk
 is one of the three, and this is the last shape where it still disagrees with
 the shared walker it delegates to.
+
+## 2026-09-06 — the observable changed under it: a FALSE REFUSAL, and it is the same defect
+
+frankB landed `f9476d579` while this ticket sat open. It makes a pointer chain
+that is one dereference SHORT **refuse** rather than answer a number, and frankB
+asked to be told if a fix here made `GetPP^.a` resolve — with the warning to
+check that `GetPPP^.a` still refuses rather than becoming a number.
+
+**The measurement is the inverse of that expectation, and no fix was applied.**
+Measured at `85c81be85`, binary `faa41e4b920f`, on a 41-row opener x chain
+differential that moved from `agree=36 DIFFER=5 PXX-REFUSES=0` to
+`agree=36 DIFFER=3 PXX-REFUSES=2`:
+
+| program | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `GetPP^.a` (one short, call-result opener) | **refused** — `"a": this value is still a POINTER here` | compiles, prints `11 22` |
+| `GetPPP^.a` (two short, call-result opener) | refused | refused — `Illegal qualifier` |
+| `pp^.a` (one short, pointer VARIABLE) | 11 | 11 |
+| `ppp^^.a` (one short, pointer VARIABLE at depth 3) | 11 | 11 |
+
+So the new arm is **correct on the two-short chain** (row 2 is frankB's arm
+doing exactly its job, confirmed against fpc) and **false on the one-short
+chain**, and it is false *only* on the call-result opener. The pointer-variable
+twins in rows 3-4 take the same one-short chain and still resolve.
+
+**That opener is this ticket.** Where the depth is lost, a legal one-short chain
+is indistinguishable from a two-short one, so a refusal aimed at the two-short
+case necessarily swallows it. The two are not adjacent bugs to be sequenced —
+they are one missing fact (`ProcRet*` depth at the call site) observed through
+two different arms. **Fixing this ticket removes frankB's false positive as a
+by-product; nothing needs to be reverted.**
+
+The two remaining wrong-VALUE rows are `GetPP^.GetA` and `GetPP^.PA` — both
+`4306192` against fpc's `11` — which are the same loss reaching the method and
+property member kinds, where no refusal arm stands in front of them.
+
+Whoever takes this inherits frankB's control as a required row: after the fix,
+`GetPPP^.a` must still refuse. It does today, and it must not become a number.
+
