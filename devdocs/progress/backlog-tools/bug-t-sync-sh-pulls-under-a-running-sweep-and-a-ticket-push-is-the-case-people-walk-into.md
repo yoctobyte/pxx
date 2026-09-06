@@ -6,7 +6,7 @@ type: bug
 status: backlog
 blocked-by: []
 owner: ""
-summary: "`tools/sync.sh` does `pull --rebase` unconditionally, so running it during a sweep in the SAME checkout swaps test sources under a harness that reads them from the tree. Twice on 2026-09-06 by two seats who could both quote the rule: frankD lost a 2276-file census (two syncs, 4 files changed mid-sweep) and frankB lost a full suite over three Group 19 fixes (three ticket syncs; the tree picked up another seat's new test row against a binary built before it, and the RED landed on a file frankB had just edited so it read as theirs and had a plausible mechanism). THE HOLE IS EXACTLY THE SIZE OF THE WORK THAT FEELS SAFE -- nobody lands a code fix mid-sweep, and pushing a TICKET feels like paperwork; sync.sh does not know the difference because the pull is the same pull. A GUARD WAS WRITTEN AND NOT SHIPPED: argv-anchored, cwd-scoped to this checkout, refusing with a PXX_SYNC_DURING_SWEEP=1 escape. Its POSITIVE control fired correctly and its NEGATIVE control ALSO fired -- so it is not trustworthy and shipping it would break every seat's sync. Design and both controls are below; whoever takes this needs a negative control that passes before anything lands."
+summary: "`tools/sync.sh` does `pull --rebase` unconditionally, so running it during a sweep in the SAME checkout swaps test sources under a harness that reads them from the tree. Twice on 2026-09-06 by two seats who could both quote the rule: frankD lost a 2276-file census (two syncs, 4 files changed mid-sweep) and frankB lost a full suite over three Group 19 fixes (three ticket syncs; the tree picked up another seat's new test row against a binary built before it, and the RED landed on a file frankB had just edited so it read as theirs and had a plausible mechanism). THE HOLE IS EXACTLY THE SIZE OF THE WORK THAT FEELS SAFE -- nobody lands a code fix mid-sweep, and pushing a TICKET feels like paperwork; sync.sh does not know the difference because the pull is the same pull. A GUARD WAS WRITTEN AND NOT SHIPPED: argv-anchored, cwd-scoped to this checkout, refusing with a PXX_SYNC_DURING_SWEEP=1 escape. Its POSITIVE control fired correctly and its NEGATIVE control ALSO fired, so it was reverted rather than tuned -- sync.sh is in every lane's inner loop and a false refusal there is worse than the defect. THE DETECTOR IS NOW SOLVED (frankB): read a field the waiter cannot write into. argv is writable by every waiter and comm is not, so `pgrep -x make` matches the executable NAME and a shell running it cannot match its own probe -- a negative control that holds structurally rather than by luck. The bracket trick does NOT work (`pgrep -f '[m]ake test'` returns the identical pid set) because pgrep never puts its pattern in the matched processes' argv; that trick defends the tool against itself and does nothing about third parties. Measured: 3 orphan waiter shells match `pgrep -f`, aged 28.7h / 853s / 0s, the last being the measuring shell itself. Remaining work is the guard around that detector plus its devtest."
 ---
 
 # sync.sh pulls under a running sweep, and the commit that does it is a ticket
@@ -74,8 +74,59 @@ worse than the defect, and `sync.sh` is the one script every lane runs. Reverted
 rather than tuned, because a guard nobody trusts gets an env var permanently
 exported and then it is not a guard.
 
-**Whoever takes this: the deliverable is a NEGATIVE control that passes**, run
-from a context that does not itself mention the patterns — a committed devtest
-that spawns its own controls in a clean `sh`, not a heredoc typed by an agent
-whose transcript is in `/proc`. Then the positive control, then the escape, then
-land.
+**Whoever takes this: the deliverable is a NEGATIVE control that passes.** The
+guard is easy; the control is the work.
+
+## THE DETECTOR IS SOLVED, AND THE PROPERTY IS NOT THE ONE I WAS AIMING AT (frankB, 2026-09-06)
+
+**Read a field the waiter CANNOT WRITE INTO.** `argv` is writable by every waiter
+— that is the whole disease — and **`comm` is not.**
+
+```
+pgrep -f 'make test'   ->  5 pids     (1 real make, 3 orphan waiters, 1 my own probing shell)
+pgrep -x make          ->  1 pid      comm=make
+```
+
+`pgrep -x` matches the executable NAME, so **a shell running `pgrep -x make`
+cannot match its own probe** — its command name is `bash` whatever its arguments
+say. Verified here: the probing shell does not appear in its own result. That is a
+negative control that holds **structurally rather than by luck**, which is exactly
+what this ticket was blocked on.
+
+**AND IT KILLS THE OBVIOUS FIX FIRST.** The bracket trick does nothing:
+
+```
+pgrep -f 'make test'    ->  143678 363689 1655102 1772877 1772931 1906270
+pgrep -f '[m]ake test'  ->  143678 363689 1655102 1772877 1772931 1906270
+```
+
+Identical. `[m]ake` works against `ps | grep` because **grep's own argv carries
+the pattern**; `pgrep` never puts its pattern into the matched processes' argv at
+all. **The trick defends the tool against itself and does nothing about third
+parties**, and third parties are the actual failure mode.
+
+**THE ORPHANS ARE THE DURABLE HALF.** Measured on this box: three `bash` processes
+matching `pgrep -f 'make test'`, each an `until ! pgrep -f "make test"` loop whose
+own argv contains the string it waits to disappear — so each can never exit, and
+**while it lives it makes every other `pgrep -f 'make test'` in that session
+answer YES.** Ages when measured: **103275s (28.7 hours)** in one checkout, 853s in
+another, and 0s in a third — that last one being **this ticket author's own
+probing shell, matching itself while measuring the defect.**
+
+**A guard that is merely wrong fails once. A self-perpetuating waiter makes every
+future check in that session wrong, silently, and outlives the thing it was
+watching by a day.** Nothing cleans them up.
+
+**Two caveats so the guard is not aimed wrong:**
+
+- `-x make` finds any `make`, not specifically `make test`. If the distinction is
+  needed, take the pid set from `pgrep -x make` and read `/proc/<pid>/cmdline`
+  **per pid** — that set is already free of self-matches, so filtering it is safe
+  in a way that filtering `pgrep -f` output is not.
+- It will not see a sweep driven by something that is not `make` — a bare
+  `testmgr`, `gate.sh`. **Name that limitation in the guard rather than widening
+  back to `-f`**, or the hole reopens.
+
+**And the corollary for every waiter in the fleet, which is the wider fix:
+wait on a PID, not on a string** — `while kill -0 $pid 2>/dev/null; do sleep 5;
+done`. A pid cannot match itself.
