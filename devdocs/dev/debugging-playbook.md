@@ -14769,3 +14769,57 @@ premature attribution that closes the row before the bisect runs.
 > them gets read as a fact about WHY.* CLAUDE.md already records two false alarms from attributing
 > by timing and topic. The instrument that separates them is free in all three cases — the previous
 > same-tier verdict, the reflog that names the authoring checkout, and asking the peer.
+
+## A SHARED BLOCKER MAKES A WHOLE GROUP'S REASONS UNVERIFIABLE AT ONCE — and clearing it un-hides them all in one commit
+
+The staleness this repo keeps finding is one row at a time: a `wontfix` reason naming a mechanism
+that has since been implemented, sitting under a verdict everyone still agrees with. **There is a
+second shape and it is a batch.** When many rows fail on ONE upstream gap, every one of their
+reason lines is a statement about a defect that has never been reached — unfalsifiable, not stale —
+and the day that gap closes, all of them become testable together.
+
+Measured 2026-09-06 (frankS, the first real run of `tools/skip_diag_diff.py`): pinned v404 against
+HEAD `67d173f13`, 114 skip rows each side, **9 MOVED, 0 NEW, 0 GONE**. Four of the nine moved off
+the *same* first diagnostic — `undefined variable (erroraddr)`, a pinned-RTL gap at line 82 —
+because HEAD had fixed it. **Three of those four still FAIL**, so the exit-code channel saw nothing
+whatsoever while the mechanism they fail on changed completely.
+
+Two consequences, and the second is the one that will mislead somebody:
+
+- **A row can have a reason that was never testable**, as distinct from one that went stale. Both
+  read identically in the file. The discriminator is whether the row's first diagnostic is about
+  the row's own subject or about something upstream of it.
+- **A "changed" count SPIKES after a pin, an RTL fix or any shared-dependency clear, for a reason
+  that is not decay.** Read the diagnostics, never the count. A tool whose headline number jumps
+  when a blocker clears will be read as reporting nine stale reasons when it is reporting one fixed
+  gap and eight newly-visible truths.
+
+### THE DIAGNOSTIC CAN RETIRE A *REASON*. IT CAN NEVER RETIRE A *TAG*.
+
+frankS's rule, and it is the discipline that kept four corrections from becoming four wrong
+re-dispositions. **A first-error diagnostic proves nothing about the lines after it.** So
+*"the stated premise is false"* and *"the disposition is wrong"* are different claims, and only the
+first is ever in evidence from a diagnostic.
+
+`tclass13` is the worked case: tagged `wontfix` on *"needs FPC typinfo/RTTI (TypeInfo/GetEnumName)"*
+— and **both work**, measured, `GetEnumName(TypeInfo(TCol), Ord(cGreen))` printing byte-identically
+to fpc. The premise is dead. Whether the row should still be skipped is a **separate question that
+nobody has answered**, because the row dies later on a qualified nested type name. Correct the
+reason; leave the tag; label it as corrected-premise rather than as re-triaged.
+
+### An interrupted artefact is WELL-FORMED AND SHORT, which is not the same animal as a corrupt one
+
+Same run, and it nearly ate it. Two of frankS's background sweeps had already been killed for memory
+that hour. **A truncated diagnostic map parses cleanly, and every row in it is correct** — the rows
+the run never reached simply come back as `GONE`. Nothing inside the consuming tool can tell a half
+map from a complete one; an emptiness check catches the empty case and no check catches this one.
+
+> **Completeness is knowable only to the PRODUCER, so the guard belongs there:** write
+> `<path>.partial`, rename after the summary line, and a killed run leaves no artefact instead of a
+> short one. The consumer then fails loudly with "no such file" rather than quietly with a list of
+> `GONE` rows. Landed in `run_pascal_conformance.sh` for exactly this, verified in both
+> directions.
+
+**Generalise it: any tool that appends rows as it goes and is read by another tool has this hole.**
+The question to ask of an artefact is not "is it valid" but **"does anything in it say it is
+FINISHED"** — and if the answer is no, the fix is a rename, not a validator.
