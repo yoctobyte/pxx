@@ -84,6 +84,50 @@ of the last four bugs here was one door being fixed while the next stayed shut:
 
 Four rounds, each closed correctly, none of which could see the next.
 
+## 2026-09-06 (frankA) — the scope is BOUNDED to the cast doors, and the merge is held for frankH
+
+Two things landed on this ticket after the construction collapse, and neither is
+the recognition merge.
+
+**The merge is NOT started, deliberately.** frankH holds an owner-directed change
+to the type-identity side channel — the alias table, `RegisterGeneralAlias`, the
+`LastType*` channels — with the instruction that nobody else is inside those
+while it is in flight. A `name -> (castKind, enumId, aliasIdx)` resolver IS the
+alias table's read door, so that is one question with two holders: both diffs
+would apply cleanly and no track letter would see the collision. Held until
+frankH lands. The ordering constraint below was sent to frankH directly, because
+its session was cleared and cannot have it, and because the natural spelling is
+the wrong one — `4be17cb8f` is the receipt.
+
+**And the scope is smaller than this ticket implies, measured rather than
+assumed.** All 51 names in the union of `OrdinalNameToTk` and
+`BuiltinScalarTypeKind`, derived from the tables, each asked in BOTH spellings —
+the builtin name, and a one-level `type a = <name>` alias to it:
+
+| door | names | direct-vs-alias disagreements |
+| --- | --- | --- |
+| `SizeOf` | 51 | 0 (pxx), 0 (fpc) |
+| `High` / `Low` | 31 ordinals | 0 |
+| `TypeInfo` | 10 | 0 |
+| the CAST doors | — | **seven defects on 2026-09-06** |
+
+At `SizeOf`, `High`, `Low` and `TypeInfo` the alias is resolved to its target
+before the name is asked about, so those doors have ONE recognition rule. The
+duplication this ticket is named for is a property of the CAST path specifically,
+not of named-type recognition in general — which narrows the merge and is worth
+knowing before writing a resolver sized for a problem that is not there.
+
+**One defect fell out of the sweep and it is filed, not fixed here:** the three
+sized booleans are refused at `High`/`Low` in their direct spelling and ACCEPTED
+through an alias, where they answer 255 / 65535 / 2147483647 against fpc's TRUE.
+The refusal is the deliberate mitigation and the alias routes around it. Appended
+to `bug-p-thirteen-builtin-type-names-answer-at-some-doors-and-are-refused-at-others`,
+whose summary said "refused at High/Low" and was true of only one spelling.
+
+**What the sweep held constant:** alias depth is one level throughout, the target
+is always a builtin, and every alias sits in one program's single `type` block. A
+two-level alias or one crossing a `uses` boundary is unmeasured.
+
 ## Shape
 
 One resolver — `name -> (castKind, enumId, aliasIdx)` — consulted once, with a

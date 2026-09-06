@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
-summary: "THREE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High` and `Low` of ByteBool, LongBool and WordBool. They map to tyUInt8/tyInteger/tyUInt16 ON PURPOSE, to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE -- they need a kind carrying a width AND boolean bounds, which no current table can express, and that is why they are the remainder rather than the next one-liner. The other ten were fixed on 2026-09-06 (26742a0ca, 86f935479, b6815e5b8); the count is the probe's own clean re-run at b6815e5b8, 51 names, 327 cells agreeing and 10 differing. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
+summary: "THREE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High` and `Low` of ByteBool, LongBool and WordBool -- and the refusal is only the DIRECT spelling: `type b = ByteBool; High(b)` is accepted and answers **255** (WordBool 65535, LongBool 2147483647) where fpc answers TRUE at both spellings, so the one-line alias bypasses the deliberate hold and returns a silent wrong value instead of a refusal. They map to tyUInt8/tyInteger/tyUInt16 ON PURPOSE, to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE -- they need a kind carrying a width AND boolean bounds, which no current table can express, and that is why they are the remainder rather than the next one-liner. The other ten were fixed on 2026-09-06 (26742a0ca, 86f935479, b6815e5b8); the count is the probe's own clean re-run at b6815e5b8, 51 names, 327 cells agreeing and 10 differing. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
 status: new
 owner: ""
 ---
@@ -57,6 +57,60 @@ all five, so whatever answers `High` has the name and declines the sibling.
 rule that was correct for the names its own tests used. Whoever takes this
 should run the probe first — it is the only instrument that can see the class,
 since a per-door test passes on every door that works.
+
+## 2026-09-06 (frankA) — the refusal is one spelling, and the other spelling answers wrongly
+
+The three surviving rows are refused as `High(ByteBool)`. They are NOT refused
+through a one-line alias, and there they answer an ordinal:
+
+| | `High` | `Low` | fpc, both spellings |
+| --- | --- | --- | --- |
+| `High(ByteBool)` | REFUSED | REFUSED | `TRUE` / `TRUE` |
+| `type b = ByteBool; High(b)` | **255** | 0 | `TRUE` / `TRUE` |
+| `type b = WordBool; High(b)` | **65535** | 0 | `TRUE` / `TRUE` |
+| `type b = LongBool; High(b)` | **2147483647** | -2147483648 | `TRUE` / `TRUE` |
+
+**THE REFUSAL IS THE MITIGATION AND THE ALIAS ROUTES AROUND IT.** This ticket's
+own body says these names map to `tyUInt8`/`tyInteger`/`tyUInt16` on purpose, to
+keep their C-ABI width, and that answering `High` from the kind would give
+2147483647 rather than TRUE — which is exactly what the alias spelling does. So
+the direct door is not merely missing a feature; it is declining to answer a
+question it cannot answer correctly, and the sibling door has no such scruple.
+A refusal is loud and a wrong bound is silent, which makes the accepted spelling
+the worse of the two.
+
+**It also changes what is BLOCKED.** Making these answer `TRUE` needs the kind
+that carries a width and boolean bounds together — the fork this ticket is now
+edged to, and genuinely blocked. Making the two spellings AGREE does not: the
+alias path could refuse exactly as the direct path does, today, and that is a
+strictly smaller change than the fork. Whoever takes the fork should know they
+are not the only route.
+
+**The population this was found in, and what it certifies.** All 51 names from
+the union of `OrdinalNameToTk` and `BuiltinScalarTypeKind`, derived from the
+tables rather than read off a list, each asked in BOTH spellings — the builtin
+name and a one-level `type a = <name>` alias to it — in one program per door:
+
+- `SizeOf`, all 51 names, pxx and fpc: **zero** direct-vs-alias disagreements in
+  either compiler. The four pxx-vs-fpc rows (`extended`/`valreal` 8 against 10,
+  `variant`/`olevariant` 16 against 24) are identical on both spellings, so they
+  are representational latitude and not door divergences.
+- `High`/`Low`, the 31 ordinal names with the three sized booleans excluded:
+  **zero** disagreements.
+- `TypeInfo`, 10 names: zero.
+
+**So the sized booleans are the ONLY cell in the sweep where the spelling
+changes the answer, and the negative result is the useful half:** at `SizeOf`,
+`High`, `Low` and `TypeInfo` the alias is resolved to its target BEFORE the name
+is asked about, so those doors have one recognition rule and not two. The
+per-door duplication this ticket is named for is real at the CAST doors — where
+it produced seven defects on 2026-09-06 — and does not extend to the rest.
+
+**What the sweep held constant, since a clean result is only about its own
+axis:** alias DEPTH is one level throughout (never an alias to an alias), the
+target is always a builtin (never a user record or enum), and every alias is
+declared in the same program's single `type` block. A two-level alias, or one
+crossing a `uses` boundary, is unmeasured.
 
 ## Guard
 
