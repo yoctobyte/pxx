@@ -35,3 +35,6 @@ pascal26:22: error: this token is not a class member: expected a field, method, 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-core#src:test/test_generic_method_unused_is_erased.pas` passes at ddd0d63e188b (tier native); it was red at d11b8a1a99dd. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
