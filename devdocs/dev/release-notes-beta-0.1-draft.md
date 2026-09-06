@@ -73,10 +73,26 @@ different word.
 
 **wasm32 is real but unwired.** Its two test suites are green and both are run
 by hand — no continuous tier covers it, so it carries less evidence than the
-other six. It is also where the honest caveat lives: both suites were fully
-green while a `Variant` written through a pointer put its payload over its own
-tag, giving 42 natively and 0 on wasm32. Fixed, and the fix is in this pin. A
-green suite is evidence about what it tests.
+other six. It is also where the honest caveat lives, and the caveat got sharper
+between the first draft of this file and the pin. **Three separate wasm32-only
+defects were found while the suites were fully green**, all three silent:
+
+- a `Variant` written through a pointer put its payload over its own tag,
+  giving 42 natively and 0 on wasm32 — fixed, and that fix is in this pin;
+- every Nil-Python object bound to a local leaked, once per call, on wasm32 and
+  no other target. It corrupts nothing, so every value assertion in the suite
+  passed on both sides of it: measured 1900 objects stranded at 2000 iterations
+  and 7815 at 8000, against a flat 1 on x86-64 for the same source;
+- a managed local a generator held **across a yield** was released at the yield,
+  so the generator resumed holding a dead handle — six lines of Nil-Python
+  printing `4 5` on x86-64 and `4 2` on wasm32, no crash and no diagnostic.
+
+The last two are fixed on master and are **not in this pin**. All three were
+green under both suites the whole time they were live, and the reason is the
+same each time: wasm32 has its own copy of machinery the other six targets
+share, so a row missing there is missing on exactly the target nobody measures.
+**A green suite is evidence about what it tests**, and on this target that
+sentence has now been paid for three times.
 
 ## What it compiles
 
