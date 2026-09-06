@@ -395,6 +395,7 @@ AN_ASSIGN Right CPromoteCharTo(declTk, initExpr)
 AN_ASSIGN Right CStrInitElem[ei]
 AN_ASSIGN Right CurASTNode
 AN_ASSIGN Right GParseExpr
+AN_ASSIGN Right MakeDynConcat(dcRead, CurASTNode)
 AN_ASSIGN Right PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMakeIdent(iSym))
 AN_ASSIGN Right PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym))
 AN_ASSIGN Right PyCallMeth1(listCi, 'count', PyMakeIdent(caSym), -1)

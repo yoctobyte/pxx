@@ -6253,6 +6253,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_an_open_array_slice_passes_a_sub_range \
 	  "$$($(TESTTMP)/test_slice26)" \
 	  "$$(cat test/test_an_open_array_slice_passes_a_sub_range.expected)"
+	# `a + [4]`, `[0] + a`, `a += [5]`, `Concat(a, [x])`. An element list arrives
+	# as a SET -- `[...]` is a set until something names its element type -- and in
+	# a concatenation there is no assignment to ask, so the SIBLING OPERAND names
+	# it, through the same retag the assignment and `TDynArr.Create(...)` use.
+	# Every row prints CONTENTS, not just Length, with distinct ascending values:
+	# a concat that dropped or reversed an operand still yields a plausible
+	# length. The `a + []` row is the IDENTITY case and is labelled as one -- it
+	# can only report that the call compiles.
+	./$(COMPILER) test/test_a_dynamic_array_concatenates_with_an_element_list.pas $(TESTTMP)/test_dynconcat26
+	tools/expect_same.sh test_a_dynamic_array_concatenates_with_an_element_list \
+	  "$$($(TESTTMP)/test_dynconcat26)" \
+	  "$$(cat test/test_a_dynamic_array_concatenates_with_an_element_list.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

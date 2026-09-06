@@ -5772,6 +5772,7 @@ var
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
   sBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
+  dcRead: Integer;    { `a += <dynarray>`: a FRESH AN_IDENT for the read half of the `a := a + e` rewrite, so the target is never an aliased subtree }
   isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
   slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
   slCastTk: TTypeKind;   { ...and the kind that decided it }
@@ -8380,6 +8381,38 @@ begin
                   frontend's path); this just accepts it in statement position. }
                 castPrevTok := Ord(CurTok.Kind); Next;
                 ParseExpr;
+                { `a += [5]` and `a += b` over a DYNAMIC ARRAY: rewritten to
+                  `a := a + <rhs>` rather than taught to AN_COMPOUND_ASSIGN's
+                  lowering, so concatenation keeps having exactly one
+                  implementation. Without this the compound spelling fell to the
+                  arithmetic lowering and added two handles -- tarray17 Halt(3),
+                  with the plain `a + [4]` two lines above it already correct,
+                  which is the two-spellings-one-construct shape again.
+
+                  RESTRICTED TO A PLAIN IDENTIFIER TARGET, and that is a real
+                  limit rather than caution: the rewrite mentions the target
+                  TWICE, so any target whose evaluation can have an effect --
+                  an indexed getter, a call, a property -- would run it twice.
+                  A fresh AN_IDENT is minted for the read rather than sharing or
+                  cloning the lvalue node, so there is no aliased subtree either.
+                  Anything else keeps the ordinary compound path and its ordinary
+                  refusal. fpc-testsuite tarray17 }
+                if (castPrevTok = Ord(tkPlusEq)) and (valNode >= 0) and
+                   (ASTKind[valNode] = AN_IDENT) and (NodeDynDepth(valNode) >= 1) and
+                   DynConcatOperandsEligible(valNode, CurASTNode) then
+                begin
+                  dcRead := AllocNode(AN_IDENT);
+                  ASTIVal[dcRead] := ASTIVal[valNode];
+                  ASTTk[dcRead]   := ASTTk[valNode];
+                  ASTSOffset[dcRead] := ASTSOffset[valNode];
+                  ASTSLen[dcRead]    := ASTSLen[valNode];
+                  node := AllocNode(AN_ASSIGN);
+                  ASTLeft[node]  := valNode;
+                  ASTRight[node] := MakeDynConcat(dcRead, CurASTNode);
+                  ASTTk[node]    := ASTTk[valNode];
+                end
+                else
+                begin
                 node := AllocNode(AN_COMPOUND_ASSIGN);
                 ASTLeft[node] := valNode; ASTRight[node] := CurASTNode;
                 if castPrevTok = Ord(tkPlusEq) then ASTIVal[node] := Ord(tkPlus)
@@ -8387,6 +8420,7 @@ begin
                 else if castPrevTok = Ord(tkStarEq) then ASTIVal[node] := Ord(tkStar)
                 else ASTIVal[node] := Ord(tkSlash);
                 ASTTk[node] := ASTTk[valNode];
+                end;
               end
               { A PARAMETERLESS procedural value called with no argument list,
                 for ANY designator spelling: `h.nul;`, `h.p;`, `a[0];`, and the

@@ -577,9 +577,85 @@ end;
   The index is a CONSTANT and not a `Length(a)` node on purpose: a Length node
   would re-evaluate the left operand, so `Concat(F(), G())` would call F twice.
   MakeWholeDynCopy above pins its count the same way, for the same reason. }
+function DynConcatOperandsEligible(left, right: Integer): Boolean;
+{ May `left + right` (or `Concat(left, right)`) be a dynamic-array concatenation?
+
+  A NAMED PREDICATE AND NOT AN INLINE TEST, because there are three doors into
+  MakeDynConcat -- the `+` operator, the Concat intrinsic, and Concat's
+  multi-argument fold -- and a gate written three times is three gates. The one
+  that already differed is why this exists: the operator door tested
+  `NodeDynDepth(both) > 0`, so an ELEMENT LIST on one side never reached the
+  retag inside MakeDynConcat at all and got the generic
+  "arithmetic operator not supported for dynamic arrays" from a check two
+  thousand lines away that is correct about ordinary arithmetic.
+
+  An element list is eligible only OPPOSITE a real dynamic array, because the
+  array is what names the element type. `[1] + [2]` is not eligible and gets the
+  ordinary refusal -- neither side knows what it holds, and guessing Integer
+  would be a wrong answer wearing a working program. }
+begin
+  Result := False;
+  if (left < 0) or (right < 0) then Exit;
+  if (NodeDynDepth(left) >= 1) and (NodeDynDepth(right) >= 1) then
+  begin Result := True; Exit; end;
+  if (NodeDynDepth(left) >= 1) and (ASTKind[right] = AN_SET_LIT) and
+     SetLitElemsArePlain(right) then
+  begin Result := True; Exit; end;
+  if (NodeDynDepth(right) >= 1) and (ASTKind[left] = AN_SET_LIT) and
+     SetLitElemsArePlain(left) then
+    Result := True;
+end;
+
+procedure RefuseUntypedElementListConcat(left, right: Integer);
+{ `Concat([1, 2, 3], [6, 8, 10])` -- BOTH operands element lists, so nothing in
+  the expression names an element type. fpc takes it from the ASSIGNMENT's
+  destination; the expression parser has no channel carrying that, and inventing
+  one is a design change rather than a gate widening.
+
+  MEASURED 2026-09-06, AND PRE-EXISTING: this compiled clean and answered
+  `len=4310464 a0=1358 a3=0` where fpc says `len=6 a0=1 a3=6` -- verified against
+  the pre-change compiler by stashing, so the widening below did not introduce
+  it and does not fix it. A silent wrong length out of a call that looks like it
+  worked is the expensive shape, and it was sitting directly beside the case
+  this change DOES fix (`Concat(a, [x])`, either order), which is exactly how a
+  half-landed feature certifies its own broken half.
+
+  So it is refused by name and the refusal says what would be needed.
+  fpc-testsuite tarray14. }
+begin
+  if (left < 0) or (right < 0) then Exit;
+  if (ASTKind[left] = AN_SET_LIT) and (ASTKind[right] = AN_SET_LIT) and
+     (NodeDynDepth(left) = 0) and (NodeDynDepth(right) = 0) then
+    Error('array concatenation: neither operand is a dynamic array, so nothing '
+        + 'names the element type -- give one operand a typed array variable, '
+        + 'or assign the lists first');
+end;
+
 function MakeDynConcat(left, right: Integer): Integer;
 var argA, argB, idxN: Integer;
 begin
+  { `a + [4]` and `[0] + a` -- AN ELEMENT LIST AS ONE OPERAND. It arrives as an
+    AN_SET_LIT, because `[...]` is a set until something says otherwise, and the
+    something is normally the ASSIGNMENT's left-hand side. Here there is no
+    assignment to ask: `CheckArray(a, [1, 2, 3, 4])` passes one as an ARGUMENT
+    and `a += [5]` has the array on the other side of the operator.
+
+    So the SIBLING OPERAND names the element type, exactly as the destination
+    does in an assignment and as the type name does in `TDynArr.Create(...)`.
+    Same retag, third caller, no fourth answer to "what is a dynamic-array
+    literal" -- which is the whole reason RetagSetLitAsArrayCtor is one routine
+    reached through a forward rather than a thing each door does for itself.
+
+    Only ONE side is retagged: `[1] + [2]` has no operand that knows an element
+    type and still gets the ordinary "both operands must be dynamic arrays",
+    which is the honest answer rather than a guess at Integer.
+    fpc-testsuite tarray17 }
+  if (ASTKind[left] = AN_SET_LIT) and (NodeDynDepth(right) >= 1) and
+     SetLitElemsArePlain(left) then
+    RetagSetLitAsArrayCtor(left, NodeDynBaseTk(right), NodeDynDepth(right));
+  if (ASTKind[right] = AN_SET_LIT) and (NodeDynDepth(left) >= 1) and
+     SetLitElemsArePlain(right) then
+    RetagSetLitAsArrayCtor(right, NodeDynBaseTk(left), NodeDynDepth(left));
   if (NodeDynDepth(left) < 1) or (NodeDynDepth(right) < 1) then
     Error('array concatenation: both operands must be dynamic arrays');
   if NodeDynDepth(left) <> NodeDynDepth(right) then
@@ -6237,7 +6313,15 @@ begin
         while Eat(tkComma) do
         begin
           ParseExpr;
-          if NodeDynDepth(node) > 0 then
+          { ASK BOTH OPERANDS, NOT JUST THE ACCUMULATOR. `Concat([0], a)` starts
+            the fold on an element list, which is depth 0, so the ARRAY
+            concatenation was never chosen and the fold built a STRING `+` chain
+            instead -- reported far later as `arithmetic operator not supported
+            for dynamic arrays`, at the next statement mentioning the variable.
+            The eligibility predicate is the same one the `+` operator uses, so
+            the two doors cannot disagree about what a concatenable pair is. }
+          RefuseUntypedElementListConcat(node, CurASTNode);
+          if DynConcatOperandsEligible(node, CurASTNode) then
             node := MakeDynConcat(node, CurASTNode)
           else
           begin
@@ -8081,8 +8165,17 @@ begin
             be reported as a missing `+` overload instead of as the wrong call
             it is.
             compat-pascal-uses-sysutils-withdraws-the-variadic-concat }
+          { The gate asks the FIRST argument what kind of Concat this is, so a
+            leading element list (`Concat([0], a)`) answered "neither" and the
+            call fell through to the no-overload-match error. Ask whether the
+            first PAIR is concatenable instead -- same predicate as the operator
+            door and the intrinsic fold above. }
+          if CaseEqual(name, 'Concat') and (nArgs >= 2) and (ASTRight[argsHead] >= 0) then
+            RefuseUntypedElementListConcat(ASTLeft[argsHead], ASTLeft[ASTRight[argsHead]]);
           if CaseEqual(name, 'Concat') and (nArgs >= 1) and
              ((NodeDynDepth(ASTLeft[argsHead]) > 0) or
+              ((nArgs >= 2) and (ASTRight[argsHead] >= 0) and
+               DynConcatOperandsEligible(ASTLeft[argsHead], ASTLeft[ASTRight[argsHead]])) or
               (IntToTypeKind(ASTTk[ASTLeft[argsHead]]) in
                  [tyString, tyAnsiString, tyShortString, tyFixedString, tyChar])) then
           begin
@@ -8090,7 +8183,7 @@ begin
             argSeq := ASTRight[argsHead];
             while argSeq <> -1 do
             begin
-              if NodeDynDepth(node) > 0 then
+              if DynConcatOperandsEligible(node, ASTLeft[argSeq]) then
                 node := MakeDynConcat(node, ASTLeft[argSeq])
               else
               begin
@@ -9888,7 +9981,7 @@ begin
     else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
     else if (op = tkPlus) and not PyExprMode and not CProgramMode and
-            (NodeDynDepth(left) > 0) and (NodeDynDepth(right) > 0) then
+            DynConcatOperandsEligible(left, right) then
     begin
       { `a + b` over two dynamic arrays — FPC's {$modeswitch arrayoperators} /
         Delphi-mode concatenation. SAME node the Concat intrinsic builds, so

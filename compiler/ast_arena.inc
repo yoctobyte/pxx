@@ -522,6 +522,23 @@ begin
         `Concat(a, b)` build: same element, same nesting, more elements
         (feature-p-dynamic-array-concatenation). }
       Result := NodeDynDepth(ASTLeft[node]);
+    AN_ARRAY_CTOR:
+      { `[1, 2, 3]` ONCE IT HAS BEEN RETAGGED FOR A DYNAMIC-ARRAY DESTINATION.
+        It lowers to a real dyn-array temp (AllocDynArray + SetLength + per
+        element store) and yields that handle, so it IS a dynamic-array value
+        and answering 0 here was simply a wrong answer -- the same
+        "only this reader was missing" shape the AN_CALL and AN_COMMA arms below
+        each record for their own kind.
+
+        ASTSOffset carries the ELEMENT shape (see the lowering): < 0 means a
+        named DYNAMIC element of that depth, so the whole value is one level
+        deeper; >= 0 is a scalar or fixed-row element, i.e. depth 1. A bare
+        AN_SET_LIT deliberately answers 0 -- it is still a SET until something
+        retags it, and a set that claimed to be an array would be worse than a
+        set that admits it is not.
+        feature-p-dynamic-array-concatenation }
+      if ASTSOffset[node] < 0 then Result := 1 + (-ASTSOffset[node])
+      else Result := 1;
     AN_COMMA:
       { `(side-effect, value)` yields the RIGHT operand's value, so its shape is
         the right operand's -- the same rule ResolveNodeRec's comma arm states.
@@ -610,6 +627,11 @@ begin
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
           (ASTKind[node] = AN_DYN_INSERT) then
     Result := NodeDynBaseTk(ASTLeft[node])
+  else if ASTKind[node] = AN_ARRAY_CTOR then
+    { the retagged element list: its element kind is on the node itself, written
+      by RetagSetLitAsArrayCtor from the destination that named it. See
+      NodeDynDepth's arm. }
+    Result := IntToTypeKind(ASTIVal[node])
   else if ASTKind[node] = AN_COMMA then
     { the comma's value is its RIGHT operand — see NodeDynDepth's arm }
     Result := NodeDynBaseTk(ASTRight[node]);
