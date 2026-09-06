@@ -3,7 +3,7 @@ slug: bug-a-tarray-is-not-ambient-so-a-unit-that-names-it-without-uses-sysutils-
 track: A
 type: bug
 prio: 40
-status: working
+status: done
 created: 2026-09-06
 found-by: frankB
 owner: frankS
@@ -116,3 +116,6 @@ Conformance: the wall moved on every row the ticket named. `tarray18` 37 -> 46,
 `tarrconstr5` 14 -> 47, `trtti12` -> 22, `trtti16` -> 27; `tarray12` compiles.
 None of the four burns yet — each now stops on something else, and their skip
 reasons are updated to say what.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
