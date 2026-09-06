@@ -431,6 +431,48 @@ end;
 
 { Append a string to the TokChars pool and return its offset (for synthesized
   identifier tokens — the mode-Delphi generics desugar mints alias names). }
+
+function ClassConstThroughReceiver(ci: Integer; const nm: AnsiString;
+                                   var outTk: TTypeKind; var symIdx: Integer): Integer;
+{ A class CONST reached through an INSTANCE receiver -- `c.K`, not `TC.K`.
+
+  THE SIBLING ARM OF A DOUBLE CASE, and it was missing for a year of commits.
+  The class VAR half was added to both receiver arms ("a class var is reachable
+  from instances too", which is FPC's rule and Delphi's), and a class const --
+  which is reachable from an instance for exactly the same reason, being
+  per-class rather than per-instance -- was not. So `TC.K` compiled and `c.K` on
+  an instance of that class answered `"K": no such member on this record/class`,
+  a diagnostic that reads as "you misspelled the member" and points at the
+  user's code rather than at the missing arm. Measured against fpc 3.2.2, which
+  accepts both.
+
+  ONE FUNCTION AND NOT A THIRD COPY. The qualified path (`TFoo.X`) already had
+  these six lines; copying them into the two receiver arms would have made three
+  copies of a rule that has already grown a visibility check and a typed-const
+  fallback since it was written. FindClassConstSym's own header gives the same
+  reason for existing.
+
+  TWO KINDS OF ANSWER, because a class const has two backings. An untyped one
+  (`const K = 3`) is a VALUE and comes back as a literal node in Result. A TYPED
+  one (`const X: T = ...`) is writable STORAGE and comes back as a SYMBOL in
+  symIdx, which the caller must turn into an lvalue so that suffixes (`[i]`,
+  `.f`, `^`) still parse. Result -1 with symIdx -1 means this class chain
+  declares no const of that name.
+  bug-p-a-class-const-is-unreachable-through-an-instance-receiver }
+var reg: Integer; key: AnsiString;
+begin
+  Result := -1; symIdx := -1; outTk := tyUnknown;
+  if ci < 0 then Exit;
+  reg := FindClassConst(ci, nm);
+  if reg < 0 then Exit;
+  if StrictVisibility then
+    EnforceMemberVis(ClassConstCi[reg], ClassConstVis[reg], nm);
+  key := ClassConstMangle(ClassConstCi[reg], nm);
+  Result := EmitClassConstNode(key, outTk);
+  if Result >= 0 then Exit;
+  symIdx := FindSym(key);
+end;
+
 function TokCharsAppend(const s: AnsiString): Integer;
 var i: Integer;
 begin

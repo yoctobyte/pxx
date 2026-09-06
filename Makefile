@@ -8121,6 +8121,47 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_class_const_visibility_strict_fail.pas $(TESTTMP)/test_ccvsf_lax26 > $(TESTTMP)/test_ccvsf_lax.log 2>&1
 	! ./$(COMPILER) --strict-visibility test/test_class_const_visibility_strict_fail.pas $(TESTTMP)/test_ccvsf26 > $(TESTTMP)/test_ccvsf.log 2>&1
 	grep -q "cannot access strict private" $(TESTTMP)/test_ccvsf.log
+	@# THE OTHER RECEIVER SPELLING. `TC.K` compiled and `c.K` answered `"K": no
+	@# such member on this record/class` for the same const, because Pascal member
+	@# dispatch is written more than once and only the TYPE-NAME receiver ever
+	@# learned about class consts. One helper -- ClassConstThroughReceiver -- now
+	@# holds the resolution and both receiver arms call it; a second copy is what
+	@# normalise-dont-special-case exists to refuse.
+	@# TWELVE ROWS, AND THE SPLIT IS THE POINT: with the fix reverted and the
+	@# compiler rebuilt, ten of them are refused with `no such member` and the two
+	@# QUALIFIED rows still compile. The controls are the half of the double case
+	@# that already worked. Byte-identical to fpc 3.2.2.
+	@# bug-p-a-class-const-is-unreachable-through-an-instance-receiver
+	./$(COMPILER) test/test_a_class_const_is_reachable_through_an_instance_receiver.pas $(TESTTMP)/test_classconstrecv26
+	tools/expect_same.sh test_classconstrecv26 "$$($(TESTTMP)/test_classconstrecv26 | tail -n 2)" "$$(printf 'fails=0\nCLASSCONSTRECV OK')"
+	@# ...and the guard, because the fix ADDED a route to a member and a new route
+	@# is a new route past whatever guards the old one. The helper calls
+	@# EnforceMemberVis and this pair is the only thing that reads that call:
+	@# MEASURED by deleting the call and rebuilding, after which the --strict-
+	@# visibility run below COMPILES. The lax run is the other half -- before the
+	@# fix it did not compile either, so it is also the control that the new route
+	@# exists at all. Deliberately NOT folded into test_class_const_visibility_
+	@# strict_fail.pas above: that file would keep failing on its own descendant-
+	@# method row with the visibility call gone, so it cannot see this.
+	./$(COMPILER) test/test_a_class_const_through_an_instance_receiver_still_obeys_strict_visibility_fail.pas $(TESTTMP)/test_ccrecvvis_lax26 > $(TESTTMP)/test_ccrecvvis_lax.log 2>&1
+	! ./$(COMPILER) --strict-visibility test/test_a_class_const_through_an_instance_receiver_still_obeys_strict_visibility_fail.pas $(TESTTMP)/test_ccrecvvis26 > $(TESTTMP)/test_ccrecvvis.log 2>&1
+	grep -q "cannot access strict private" $(TESTTMP)/test_ccrecvvis.log
+	@# THE SAME RECEIVER ARMS, THE OTHER HALF OF WHAT THEY DROPPED. Both resolved
+	@# a class var through an instance and then cleared the RECORD IDENTITY while
+	@# the selector loop continued, so a class var or class const selected off
+	@# another class var had no namespace to be looked up in and became a read at
+	@# offset 0: `c.Inner.IV` printed 4265192 where fpc prints 22, the same
+	@# constant for every member tried. IT BREAKS ONLY WHEN BOTH LINKS ARE
+	@# PER-CLASS -- an instance field off the same chain re-derives the record
+	@# further down and was right -- which is why two correct neighbours sat on
+	@# either side of it for as long as they did.
+	@# The fixture spells every member kind out because `class var` opens a
+	@# SECTION: `class var IV: LongInt; F: LongInt;` makes F a class var too,
+	@# under both compilers, and a fixture that forgets that is contrasting a
+	@# class var with a class var while every row still passes.
+	@# bug-p-a-chained-class-var-of-class-type-loses-its-record-identity
+	./$(COMPILER) test/test_a_class_var_of_class_type_carries_its_record_identity_through_a_chain.pas $(TESTTMP)/test_classvarchain26
+	tools/expect_same.sh test_classvarchain26 "$$($(TESTTMP)/test_classvarchain26 | tail -n 2)" "$$(printf 'fails=0\nCLASSVARCHAIN OK')"
 	# --strict-fpc umbrella: bundles case/operator/visibility/require-forward (NOT
 	# StrictOverload), so an ordinary RTL-using program still compiles under it...
 	# A float LITERAL must be the nearest double to the text written. The old

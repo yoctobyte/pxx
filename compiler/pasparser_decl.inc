@@ -9421,7 +9421,8 @@ begin
         end
         else if (sidx < 0) and (ci >= 0) and
                 ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0) or
-                 (FindUProp(ci, nm) >= 0) or (FindClassVar(ci, nm) >= 0)) then
+                 (FindUProp(ci, nm) >= 0) or (FindClassVar(ci, nm) >= 0) or
+                 (FindClassConst(ci, nm) >= 0)) then
         begin
           { FIVE member kinds, and it recognised TWO. A bare name in a method
             body reaches its class through implicit Self whatever KIND of
@@ -9441,13 +9442,17 @@ begin
             three that were absent.
             [[a-caller-census-cannot-find-an-absent-copy]]
 
-            THE FIFTH KIND, a class CONST, is deliberately not in this list and
-            its absence is measured rather than overlooked. The desugar here is
-            a `__nestself.` prefix, and `<instance>.K` for a class const is
-            refused across the member-dispatch paths generally -- `TC.K` works
-            and `c.K` does not, with no nested routine anywhere in sight. Adding
-            it here would turn `undefined variable (K)` into `"K": no such
-            member`, which is a different wrong answer, not a fix.
+            THE FIFTH KIND, a class CONST, arrived SECOND, and the gap was
+            measured rather than overlooked. The desugar here is a
+            `__nestself.` prefix, and `<instance>.K` for a class const was
+            refused across the member-dispatch paths generally -- `TC.K` worked
+            and `c.K` did not, with no nested routine anywhere in sight -- so
+            adding the kind then would have turned `undefined variable (K)`
+            into `"K": no such member`: a different wrong answer, not a fix.
+            ClassConstThroughReceiver closed that, and this line went in the
+            same day, with the `classconst=5` row in the fixture below. An
+            absence that names its own blocker is the one kind of absence that
+            gets removed on time.
             bug-p-a-class-const-is-unreachable-through-an-instance-receiver
             bug-p-a-nested-routine-sees-only-two-of-its-classs-five-member-kinds }
           needSelf := True;

@@ -73,7 +73,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (12)
+## backlog (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,6 +81,7 @@ _none_
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
+| regression-test-core-test-interface-containers | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@2 at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_interface_containers_ts26 "$(/tmp/test_interface_containers_ts26)" "$(printf 'strarr: ok\nsta…` (auto-filed by twatch) | — |
 | regression-test-core-test-libwriteln-parity | T | 70 | regression | regression: test-core#src:test/test_libwriteln_parity.pas at fa5e9ef55813 in step 2/2, `tools/expect_same.sh test_libwln26 "$(/tmp/test_libwln26)" "$(cat test/test_libwriteln_parity.expected)"` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
@@ -89,6 +90,8 @@ _none_
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
+| regression-test-threads-test-threadsafe-class-finalize-kinds | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_class_finalize_kinds.pas at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_tscfk26 "$(/tmp/test_tscfk26)" "$(printf 'errors=0\nKINDS OK')"` (auto-filed by twatch) | — |
+| regression-test-threads-test-threadsafe-class-finalize-race | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_class_finalize_race.pas at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_tscfr26 "$(/tmp/test_tscfr26)" "$(printf 'errors=0\nRACE OK')"` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -409,11 +412,10 @@ _none_
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (29)
+## backlog-pascal (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-p-a-class-const-is-unreachable-through-an-instance-receiver | P | 40 | bug | `TC.K` for a class const compiles and `c.K` on an instance of the same class answers `\"K\": no such member on this record/class`. fpc accepts both. The class VAR sibling was fixed -- pasparser_lval.inc:5436 reaches FindClassVar through a non-bare receiver, with a comment naming it as the sibling arm of a double case -- and the class CONST beside it was never added, so FindClassConst has no receiver-path caller at all. Blocks the fifth member kind in bug-p-a-nested-routine-sees-only-two-of-its-classs-five-member-kinds: that fix desugars an implicit member reference to `__nestself.<name>`, which for a class const lands on exactly this refusal. | — |
 | bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles | P | 45 | bug | The current wall on the FPC compiler-source march, and the first one this session that did NOT reduce. `cclasses` / `comphook` / `finput` / `cfileutl` stop at `cclasses.pas:2909 dereferenced value is not a pointer` — `Entry := @Entry^^.Next` inside `THashSet.Lookup`, where `Entry: PPHashSetItem` and the three types are declared forward (`PPHashSetItem = ^PHashSetItem` above `PHashSetItem = ^THashSetItem` above the record). A hand-written reduction with those exact declarations, that exact routine body and a class field of the same type COMPILES AND RUNS, so the discriminator is something else in the unit and the reduction is the work. Two separate small shapes DO fail and are recorded below; neither produces this diagnostic, so neither is established as the cause. | — |
 | bug-p-a-manifest-is-skipped-in-silence-when-the-source-is-compiled-from-its-own-directory | P | 30 | bug | MEASURED 2026-09-06 at 8b55d1918, compiler 5ca36ce7aae9. `PxxLibFindManifest` walks UP from the unit's own directory and deliberately stops before the cwd (paslexer.inc:394-403: 'a manifest is a property of where the SOURCE lives'), and it exits immediately on an empty dir. A source given as a BARE FILENAME therefore has dir='' and gets no manifest at all -- so `cd Source && pxx --mimic-fpc p.pas` resolves NO unitalias rows while `pxx --mimic-fpc -FuSource p.pas` from the parent resolves all of them. Same tree, same files, same flags, different answer, and the only symptom is the ordinary `uses: unit source not found: system.classes` a genuinely missing unit produces. THE SCOPING RULE IS NOT THE DEFECT AND SHOULD NOT BE CHANGED -- it is what stops a stray cfg in an invocation directory redefining somebody's build, and defs.inc:6578 argues it well. The defect is that the skip is UNOBSERVABLE: this cost a session an hour of believing the landed unitalias feature was broken, and the wrong conclusion was only caught by running the feature's own test/libmanifest positive control, which passed. SUGGESTED FIX IS A DIAGNOSTIC, NOT A BEHAVIOUR CHANGE: when a `uses` of a DOTTED name fails to resolve and a pxxlib.cfg exists in the failing source's directory but was not consulted, add a note saying so. Cheap, and it fires exactly in the case that is confusing. | — |
 | bug-p-a-shadowed-soft-intrinsic-is-closed-without-consulting-the-arguments | P | 30 | bug | SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape -- including shapes it could never bind. Fixed for the bare-name dyn-array Delete/Insert case (DynArrayReopensIntrinsic, pasparser_stmt.inc); the general answer, and the non-bare spellings `Delete(obj.Items, i, 1)` / `Insert(x, p^.list, i)`, are still closed. Sixteen call sites share the predicate. | — |
@@ -934,9 +936,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3459)
+## done (3461)
 
-3459 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3461 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1040,6 +1042,7 @@ _none_
 - [p 70] [T] regression-cascade-6758c7ce7dbd
 - [p 70] [T] regression-cascade-b8e3b3010249
 - [p 70] [T] regression-optdiff-shard6-12
+- [p 70] [T] regression-test-core-test-interface-containers
 - [p 70] [T] regression-test-core-test-libwriteln-parity
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
@@ -1048,6 +1051,8 @@ _none_
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
+- [p 70] [T] regression-test-threads-test-threadsafe-class-finalize-kinds
+- [p 70] [T] regression-test-threads-test-threadsafe-class-finalize-race
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A+S] bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
@@ -1218,7 +1223,6 @@ _none_
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
-- [p 40] [P] bug-p-a-class-const-is-unreachable-through-an-instance-receiver
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token
 - [p 40] [P] bug-p-low-and-high-of-a-nested-static-array-row-answer-the-outer-arrays-bounds

@@ -7,16 +7,20 @@
   properties and every one was a wall.
 
   The rows are the member KINDS, enumerated from the concept rather than from
-  the report: field, method, class var, property-read (through a getter),
-  property-read (straight off a field), property-WRITE. Each asserts a VALUE
-  that only the right receiver can produce -- the getter multiplies by ten and
-  the write goes through a setter, so a reference that resolved to the wrong
+  the report: field, method, class var, class const, property-read (through a
+  getter), property-read (straight off a field), property-WRITE. Each asserts a
+  VALUE that only the right receiver can produce -- the getter multiplies by ten
+  and the write goes through a setter, so a reference that resolved to the wrong
   storage prints a different number rather than failing to build.
 
-  A class CONST is the fifth kind and is deliberately NOT here: `<instance>.K`
-  is refused across pxx's member-dispatch paths generally (`TC.K` works, `c.K`
-  does not, no nested routine involved), so the `__nestself.` desugar cannot
-  service it yet.
+  THE CLASS CONST ROW ARRIVED SECOND AND THAT IS THE INTERESTING PART. It was
+  deliberately absent while `<instance>.K` was refused across pxx's member
+  dispatch generally -- `TC.K` worked and `c.K` did not, with no nested routine
+  involved -- because the desugar here is a `__nestself.` prefix, so adding the
+  kind would have turned `undefined variable (K)` into `"K": no such member`:
+  a different wrong answer, not a fix. The receiver bug is fixed now and the
+  scan asks about the fifth kind. The absence was measured, not overlooked,
+  which is why it could be removed the day its blocker closed.
   bug-p-a-nested-routine-sees-only-two-of-its-classs-five-member-kinds
   bug-p-a-class-const-is-unreachable-through-an-instance-receiver }
 {$mode objfpc}
@@ -48,6 +52,7 @@ procedure TC.Outer;
     WriteLn('propro=', RO);
     V := n;
     WriteLn('propwrite=', V);
+    WriteLn('classconst=', K);
   end;
 begin
   FV := 3; CV := 9;

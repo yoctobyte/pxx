@@ -585,6 +585,7 @@ var
   mBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
   qualNameTok: Integer;   { token index of the member name in `TClass.member` }
+  ccInstNode, ccInstSym: Integer; ccInstTk: TTypeKind;   { a class CONST through an instance receiver -- see ClassConstThroughReceiver }
   augPow: Boolean;   { `d[k] **= v` — `**` has no binary token, see PyAugDunderName }
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi, cpArgs: Integer;
@@ -3733,7 +3734,57 @@ begin
           ASTIVal[node] := fldIdx;
           ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
           tk := Syms[fldIdx].TypeKind;
+          { AND ITS RECORD IDENTITY, because the loop CONTINUES and whatever
+            comes next has to be looked up in SOMETHING. Cleared to REC_NONE,
+            a class var of CLASS or RECORD type was correct on its own --
+            `t := c.Inner` gave the right pointer, and `c.Inner.AnInstanceField`
+            was right too, because a field read re-derives the record from the
+            node further down. What could not re-derive it is the arm you are
+            reading: it asks FindClassVar(recName - REC_UCLASS_BASE, ...)
+            DIRECTLY, so with REC_NONE in hand a class var (or class const)
+            selected off another class var fell past every arm to the
+            no-namespace fallback and became a read at offset 0.
+            MEASURED: `c.Inner.IV` printed 4265192 where fpc prints 22, the
+            same constant for every member tried, which is the tell that no
+            member was being read at all; `TC.Inner.IV` on the very same object
+            was right. The instance spelling of a double case, again.
+            THE TWO WORKING NEIGHBOURS ARE WHY IT SURVIVED: the shape only
+            breaks when BOTH links are per-class, and the mixed chains on
+            either side of it answer correctly.
+            bug-p-a-chained-class-var-of-class-type-loses-its-record-identity }
+          if (tk = tyClass) or (tk = tyRecord) then recName := ResolveNodeRec(node)
+          else recName := REC_NONE;
+          Next;   { consume field name }
+          Continue;
+        end;
+        { ...and a class CONST through the same receiver, which is reachable from
+          an instance for exactly the reason the class var above is: it is
+          per-class, not per-instance. This arm was missing here and in
+          ParseClassRecordSelectors, so `TC.K` compiled and `c.K` answered
+          `"K": no such member` -- see ClassConstThroughReceiver. }
+        ccInstNode := ClassConstThroughReceiver(recName - REC_UCLASS_BASE,
+                                                fieldName, ccInstTk, ccInstSym);
+        if ccInstNode >= 0 then
+        begin
+          node := ccInstNode;
+          tk := ccInstTk;
           recName := REC_NONE;
+          Next;   { consume field name }
+          Continue;
+        end;
+        if ccInstSym >= 0 then
+        begin
+          { a TYPED class const is storage, so it enters as a symbol exactly the
+            way the class var above does -- which is what keeps `c.TAG[1]`
+            parsing its suffixes. }
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := ccInstSym;
+          ASTTk[node] := Ord(Syms[ccInstSym].TypeKind);
+          tk := Syms[ccInstSym].TypeKind;
+          { carries its record identity for the reason the class var above
+            does -- a typed const of RECORD type is storage with members. }
+          if (tk = tyClass) or (tk = tyRecord) then recName := ResolveNodeRec(node)
+          else recName := REC_NONE;
           Next;   { consume field name }
           Continue;
         end;
@@ -5150,6 +5201,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     dfIsAssign: Boolean;   { the default-property `[` is an assignment TARGET }
     cvIdx: Integer;
+    ccSelNode, ccSelSym: Integer; ccSelTk: TTypeKind;   { a class CONST through a chained receiver -- see ClassConstThroughReceiver }
     thNode: Integer;   { a chained type-helper call on the value so far }
     mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
     dpsTk, dpsRec, dpsCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
@@ -5630,7 +5682,39 @@ begin
           ASTIVal[sub] := cvIdx;
           ASTTk[sub] := Ord(Syms[cvIdx].TypeKind);
           tk := Syms[cvIdx].TypeKind;
+          { the record identity too -- the sibling of the same clearing in
+            ParseLValueAST, and it had the same consequence.
+            bug-p-a-chained-class-var-of-class-type-loses-its-record-identity }
+          if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(sub)
+          else recId := REC_NONE;
+          Next;                        { consume the field name }
+          node := sub;
+          outTk := tk;
+          Continue;
+        end;
+        { ...and the class CONST beside it -- the sibling arm, see
+          ClassConstThroughReceiver. Both receiver arms take it, because a
+          member-dispatch rule added to one copy and not the other is how this
+          one came to be missing in the first place. }
+        ccSelNode := ClassConstThroughReceiver(recId - REC_UCLASS_BASE,
+                                               fieldName, ccSelTk, ccSelSym);
+        if ccSelNode >= 0 then
+        begin
+          tk := ccSelTk;
           recId := REC_NONE;
+          Next;                        { consume the field name }
+          node := ccSelNode;
+          outTk := tk;
+          Continue;
+        end;
+        if ccSelSym >= 0 then
+        begin
+          sub := AllocNode(AN_IDENT);
+          ASTIVal[sub] := ccSelSym;
+          ASTTk[sub] := Ord(Syms[ccSelSym].TypeKind);
+          tk := Syms[ccSelSym].TypeKind;
+          if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(sub)
+          else recId := REC_NONE;
           Next;                        { consume the field name }
           node := sub;
           outTk := tk;
