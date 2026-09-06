@@ -141,11 +141,15 @@ FPC and Delphi modes, and explicitly not every dialect of either. We do not
 chase FPC bug-for-bug; we care that correct Pascal compiles correctly.
 
 One alias-resolution defect is fixed in this pin. A census settled its scope:
-**exactly one affected name in everything pxx ships — `IUnknown`, and it failed
-loudly** — because the alias table only ever admitted class types. What remains
-genuinely **unmeasured** is third-party Pascal that declares a class or
-interface alias re-using a builtin name. Unmeasured is the accurate word; it is
-not a claim that the case is fine.
+**exactly one affected name in everything pxx ships — `IUnknown`, and that one
+failed loudly** — because the alias table only ever admitted class types, so a
+scalar alias such as `HResult = LongInt` was never a candidate. **Loudly is a
+property of that instance and not of the defect**: where the two targets happen
+to be compatible, the same mechanism bound the wrong type with no diagnostic at
+all. What remains genuinely **unmeasured** is third-party Pascal that declares a
+class or interface alias re-using a builtin name — and that is the shape the
+silent face fits, so the sentence above is not reassurance about it. Unmeasured
+is the accurate word; it is not a claim that the case is fine.
 
 ## Nil-Python
 
