@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-summary: "FOUR now, down from five (8627d25ce): the TWO in pasparser_stmt.inc were character-for-character identical apart from the `^` arm and are one routine, ParseCastTargetSuffix -- the difference between them collapsed to one boolean because it is a fact about the CAST (a record-name cast knows its own pointee and carries no alias row; a pointer-alias cast has the whole triple and must ask ResolveDerefShape). The `^ / .field / [i]` suffix chain is parsed by FOUR hand-rolled loops in Pascal (pasparser_lval.inc's ApplyCallResultPtrSuffix, two in pasparser_expr.inc for the record-name and pointer-alias casts, one shared cast-target walk in pasparser_stmt.inc) plus two more in Track N's pyparser.inc — not the THREE the title and the body below still say; re-derived 2026-09-04 and 2026-09-05 with `grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc`. The divergences are now WORKED OUT: an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and as of 657ab09da all five reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask -- ONE suffix parser instead of four -- with no defect backlog attached, so rank it as a pure refactor. THE REMAINING THREE ARE NOT THE SAME MERGE the statement pair was: the expr record-cast twin hand-builds its own AN_INDEX arm where the statement side delegates `[` to ParseClassRecordSelectors, so unifying those asks whether that arm is RIGHT, not whether a body can be lifted. Caveat: the census cannot see a loop that CALLS an escape and discards its answer, which is what one of the four defects turned out to be."
+summary: "THREE now, down from four (7927fe685) and from five (8627d25ce), and the title is finally true. The `^ / .field / [i]` suffix chain is parsed by three hand-rolled loops in the PASCAL frontend -- pasparser_lval.inc's ApplyCallResultPtrSuffix and two in pasparser_expr.inc, for the record-name and pointer-alias casts -- plus two more in Track N's pyparser.inc, which are DELIBERATE (the-substrate-is-ast-and-ir-not-the-parser says duplicate the parser per LANGUAGE) and are not in scope here, though they owe the same field-encoding contract. Re-derived 2026-09-06 with `grep -n 'while CurTok.Kind in [tkCaret, tkDot, tkLBrack]' compiler/*.inc`. The statement-side copy is GONE: refactor-p-one-lvalue-path-for-statements-and-expressions merged the cast-headed assignment target onto the expression parser and deleted both arms and ParseCastTargetSuffix with them, so the count fell by deleting a CALLER rather than by unifying two bodies. The divergences on the survivors are worked out -- an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and all three reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask, ONE suffix parser instead of three, with no defect backlog attached, so rank it as a pure refactor. NOT THE SAME MERGE the statement pair was: the expr record-cast twin hand-builds its own AN_INDEX arm where the pointer-alias twin has real element-type logic, so unifying them asks whether each arm is RIGHT, not whether a body can be lifted. Two caveats, both paid for: the census cannot see a loop that CALLS an escape and discards its answer (one of the four defects), and it cannot see an arm whose guard is a DECLINE SIGNATURE that is also a true answer -- the pointer-alias caret arm restored the alias element type on tyInteger/REC_NONE/0/0 and was refusing `PA(q)^.pi^` in both faces on the pin until 7927fe685."
 status: working
 owner: frankA
 ---
@@ -647,3 +647,50 @@ row with the same chain off a variable — a cast row alone cannot tell a fixed
 walk from a language that never allowed this — and rows 5-8 assert the TAG
 rather than the parse, since consuming the token is not enough. 8 rows,
 byte-identical to fpc.
+
+## 2026-09-06 — four becomes three, by deleting a CALLER
+
+`f56d42898` and `7927fe685` merged the cast-headed assignment target onto the
+expression parser and deleted both statement-side arms and `ParseCastTargetSuffix`
+with them. So the count did not fall by unifying two bodies; it fell because the
+thing that CALLED one of them stopped existing. That is worth saying because it
+is the cheaper move and this ticket had not considered it: ask who calls a
+duplicated walk before asking how to merge it into its twin.
+
+`grep -n 'while CurTok.Kind in \[tkCaret, tkDot, tkLBrack\]' compiler/*.inc` now
+answers five, three of them Pascal:
+
+| where | opener |
+| --- | --- |
+| `pasparser_lval.inc:5528` | `ApplyCallResultPtrSuffix` — a call RESULT |
+| `pasparser_expr.inc:6779` | the record-name cast |
+| `pasparser_expr.inc:7331` | the pointer-alias cast |
+| `pyparser.inc:48199`, `:48345` | Track N, deliberate — duplicate the parser per LANGUAGE |
+
+### A third census the escape census cannot do
+
+The escape census asks which shared routines a loop reaches, and the re-entry
+question asks whether it comes back after delegating. Neither can see a loop that
+reaches the right resolver, gets the right answer, and then **overwrites it** —
+which is what `7927fe685` found in the pointer-alias caret arm. Its restore fires
+on `tyInteger / REC_NONE / 0 / 0`, and that quadruple is BOTH `ResolveDerefShape`'s
+decline signature AND its true answer for a `^Integer` field, so the arm could not
+tell "no shape recorded" from "the shape is `^Integer`". `PA(q)^.pi^` was refused
+in both faces on pin v404 and every other opener of the same chain was right.
+
+The generalisation is worth carrying into the remaining unification: **a fallback
+whose trigger is a default value cannot signal "not applicable"**, and the fix is
+a separate bit for membership (`pcMovedOff`) rather than a smarter test on the
+value. The statement-side copy already had that bit; the expression copy had it
+only on the one arm where `.name` is not a field, i.e. the arm a plain field never
+takes. Two copies of one rule, and only one of them complete — which is the
+argument this ticket exists to make.
+
+### What remains
+
+Unifying the two `pasparser_expr.inc` loops is still not a lift-and-share: the
+record-name twin hand-builds its own `AN_INDEX` arm, the pointer-alias twin has
+real element-type logic (frozen strings, N-D folding, dyn-array element kinds),
+and `ApplyCallResultPtrSuffix` carries the call's own constants. Each arm has to
+be shown RIGHT before it can be shown redundant, and the instrument for that is
+an opener × chain differential, not a reading.
