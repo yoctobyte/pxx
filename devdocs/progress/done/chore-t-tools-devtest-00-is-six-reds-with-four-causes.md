@@ -559,4 +559,4 @@ remain worth having on their own merits, but they are not holding this job red.
 repairing a dated claim in place would make it look freshly measured.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f98e1105b.
