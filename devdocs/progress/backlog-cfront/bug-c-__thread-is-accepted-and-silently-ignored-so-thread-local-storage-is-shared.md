@@ -130,6 +130,22 @@ one shared `.bss` object and still warns rather than refuses. What changes is
 the plan: the missing piece is not a per-thread base, it is (2) and (3) below
 plus a ruling on (a) and a decision about (b).
 
+**(c) THE EXISTING BLOCK CANNOT HOLD `__thread` VARIABLES — it is exactly
+full.** Counted rather than estimated: `TLS_BLOCK_SIZE = 1152` is **144 slots**
+of 8 bytes; 0..12 are taken, `TLS_SLOT_FIRST_FREE = 13`, and the heap magazine
+starts at `TLS_SLOT_HEAP_MAG = 16` with `HEAP_MAG_BINS = 64` heads (16..79) and
+64 counts (80..143). So slots 13, 14 and 15 are free — **three** — and the last
+magazine count lands on the block's final slot.
+
+An arbitrary number of `__thread` variables does not fit in three slots, so
+this needs a growable per-thread area rather than the existing map. That is not
+free: a cloned thread **carves its block off its own stack**
+(`thread_emit.inc`), so growing `TLS_BLOCK_SIZE` costs stack in every thread,
+and the main thread's block is a fixed `.bss` reservation (`BSS_TLS_MAIN`).
+Whoever implements (2) is choosing an allocation strategy, not picking a spare
+slot — and the three free slots are a trap, because they are enough to make a
+one-variable proof of concept work and are not enough for the feature.
+
 ### Ordering, corrected
 
 1. ~~a per-thread TCB with a distinct FS base~~ — **done, on GS, x86-64 only**.
