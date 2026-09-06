@@ -2933,6 +2933,31 @@ begin
     MatchArgProcAddrValid := True;
 
     ok := True;
+    { A NilPy `*args` / `**kwargs` METHOD HAS NOT BEEN PACKED YET, so its
+      arguments are not in its parameter slots and comparing them there asks a
+      question about the wrong pairing. `def take(self, a, *rest, **kw)` called
+      as `b.take(1, 2, 3)` presents three Integers; after PyPackStarArgs the
+      callee sees `a`, a LIST and a DICT. This check runs BEFORE that packing --
+      the packing is done by the NilPy call site once the argument list is
+      parsed -- so arguments 2 and 3 were matched against the list and dict
+      parameters and refused: "no overload of take matches these arguments",
+      test_nilpy_star_methods_and_targets, an auto-filed Track T RED.
+
+      Skipped rather than made precise on purpose. The pre-pack argument list
+      and the post-pack parameter list are DIFFERENT SHAPES, not a shifted
+      version of one shape, so there is no j-to-pj mapping this loop could use;
+      OverloadArgParamIdx answers about the declared slots, which is right for
+      every caller that has already packed and wrong for this one. Restoring
+      the pre-a79ea9af6 answer for exactly these procs is the narrow fix, and
+      the wide one -- checking after packing -- belongs where the packing is.
+
+      NOT A REGRESSION IN THE GATE'S OWN TERMS: a79ea9af6 measured zero change
+      across the Pascal corpus, conformance and fgl, and NilPy is in none of
+      those three. A green scoped to the populations it was measured on.
+      regression-test-core-test-nilpy-star-methods-and-targets-2 }
+    if (ProcPyStarIdx[pi] >= 0) or (ProcPyKwIdx[pi] >= 0) then
+      ok := True
+    else
     for j := 0 to nArgs - 1 do
     begin
       pj := OverloadArgParamIdx(pi, 1, j, argKwTok[j]);
