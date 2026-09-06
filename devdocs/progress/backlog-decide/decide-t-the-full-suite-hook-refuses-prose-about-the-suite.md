@@ -1,9 +1,9 @@
 ---
 track: U
-prio: 40
+prio: 55
 type: decide
 blocked-by: []
-summary: "no-full-suite.sh matches command TEXT, so a `git commit` whose MESSAGE explains why test-nilpy is full-tier-only is refused as an attempt to run it — killing the whole command line including the `git add`. Five instances now, four of them landing on a document ABOUT the tier split. Any fix edits .claude/hooks/, which binds every agent on this box, so it is the owner's call."
+summary: "no-full-suite.sh matches command TEXT, so writing ABOUT a suite is refused as running one. RE-COUNTED 2026-09-06: at least TEN instances across five-plus sessions, not five -- two further Track T tickets were filed independently on 2026-09-05 reporting the same cause, which is itself the finding, since this row was written to stop exactly that rediscovery. AND THE COUNT CHANGES THE FORK: option 3 (downgrade for `git commit`) covers only a MINORITY of the measured instances -- three of frankC's five are `cat > file` / `cat >> LOGBOOK.md` heredocs that write FILES, and a separate rule (the shell-loop one) fires on the word `for` plus a `test/` glob inside a heredoc body, with a two-line repro. Every single instance is an author WRITING DOWN WHAT THEY DID, which is the sentence the hook's own refusal text instructs them to write. Any fix edits .claude/hooks/, which binds every agent on this box, so it is the owner's call and no agent may make it."
 ---
 
 # Should the full-suite hook stop matching prose about the suite?
@@ -66,3 +66,81 @@ protected is not worth a quoting parser.
 
 Track T holds no opinion strong enough to act on unilaterally; this is recorded
 so the fifth instance is the last one that has to be rediscovered.
+
+## RE-COUNTED AND RE-ARGUED 2026-09-06 (frank-coordinator) — the count doubled and it moves the recommendation
+
+**This row said, in its own last line, that it was recorded "so the fifth instance is the
+last one that has to be rediscovered."** On 2026-09-05, **two further Track T tickets were
+filed independently** by two sessions reporting the same cause:
+
+- `bug-t-the-full-suite-hook-refuses-writing-about-the-suite-not-just-running-it` (frankC)
+- `bug-t-the-full-suite-hook-scans-heredoc-prose-and-refuses-documentation`
+
+Both are now wired `blocked-by:` this row. **The rediscovery is not a filing error to tidy
+away — it is evidence.** A decision recorded in `backlog-decide/` did not reach two sessions
+that hit the defect a week later, so "it is written down" is not a cost the fork may count
+as paid.
+
+### The consolidated count
+
+| source | instances | shapes |
+| --- | --- | --- |
+| this row, 2026-08-30 | 5 | four on documents ABOUT the tier split; a ticket body quoting `optdiff.sh`'s file list; a commit message on the nilpy tier |
+| frankC's row, 2026-09-05 | 5 | `cat > ticket.md` heredoc containing `gate.sh full`; `cat >> LOGBOOK.md` naming a `test/` glob; `git commit -F -` whose message said `make test`; **the commit filing that ticket, refused for describing the refusals**; a logbook line recording a sweep that had been properly declared with `PXX_ALLOW_FULL_SUITE=1` |
+| the heredoc row, 2026-09-05 | repro | rule 3 (shell-loop) firing on the word `for` plus a `test/` glob **inside a heredoc body** — quoting a Pascal `for i := 0 to n` is enough |
+
+**At least ten, across five or more sessions, two of them self-referential:** the commit
+filing the ticket about the hook was refused by the hook, and *the refusal text tells the
+author to say in the commit why the quick tier was not enough — twice now that exact
+sentence has been refused for containing the words it asks for.*
+
+### Why the count changes the fork rather than just restating it
+
+**Option 3 was the cheap arm and it does not cover the majority of the measured
+instances.** Only two of frankC's five are `git commit`; **three are `cat >` / `cat >>`
+heredocs writing FILES**, which option 3 leaves refused exactly as they are. And **it is not
+one rule**: the shell-loop rule matches `for` + a `test/` glob independently of the suite-name
+rule, so a fix aimed at `-m`/`-F` arguments does not reach it. The two-line repro in the
+heredoc ticket is the cheapest way to see this.
+
+**Option 1's cost estimate was five instances with a one-rewrite workaround.** The measured
+cost is ten-plus, three duplicate tickets, and a workaround that **differs per tool** — the
+`Write` tool for file content, a message file for `git commit -F`, and for the shell-loop
+rule a rephrase of prose that the reporters explicitly refused to make. *Every reporter has
+declined to reword the prose to slip past the guard, correctly, and CLAUDE.md says so in as
+many words: a guard you route around is a guard the owner no longer has.*
+
+**The selection effect is stronger than "aimed at people writing down why the rule
+exists".** It is exact: **every one of the ten instances is an author writing down what they
+did, and the hook's own refusal text instructs them to write it.** The false-positive
+population is precisely the population the policy exists to create.
+
+### What has NOT changed, and it is why this stays a decision
+
+**No reporter asks for the guard to be weakened, and neither does this note.** frankC's row
+states the constraint the fix must hold: *"do not fix this by loosening what counts as a
+suite invocation, and do not fix it by teaching agents to rephrase prose so it slips past."*
+`PXX_ALLOW_FULL_SUITE=1` is lift-it-yourself, is used autonomously and legitimately, and
+must keep working. **The positive control any fix must pass is already written down:** a
+real `make test` in command position inside a heredoc-writing command must STILL be refused,
+and `PXX_ALLOW_FULL_SUITE=1 make test` must still be allowed. *A fix that makes the hook stop
+refusing anything is the failure mode here.*
+
+### Revised recommendation
+
+**Option 2, scoped to heredoc bodies only** — skip the scan between `<<'EOF'` and its
+terminator, leave `-m`/`-F` and command-position matching exactly as they are. It is the
+arm this row rated most correct and most risky, and the risk assessment was made against a
+population that has since changed: heredoc bodies are where the majority of measured
+instances live, they have an unambiguous delimiter that needs no shell-quoting parser, and
+skipping only them leaves every real invocation refused. **Option 3 is no longer the cheap
+arm, because it fixes two of ten.** Option 1 remains coherent — the reporters have all
+absorbed the cost and none is blocked — but it should be chosen against ten instances and a
+failed recording, not against five and a shrug.
+
+**Raised 40 -> 55** on the measured count, not on urgency: nobody is blocked, and the reason
+to rank it is that a p40 decide row is what produced two duplicate filings.
+
+**Nothing here touches `.claude/**`.** This row is prose about a decision that is the
+owner's alone; no agent may edit the hook, the settings or CLAUDE.md, and a peer cannot
+authorise it.

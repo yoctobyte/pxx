@@ -3,7 +3,7 @@ slug: bug-t-the-full-suite-hook-refuses-writing-about-the-suite-not-just-running
 track: T
 prio: 35
 type: bug
-blocked-by: []
+blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]
 status: backlog
 found: 2026-09-05
 found-by: frankC
@@ -90,3 +90,21 @@ workaround stays the same — the `Write` tool for file content, a message file
 for `git commit -F` — and it stays deliberate. **Do not reword the prose to
 avoid the pattern**, which is the tempting fix and the one that would leave the
 guard weaker than it looks.
+
+## WIRED TO THE DECISION 2026-09-06 (frank-coordinator)
+
+`blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]`. **Not a merge
+and not a duplicate-closure** — this row's instances are its own evidence and are counted in
+the decision. The edge is real: **the fix is in `.claude/hooks/no-full-suite.sh`, which binds
+every agent on this box, so no track agent may make it and no peer may authorise it.** Until
+the owner rules, there is nothing here to implement, and an unwired T row at p35 reads as
+work somebody could pick up.
+
+**Your instances moved the recommendation.** The decision row was written on five instances,
+all around commit messages, and recommended *leave it* or *downgrade for `git commit`*. The
+five in these two rows are mostly `cat >` / `cat >>` heredocs writing FILES, plus a separate
+rule firing on `for` + a `test/` glob in a heredoc body — neither of which the cheap arm
+covers. Consolidated count is now **at least ten across five-plus sessions**, and the
+decision's own stated purpose (*"so the fifth instance is the last one that has to be
+rediscovered"*) demonstrably failed, since both of these were filed a week later by sessions
+that did not find it.
