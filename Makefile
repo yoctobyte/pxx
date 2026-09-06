@@ -8433,6 +8433,18 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_ufield_growth26; test $$? -eq 42
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas $(TESTTMP)/test_dynarray_of_fixed_array26
 	tools/expect_same.sh test_dynarray_of_fixed_array26 "$$($(TESTTMP)/test_dynarray_of_fixed_array26 | tail -1)" "total ok 13 / 13"
+	# A dynamic array whose ELEMENT is a class must keep that element type when it
+	# arrives as a PARAMETER. `array of SomeRecord` matched the array arm and got
+	# ElemRecName; `array of SomeClass` matched no array arm, fell through to the
+	# scalar class/record arm, and had its element's class id written to RecName --
+	# not where ResolveNodeRec looks. Three symptoms, one cause, and only the first
+	# is silent: a field read printed 4265192 where fpc prints 'cc'; var/open-array
+	# dumped ~45KB of heap; A[0].ClassName reported "no such member". The record and
+	# integer element rows are CONTROLS -- correct before the fix -- because they are
+	# what proves the boundary is "element is a class", not "element is an
+	# aggregate". fpc 3.2.2 prints the same 9 / 9.
+	./$(COMPILER) test/test_a_dynamic_array_of_class_keeps_its_element_type_as_a_parameter.pas $(TESTTMP)/test_dynarray_of_class_param26
+	tools/expect_same.sh test_dynarray_of_class_param26 "$$($(TESTTMP)/test_dynarray_of_class_param26 | tail -1)" "total ok 9 / 9"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas $(TESTTMP)/test_class_managed_fields_finalize26
 	tools/expect_same.sh test_class_managed_fields_finalize26 "$$($(TESTTMP)/test_class_managed_fields_finalize26)" "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
 	# COM interface elements inside CONTAINERS. Five shapes that all leaked (or

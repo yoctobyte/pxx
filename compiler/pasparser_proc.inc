@@ -2774,6 +2774,33 @@ begin
     else if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
     begin
       Syms[idx].RecName := ptypesRec[i];
+      { AN ARRAY PARAMETER'S RECORD IDENTITY IS ITS ELEMENT'S, AND IT LIVES IN
+        ElemRecName. RecName is for a plain scalar/record-typed symbol --
+        ResolveNodeRec opens by calling that distinction "a recurring landmine
+        throughout this codebase", and its AN_INDEX/AN_IDENT arm reads
+        ElemRecName and nothing else.
+
+        `array of SomeRecord` never reaches here: the `parr and tyRecord` arm
+        above catches it and writes ElemRecName correctly. `array of SomeClass`
+        matched NO array arm, fell through to this scalar one, and had its
+        element's class id written to RecName -- so ResolveNodeRec answered
+        REC_NONE for A[i], the field lookup found nothing, and `.Ext` typed as
+        tyInteger and printed a plausible wrong integer with no diagnostic
+        (4265192 against fpc's 'cc'); `var`/open-array reached a different
+        addressing path and read ~45KB of heap; and `A[0].ClassName` reported
+        "no such member on this record/class", which points at the member and
+        not at the array.
+
+        Additive on purpose: the RecName write above is left in place because
+        this arm is shared with scalar class parameters and nothing has
+        established which readers consult it for the array case. The defect is
+        the MISSING ElemRecName, not the extra RecName.
+        bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-parameter }
+      if parr[i] then
+      begin
+        Syms[idx].ElemType := ptypes[i];
+        Syms[idx].ElemRecName := ptypesRec[i];
+      end;
       { Persist the param's rec id: param sym slots are reused across procs, so
         overload matching / call-arg coercion cannot read it back from the sym. }
       if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
