@@ -488,7 +488,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | task-u-evaluate-the-2026-08-31-ticket-rules-next-week | U | 60 | task | Owner asked to evaluate the new rules next week. Written as a ticket rather than a scheduled callback BECAUSE timed callbacks are one of the rules. Carries the 2026-08-31 baseline so the comparison is possible at all -- without it, next week's evaluation is an opinion. | — |
 
-## backlog-libs (22)
+## backlog-libs (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -513,6 +513,7 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
+| task-b-four-fpc-build-artefacts-are-committed-under-lib-asmcore | B | 20 | task | `lib/asmcore/asmcore_base.{o,ppu}` and `lib/asmcore/asmcore_x64.{o,ppu}` are TRACKED IN GIT -- four FPC build artefacts committed at 3d3ed9ab3, in a directory `compiler/compiler.pas` uses and `make bootstrap` compiles with fpc. They are INERT TODAY and that is measured, not assumed: fpc records the source timestamp inside a ppu and rebuilds on any mismatch in either direction, so any checkout makes the .pas disagree with the recorded time and the unit is recompiled. What they are is two committed .ppu in a source tree that nobody knows are there, in the one directory where an fpc-side compile happens. The live version of the hazard is an OPTION change, which the source-time check cannot see: a ppu built with -dFOO is silently reused by a compile without it. Remove them and add the extensions to .gitignore; verify with `make bootstrap` plus the FPC seed canary, which is the consumer that would notice. | — |
 | task-b-nineteen-sysutils-names-that-fpc-keeps-in-system | B | 45 | task | TWELVE names an FPC program uses with NO uses clause and a pxx program cannot: AllocMem DynArraySize Error LowerCase SetString sLineBreak StringOfChar StrLen StrPas SysBackTraceStr UTF8Decode UTF8Encode. They are the second sign of the unit-boundary class whose first sign frankD fixed at f5ad23c32 (a sysutils declaration SHADOWING dyn-array Delete/Insert; declarations removed by frankH at 475528dae) -- opposite directions, same root, same tell of one `uses` line changing the answer. Measured TWICE with probes that fail differently, agreeing name for name: 167 sysutils interface routines, 17 that fpc resolves ambiently, 5 of those ambiently reachable here too (Concat/Copy/Pos/UpCase parser intrinsics, HexStr a builtin export), 12 left. Reproduce with tools/rtl_unit_boundary_census.py. THIS IS A POPULATION TO CHECK, NOT TWELVE CONFIRMED BUGS -- only DynArraySize is shown to break a real program (frankS: tarray13 dies at line 23, one `uses sysutils` advances it to line 68). sLineBreak is a const not a routine, and Error is also a compiler-internal name; both need a look before being treated as RTL gaps. | — |
 
 ## backlog-cfront (11)
@@ -1401,6 +1402,7 @@ _none_
 - [p 20] [M] feature-t-windows-wine-harness
 - [p 20] [A] feature-typeinfo-last-categories
 - [p 20] [A] meta-constant-normalisation [meta — a standing index, never "done"; link work to it, do not claim it]
+- [p 20] [B] task-b-four-fpc-build-artefacts-are-committed-under-lib-asmcore
 - [p 18] [C+S] feature-c-esp-conformance-coverage
 - [p 18] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
