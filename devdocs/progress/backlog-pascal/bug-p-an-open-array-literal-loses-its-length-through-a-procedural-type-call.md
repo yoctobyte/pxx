@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
-summary: "Passing an open-array LITERAL through a procedural-type variable silently loses the hidden length. `c := @Show; c([7,8,9])` for `TOpenCb = procedure(const A: array of Integer)` gives `Length(A) = 263845145632`; the same callback typed `of object` gives `Length(A) = 0`. fpc 3.2.2 prints 3 for both, and pxx itself prints 3 for the DIRECT call and for an indirect call passing a VARIABLE -- so the defect is exactly literal-plus-indirect, and the three neighbouring rows that work are what makes it invisible. THIS COMPILES TODAY WITH NO DIAGNOSTIC on ordinary `array of Integer` code, which is why it outranks the parse refusal that led me here. THE `of object` SPELLING ANSWERS 0, A LEGAL LENGTH: a probe passing `[]` sees a correct answer, and so does any caller that only checks Length > 0 before looping. It also explains why bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap could not be fixed in the parser -- `array of const` is called with a literal essentially always, so making the declaration parse just routes it into this. Measured on x86-64 only."
+summary: "ROOT CAUSE FOUND: an open-array `[...]` literal at an INDIRECT call site is parsed as a SET LITERAL, so the hidden length is never computed -- `PXXDBG=a.ir` shows `set_lit tk=21` and one argument where the direct call emits an array temp plus `const_int 3` and two. Passing an open-array LITERAL through a procedural-type variable therefore silently loses the length. `c := @Show; c([7,8,9])` for `TOpenCb = procedure(const A: array of Integer)` gives `Length(A) = 263845145632`; the same callback typed `of object` gives `Length(A) = 0`. fpc 3.2.2 prints 3 for both, and pxx itself prints 3 for the DIRECT call and for an indirect call passing a VARIABLE -- so the defect is exactly literal-plus-indirect, and the three neighbouring rows that work are what makes it invisible. THIS COMPILES TODAY WITH NO DIAGNOSTIC on ordinary `array of Integer` code, which is why it outranks the parse refusal that led me here. THE `of object` SPELLING ANSWERS 0, A LEGAL LENGTH: a probe passing `[]` sees a correct answer, and so does any caller that only checks Length > 0 before looping. It also explains why bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap could not be fixed in the parser -- `array of const` is called with a literal essentially always, so making the declaration parse just routes it into this. It is a Track P call-site parse decision, not an ABI or codegen defect: the proc-type signature is registered as `$proctype`, so the question the direct path asks can be asked here. Measured on x86-64 only."
 ---
 
 # An open-array literal loses its length through a procedural-type call
@@ -65,14 +65,76 @@ So the parse fix stays reverted until this lands. `array of const` is called
 with a literal essentially always, so parsing the declaration only moves the
 failure from a clean refusal to a silent wrong number.
 
-## Where to start
+## Root cause: the literal is parsed as a SET
 
-The direct call and the variable-argument indirect call both work, so the
-length is computed and passed somewhere. What differs on the failing rows is a
-literal materialised at the call site and handed to a callee whose signature is
-known only through the procedural type. Compare the argument setup the direct
-literal call emits against the indirect one (`PXXDBG=a.ir:<proc>`); the hidden
-length is present in one and not the other.
+`PXXDBG=a.ir` on the two call shapes, same program, same argument:
+
+```
+DirectCall                         IndirectCall
+  lea      <array temp>              set_lit  ival=1264 tk=21   <- tySet
+  arg      <address>                 arg      <the set>
+  const_int ival=3                   load_sym c
+  arg      <the length>              call_ind
+  call
+```
+
+The direct call materialises an array temp, stores 7/8/9 into it, and passes
+TWO arguments — the address and the hidden length 3. The indirect call emits
+`set_lit ... tk=21` and passes ONE. The length is not lost in marshalling; it
+was never computed, because **`[7,8,9]` was parsed as a set literal.**
+
+This is the mechanism `ParamIsVarRecArray`'s own comment describes for the
+`array of const` case: *"This decision is made BEFORE overload resolution — the
+parser has to know whether `[...]` is a TVarRec vector or a set literal in order
+to parse it at all."* At an indirect call site there is no `procIdx`, so the
+question is never asked and `[...]` defaults to a set.
+
+**The confirmation is in the wrong value itself.** The garbage element read
+`A[0] = 896`, and 896 is `1 shl 7 or 1 shl 8 or 1 shl 9` — the set bitmask for
+{7,8,9}. The failing program is printing its own misparse.
+
+So this is a Track P call-site parse decision, not an ABI or codegen defect, and
+it is fixable in principle: the procedural type's signature IS known — the
+parser registers it as `$proctype` via `RegisterProc` — so the same question
+the direct path asks can be asked of the proc-type's parameter list.
+
+**The fix site is exact.** `BuildIndirectCallAST` (`pasparser_lval.inc:54`)
+parses every argument with a bare `ParseExpr`:
+
+```pascal
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseExpr;                       { <- `[...]` becomes a set, always }
+```
+
+The direct path asks first (`pasparser_expr.inc:7686`):
+
+```pascal
+  if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
+    CurASTNode := ParseVarRecLiteralAST
+  else
+    ParseExpr;
+```
+
+`sigPi` is a `Procs[]` index and `nArgs` is the slot number, so the same
+question is answerable here with what the function already holds — this
+function's own comment forty lines down makes exactly that argument for the
+suffix handoff (*"It takes a Procs[] index and a signature row IS one"*), and
+the argument loop is the case it did not carry across. That comment also says
+this helper exists "to stop the argument loop being written a fourth time",
+which makes it the right and only place to add the question.
+
+Establish before writing it: the direct path emits an array temp for a PLAIN
+`array of Integer` literal, not a TVarRec vector, so `ParamIsVarRecArray` is
+only half the test — find what the direct path consults for a non-const open
+array and carry both.
+
+Note what this predicts and what should be checked before fixing: any callee
+parameter whose `[...]` argument needs a non-set reading has the same hole at an
+indirect call site, `array of const` included. That makes this the single fix
+for both, and it is why
+[[bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap]]
+should not be approached from the declaration end.
 
 ## Not established
 
