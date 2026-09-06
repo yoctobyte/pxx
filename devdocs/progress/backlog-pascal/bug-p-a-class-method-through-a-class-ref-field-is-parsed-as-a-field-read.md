@@ -5,7 +5,7 @@ type: bug
 status: open
 blocked-by: []
 owner: frankO
-summary: "A class method called through a class-REFERENCE field is parsed as a FIELD READ, not a call: measured, the expression parser returns AN_FIELD (kind 11) with the argument list's `(` unconsumed. In STATEMENT position that surfaces as `statement is neither a call nor an assignment`; in EXPRESSION position it COMPILES AND SILENTLY YIELDS GARBAGE -- `r := PP(p)^.__ClassRef.Val(3)` printed r=-86205216 with the method never entered, where fpc 3.2.2 and pin v404 both print `SIDE called n=3` and r=42. A REGRESSION in 5b5fdb0b3..de4bf2245; good at 60666ec36, so it is at or after c01eb17a8 where the nested-alias bug masks it. Blocks corpus rung 6a at generics.defaults:1865. The loud half is the lucky half."
+summary: "A class method called through a class-REFERENCE field is parsed as a FIELD READ, not a call: measured, the expression parser returns AN_FIELD (kind 11) with the argument list's `(` unconsumed. In STATEMENT position that surfaces as `statement is neither a call nor an assignment`; in EXPRESSION position it COMPILES AND SILENTLY YIELDS GARBAGE -- `r := PP(p)^.__ClassRef.Val(3)` printed r=-86205216 with the method never entered, where fpc 3.2.2 and pin v404 both print `SIDE called n=3` and r=42. It is a CONJUNCTION: a NESTED pointer alias AND two levels of pointer (the second deref implicit) -- nested-with-single-pointer and unit-level-with-double-pointer both call correctly. A REGRESSION in 5b5fdb0b3..de4bf2245; good at 60666ec36, so it is at or after c01eb17a8 where the nested-alias bug masks it. Blocks corpus rung 6a at generics.defaults:1865. The loud half is the lucky half."
 ---
 
 # A class method through a class-ref field is parsed as a field read
@@ -63,9 +63,35 @@ accepted as a value and lowered as a field read of a class reference.
 | the same with the types at UNIT level | ok |
 | class function vs class procedure, virtual vs not | no difference |
 
-So it needs the types NESTED, and it is the member call after a class-ref-valued
-chain that fails. Not procedure-ness, not virtualness, not statement position —
-statement position only changes whether you are TOLD.
+**It is a CONJUNCTION, and each factor alone is harmless** — checked with the
+side-effect probe, so "works" here means the method actually ran:
+
+| types | pointer depth | result |
+| --- | --- | --- |
+| nested | single (`PVMT(pv)^.__ClassRef.Val(3)`) | `SIDE called n=3` / 42 |
+| unit level | double (`PPVMT(ppv)^...`) | `SIDE called n=3` / 42 |
+| **nested** | **double** | **`r=-86205216`, never called** |
+
+So it needs a NESTED pointer alias resolved through TWO levels. The second
+deref is implicit — `PPVMT(x)^` yields `PVMT`, and `.__ClassRef` derefs again —
+and that is the step where the pointee record is lost.
+
+Not procedure-ness, not virtualness, not statement position; statement position
+only changes whether you are TOLD.
+
+## Where to look
+
+`NodeMetaclassCi` (`pasparser_lval.inc`) is the predicate the chained-selector
+path consults at `mcCi := NodeMetaclassCi(node)`. Its `AN_FIELD` arm does
+`ResolveNodeRec(ASTLeft[node])` and then `FindUField` on the result. For the
+failing shape `ASTLeft` is the deref of a cast to a NESTED double pointer, and
+the arm returns -1 — so the selector loop never enters
+`ParseMetaclassMemberTail` and the member is built as a plain field instead.
+
+That points at nested-pointer-alias element resolution across two levels, which
+is exactly what `c01eb17a8` ("a nested pointer alias belongs to the type that
+declared it") changed. **Not yet confirmed by instrumenting `ResolveNodeRec`** —
+the arm returning -1 is inferred from the observed `AN_FIELD`, not printed.
 
 ## A false green of mine, recorded because it is the reusable part
 
