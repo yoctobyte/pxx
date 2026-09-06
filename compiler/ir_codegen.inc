@@ -14171,7 +14171,9 @@ begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
       begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+        act := ScopeExitReleaseAction(i, a1, a2, a3);
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
           EmitLoadVarAddrArm32(i);                     { r0 = interface slot address }
@@ -14183,8 +14185,7 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+                (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit. Without this arm an `array[0..N] of string` either fell into
@@ -14208,7 +14209,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+                (act = SXR_STR) then
         begin
           { `not IsArray`: see the i386 arm — arm32 shared that bug. }
           EmitLoadVarArm32(i);                         { r0 = handle }
@@ -14219,7 +14220,7 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+                (act = SXR_VAR) then
         begin
           { `not IsArray`: an array's TypeKind IS its element kind, so
             `array[0..N] of Variant` was claimed here and cleared element ZERO.
@@ -14235,8 +14236,7 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) then
+                (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14266,7 +14266,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+                (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
             (bug-a-runtime-variant-heap-grows-unbounded). arm32 was the last
@@ -14282,8 +14282,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
+                (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
             portable helper. r0 = record address, r1 = layout descriptor.
@@ -14311,7 +14310,7 @@ begin
           EmitI32($E8BD000C);                          { pop {r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+                (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
             exit. Only x86-64 had this arm; the other four leaked the whole
