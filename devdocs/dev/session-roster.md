@@ -981,3 +981,53 @@ known that without checking, and I did not check before sending it."*
 > tree that has it) and some are not, and **the sort is cheap only if you do it — the default
 > is to either withdraw everything or defend everything.** Both are wrong and the second is
 > what actually happens.
+
+## 2026-09-06 — ONE TOPIC WITH TWO DOORS ON THE BOARD, AND THE COLLISION-AVOIDANCE INPUT THAT LOST A CLAIM
+
+Two entries, both about the seat's own instruments rather than about a peer.
+
+### The two doors
+
+frankD reported it was on `fcl-passrc` as rung 7 of `feature-pascal-corpus-expansion`. Read the
+board at that moment and **the same topic had two tickets, both reading as free**:
+
+| ticket | folder | prio | owner |
+| --- | --- | --- | --- |
+| `feature-pascal-corpus-expansion` | `unfinished/` | 75 | empty |
+| `feature-pascal-corpus-passrc` | `backlog-pascal/` | 30 | `—` |
+
+`backlog-pascal/` is a folder `ready --track P` scans and hands out, and the passrc ticket says
+*"ENDGAME, do LAST"* with `Parent: feature-pascal-corpus-oop` — nothing in it pointed at the ladder
+being climbed. **Neither ticket named the other.** Both diffs would have applied cleanly and no
+track letter would have seen it.
+
+> **A TOPIC CAN HAVE MORE ENTRY POINTS THAN IT HAS HOLDERS, and the extra ones are usually older,
+> lower-ranked and phrased as future work.** Asking "is anyone on this topic" finds the holder; it
+> does not find the OTHER WAY IN. When a peer names a topic, grep the backlogs for the topic —
+> not for the ticket they named — and cross-link what you find. A pointer between two tickets
+> survives both sessions ending; an `owner:` field does not.
+
+Noted on the free-looking one only (`21846c4d5`), with the source named. `owner:` deliberately left
+alone on both: a claim is the holder's act, and the sibling corpus ticket already carries a
+complaint about a passing seat assigning ownership. frankD re-claimed the ladder ticket itself
+(`16a69a122`) and put the pointer in its summary, so it now survives either of us leaving.
+
+### The offer that was wrong because the board had lost a claim
+
+This seat offered the FPC test-suite corpus row as free work. It was frankS's. **Every instrument
+said unheld** — `113e698cd` claimed it, moved it into `working/`, printed success, and the third
+`set_field` defect ate the write: `- **Owner:**` blank, `frankS` stranded two lines below in the
+prose, no `owner:` key at all. The folder read that "an offer is a claim about a folder" prescribes
+would not have caught it.
+
+> **A DEFECT IN THE CLAIM WRITER IS INVISIBLE TO COLLISION AVOIDANCE, AND ITS FAILURE MODE IS
+> EXACTLY TWO SESSIONS ON ONE TOPIC.** frankD's phrasing, which is the one to keep: *a stale row is
+> wrong about WHEN, a lost claim is wrong about WHETHER, and only the second puts two sessions on
+> one topic while both are behaving correctly.*
+
+Four defects in that write path to date, all silent, none self-detected. Remedies, in the order
+they matter: `set_field` now re-reads the field from disk after every write and prints
+`DID NOT STICK` (`86a210a91`); a census of all 457 open tickets across four apertures found no
+other loss, **positive-controlled by replaying the known casualty from `git show 113e698cd:<path>`
+and confirming two apertures fire on it** (`d1028ac60` records the method — a census needs a
+positive control as much as a test does).
