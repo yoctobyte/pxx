@@ -638,6 +638,20 @@ So the risk is not spread evenly over the backlog — it is **concentrated on ex
 the campaign cares most about**, and it rises as the queue gets better ranked. A well-ranked
 queue makes independent sessions agree, and agreement here is the failure.
 
+**SHARPENED BY THE HOLDER THE SAME NIGHT, AND IT IS WORSE THAN THE ABOVE.** Neither session
+took the actual top row — both skipped the p70 (`DO NOT CLAIM`) and the p65 (parked):
+
+> **They did not collide on the top of the queue. They collided on the top ELIGIBLE row.
+> Every session filters that list the same way, by the same annotations, so the agreement
+> SURVIVES the exclusions and the effective funnel is narrower than the ranking suggests.**
+
+**Annotations do not disperse sessions; they synchronise them further.** Every `DO NOT CLAIM`,
+every park, every hold is applied identically by every reader, so each one **narrows the
+funnel for everyone at once** rather than spreading the field. The instinct that a
+well-annotated board is a safer board is exactly backwards for this failure: **the more
+shared filtering the board supports, the more precisely two independent sessions arrive at
+the same row.**
+
 ### `claim` reads as an exclusion mechanism and is not one
 
 **Both sessions had claimed, and both claims were pushed.** This was not somebody working an
