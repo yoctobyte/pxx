@@ -219,6 +219,17 @@ which is what says the fixture measures LAYOUT and not something i386-shaped.
 `TargetArch = TARGET_I386`. So the two are composed: neither frontend can reach
 the defect, on any target, today.
 
+**And the refusal is not stale conservatism — it is load-bearing, measured.**
+Disabling both lines locally and rebuilding: Rust and Zig then compile CLEAN for
+i386, aarch64 and arm32, and every one of those binaries dies before its first
+syscall, because all three skeleton drivers emit a literal x86-64
+`call main; xor edi,edi; mov eax,231; syscall` tail with no `case TargetArch`.
+Filed as
+[[bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it]],
+which is the thing that has to land before the R and Z halves here become
+reachable at all. So the order is: that ticket, then this substitution, then a
+test that can go red.
+
 That is not "no oracle". It is **no reachable observable**, which is a different
 finding and it changes what these two halves are: a **trap for whoever lifts the
 target restriction**, not a wrong answer anybody can obtain. Substituting the
