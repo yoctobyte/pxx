@@ -1045,11 +1045,38 @@ os.environ["TESTTMP"] = TESTTMP
 
 
 def reap_stale(info):
-    """Clean up after a run that died without releasing its lock."""
+    """Clean up after a run that died without releasing its lock.
+
+    NEVER REAPS OUR OWN SCRATCH, and that is not hypothetical bookkeeping: the
+    pid here comes out of the LOCK FILE, and lock_state() says in its own
+    docstring why that pid cannot be trusted for identity -- "pids get reused".
+    A stale lock naming pid P plus a live run that has been handed P by the
+    kernel means `%s/testmgr-scratch-P` IS this run's RUN_TMP, and the rmtree
+    below would delete a live run's scratch out from under its own recipe. The
+    symptom is a job that reports `ok: <path> [code=...]` for an artifact and
+    then `ld: cannot find <same path>` a few steps later -- no error from the
+    compiler, no error from the reaper, a red in whatever subject happened to
+    own the file.
+
+    THE OTHER TWO CLEANUP PATHS ALREADY GUARD THIS AND THIS ONE DID NOT.
+    kill_run() refuses `pid in (os.getpid(), os.getppid())`, added after it
+    SIGKILLed itself proving the point; sweep_orphan_tmp() skips
+    `pid == os.getpid()` before it will rmtree. Three siblings, one predicate,
+    two implementations of it -- the third is the one that stays wrong.
+
+    Reachable-with-harm today only through call ORDERING (acquire_lock runs
+    before the scratch is populated), which is a property of the callers and
+    not of this function. Guarded here so the next caller does not have to know.
+    tools/testmgr_reap_self_devtest.py is the positive control.
+    """
     pid = info.get("pid", -1)
     kill_run(pid, "wedged (no heartbeat for >%ds)" % HEARTBEAT_STALE)
     scratch = "%s/testmgr-scratch-%d" % (TESTTMP, pid)
-    if os.path.isdir(scratch):
+    if pid in (os.getpid(), os.getppid()):
+        print("testmgr: refusing to reap scratch %s — it is ours or our "
+              "parent's (stale lock naming a REUSED pid)" % scratch,
+              file=sys.stderr, flush=True)
+    elif os.path.isdir(scratch):
         shutil.rmtree(scratch, ignore_errors=True)
     try:
         os.unlink(LOCK_PATH)

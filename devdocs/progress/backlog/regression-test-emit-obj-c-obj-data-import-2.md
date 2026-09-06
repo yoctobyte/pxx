@@ -91,3 +91,74 @@ compiler wrote the object, and the cause is above the compiler.
 ## Log
 - 2026-09-04 — the seven watcher saw `test-emit-obj#src:test/c_obj_data_import.c` GREEN at cf9b14600039 (tier full) and did NOT close this: this is a repeat stub (`regression-test-emit-obj-c-obj-data-import-2`, not `regression-test-emit-obj-c-obj-data-import`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-06 — the seven watcher saw `test-emit-obj#src:test/c_obj_data_import.c` GREEN at 1d9d36ff36bb (tier full) and did NOT close this: this is a repeat stub (`regression-test-emit-obj-c-obj-data-import-2`, not `regression-test-emit-obj-c-obj-data-import`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-09-06 (frankH) — three candidate mechanisms ELIMINATED, one real asymmetry fixed, residual still open
+
+Taking frankb-78's residual question — *why did `$(TESTTMP)` lose a file mid-job
+on seven* — and reading the scratch lifecycle. **I did not find the cause.**
+What follows is eliminations plus one defect found on the way; the question
+still has no answer and still belongs to whoever can see a live run on seven.
+
+### Eliminated
+
+**1. The producer/consumer split is not it.** testmgr splits a recipe into jobs
+and re-merges groups that share a `/tmp` token, and its own comment names the
+failure this would produce ("a standalone `--job` repro runs the consumer with
+a fresh scratch dir where the artifact never existed", test-core#555/#556,
+2026-07-12). It cannot apply here: both lines name the artifact literally, in
+one target —
+
+```
+Makefile:28110  ./$(COMPILER) --emit-obj test/c_obj_data_import.c $(TESTTMP)/cods_imp_x64.o
+Makefile:28123  gcc $(TESTTMP)/cods_imp_main.c $(TESTTMP)/cods_imp_x64.o -o ...
+```
+
+so `tmp_re.findall` sees `/tmp/cods_imp_x64.o` in both groups and the union-find
+merges them. The invisible-edge case that comment is really about (a `.so`
+found by soname, named nowhere) does not arise either.
+
+**2. `sweep_orphan_tmp` is not it.** It only reaps a `testmgr-scratch-<pid>`
+whose pid is *dead*, and skips `pid == os.getpid()`.
+
+**3. `reap_stale` is not it, on ordering.** It is reached only from
+`acquire_lock`, which runs before the run has populated its scratch — so its
+rmtree cannot remove an artifact a recipe has already produced.
+
+### Fixed anyway: reap_stale would reap its OWN scratch
+
+Elimination 3 is a fact about the CALLERS, not about the function, and the
+function is wrong on its own terms. The pid it acts on comes out of the lock
+file, and `lock_state()` says in its own docstring why that is not an identity:
+**"pids get reused"**. A stale lock naming pid P plus a live run the kernel has
+handed P means `$(TESTTMP)/testmgr-scratch-P` *is* that run's `RUN_TMP`.
+
+Three sibling cleanup paths, one predicate, and only two implementations of it:
+
+```
+kill_run()          if pid in (os.getpid(), os.getppid()): refuse
+sweep_orphan_tmp()  if pid == os.getpid(): continue
+reap_stale()        (nothing)                              <- fixed
+```
+
+`kill_run`'s guard exists because it *SIGKILLed itself* proving the point. The
+rmtree beside it never got the same treatment.
+
+**And the symptom it would produce is character-for-character this ticket's:**
+`ok: <path> [code=...]` from the compiler, then `ld: cannot find <path>` a few
+steps later, no error from either side, the red landing in whatever subject
+owned the file. That is not evidence it happened here — ordering says it did
+not — but it does mean **this ticket's signature is reachable from the harness
+by more than one route**, which is the part worth carrying forward.
+
+Guarded, with `tools/testmgr_reap_self_devtest.py` as the positive control
+(picked up automatically by `tools-devtest`'s glob). Ablation: remove the guard
+and the "our own scratch survives" row fails while the "a dead run's scratch is
+still reaped" row keeps passing — so the control is not a disabled reaper.
+
+### Residual, still unowned by this ticket
+
+Nothing here explains a file vanishing mid-recipe on seven on 2026-09-04. The
+remaining candidates need the live box: a concurrent writer, the run's own
+`--force` path taken by a second testmgr, or something outside testmgr. The
+`/tmp` reaper is *not* a candidate for that date — it was still at 10 days then
+and only moved to 6h on 2026-09-06.
