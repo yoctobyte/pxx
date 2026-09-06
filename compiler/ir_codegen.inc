@@ -14554,7 +14554,10 @@ begin
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+       begin
+        act := ScopeExitReleaseAction(i, a1, a2, a3);
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
           procIdx := FindProc('PXXIntfRelease');
@@ -14564,8 +14567,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+                (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element. N-D
             arrays are stored flat, so ArrLen is the right count. }
@@ -14584,7 +14586,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+                (act = SXR_STR) then
         begin
           { A SCALAR AnsiString local. `not IsArray` is load-bearing: an array's
             TypeKind IS its element kind, so without it a local `array of
@@ -14597,7 +14599,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+                (act = SXR_VAR) then
         begin
           { Variant local: clear (releases any managed payload). arg0 = address. }
           procIdx := FindProc('PXXVarClear');
@@ -14606,8 +14608,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) then
+                (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14635,7 +14636,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+                (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
             (bug-a-runtime-variant-heap-grows-unbounded). Absent on profiles
@@ -14648,8 +14649,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
+                (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
             portable helper. arg0 = record address, arg1 = layout descriptor.
@@ -14674,7 +14674,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+                (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY — the seventh kind, and it was held back one
             commit rather than skipped. The rule (riscv32's arm below states it
@@ -14701,6 +14701,7 @@ begin
           EmitLoadDataRefXtensa(XtensaArgRegN(1), GetOrAllocSymRTTI(i));
           EmitCallProc(procIdx);
         end;
+       end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
