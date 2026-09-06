@@ -16634,3 +16634,36 @@ named form, the declaration form beside the statement form, the base-typed
 reference beside the derived one. See also `normalise-dont-special-case.md`'s
 *"fixed one arm of a double case? grep for the sibling before closing"*, which is
 this rule pointed at a fix instead of at a corpus.
+
+## THE NAME YOU WOULD NATURALLY GIVE THE REPRO HIDES THE BUG — and this one collides with the CORRECT value, not the failure value
+
+frankB, 2026-09-06, hit live while writing the test for their own filed defect.
+`class constructor` is swallowed by the class-body member loop and demoted to an
+ordinary constructor. **So spell the repro the way anyone would —**
+
+```pascal
+class constructor TC.Create;   { sets a class var to 5 }
+```
+
+**— and the demoted routine is an ordinary constructor named `Create`.** `TC.Create`
+then runs its body as an instance constructor, the class var reads **5**, and the
+test passes. The right answer, by the wrong mechanism, from a routine that is
+still never a class constructor and still never runs before first use. Only a name
+that cannot collide with the default constructor — `Init` — shows the zero.
+frankB's own test asserted `N=1` and got `5`.
+
+**This is the third instance of "the spelling you would naturally test collides
+with the working path", and it is the INVERSE of the others.** The `Fn(5)` shape
+and `sizeof(*s.fp)` = 4 collide with the FAILURE value: the probe cannot tell a
+correct answer from a blank one. This collides with the CORRECT value: the probe
+gets the right number **through a path that is not the one under test**. Both
+produce a green row; only the second one also produces a plausible story about
+why the feature works.
+
+**The tell is specific to names with meaning in the language.** `Create`,
+`Destroy`, `Free`, `Init` where the compiler has a default; `Result` in a
+parameterless function; a field named like a property's backing store; an overload
+name that already resolves. **When a defect works by DEMOTING or REROUTING a
+construct, the demoted form has a default behaviour — and the natural name is the
+one that makes the default behaviour indistinguishable from the feature.** Name
+the repro something the language has no opinion about.
