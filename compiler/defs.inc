@@ -2013,7 +2013,24 @@ type
 
       APPENDED at the tail like tkPowEq/tkAtEq/tkSymDiff, so no existing ordinal
       moves. bug-a-shr-reaches-the-ir-spelled-as-tkident }
-    tkShrLogical
+    tkShrLogical,
+    { Pascal `**` (exponentiation). Appended at the tail for the same
+      frozen-ordinal reason as tkPowEq/tkAtEq/tkSymDiff, and minted by
+      paslexer ONLY -- Python's `**` is pylexer's business and C has no such
+      operator, so no frontend gate is needed anywhere downstream.
+
+      It has to lex as ONE token: `operator ** (a, b: TFoo): Integer` otherwise
+      arrives as two tkStar and dies on `expected ':'`, which is how both
+      toperator78 and terecs14 failed. Pascal has no unary `*`, so `**` in
+      Pascal source can only ever be this operator -- there is no `a * *b`
+      spelling for the merge to steal.
+
+      NO BUILTIN MEANING, deliberately. fpc's core language does not implement
+      `**` either; the math unit DECLARES `operator **` for floats, and an
+      advanced record may declare `class operator **`. So an unoverloaded
+      `a ** b` is a diagnostic in both compilers and no backend gains an
+      opcode. }
+    tkPow
   );
 
   TToken = record
