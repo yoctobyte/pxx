@@ -5,9 +5,9 @@ type: bug
 blocked-by: [decide-should-an-open-array-parameter-become-a-two-word-descriptor]
 found: 2026-09-02
 found-by: frankB
-summary: "ESCALATED TO TRACK U 2026-09-03 — do not attempt this from the queue. The fix is a representation change (633 `IsArray` sites, 27 files, 6 backends) and the fork is now `decide-should-an-open-array-parameter-become-a-two-word-descriptor`, with both arms, their costs and a recommendation; three sessions had stopped at this ticket's own 'do not start it casually' sentence and each stop looked like difficulty rather than mis-filing. `@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for a `var` or `const` open-array parameter whose argument is a STATIC array -- on every element type and for a global, a local and a record field alike; FPC answers TRUE for all of them. CORRECTED 2026-09-03 by its own author: a DYNAMIC array argument already aliases correctly (1/1, matching FPC), and a VALUE parameter answers FALSE in FPC TOO, so that row was never a divergence -- the original summary claimed both. Cause is representational: a pxx open-array param is a pointer with its length at [ptr-8], so only an argument that already carries that header can be passed by reference; FPC passes (ptr, high) as two words and therefore aliases everything. NOT a wrong value -- the temp is a faithful, writable, correctly-strided view whose writes are copied back -- it bites only when an address ESCAPES the call. THE FIX IS A REPRESENTATION CHANGE, NOT A PATCH: 633 IsArray sites across 27 files, so do not start it casually."
+summary: "TWO CONDITIONS BEFORE ANYONE TOUCHES 633 SITES, AND THEY ARE THE FIRST THING TO READ. (1) SEQUENCING: the decision says not to start this while the phase-4 flip is unreleased -- both serialise the backends. That hold names no event anybody can check and no ticket to point at; establish its state with whoever owns phase-4 before starting, and write the answer here. (2) MEASURE FIRST: the 633-site figure assumes arm A is a wire-format change because `[ptr-8]` is SHARED with dyn arrays and AnsiString handles -- but passing an open-array PARAMETER as two words AT THE CALL BOUNDARY may not require changing the storage convention those two rely on. Nobody has measured that, and it decides weeks vs days. UNBLOCKED 2026-09-03: `decide-should-an-open-array-parameter-become-a-two-word-descriptor` is DECIDED -- the owner chose ARM A, *\"if we need more meta info, use more data fields. hardly a decision.\"* Carry the metadata; do not spend correctness to keep one word. The ticket's own recommendation was arm C and was heard and overruled. THE DEFECT: `@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for a `var` or `const` open-array parameter whose argument is a STATIC array -- every element type, and for a global, a local and a record field alike; FPC answers TRUE for all of them. Cause is representational: a pxx open-array param is a pointer with its length at `[ptr-8]`, so only an argument already carrying that header can be passed by reference, and FPC passes (ptr, high) as two words and therefore aliases everything. NOT a wrong value -- the temp is a faithful, writable, correctly-strided view whose writes are copied back -- it bites only when an address ESCAPES the call. CORRECTED 2026-09-03 by its own author: a DYNAMIC array argument already aliases correctly (1/1, matching FPC), and a VALUE parameter answers FALSE in FPC TOO, so neither row was ever a divergence."
 
-status: open
+status: backlog
 ---
 
 # `@a[i]` on an open-array parameter addresses the marshalling temp, not the caller's array
@@ -143,3 +143,32 @@ The fork, both arms, their costs and a recommendation are in
 about the diagnosis below changed; it is complete and it was corrected against
 FPC on 2026-09-03. `blocked-by` now names the decision, so this drops out of the
 ranked queue until the fork is settled.
+
+## MOVED OUT OF `blocked/` 2026-09-06 (frank-coordinator) — the edge was met and the ticket was invisible
+
+`tools/progress.sh check` flagged this as STALE-EDGE-HIDDEN: the only ticket in its
+`blocked-by` has been in `decided/` since 2026-09-03, and `ready`/`next` never scan
+`blocked/`, so a decided p55 defect was invisible to the ranker for three days. **The
+`blocked-by` edge is left in place deliberately** — it records the RELATIONSHIP, which is
+real and worth keeping; only the blocker's FOLDER records whether the edge is still
+unmet, and it says met.
+
+**What the move does NOT do is make this ready to start**, which is why the summary was
+rewritten in the same commit rather than left as it was. The old summary opened
+*"ESCALATED TO TRACK U — do not attempt this from the queue"*, and that sentence stopped
+being true the moment the decision landed; a summary is the only part everyone reads, so
+a stale one misroutes whoever reads it. The two conditions that ARE still live now open
+it instead.
+
+**The sequencing hold has no retiring event and that is the thing to fix.** *"Not to be
+started while the phase-4 flip is unreleased"* is a real constraint written by someone
+who could see it, and there is no `phase-4` ticket to point a `blocked-by` at — the
+phrase appears in exactly one open ticket, and there only to say the flip does NOT touch
+that work. So it cannot be wired as an edge, nothing re-checks it, and it retires only
+when a human remembers. **Whoever takes this should establish phase-4's state from its
+owner first and write the answer into this ticket**, which converts a hold that ages
+silently into a fact with a date on it. A stated blocker is a hypothesis with the same
+standing as a stated cause; the difference is that a cause invites re-measurement and a
+blocker invites deferral.
+
+Not claimed, no owner set. This is board hygiene, not a claim.

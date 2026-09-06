@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:21 blocked:8 backlog:11 backlog-umbrella:7 backlog-core:134 backlog-nilpy:98 backlog-tools:39 backlog-pascal:27 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3383 rejected:78`
+`working:22 unfinished:21 blocked:7 backlog:11 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:39 backlog-pascal:27 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3383 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,9 +56,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
-- `bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp` [A] — blocked-by: decide-should-an-open-array-parameter-become-a-two-word-descriptor
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-p-nine-intrinsic-spellings-are-hard-keywords-so-they-cannot-be-user-names` [P] — blocked-by: feature-writeln-as-library
@@ -67,7 +66,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 395, ranked
+## Ready — top 30 of 396, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -100,4 +99,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
-_365 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_366 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
