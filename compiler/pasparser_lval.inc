@@ -7452,8 +7452,15 @@ begin
 end;
 
 { Compile-time low/high bound of a built-in ordinal type. Returns False for a
-  non-ordinal (float/string/record/etc). Ranges match FPC. UInt64/NativeInt high
-  overflows signed Int64 storage, so it is left unsupported (returns False). }
+  non-ordinal (float/string/record/etc). Ranges match FPC.
+
+  The old second sentence said UInt64/NativeInt high "is left unsupported
+  (returns False)", and the arms below have answered both for some time -- the
+  comment was describing the code it was written against, not the code beneath
+  it. Corrected rather than deleted, because the REASON it said so is still
+  live and is what those arms document: 2^64-1 does not fit the Int64 this
+  returns, so the bit pattern comes back as -1 and the value is only correct if
+  the caller knows the type is unsigned. Both callers do. }
 { The two kinds whose values do not fit the Int64 the const evaluator carries,
   so the bit pattern is exact and only the INTERPRETATION differs. Everything
   that folds a constant asks this before choosing signed or unsigned semantics;
@@ -7496,6 +7503,22 @@ begin
     tyNativeUInt: if wantHigh then v := -1 else v := 0;
     tyBoolean: if wantHigh then v := 1 else v := 0;
     tyChar:    if wantHigh then v := 255 else v := 0;
+    { The two character kinds CARVED OUT of integer kinds, and both were missing
+      here for the same reason the variant unbox lists were: this case was
+      COMPLETE when written. A WideChar variable was tyUInt16 (listed above,
+      and 65535 is its right answer) and a UCS4Char was a 32-bit integer kind,
+      so giving each its own kind took it silently out of a case that still
+      reads as correct. `High(WideChar)` answered `undefined variable
+      (WideChar)` -- not a wrong bound, a rejected NAME, because the caller
+      reads a False here as "not an ordinal type name at all" and falls through
+      to the variable path. fpc 3.2.2 answers 65535/0 and 1114111/0.
+
+      1114111 is $10FFFF, the largest Unicode code POINT, and it is what fpc
+      answers -- not 4294967295, which is what the 4-byte storage would suggest
+      and what deriving the bound from the width would have produced. The bound
+      is a statement about the range of the type, not about its slot. }
+    tyWideChar: if wantHigh then v := 65535 else v := 0;
+    tyUCS4Char: if wantHigh then v := 1114111 else v := 0;
   else
     Result := False;
   end;

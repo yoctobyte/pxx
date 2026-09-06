@@ -1,0 +1,13 @@
+high widechar    65535
+low  widechar    0
+high unicodechar 65535
+low  unicodechar 0
+high ucs4char    1114111
+low  ucs4char    0
+const widechar   65535
+const ucs4char   1114111
+high char        255
+low  char        0
+high word        65535
+ordered          2
+CARVED CHAR BOUNDS OK

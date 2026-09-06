@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "Thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High`/`Low` of WideChar, UnicodeChar, UCS4Char, ByteBool, LongBool and WordBool; `Low` of AnsiString, RawByteString, UnicodeString, UTF8String and WideString; and a cast to Variant/OleVariant stored in its declared type. Every one DECLARES fine, casts fine and answers SizeOf, so nothing about the name looks broken from any single door. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
+summary: "TEN of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High`/`Low` of ByteBool, LongBool and WordBool; `Low` of AnsiString, RawByteString, UnicodeString, UTF8String and WideString; and a cast to Variant/OleVariant stored in its declared type. Every one DECLARES fine, casts fine and answers SizeOf, so nothing about the name looks broken from any single door. WideChar, UnicodeChar and UCS4Char were the same shape and are FIXED — `OrdinalTypeBound` had no arm for the two character kinds carved out of integer kinds. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
 status: new
 owner: ""
 ---
@@ -27,7 +27,7 @@ Measured at `1df943481` over all 51 names in the union of `OrdinalNameToTk` and
 
 | name(s) | refused at | fpc 3.2.2 answers |
 | --- | --- | --- |
-| `WideChar` `UnicodeChar` `UCS4Char` | `High` `Low` | the code-unit bounds |
+| ~~`WideChar` `UnicodeChar` `UCS4Char`~~ | ~~`High` `Low`~~ | **FIXED** — see below |
 | `ByteBool` `LongBool` `WordBool` | `High` `Low` | `TRUE` / `FALSE` |
 | `AnsiString` `RawByteString` `UnicodeString` `UTF8String` `WideString` | `Low` | `1` |
 | `Variant` `OleVariant` | the cast (`x := Variant(y)`) | accepts |
@@ -70,3 +70,34 @@ than the one pxx means.
 - `bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree` — the
   ancestor. The two tables no longer disagree on a shared name (measured); they
   differ only by which names each HAS, which is what produces these rows.
+
+
+## 2026-09-06 (frankA) — three of the thirteen were one missing case arm
+
+`OrdinalTypeBound` (`pasparser_lval.inc`) folds `High`/`Low` of a builtin
+ordinal, as a `case` over kinds. It had `tyChar` and `tyUInt16` and **no
+`tyWideChar` or `tyUCS4Char`** — and returning False there is read by
+`TryFoldHighLowType` as *"not an ordinal type NAME at all"*, so it fell through
+to the variable path and reported `undefined variable (WideChar)`. The name was
+recognised by `OrdinalNameToTk` and discarded one call later.
+
+**The case was COMPLETE when it was written.** A `WideChar` variable was
+`tyUInt16` then — which is listed, and 65535 is `tyUInt16`'s right answer — and
+a `UCS4Char` was a 32-bit integer kind. The fix that gave each its own kind took
+it out of this case without editing it, and the case still reads as correct.
+Third and fourth instance of that in one session; the two others were
+`IRVariantUnboxKind` and ir.inc's variant-unbox helper dispatch (`a3933d0f7`).
+
+`High(UCS4Char)` is **1114111** (`$10FFFF`, the largest Unicode code POINT),
+which is fpc's answer and NOT the 4294967295 that deriving the bound from its
+4-byte storage would give. Asserted deliberately: a row whose expected value
+equals what the machinery would produce by doing nothing cannot fail.
+
+Test `test/test_high_low_of_the_carved_out_char_kinds.pas`, `.expected` from
+fpc, with `Char`/`Word` control rows through the same case and the const-fold
+path pinned beside the expression one (they are documented as changing
+together). Positive control is pin v404, which fails with
+`High/Low in a constant expression: expected an ordinal type name`.
+
+**Ten left, and the sized booleans are still the hard one** — they need a kind
+carrying a width AND boolean bounds, which no current table can express.
