@@ -14815,6 +14815,16 @@ a finding in itself — one of you is wrong and the stub is the one with a bisec
 **A generated field reads as filler and a hand-derived paragraph reads as analysis, independently
 of which one is right** — so the re-derivation wins on layout, and it wins silently.
 
+**AND NOT BEING ALLOWED TO CHANGE A FILE IS NOT A REASON NOT TO READ IT.** Same day, same seat,
+one door over: a hook denied a commit, and the report of it said *"it matches text on the command
+line"* — a description of the symptom offered as a diagnosis, written without opening the hook,
+because `.claude/**` is the owner's. Reading it cost one `grep` and gave the real mechanism: the
+hook **does** exempt `git commit`, and the exemption is disarmed by a leading `cd`, because a
+chained command keeps its exemption only when `git` is the FIRST word. **Ownership constrains what
+may be WRITTEN. Reading is free**, and it is the difference between a symptom and a diagnosis.
+Both failures are one failure: an authoritative answer sitting a single command away, unread,
+while a worse one is derived by hand.
+
 ### The window itself
 
 Track T samples the tip every ~8 commits, so **every auto-filed red carries a sha that is a
@@ -15130,3 +15140,88 @@ harness reports a run it never performed.
 > A check aimed past an earlier wall is not aimed at all. The fix was a second,
 > freestanding subject reporting through an exit code, which clears the upstream
 > wall and fires earlier.
+
+### The type-side twin, found the same day: **4 is the blank, AND `sizeof(Integer)`, AND an enum's storage size**
+
+frankS, on the forward-pointer group. A forward `^T` whose T is a set, a scalar
+alias or a `string[N]` was taking no repair arm at all — `SizeOf(p^)` answered 4
+for pointees of 8, 11 and 32 bytes, a forward `^TSet` segfaulted on `in`, and a
+forward `^string[4]` took a ten-character store. The same declarations in the
+other order were all correct.
+
+**It survived because the obvious probe cannot see it.** A `^TMyInt` or a
+`^TEnum` answers **4**, which is simultaneously the blank value, `sizeof(Integer)`
+and an enum's storage size — so the row passes while the machinery does nothing.
+This is CLAUDE.md's `sizeof(*s.fp)` case in a different subsystem, and the escape
+is the same: **every row of the new test is 8 bytes or wider, each with an
+in-order twin.** The twin is the part that makes it a measurement rather than a
+value — a correct answer in one declaration order and a wrong one in the other
+cannot both be a default.
+
+And the load-bearing line was proved by REMOVAL, not by argument: taking the
+string-capacity carry out and rebuilding made the forward order write
+`abcdefghij` into a `string[4]` through the pointer, while the identical direct
+assignment on the next line clamped to 4.
+
+> **Declaration order deciding whether a program is correct is the tell**, and it
+> was the third instance in one procedure — the two earlier arms were found the
+> same way and both their comments say so. A tell that has already worked three
+> times in one function is a place to probe first, not a coincidence.
+
+## A REFUSAL ADDED ON A TRUE PREMISE STILL NEEDS THE POPULATION THAT LEGITIMATELY REACHES IT
+
+The premise being right is what makes this one expensive: there is nothing to
+argue with, so nobody asks the second question.
+
+Measured 2026-09-06. A `^T` whose T is never declared anywhere should be refused
+— true, and previously `PNever = ^TNeverDeclared` compiled clean, ran, and
+printed `SizeOf(p^)` = 4. **Tolerated and accepted had become the same thing**,
+because nothing was parked and nothing ever came back to ask. The fix parks the
+name and drains at the program's final `end.`
+
+The refusal then fired on `uses syncobjs`, red for the whole fleet, and the
+shape it refused is the one the fix's own commit message says must be tolerated:
+`palsync.pas:26` is `PMutex = ^TMutex;` with `TMutex = record` four lines below.
+**`uses palsync` directly compiles; `uses syncobjs`, one level further out, does
+not** — so the drain is depth- or unit-order-sensitive, and a two-line program
+separates the cases with no harness involved.
+
+**What was missing is not care and not a test. It is a census of what legitimately
+reaches the new refusal today.** `lib/rtl` alone would have answered it in
+seconds. The failing shape is two units deep and entirely ordinary.
+
+> **And it has an accept-side twin in the same procedure, which is the tell that
+> the missing measurement is the real defect.** The repair pass fixes classes,
+> records, named arrays and pointer/record aliases, and fixes **nothing** for a
+> forward `^T` to an enum, a subrange or a plain scalar alias — all three legal,
+> all three already agreeing with FPC, none ever broken, so no pass ever touched
+> them. **A drain keyed on *"was this row repaired"* refuses all three.** The
+> correct key is *"is this name a type NOW"*. Same absent population, opposite
+> sign: one direction refuses working code, the other accepts broken code.
+
+**The general form, and it applies to any new diagnostic, guard or lint:** a
+refusal partitions the world into what it catches and what it lets through, and
+the premise only tells you about the first half. **Before landing one, enumerate
+what currently reaches it and passes** — not a test you write, the code that is
+already there. Nobody re-derives that after the fact; they file the reds one at a
+time, and the auto-filer will happily produce one ticket per failing test from a
+single cause (it filed two against this commit).
+
+### The accept-side twin generalises: A FIELD WHOSE EMPTINESS HAS SEVERAL CAUSES, READ AS THOUGH IT HAD ONE
+
+*"Was this row repaired"* answers **no** for two unrelated reasons — the repair
+failed, and there was never anything to repair — and a guard keyed on it cannot
+tell them apart. Three instances on 2026-09-06, which is what makes it a class
+rather than three mistakes:
+
+| the empty reading | the causes it conflates |
+| --- | --- |
+| a drain keyed on *"was this row repaired"* | the repair failed / the row was never broken (enums, subranges, scalar aliases) |
+| a ticket's `owner:` reading as unowned | nobody claimed it / the claim was eaten by the write path / **the claim is real and not yet pushed** — the commonest, and no git command reaches another session's working tree |
+| a `%FAIL` corpus row | the feature is missing / the row is satisfied upstream of its own subject |
+
+**The guard is the same in all three:** before treating an absence as a verdict,
+enumerate what else produces that absence. If the list has more than one entry
+the field is not a discriminator, and reading it more carefully will not make it
+one — you need a different question. *"Is this name a type NOW"* instead of *"was
+this row repaired"*; *"ask the holder"* instead of *"read the board"*.
