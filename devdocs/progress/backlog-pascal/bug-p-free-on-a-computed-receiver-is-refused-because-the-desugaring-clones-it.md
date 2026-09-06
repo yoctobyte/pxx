@@ -6,7 +6,7 @@ blocked-by: []
 status: open
 owner: ""
 created: 2026-09-06
-summary: "`L.Objects[i].Free` and `b.Pick(i).Free` are refused with `\"Free\": no such member on this record/class`, while `b.FA[i].Free` on the same objects compiles. The boundary is exactly BuiltinFreeHere's `PureDesignator(node)` guard, and the guard is CORRECT for the desugaring it protects: GenMakeFreeObjectExpr CloneASTs the operand up to three times (nil test, Destroy, FreeMem), so a getter or a function call would run three times. The fix is to stop cloning — materialise a non-designator receiver into a temp, or route the whole thing through an RTL helper that takes the instance once. `AllocTemp` (symtab.inc:6193) exists and has ZERO callers, so the parser has no established pattern for a hidden local and that is the real work. Two of fcl-passrc pscanner.pp's seven remaining walls are `FStreams.Objects[i].Free` / `FMacros.Objects[i].Free`."
+summary: "`L.Objects[i].Free` and `b.Pick(i).Free` are refused with `\"Free\": no such member on this record/class`, while `b.FA[i].Free` on the same objects compiles. The boundary is exactly BuiltinFreeHere's `PureDesignator(node)` guard, and the guard is CORRECT for the desugaring it protects: GenMakeFreeObjectExpr CloneASTs the operand up to three times (nil test, Destroy, FreeMem), so a getter or a function call would run three times. The fix is to stop cloning — materialise a non-designator receiver into a temp, or route the whole thing through an RTL helper that takes the instance once. THE STATED BLOCKER IS FALSE AND WAS MEASURED AS SUCH 2026-09-06: `AllocTemp` (symtab.inc:6200) does have zero callers, and it is merely an unused ALIAS for `AllocVar('', tyInteger)` -- the hidden-local pattern itself has **193 sites** in `compiler/**` (58 tyPointer, 27 tyAnsiString, 23 tyInteger, ...), at least four of them in the Pascal frontend (`pasparser_stmt.inc:2463`, `:3685`, `:7565`, `pasparser_expr.inc:10838`), and the canonical spelling is `sym := AllocVar('', tk)` then `GenMakeAssign(GenMakeIdent(sym, tk), value)` then `GenMakeIdent(sym, tk)` -- exactly `GenMakeStrArgTemp` (pasparser_stmt.inc:357). So there IS an established pattern; a zero-caller count on a NAME was read as a missing CAPABILITY. The real work is the desugaring, not the temp. Two of fcl-passrc pscanner.pp's seven remaining walls are `FStreams.Objects[i].Free` / `FMacros.Objects[i].Free`."
 ---
 
 # `Free` on a computed receiver is refused, because the desugaring clones it
@@ -57,8 +57,28 @@ change. That is a silently wrong program in place of a refusal.
 ## Two routes, and the work is the same either way
 
 1. **Materialise a temp.** `tmp := <obj>; if tmp <> nil then ...`, with `tmp` a
-   hidden local. `AllocTemp` (`symtab.inc:6193`) is `AllocVar('', tyInteger)`
-   and **has zero callers** — the Pascal frontend has never made a hidden local
+   hidden local.
+
+   **CORRECTED 2026-09-06, and this is the line that was blocking the work.**
+   `AllocTemp` (`symtab.inc:6200`) is `AllocVar('', tyInteger)` and has zero
+   callers -- true, and it says nothing about the capability, because it is an
+   unused ALIAS. Measured at HEAD: **`AllocVar('', <tk>)` appears 193 times in
+   `compiler/**`** -- 58 `tyPointer`, 27 `tyAnsiString`, 23 `tyInteger`, 12
+   `tyVariant`, and so on -- with at least four in the Pascal frontend
+   (`pasparser_stmt.inc:2463`, `:3685`, `:7565`, `pasparser_expr.inc:10838`).
+   The three-line idiom is right there in `GenMakeStrArgTemp`
+   (`pasparser_stmt.inc:357`):
+
+       st := AllocVar('', tyAnsiString);
+       preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+                   GenMakeAssign(GenMakeIdent(st, tyAnsiString), argNode), -1));
+       Result := GenMakeIdent(st, tyAnsiString);
+
+   **A zero-caller count is a true fact about a NAME and was converted into a
+   false claim about a MECHANISM.** The frontend has made hidden locals for a
+   long time; it has just never called them `AllocTemp`. What remains is the
+   desugaring itself -- materialise the receiver once and stop cloning -- which
+   is real work and is not blocked on a missing pattern.
    this way, so this is a new pattern, not a reuse. It also needs the result to
    be a statement SEQUENCE where today it is a single node, and every
    `GenMakeFreeObjectExpr` caller assigns it straight into `Result`.
