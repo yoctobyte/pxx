@@ -18501,6 +18501,14 @@ test-core: $(COMPILER)
 	# builtin-only rows are controls that must not move. .expected is FPC 3.2.2's.
 	./$(COMPILER) test/test_a_named_cast_asks_the_alias_before_the_builtin.pas $(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26
 	tools/expect_same.sh test_a_named_cast_asks_the_alias_before_the_builtin26 "$$($(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26)" "$$(cat test/test_a_named_cast_asks_the_alias_before_the_builtin.expected)"
+	# ... and where one type has BOTH a KEYWORD and an identifier spelling, the
+	# keyword arm and the shared builtin door must agree. Varies the spelling and
+	# holds the value fixed, so it fails whichever direction the seam reopens --
+	# it has reopened three times, alternating which side was taught. Probe values
+	# exceed the target width on purpose; 65 -> 'A' is the readable control, not
+	# the discriminator. .expected is FPC 3.2.2's.
+	./$(COMPILER) test/test_p_keyword_and_identifier_spellings_of_a_type_agree.pas $(TESTTMP)/test_p_keyword_and_identifier_spellings_of_a_type_agree26
+	tools/expect_same.sh test_p_keyword_and_identifier_spellings_of_a_type_agree26 "$$($(TESTTMP)/test_p_keyword_and_identifier_spellings_of_a_type_agree26)" "$$(cat test/test_p_keyword_and_identifier_spellings_of_a_type_agree.expected)"
 	# a SIZED BOOLEAN is a boolean: `if a` and `if not a` both fired, silently,
 	# because `not` on ByteBool/WordBool/LongBool was an integer complement.
 	# The True rows are the assertion and the False rows CANNOT fail -- `not 0`

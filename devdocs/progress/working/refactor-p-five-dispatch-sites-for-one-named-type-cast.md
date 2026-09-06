@@ -17,11 +17,21 @@ four since the `OrdinalNameToTk` door was deleted. Note also that FIVE counts
 RECOGNITION rules, not constructions — the file has fourteen
 `AllocNode(AN_PTR_CAST)` sites, and the two counts are not in conflict.)*
 
-**STATE, 2026-09-06: the CONSTRUCTION half is done and the RECOGNITION half is
-not.** Every scalar door now builds its node in one body — `TryScalarNamedCast`
+**STATE, 2026-09-06: the CONSTRUCTION half is done FOR THE TWO IDENTIFIER DOORS
+and the RECOGNITION half is not.** Every scalar door *reached by NAME* now builds
+its node in one body — `TryScalarNamedCast`
 (`297dbd125`) for the runtime doors, `ConstCastWidth` for the const-fold door —
 and the seven defects listed at the bottom of this ticket were all found by
-measuring the doors on the way there. What is left is the merge this ticket was
+measuring the doors on the way there.
+
+**But the four KEYWORD-token arms still build their own nodes**, which the
+sentence here previously denied by saying "every scalar door":
+`TryScalarNamedCast` has exactly two call sites, and the `tkChar_T`/`tkBoolean_T`
+arm allocates its own `AN_PTR_CAST`. Two more defects fell out of that gap on
+2026-09-06 — a segfault and a parse refusal, both fixed, both detailed at the
+bottom — so read the first sentence as naming a boundary, not a finished job.
+
+What is left is the merge this ticket was
 filed for: one `name -> (castKind, enumId, aliasIdx)` resolver replacing
 `FindTypeAlias` and `BuiltinScalarTypeKind` being asked separately. The ticket
 stays `working` with `owner: frankA` as attribution, not a claim — it is free
@@ -614,3 +624,77 @@ only correct fix rather than the tidy one.
 So the ordering rule this ticket has carried since it was filed — a source
 declaration outranks a builtin — has a population where it cannot be expressed
 at all, and that population is nine of the commonest type names in the language.
+
+## 2026-09-06 (frankA) — the merge is 2 doors, not 5, and the defect generator is the SPELLING
+
+Took this to write the resolver and measured first. Three things came out, and
+the third changed what the ticket is for.
+
+**1. The order this ticket calls load-bearing is CORRECT, and it is pinned.**
+`type LongInt = Int64` then `LongInt(n)` at runtime answers 4294967301 (the
+declaration) and without the declaration answers 5 (the builtin), matching fpc
+in both, with the two values far enough apart to discriminate. That is not a new
+finding — `test_a_named_cast_asks_the_alias_before_the_builtin` already asserts
+it at the const AND runtime doors, both directions, with alias-only and
+builtin-only controls, and it is wired. **I re-derived a result this repo had
+already banked**, which is agreement, not a catch. So the merge as filed would
+collapse two doors that are correct and covered.
+
+**2. The count today is SIX recognition doors, and only TWO can merge.** Four
+keyword-token arms in `ParseFactorCore` (`tkInteger_T`/`tkLongWord_T`,
+`tkChar_T`/`tkBoolean_T`, the float keywords, `tkString_T`), plus the alias door
+and the builtin-scalar door. A `name -> (castKind, semId, aliasIdx)` resolver
+can serve the last two. **It cannot serve the first four, because they never see
+a name** — they dispatch on a TOKEN KIND, and the ten names that lex as keywords
+are exactly the ones a resolver cannot be handed. That makes
+`compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all` the blocker for
+the half of this ticket that still carries risk, rather than a neighbour of it.
+
+**3. And the summary above was too strong: the CONSTRUCTION half is done for the
+two identifier doors, not for the four keyword arms.** `TryScalarNamedCast` is
+called at exactly two sites. The `tkChar_T`/`tkBoolean_T` arm builds its own
+`AN_PTR_CAST`, and its own comment records a drift of precisely that shape
+(`AnsiChar(258)` narrowed, `Char(258)` did not). Corrected in the summary.
+
+**So I stopped merging and swept the seam instead, and it paid immediately.**
+The instrument is a differential that varies the SPELLING and holds the value
+fixed — two spellings of one type must agree, which is self-inconsistent when it
+fails and needs no oracle. Twenty minutes, two defects, both confirmed against
+the PINNED compiler so neither is mine:
+
+- **A `Char` cast to a string type SEGFAULTS in every identifier spelling.**
+  `String(c)` prints `A`; `AnsiString(c)`, `UnicodeString(c)`, `WideString(c)`,
+  `UTF8String(c)` and `RawByteString(c)` all crash — the identifier door built an
+  `AN_PTR_CAST` that re-typed the character itself as a string, so the string
+  machinery dereferenced the ordinal 65 as a pointer. fpc accepts all six and
+  answers `A`. Fixed by calling the SHARED `WrapCharToStringExpr` — the desugar
+  already existed and already had three callers; this door was simply not one of
+  them.
+- **The indexed string cast is refused in the KEYWORD spelling.** `AnsiString(s)[2]`
+  walks the selector; `String(s)[2]` reports `expected ')' before '['`. The walk
+  was there — sitting inside the final `else` of a four-branch arm, so it served
+  a pointer operand and not a string one, which is the spelling ordinary code
+  writes. Fixed by hoisting it to cover every branch.
+
+**These are the same defect facing opposite ways, and that is the point.** The
+first is the identifier door missing what the keyword arm has; the second is the
+keyword arm missing what the identifier door has. The seam has now been repaired
+four times — `Char(258)`, `String(p)`, `AnsiString(r)[2]`, and today's pair —
+and each repair taught whichever side was reported.
+
+**What this ticket should now be measured by.** The defect generator is not
+"five doors that build a node"; construction is largely shared. It is **one
+concept reachable through a keyword token and an identifier**, where a fix
+lands on the spelling in the bug report. A resolver does not close that — the
+keyword arms cannot call it. What closes it cheaply is the differential:
+`test_p_keyword_and_identifier_spellings_of_a_type_agree` is wired, covers the
+ordinal, float, char->string and indexed-cast pairs, and fails whichever
+direction the next divergence faces.
+
+**Known gap in that test's population, stated rather than papered over:**
+`Boolean`, `Real` and `Single` have no identifier-spelled synonym in the shared
+table, so no pair exists for them. `ShortString(c)` is a third thing again —
+`shortstring` is not in `BuiltinScalarTypeKind` at all and answers "undefined
+variable" while fpc accepts it. Not fixed here; adding a name to that table
+reaches the declaration path too, which is a wider blast radius than this
+change earns.

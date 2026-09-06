@@ -2270,22 +2270,32 @@ begin
             ASTTk[node] := Ord(tyString);
           CurASTNode := node;
           LastExprTk := IntToTypeKind(ASTTk[node]);
-          { `String(r)[4]` -- the KEYWORD spelling of the indexed string cast.
-            The branch above is the reinterpret; the subscript after it was left
-            standing and the enclosing expression reported `expected ')' before
-            '['`. Same walk, same call, as the identifier spelling
-            `AnsiString(r)[4]` and the alias spelling `t(r)[4]` -- this arm
-            exists precisely because `String` is a keyword token and never
-            reaches the identifier path, which is the structural reason this
-            file keeps fixing one concept three times.
-            bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
-          if CurTok.Kind = tkLBrack then
-          begin
-            castTk := IntToTypeKind(ASTTk[node]);
-            CurASTNode := ParseClassRecordSelectors(node, REC_NONE, castTk);
-            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-          end;
         end;
+      end;
+      { `String(r)[4]` -- the KEYWORD spelling of the indexed string cast.
+        The subscript was left standing and the enclosing expression reported
+        `expected ')' before '['`. Same walk, same call, as the identifier
+        spelling `AnsiString(r)[4]` and the alias spelling `t(r)[4]` -- this arm
+        exists precisely because `String` is a keyword token and never reaches
+        the identifier path, which is the structural reason this file keeps
+        fixing one concept three times.
+        bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere
+
+        HOISTED OUT OF THE REINTERPRET BRANCH, 2026-09-06. It was placed inside
+        the final `else` -- the generic typecast -- so it served `String(p)[2]`
+        over a pointer and NOT `String(s)[2]` over a string, which takes the
+        passthrough branch at the top of this arm and is the spelling ordinary
+        code actually writes. `AnsiString(s)[2]` worked throughout, so the two
+        spellings disagreed exactly as this arm's own header says they must not.
+        Confirmed against the PINNED compiler, so it predates today's change.
+        A fix placed on one branch of a four-branch arm is the same defect as a
+        fix placed on one door of four.
+        refactor-p-five-dispatch-sites-for-one-named-type-cast }
+      if CurTok.Kind = tkLBrack then
+      begin
+        castTk := IntToTypeKind(ASTTk[CurASTNode]);
+        CurASTNode := ParseClassRecordSelectors(CurASTNode, REC_NONE, castTk);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
       end;
     end;
     tkIdent:
@@ -7222,6 +7232,30 @@ begin
                ((IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) or
                 (IntToTypeKind(ASTTk[CurASTNode]) = tyBool8)) then
               CurASTNode := SemBoolMaterialise(CurASTNode, castTk);
+            { A CHAR operand cast to a STRING type is a CONVERSION, not a
+              reinterpret: `AnsiString(c)` must materialise a 1-char string.
+              Falling through built an AN_PTR_CAST that re-typed the character
+              itself as a string, so the string machinery dereferenced the
+              ordinal 65 as a pointer — a SEGFAULT, not a wrong value, on every
+              identifier spelling (AnsiString, UnicodeString, WideString,
+              UTF8String, RawByteString) while the KEYWORD spelling `String(c)`
+              printed 'A'. fpc accepts all six and answers 'A'.
+
+              This is the exact mirror of the defect the tkString_T arm's own
+              closing comment records: there the keyword branch lacked the
+              POINTER cast the identifier path had, and it was fixed by teaching
+              the keyword branch. The sibling direction was never checked, so the
+              same seam reopened facing the other way. Hence the shared
+              WrapCharToStringExpr rather than a second copy of the desugar —
+              the construction is one thing or it drifts again.
+              refactor-p-five-dispatch-sites-for-one-named-type-cast }
+            if TypeIsAnyString(castTk) and
+               (IntToTypeKind(ASTTk[CurASTNode]) = tyChar) then
+            begin
+              CurASTNode := WrapCharToStringExpr(CurASTNode);
+              LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+              Exit;
+            end;
             if TryScalarNamedCast(castTk, castSem) then Exit;
             { ...and on a promotable int, `Pointer(n)` IS `@n`, so make it one.
               Punning the operand worked for a LOCAL, whose rvalue already is

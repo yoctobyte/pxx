@@ -1,0 +1,25 @@
+byte-kw     2
+byte-id     2
+char-kw     2
+char-id     2
+lword-kw    5
+lword-id    5
+lword-id2   5
+lword-id3   5
+double-kw   3.75
+double-id   3.75
+s-kw        A 1
+s-ansi      A 1
+s-unicode   A 1
+s-wide      A 1
+s-utf8      A 1
+s-rawbyte   A 1
+s-concat    ABC
+idx-kw      e
+idx-id      e
+idx-kw-p    e
+idx-id-p    e
+pass-kw     hello
+pass-id     hello
+pchar-kw    hello
+pchar-id    hello
