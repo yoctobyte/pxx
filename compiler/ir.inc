@@ -1694,8 +1694,12 @@ function IRPromoInitFromLiteral(dstAddr, node: Integer): Boolean;
 var litNode, zeroAddr, zeroSym, strSym: Integer;
 begin
   IRPromoInitFromLiteral := False;
-  if IsWideIntLit(node) then litNode := node
-  else if IsWideNegLit(node) then litNode := ASTLeft[node]
+  { WideLitHasDigits, not IsWideIntLit: a decimal in [2^63, 2^64) is retagged
+    tyUInt64 at its creation site and leaves IsWideIntLit, which took the whole
+    band out of this function and left PromoInt reading the wrapped ASTIVal.
+    See ast_arena.inc's note above WideLitHasDigits. }
+  if WideLitHasDigits(node) then litNode := node
+  else if IsWideNegLitDigits(node) then litNode := ASTLeft[node]
   else Exit;
   { The digit text must reach PXXPromoFromStr through a hidden OWNING string
     local, not as a bare IR_CONST_STR argument: IRPromoCall builds its IR
@@ -1713,7 +1717,7 @@ begin
   IRMarkStatementNode(IRPromoCall('PXXPromoFromStr', dstAddr,
                         IRAppend(IR_LOAD_SYM, strSym, -1, -1, 0, Ord(tyAnsiString)),
                         -1, tyUnknown));
-  if IsWideNegLit(node) then
+  if IsWideNegLitDigits(node) then
   begin
     { negate in place: dst := 0 - dst. A fresh temp slot is already inline 0. }
     zeroAddr := IRPromoTempSlot(zeroSym);
@@ -1805,7 +1809,7 @@ begin
     slot — it must take the boxing path below, where IRPromoInitFromLiteral
     consumes the digit text. Checked before the promo-typed branch, which
     would otherwise hand the wrapped machine constant back as a slot address. }
-  if (not IsWideIntLit(node)) and (not IsWideNegLit(node)) and
+  if (not WideLitHasDigits(node)) and (not IsWideNegLitDigits(node)) and
      TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
   begin
     addr := IRPromoLValueAddr(node);
@@ -1903,8 +1907,8 @@ begin
     the machine int directly instead of boxing it into a slot first. That is the
     shape almost all real code has — accumulators, counters, small constants. }
   if (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]]))) and
-     (not IsWideIntLit(ASTRight[node])) and
-     (not IsWideNegLit(ASTRight[node])) and
+     (not WideLitHasDigits(ASTRight[node])) and
+     (not IsWideNegLitDigits(ASTRight[node])) and
      (PromoMixedHelper(TTokenKind(ASTIVal[node])) <> '') then
     IRMarkStatementNode(IRPromoCall(PromoMixedHelper(TTokenKind(ASTIVal[node])),
                                     dstAddr, lhsAddr,
@@ -12302,7 +12306,15 @@ begin
                 TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
           { a wide literal / promo-typed operand: IR_VAR_BOX would box the
             WRAPPED machine int — route through the promo runtime instead so
-            an over-Int64 value keeps its exact reading (VT_PROMO_INT64) }
+            an over-Int64 value keeps its exact reading (VT_PROMO_INT64).
+            DELIBERATELY IsWideIntLit AND NOT WideLitHasDigits. A variant
+            carries no unsignedness, so the [2^63, 2^64) band IS wrong here --
+            but this arm reaches the promo RUNTIME, and a program that never
+            mentions PromoInt does not load promocore, so widening the
+            predicate turns a wrong value into "runtime helper PXXPromoFromStr
+            not found". Measured. Above 2^64 there is no 64-bit reading at all
+            so the trade is worth it; inside the band it is not.
+            bug-a-a-wide-unsigned-literal-boxed-into-a-variant-stores-the-wrapped-value }
           left := IRPromoBoxedVariantAddr(ASTLeft[node])
         else
         begin
@@ -13866,6 +13878,15 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           whatever rax held: VType garbage, payload lost
           (bug-a-variant-fn-return-forward-nrvo-corruption). }
         leftAddr := IRLowerDestAddress(ASTLeft[node]);
+        { `v := <literal in [2^63, 2^64)>` STORES THE WRAPPED -1 and fpc 3.2.2
+          stores 18446744073709551615. Filed, NOT fixed here: routing it
+          through PXXPromoToVariant like the promo rvalue above makes an
+          ordinary Pascal program that never mentions PromoInt fail to compile
+          with "runtime helper PXXPromoFromStr not found", which is a worse
+          answer than the wrong one and is the exact condition 10e670503 was
+          written to remove. A variant carries no unsignedness, so the repair
+          is on the variant side, not in this predicate.
+          bug-a-a-wide-unsigned-literal-boxed-into-a-variant-stores-the-wrapped-value }
         if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
           { promotable int -> variant. An INLINE value becomes an ordinary

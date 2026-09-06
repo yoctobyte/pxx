@@ -772,6 +772,49 @@ begin
   IsWideNegLit := (ASTKind[node] = AN_NEG) and IsWideIntLit(ASTLeft[node]);
 end;
 
+{ THE SAME LITERAL, ASKED A DIFFERENT QUESTION -- "does it carry exact digits"
+  rather than "is it still untyped-signed". These two were ONE predicate until
+  2026-09-06 and the split is the fix for test_promoint_bitwise.
+
+  `10e670503` retags every DECIMAL in [2^63, 2^64) to tyUInt64 at the literal's
+  creation site, which is right: between High(Int64) and High(QWord) the
+  literal IS an unsigned value, and the signedness arms need IsWideIntLit to go
+  False afterwards -- pasparser_expr.inc:896 says so and relies on it.
+
+  The cost was invisible. Every PROMO path also asked IsWideIntLit, and all it
+  ever wanted was the span, so that whole band silently left the predicate and
+  PromoInt fell back to ASTIVal -- the WRAPPED reading. `mask := 2^64-1` became
+  -1, `a and mask` became -1, and `a > b` became FALSE. Above 2^64 the tag
+  stays tyInt64, so PromoInt kept working there and the defect hid in one band,
+  reading as a PromoInt bug rather than a literal-typing one.
+
+  NOT FIXED BY WIDENING IsWideIntLit: that would hand the promo path every
+  QWord operand and re-break bug-p-qword-div-by-a-literal-above-2-63-is-signed,
+  which is the condition 10e670503 exists to create. Measured, both directions,
+  in that ticket.
+
+  AND NOT ASKED BY EVERY SITE THAT LOOKS PROMO-ISH. The discriminator is the
+  DESTINATION, not the literal: inside [2^63, 2^64) a correct 64-bit reading
+  EXISTS, so the machine-int lowering, the Write arm and the variant box are
+  right to take it and are cheaper. Only a promo SLOT needs the digits, because
+  a slot holds a signed semantic value and -1 is not 18446744073709551615 there
+  however correct those bits are as a QWord. Callers: IRPromoInitFromLiteral,
+  IRPromoAddrOf, IRPromoEmitBinop's mixed-helper guard.
+
+  tyUInt64 cannot be a char literal, so the char-pool hazard the tyInt64 test
+  guards against above does not reach this one. }
+function WideLitHasDigits(node: Integer): Boolean;
+begin
+  WideLitHasDigits := IsWideIntLit(node) or
+                      ((ASTKind[node] = AN_INT_LIT) and (ASTSLen[node] > 0) and
+                       (ASTTk[node] = Ord(tyUInt64)));
+end;
+
+function IsWideNegLitDigits(node: Integer): Boolean;
+begin
+  IsWideNegLitDigits := (ASTKind[node] = AN_NEG) and WideLitHasDigits(ASTLeft[node]);
+end;
+
 function IsConstStrLitNode(n: Integer): Boolean;
 { A compile-time string-or-char literal (foldable in an ESP tyString concat). }
 begin
