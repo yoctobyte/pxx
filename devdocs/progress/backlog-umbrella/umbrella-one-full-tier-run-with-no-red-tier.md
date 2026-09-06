@@ -1,15 +1,110 @@
 ---
 slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
-prio: 85
+prio: 55
 type: umbrella
 blocked-by: [regression-test-core-c-crtl-wait, bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain]
 created: 2026-09-01
 owner: frankZ
-summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
+summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RE-RANKED 85 -> 55 on 2026-09-06: the prio-85 justification was that a green run makes the rollback target VERIFIED rather than merely recent, and CLAUDE.md now says the fleet does not roll back at all (owner, 2026-09-06: 'we avoid rollbacks. useful work done is work done'), usable rollback depth is ZERO, and verbatim `do not rank a ticket on rollback depth`. The other stated buy -- grading a pin `green` rather than `reds(N)` -- is voided by the same rule, which calls `pin_is_green`/`pinstatus` a target for an operation this fleet does not perform. What survives is ordinary regression value, and the goal itself stays reasonable: the reds are real defects. Lowering it DOES lower what its blockers inherit -- `effective_prio` (`tools/progress.py:945`) is max(own prio, dependents), so the floor they inherit from this goal drops 85 -> 55; what it cannot do is push any blocker below the prio it earned on its own, and that is the intended effect, not a side effect. CLOSER THAN IT HAS EVER BEEN: the newest full run on seven (`c543b335fb2f`, 2026-09-06T19:55Z) is RED on THREE jobs, down from nine in eight hours. Still ends when one clean run comes back; still not a standing triage desk."
 ---
 
 # One full tier run with no RED tier
+
+## 2026-09-06 — RE-RANKED 85 -> 55, and the goal is three reds away
+
+frankH flagged the caveat and declined to re-rank on their own reading of a
+rule, which was right: it is this umbrella's own justification, so it is mine.
+Settled here rather than sent to U, because **U is for forks the rules do not
+settle and this one is settled by the rules** — CLAUDE.md:207-214 does not
+merely imply it, it names the operation:
+
+> **WE AVOID ROLLBACKS — FORWARD IS THE RECOVERY PATH** (owner, 2026-09-06):
+> *"yes we avoid rollbacks. useful work done is work done, even if (other)
+> things break."* ... **do not rank a ticket on rollback depth.**
+
+Both of this ticket's stated buys die on that. The rollback one is explicit.
+The second — grading a pin `green` rather than `reds(N)` — dies to the same
+sentence, which calls `pin_is_green`/`pinstatus` *"a target for an operation
+this fleet does not perform."* v398 stays a good story and stops being a
+ranking argument: what it argues for is pinning OFTEN, which is already a rule.
+
+**55, not lower and not withdrawn.** The reds are real defects that would be
+worth fixing with no umbrella at all; what the umbrella adds is order and
+grouping.
+
+**Say the cost plainly rather than reassuringly.** `effective_prio`
+(`tools/progress.py:945`) is `max(own prio, eff(dependents))`, so this re-rank
+drops the floor every blocker inherits from this goal by thirty points. It does
+not push any blocker below its own `prio` — but "buries nothing" would have been
+the comfortable phrasing of a real change, and the first draft of this section
+said exactly that. **A ticket whose rank depended on the inherited 85 is
+supposed to fall here.** If one of the three reds above turns out to deserve
+more than 55, it earns that on its own body, which is where it should have been
+all along.
+
+### The state that argues for keeping it — measured, not inherited
+
+Tonight's full runs on seven, in order (`## STILL-RED` + `## NEW-RED` counted
+apart, because a bare `grep '^- '` merges `## FIXED` into the red list — that
+error nearly filed a regression here on 2026-09-06):
+
+```
+17:47Z  77f298a   RED   still-red 9   new-red 0   fixed 0
+18:02Z  c69b52b   RED   still-red 8   new-red 0   fixed 1
+18:37Z  6d04b14   RED   still-red 3   new-red 2   fixed 3
+19:43Z  1b903c1   RED   still-red 2   new-red 3   fixed 1
+19:55Z  c543b33   RED   still-red 1   new-red 2   fixed 5      wall 600.8  flaky 7
+```
+
+Nine to three in eight hours, and in the last run the fix rate beat the arrival
+rate five to two. This ticket's own standing condition is *"get one run where
+the arrival rate loses to the fix rate for one tier's duration"* — that
+happened tonight. The three at `c543b335fb2f`:
+
+- `tools-devtest#00` — STILL-RED, and group 7 above already reports it fixed
+  three times. Its fourth fault is the ticket to write, not a fourth fix.
+- `lib-test#src:test/lib_sysutils_delphi_exceptions.pas` — NEW-RED tonight.
+- `test-debug-g#src:tools/compiler_srchash.sh` — NEW-RED tonight, and the job
+  name is a SELECTOR, not a label: `tools/compiler_srchash.sh` is merely the
+  first source of the job, shared by several unrelated jobs. See
+  [[bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised]].
+
+### And the archive claim, corrected in both directions
+
+A peer read the archive as *zero shas with a full run and no RED, ever*. That
+is false — 47 shas qualify, and this ticket's own body already said so
+(*"588 shas have been fully green at some point"*). But the useful half of
+their reading is the one neither of us stated: **every full GREEN in the
+archive is plexus, borg or xeon; `seven` has never produced one.** The body
+already explains why the goal can only be met there (*"the `full` run cannot
+come from plexus — 41 jobs SKIP for missing corpus"*), so the two facts
+together say the goal has never been met **by the only host that can meet it**.
+
+That is worth stating plainly and is NOT yet a reason to call the goal
+unsatisfiable in the sense of *"a gate that cannot pass is not a gate either"* —
+tonight's 9 -> 3 is direct evidence against unsatisfiability. Revisit it if the
+count stops falling; the discriminator is the trend, not the zero.
+
+### The same rule lands on a ticket that is not mine — flagged, not re-ranked
+
+Grouping rather than triaging: `ready --track T` puts
+[[bug-t-the-named-rollback-target-cannot-build-the-tree-it-would-roll-back-to]]
+at **prio 80**, and it is the ticket whose measurement *became* the CLAUDE.md
+rule quoted above — usable rollback depth ZERO, every historical pin strictly
+worse than the one in place. The rule's answer to it was not "fix the rollback"
+but *"do not spend work making `make revert` produce a coherent pair."* So it
+is ranked 80 for a remedy the owner ruled out, which is the same shape as this
+umbrella's 85 and probably wants `low-prio/` or `rainy-day/` — its measurement
+is true and reproducible, and there is no plan to act on it.
+
+**Flagged, not moved.** frankH declined to re-rank this umbrella on their own
+reading of a rule and handed it to its owner; that cuts both ways and the
+symmetry is the point. Its neighbour
+[[bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names]] is NOT
+in this class and should stay at 80: it says every pin verify builds with pin
+v(N-1) while recording the verdict under vN. That is an instrument lying about
+which binary it measured, and it is wrong whether or not anyone ever rolls back.
 
 Written 2026-09-01 by frankZ, from the owner's words via frank-user: *"we
 should have one track working on the regressions, and only the regressions."*

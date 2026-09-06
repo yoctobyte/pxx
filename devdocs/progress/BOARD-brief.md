@@ -67,7 +67,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 440, ranked
 
-- `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [A]` refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies (unblocks 1)
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -97,5 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [A]` bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
 _410 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
