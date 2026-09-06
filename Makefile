@@ -14694,6 +14694,24 @@ test-core: $(COMPILER)
 	# throughout the entire bug.
 	./$(COMPILER) test/test_nested_pointer_alias_is_scoped_to_its_owner.pas $(TESTTMP)/sweep_nestptralias26
 	tools/expect_same.sh sweep_nestptralias26 "$$($(TESTTMP)/sweep_nestptralias26)" "$$(printf '1 int=7\n2 str=hi\n3 dbl=2.5\n4 reca=11\n5 recb=rec\n6 top=99\nOK')"
+	# `q^.field` where q is a POINTER TO A POINTER: FPC/Delphi apply ONE implicit
+	# deref, so `q^.e` means `q^^.e`. pxx dropped it and built the field over the
+	# POINTER -- the field read at an offset into the pointer VALUE, a silent
+	# wrong number with no diagnostic. Explicit `q^^.e` was always right, so the
+	# two spellings of one concept disagreed.
+	#
+	# ROWS 7 AND 8 READ LATE FIELDS ON PURPOSE. Offset 0 is what a lost base
+	# resolves to, so a probe reading only the first field cannot tell a correct
+	# answer from a dropped deref. The record is 20 bytes so nothing here can
+	# collide with a pointer width either.
+	#
+	# NOT COVERED, DELIBERATELY: two implicit derefs (`z^.e` on a three-deep
+	# pointer) is "Illegal qualifier" under fpc 3.2.2 -- resolving it would make
+	# us accept what FPC refuses, so the fix gates on the deref count matching
+	# the declared depth and this test asserts only the legal spellings.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_implicit_deref_through_a_pointer_to_pointer.pas $(TESTTMP)/implderef26
+	tools/expect_same.sh implderef26 "$$($(TESTTMP)/implderef26)" "$$(cat test/test_implicit_deref_through_a_pointer_to_pointer.expected)"
 	# The ONE row here with no external oracle: the trampoline ABI proof reaches
 	# pxx's own RTTI (GetInstanceRTTI / GetMethInfoByName), which FPC has no
 	# equivalent of, so it cannot be compiled there at all. The values below are

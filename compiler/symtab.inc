@@ -15984,7 +15984,7 @@ begin
 end;
 
 function ResolveNodeRec(node: Integer): Integer;
-var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
+var baseNode, baseRec, fIdx, innerNode, dwDepth: Integer; fieldName: AnsiString;
 begin
   if ASTKind[node] = AN_IDENT then
   begin
@@ -16197,6 +16197,70 @@ begin
       { f()^ : the pointed-at record comes from the callee's return element. }
       if ASTIVal[baseNode] >= 0 then
         Result := ProcRetPtrElemRec[ASTIVal[baseNode]]
+      else
+        Result := REC_NONE;
+    end
+    else if ASTKind[baseNode] = AN_DEREF then
+    begin
+      { A DEREF whose base is itself a DEREF -- `q^^` over `PPRec = ^PRec`.
+        Every other arm here names a base kind that is NOT a deref, so a
+        stacked one fell to REC_NONE below, and the caller that asks this
+        question is the IMPLICIT-DEREF arm in pasparser_lval.inc: `q^.field`
+        means `q^^.field` in FPC/Delphi. With REC_NONE it declined to insert
+        the second deref and built AN_FIELD over the POINTER, reading the
+        field at an offset into the pointer VALUE -- `q^.e` printed the low
+        half of an address where fpc prints 55. Silent, no diagnostic.
+
+        Explicit `q^^.e` was always right because the lvalue chain's own
+        depth-aware walk had already reduced it to a record before any field
+        lookup; only the IMPLICIT step came through here. Two mechanisms
+        answering "what record does this deref yield", and the enumerated one
+        was missing a case the walking one handles.
+
+        COUNTED, NOT ASSUMED: walk the whole deref chain and require the count
+        to equal the symbol's declared depth. That is what keeps `z^.e` over a
+        THREE-deep pointer out -- fpc rejects two implicit derefs outright
+        ("Illegal qualifier"), so resolving it here would make us accept what
+        FPC refuses, and returning the ultimate record for a half-dereferenced
+        pointer is exactly how a wrong offset becomes a plausible value.
+        bug-p-an-implicit-deref-over-an-explicit-caret-is-dropped }
+      dwDepth := 0;
+      innerNode := node;
+      while ASTKind[innerNode] = AN_DEREF do
+      begin
+        Inc(dwDepth);
+        innerNode := ASTLeft[innerNode];
+      end;
+      { The chain can bottom out on a CAST as well as a variable --
+        `PPRec(raw)^.field` -- and the alias table carries the same two facts
+        under different names: AliasPtrDepth for the depth, AliasElemRec for the
+        ultimate element. Spelled here rather than left out because the cast is
+        how this bug was originally REPORTED, and a fix that repaired only the
+        variable spelling would have closed the ticket against its own repro. }
+      if (ASTKind[innerNode] = AN_PTR_CAST) and
+         (Integer(ASTIVal[innerNode]) >= 0) and
+         (AliasPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
+        { AliasPtrBaseRec, the ULTIMATE base -- the alias twin of SymPtrBaseRec
+          above, and NOT AliasElemRec, which is the immediate element and is
+          REC_NONE for `PPRec = ^PRec`. Both tables are written on the same
+          fifteen lines of pasparser_decl.inc and the immediate/ultimate pair
+          reads identically at every call site; this fix used the wrong half of
+          BOTH tables before measuring, once each. }
+        Result := AliasPtrBaseRec[Integer(ASTIVal[innerNode])]
+      else if (ASTKind[innerNode] = AN_IDENT) and
+         (Integer(ASTIVal[innerNode]) >= 0) and
+         (Integer(ASTIVal[innerNode]) < SymCount) and
+         (SymPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
+        { SymPtrBaseRec, the ULTIMATE base -- not Syms[].PtrElemRec, which is the
+          IMMEDIATE pointee and is REC_NONE for a pointer-to-pointer because the
+          thing it points at is a pointer, not a record. `PXXDBG=a.symptr` prints
+          both and names the distinction: for `q: PPRec` it says
+          `depth=2 ptrElemTk=17 baseTk=5 baseRec=23` -- pointee is a POINTER,
+          base is TRec. Reading the immediate field here returned REC_NONE and
+          the fix silently did nothing, which is why the depth gate above is
+          paired with the ULTIMATE record: they are only the same field when
+          depth = 1. }
+        Result := SymPtrBaseRec[Integer(ASTIVal[innerNode])]
       else
         Result := REC_NONE;
     end
