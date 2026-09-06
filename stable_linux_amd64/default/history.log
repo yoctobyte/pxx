@@ -402,3 +402,4 @@
 2026-09-03T20:32:52Z  v402  80ecb94023ebb96f83bd7133984b9903db9eb2588d91f645dc6192eea8615274  2a216b280f331540df1f67aa5fa5950ca2d46575  docs(progress): a fourth refusal shape, and a sequencing call made rather than deferred
 2026-09-03T23:44:13Z  v403  c31d03b202da9a092ed71cf666876c698fd473e05758f26526a70665cf4b9175  214500da237a6f1d574e3591e929ee6506bd5e48  docs(progress): record the shas the resolves landed as
 2026-09-05T18:15:57Z  v404  fe1e9c37d322c62f5f7b1a88a0afcccb7a504f1f4e3c56adb4f42d0d2b8b277a  5b5fdb0b32d30418cafe9d5c631237a94893490b  tickets(B,P): dwscript-rtti's blocking analysis is stale in both halves — the block is gone, the segfault is a different bug
+2026-09-06T07:42:36Z  v405  8f21d04df6264cc5edc4350a33f481f8a12849d5923dd2d45b11f82bce0c9e87  36eb642d624059572f80acb9f05d41740894c2e4  tickets(P): the remaining four intrinsic spellings have four doors and three are open at once
