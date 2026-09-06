@@ -5,3 +5,5 @@ char  len=3: x y z
 str   len=2: foo bar
 rec   len=2: 1/2 3/4
 one   len=1: 42
+row   len=2: [ 1 2 3 ] [ 4 5 6 ]
+row independent: dw[0][0]=1 sw[0][0]=99

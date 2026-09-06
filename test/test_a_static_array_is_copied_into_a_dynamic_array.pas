@@ -25,6 +25,13 @@
       assignment must not move `d[0]` -- that is the one assertion the original
       bug could never have passed, since the handle held s's own address.
     - EMPTY-ish: a one-element source, so the loop bound is exercised at 1.
+    - a FIXED-ROW destination (`d: array of TRow`), which is the shape that was
+      refused for a day: `array[0..1] of TRow` is FLATTENED to a 2-D array, so
+      the source's ArrLen is the SIX elements and not the two rows and a plain
+      `s[i]` would index one LongInt. It needs BuildPartialNDRowIndex, which
+      scales the leading subscript AND stamps ASTNDRowSubs. Its own
+      independence row is separate because a row copy has more ways to alias
+      than a scalar one.
 
   fpc 3.2.2 is the oracle for every row whose low bound is 0; the two `1..N`
   rows it refuses outright and their values are ours.
@@ -33,6 +40,7 @@ program test_a_static_array_is_copied_into_a_dynamic_array;
 
 type
   TR = record a, b: LongInt; end;
+  TRow = array[0..2] of LongInt;
 
 var
   d: array of LongInt;
@@ -46,7 +54,9 @@ var
   sr: array[0..1] of TR;
   one: array of LongInt;
   s0: array[0..0] of LongInt;
-  i: Integer;
+  dw: array of TRow;
+  sw: array[0..1] of TRow;
+  i, j: Integer;
 
 begin
   s[0] := 2; s[1] := 4; s[2] := 6;
@@ -88,4 +98,20 @@ begin
   Write('one   len=', Length(one), ':');
   for i := 0 to Length(one) - 1 do Write(' ', one[i]);
   Writeln;
+
+  sw[0][0] := 1; sw[0][1] := 2; sw[0][2] := 3;
+  sw[1][0] := 4; sw[1][1] := 5; sw[1][2] := 6;
+  dw := sw;
+  Write('row   len=', Length(dw), ':');
+  for i := 0 to Length(dw) - 1 do
+  begin
+    Write(' [');
+    for j := 0 to 2 do Write(' ', dw[i][j]);
+    Write(' ]');
+  end;
+  Writeln;
+
+  { a row copy has more ways to alias than a scalar one, so it gets its own }
+  sw[0][0] := 99;
+  Writeln('row independent: dw[0][0]=', dw[0][0], ' sw[0][0]=', sw[0][0]);
 end.

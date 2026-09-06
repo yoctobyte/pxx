@@ -7137,7 +7137,7 @@ begin
              (SymElemDynDepth[ASTIVal[exprNode]] = 0) and
              (NodeDynElemRowLen(valNode) = 0) and
              (NodeDynDepth(valNode) = 1) then
-            exprNode := FixedArrayAsArrayCtor(exprNode);
+            exprNode := FixedArrayAsArrayCtor(exprNode, 0, 0);
           insSrcSym := -1;
           insSplice := False;
           if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and

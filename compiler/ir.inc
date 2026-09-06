@@ -3760,12 +3760,32 @@ end;
   Caller owns the guards. In particular a PARAMETER is never handed here:
   AllocParam stamps ArrLen := 1000 on every array parameter as the open-array
   placeholder, so a param's recorded length is not a length. }
-function FixedArrayAsArrayCtor(srcNode: Integer): Integer;
+function FixedArrayAsArrayCtor(srcNode, rowLen, rowLo: Integer): Integer;
 var srcSym, faLo, faN, i, faHead, faTail, faArg, faIdx, faLit, faBase: Integer;
 begin
   srcSym := ASTIVal[srcNode];
   faLo := Syms[srcSym].ConstVal;
   faN  := Syms[srcSym].ArrLen;
+  { A FIXED-ROW destination (`d: array of TRow`, `s: array[0..1] of TRow`) is
+    the second shape, and the source side is where it is awkward rather than the
+    destination side: `array[0..1] of TRow` is FLATTENED to a 2-D array, so
+    Syms[].ArrLen is the SIX elements and not the two rows, and a plain
+    `s[i]` would index one LongInt. NDInfoSpan[0] is the row count and
+    BuildPartialNDRowIndex is what scales a leading subscript to the row's
+    first-element flat index AND stamps ASTNDRowSubs -- one routine for both
+    halves, deliberately, because a caller that set the arithmetic and forgot
+    the stamp would build a sub-array every consumer reads as an element.
+    Restricted to a 2-D source whose trailing span IS the destination's row
+    length: anything deeper wants more than one leading subscript and the
+    caller refuses it. }
+  if rowLen > 0 then
+  begin
+    if not NodeArrNDInfo(srcNode) then begin Result := -1; Exit; end;
+    if (NDInfoNDims <> 2) or (NDInfoSpan[1] <> rowLen) then
+    begin Result := -1; Exit; end;
+    faLo := NDInfoLo[0];
+    faN  := NDInfoSpan[0];
+  end;
   faHead := -1; faTail := -1;
   for i := 0 to faN - 1 do
   begin
@@ -3780,7 +3800,16 @@ begin
     ASTTk[faLit]   := Ord(tyInteger);
     faIdx := AllocNode(AN_INDEX);
     ASTLeft[faIdx]  := faBase;
-    ASTRight[faIdx] := faLit;
+    if rowLen > 0 then
+    begin
+      { NDInfo* is global and BuildFlatNDIndex reads it, so it is re-primed for
+        every element rather than once before the loop -- NDChkIdx allocates
+        nodes and nothing here guarantees the state survives that. }
+      if not NodeArrNDInfo(faBase) then begin Result := -1; Exit; end;
+      BuildPartialNDRowIndex(faIdx, faLit);
+    end
+    else
+      ASTRight[faIdx] := faLit;
     ASTTk[faIdx]    := Ord(Syms[srcSym].TypeKind);
     faArg := AllocNode(AN_ARG);
     ASTLeft[faArg]  := faIdx;
@@ -3797,8 +3826,12 @@ begin
     carry it forever as a reviewed overload for a no-op. }
   ASTIVal[Result]    := Ord(Syms[srcSym].TypeKind);
   ASTTk[Result]      := Ord(Syms[srcSym].TypeKind);
-  ASTSLen[Result]    := 0;
-  ASTSOffset[Result] := 0;
+  { OpenArrayCtorRowLen's encoding, passed in by the caller rather than derived
+    here: > 0 = the DESTINATION's element is a fixed ROW of that many elements,
+    rowLo its low bound, which makes the temp row-strided and each element store
+    a row-COPY. 0 = a plain scalar or handle element. }
+  ASTSOffset[Result] := rowLen;
+  ASTSLen[Result]    := rowLo;
 end;
 
 { `d` is a dynamic array whose ELEMENT is a fixed ROW (`array of array[0..2] of
@@ -3813,6 +3846,19 @@ begin
   si := ASTIVal[node];
   if (si < 0) or (si >= SymCount) then Exit;
   NodeDynElemRowLen := SymDynElemRowLen[si];
+end;
+
+{ The row's LOW BOUND. Separate from the length above rather than a var
+  parameter on it, because most callers only ever ask "is the element a row at
+  all" and would have to invent a variable to discard. }
+function NodeDynElemRowLo(node: Integer): Integer;
+var si: Integer;
+begin
+  NodeDynElemRowLo := 0;
+  if (node < 0) or (ASTKind[node] <> AN_IDENT) then Exit;
+  si := ASTIVal[node];
+  if (si < 0) or (si >= SymCount) then Exit;
+  NodeDynElemRowLo := SymDynElemRowLo[si];
 end;
 
 function IsNodeClassRef(node: Integer): Boolean;
@@ -8619,6 +8665,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     wValNode, wEnumId: Integer;   { write(TEnum) -> the member NAME, like write(Boolean) }
     chArrCap, chArrCap2: Integer;   { static `array of Char` <-> string conversion }
     asgDstTk, asgSrcTk: TTypeKind;  { AN_ASSIGN incompatibility check }
+    asgFaRow, asgFaCtor: Integer;   { AN_ASSIGN: the destination's fixed-ROW element length, and the element list built from a fixed-length source (-1 = the source shape cannot be one) }
     foldStr: AnsiString;
     down: Boolean;
     varIdx, varIdx2: Integer;
@@ -12510,16 +12557,26 @@ begin
           A single arm and a single diagnostic for all three: what the
           programmer needs to know is that the copy did not happen, and the
           remedy (SetLength + element loop) is the same in every case. }
-        if (SymArrNDims[ASTIVal[ASTRight[node]]] > 1) or
-           (SymElemDynDepth[ASTIVal[ASTRight[node]]] > 0) or
-           (NodeDynElemRowLen(ASTLeft[node]) > 0) then
+        asgFaRow := NodeDynElemRowLen(ASTLeft[node]);
+        if (SymElemDynDepth[ASTIVal[ASTRight[node]]] > 0) or
+           ((asgFaRow = 0) and (SymArrNDims[ASTIVal[ASTRight[node]]] > 1)) then
+          asgFaCtor := -1
+        else
+          asgFaCtor := FixedArrayAsArrayCtor(ASTRight[node], asgFaRow,
+                                             NodeDynElemRowLo(ASTLeft[node]));
+        { -1 is the builder saying the source shape cannot be spelled as an
+          element list -- a >2-D source, or a row length that does not match the
+          destination's. REFUSED rather than left to the bare store, because the
+          bare store is the address bug this whole arm exists for. }
+        if asgFaCtor < 0 then
           ErrorAtRecover(ASTLine[node],
             'cannot assign this fixed-length array to a dynamic array: only a '
-          + 'single-dimensional array of plain elements is copied element by '
+          + 'single-dimensional array of plain elements, or a 2-D array whose '
+          + 'rows match the destination''s row length, is copied element by '
           + 'element -- use SetLength and copy the rows '
           + '(bug-a-a-static-array-assigned-to-a-dynamic-array-stores-its-address)')
         else
-          ASTRight[node] := FixedArrayAsArrayCtor(ASTRight[node]);
+          ASTRight[node] := asgFaCtor;
       end;
 
       { ...AND THE ONE PAIR THE KIND CANNOT EXPRESS AT ALL, which is why it is

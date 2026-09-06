@@ -3,7 +3,7 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-summary: "`d := s` for `d: array of LongInt` and `s: array[0..2] of LongInt` stored the STATIC array's ADDRESS into the dynamic array's handle slot, so Length read the words in front of `s` as a managed-block header — measured `Length(d) = 4310328` and a SEGFAULT walking it, where fpc prints `len=3: 2 4 6`. The kind check cannot see it: an array symbol's TypeKind is its ELEMENT's kind, so both sides are tyInteger and AssignKindsIncompatible CERTIFIES the pair rather than merely missing it. FIXED: the source is materialised through the array constructor `d := [1, 2, 3]` already uses, so the elements go through the normal element-assign path with coercion and managed-element ARC. Every lo=0 row diffed against fpc 3.2.2. Also closes tarray12 (its eleventh check, `Insert(t3, t, 2)` with a static source, through the same call). RESIDUAL, refused rather than silently wrong: a multidim source, a dyn-array element, and a fixed-ROW destination — fpc accepts the last one, so that is a compat gap and it is why this stays open at a lower prio."
+summary: "`d := s` for `d: array of LongInt` and `s: array[0..2] of LongInt` stored the STATIC array's ADDRESS into the dynamic array's handle slot, so Length read the words in front of `s` as a managed-block header — measured `Length(d) = 4310328` and a SEGFAULT walking it, where fpc prints `len=3: 2 4 6`. The kind check cannot see it: an array symbol's TypeKind is its ELEMENT's kind, so both sides are tyInteger and AssignKindsIncompatible CERTIFIES the pair rather than merely missing it. FIXED: the source is materialised through the array constructor `d := [1, 2, 3]` already uses, so the elements go through the normal element-assign path with coercion and managed-element ARC. Every lo=0 row diffed against fpc 3.2.2. Also closes tarray12 (its eleventh check, `Insert(t3, t, 2)` with a static source, through the same call). RESIDUAL, refused rather than silently wrong and now smaller: a dyn-array element, and a source deeper than the destination's row shape. The fixed-ROW destination is CLOSED — it needed the source's leading subscript scaled by BuildPartialNDRowIndex, because `array[0..1] of TRow` is FLATTENED to 2-D and its ArrLen is the six elements, not the two rows."
 status: backlog
 owner: unassigned
 ---
@@ -112,3 +112,38 @@ Deliberate, and the same expansion `d := [e0, e1, ...]` already pays. A loop
 form would be O(1) code and needs an induction variable synthesised in the IR
 lowering. **If a real program assigns a large fixed table this way, that is the
 reason to reopen — it is not a correctness question.**
+
+## The fixed-ROW destination closed too (2026-09-06, frankS)
+
+Measured at compiler `de306e74b7ec`; `d: array of TRow`, `s: array[0..1] of TRow`,
+`TRow = array[0..2] of LongInt` now prints `len=2: [ 1 2 3 ] [ 4 5 6 ]` and
+`dw[0][0]=1` after `sw[0][0] := 99`, byte-identical to fpc 3.2.2.
+
+**The destination side was never the hard half and the first attempt aimed at
+it.** `AN_ARRAY_CTOR` already carries `OpenArrayCtorRowLen`'s encoding, so
+handing it `rowLen`/`rowLo` makes the temp row-strided and each element store a
+row-COPY. That changed nothing, because the refusal was firing on the SOURCE:
+**`array[0..1] of TRow` is FLATTENED to a 2-D array**, so `SymArrNDims` is 2,
+`Syms[].ArrLen` is the SIX elements rather than the two rows, and a plain
+`s[i]` indexes one LongInt. A one-line debug print of the three guard values
+settled in one build what re-reading the arm would not have.
+
+The source elements are built with `BuildPartialNDRowIndex`, which scales the
+leading subscript to the row's first-element flat index **and** stamps
+`ASTNDRowSubs` — one routine for both halves by design, because a caller that
+sets the arithmetic and forgets the stamp builds a sub-array every consumer
+reads as an element. `NDInfo*` is global and `BuildFlatNDIndex` reads it, so it
+is re-primed per element rather than once before the loop.
+
+Restricted to a 2-D source whose trailing span IS the destination's row length.
+Anything deeper needs more than one leading subscript; the builder answers -1
+and the caller refuses by name.
+
+### Still open: the LITERAL row list
+
+`tarray15`'s line 36, `v6: array of array[0..2] of LongInt = ((1, 2, 3), (4, 5,
+6))`, is a different door and is NOT closed by this. The ctor's row path
+row-COPIES from an existing array and a nested literal is not one, so the
+elements would have to be materialised into rows first. The existing refusal
+(`an element list cannot initialise a dynamic array of fixed rows`) still
+stands and is still correct.
