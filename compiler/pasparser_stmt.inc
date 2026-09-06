@@ -5966,6 +5966,7 @@ end;
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym, mrefNode: Integer;
+  pvLastArg: Integer;   { FillDefaultArgs' running tail for a PARENLESS proc-var call }
   pvIsMeth: Boolean;
   name: AnsiString;
   stSpell: AnsiString;   { the token a statement cannot start with, as typed }
@@ -8745,22 +8746,68 @@ begin
                 and never inside the lvalue walk -- which runs for expression
                 atoms too, where a `;` is just as common.
                 bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier }
+              { ...or every parameter carries a DEFAULT, which is the same
+                question one step further out: `c;` on
+                `TCb = procedure(n: Integer = 5)` is a complete call under fpc
+                and was `expected ':=' before ';'` here. ParamCount = 0 is the
+                degenerate case of "nothing left to supply", not a separate
+                rule, so the two arms are one condition.
+                ParamsDefaultedFrom(sig, 0) is the SAME guard the interface and
+                method parenless arms ask -- deliberately, because the bug that
+                function was extracted for is exactly this shape: accept the
+                short call because a default exists and then supply nothing,
+                which compiles clean and segfaults. The fill below is not
+                optional and is why the two live in one arm.
+                bug-p-a-procedural-types-parameter-cannot-carry-a-default-value }
               else if (PasNodeProcSig(valNode) >= 0) and
-                      (Procs[PasNodeProcSig(valNode)].ParamCount = 0) and
+                      ((Procs[PasNodeProcSig(valNode)].ParamCount = 0) or
+                       ParamsDefaultedFrom(PasNodeProcSig(valNode), 0)) and
                       (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
                                        tkFinally, tkExcept]) then
               begin
                 pvSig := PasNodeProcSig(valNode);
                 node := AllocNode(AN_CALL_IND);
-                ASTLeft[node]  := -1;      { no args }
+                ASTLeft[node]  := -1;      { no args yet -- the fill below writes
+                                            this slot when there are defaults }
                 ASTRight[node] := valNode;
                 ASTIVal[node]  := pvSig;
                 ASTTk[node]    := Ord(Procs[pvSig].RetType);
                 { the method-pointer flag the indirect-call lowering reads: a
                   {Code,Data} pair is tyRecord, a plain procedural value is a
-                  bare code pointer. }
+                  bare code pointer.
+                  MEASURED, because this line was lost for one build while the
+                  arm above was being split: without it `cm;` on a
+                  `procedure(n: Integer = 11) of object` printed M-1480588942
+                  -- the Data half read as the Code half. A parenless method
+                  pointer is the ONLY row of the fixture that can see it, and
+                  the ten around it stayed green. }
                 if ASTTk[valNode] = Ord(tyRecord) then ASTSLen[node] := 1
                 else ASTSLen[node] := 0;
+                if Procs[pvSig].ParamCount > 0 then
+                begin
+                  pvLastArg := -1;
+                  FillDefaultArgs(pvSig, 0, node, pvLastArg);
+                end;
+              end
+              { ...and the NEAR MISS, which until now fell through to
+                `Expect(':=')` and was reported as `expected ':=' before ';'` --
+                a message that tells the programmer they meant an ASSIGNMENT
+                when what they wrote was a call missing its arguments. Same
+                class as the overload-candidate report that printed a
+                parameter's element kind: the diagnostic does not merely fail to
+                help, it argues for a different mistake. }
+              else if (PasNodeProcSig(valNode) >= 0) and
+                      (Procs[PasNodeProcSig(valNode)].ParamCount > 0) and
+                      (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
+                                       tkFinally, tkExcept]) then
+              begin
+                ErrorRecover('a bare procedural value is only a CALL when every'
+                  + ' parameter can default, and this one takes '
+                  + AIntToStr(Procs[PasNodeProcSig(valNode)].ParamCount)
+                  + ' -- write the argument list');
+                Result := AllocNode(AN_BLOCK);
+                ASTLeft[Result] := -1;
+                Exit;
               end
               else
               begin

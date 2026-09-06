@@ -5979,6 +5979,19 @@ var
   mPDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { see rmDynA }
   mDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
   mPStrCapPT: array[0..MAX_PROC_PARAMS-1] of Integer;  { the frozen `string[N]` capacity of each param, 0 = none. See the note at its fill site. }
+  { A DEFAULT VALUE per parameter -- the fifth dropped column of this routine,
+    and the only one that was not dropped but MISSING: this was the one of the
+    four parameter parsers with no ParseParamDefaultValue call at all, so
+    `TCb = procedure(n: Integer = 5)` was a hard syntax error (`expected ')'
+    before '='`) for every parameter type, while the identical routine, method
+    and interface-method declarations compiled.
+    bug-p-a-procedural-types-parameter-cannot-carry-a-default-value }
+  mPDefaultPT, mPDefaultIsStrPT, mPDefaultIsFloatPT, mPDefaultIsSetPT: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDefaultValPT: array[0..MAX_PROC_PARAMS-1] of Int64;
+  mPDefaultSOffPT, mPDefaultSLenPT: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mHasDefaultPT, mDefIsStrPT, mDefIsFloatPT, mDefIsSetPT: Boolean;
+  mDefValPT: Int64;
+  mDefSOffPT, mDefSLenPT: Integer;
 begin
       mIsFunc := (CurTok.Kind = tkFunction);
       Next;
@@ -6031,6 +6044,21 @@ begin
             mIsArr := True
           else
             mTk := ParseTypeKind;
+          { Default value: `n: Integer = 5` — mirror the three sibling parsers,
+            including the open-array refusal flag they pass. `mIsArr and (mDyn
+            <= 0)` and not the bare flag: IsArray is true for a NAMED array type
+            too, and only the literal `array of` spelling may not carry one. }
+          mHasDefaultPT := False; mDefValPT := 0;
+          mDefIsStrPT := False; mDefIsFloatPT := False; mDefIsSetPT := False;
+          mDefSOffPT := 0; mDefSLenPT := 0;
+          if CurTok.Kind = tkEq then
+          begin
+            Next;
+            ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr and (mDyn <= 0),
+                                   mDefValPT, mDefIsStrPT, mDefIsFloatPT,
+                                   mDefIsSetPT, mDefSOffPT, mDefSLenPT);
+            mHasDefaultPT := True;
+          end;
           { A `const` record/variant param is passed by reference — must match
             ParseSubroutine's rule (pasparser_*.inc ~11403) so an INDIRECT call
             through this proc-type marshals the arg the same way the callee
@@ -6046,6 +6074,13 @@ begin
             mPDynA[i] := mDyn;
             mPByRef[i] := mIsByRef;
             mPConstPT[i] := mSawConst;
+            mPDefaultPT[i] := mHasDefaultPT;
+            mPDefaultValPT[i] := mDefValPT;
+            mPDefaultIsStrPT[i] := mDefIsStrPT;
+            mPDefaultIsFloatPT[i] := mDefIsFloatPT;
+            mPDefaultIsSetPT[i] := mDefIsSetPT;
+            mPDefaultSOffPT[i] := mDefSOffPT;
+            mPDefaultSLenPT[i] := mDefSLenPT;
             { ...and the frozen CAPACITY of a `string[N]` parameter, which is the
               FOURTH instance of the dropped-field pattern this routine's own
               comments already name three times for the RESULT (the pointee, the
@@ -6163,6 +6198,16 @@ begin
         begin
           ProcParamExplicitByRef[mpi * MAX_PROC_PARAMS + i] := mPByRef[i];
           ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConstPT[i];
+        end;
+        if (i < MAX_PROC_PARAMS) and mPDefaultPT[i] then
+        begin
+          ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
+          ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultValPT[i];
+          ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStrPT[i];
+          ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsFloatPT[i];
+          ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsSetPT[i];
+          ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOffPT[i];
+          ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLenPT[i];
         end;
         if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
           ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];

@@ -157,10 +157,32 @@ begin
     else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
   end;
   Expect(tkRParen, ')');
-  if nArgs <> Procs[sigPi].ParamCount then
+  if nArgs > Procs[sigPi].ParamCount then
     Error('procedural call: wrong number of arguments');
   callIndNode := AllocNode(AN_CALL_IND);
   ASTLeft[callIndNode]  := argsHead;
+  { A SHORT argument list is legal exactly when the remaining parameters carry
+    declared defaults, which is what the DIRECT path has always done and what
+    this path could not do while ParseProcTypeSignature refused to parse a
+    default at all. Now that `TCb = procedure(a: Integer; b: Integer = 7)`
+    declares one, `c(1)` has to fill it -- and the arity check above had to stop
+    being an equality, because a short list is no longer a wrong count.
+
+    The order matters: FillDefaultArgs writes ASTLeft[callNode] itself when the
+    list was empty, so the node has to exist before the fill and the fill has to
+    happen before ASTLeft is read for anything else.
+
+    NOT ParamsDefaultedFrom's caller's job to check every remaining slot: Pascal
+    requires defaults to be trailing, so the first missing one having a default
+    is the whole question, and this is the same guard CanFillDefaultsFrom asks
+    on the direct path.
+    bug-p-a-procedural-types-parameter-cannot-carry-a-default-value }
+  if nArgs < Procs[sigPi].ParamCount then
+  begin
+    if not ParamsDefaultedFrom(sigPi, nArgs) then
+      Error('procedural call: wrong number of arguments');
+    FillDefaultArgs(sigPi, nArgs, callIndNode, lastArg);
+  end;
   ASTRight[callIndNode] := calleeNode;
   ASTIVal[callIndNode]  := sigPi;
   ASTTk[callIndNode]    := Ord(Procs[sigPi].RetType);

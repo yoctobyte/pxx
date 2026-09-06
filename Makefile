@@ -10618,6 +10618,31 @@ test-core: $(COMPILER)
 	! grep -q 'OnlyArr(LongInt)' $(TESTTMP)/candarr.log \
 	  || { echo "candidate-spelling: the element kind is still printed as the parameter's own kind:"; cat $(TESTTMP)/candarr.log; exit 1; }
 	@echo "candidate-spelling: OK"
+	@# bug-p-a-procedural-types-parameter-cannot-carry-a-default-value
+	@# -- ParseProcTypeSignature was the one of the four parameter parsers in
+	@# pasparser_decl.inc with NO ParseParamDefaultValue call, so
+	@# `TCb = procedure(n: Integer = 5)` was `expected ')' before '='` for every
+	@# parameter type while the identical routine, method and interface-method
+	@# declarations compiled. The parse is the small half: a default that is
+	@# RECORDED and never FILLED is the shape that segfaulted at four interface
+	@# arms, so BuildIndirectCallAST (`c(1)`) and the statement path's parenless
+	@# arm (`c;`) both had to learn to fill -- the latter's guard was
+	@# `ParamCount = 0`, which is the degenerate case of "nothing left to
+	@# supply" rather than a separate rule. Value kinds are rows, not padding:
+	@# the row-write copies six default columns and an Integer-only fixture
+	@# proves one of them. `parenless meth` is the only row that can see the
+	@# method-pointer flag, and it caught its loss during this very edit.
+	./$(COMPILER) test/test_a_procedural_types_parameter_carries_its_default_through_every_indirect_call_shape.pas $(TESTTMP)/test_proctypedefault26
+	tools/expect_same.sh test_proctypedefault26 "$$($(TESTTMP)/test_proctypedefault26 | tail -n 1)" "PROCTYPEDEFAULT OK"
+	@# ...and its control. Relaxing the indirect-call arity check from an
+	@# equality is what makes the rows above pass; if the relaxation is not
+	@# gated on ProcParamHasDefault they pass anyway, from a zeroed column, and
+	@# only THIS row fails. The parenless spelling is the sharper of the two.
+	! ./$(COMPILER) test/test_a_procedural_type_without_a_default_still_refuses_a_short_call_fail.pas $(TESTTMP)/test_nodefshort26 > $(TESTTMP)/nodefshort.log 2>&1 \
+	  || { echo "proc-type default: a short call to a proc type with NO default COMPILED"; exit 1; }
+	grep -q 'only a CALL when every parameter can default' $(TESTTMP)/nodefshort.log \
+	  || { echo "proc-type default: refused, but not by the parenless-call rule (an 'expected :=' here is the diagnostic this row exists for):"; cat $(TESTTMP)/nodefshort.log; exit 1; }
+	@echo "proc-type default control: OK"
 	@# bug-p-a-named-dynamic-array-default-declared-in-a-class-body-is-lost-if-the-implementation-omits-it
 	@# -- and it is ALSO the regression control for the row above. Teaching the
 	@# four parameter parsers about named array types made the declaration and
