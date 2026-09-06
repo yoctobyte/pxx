@@ -897,6 +897,7 @@ end;
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
+    rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
 begin
 {$ifdef FPC}
   { The exact-decimal core in exdec.inc is lib/rtl code, written for a runtime
@@ -2477,6 +2478,98 @@ begin
             ' eligible-param-loads+stores=', RegcallEligibleUses);
   end;
   if MeasureInline then InlineMeasureSummary;
+  { PXXDBG a.reclayout — the aggregate layout each frontend actually DECIDED,
+    read back out of the UClass/UFld tables that all five of them write into.
+
+    It exists because there was no observable at all for three of the five.
+    `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` says
+    so in its own obstacle line: each frontend's i386 layout is self-consistent,
+    so no pxx-only test can go red or green on the change, and NilPy, Rust and
+    Zig have no `sizeof`/`offsetof` spelling to ask with — measured, the three
+    parsers contain no size_of/offset_of/@sizeOf/@offsetOf at all. The C and
+    Pascal halves were provable only because they can export a symbol a gcc
+    `main` links against (test-record-abi-mixed-link); the other three cannot.
+
+    What settled the Pascal half was not a better argument, it was ONE COMPILER
+    DISAGREEING WITH ITSELF — `{int a; double y;}` came out 12/4 through
+    TypeFieldAlign and 16/8 through TypeAlign, same target, same invocation
+    family. This channel is that oracle made available to every frontend at
+    once: compile the same aggregate through each and compare the lines. The C
+    frontend's row is already pinned against gcc by test-record-abi-mixed-link,
+    so `R/Z/N agree with C` chains to the platform ABI without needing rustc or
+    zig on the box.
+
+    ONE PROBE, IN compiler.pas, AND NOT FIVE IN THE FRONTENDS. The tables are
+    the closed world here: whatever a frontend decided, it decided by writing
+    UClsSize_/UClsAlign and a field window, so walking `0..UClsCount-1` cannot
+    miss a frontend the way five hand-placed probes could. It is here rather
+    than in symtab.inc for the reason the a.rel8max block above records —
+    printing needs PxxDbgEnabled, and compiler.pas is the one file no mocked
+    test harness includes.
+
+    `falign` (member) and `salign` (storage) are BOTH printed beside `off`
+    because the whole defect is the two being conflated: a field sitting at an
+    offset its `falign` did not require, on a target where `salign` did, is the
+    bug with its own evidence on the line. Reading `off` alone cannot show it.
+
+    IT RUNS HERE, BEFORE THE WRITERS, AND THAT IS NOT A STYLE CHOICE. Field
+    names are TokChars slices, and `elfwriter.inc`'s MapAppendLine reuses
+    TokChars as a BOUNCE BUFFER for the .map file — deliberately, to keep the
+    map writer linear. Placed after the writer dispatch (where a.rel8max and
+    a.casebind legitimately sit, because they print only integers) every name
+    came out as a slice of the ELF writer's own strings: `fld=x` with the pool
+    around it reading `ess: 0x08048000`. It never errored and every OFFSET on
+    the line was correct, so the reading looked like a naming bug in the
+    frontends rather than a clobbered pool. Any future probe that renders a
+    TokChars slice has the same constraint.
+
+    TOTAL is the denominator, for the reason a.casebind's and a.wholearr's are:
+    a run that prints no rec= lines has either compiled a file with no
+    aggregates or died before layout, and those are different answers that both
+    print as silence. A FAILING compile never reaches here at all, so an absent
+    TOTAL means the file did not compile — it is not a zero. }
+  if PxxDbgEnabled('a.reclayout') then
+  begin
+    rlRecs := 0;
+    rlFlds := 0;
+    for rlCi := 0 to UClsCount - 1 do
+      if UClsFCount[rlCi] > 0 then
+      begin
+        WriteLn('PXXDBG a.reclayout rec=',
+                GetTokenStrFromRaw(UClsNOff[rlCi], UClsNLen[rlCi]),
+                ' size=', UClsSize_[rlCi], ' align=', UClsAlign[rlCi],
+                ' nf=', UClsFCount[rlCi]);
+        Inc(rlRecs);
+        for rlK := 0 to UClsFCount[rlCi] - 1 do
+        begin
+          rlFi := UClsFBase[rlCi] + rlK;
+          { A window may legitimately extend PAST the tail mid-parse -- the C
+            struct parser re-anchors UClsFBase while UClsFCount still holds a
+            previous definition's count, which AddUField's own comment records
+            and deliberately leaves alone. Nothing guarantees that state is
+            settled for every row by the time a DIAGNOSTIC walks the table, and
+            a debug channel that can index out of bounds is worse than no
+            channel. Say which row was short rather than reading past. }
+          if (rlFi < 0) or (rlFi >= UFldCount) then
+          begin
+            WriteLn('PXXDBG a.reclayout   fld=<out-of-window> idx=', rlFi,
+                    ' tail=', UFldCount);
+            Continue;
+          end;
+          WriteLn('PXXDBG a.reclayout   fld=',
+                  GetTokenStrFromRaw(UFldNOff[rlFi], UFldNLen[rlFi]),
+                  ' off=', UFldOff_[rlFi],
+                  ' tk=', UFldTk[rlFi],
+                  ' rec=', UFldRec_[rlFi],
+                  ' slot=', TypeSlotSize(IntToTypeKind(UFldTk[rlFi])),
+                  ' falign=', TypeFieldAlign(IntToTypeKind(UFldTk[rlFi])),
+                  ' salign=', TypeAlign(IntToTypeKind(UFldTk[rlFi])));
+          Inc(rlFlds);
+        end;
+      end;
+    WriteLn('PXXDBG a.reclayout TOTAL classes=', UClsCount,
+            ' with-fields=', rlRecs, ' fields=', rlFlds);
+  end;
   { All code is emitted and CodeLen is final; the ELF writer below derives
     dataBase from it. This is the one point where the libc syscall thunk can be
     appended -- EmitSyscall fires mid-routine, so the body cannot be emitted

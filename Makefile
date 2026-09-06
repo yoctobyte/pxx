@@ -28763,7 +28763,19 @@ test-emit-obj: $(COMPILER)
 	@# calls through a .data slot (DynCall), which are different arrays that
 	@# never pass through those emitters at all. The C row was green with five
 	@# absolute relocations still in this one.
-	readelf -rW $(TESTTMP)/test_emit_obj_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{exit (n+0)==0 ? 0 : 1}' || { echo "test-emit-obj: the Pascal i386 object still carries absolute .text relocations"; exit 1; }
+	@#
+	@# WHEN THIS ROW GOES RED, READ IT AS ADOPTION BEFORE YOU READ IT AS A
+	@# REGRESSION. `abs == 0` is a claim about the rewritable sites that ARISE
+	@# TODAY, not about the family: only the moffs shapes (A0-A3) announce
+	@# X386InstrStart via EmitMovGlobAcc, and every unannounced site still
+	@# REFUSES to rewrite -- by design, because a missing announcement leaves an
+	@# earlier, smaller offset and the guard fails closed. So the first time a
+	@# new emit site puts a displacement ending in $66/$67/$F0/$F2/$F3/$2E/$36/
+	@# $3E/$26/$64/$65 in front of a rewritable access, this row goes red with
+	@# nothing broken: one more site needs to call EmitMovGlobAcc. The natural
+	@# reading is "the PIE link regressed" and that reading costs a bisect.
+	@# fc000b076; bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix
+	readelf -rW $(TESTTMP)/test_emit_obj_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{exit (n+0)==0 ? 0 : 1}' || { echo "test-emit-obj: the Pascal i386 object still carries absolute .text relocations -- CHECK ADOPTION FIRST: an unannounced emit site refuses to rewrite by design, so this is one more site needing EmitMovGlobAcc before it is a regression"; exit 1; }
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -pie -Wl,-z,text $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_pie || { echo "test-emit-obj: the Pascal i386 .o FAILED to link as a hardened PIE"; exit 1; }; \
 	  readelf -d $(TESTTMP)/test_emit_obj_386_pie | grep -q TEXTREL && { echo "test-emit-obj: the Pascal i386 PIE carries DT_TEXTREL"; exit 1; }; \

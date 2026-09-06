@@ -4,7 +4,7 @@ prio: 45
 type: bug
 found: 2026-09-01
 found-by: frankC
-summary: "PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box."
+summary: "PASCAL DONE AND PROVEN; the THREE REMAINING HALVES ARE NOT ONE POPULATION and 2026-09-06 measured which is which. RUST AND ZIG ARE LATENT, NOT LIVE: both refuse every non-x86-64 target at the top of the parse (rparser.inc:5774, zparser.inc:1983) and TypeAlign only differs from TypeFieldAlign when TargetArch = TARGET_I386, so neither frontend can reach the defect today -- it is a trap for whoever lifts the target restriction, not a wrong answer anyone can obtain. NILPY IS REACHABLE AND MEASURED WRONG: `--target=i386`, one compiler, the aggregate {1-byte b; double y} comes out C `b@0 y@4 size 12`, Pascal `b@0 y@4 size 12`, NilPy `b@8 y@16 size 24` -- seven bytes of padding where falign=4 asks for three. THE OBSTACLE THIS TICKET WAS BUILT ON IS NOW FALSE: `PXXDBG=a.reclayout` (landed 2026-09-06) prints every aggregate the compile laid out straight out of the shared UClass/UFld tables, so all five frontends have a layout observable and the comparison is one compiler disagreeing with itself -- the same oracle that dissolved the Pascal fork -- with no export spelling and no rustc/zig needed. WHAT IS STILL HONESTLY OPEN FOR NILPY IS THE CLAIM, NOT THE READING: NilPy has no cdecl export and no ctypes (ProcCdecl is set only from cparser.inc and pasparser_*; pyparser.inc mentions neither), so nothing outside pxx reads a NilPy instance and the over-alignment costs SIZE today, not a wrong value. PASCAL DETAIL BELOW UNCHANGED. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box."
 status: working
 owner: frankA
 tags: [abi, i386, layout, record, mixed-link]
@@ -148,3 +148,128 @@ three provable, and here is the specific reason for each:
 So the honest next step for those three is an export spelling, not a layout
 edit. Landing the substitution unproven in three frontends is exactly what this
 ticket was filed to prevent.
+
+## 2026-09-06 (frankA) — THE OBSTACLE IS RETIRED, AND THE THREE REMAINING HALVES ARE NOT ONE POPULATION
+
+### What was blocking this, in the ticket's own words
+
+*"Each frontend's i386 layout is currently self-consistent, so no pxx-only test
+can go either red or green on the change"*, and the section above it: the honest
+next step is *an export spelling, not a layout edit*, because there is no `.o`
+with a callable symbol for a gcc `main` to link against.
+
+That is true about a MIXED LINK and it was never true about the LAYOUT. What the
+Pascal half was actually settled by is written two sections up and is not a link
+at all: **one compiler disagreeing with itself.** `{int a; double y;}` came out
+12/4 through pxx's C frontend and 16/8 through pxx's Pascal frontend, same
+target, same invocation family. The link is how that reading was *pinned*
+afterwards; it is not how it was obtained.
+
+The reason nobody could take that reading for N/R/Z is narrower than "no
+oracle": **there was no way to ask them what they decided.** Measured — zero
+occurrences of `size_of`, `offset_of`, `@sizeOf` or `@offsetOf` in
+`pyparser.inc`, `rparser.inc` and `zparser.inc`. No introspection, so no
+observable, so nothing to compare.
+
+### `PXXDBG=a.reclayout` is that observable, and it is one probe for all five
+
+Landed 2026-09-06. It walks the UClass/UFld tables at the end of the parse and
+prints every aggregate the compile laid out: record name, `size`, `align`, then
+per field `off`, `tk`, `slot`, `falign` (`TypeFieldAlign`, the member answer)
+and `salign` (`TypeAlign`, the storage answer).
+
+**One probe in `compiler.pas`, not five in the parsers, and that is the whole
+reason it works.** Every frontend records its decision by writing
+`UClsSize_`/`UClsAlign` and a field window into the same tables, so walking
+`0..UClsCount-1` is closed-world — it cannot miss a frontend the way five
+hand-placed probes could, and it needs no edit in any parser.
+
+`falign` and `salign` are printed side by side because the defect IS the two
+being conflated: a field at an offset only `salign` required is the bug with its
+own evidence on the line.
+
+### The measurement — `{1-byte b; double y}`, `--target=i386`, one compiler
+
+| frontend | `b` | `y` | size | verdict |
+| --- | --- | --- | --- | --- |
+| C (`char b; double y`) | 0 | **4** | 12 | agrees with gcc |
+| Pascal (`b: Boolean; y: Double`) | 0 | **4** | 12 | agrees with gcc |
+| NilPy (`self.b = True; self.y = 2.0`) | 8 | **16** | 24 | **7 bytes of padding where `falign=4` asks for 3** |
+| Rust | — | — | — | **cannot be asked** |
+| Zig | — | — | — | **cannot be asked** |
+
+(The NilPy row's `b` sits at 8 because an instance carries an 8-byte header on
+i386; the discriminator is the 8-byte step from `b` to `y` against C's 4. The
+`{int a; double y}` shape does NOT discriminate for NilPy — every NilPy integer
+is a 64-bit `tk=13`, so `y` lands at 16 under either rule. **A probe whose right
+answer collides with the failure value is not a probe**; the 1-byte-then-double
+shape is the one that separates them and the four-shape set the Pascal oracle
+uses does not contain it.)
+
+The x86-64 arm of the same fixtures: C and Pascal both 16/8, as they must be,
+which is what says the fixture measures LAYOUT and not something i386-shaped.
+
+### RUST AND ZIG ARE LATENT, NOT LIVE — and this reranks their half
+
+    pascal26:1: error: Rust frontend: only the x86-64 target is supported by the skeleton
+    pascal26:1: error: Zig frontend: only the x86-64 target is supported by the skeleton
+
+`rparser.inc:5774` and `zparser.inc:1983`, at the top of the parse. And
+`TypeFieldAlign` differs from `TypeAlign` **only** when
+`TargetArch = TARGET_I386`. So the two are composed: neither frontend can reach
+the defect, on any target, today.
+
+That is not "no oracle". It is **no reachable observable**, which is a different
+finding and it changes what these two halves are: a **trap for whoever lifts the
+target restriction**, not a wrong answer anybody can obtain. Substituting the
+call now is still the right edit — it is cheap, it is correct, and it costs the
+person who lifts the restriction nothing — but it must be recorded as
+*removing a trap*, never as *fixing a measured wrong answer*, because nothing
+today can distinguish the two and a later reader would inherit the stronger
+claim. Seven other frontends refuse the same way (`aparser`, `fparser`,
+`eparser`, `lparser`, `gparser`, `wparser`, plus the generator backend); this is
+a property of the skeleton set, not of R and Z.
+
+### NILPY IS REACHABLE — AND THE CLAIM IS SIZE, NOT A WRONG VALUE
+
+NilPy compiles for i386 and over-aligns, measured above. What it does NOT have
+is anyone outside pxx reading the result: `ProcCdecl` is set from `cparser.inc`
+and `pasparser_*` and nowhere else, and `pyparser.inc` contains no `ctypes`,
+`cdecl` or `Structure` surface at all. So today a NilPy instance's layout is
+read only by pxx, self-consistently, and the cost is **padding**, not a wrong
+`double`.
+
+**Saying so is the point.** The Pascal half's expensive row was the value round
+trip — C wrote at 4, Pascal read from 8, wrong `double`, no diagnostic. NilPy
+has no such row available and inventing one would be a positive control drawn
+from the wrong population. What makes it a correctness bug rather than a size
+one is any of: a NilPy export spelling, a `ctypes`-shaped struct interop, or a
+NilPy instance mapped onto foreign memory. None exists.
+
+`UClsAlign` for the NilPy class comes back as **1** while its fields are laid
+out on 8 — worth a look on its own; a record whose stated alignment is weaker
+than its own field placement is either a dead field or a second bug, and this
+note is not a diagnosis of which.
+
+### What the acceptance can be now, and it asserts a RELATION
+
+Not a per-target constant. **The same aggregate, compiled through each frontend
+for the same target, must produce the same field offsets** — no expected width
+anywhere, passes on every target, prints a different correct number on each.
+The chain to the platform ABI is already built: the C row is pinned against gcc
+by `test-record-abi-mixed-link`, so *"N (and later R, Z) agrees with C"* reaches
+the psABI without an export spelling, without `rustc --target
+i686-unknown-linux-gnu` and without `zig build-obj -target x86-i686-linux`.
+
+The positive control is free and already demonstrated: the pre-fix NilPy row
+comes out 8/16/24 against C's 0/4/12, on the shape that discriminates.
+
+### Not landed tonight, and the reason is timing rather than doubt
+
+A bounded landing quiet period is in force for `compiler/**`, `lib/**` and
+`test/**` until the next full tier publishes. The probe is landed (it is behind
+`PxxDbgEnabled` and changes no emitted byte); the `TypeAlign` -> `TypeFieldAlign`
+substitution in `pyparser.inc` (33794, 33873, 34071, 34612, 34769) and its
+fixture are the next landing, not a held decision. **`rparser.inc:447`
+(`RPayloadAlign`) still keeps `TypeAlign`** — it is a payload SLOT, storage and
+not a member, and that distinction is the whole bug.
