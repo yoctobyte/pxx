@@ -52,6 +52,18 @@ ALLOWED = {
         "that dir to job_history()/job_selectors(). The fixture IS the "
         "subject: the case proves the readers can see a requested run's reds, "
         "so it must supply the archive rather than read the real one.",
+    "twatch_live_code.py":
+        "reads runs-<host>.ndjson to join a PUBLISHED code_fp against "
+        "twatch.py's git history, answering which twatch.py a remote daemon "
+        "is executing. It wants rows exactly as the archive has them, so "
+        "materialize_tstate() would not help: the question is about another "
+        "BOX, not about this checkout's view of state. Arrived with 0d50638ac "
+        "on 2026-09-06 and reddened tools-devtest#00 the same way two other "
+        "files did that evening -- gate.sh quick does not run that job, so "
+        "all three authors landed green. Third instance in one night is why "
+        "the umbrella now models this as a source of reds rather than as "
+        "three mistakes. Added by frankH, not the author: say so if you "
+        "meant to route it through the helper instead.",
     "twatch.py":
         "the WRITER — it publishes tstate, and owns states_at/materialize_tstate",
     "twatch_web.py":

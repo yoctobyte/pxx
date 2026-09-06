@@ -6792,6 +6792,18 @@ def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
         f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
                             "full": tier == "full", "verdict": verdict,
                             "wall": report["wall"], "reds": sorted(reds),
+                            # WHICH HARNESS answered. The thin row carried no
+                            # code_fp, so the rows this comment's own fix made
+                            # checkable still could not say what produced them
+                            # -- and tools/twatch_live_code.py resolves a
+                            # running daemon's version by joining exactly this
+                            # field against twatch.py's history, so a row
+                            # without it is invisible to the one query that
+                            # asks whether a fix is live. A requested row is
+                            # the likeliest of all to be answered by a stale
+                            # daemon, because somebody asked for it now and
+                            # the daemon has been up since whenever.
+                            "code_fp": CODE_FP,
                             # provenance: this row is an ANSWER, not a rung of
                             # the ladder, so a reader counting ladder coverage
                             # can exclude it.
