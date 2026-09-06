@@ -285,9 +285,11 @@ end;
   temporary does not. }
 function PyGenArgNeedsCell(gpi, k: Integer): Boolean;
 begin
+  { UNDECIDED: an `array of Variant` generator parameter answers True on its
+    ELEMENT's kind. Same in the two siblings below. }
   Result := PyExprMode and (k < Procs[gpi].ParamCount) and
             Procs[gpi].Params[k].IsRef and
-            (Procs[gpi].Params[k].TypeKind = tyVariant);
+            (ParamStoredKind(gpi, k) = tyVariant);
 end;
 
 function GenMakeVariantArgCell(argNode: Integer; var preSeq: Integer): Integer;
@@ -368,7 +370,7 @@ function PasGenArgNeedsStrTemp(gpi, k: Integer): Boolean;
 begin
   Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
             (not Procs[gpi].Params[k].IsRef) and
-            (Procs[gpi].Params[k].TypeKind = tyAnsiString);
+            (ParamStoredKind(gpi, k) = tyAnsiString);
 end;
 
 { Does argument `k` of this generator need its ADDRESS taken?
@@ -396,7 +398,7 @@ function PasGenArgNeedsTemp(gpi, k: Integer): Boolean;
 begin
   Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
             (not Procs[gpi].Params[k].IsRef) and
-            (Procs[gpi].Params[k].TypeKind = tyVariant);
+            (ParamStoredKind(gpi, k) = tyVariant);
 end;
 
 { The INSTANCE OFFSET of generator argument `k` (1-based).
@@ -631,7 +633,9 @@ begin
                   ' paramsym=', Procs[gpi].Params[dbgK].SymIdx,
                   ' symgenslot=', SymGenSlot[Procs[gpi].Params[dbgK].SymIdx],
                   ' realoff=', SL_OFF_SLOTS + 8 * SymGenSlot[Procs[gpi].Params[dbgK].SymIdx],
-                  ' tk=', Ord(Procs[gpi].Params[dbgK].TypeKind));
+                  { STORED kind on purpose: a debug print wants the field as
+                    it is, not a refusal. }
+                  ' tk=', Ord(ParamStoredKind(gpi, dbgK)));
     end;
     if nargs >= 1 then
     begin

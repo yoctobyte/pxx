@@ -7582,7 +7582,7 @@ begin
           ASTTk[mcallNode] := Ord(Procs[rcPi].RetType);
           rcSelf := AllocNode(AN_INT_LIT);
           ASTIVal[rcSelf] := 0;
-          ASTTk[rcSelf] := Ord(Procs[rcPi].Params[0].TypeKind);
+          ASTTk[rcSelf] := Ord(ParamOwnKind(rcPi, 0));   { Self: never an array }
         end
         else
         begin

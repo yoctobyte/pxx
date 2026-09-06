@@ -1188,7 +1188,13 @@ begin
       to '' while the int/float/bool defaults beside it were all correct —
       which is exactly what made the class look like defaults work.
       bug-nilpy-dataclass-str-field-default-is-dropped }
-    if Procs[mpi].Params[k].TypeKind = tyAnsiString then
+    { UNDECIDED, and MEASURED REACHABLE 2026-09-06: `const a: TLA = nil` on a
+      named dynamic array is accepted by pxx AND by fpc 3.2.2 (both print
+      len=0), so every ParamStoredKind read in this default-value block can be
+      handed an array row whose kind is its ELEMENT's. Today that lands on the
+      INT_LIT arm below and tags a 0 with tyInteger, which happens to be right
+      because a dyn array is a pointer. Right by luck, not by rule. }
+    if ParamStoredKind(mpi, k) = tyAnsiString then
       ASTTk[exprNode] := Ord(tyAnsiString)
     else
       ASTTk[exprNode] := Ord(tyString);
@@ -1208,7 +1214,7 @@ begin
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(tySet);
   end
-  else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) and
+  else if isNilPy and (ParamStoredKind(mpi, k) = tyVariant) and
           (ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] or
            ((ProcUnitIdx[mpi] >= 0) and
             (not UnitIsPyModule(ProcUnitIdx[mpi])))) then
@@ -1230,7 +1236,7 @@ begin
       thing songformatter did at run time. }
     exprNode := PyMakeNone
   else if isNilPy and ProcParamDefaultIsBool[mpi * MAX_PROC_PARAMS + k] and
-          (Procs[mpi].Params[k].TypeKind = tyVariant) then
+          (ParamStoredKind(mpi, k) = tyVariant) then
   begin
     { `b=True` into a VARIANT parameter: recorded as the ordinal 1, and boxed as
       an integer the variant prints 1 rather than True. }
@@ -1242,7 +1248,7 @@ begin
   begin
     exprNode := AllocNode(AN_INT_LIT);
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
-    ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    ASTTk[exprNode] := Ord(ParamStoredKind(mpi, k));
     { A REFERENCE-shaped parameter's only constant default is `nil`, and the
       node has to be the one a WRITTEN nil argument builds -- INT_LIT 0 tagged
       tyPointer -- not the literal 0 wearing the parameter's own kind. Tagged
@@ -1259,7 +1265,7 @@ begin
       the parameter's own type it looked like a variant already, the boxing was
       skipped, and the callee dereferenced a bare ordinal — `def g(self, x,
       s=5)` called as `A().g(1)` segfaulted. }
-    if Procs[mpi].Params[k].TypeKind = tyVariant then
+    if ParamStoredKind(mpi, k) = tyVariant then
       ASTTk[exprNode] := Ord(tyInteger);
   end;
   DefaultArgValueNode := exprNode;
@@ -1513,7 +1519,11 @@ begin
   if Procs[aPi].ParamCount <> Procs[bPi].ParamCount then Exit;
   if Procs[aPi].ParamCount > MAX_PROC_PARAMS then Exit;
   for i := 0 to Procs[aPi].ParamCount - 1 do
-    if Procs[aPi].Params[i].TypeKind <> Procs[bPi].Params[i].TypeKind then Exit;
+    { STORED kind on purpose: this asks whether two rows are the SAME row,
+      and for two array parameters that question is about their elements.
+      ParamOwnKind here would answer tyUnknown on both sides and make every
+      pair of array parameters compare equal -- a widening, not a fix. }
+    if ParamStoredKind(aPi, i) <> ParamStoredKind(bPi, i) then Exit;
   Result := True;
 end;
 
@@ -2814,13 +2824,18 @@ var pe, ae: Integer;
 begin
   Result := False;
   if (pj < 0) or (pj >= MAX_PROC_PARAMS) then Exit;
-  if (argTk = tyAnsiString) and (Procs[pi].Params[pj].TypeKind = tyAnsiString) then
+  { UNDECIDED, both arms: an `array of AnsiString` (or `array of Pointer`)
+    parameter reaches these tests on its ELEMENT's kind and is then compared
+    against the argument's string width or pointee. Own-kind is the question
+    being asked; the element kind is what answers. Not converted -- see the
+    ticket's suspect list. }
+  if (argTk = tyAnsiString) and (ParamStoredKind(pi, pj) = tyAnsiString) then
   begin
     Result := StrElemIsWide(ASTStrElemTkOf(node)) <>
               StrElemIsWide(ProcParamStrElemTk[pi * MAX_PROC_PARAMS + pj]);
     Exit;
   end;
-  if (argTk = tyPointer) and (Procs[pi].Params[pj].TypeKind = tyPointer) then
+  if (argTk = tyPointer) and (ParamStoredKind(pi, pj) = tyPointer) then
   begin
     pe := ProcParamPtrElemTk[pi * MAX_PROC_PARAMS + pj];
     ae := Ord(NodePtrElemTkCertain(node, argTk));
@@ -3189,8 +3204,7 @@ begin
               okBr := False
             else
             begin
-              if (not Procs[pi].Params[pj].IsArray) and
-                 (Procs[pi].Params[pj].TypeKind = tySet) then vetoed := True;
+              if ParamOwnKind(pi, pj) = tySet then vetoed := True;
               if not Procs[pi].Params[pj].IsArray then okBr := False;
             end;
           end;
@@ -3281,14 +3295,18 @@ begin
     begin
       pj := OverloadArgParamIdx(pi, base, j, argKwTok[j]);
       if (pj < base) or (pj >= MAX_PROC_PARAMS) then continue;   { abstain: see the helper }
-      rank := OverloadArgRank(Procs[pi].Params[pj].TypeKind, argTk[j]);
+      { STORED kind on purpose: an array parameter is ranked by its ELEMENT
+        against an argument that carries the same element tag, which is how
+        `Test(la)` separates from `Test(array of LongInt)` at all. The two
+        meanings are both wanted here, one per IsArray state. }
+      rank := OverloadArgRank(ParamStoredKind(pi, pj), argTk[j]);
       { CLASS-IDENTITY-aware refinement: two tyClass params tie at rank 0, so
         `Add(TJSONData)` vs `Add(TJSONObject)` picked whichever was declared
         first regardless of the argument's class. FPC picks the EXACT class,
         accepts an up-cast to an ancestor as merely compatible, and rejects an
         unrelated class. Both recs must be known — REC_NONE (nil, untagged)
         keeps the kind-level rank. (bug-pascal-overload-impl-decl-signature-match) }
-      if (rank < 3) and (Procs[pi].Params[pj].TypeKind = tyClass) and
+      if (rank < 3) and (ParamStoredKind(pi, pj) = tyClass) and
          (argTk[j] = tyClass) then
       begin
         pRec := ProcParamRecId[pi * MAX_PROC_PARAMS + pj];
@@ -3838,7 +3856,8 @@ begin
     score := 0;
     for j := 0 to nArgs - 1 do
     begin
-      rank := OverloadArgRank(Procs[pi].Params[1 + j].TypeKind, argTk[j]);
+      { STORED kind on purpose -- see the twin in FindUMethOverloadAhead. }
+      rank := OverloadArgRank(ParamStoredKind(pi, 1 + j), argTk[j]);
       { see the twin site in FindUMethOverloadAhead: two tyPointer (or two
         tyAnsiString) parameters tie at rank 0, and the part that separates them
         is not on the kind. }
@@ -4023,7 +4042,14 @@ function ParamIsConstVariant(pi, slot: Integer): Boolean;
 begin
   Result := (pi >= 0) and (slot >= 0) and (slot < MAX_PROC_PARAMS) and
             (slot < Procs[pi].ParamCount) and
-            (Procs[pi].Params[slot].TypeKind = tyVariant) and
+            { STORED kind, and it answers True for `const a: array of Variant`
+              because that is the ELEMENT's kind. RIGHT FOR THE WRONG REASON and
+              deliberately left: the one caller asks "may an expression bind
+              here", and an array-of-Variant parameter is not a var-binding
+              target either. Correcting it changes pyparser.inc, which calls
+              this from five sites, for no measured reason.
+              refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither }
+            (ParamStoredKind(pi, slot) = tyVariant) and
             ProcParamIsConst[pi * MAX_PROC_PARAMS + slot];
 end;
 

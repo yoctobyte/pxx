@@ -9712,6 +9712,64 @@ begin
   Result := False;
 end;
 
+{ THE PARAMETER ROW'S KIND FIELD ANSWERS TWO QUESTIONS UNDER ONE NAME, and the
+  three accessors below are the only spellings that say which one they mean.
+
+    Procs[pi].Params[j].IsArray = False  ->  TypeKind is the PARAMETER's kind
+    Procs[pi].Params[j].IsArray = True   ->  TypeKind is its ELEMENT's kind
+
+  Nothing enforces the pairing and the field name carries no hint of it, so a
+  caller who did not know there was a question gets a PLAUSIBLE wrong answer.
+  Five landed defects came from exactly that, from three seats in one day: a
+  default-value check that saw a string parameter where `array of string` was
+  declared and then let the callee read a frozen literal's prefix as a length;
+  two bracket-argument arms that sent every `[...]` to the TVarRec builder; an
+  open array and a named dynamic array stored with the same element kind and
+  the same IsArray bit, so they were ONE signature; and one probe that skipped
+  arrays on one line and asked about them BY TYPE two lines later, refusing
+  `i.A(t)` and segfaulting on `i.A(nil)` off the same row.
+
+  WHY ACCESSORS THAT REFUSE RATHER THAN A SHARED PREDICATE (frankD, seconded by
+  frankS): a predicate can be called correctly and still be handed the wrong
+  field. `ParamOwnKind` returning tyUnknown for an array parameter cannot give a
+  plausible answer to a caller asking the wrong question; that is the property
+  the raw field lacks, and it is the whole point.
+
+  ParamStoredKind IS THE RAW FIELD AND SAYS SO. It exists so that a site which
+  genuinely wants the union -- a signature comparison, a debug print -- can say
+  that, and so that a site nobody has decided yet is GREPPABLE rather than
+  invisible. It is not a fourth meaning; it is the absence of a decision, named.
+  All three bound only by MAX_PROC_PARAMS and not by ParamCount, deliberately:
+  several callers read a slot past ParamCount and a bound here would change
+  their answers, which would make this refactor a behaviour change. }
+function ParamStoredKind(pi, j: Integer): TTypeKind;
+begin
+  Result := tyUnknown;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  Result := Procs[pi].Params[j].TypeKind;
+end;
+
+function ParamOwnKind(pi, j: Integer): TTypeKind;
+{ The parameter's OWN kind, or tyUnknown when the row holds an element kind. }
+begin
+  Result := tyUnknown;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if Procs[pi].Params[j].IsArray then Exit;
+  Result := Procs[pi].Params[j].TypeKind;
+end;
+
+function ParamElemKind(pi, j: Integer): TTypeKind;
+{ The ELEMENT's kind, or tyUnknown when the parameter is not an array. }
+begin
+  Result := tyUnknown;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if not Procs[pi].Params[j].IsArray then Exit;
+  Result := Procs[pi].Params[j].TypeKind;
+end;
+
 function ProcParamIsInterface(procIdx, j: Integer): Boolean;
 { True iff parameter j of proc procIdx is a CORBA interface type (a fat-pointer
   record), so overload matching can accept a class argument that implements it.

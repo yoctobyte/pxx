@@ -3,13 +3,13 @@ slug: refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-th
 track: P
 type: refactor
 prio: 45
-status: backlog
+status: done
 created: 2026-09-06
 found-by: frankB
-owner: ""
+owner: frankB
 blocked-by: []
 title: "`Params[j].TypeKind` means two different things depending on `IsArray`, and a caller that reads it alone gets a plausible wrong answer"
-summary: "THREE SEATS HIT THIS IN ONE DAY FROM THREE DOORS, which is the argument for the shape of the fix rather than for another predicate. `Procs[pi].Params[j].TypeKind` is the parameter's OWN kind when `Params[j].IsArray` is False and its ELEMENT kind when True; the field name says neither, and nothing refuses a caller that reads it without asking. Verified at pasparser_proc.inc ~1235 (frankS): the named-array-type arm sets `tk := IntToTypeKind(ArrTypeElemTk[paramAi])` alongside `isArr := True`, and that tk is what reaches Params[i].TypeKind. Three landed instances: the parameter default-value check read TypeKind alone and saw a string parameter where an `array of string` was declared (bug-p-a-default-value-is-accepted-on-an-open-array-parameter, closed 2026-09-06); two bracket-argument arms guarded on IsArray alone and sent every `[...]` to the TVarRec builder (bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path, closed 2026-09-06); and an open array and a named dynamic array are stored with the same element kind and the same IsArray bit, so they are ONE signature to FindProcOverloadRec (bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature, open). THE REMEDY IS AN ACCESSOR THAT REFUSES, NOT A PREDICATE (frankD, seconded by frankS): a predicate can be called correctly and still be handed the wrong field, while `ParamOwnKind(pi, j)` returning tyUnknown for an array parameter cannot give a plausible answer to a caller asking the wrong question. NOT A ONE-SITTING CHANGE and that is why it is a ticket. THE NUMBER TO CARRY IS 30 AND IT COMES WITH ITS GREP: `grep -nE '\.Params\[[^]]*\]\.TypeKind' compiler/pasparser_*.inc | grep -vE '\.TypeKind[[:space:]]*:='` = 30 read lines, 0 assignment targets, 0 in comments (call 13, lval 10, stmt 4, name 2, expr 1); frank-coordinator's comment-aware scanner says 31 for the same population and the difference is regex breadth around the subscript. That is the population all three known bugs came from and it is the tractable first increment. THE WHOLE-TREE FIGURE IS SCALE, NOT EVIDENCE, AND FOUR SEATS PRODUCED FOUR OF IT IN ONE DAY: ~18 (filed here), 209 (frankS), 266 (both of us), 263 (frank-coordinator, comment-aware -- 272 mentions, 6 in comments, 3 assignment targets). The 18 and the 209 were one defect, a filter dropping `x := Procs[..].Params[i].TypeKind`, which is a READ; the coordinator's first predicate had a third variant of it. THE 266 AGREED BECAUSE IT WAS ONE METHOD RUN TWICE -- neither of us had written the filter down, so neither could compare filters, only totals (frankS: a second source that produces a NUMBER has to publish its PREDICATE). The disposition never depended on any of them: 'more than one sitting' was true at 18 and is true at 263. THE LOAD-BEARING CLAIM IS STILL UNCHECKED -- 'many of these legitimately want the element kind' decides the ORDER of the work and nobody has read the 143 ir*/abi lines to find out. 'Zero name IsArray on the same line' is NOT evidence for it: frankS re-derived 0 over the full population and over the 57 dropped reads, so it is accidentally safe rather than actually checked. The honest version is the coordinator's five-line proximity proxy -- IR+lowering 64/142, symtab 9/32, other frontends 9/56, pasparser_* 4/30 (re-derived here; theirs 4/31) -- which is the ranking argument and is a proxy, not the claim."
+summary: "`Procs[pi].Params[j].TypeKind` is the parameter's OWN kind when `Params[j].IsArray` is False and its ELEMENT kind when True; the field name says neither, and five landed defects from three seats in one day came from a caller reading one half. DONE for the `pasparser_*` increment 2026-09-06 (frankB): raw readers there are now **0** (was 23 lines / 24 occurrences). THREE accessors in symtab.inc, not two — `ParamOwnKind` (tyUnknown when IsArray), `ParamElemKind` (tyUnknown when not), and `ParamStoredKind`, the raw field named to say it is the union. The third is what makes the refactor honest: most sites cannot be DECIDED without a behaviour change nobody has evidence for, so the choice was leaving raw reads a newcomer copies, or smuggling behaviour changes under a rename. `ParamStoredKind` is the absence of a decision, named and greppable. Seven decided conversions, each exact by construction; the rest annotated in place as deliberate-union (4) or suspect (12). ABLATION RUN: `ParamElemKind`'s refusal is load-bearing — removing it segfaults `ifclist.pas` in `run_fgl_corpus.sh`, which `--tier quick` does NOT see — while `ParamOwnKind`'s refusal is INERT at all four of its sites and is recorded as such rather than credited. One suspect was measured reachable: `const a: TLA = nil` on a named dynamic array compiles under both compilers, so the default-value block does get an array row and tags its 0 with tyInteger, right only because a dyn array is a pointer. REMAINING: symtab.inc 32, IR+lowering 142, other frontends 56; the accessors are visible to all of them."
 ---
 
 # One field, two meanings, no refusal
@@ -258,3 +258,110 @@ explicitly.
 Found by three seats on 2026-09-06: frankB (default values, bracket arguments),
 frankD (the slot-mask work and the accessor design), frankS (signature identity,
 and the `pasparser_proc.inc` verification of the two meanings).
+
+## Done for the `pasparser_*` increment — 2026-09-06 (frankB), compiler `b50b1643e1a8`
+
+`grep -nE '\.Params\[[^]]*\]\.TypeKind' compiler/pasparser_*.inc` is now **0**.
+It was 23 lines / 24 occurrences (the extra is the two reads on one line in the
+signature comparison). `gate.sh quick` GREEN, FPC seed canary included; the three
+bodies sit in `symtab.inc` above every `pasparser_*` caller, so no forward
+declaration is needed and the canary confirms it.
+
+### THREE accessors, not two, and the third is the load-bearing one for a REFACTOR
+
+`ParamOwnKind` and `ParamElemKind` are as specified above. The third is
+`ParamStoredKind` — the raw field, named to say it is the union.
+
+Without it this ticket cannot be finished honestly. Two accessors let a site be
+converted only when its question has been DECIDED, and most of these sites cannot
+be decided without a behaviour change nobody has evidence for. The choice was
+then between leaving 23 raw reads (so a new reader copies one and the refactor
+buys nothing) and converting them anyway (so the refactor smuggles in behaviour
+changes under a rename). `ParamStoredKind` is the third option: **the absence of
+a decision, named and greppable.** A new reader now has to pick one of three
+names, each of which says which question it answers, and the remaining work is a
+grep for one identifier rather than a re-derivation of the population.
+
+### Seven DECIDED conversions, each behaviour-preserving by construction
+
+| site | to | why it is exact |
+| --- | --- | --- |
+| `pasparser_lval.inc` bracket door | `ParamElemKind` | guarded by `ParamIsOpenArrayScalar` one line up |
+| `ParamIsVarRecArrayAt` | `ParamElemKind` | replaced `IsArray and (TypeKind = tyRecord)` — the accessor's refusal IS that conjunct |
+| `ParamIsOpenArrayScalarAt` | `ParamElemKind` | `<> tyRecord`, so the `IsArray` guard STAYS: tyUnknown `<>` tyRecord is True and dropping it would have been a widening |
+| bracket-slot set veto (`pasparser_call.inc`) | `ParamOwnKind` | replaced `(not IsArray) and (TypeKind = tySet)` |
+| `hasSet` scan (`pasparser_lval.inc`) | `ParamOwnKind` | same shape |
+| two `Params[0]` Self tags (lval, expr) | `ParamOwnKind` | Self is never an array |
+
+The third row is the one worth reading: **an accessor that refuses is only a
+drop-in for an `=` test.** On a `<>` test the refusal answers tyUnknown, which
+satisfies the inequality, so the guard has to stay. That is the same near-miss as
+a narrowing wearing a widening's message, one type family over.
+
+### ABLATION, RUN AND NOT ASSUMED — and only one of the two refusals is covered
+
+Each refusal removed in turn, compiler rebuilt each time:
+
+| ablation | `--tier quick` | `run_fgl_corpus.sh` |
+| --- | --- | --- |
+| `ParamElemKind` stops refusing | GREEN | **RED — `ifclist.pas` exit 139** |
+| `ParamOwnKind` stops refusing | GREEN | GREEN |
+| both | GREEN | RED (the same row) |
+
+So `ParamElemKind`'s refusal is load-bearing today and the corpus is the only
+instrument that sees it — `quick` does not. **`ParamOwnKind`'s refusal is
+INERT**, at all four of its sites, and two of them (`Params[0]` is Self) are inert
+by construction and always will be. Recorded rather than papered over: an
+attempt to build a row that discriminates it (an `array of <set>` parameter at a
+bracket slot, so the veto would fire without the refusal) did not move the
+answer, because the narrowing already declines when two array candidates share
+the slot. `ParamOwnKind` earns its place as the thing a FUTURE caller cannot get
+a plausible wrong answer out of, which is the ticket's thesis — not as a fix.
+
+### The undecided sites, annotated in place, and one is measured reachable
+
+Each remaining `ParamStoredKind` read now carries a comment saying which question
+it asks. Two categories:
+
+**Deliberate union reads, annotated so nobody "fixes" them:** the signature
+equality test (`ParamOwnKind` there would make every pair of array parameters
+compare equal — a widening), the two `OverloadArgRank` sites (an array parameter
+is ranked by its element against an argument carrying the same element tag, which
+is how a named dyn array separates from an open array at all), `ParamIsConstVariant`
+(right for the wrong reason, and correcting it changes `pyparser.inc`'s five
+callers for no measured reason), and the `PXXDBG` print.
+
+**Suspects — the site means the parameter's OWN kind and an array row answers on
+its element:** `ParamTakesCharLitAsStr` and the Char-literal refusal beside it
+(`array of string` carries tyString); `OverloadArgElemMismatch`, both arms
+(`array of AnsiString` / `array of Pointer`); the PChar→string and
+WideChar→UTF8 wrappers; the procedural-designator arm; the three generator-argument
+predicates (`array of Variant`, `array of AnsiString`). None converted: each is a
+behaviour change with no probe asking for it.
+
+**The default-value block is the one with a measurement.** It was left as a
+suspect and then made reachable rather than theoretical:
+
+```pascal
+procedure P1(const a: TLA = nil);     { TLA = array of LongInt }
+```
+
+compiles under pxx AND under fpc 3.2.2, both printing `len=0`. So an array row
+whose kind is its ELEMENT's does reach every read in that block; today it lands
+on the `AN_INT_LIT` arm and tags a 0 with tyInteger, which is right only because
+a dynamic array is a pointer. **Right by luck, not by rule** — the same shape as
+`ParamIsConstVariant`, and the reason this ticket wanted an accessor rather than
+a predicate.
+
+### What is left
+
+`symtab.inc` 32 reads, IR + lowering 142, other frontends 56. The accessors are
+declared where all of those can see them. The load-bearing claim in this ticket —
+*"many of these legitimately want the element kind"* — is still unchecked and this
+increment did not check it; what it did establish is that in `pasparser_*` the
+split is **7 decided, 4 deliberately union, 12 suspect**, which is not the ratio
+the proximity proxy predicted and is a reason to read the IR sites rather than
+assume them.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

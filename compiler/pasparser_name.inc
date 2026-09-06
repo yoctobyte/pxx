@@ -811,7 +811,11 @@ begin
   ParamTakesCharLitAsStr := False;
   if (cpi < 0) or (cpi >= ProcCount) then Exit;
   if (pi < 0) or (pi >= MAX_PROC_PARAMS) or (pi >= Procs[cpi].ParamCount) then Exit;
-  tk := Procs[cpi].Params[pi].TypeKind;
+  { UNDECIDED. This means the parameter's OWN kind: for `array of string`
+    the row holds tyString, so a Char literal at that slot is taken as a
+    string on the strength of the ELEMENT. Not converted because the change
+    is behavioural and no probe wants it yet. See the ticket's suspect list. }
+  tk := ParamStoredKind(cpi, pi);
   if TypeIsFrozenString(tk) then
   begin
     ParamTakesCharLitAsStr := True;
@@ -984,7 +988,7 @@ begin
   if (argNode >= 0) and (IntToTypeKind(ASTTk[argNode]) = tyChar) and
      (cpi >= 0) and (cpi < ProcCount) and
      (pi >= 0) and (pi < Procs[cpi].ParamCount) and
-     (not TypeIsFrozenString(Procs[cpi].Params[pi].TypeKind)) and
+     (not TypeIsFrozenString(ParamStoredKind(cpi, pi))) and
      (not CProgramMode) and (not PyExprMode) then
     Error('argument type: a Char VALUE is not a PChar — only a character '
           + 'CONSTANT converts (fpc refuses this too)');

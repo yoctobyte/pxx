@@ -130,7 +130,7 @@ begin
   if ParamIsVarRecArray(procIdx, slotIdx) then
     Result := ParseVarRecLiteralAST
   else if ParamIsOpenArrayScalar(procIdx, slotIdx) then
-    Result := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
+    Result := ParseArrayCtorAST(ParamElemKind(procIdx, slotIdx),
       OpenArrayCtorRowLen(procIdx, slotIdx),
       ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx]);
 end;
@@ -1807,7 +1807,7 @@ begin
               by-value dummy the static body may not read. }
             mselfArg := AllocNode(AN_INT_LIT);
             ASTIVal[mselfArg] := 0;
-            ASTTk[mselfArg] := Ord(Procs[mpi].Params[0].TypeKind);
+            ASTTk[mselfArg] := Ord(ParamOwnKind(mpi, 0));   { Self: never an array }
           end
           else
           begin
@@ -4437,8 +4437,7 @@ begin
     element type is a record is, in this dialect, only ever `array of const`. }
   Result := (procIdx >= 0) and (TVarRecId <> REC_NONE) and
             (argNo >= 0) and (argNo < Procs[procIdx].ParamCount) and
-            Procs[procIdx].Params[argNo].IsArray and
-            (Procs[procIdx].Params[argNo].TypeKind = tyRecord);
+            (ParamElemKind(procIdx, argNo) = tyRecord);
 end;
 
 function AbsorbVariadicTailArgs(mpi, lastArg: Integer): Boolean;
@@ -4570,8 +4569,7 @@ begin
   begin
     if ParamIsVarRecArrayAt(i, argNo) then hasVarRec := True
     else if (argNo >= 0) and (argNo < Procs[i].ParamCount) and
-            (not Procs[i].Params[argNo].IsArray) and
-            (Procs[i].Params[argNo].TypeKind = tySet) then hasSet := True;
+            (ParamOwnKind(i, argNo) = tySet) then hasSet := True;
     i := ProcHashNext[i];
   end;
   Result := hasVarRec and not hasSet;
@@ -4602,7 +4600,7 @@ begin
   Result := (procIdx >= 0) and (argNo >= 0) and
             (argNo < Procs[procIdx].ParamCount) and
             Procs[procIdx].Params[argNo].IsArray and
-            (Procs[procIdx].Params[argNo].TypeKind <> tyRecord);
+            (ParamElemKind(procIdx, argNo) <> tyRecord);
 end;
 
 function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer;
@@ -7613,9 +7611,12 @@ begin
         for i := 0 to nArgs-1 do
         begin
           exprNode := ASTLeft[currArg];
+          { UNDECIDED: `array of string` carries tyString here, so a PChar
+            argument at that slot would be wrapped on the ELEMENT's kind.
+            Same shape in the widechar twin below. }
           if IsNodePChar(exprNode) and
-             ((Procs[pi].Params[i].TypeKind = tyString) or
-              (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
+             ((ParamStoredKind(pi, i) = tyString) or
+              (ParamStoredKind(pi, i) = tyAnsiString)) then
             ASTLeft[currArg] := WrapPCharToString(exprNode);
           currArg := ASTRight[currArg];
         end;
@@ -7655,8 +7656,8 @@ begin
         begin
           exprNode := ASTLeft[currArg];
           if (NodeIsWideCharVal(exprNode) or (argTypes[i] = tyUInt16)) and
-             ((Procs[pi].Params[i].TypeKind = tyString) or
-              (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
+             ((ParamStoredKind(pi, i) = tyString) or
+              (ParamStoredKind(pi, i) = tyAnsiString)) then
             ASTLeft[currArg] := WrapWideCharToUTF8(exprNode);
           currArg := ASTRight[currArg];
         end;
@@ -7706,7 +7707,7 @@ begin
     exprNode := ASTLeft[currArg];
     sidx := Procs[pi].Params[i].SymIdx;
     if procCand[i] and
-       ((Procs[pi].Params[i].TypeKind = tyPointer) or
+       ((ParamStoredKind(pi, i) = tyPointer) or
         (ProcParamProcSig[pi * MAX_PROC_PARAMS + i] >= 0) or
         ((sidx >= 0) and (SymProcSig[sidx] >= 0))) then
     begin
