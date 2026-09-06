@@ -21,9 +21,17 @@ program test_mgmt_operators;
   What the `Mk` block DOES pin down is shared with FPC: the function's own
   Result slot is not initialized on entry.
 
-  Not exercised because pxx refuses them outright rather than silently skipping
-  them: an array of a managed record, and a record or class with a managed
-  record FIELD — feature-pascal-management-operators-nested-and-array. }
+  Not exercised HERE, because they have their own fixtures now: a record with a
+  managed record FIELD at any depth (test_mgmt_operators_nested_field) and an
+  array of a managed record, local and global
+  (test_mgmt_operators_array, _global_array).
+
+  Still refused outright rather than silently skipped, each naming
+  feature-pascal-management-operators-nested-and-array: a DYNAMIC or
+  MULTI-DIMENSIONAL array, a record holding a managed record behind an ARRAY
+  field, and a CLASS field — the last is not the same shape at all, since fpc
+  runs a class field's Initialize in Create and its Finalize in Free, which is
+  not a scope lifetime. }
 {$mode objfpc}{$H+}{$modeswitch advancedrecords}
 uses SysUtils;
 

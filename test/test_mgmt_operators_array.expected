@@ -1,0 +1,17 @@
+init Foo 0
+init Foo 1
+init Foo 2
+body 012
+fin  Foo 0
+fin  Foo 1
+fin  Foo 2
+init Foo 3
+init Bar 4
+init Foo 5
+init Bar 6
+bodyQ 3546
+fin  Bar 4
+fin  Foo 3
+fin  Bar 6
+fin  Foo 5
+done

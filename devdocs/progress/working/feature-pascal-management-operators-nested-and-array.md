@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: frankA
 blocked-by: []
-summary: "PARTLY DONE 2026-09-06 (frankA): a FIELD of a RECORD that contains a managed record now works at any depth, matching fpc including the order, which is not uniform -- Initialize is POST-order across nesting levels, Finalize is PRE-order, and both go forward in declaration order within a level. STILL REFUSED: an ELEMENT of an array of a managed record, an ARRAY FIELD inside a record, and a CLASS field. THE CLASS CASE IS NOT THIS DESUGAR'S JOB and the ticket said it was: measured, fpc runs a class field's Initialize inside Create and its Finalize inside Free, so a scope-bound try/finally would finalize a live heap object at every scope exit and never run for one that outlives the scope -- it belongs on the constructor and destructor paths. THE CORPUS CITATION BELOW IS ALSO MIS-AIMED: tmoperator4's TA/TB are CLASSES, so it is the class row, and the record nested-field arm that just landed had no corpus row at all. Refused rather than skipped, by design -- a declared invariant that simply never runs is a plausible wrong value far from the cause. fpc 3.2.2 does all three. The fix generalises WrapManagementOpsRange from per-SYMBOL to per-LVALUE-node: a field path for the nested case, a synthesised `for i := lo to hi` for the static array; the DYNAMIC array and class-instance-field cases are the RTTI walk fpc uses and belong to [[feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]]. CORPUS EVIDENCE, measured 2026-09-06 at 88a0b3d93835: fpc testsuite tmoperator4 (line 81, the nested-field arm) and tmoperator7 (line 101, the array arm) stop on this ticket's own two refusal strings -- two of the six live tmoperator rows, one for each arm, which is why both arms are in one ticket. tmoperator7 only reaches line 101 since the class-operator scope fix landed the same day; before it, the row stopped at line 29 on `undefined variable (InitializeCount)` and was skipped as a management-operator row for a defect that was nothing of the kind."
+summary: "PARTLY DONE 2026-09-06 (frankA): a managed record reached through a FIELD at any depth, and through an ELEMENT of a FIXED one-dimensional array, are both initialized and finalized now -- local and global. STILL REFUSED, each with its own fixture naming why: a DYNAMIC array (its extent is a runtime length the desugar cannot read), a MULTI-DIMENSIONAL one (the synthesised loop is 1-D), a record holding a managed record behind an ARRAY field, and a CLASS field. THE CLASS CASE IS NOT THIS DESUGAR'''S JOB and the ticket said it was: measured, fpc runs a class field'''s Initialize inside Create and its Finalize inside Free, so a scope-bound try/finally would finalize a live heap object at every scope exit and never run for one that outlives the scope -- it belongs on the constructor and destructor paths. THE ORDER IS NOT UNIFORM AND THIS TICKET HAD ONE OF THE TWO RULES WRONG: across NESTING levels Initialize is POST-order and Finalize is PRE-order, but ACROSS ARRAY ELEMENTS both run ASCENDING -- fpc does not reverse an array on the way out. The Symptom section above claimed `fin 3 / fin 0`, i.e. descending, and that is refuted by fpc 3.2.2'''s own output in test_mgmt_operators_array.expected. THE GLOBAL ARRAY DIVERGES FROM FPC IN BOTH DIRECTIONS AND DELIBERATELY: measured, fpc runs NOTHING for a global array (`body 000`) while it does run Initialize for a plain global record, so its omission is about the array and leaves a declared invariant that never runs; we initialize, and we finalize, the latter being the already-chosen position for the non-array case. CORPUS: tmoperator7 advanced from line 101 to line 117 and still stops on this ticket -- its array is DYNAMIC (SetLength), so the fixed-array arm that landed cannot clear that row. tmoperator4'''s TA/TB are CLASSES, so it is the class row, and the record nested-field arm had no corpus row at all. Refused rather than skipped, by design -- a declared invariant that simply never runs is a plausible wrong value far from the cause."
 ---
 
 # Management operators do not reach an array element or a nested field
@@ -33,7 +33,14 @@ record type. It does not fire for:
 Measured against FPC 3.2.2, which does all three:
 
     var b: TBar;              ->  init / ... / fin 7
-    var arr: array[0..1] ...  ->  init / init / ... / fin 3 / fin 0
+    var arr: array[0..1] ...  ->  init 0 / init 1 / ... / fin 0 / fin 1
+
+The second row read `fin 3 / fin 0` until 2026-09-06 — descending, which is
+what a scope-exit rule looks like if you assume arrays unwind the way locals
+appear to. **fpc does not reverse array elements.** Corrected against 3.2.2's
+own output, which is now `test/test_mgmt_operators_array.expected` byte for
+byte. The pre/post-order rule that DOES hold across nesting levels is a
+different rule and still applies within each element.
 
 ## Why it is refused rather than skipped
 
@@ -161,3 +168,75 @@ implements the thing, and it is the one kind of test whose failure means
 `test_mgmt_operators_class_field_refused` covers the class one, with the
 Create/Free measurement in its header so the next reader does not fold it back
 in.
+
+## 2026-09-06 (frankA) — the FIXED-ARRAY arm lands, and what it is refuted by
+
+**Done: `arr: array[lo..hi] of TFoo` initializes and finalizes every element**,
+as a proc local and as a program global, matching fpc 3.2.2 byte for byte for
+the local case (`test_mgmt_operators_array`).
+
+`AppendManagedArrayOps` synthesises `k := lo; while k <= hi do begin <element
+ops>; k := k + 1 end`. The element ops are **the same `AppendManagedFieldOps`
+walk a plain record local gets**, over an `AN_INDEX` base instead of an
+identifier — so an array of records that themselves hold managed fields works
+without a second mechanism, and the nesting order rule keeps applying inside
+each element.
+
+### The order, measured before it was written
+
+fpc 3.2.2, `b: array[0..1] of TBar` where `TBar` has both its own operators and
+a `TFoo` field:
+
+    init Foo 3 / init Bar 4 / init Foo 5 / init Bar 6
+    fin  Bar 4 / fin  Foo 3 / fin  Bar 6 / fin  Foo 5
+
+Two rules, and they are not the same rule:
+
+- **across ARRAY ELEMENTS: ascending, both directions.** `b[0]` finalizes before
+  `b[1]`. Nothing is reversed on the way out.
+- **within one element: post-order in, pre-order out** — the nesting rule this
+  ticket already had, unchanged.
+
+The ticket's own Symptom section predicted descending and has been corrected
+in place. A test asserting only that both elements ran would have passed either
+way, which is why every row prints a distinguishable number.
+
+### Two things the fixture is aimed at that a smaller one would miss
+
+**SOURCE index space.** `test_mgmt_operators_array` declares `array[3..5]`, not
+`array[0..2]`. The loop builds an `AN_INDEX` node read exactly the way `a[3]` in
+the source is, so it must run 3..5. A loop hard-coded to `0..n-1` is correct for
+every 0-based declaration — which is every array anyone writes by reflex — and
+silently initializes three slots that are not the array's for the other one.
+The bounds come off the symbol: `ConstVal` is the LOW bound (AllocArray stores
+it there) and `ArrLen` the extent.
+
+**The refusal and the emission are one predicate.** `SymIsLoopableManagedArray`
+is spelled once and both read it. A shape the refusal lets through and the
+emission skips is a declared Initialize that silently never runs — which is the
+exact defect `regression-test-core-test-mgmt-operators` was written for, and it
+arrived last time through two conditions that were *supposed* to agree.
+
+### The global array diverges from fpc, in the direction of running more
+
+Measured on the fixture itself: fpc 3.2.2 prints `body 000` and no operator line
+at all for a global array, while for a plain global *record* it runs Initialize.
+So the omission is about the array, not about globals. `_global_array.expected`
+is therefore ours rather than fpc's, and the header carries both divergences —
+the second (no Finalize for a record global) being the position already chosen
+in `test_mgmt_operators`'s header, which this inherits.
+
+### Still refused, each with its own fixture
+
+`array_refused` is now the DYNAMIC case and `multidim_array_refused` the 2-D
+one: two clauses of one predicate, so neither row can stand in for the other —
+a 2-D array has a fixed `ArrLen` and would sail past a dynamic-only check. Both
+fixtures were re-aimed rather than deleted, because a test whose whole claim is
+"we do not support X" goes red the day someone implements X.
+
+### The corpus row does not clear, and that is the honest reading
+
+`tmoperator7` moved from line 101 to **line 117** and still stops on this
+ticket's refusal — its array is `SetLength(FoosObj, ...)`, i.e. DYNAMIC. The
+fixed-array arm cannot clear it. Advancing 16 lines is real progress through the
+file and it is not a closed row; whoever takes the dynamic case owns that one.

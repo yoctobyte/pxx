@@ -889,6 +889,7 @@ AN_INCDEC Left CurASTNode
 AN_INCDEC Left lv
 AN_INDEX Left CloneAST(target)
 AN_INDEX Left GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk)
+AN_INDEX Left GenMakeIdent(symIdx, tyRecord)
 AN_INDEX Left RMakeIdent(arrSym)
 AN_INDEX Left RMakeIdent(symIdx)
 AN_INDEX Left baseFld
@@ -903,6 +904,7 @@ AN_INDEX Left vrIdent
 AN_INDEX Right AllocNode(AN_IDENT)
 AN_INDEX Right BuildFlatNDIndex(nIdx)
 AN_INDEX Right CurASTNode
+AN_INDEX Right GenMakeIdent(kSym, tyInteger)
 AN_INDEX Right argNode
 AN_INDEX Right fieldNode
 AN_INDEX Right flatNode
@@ -1154,6 +1156,7 @@ AN_WHILE Left condNode
 AN_WHILE Left mnCall
 AN_WHILE Left scanCond
 AN_WHILE Right RParseBlock
+AN_WHILE Right bHead
 AN_WHILE Right body
 AN_WHILE Right bodyN
 AN_WHILE Right bodyNode

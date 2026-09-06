@@ -509,6 +509,90 @@ begin
     end;
 end;
 
+{ Append one statement to a management-operator seq chain. }
+procedure AppendManagedStmt(stmtNode: Integer; var head, tail: Integer);
+var newSeq: Integer;
+begin
+  newSeq := GenMakeSeq(stmtNode, -1);
+  if head = -1 then head := newSeq else ASTRight[tail] := newSeq;
+  tail := newSeq;
+end;
+
+{ `k := lo; while k <= hi do begin <element ops>; k := k + 1 end` for a FIXED
+  array of a managed record.
+
+  A fixed array symbol keeps its bounds as `ConstVal` (the LOW bound -- see
+  AllocArray, which stores it there) and `ArrLen`. The loop runs in SOURCE index
+  space, not 0-based: the AN_INDEX node it builds is read exactly the way `a[3]`
+  in the source is, so for `array[3..5] of TFoo` it must run 3..5.
+  test_mgmt_operators_array covers a non-zero lower bound for that reason -- a
+  0-based loop is right for the 0-based declaration and silently initializes the
+  wrong three slots for the other one.
+
+  ORDER: elements ASCENDING for both Initialize and Finalize. fpc does not
+  reverse array elements on the way out; measured against 3.2.2, `init 0/1/2`
+  then `fin 0/1/2`. That is the same forward rule that holds for sibling fields
+  and for a scope's locals, and it is NOT the pre/post-order rule that holds
+  ACROSS nesting levels -- which still applies WITHIN one element, so the body
+  is built by the same AppendManagedFieldOps walk a plain record local gets.
+
+  Built as an AN_WHILE with the increment at the BOTTOM of the body. The for-in
+  desugars deliberately put theirs at the TOP because AN_WHILE's continue target
+  is the condition test, so a `Continue` in a user body would skip a bottom
+  increment and spin forever. That hazard cannot arise here: the body is
+  synthesised operator calls and contains no user statement to `Continue` from. }
+procedure AppendManagedArrayOps(symIdx, recId, opk, lo, hi: Integer;
+                                postOrder: Boolean; var head, tail: Integer);
+var kSym, condN, idxN, incN, whileN, opIdx: Integer;
+    bHead, bTail: Integer;
+begin
+  bHead := -1; bTail := -1;
+  kSym := AllocVar('', tyInteger);
+  idxN := AllocNode(AN_INDEX);
+  ASTLeft[idxN]  := GenMakeIdent(symIdx, tyRecord);
+  ASTRight[idxN] := GenMakeIdent(kSym, tyInteger);
+  ASTTk[idxN]    := Ord(tyRecord);
+  opIdx := FindOpOverload(opk, Ord(tyRecord), recId);
+  if postOrder then
+  begin
+    AppendManagedFieldOps(idxN, recId, 0, opk, postOrder, bHead, bTail);
+    if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(idxN), bHead, bTail);
+  end
+  else
+  begin
+    if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(idxN), bHead, bTail);
+    AppendManagedFieldOps(idxN, recId, 0, opk, postOrder, bHead, bTail);
+  end;
+  { No operator anywhere in the element: emit nothing at all rather than a loop
+    whose body is empty, which would still cost hi-lo+1 iterations at runtime. }
+  if bHead = -1 then Exit;
+  incN := GenMakeAssign(GenMakeIdent(kSym, tyInteger),
+                        GenMakeArith(Ord(tkPlus), GenMakeIdent(kSym, tyInteger),
+                                     GenMakeIntLit(1)));
+  AppendManagedStmt(incN, bHead, bTail);
+  condN := GenMakeCmp(Ord(tkLe), GenMakeIdent(kSym, tyInteger), GenMakeIntLit(hi));
+  whileN := AllocNode(AN_WHILE);
+  ASTLeft[whileN]  := condN;
+  ASTRight[whileN] := bHead;
+  AppendManagedStmt(GenMakeAssign(GenMakeIdent(kSym, tyInteger),
+                                  GenMakeIntLit(lo)), head, tail);
+  AppendManagedStmt(whileN, head, tail);
+end;
+
+{ True iff an array symbol is the shape AppendManagedArrayOps can iterate: one
+  dimension, a FIXED extent known here, and record ELEMENTS rather than
+  dynamic-array handles. Spelled once because the refusal below and the emission
+  below it must agree -- a shape the refusal lets through and the emission skips
+  is a declared Initialize that silently never runs, which is the exact defect
+  regression-test-core-test-mgmt-operators was written for. }
+function SymIsLoopableManagedArray(idx: Integer): Boolean;
+begin
+  SymIsLoopableManagedArray :=
+    Syms[idx].IsArray and (Syms[idx].TypeKind = tyRecord) and
+    (Syms[idx].ArrLen > 0) and (SymArrNDims[idx] <= 1) and
+    (SymElemDynDepth[idx] = 0) and (SymTR[idx].ElemRec <> REC_NONE);
+end;
+
 { The record id a symbol's management operators would belong to.
 
   For a plain record variable that is `RecName` (mirrored as `SymTR[].RecId`).
@@ -537,7 +621,7 @@ end;
 function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
                                bodyNode: Integer): Integer;
 var i, ip, fp, headInit, tailInit, headFin, tailFin, tryNode: Integer;
-    mrec: Integer;
+    mrec, alo: Integer;
     isTarget: Boolean;
 begin
   Result := bodyNode;
@@ -554,8 +638,20 @@ begin
     if isTarget and (mrec <> REC_NONE) and
        (Syms[i].TypeKind in [tyRecord, tyClass]) then
     begin
-      if Syms[i].IsArray and RecHasManagementOp(mrec) then
-        Error('an array of a record with a management operator is not supported yet '
+      { A fixed one-dimensional array of a managed record is a synthesised loop
+        now; a DYNAMIC or MULTI-DIMENSIONAL one still is not, because neither
+        has bounds this pass can read -- a dynamic array's extent is a runtime
+        length and the desugar would have to call Length(). }
+      if Syms[i].IsArray and (not SymIsLoopableManagedArray(i)) and
+         (RecHasManagementOp(mrec) or RecContainsManagementOp(mrec, 0)) then
+        Error('a dynamic or multi-dimensional array of a record with a management '
+              + 'operator is not supported yet '
+              + '(feature-pascal-management-operators-nested-and-array)');
+      { ...and a loopable array whose ELEMENT hides a managed field behind an
+        array field keeps the refusal the element's own shape would get. }
+      if SymIsLoopableManagedArray(i) and
+         RecContainsUnreachableManagedField(mrec, 0) then
+        Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
       { A CLASS field is still refused, and it is not the same shape at all: a
         class instance's lifetime is not scope-bound. Measured against fpc
@@ -573,6 +669,16 @@ begin
          RecContainsUnreachableManagedField(mrec, 0) then
         Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
+    end;
+    if isTarget and (i <> retSym) and SymIsLoopableManagedArray(i) then
+    begin
+      alo := Syms[i].ConstVal;
+      AppendManagedArrayOps(i, SymTR[i].ElemRec, OPK_INITIALIZE,
+                            alo, alo + Syms[i].ArrLen - 1, True,
+                            headInit, tailInit);
+      AppendManagedArrayOps(i, SymTR[i].ElemRec, OPK_FINALIZE,
+                            alo, alo + Syms[i].ArrLen - 1, False,
+                            headFin, tailFin);
     end;
     if isTarget and (Syms[i].TypeKind = tyRecord) and
        (not Syms[i].IsArray) and (i <> retSym) and

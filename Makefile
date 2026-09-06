@@ -13601,14 +13601,40 @@ test-core: $(COMPILER)
 	# byte, no divergence.
 	./$(COMPILER) test/test_mgmt_operators_nested_field.pas $(TESTTMP)/test_mgmt_op_nf26
 	$(TESTTMP)/test_mgmt_op_nf26 | diff -u test/test_mgmt_operators_nested_field.expected -
-	# ...and the four shapes that are REFUSED rather than silently skipped: an
-	# array of a managed record, a record holding one in an ARRAY field, a CLASS
+	# ...and an ARRAY of a managed record, which is a loop this pass synthesises
+	# (AppendManagedArrayOps). Two things the row is aimed at, both of which a
+	# 0-based one-element array would pass while broken: elements go ASCENDING in
+	# BOTH directions -- fpc does not reverse an array on the way out -- and the
+	# loop runs in SOURCE index space, which is why the fixture declares
+	# `array[3..5]`. A loop hard-coded to 0..n-1 is right for every 0-based
+	# declaration and initializes three slots that are not the array's for that
+	# one. .expected is fpc 3.2.2's, byte for byte, no divergence.
+	./$(COMPILER) test/test_mgmt_operators_array.pas $(TESTTMP)/test_mgmt_op_arr_ok26
+	$(TESTTMP)/test_mgmt_op_arr_ok26 | diff -u test/test_mgmt_operators_array.expected -
+	# ...and the GLOBAL array, through WrapMainBodyManagementOps' separate call.
+	# This .expected is OURS, not fpc's: measured, fpc 3.2.2 runs nothing at all
+	# for a global array (`body 000`) while it does run Initialize for a plain
+	# global record, so its omission is about the array and leaves a declared
+	# invariant that never runs. The fixture header carries both divergences.
+	./$(COMPILER) test/test_mgmt_operators_global_array.pas $(TESTTMP)/test_mgmt_op_garr_ok26
+	$(TESTTMP)/test_mgmt_op_garr_ok26 | diff -u test/test_mgmt_operators_global_array.expected -
+	# ...and the five shapes that are REFUSED rather than silently skipped: a
+	# DYNAMIC array of a managed record and a MULTI-DIMENSIONAL one (two clauses
+	# of one predicate, so neither row can stand in for the other -- a 2-D array
+	# has a fixed ArrLen), a record holding one in an ARRAY field, a CLASS
 	# holding one in a field, and Copy/AddRef
 	# (recognised, but the copy event is not dispatched yet). Each must name its
 	# follow-up ticket, because a declared invariant that never runs is worse
 	# than a program that does not compile.
+	#
+	# The FIXED-array rows that used to sit here expired when the loop landed and
+	# were re-aimed rather than deleted: a fixture whose whole claim is "we do
+	# not support X" goes red the day someone implements X.
 	if ./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 >/dev/null 2>&1; then \
-	  echo "FAIL: an array of a managed record compiled"; exit 1; \
+	  echo "FAIL: a DYNAMIC array of a managed record compiled -- its extent is a runtime length the desugar cannot read"; exit 1; \
+	fi
+	if ./$(COMPILER) test/test_mgmt_operators_multidim_array_refused.pas $(TESTTMP)/test_mgmt_op_mdarr26 >/dev/null 2>&1; then \
+	  echo "FAIL: a MULTI-DIMENSIONAL array of a managed record compiled -- the synthesised loop is one-dimensional"; exit 1; \
 	fi
 	if ./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a record holding a managed record in a field compiled"; exit 1; \
@@ -13621,26 +13647,14 @@ test-core: $(COMPILER)
 	fi
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
+	./$(COMPILER) test/test_mgmt_operators_multidim_array_refused.pas $(TESTTMP)/test_mgmt_op_mdarr26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"
-	# ...and the same refusal for a GLOBAL array, which WrapMainBodyManagementOps
-	# reaches through a separate call. Added with the fix for
-	# regression-test-core-test-mgmt-operators: the local row above had been
-	# passing FOR THE WRONG REASON — the guard read RecName, which is meaningless
-	# for an array symbol (its record id is ElemRecName), and only ever held the
-	# right value because slots are recycled and the stale one happened to fit.
-	# 4a3c88532 cleared that field and every arm went silent at once. A row that
-	# only asserts "refused" cannot tell a correct guard from a lucky one; two
-	# rows that fail together, across the local and global paths, can.
-	if ./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 >/dev/null 2>&1; then \
-	  echo "FAIL: a global array of a managed record compiled"; exit 1; \
-	fi
-	./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 2>&1 \
-	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26
