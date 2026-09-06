@@ -94,11 +94,28 @@ UNCOMMITTED work is invisible to this. A lane editing a file it has not committe
 does not appear, so `quiet` means "nobody has LANDED anything recently", never
 "nobody is in it". Ask before opening a file that matters.
 """
-import re, subprocess, sys, time, collections
+import collections, os, re, subprocess, sys, time
 
 _LANE_OK = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}$")
 # The id itself, wherever it sits: bare, or at the tail of the URL the spec uses.
 _SESSION_RE = re.compile(r"session_([A-Za-z0-9]{6,})")
+# Reflog actions that mean THIS CHECKOUT PRODUCED THIS COMMIT OBJECT. `rebase
+# (start)` and `rebase (finish)` are NOT in the list and must never be: `start`
+# checks out the UPSTREAM tip, so it stamps every puller's reflog with whatever
+# sha origin was at, and `finish` returns to a branch. Measured 2026-09-06 over
+# 719 commits and 17 checkouts:
+#
+#     rule                              resolved   ambiguous
+#     `commit` only (CLAUDE.md's)        43%          0
+#     `commit` or any `rebase`           53%        289   <- worse, not better
+#     `commit` or rebase(pick-family)    79%          0
+#
+# The middle row is the trap: it resolves more shas AND makes 289 of them name
+# two seats, which is a confident wrong answer wearing the shape of an improved
+# one. The pick-family is the whole gain and it costs nothing.
+_AUTHORING_ACT = re.compile(
+    r"^(commit|commit \(amend\)|commit \(initial\)|"
+    r"rebase \((pick|reword|squash|fixup|amend|continue)\))")
 
 WINDOW_MIN = 360
 
@@ -131,7 +148,7 @@ def recent(path, minutes):
         parts = rec.split("\x01")
         if len(parts) < 3:
             continue
-        _, cd, subj = parts[0], parts[1], parts[2]
+        sha, cd, subj = parts[0], parts[1], parts[2]
         body = parts[3] if len(parts) > 3 else ""
         sess = ""
         # The value must LOOK like a lane name: one identifier, optionally with a
@@ -181,8 +198,76 @@ def recent(path, minutes):
             age = int((now - int(cd)) / 60)
         except ValueError:
             continue
-        rows.append((age, sess or "?", subj))
+        rows.append((age, sess or "?", subj, sha))
     return rows
+
+
+_SEATS = None
+
+
+def seat_map():
+    """{sha -> checkout name} from every sibling checkout's reflog, or {}.
+
+    WHY THIS IS NOT `Lane:` AND NOT THE SESSION ID. The session id names a
+    TRANSCRIPT; `Lane:` names someone you can message and has 0 uses in 722
+    commits. A checkout name is the third thing: it is what `ListAgents` shows
+    and what `SendMessage` takes, and it costs the author nothing because it is
+    a side effect of committing somewhere.
+
+    MATCH `commit` AND THE `rebase (pick)` FAMILY, NOT `commit` ALONE. `tools/sync.sh` does a
+    `pull --rebase` before every push, so an authoring checkout's OWN commits
+    are replayed onto origin and the sha that ends up on origin/master appears
+    in that checkout's reflog under `rebase (pick):` while the ORIGINAL sha
+    keeps the `commit:` entry. Matching only `commit` therefore misses exactly
+    the commits that were rebased -- which is nearly all of them, and
+    systematically the MOST RECENT one, which is the one anybody is asking
+    about. Verified 2026-09-06 on `f00d3d230` (frankD): `rebase (pick)` in
+    frankD's reflog and in no other checkout, `commit:` on its pre-rebase id
+    `f7ee1414a`. frankD's own statement of it: "that is not a gap in the method,
+    it is the method meeting tools/sync.sh."
+
+    But NOT every `rebase` line: `rebase (start)` checks out the UPSTREAM tip,
+    so it stamps every puller's reflog with whatever sha origin was at. Including
+    it lifts resolution from 43% to 53% and makes 289 of 719 shas name two seats
+    -- a confident wrong answer wearing the shape of a better one. The pick
+    family alone gives 79% with zero ambiguity, measured over the same corpus.
+
+    Plain reflog MEMBERSHIP still does not discriminate -- every pull walks
+    other people's shas through every checkout's HEAD -- so the action prefix is
+    load-bearing and a bare `grep <sha>` would name everyone.
+
+    AND IT ANSWERS *WHERE* A COMMIT WAS AUTHORED, NEVER *WHO* AUTHORED IT
+    (frankD's caveat, and CLAUDE.md's): a cherry-pick, a rebase that re-creates
+    someone else's commits, or one session applying another's patch all put the
+    wrong tree's reflog behind a sha. A sha claimed by two checkouts is reported
+    as ambiguous rather than resolved, because a confident wrong seat is worse
+    than none -- it is a name, and a name gets believed.
+    """
+    global _SEATS
+    if _SEATS is not None:
+        return _SEATS
+    _SEATS = {}
+    root = sh("git", "rev-parse", "--show-toplevel").strip()
+    if not root:
+        return _SEATS
+    parent = os.path.dirname(root)
+    claims = collections.defaultdict(set)
+    for name in sorted(os.listdir(parent)):
+        d = os.path.join(parent, name)
+        if not os.path.isdir(os.path.join(d, ".git")):
+            continue
+        out = subprocess.run(["git", "-C", d, "reflog", "--format=%H %gs"],
+                             capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            parts = line.split(" ", 1)
+            if len(parts) != 2:
+                continue
+            sha, act = parts
+            if _AUTHORING_ACT.match(act):
+                claims[sha].add(name)
+    for sha, who in claims.items():
+        _SEATS[sha] = sorted(who)[0] if len(who) == 1 else "ambiguous"
+    return _SEATS
 
 
 def report(paths, minutes):
@@ -192,10 +277,10 @@ def report(paths, minutes):
             print(f"\n{p}\n  quiet — nothing landed in {minutes}m "
                   f"(uncommitted work is INVISIBLE here; quiet is not empty)")
             continue
-        sess = collections.Counter(s for _, s, _ in rows)
+        sess = collections.Counter(s for _, s, _, _ in rows)
         unknown = sess.get("?", 0)
         who = ", ".join(f"{k}×{v}" for k, v in sess.most_common())
-        age, s, subj = rows[0]
+        age, s, subj, sha = rows[0]
         # Never print a session COUNT as if it were known. The unknowns collapse
         # into one "?" bucket, so `1 session` for eleven untrailered commits could
         # be one lane or eleven -- and a precise-looking number is worse than an
@@ -208,7 +293,10 @@ def report(paths, minutes):
             count = f"{known} session(s)"
         print(f"\n{p}")
         print(f"  {len(rows)} commit(s) / {count} in {minutes}m — {who}")
-        print(f"  most recent: {age}m ago  session={s}  {subj[:78]}")
+        seat = seat_map().get(sha, "")
+        seat_note = f"  seat={seat}" if seat else "  seat=unresolved"
+        print(f"  most recent: {age}m ago  session={s}{seat_note}")
+        print(f"               {subj[:76]}")
         bad = sess.get("!bad", 0)
         if unknown:
             print(f"  !! {unknown} carry NO Lane:/session trailer — '?' means "
