@@ -78,3 +78,37 @@ should now be covered.
 A before B. B is behind A for every program that would exercise it, because
 reaching `fcntl.c` requires a header that trips A first. Doing B alone changes
 no observable.
+
+## Where this lane actually was, 2026-09-06 (frankC) — note to self, and to whoever is next
+
+**Wall A (`environ`) is the next piece and it was NOT started.** No code exists
+for it, no branch, no stash. The fleet moved to reds-only for the beta 0.1 pin
+before I began, so this is a clean stopping point rather than an interrupted one.
+
+**What I would do first, so the next session does not re-derive it.** The shape
+is already in the tree as a worked example: `WasmEmitArgvFetch`
+(`ir_codegen_wasm32.inc`) fetches argv with `args_sizes_get` + `args_get` into a
+`PXXAlloc`'d block and hands back a count and a pointer vector. WASI's
+`environ_sizes_get` / `environ_get` are the same two calls with the same shape,
+and `environ` wants exactly what `args_get` already produces — a NULL-terminated
+pointer vector. So the first move is to read that function, not to design one.
+
+**Then the refusal comes out, not the predicate.** The refusal I added in
+`ParseCProgram`'s `TARGET_WASM32` arm exists only because there was no way to
+fill `environ`; once there is, delete it rather than narrowing
+`CNeedsEnvironInit`. The predicate's over-approximation (a token scan that
+cannot tell the crtl DECLARATION from a use, so `#include <stdio.h>` is enough)
+stops mattering the moment the answer is available — it would only ever have
+caused an unnecessary *initialisation*, never a wrong one.
+
+**Order is not negotiable.** Wall B (va_arg) is unreachable behind wall A for
+every program that would exercise it, because reaching `lib/crtl/src/fcntl.c`
+requires a header that trips A first. Doing B alone changes no observable, and
+`tools/c_va_arg_every_target.sh` will keep reporting `refuses no environ on
+wasm32` and passing — see that ticket's own note on why the script cannot grade
+B until A is done.
+
+**One thing already true and easy to lose:** freestanding C on wasm32 works
+today and is covered by `tools/c_wasm32_entry.sh`. Do not let a wall-A attempt
+regress it — that script is the guard, and its rows are all nonzero-expecting
+for a reason written at the top of the file.

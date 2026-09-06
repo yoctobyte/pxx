@@ -16,6 +16,35 @@ Cite that grep, never this file's table — a list transcribed into prose is sta
 the first time somebody files or closes one, and this document has no way to
 know. If the two disagree, the grep is right.
 
+## Before you re-run this sweep: ASSERT THE FIXTURE, then believe the refusal
+
+Banked because it nearly inverted a row of the table below, and it would have
+inverted it in the SAFE-LOOKING direction.
+
+Mid-sweep the scratchpad directory was removed under me. A `cat > $S/ld.c`
+heredoc failed, and the very next command handed that path to the compiler:
+
+```sh
+./compiler/pascal26 $S/ld.c $S/ld_pxx || echo "  pxx: refused"
+```
+
+It printed `pxx: refused`. **That refusal was about the missing FILE and read
+exactly like a result about `long double`** — and it would have entered the
+table as "pxx refuses long double", which is the opposite of the truth and would
+have moved that ticket OUT of the release-risk set. A refusal is the reassuring
+answer here: a refusal is the class a beta may ship.
+
+The guard is one line, and it must come before anything reads the compiler's
+output:
+
+```sh
+[ -s "$S/ld.c" ] || { echo "FIXTURE MISSING — not reporting a result"; exit 1; }
+```
+
+Same family as everything else in this file: the instrument did not error, it
+answered a different question. Assert that the subject EXISTS before comparing
+what it produced.
+
 ## The set as of 2026-09-06, all re-measured here rather than read
 
 | ticket | prio | what is silently wrong |
