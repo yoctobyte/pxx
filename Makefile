@@ -7239,6 +7239,23 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.main \
 	  "$$(./$(COMPILER) test/test_a_semantic_diagnostic_in_a_used_unit_has_a_line.pas $(TESTTMP)/test_maindiagline26 2>&1 | head -1)" \
 	  "pascal26:30: error: incompatible types: cannot assign Pointer to record"
+	@# A CLASS CONST IN A FIELD'S ARRAY BOUND. The const evaluator recovers a
+	@# class const from two contexts and a field declaration is in neither:
+	@# ParsingClassConstCi is live only inside a `const` SECTION, CurMethClass
+	@# only inside a METHOD BODY. So `FRing: array[0..RingSize-1] of T` answered
+	@# `not a constant` -- a diagnostic about the EXPRESSION for a defect in
+	@# SCOPE. ParsingClassBodyCi already spans the missing region and is now the
+	@# third fallback, LAST because the other two are narrower (and because for a
+	@# nested type it names the nested class, not the enclosing one).
+	@# EVERY ROW ASSERTS A LENGTH, not that it compiled: a bound that folded to
+	@# the wrong number still compiles, as an array of some other size with every
+	@# index in range. The `global` row is the one that can break -- a plain unit
+	@# const in the same syntactic slot, which a fallback consulted too eagerly
+	@# would shadow. fcl-passrc pparser.pp:286.
+	@./$(COMPILER) test/test_a_class_const_bounds_a_field_array.pas $(TESTTMP)/test_ccbound26
+	@tools/expect_same.sh test_a_class_const_bounds_a_field_array \
+	  "$$($(TESTTMP)/test_ccbound26)" \
+	  "$$(cat test/test_a_class_const_bounds_a_field_array.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

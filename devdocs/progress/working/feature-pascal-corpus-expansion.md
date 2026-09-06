@@ -2487,4 +2487,32 @@ That run exercises three of the four fixes on purpose: `TRecordValues.Destroy`
 is the `Fields := nil` path, `Release` ends in the receiver-less `Free;`, and
 the tree it builds is the one `TFPList.Assign` populates.
 
-**Next on this rung: `pparser.pp` (7823 lines), then `pasresolver.pp` (29660).**
+## 2026-09-06 — `pparser.pp` (7823 lines) attempted: two walls, one down
+
+| # | line | shape | state |
+| --- | --- | --- | --- |
+| 1 | 286 | `FTokenRing: array[0..FTokenRingSize-1]` — a CLASS CONST as a field's array bound | **FIXED** |
+| 2 | 635 | `var CCNames: array[TCallingConvention] of String = (...)` — a local var-section array initializer | open, **filed not fixed** |
+
+Wall 1 is the same shape as everything else on this rung: the const evaluator
+recovers a class const from a `const` SECTION and from a METHOD BODY, and a
+field declaration is in neither. `ParsingClassBodyCi` already spanned the gap.
+**The diagnostic was `not a constant`** — about the expression, for a defect in
+scope, so it pointed at the bound and not at the lookup.
+
+**Wall 2 is filed rather than fixed, and the measurement is why.** The same
+declaration spelled `const` in the same routine **compiles and runs correctly
+today** — so the element loop, the enum-indexed bound, the string elements and
+the routine-local flush all already work for exactly this shape, and only the
+`var` path never got an entry to them. **A door, not a capability gap.** But the
+const array initializer is ~315 lines INLINE in `ParseConstSection`, entangled
+with that routine's locals, and it parses the TYPE as well as the initializer —
+which the var path has already done. A reusable
+`ParseArrayInitializerInto(symIdx, isLocal)` has to derive the dimension list
+and element kind from the already-declared SYMBOL rather than from the shared
+parse, and **that is the step that stops being mechanical**, because each
+derived value has to be verified equal to what the parse produced rather than
+assumed. Banked rather than half-done:
+[[feature-p-a-local-var-section-array-initializer]].
+
+**Next on this rung: `pparser.pp` behind wall 2, then `pasresolver.pp` (29660).**

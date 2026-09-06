@@ -11498,7 +11498,30 @@ begin
     begin
       ccBaseCi := -1;
       if ParsingClassConstCi >= 0 then ccBaseCi := ParsingClassConstCi
-      else if CurMethClass >= REC_UCLASS_BASE then ccBaseCi := CurMethClass - REC_UCLASS_BASE;
+      else if CurMethClass >= REC_UCLASS_BASE then ccBaseCi := CurMethClass - REC_UCLASS_BASE
+      { ...and the THIRD context, which is the class BODY outside any const
+        section or method: a class const used as an ARRAY BOUND on a field of
+        the same class.
+
+          TC = class
+            const RingSize = 32;
+            FRing: array[0..RingSize - 1] of TRec;   { <- here }
+          end;
+
+        ParsingClassConstCi is live only while a `const` section is being
+        parsed and CurMethClass only inside a method body, so a field
+        declaration between them had no class context at all and the name fell
+        through to `not a constant` — a diagnostic about the EXPRESSION for a
+        defect in SCOPE, so it points at the bound rather than at the lookup.
+        ParsingClassBodyCi already spans exactly the region that was missing
+        (it is set at the top of the member loop and restored at its `end`),
+        and it is the LAST of the three because the first two are narrower:
+        inside a const section or a method body they are the more specific
+        answer, and for a nested type ParsingClassBodyCi points at the nested
+        class rather than the enclosing one.
+        fcl-passrc pparser.pp:286, `FTokenRing: array[0..FTokenRingSize-1]`.
+        bug-p-a-class-const-is-not-a-constant-in-a-field-array-bound }
+      else if ParsingClassBodyCi >= 0 then ccBaseCi := ParsingClassBodyCi;
       if ccBaseCi >= 0 then
       begin
         ccReg := FindClassConst(ccBaseCi, cName);
