@@ -81,6 +81,22 @@ controls, the three broken ones, the small-record row, and the const/by-value
 regression rows. Positive control measured — `VARRECWRITEBACK FAILED 4` with the
 fix reverted and rebuilt. Byte-identical to fpc 3.2.2.
 
+## The pairing rule, for whoever adds the fifth site
+
+`ProcParamIsConst` and `ProcParamExplicitByRef` are correct only when written
+**together**. `pasparser_proc.inc` writes them adjacent at every site:
+
+```
+1698/1699    2153/2154    2568/2569
+```
+
+`pasparser_decl.inc` before this fix wrote `IsConst` alone at two sites and
+neither at the other two. **A parallel-array channel whose writes are correct
+only in pairs cannot say so at its declaration**, so the check has to be
+mechanical: grep each name and compare the counts. Three hits for one and four
+for the other is the bug. (frankS's framing, and their parallel case the same
+day: a bug whose entire population is "sites that write one of a pair".)
+
 ## Downstream
 
 frankA is building by-value record parameter lifecycle and needs exactly this

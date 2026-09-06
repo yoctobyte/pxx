@@ -11193,6 +11193,37 @@ begin
     Result := False;
 end;
 
+function ParamSpellingForReport(pi, j: Integer): AnsiString;
+{ How a PARAMETER should be spelled in an overload-candidate list.
+
+  `Procs[pi].Params[j].TypeKind` is one field with two meanings: the parameter's
+  OWN kind when IsArray is False, and its ELEMENT kind when IsArray is True.
+  The report read it as the first, unconditionally, so
+
+    procedure OnlyArr(const a: array of LongInt);   OnlyArr(3);
+
+  refused the call and then offered `OnlyArr(LongInt)` as the candidate -- which
+  is a spelling of the call the programmer had just made. The message says "this
+  does not match" and shows something that looks like it does. That is the
+  worst shape a diagnostic can take: it does not merely fail to help, it argues
+  for the mistake.
+
+  ProcParamDynDepth distinguishes an open array (depth 0, `array of T`) from a
+  NAMED dynamic array (depth N, N nestings), which is why the depth loop runs at
+  least once rather than exactly ProcParamDynDepth times.
+  refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither }
+var d, dep: Integer;
+begin
+  Result := TypeKindSpelling(Procs[pi].Params[j].TypeKind);
+  if (j < MAX_PROC_PARAMS) and Procs[pi].Params[j].IsArray then
+  begin
+    dep := ProcParamDynDepth[pi * MAX_PROC_PARAMS + j];
+    if dep < 1 then dep := 1;
+    for d := 1 to dep do
+      Result := 'array of ' + Result;
+  end;
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
@@ -11649,7 +11680,7 @@ begin
         for j := 0 to Procs[i].ParamCount-1 do
         begin
           if j > 0 then OverloadReport := OverloadReport + ', ';
-          OverloadReport := OverloadReport + TypeKindSpelling(Procs[i].Params[j].TypeKind);
+          OverloadReport := OverloadReport + ParamSpellingForReport(i, j);
         end;
         { A variadic candidate spells its tail. Without it the report reads as a
           flat refusal of the extra arguments -- `printf(Pointer)` against a call

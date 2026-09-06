@@ -190,6 +190,64 @@ with no array question anywhere nearby is the parser, which is where all three
 defects were. Somebody still has to read the 143 IR lines before anyone claims
 they *want* the element kind.
 
+## The USER-FACING instance, and it is fixed (2026-09-06)
+
+Everything above is about a caller getting a wrong answer. One caller printed
+that answer straight to the programmer:
+
+```
+pascal26:8: error: no overload of OnlyArr matches these arguments
+  argument types: (Integer)
+  candidates:
+    OnlyArr(LongInt)
+```
+
+for `procedure OnlyArr(const a: array of LongInt)`. `symtab.inc`'s
+`OverloadReport` spelled every candidate with `TypeKindSpelling(Params[j].TypeKind)`
+— so it **refused `OnlyArr(3)` and then offered a candidate that is a spelling of
+the call the programmer had just made.** Not merely unhelpful: it argues for the
+mistake.
+
+Fixed by `ParamSpellingForReport(pi, j)` (`symtab.inc`, before `MatchProcCall`),
+which prefixes `array of ` per `ProcParamDynDepth`, floor 1. Fixture
+`test/test_an_overload_candidate_spells_an_array_parameter_as_an_array_fail.pas`.
+**It is one site, so it is a fix and not the refactor** — the refactor is still
+the thing that stops the next one.
+
+## Two instances from the WRITE side (2026-09-06)
+
+Every instance above is a reader. Two are not, and they change what the accessor
+has to do:
+
+1. **A widening.** Teaching the four parameter parsers about named array types
+   made `IsArray` true for `a: TDyn` — correct — and four callers passing the
+   bare flag to the open-array-default refusal silently changed question. **No
+   character changed at any call site.** A refusing accessor protects readers and
+   protects nobody who passes the flag onward (frankS).
+2. **An absence.** `ProcParamExplicitByRef` was simply not written by four
+   declaration-site parsers, so every reader got a well-formed `False`
+   (`bug-p-a-var-record-parameters-write-back-is-dropped-...`, closed). **A column
+   whose default is also a legal value cannot be told apart from an unwritten
+   one**, and no accessor over the read can see that. If the accessor increment
+   is going to pay for itself twice, making the parameter row's *unwritten* state
+   distinguishable is the half that catches this class.
+
+## The pairing rule, verbatim, because the constraint has nowhere else to live
+
+`ProcParamIsConst` and `ProcParamExplicitByRef` are only correct **written
+together** — `ByRefArgNeedsLvalue` asks `ExplicitByRef and not IsConst`, so one
+without the other turns a `const` record parameter into one that refuses a
+non-lvalue argument. In `pasparser_proc.inc` they are adjacent at every site:
+
+```
+1698/1699    2153/2154    2568/2569
+```
+
+In `pasparser_decl.inc` before 2026-09-06, two of the four sites wrote
+`IsConst` only and two wrote neither. **A parallel-array channel whose writes are
+correct only in pairs has no way to say so at its declaration**, so the check is
+mechanical and belongs here: grep each name and compare the counts.
+
 ## Done when
 
 The two accessors exist, every `pasparser_*` reader of `Params[].TypeKind` has

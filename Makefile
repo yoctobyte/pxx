@@ -10571,6 +10571,38 @@ test-core: $(COMPILER)
 	@# parameter would start refusing a non-lvalue argument.
 	./$(COMPILER) test/test_a_var_record_parameter_writes_back_through_every_receiver_that_has_no_implementation_header.pas $(TESTTMP)/test_varrecwriteback26
 	tools/expect_same.sh test_varrecwriteback26 "$$($(TESTTMP)/test_varrecwriteback26 | tail -n 1)" "VARRECWRITEBACK OK"
+	@# refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither
+	@# -- the USER-FACING instance of that field's two meanings, and the reason
+	@# the refactor is not cosmetic. Params[j].TypeKind is the parameter's OWN
+	@# kind when IsArray is False and its ELEMENT kind when True; the
+	@# overload-candidate report read it as the first, unconditionally. So
+	@# `procedure OnlyArr(const a: array of LongInt)` given `OnlyArr(3)` was
+	@# refused with `candidates: OnlyArr(LongInt)` -- the message says "this does
+	@# not match" and then prints something that looks exactly like the call the
+	@# programmer just made. A diagnostic that argues FOR the mistake.
+	@# The 2-deep row is not padding: the depth comes from ProcParamDynDepth and
+	@# 1 is also its floor, so a one-deep row cannot tell "used the depth" from
+	@# "printed the prefix once". The `Mixed` pair is the control and it took
+	@# three attempts to make it one -- `Plain(1)` compiles, and so does
+	@# `Plain('x')`, so neither ever reached a candidate list at all. Two
+	@# overloads under one name land in ONE list from ONE refused call, so the
+	@# array arm gaining the prefix and the plain arm not gaining it are
+	@# asserted against the same output.
+	! ./$(COMPILER) test/test_an_overload_candidate_spells_an_array_parameter_as_an_array_fail.pas $(TESTTMP)/test_candarr26 > $(TESTTMP)/candarr.log 2>&1 \
+	  || { echo "candidate-spelling: the must-not-compile fixture COMPILED"; exit 1; }
+	grep -q 'OnlyArr(array of LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: an open-array parameter is not spelled as an array:"; cat $(TESTTMP)/candarr.log; exit 1; }
+	grep -q 'OnlyNamed(array of LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: a NAMED dynamic array parameter is not spelled as an array:"; cat $(TESTTMP)/candarr.log; exit 1; }
+	grep -q 'OnlyNamed2(array of array of LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: a 2-deep named dynamic array lost its depth (prefix printed once, not ProcParamDynDepth times):"; cat $(TESTTMP)/candarr.log; exit 1; }
+	grep -q 'Mixed(array of LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: the array arm of the control pair is not spelled as an array:"; cat $(TESTTMP)/candarr.log; exit 1; }
+	grep -q 'Mixed(LongInt, LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: THE CONTROL FAILED -- a plain parameter gained an array prefix, so the fix is not keyed on IsArray:"; cat $(TESTTMP)/candarr.log; exit 1; }
+	! grep -q 'OnlyArr(LongInt)' $(TESTTMP)/candarr.log \
+	  || { echo "candidate-spelling: the element kind is still printed as the parameter's own kind:"; cat $(TESTTMP)/candarr.log; exit 1; }
+	@echo "candidate-spelling: OK"
 	@# bug-p-a-named-dynamic-array-default-declared-in-a-class-body-is-lost-if-the-implementation-omits-it
 	@# -- and it is ALSO the regression control for the row above. Teaching the
 	@# four parameter parsers about named array types made the declaration and
