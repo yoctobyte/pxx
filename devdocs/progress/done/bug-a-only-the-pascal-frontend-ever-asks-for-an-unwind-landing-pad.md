@@ -107,4 +107,4 @@ Zig is vacuous on (1) as well: `zparser.inc` mentions no managed type kind at
 all, so there is nothing in a Zig frame to release.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit aa2357a29.
