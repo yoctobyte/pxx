@@ -916,10 +916,12 @@ of deciding.*
 CLAUDE.md's *count open tickets by FOLDER, never by a glob across all of them* — the trap the
 handbook records against a coordinator, catching the coordinator.
 
-### And the ref-scan sentence, frankuser's, kept in its own words
+### And the ref-scan sentence, kept as a property of the incident and NOT attributed
 
-frankuser's fleet pass now measures every checkout's HEAD against **its own fetched ref**
-rather than each tree's:
+The fleet pass now measures every checkout's HEAD against **one fetched ref** rather than each
+tree's own. Deliberately unattributed, at the author's request and for the right reason: **a
+name invites the next reader to weigh who said it instead of checking whether it still holds**
+— the same failure as a signed mechanism section having had exactly one reader.
 
 > **The discriminator was never the tree, it was whose ref you asked. A per-tree scan reads
 > each peer's own stale `origin/master`, and the bias is ANTI-CORRELATED WITH TRUTH — it fires
