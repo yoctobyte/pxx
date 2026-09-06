@@ -7326,15 +7326,24 @@ begin
             ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False, False,
                                curPublished, curVis);
           end
-          else if (CurTok.Kind = tkSemicolon) or (CurTok.Kind = tkVar) then
-            { A stray `;`, and `var` reopening a field list after a nested
-              `type` section. Skipped deliberately; the members are read by the
-              arms above. `class` is NOT in this list and must not be added --
-              a class body has real arms for class members, so `class` reaching
-              here would mean one of them failed, and that is worth an error.
-              (The record body's copy of this arm DOES allow `class`, because a
-              record body has no such arm. The two lists are different on
-              purpose.)
+          else if (CurTok.Kind = tkSemicolon) or (CurTok.Kind = tkVar) or
+                  (CurTok.Kind = tkClass) then
+            { A stray `;`, `var` reopening a field list after a nested `type`
+              section, and `class` — which a class body's own arms handle for
+              the shapes they know, and which still arrives here for at least
+              one they do not: `class generic function` (test/
+              generic_xunit_method_units/uxgm.pas:10). Skipped, as it was before
+              this arm was narrowed.
+
+              I EXCLUDED `class` HERE AND THE CENSUS AGREED WITH ME, WRONGLY.
+              The sweep compiled each corpus file STANDALONE, and pxx cannot
+              compile a unit standalone — it refuses before parsing the class
+              body — so every construct living only in a unit contributed zero
+              fires no matter what it was. `class` read as 0 of 6287 because the
+              instrument could not see the file, not because the corpus does not
+              use it. The full suite found it in one run. A census that compiles
+              its population needs the population to be COMPILABLE, and a
+              file that fails early is not a null result, it is an absence.
 
               THIS USED TO BE A BARE `else Next`. A class body accepted
               `42 43 44;`, `+ - * ;` and `'oops';` and compiled them away in
