@@ -4,7 +4,7 @@ prio: 35
 type: bug
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 summary: "CLOSED 2026-09-06: all thirteen builtin type names now answer at every door. The last rows were `High`/`Low` of the four sized booleans -- ByteBool, WordBool, LongBool, QWordBool -- refused at the DIRECT spelling and, through a one-line alias, first answering a silent wrong bound (255 / 65535 / 2147483647 from the C-ABI kind) and later refusing too. Answered now from the IDENTITY table rather than the kind table: `SizedBoolBound` in pasparser_lval.inc, wired at both High/Low resolvers and at both spellings. High is True (Ord -1), Low is False (0). THOSE VALUES ARE OURS AND CHOSEN -- fpc 3.2.2 gives the Int64 extremes for all four widths, its own assembler refuses the value it produced, and `Ord()` truncates them to exactly the -1/0 we return, so every earlier reading of fpc here was the wrong instrument. Test `test/test_high_low_of_a_sized_boolean.pas`, 37 rows, both spellings, six controls."
-status: resolved
+status: done
 owner: "frankB"
 ---
 
@@ -372,3 +372,6 @@ where fpc's truncated −1/0 now MATCHES ours. It will report agreement, which i
 the right verdict reached by the wrong arithmetic. Left as is rather than
 "fixed": changing it to cast through Int64 would make the sweep report a
 DIFFER on four names that are correct and chosen, which is worse.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

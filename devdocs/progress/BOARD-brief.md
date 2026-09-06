@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:147 backlog-nilpy:97 backlog-tools:51 backlog-pascal:40 backlog-decide:44 backlog-libs:22 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3519 rejected:79`
+`working:22 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:147 backlog-nilpy:97 backlog-tools:51 backlog-pascal:39 backlog-decide:44 backlog-libs:22 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3520 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -66,7 +66,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 437, ranked
+## Ready — top 30 of 436, ranked
 
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [A]` refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies (unblocks 1)
@@ -99,4 +99,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [P]` bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals
 
-_407 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
