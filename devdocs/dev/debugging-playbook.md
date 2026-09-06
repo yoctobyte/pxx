@@ -13934,3 +13934,86 @@ bullet intact with its date, `status: working` written to the frontmatter — ra
 reading the diff. Earlier the same night, **two fixes to that same function did not compose**
 (each was green on its own reproducer and one still deleted a line). **There was no reason to
 assume a third and a repair did.**
+
+## A LINE CITATION IS A FACT ABOUT A FILE *AT A TREE*, AND NOTHING IN THE CITATION SAYS WHICH — the correction reproduced the failure it was correcting
+
+2026-09-06, live, between two sessions in one exchange.
+
+This seat cited `testmgr.py` at `2913` / `2914` / `1960`. A reviewer corrected them to
+`2634` / `1673` / `1680`, noted accurately that `2913` *"lands in a docstring, mid-prose"*, and
+invoked this file's own booked failure — *the three `Makefile:<n>` citations that drifted, one
+of them onto `fi; \`*.
+
+**Both sets were right.** `324304f1e` (2026-09-05 22:04) added **281 lines** to `testmgr.py`.
+At `324304f1e^` the name line is at **1680**; at HEAD it is at **1960**. The reviewer's
+checkout was **one commit behind**.
+
+> **A line number drifted by 281 inside twenty-four hours, and the correction to it drifted by
+> the same 281 in the other direction.** The rule was demonstrated by the act of enforcing it.
+> **Neither reader was careless** — and that is the point: care is not the missing ingredient,
+> because the citation does not carry the one fact that would make it checkable.
+
+**The remedy is the one already in this file, and this is the strongest evidence for it yet:
+cite the SYMBOL** — `split_jobs(target, lines)`, `class Job.__init__` — **never `file:line`.**
+A symbol survives an insertion above it, and a rename is loud where a shift is silent. Where a
+line number is unavoidable, **name the tree**: a sha, or the commit that last touched the file.
+
+### And the reviewer's OTHER point stood, which is the reason to welcome the correction anyway
+
+The same message flagged **three** `for i, g in enumerate(groups)` loops where the write-up
+quoted one, on the ground that *a fix landing on one arm and not its siblings is the
+double-case failure this repo names explicitly.* **Correct as a question, and it resolved
+benignly:** all three are inside `split_jobs`, only the last builds `Job`s, and the other two
+are the union-find `owner` map and the bucket merge — **the machinery that determines the ORDER
+which makes the index positional in the first place.** One mechanism, not three arms.
+
+> **A reviewer whose citation is wrong can still be right about the structure**, and the two
+> halves have to be answered separately. Dismissing the structural question because the line
+> numbers were off would have been the expensive mistake here — the citation cost a commit,
+> the unanswered double-case question would have cost a fix.
+
+## THE SELF-HOST FIXEDPOINT'S SILENCE IS NOT EVIDENCE FOR A DISPATCH, ABI OR LAYOUT CHANGE — and here is what to use instead
+
+frankS, 2026-09-06 (`fa901ab62`), fixing a **silent wrong answer in plain OOP** that the
+fixedpoint could not have seen.
+
+```pascal
+TBase = class procedure Say; virtual;  end;
+TDer  = class(TBase) procedure Say; override; end;
+procedure TDer.Say;  begin writeln('derived'); end;   { implemented FIRST }
+procedure TBase.Say; begin writeln('base');    end;
+```
+
+pxx printed **`base`** for every call site, including a direct `TDer(o).Say`; fpc prints
+`derived`. **Swap the two implementations and pxx was correct.** *Implementation order was the
+entire variable, and nothing in Pascal constrains it.*
+
+Cause: parsing a virtual method's body recorded a VMT fixup for its own class **and for every
+subclass**, filtered by a plain `IsSubclassOf`. **Fixups apply in record order, so the body
+parsed LAST won the slot.**
+
+> **`compiler.pas` is a deliberately procedural subset with no hierarchies of this shape, so
+> the fixedpoint is silent on it BY CONSTRUCTION** — the same scope limit CLAUDE.md states, met
+> in the wild. **For anything touching dispatch, ABI or layout, a green fixedpoint is not
+> evidence.** frankS used the 550-row conformance corpus instead: **382 pass / 0 fail / 118
+> skip**, up from 380/0/120, zero regressions. *The method is the contribution, not the number.*
+
+### Depth matters, and "is `otherCi` below `methOwnerCi`" is the WRONG QUESTION
+
+For `A -> B -> C` with **B overriding and C not**, C inherits **B**, not A — and the pinned
+compiler prints **A for both TB and TC**. So the naive subclass filter is **wrong at two levels,
+not one**. The repair asks who **OWNS** a slot (`DeclaringClassForSlot`) rather than which proc
+does: the existing sibling `ResolveVMTSlotProc` cannot answer, because at body-parse time the
+winning override's proc is still `-1` **exactly when its body has not been reached** — which is
+the case that needs detecting.
+
+### AND IT LOOKED LIKE A GENERICS BUG AND WAS NOT — the framing survived because the row that exposed it is a generics test
+
+Found via `tgeneric15`, whose skip reason read *"class inheriting from `specialize
+TStack<Integer>` as parent type"*. **The reduction only came apart when a plain class and a
+generic one were run side by side with identical bodies — both failed.**
+
+> **A corpus row's own skip reason names the row's SUBJECT, not the defect's.** Where the
+> corpus is partitioned by feature, every defect found through it arrives pre-labelled with
+> that feature, and the label survives every reduction that stays inside the partition. **The
+> control is a specimen from OUTSIDE the partition with the same body** — here, the plain class.
