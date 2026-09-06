@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "The wasm32 C entry landed (WasmEmitCEntry) and FREESTANDING C now builds and runs -- `int main(void){return 42;}` exits 42 under wasmtime, argc/argv are live. HOSTED C still refuses, at two walls in front of crtl, and the first is reached by any of <stdio.h> <stdlib.h> <unistd.h> <math.h>: (1) `environ` -- the pre-main initializer derives the environment from the initial stack pointer and WASI has none, reporting it through environ_get instead, and CNeedsEnvironInit is a token scan that cannot tell the crtl DECLARATION from a use, so it fires for programs that never mention it; (2) va_arg is unimplemented for wasm32, which lib/crtl/src/fcntl.c needs for open/openat. Measured: stdarg.h and string.h compile, stdlib.h/stdio.h/unistd.h/math.h refuse. So `printf` on wasm32 -- the second acceptance criterion of the entry-stub ticket -- needs BOTH."
+summary: "Wall A (`environ`) IS DONE as of 63d077feb -- WasmEmitEnvironFetch makes the WASI environ_sizes_get/environ_get pair inside the synthesised `_start` and hands the vector to __pxx_set_environ, and the refusal is deleted. It has NEVER EXECUTED and is inert (WasmCEntryEnvp stays -1 for every program that compiles today), because hosted C on wasm32 turns out to have THREE walls, not two, and A was only the first. Measured individually on 2026-09-06 by moving one and re-running: (B) lib/crtl/src/stdio.c hits `wasm: too many params+locals`, the MAX_WASM_BODY_VARS=288 bound in wasmenc.inc; (C) with that raised to 2048 locally, lib/crtl/src/fcntl.c hits the wasm32 va_arg gap, which open/openat need. The local raise was reverted -- it is the wasm backend`s call -- and the compiler rebuilt to the byte-identical 63f56a42bef6 it had before. Freestanding C is unaffected and still green. So `printf` on wasm32 needs B and C; A is no longer in the way and no longer the headline."
 ---
 
 # Hosted C on wasm32: environ and va_arg
@@ -79,36 +79,92 @@ A before B. B is behind A for every program that would exercise it, because
 reaching `fcntl.c` requires a header that trips A first. Doing B alone changes
 no observable.
 
-## Where this lane actually was, 2026-09-06 (frankC) — note to self, and to whoever is next
+## Wall C — `MAX_WASM_BODY_VARS = 288`, and it was invisible until A came out
 
-**Wall A (`environ`) is the next piece and it was NOT started.** No code exists
-for it, no branch, no stash. The fleet moved to reds-only for the beta 0.1 pin
-before I began, so this is a clean stopping point rather than an interrupted one.
+Found only by removing wall A, which is the point of this section: **a wall
+behind a wall is not merely unmeasured, it is unmeasurABLE, and the count of
+walls was wrong in the direction that flatters the estimate.** This ticket said
+"two" with confidence for a day.
 
-**What I would do first, so the next session does not re-derive it.** The shape
-is already in the tree as a worked example: `WasmEmitArgvFetch`
-(`ir_codegen_wasm32.inc`) fetches argv with `args_sizes_get` + `args_get` into a
-`PXXAlloc`'d block and hands back a count and a pointer vector. WASI's
-`environ_sizes_get` / `environ_get` are the same two calls with the same shape,
-and `environ` wants exactly what `args_get` already produces — a NULL-terminated
-pointer vector. So the first move is to read that function, not to design one.
+```
+pascal26:91: error: wasm: too many params+locals
+  in: ./compiler/../lib/crtl/src/stdio.c
+```
 
-**Then the refusal comes out, not the predicate.** The refusal I added in
-`ParseCProgram`'s `TARGET_WASM32` arm exists only because there was no way to
-fill `environ`; once there is, delete it rather than narrowing
-`CNeedsEnvironInit`. The predicate's over-approximation (a token scan that
-cannot tell the crtl DECLARATION from a use, so `#include <stdio.h>` is enough)
-stops mattering the moment the answer is available — it would only ever have
-caused an unnecessary *initialisation*, never a wrong one.
+`wasmenc.inc:87`, `MAX_WASM_BODY_VARS = 288`, a fixed array bound on
+params+locals per body. Raising it to 2048 locally moved the failure from
+`stdio.c` to `fcntl.c`'s va_arg, which is how B and C were separated at all
+rather than one being reported as "the" wall.
 
-**Order is not negotiable.** Wall B (va_arg) is unreachable behind wall A for
-every program that would exercise it, because reaching `lib/crtl/src/fcntl.c`
-requires a header that trips A first. Doing B alone changes no observable, and
-`tools/c_va_arg_every_target.sh` will keep reporting `refuses no environ on
-wasm32` and passing — see that ticket's own note on why the script cannot grade
-B until A is done.
+**Not raised in that commit, deliberately.** It is the wasm backend's bound and
+the number wants an owner who knows what it costs — BSS grew ~16KB at 2048 in
+the local probe, which is nothing, but the choice is not this arm's to make.
+The revert was verified the strongest available way: the compiler rebuilt to
+the byte-identical `63f56a42bef6` it had before the probe.
 
-**One thing already true and easy to lose:** freestanding C on wasm32 works
-today and is covered by `tools/c_wasm32_entry.sh`. Do not let a wall-A attempt
-regress it — that script is the guard, and its rows are all nonzero-expecting
-for a reason written at the top of the file.
+## Order, corrected
+
+**A, then C, then B** — and the old "A before B" line was right about A and
+silent about the wall it could not see. C (the bound) is hit first by any
+program that pulls stdio; B (va_arg) is behind it. Both are now reachable and
+measurable, which they were not this morning.
+
+## Wall A is done — what landed, and what it does NOT claim
+
+`63d077feb`. `WasmEmitEnvironFetch` in `ir_codegen_wasm32.inc`, called from
+`WasmEmitCEntry` before `main`; `ParseCProgram`'s `TARGET_WASM32` arm records
+the request and resolves `__pxx_set_environ` at the tail (crtl is not pulled
+until after that arm, so `FindProc` answers -1 up there for every program).
+
+Two differences from `WasmEmitArgvFetch`, both correctness and neither
+spelling, written up in the function's own header:
+
+- **The vector is NULL-terminated and argv's is not asked to be.** WASI writes
+  exactly `count` pointers for either call. argv survives that because argc is
+  carried separately; `environ` has no count at all and every reader walks to a
+  NULL the host never wrote. So the block holds `count + 1` pointers and
+  `vec[count]` is stored as 0.
+- **The block is never freed.** `environ` points into it for the life of the
+  program.
+
+**IT HAS NEVER RUN.** Nothing can reach it until C and B land. It is inert
+rather than untested — `WasmCEntryEnvp` stays -1 for every program that
+compiles today — and that was verified rather than asserted: the two wasm32 C
+programs that DO compile are unchanged across the commit (`return 42` exits 42,
+argc/argv exits 31). **Do not close this ticket, or quote the notes, as
+"environ works on wasm32".** The first thing to do when C and B land is to run
+a program that reads `getenv` and check the value, because that assertion has
+never been made.
+
+## The cost that was taken, and should be taken back
+
+The old refusal was a sentence written for a C author. What a user naming
+`environ` gets now is `wasm: too many params+locals` — a compiler-internal
+message that is about the true obstacle. That is a real regression in message
+quality, accepted because the old text named a wall that was not the wall.
+**Take it back when C and B land**; until then both replacements at least name
+the crtl file they come from, so a reader can tell it is our runtime rather
+than their program.
+
+## The guard moved with it, and caught the move
+
+`tools/c_va_arg_every_target.sh` failed the moment A landed — *"wasm32 refused
+for a reason that is NEITHER the C entry stub NOR the environ wall"* — because
+removing A moved wasm32's refusal onto va_arg itself. That is the script
+working, and the fix was to follow the wall rather than loosen the check: the
+admitted set is now `{entry stub, va_arg-by-name}` and **the environ spelling
+was DELETED rather than kept "just in case"**, since no target can produce it
+any more and an admissible reason that cannot occur is dead tolerance that
+reads as coverage. Still `6 built, 1 refused at a named wall, 7 examined`.
+
+Note what a va_arg refusal there means: it is the *safe* direction. The danger
+the script exists for is a C-capable target missing from `cparser.inc`'s four
+sets, which falls into the `TargetArch <> TARGET_X86_64` arm, silently takes
+aarch64's 8-byte two-bank layout, and prints wrong values from the second
+argument on.
+
+## Still true and easy to lose
+
+Freestanding C on wasm32 works and `tools/c_wasm32_entry.sh` is the guard. Do
+not let a wall-B or wall-C attempt regress it; its rows are all
+nonzero-expecting for a reason written at the top of that file.

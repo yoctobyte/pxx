@@ -285,23 +285,41 @@ Add the prologue arm and the four sites **together**, and let
 the moment it stops refusing at a named wall the script demands the same output
 gcc gives.
 
-**But know what that script can and cannot see today, because I overclaimed it
-in the first version of this section.** Its subject needs `printf`, so it
-`#include`s `<stdio.h>`, so on wasm32 it stops at the ENVIRON wall — which is
-upstream of the prologue. A change that added the wasm32 prologue arm and left
-`environ` alone would leave the script reporting `refuses no environ on wasm32`
-and passing. **It grades the prologue only after
-[[bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse]]
-wall A is done.** Order: environ, then prologue + the four sets, then the script
-is the grader.
+**UPDATED 2026-09-06 (frankC): wall A is done and this section's advice has
+inverted.** What stood here said the script stops at the ENVIRON wall, upstream
+of the prologue, so it could not grade a wasm32 prologue arm until wall A
+landed. Wall A landed (`63d077feb`), and the script now stops at **va_arg
+itself, by name** — its admitted set is `{entry stub, va_arg-by-name}` and the
+environ spelling was deleted, since no target can produce it any more.
 
-The way to make it fire earlier is a subject that exercises `va_arg` and reports
-through an EXIT CODE rather than `printf` — freestanding, no libc headers, so it
-clears the environ wall entirely. `tools/c_wasm32_entry.sh` already runs
-freestanding C on wasm32 and compares exit codes, so the mechanism exists and
-the work is a second subject, not a new harness. Worth doing when someone starts
-wall A rather than speculatively now.
+So the script **is** the grader now, with one trap in front of it:
 
+**A wasm32 prologue arm alone will make this script FAIL, not pass — and the
+failure will be correct.** Hosted C on wasm32 has a third wall nobody could see
+until A came out: `lib/crtl/src/stdio.c` hits `wasm: too many params+locals`
+(`wasmenc.inc:87`, `MAX_WASM_BODY_VARS = 288`). This subject needs `printf`, so
+it pulls stdio, so it will refuse there — and `too many params+locals` is not
+in the admitted set, which is exactly the "this check silently stopped covering
+the target" branch doing its job. Whoever adds the prologue must land the bound
+too, or expect that failure and read it correctly.
+
+### The freestanding subject is no longer a nice-to-have — it is the unblock
+
+The old text called it "worth doing when someone starts wall A rather than
+speculatively now". Wall A is done, so: **do it.** A subject that exercises
+`va_arg` and reports through an EXIT CODE instead of `printf` needs no libc
+headers, so it clears walls A, B and C in one move and lets the wasm32 prologue
+be implemented and graded **without touching the crtl or the locals bound at
+all.** That decoupling is the whole value and it was not obvious from here this
+morning: the three crtl walls are in front of `printf`, and they are not in
+front of `va_arg`.
+
+`tools/c_wasm32_entry.sh` already runs freestanding C on wasm32 and compares
+exit codes, so the mechanism exists and the work is a second subject, not a new
+harness. Note the constraint that shapes it: the exit code is one byte, so the
+`0x1122334455667788` argument this ticket's printf subject uses has to become
+several narrow assertions folded into one number, and each must be NONZERO for
+the reason written at the top of that script.
 ### The general form, which is why this is written up rather than just fixed
 
 **A residual filed as an obligation on a FUTURE commit has no reader when that

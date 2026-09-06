@@ -2999,10 +2999,12 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-cascade-562162b03a02 | T | 70 | regression | regression CASCADE: 42 jobs newly red in cab3205aa..562162b03 (6 commits) — auto-filed by twatch | — |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
+| regression-cascade-6758c7ce7dbd | T | 70 | regression | regression CASCADE: 23 jobs newly red in b8e3b3010..6758c7ce7 (105 commits) — auto-filed by twatch | — |
 | regression-cascade-8654c4d55b61 | T | 70 | regression | regression CASCADE: 11 jobs newly red in 4f526e338..8654c4d55 (241 commits) — auto-filed by twatch | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-afc0da53c859 | T | 70 | regression | regression CASCADE: 30 jobs newly red in bebac3336..afc0da53c (1 commits) — auto-filed by twatch | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
+| regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
 | regression-cascade-c999836a2981 | T | 70 | regression | regression CASCADE: 36 jobs newly red in 85d70d700..c999836a2 (2 commits) — auto-filed by twatch | — |
 | regression-cascade-d24df3f09efb | T | 70 | regression | regression CASCADE: 24 jobs newly red in fc9e258e1..d24df3f09 (22 commits) — auto-filed by twatch | — |
 | regression-cascade-d9f02bdc6240 | T | 70 | regression | regression CASCADE: 14 jobs newly red in 7acd2315e..d9f02bdc6 (3 commits) — auto-filed by twatch | — |
