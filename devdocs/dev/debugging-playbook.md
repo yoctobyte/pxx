@@ -15450,3 +15450,102 @@ compiler was printing `PendPtr` in its diagnostic.
 two disagree, the binary is older than the checkout, and every conclusion drawn
 from that run is about a compiler that no longer exists. One `grep`, no build, and
 it fires precisely in the case that otherwise costs a wrong public attribution.
+
+## A TEST NAME IS NOT AN IDENTIFIER FOR A DEFECT — two causes can produce one failing row, a day apart
+
+Measured 2026-09-06. A full suite stopped on `test_generic_method_across_a_uses_clause`,
+and **two live candidates had that exact test name**: one landed twenty minutes
+earlier by a session that had just described it, and one flagged the day before by
+a different session. Topic and timing both pointed at the first.
+
+Ancestry decided it and the story did not:
+
+```
+76efae23e  (candidate A)          IN the tree
+7d263221f  (A's fix)              NOT in the tree
+1364d9542  (candidate B)          IN
+b531be20a  (B's fix)              IN
+```
+
+So the red was real, foreign, and **already fixed upstream** — a fourth reading
+that neither candidate's story offered. The commit named the ancestry rather than
+the narrative, which is the point: *"the session that just told me about it"* is
+the version that reads as an explanation, and it is exactly the version that would
+have been **unfalsifiable if it had been wrong.**
+
+**A test name is a coordinate in the suite, not a key on the defect.** Two
+unrelated causes reaching one row within a day is not a coincidence to be
+explained away — it is what a suite does, because a row asserts an OUTCOME and
+many mechanisms produce one outcome. Before attributing a named red: ask
+`merge-base --is-ancestor` for each candidate **and for each candidate's fix.**
+Four bits, four `git` calls, and they can say *"already fixed"*, which no amount
+of reading the candidates will.
+
+## TWO SUCCESSFUL UNIFICATIONS ALONG DIFFERENT AXES ARE WORSE THAN ONE OBVIOUS GAP
+
+`root-cause-over-microfix.md` counts mechanisms: two serving one concept is a
+smell, three is a design flaw. This is the case that counting does not find.
+
+Measured 2026-09-06, on "how many bytes is this type":
+
+```
+SizeOfSlot(tk, cap)         handles the string CAPACITY, delegates records -> placeholder
+TypeStorageSize(tk, recId)  handles the record SIZE,     delegates strings  -> pointer width
+```
+
+Four lines and five lines. **Each is a successful unification.** Each was created
+by a correct fix for a real under-sizing bug, each documents its own case well,
+and **neither can size a `string[N]` inside a record-shaped question or a record
+inside a string-shaped one.** The concept was not left un-unified; it was **split
+along the wrong axis, twice, by two changes that were individually right.**
+
+**Why this is harder to see than a missing abstraction:** a single gap announces
+itself the first time someone needs it. Two half-answers that each look complete
+never do — every caller lands in the one that handles ITS parameter, gets a
+correct result, and leaves. The absence is invisible from inside either body and
+visible only from the pair.
+
+> **The diagnostic is different from counting, so it needs asking separately:**
+> for each function serving a concept, **name the parameter it does not take.**
+> `TypeStorageSize` has no capacity; `SizeOfSlot` has no recId. Two functions whose
+> missing parameters are each other's present ones are one function that has been
+> cut in half — and the cut runs along an axis of the implementation, never along
+> an axis of the question.
+
+**And the repair may still be "they stay separate".** That is a result, not a
+failure of the investigation, but only if the commit says what would have made it
+a merge — otherwise a negative reads as the group having given up.
+
+## THE RAW SET DIFFERENCE IS NOT THE CENSUS — the second predicate is what turns 83 into 4
+
+`a check that flags everything is as empty as one that never fires`, with the
+worked arithmetic, from `tools/lowering_passthrough_census.py` (2026-09-06).
+
+The defect being hunted: an AST kind whose VALUE arm exists and whose ADDRESS arm
+does not, so a consumer asking for an address silently gets contents. That is what
+made `v := Variant(y)` segfault.
+
+The obvious census is the set difference — kinds with a value arm and no address
+arm. **It answers 83**, nearly all of them statements and literals for which an
+address is meaningless. A guard reporting 83 rows flags everything, means nothing,
+and is scrolled past inside a week.
+
+**The second predicate is the census:** the value arm must be a *pass-through* —
+`Result := IRLowerAST(ASTLeft/Right[node])`, a kind that forwards to a child and
+therefore has an address its parent could legitimately want. **83 becomes 4.**
+
+> The general move: a set difference states where two implementations disagree,
+> which is almost never the same set as **where the disagreement is reachable**.
+> The reachability predicate is a property of the construct, not of the tables,
+> and it is what you have to supply. If a census comes back with a number in the
+> tens where you expected a handful, you have computed the difference and not the
+> census.
+
+Two controls, branched on, both verified against the real pre-fix tree:
+`--self-check` must NAME the kind that caused the original segfault, and a normal
+run over that tree must **exit 1** with it marked NEW. And the `ACCEPTED` list is
+deliberately not a clean bill — one entry was constructed against gcc and matches,
+two were **not constructed either way**, and the file says *"reachability asked and
+not demonstrated"* in those words, so the next reader cannot inherit an untested
+row as a clearance. **An exemption list that does not distinguish "checked and
+fine" from "not checked" is a clean bill of health written by nobody.**

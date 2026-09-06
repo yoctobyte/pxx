@@ -75,3 +75,25 @@ Filed rather than fixed because the fix is a decision about everyone's loop, and
 filed rather than left in a message because the author of the incident is
 mid-re-land and a recommendation delivered by message has no reader once that
 lands.
+
+## A SIBLING PROPOSAL ARRIVED THE SAME DAY — price them together, not one at a time
+
+`tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is a second standalone
+check written the same afternoon, deliberately NOT wired into `gate.sh` for the
+same reason this one is not: a new fleet-wide gate step is Track T's to price.
+It finds AST kinds whose value arm is a pass-through but which have no arm in
+`IRLowerAddress` — the shape that made `v := Variant(y)` segfault, where a
+consumer asking for an address silently gets contents. It runs standalone, exits
+1, has two branched-on controls, and wiring it is one line.
+
+**Recorded here so the two are priced as a pair.** Two agents each declining to
+add a gate step on the way past is correct discipline and produces a predictable
+failure: two good rows sitting unwired, each waiting for a decision nobody knows
+they are holding, and each re-proposed in a fortnight by someone who did not find
+the first. Whoever prices this row should look at that one in the same pass — the
+budget question is *"how much may `quick` grow, and what buys the most"*, and it
+cannot be answered one candidate at a time.
+
+Both share the recommended shape: gate on `compiler/**` having uncommitted
+changes, as the FPC seed canary already does, so the cost lands only on sessions
+that can cause the defect.

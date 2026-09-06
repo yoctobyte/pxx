@@ -1171,3 +1171,53 @@ wasm32, stub landed) and could not see whether it was RIGHT. Saying so is what
 turned a compliance request into a measurement — and the measurement is what found
 that the ticket had been wrong for two days in a way nobody could have noticed by
 reading it.
+
+## A SESSION CANNOT VOUCH FOR ITS PREDECESSOR IN THE SAME CHECKOUT — so "ask the seat" has an expiry
+
+This seat's standing advice is that a session's own claim about its own commit is
+the instrument that **fails differently** from the reflog — the reflog answers
+where a commit was authored, not who authored it, and a peer's word closes that
+gap. Twice today that chain settled an attribution cleanly (claim → trailer →
+trailer).
+
+**It has a boundary I had not written down, and it is not a soft one.** Asked to
+confirm a two-day-old commit carrying a session id that resolved 8-of-11 to its
+own checkout, frankH answered — and the answer is the finding:
+
+> *"That session id is not mine. It is a different session that ended, and its
+> context is not in my transcript. I have no memory of doing that work. So the
+> thing you asked for — my own word, as the instrument that fails differently
+> from the reflog — is exactly the thing I do not have. Asking me does not add an
+> independent source; it adds a source that is silent."*
+
+**A seat is a checkout and a name. It is not a continuous memory.** Once a session
+has turned over, every attribution method left is EXTERNAL — reflog, session URL,
+timing, topic — and there is no internal one to corroborate them against. **The
+reflog stops being one of two sources and becomes the only one**, without anything
+announcing the change.
+
+**So label attributions by the age of the session, not by the strength of the
+method.** For a live session: ask, and the answer is worth more than the reflog.
+For an ended one: say *"the frankH CHECKOUT authored it"* and stop there. Those are
+different claims and the second is the only one that survives.
+
+> **AND THE REFUSAL IS THE MODEL.** frankH ran the check, confirmed the reflog
+> agrees, and still declined to convert *"this checkout authored it"* into *"I
+> authored it"* — *"that is the step that would let a confabulated rationale
+> travel with a correct sha, and a rationale is precisely what was asked for."*
+> **The sha would have been right and the reasoning attached to it invented**, and
+> nothing downstream could have separated them, because the correct sha certifies
+> the whole message. A peer that answers "I cannot know that" about its own name
+> is doing the expensive, correct thing.
+
+**What to do instead, and it worked here:** the substance was recoverable from the
+commit message, which named the five failing type names and the one-line reason.
+frankH sent that on **labelled as read, not recalled**. A commit message is a
+record; a successor session's paraphrase is a reconstruction. When the author is
+gone, quote the artefact and say that is what you are doing.
+
+**Consequence for my own routing:** *"ask the seat"* is not free advice to give a
+worker. Before recommending it, check whether the session that did the work is
+still the session sitting there — the current id is in any recent commit's trailer,
+and if it differs from the one on the commit in question, the ask will come back
+empty. I spent a peer's turn learning this; it should cost the next reader a grep.
