@@ -15840,3 +15840,60 @@ answered *"this file is a unit, not a program"*, the compiler being right and th
 probe being wrong. **Fixing the obvious aim problem is what made the wrong answer
 look earned:** a second, better-aimed probe produced a clean pass, and a clean
 pass after a visible correction reads as a result rather than as the next bug.
+
+## A SAME-TYPE ASSIGNMENT BETWEEN TWO IDENTICALLY-WRONG OPERANDS IS A ROW THAT CANNOT FAIL
+
+frankD, 2026-09-06, in `pscanner.pp`. `SortedTokens : array of TToken` — a
+dynamic array whose element is an **enum** — had recorded its element type as
+`tyRecord` **with a record id**, while `tk: TToken` was correctly `tyInteger`:
+
+```
+DST kind=10 nodeTk=5 rec=1 base=SortedTokens isArr=1 elemTk=5 elemRec=1
+SRC kind=3  nodeTk=1 name=tk symTk=1
+```
+
+Four assignments in one routine. Three error (`SortedTokens[i] := tk` and the two
+halves of the swap). **The fourth — `SortedTokens[J] := SortedTokens[J+K]` — does
+NOT, because both sides are wrong in exactly the same way, so the compatibility
+check is satisfied and the row is green.**
+
+**A comparison whose two inputs share the defect cannot see it.** This is a
+distinct animal from *"match the assertion class to the defect class"*: the
+assertion class here is right, the instrument reads the right quantity, and it is
+still blind — **because the error is UNIFORM across both operands and the check
+is a check for AGREEMENT.**
+
+**The consequence is a search rule.** Any element-to-element move, any
+`a := b` between two members of the same aggregate, any round-trip through one
+encoder and its matching decoder, is **structurally incapable of reporting a
+systematic error in that aggregate's type.** So:
+
+> **The MIXED rows are the only instrument. Find the assignment that crosses the
+> boundary — array element to scalar, one type family to another — and read
+> THAT.**
+
+A self-consistency check reports that a system agrees with itself, which every
+uniformly-wrong system does. Three of the four rows could speak and one could not,
+and the silent one is the one a reader scanning for "does the swap work" would
+have tested first.
+
+## A DIAGNOSTIC THAT CANNOT SAY *WHERE* CAN STILL SAY *WHAT* — and that is often the cheaper half
+
+Same investigation, and it is the counterweight to *"a parked diagnostic carrying
+a line but not a FILE"*. `ASTLine = 0` on the failing nodes meant the error could
+not name a position at all, and the plan that forced was a **bisect of a
+60,000-line unit.**
+
+Instead frankD instrumented the check site to dump both operands — kind, node
+token, record id, base symbol, element type — and the answer fell out in one run.
+**Naming the OPERANDS was two orders of magnitude cheaper than locating the
+LINE**, and it is also the more specific answer: a line number tells you where to
+look, a dumped symbol pair tells you what is wrong.
+
+**So `line 0` is a reason to widen the message, not a reason to bisect.** When a
+diagnostic cannot carry a position, the recovery is to make it carry more of the
+STATE — the two things being compared, spelled — before spending anything on
+narrowing the input. **The two failure modes are opposite and only one is
+expensive:** a diagnostic with a line and no detail sends you to the right place
+knowing nothing; a diagnostic with detail and no line tells you the answer and
+makes you find the place, which a grep usually does for free.
