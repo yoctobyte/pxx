@@ -2,7 +2,7 @@
 track: P
 prio: 80
 type: bug
-status: open
+status: working
 blocked-by: []
 owner: frankO
 summary: "A class method called through a class-REFERENCE field is parsed as a FIELD READ, not a call: measured, the expression parser returns AN_FIELD (kind 11) with the argument list's `(` unconsumed. In STATEMENT position that surfaces as `statement is neither a call nor an assignment`; in EXPRESSION position it COMPILES AND SILENTLY YIELDS GARBAGE -- `r := PP(p)^.__ClassRef.Val(3)` printed r=-86205216 with the method never entered, where fpc 3.2.2 and pin v404 both print `SIDE called n=3` and r=42. It is a CONJUNCTION: a NESTED pointer alias AND two levels of pointer (the second deref implicit) -- nested-with-single-pointer and unit-level-with-double-pointer both call correctly. A REGRESSION in 5b5fdb0b3..de4bf2245; good at 60666ec36, so it is at or after c01eb17a8 where the nested-alias bug masks it. Blocks corpus rung 6a at generics.defaults:1865. The loud half is the lucky half."
@@ -158,3 +158,32 @@ end.
 `generics.defaults.pas:1865` and fifteen sibling lines, through
 `{$DEFINE EXTENDED_HASH_FACTORY := PPExtendedEqualityComparerVMT(Self)^.__ClassRef}`.
 Corpus rung 6a stops here.
+
+## CLAIMED 2026-09-06 (frank-coordinator, on the holder's word) — it was the top of `ready --track P` while being worked
+
+`owner: frankO` was set and the row was still in `backlog-pascal`, so `ready --track P`
+offered a **p80, top-of-queue** ticket to every P session while its owner was mid-fix.
+`owner:` is ATTRIBUTION, not a claim — the FOLDER is the whole mechanism, and `working/`
+is the only thing `ready` and `next` read. Moved, not touched otherwise.
+
+**The holder is on it now and named its boundary**, which is worth recording because it is
+a better localiser than a bisect: nested types **required**; class-ref **locals** fine;
+chain-**without**-call fine; unit-level types fine; procedure/function and
+virtual/non-virtual **irrelevant**.
+
+**Bisect precondition, if anyone does end up needing the commit.** Window
+`5b5fdb0b3..de4bf2245`, GOOD at `60666ec36`, so at or after `c01eb17a8` — **the same commit
+as the nested-alias defect fixed in `170e7aee1`, and that defect MASKS this one across the
+rest of the window.** Every step must be built with `170e7aee1` carried, and a plain `git
+apply` does not reach that far back because `symtab.inc` has drifted. **Assert the alias
+fix is EFFECTIVE in the built binary before trusting a GOOD** — a step that could not apply
+it has measured the masking bug, and that reads exactly like an absent defect, in the
+direction that walks the bisect past the cause. The holder's harness reports `UNMEASURABLE`
+rather than building an unpatched compiler and calling the step GOOD.
+
+**And the probe shape this row cost an hour to find**, because it is reusable and it is why
+the slug had to change: the expression spelling was probed first, seen to **compile**, and
+recorded as *the working arm* — which named the ticket after the loud half. A compile
+asserts the parser accepted the text and observes nothing about the callee running.
+**The discriminating probe is a method with a `WriteLn` SIDE EFFECT *and* a distinctive
+RETURN VALUE, so silence and a garbage number both show.**
