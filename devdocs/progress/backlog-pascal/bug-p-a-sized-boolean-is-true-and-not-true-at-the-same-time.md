@@ -173,3 +173,34 @@ files use that unit.
 in.** A missing name produces an error message and a wrong branch does not, so
 the feature gap is the one that recruits an owner. Whoever picks up the
 `BooleanNN` ticket should read this one first — they land in the same table.
+
+## 2026-09-06 (frankA) — a FOURTH face, and this one is asymmetric between two spellings
+
+The summary lists three consequences of one cause: `not` complements an integer,
+`WriteLn` prints a digit, `Ord` answers 1 instead of -1. There is a fourth, and
+unlike the other three it depends on how the type is SPELLED:
+
+    High(ByteBool)               -> REFUSED
+    type b = ByteBool; High(b)   -> 255      (WordBool 65535, LongBool 2147483647)
+    fpc 3.2.2, both spellings    -> TRUE
+
+**The refusal is a mitigation and the one-line alias routes around it.**
+`bug-p-thirteen-builtin-type-names-answer-at-some-doors-and-are-refused-at-others`
+records that the direct door refuses on purpose — answering `High` from the kind
+would give an ordinal — so that door is declining a question it cannot answer
+correctly, and the alias door has no such scruple. A refusal is loud and a wrong
+bound is silent.
+
+It matters for THIS ticket because it changes what the fork is exclusively
+required for. Making `High` answer `TRUE` needs the identity carrier, same as the
+other three faces. Making the two spellings AGREE does not: the alias path can
+refuse exactly as the direct path does, today, independently of how
+`decide-how-a-type-carries-an-identity-its-kind-cannot-hold` is settled. So there
+is a defensible interim state that is strictly smaller than the fork, and it was
+invisible until someone asked the second spelling.
+
+Found by sweeping all 51 names from the union of `OrdinalNameToTk` and
+`BuiltinScalarTypeKind` in both spellings; these three are the only cell in that
+sweep where the spelling changes the answer. Detail and the negative half — zero
+direct-vs-alias disagreements at `SizeOf`, `High`/`Low` and `TypeInfo` for every
+other name — are on the thirteen-names ticket.
