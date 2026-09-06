@@ -107,6 +107,17 @@ is why the message reads as nonsense.
 compatible this compiles and binds the wrong type with no diagnostic at all. The
 refusal is the lucky outcome.
 
+**AND THE SILENT CASE IS UNSIZED.** This ranked at 65 as "test-fpjson does not
+build", i.e. on the face that ANNOUNCES itself. Nobody has counted the programs
+that compiled against a wrong alias binding and said nothing, and this fix
+changes their behaviour too -- silently, in the other direction. A defect whose
+visible face is its benign one gets closed at the wrong priority by
+construction, and that is what happened here: the loud face was one suite
+failing to compile, the quiet face is every re-declared alias in the tree
+binding to whatever registered first. `lib/rtl/classes.pas` re-declares these
+names deliberately, so the population is "programs using `classes`", not
+"programs using fpjson". Not measured, and I am not claiming a number.
+
 ### It is also neither about units nor about interfaces
 
 Measured over eleven cells. It needs no unit and no `uses` — six lines in a

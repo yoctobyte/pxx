@@ -12,11 +12,20 @@
   with `obj: IUnknown` would not compile, so 0 of 203 tests ran.
 
   Rows 1-2 are the shape that was broken -- an alias from a USED UNIT, which is
-  the fpjson case. Rows 3-4 are the program-scope half, which needed a SECOND
-  fix because CurrentUnitIdx is -1 at program scope and the unit-scope guard
-  skipped it: the shorter repro and the harder one to notice. Rows 5-6 are the
-  controls that must not move -- a non-colliding alias, and a colliding alias
-  declared but never used to type anything.
+  the fpjson case. Rows 5-6 are the controls that must not move: a non-colliding
+  alias, and a colliding alias declared but never used to type anything.
+
+  ROWS 3-4 ARE LOAD-BEARING AND LOOK REDUNDANT. They are the PROGRAM-scope half
+  and they needed a SECOND fix: at program scope CurrentUnitIdx is -1, which is
+  a real scope and not "unknown", so the obvious guard -- `if CurrentUnitIdx >= 0`
+  -- fixed the unit case and left the program case live. Deleting rows 3-4
+  because rows 1-2 "already cover it" restores exactly that half of the bug,
+  and nothing else here would notice.
+
+  The reason it was nearly missed is worth keeping: the ticket is called "a UNIT
+  redeclaring a builtin interface alias", so every instinct reaches for a unit,
+  and the program-scope case is BOTH the shorter repro and the invisible one.
+  The name steered the test away from the smaller bug.
 
   STILL BROKEN ON PURPOSE, so do not read this file as covering the family: an
   alias in a USED UNIT whose name collides with a real CLASS row rather than
