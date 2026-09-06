@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
-summary: "`[...]` at an argument position is a SET to the expression parser and an `array of const` / open-array LITERAL to the callee, and only the PARAMETER can say which. That question is asked separately at EIGHT call paths and the arms are hand-written copies: pasparser_call.inc:2066, pasparser_lval.inc:88 (the one extracted helper) / :3452 / :3766 / :5251, pasparser_expr.inc:7785, pasparser_stmt.inc:7654, and -- until 2026-09-06 -- the implicit-Self bare method call at pasparser_stmt.inc:7910, which hand-rolled its own loop with a bare `ParseExpr` and asked nothing. THE FAILURE IS USUALLY SILENT, WHICH IS WHY EACH ONE IS FOUND SEPARATELY BY A CORPUS: a single-character string or an integer is a LEGAL set item, so the call compiles and the callee reads Length off a set -- 1026585632 against fpc's 3, no diagnostic. Only an element a set CANNOT hold (`['#0']`, two characters) turns it into `set item must be one character`, and that is what fcl-passrc happened to pass. Three of the eight arms already carry a comment saying a previous path lacked the door. The fix is one predicate every argument loop calls, or one argument loop."
+summary: "`[...]` at an argument position is a SET to the expression parser and an `array of const` / open-array LITERAL to the callee, and only the PARAMETER can say which. That question is asked separately at EIGHT call paths and the arms are hand-written copies: pasparser_call.inc:2066, pasparser_lval.inc:88 (the one extracted helper) / :3452 / :3766 / :5251, pasparser_expr.inc:7785, pasparser_stmt.inc:7654, and -- until 2026-09-06 -- the implicit-Self bare method call, which hand-rolled its own loop with a bare `ParseExpr` and asked nothing. DERIVE THE SITES FROM THE GREPS IN THE BODY, never from a line number here: four of the eight had drifted the same day they were filed, and a rotted citation turns a COUNT into a wrong census rather than an obvious mistake. One of the hand-written arms also asks a WEAKER predicate than the others (`Params[].IsArray`, true of any open array) -- measured, not diverging on the one call shape I could reach it with, so it is a ninth variant and not a ninth defect. THE FAILURE IS USUALLY SILENT, WHICH IS WHY EACH ONE IS FOUND SEPARATELY BY A CORPUS: a single-character string or an integer is a LEGAL set item, so the call compiles and the callee reads Length off a set -- 1026585632 against fpc's 3, no diagnostic. Only an element a set CANNOT hold (`['#0']`, two characters) turns it into `set item must be one character`, and that is what fcl-passrc happened to pass. Three of the eight arms already carry a comment saying a previous path lacked the door. The fix is one predicate every argument loop calls, or one argument loop."
 ---
 
 # Eight call paths, eight copies of one question
@@ -18,16 +18,44 @@ unambiguous in the signature: a SET if the parameter is a set, an open-array or
 `array of const` literal if it is an open array. The parser resolves it per
 call path.
 
-| where | shape it serves |
-| --- | --- |
-| `pasparser_call.inc:2066` | `GenMakeStaticMethodCall` -- class/static methods |
-| `pasparser_lval.inc:88` | `TryParseBracketArgForSlot`, the extracted helper |
-| `pasparser_lval.inc:3452` | member call on a name receiver |
-| `pasparser_lval.inc:3766` | member call, second shape |
-| `pasparser_lval.inc:5251` | member call, third shape |
-| `pasparser_expr.inc:7785` | direct call in expression position (via the helper) |
-| `pasparser_stmt.inc:7654` | direct call in statement position |
-| `pasparser_stmt.inc:7910` | **implicit-Self bare method call** -- had none until 2026-09-06 |
+**DERIVE THE LIST; DO NOT READ THE ONE BELOW.** Four of the eight line numbers
+this ticket was filed with had already drifted the same day — `call.inc` 2066 to
+2115, `lval.inc` 5251 to 5252, `expr.inc` 7785 to 7632, `stmt.inc` 7910 to 7908.
+A stale line number does not error, it points somewhere, and this ticket's whole
+value is a COUNT, so a rotted table turns into a wrong census rather than an
+obvious mistake. The two greps below are the census:
+
+```sh
+# arms that ask the question BY HAND
+grep -n 'CurTok.Kind = tkLBrack) and ParamIsVarRecArray' compiler/pasparser_*.inc
+# ...plus the one that asks a DIFFERENT, WEAKER question -- see the variation note
+grep -n 'Params\[.*\].IsArray then' compiler/pasparser_lval.inc
+# sites that DELEGATE (these are the fixed ones; the goal is for the first list
+# to be empty and this one to be every call path)
+grep -n 'TryParseBracketArgForSlot' compiler/pasparser_*.inc
+```
+
+| where (2026-09-06, re-derive before quoting) | shape it serves | asks |
+| --- | --- | --- |
+| `pasparser_call.inc:2115` | `GenMakeStaticMethodCall` — class/static methods | by hand |
+| `pasparser_lval.inc:3452` | member call on a name receiver | by hand |
+| `pasparser_lval.inc:3763` | member call, by-ref/array arm | **a weaker predicate** |
+| `pasparser_lval.inc:5252` | member call, third shape | by hand |
+| `pasparser_stmt.inc:7654` | direct call in statement position | by hand |
+| `pasparser_lval.inc:88` | `TryParseBracketArgForSlot` itself | — |
+| `pasparser_lval.inc:106` | `BuildIndirectCallAST` — indirect calls | delegates |
+| `pasparser_expr.inc:7632` | direct call in expression position | delegates |
+| `pasparser_stmt.inc:7908` | **implicit-Self bare method call** — had none until 2026-09-06 | delegates |
+
+**The variation, flagged rather than claimed.** `pasparser_lval.inc:3763` guards
+on `Procs[mpi].Params[mai].IsArray` — true of ANY open array — where every other
+arm asks `ParamIsVarRecArray`, and then routes to `ParseVarRecLiteralAST`, the
+TVarRec builder. **Measured 2026-09-06 and it does NOT diverge** on the shape I
+could reach it with: `c.M([10, 20, 30])` for `const A: array of Integer` and the
+`array of const` sibling both match fpc 3.2.2 exactly. So this is a ninth
+variant of the predicate, not a ninth defect — and the scope of that negative is
+one call shape, on x86-64, by one probe. A unification must not assume the four
+hand-written arms ask the same question, because one of them does not.
 
 ## Why each one is found separately, by a corpus, months apart
 
