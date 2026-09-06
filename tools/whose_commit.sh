@@ -25,14 +25,32 @@ STEP='\((pick|continue|fixup|squash|reword|edit|revert)\)'
 CREATE="(commit|commit \(amend\)|commit \(initial\)|(rebase|pull\b[^:()]*) $STEP)"
 root=${PXX_CHECKOUT_ROOT:-$HOME}
 
+# Which clones to scan. NOT a `frank*` glob: `~/pxx`, `~/pxx-songfmt` and
+# `~/trackt-watch` are this repo too, and trackt-watch is the one that matters
+# -- it is Track T's watcher clone, so every auto-filed regression is authored
+# there. Globbing seat names denied 4056 origin/master shas, and "authored by
+# the T daemon rather than by a seat" is a real answer, not an absence.
+# Nor a bare `*/.git` walk: `~/pxx-website` is a DIFFERENT repository.
+# So enumerate, and keep only clones sharing OUR origin URL -- which makes this
+# self-configuring instead of a second list that goes stale the same way the
+# first one did.
+mine=$(git config --get remote.origin.url 2>/dev/null)
+checkouts() {
+  for g in "$root"/*/.git; do
+    [ -e "$g" ] || continue
+    d=${g%/.git}
+    [ "$(git -C "$d" config --get remote.origin.url 2>/dev/null)" = "$mine" ] \
+      && printf '%s\n' "$d"
+  done
+}
+
 [ $# -gt 0 ] || { echo "usage: $0 <sha>..." >&2; exit 2; }
 
 rc=0
 for sha in "$@"; do
   short=$(git rev-parse --short=9 "$sha" 2>/dev/null) || { echo "$sha  UNKNOWN-SHA"; rc=1; continue; }
   claim=
-  for d in "$root"/frank*/; do
-    [ -d "$d.git" ] || continue
+  for d in $(checkouts); do
     if git -C "$d" reflog --format='%h %gs' 2>/dev/null \
          | grep -qE "^$short $CREATE"; then
       claim="$claim $(basename "$d")"
@@ -42,7 +60,7 @@ for sha in "$@"; do
   n=$(echo $claim | wc -w)
   case $n in
     0) echo "$short  NO CHECKOUT CLAIMS IT  ${id:-no-session-id}"
-       echo "      -> not authored under $root, or its reflog has expired (90d default)." ; rc=1 ;;
+       echo "      -> not authored in any clone of $mine under $root, or that\n         clone\x27s reflog has expired (90d default)." ; rc=1 ;;
     1) echo "$short $claim  ${id:-no-session-id}" ;;
     *) echo "$short  AMBIGUOUS:$claim  ${id:-no-session-id}"
        echo "      -> a patch applied in two trees. The session id is the tiebreak." ; rc=1 ;;
