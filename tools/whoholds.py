@@ -15,6 +15,32 @@ thing anyone must remember to do.
     tools/whoholds.py compiler/ir_codegen.inc compiler/symtab.inc
     tools/whoholds.py --hot                 # the busiest files, last 6h
     tools/whoholds.py --mine compiler/*.inc # ... and whether the last writer was me
+    tools/whoholds.py --containing='not a record member: expected a field'
+
+A FILENAME IS A CLAIM ABOUT WHERE CODE LIVES; `git grep -l` IS A MEASUREMENT OF
+IT -- so `--containing=STRING` takes a string the code OWNS and resolves the
+files itself. Added 2026-09-06 after this repo's coordinator reported a topic
+quiet because nobody had committed to `compiler/pasparser_class.inc`. That file
+exists (481 lines, "class/record member support"), which is why the answer came
+back clean and plausible; the code in question was in `pasparser_decl.inc`, which
+had eighteen commits in six hours and is one of the busiest files on the board.
+frankB's statement of the defect is the reason this mode exists:
+
+    A collision check against the wrong file cannot return anything but "clear".
+    It has no failure mode.
+
+The wrong file was chosen by the plausibility of its NAME, and every layer below
+it worked perfectly. `report()` cannot detect this -- it is handed a path, the
+path exists, nothing errors, and `quiet` is the honest answer to the question it
+was actually asked. **So the guard has to sit ABOVE the path, which is what this
+mode is.**
+
+ZERO MATCHES IS LOUD AND EXITS NON-ZERO, deliberately. "No tracked file contains
+this string" is the wrong-file failure arriving one step earlier, and printing it
+as a quiet row would reproduce the exact defect this mode was written to remove:
+a clean-looking negative about a population that was never located. It is the
+same rule `whokilled.sh` enforces one directory over -- blindness must not read
+as clean.
 
 WHAT IT CANNOT TELL YOU, stated because a false clean here is expensive: only 219
 of those 607 commits carried a Claude-Session trailer. A file whose recent writers
@@ -27,6 +53,15 @@ commit, by construction, because every agent commits as the owner).
 TO BE SEEN BY THIS TOOL, put a `Lane:` trailer on your commits:
 
     Lane: frankA
+
+ADOPTION, MEASURED 2026-09-06 SO THE FIELD IS NOT ASSUMED TO BE WORKING: of 722
+commits in twelve hours, **0 carried a `Lane:` line**. The field is sound and
+nobody uses it, so every row below falls back to the session id -- which names a
+transcript and not somebody you can message. That is a real gap and it is NOT
+fixed by the fallback repair below; a caller who needs a NAME still has to map
+the id themselves (CLAUDE.md's reflog method, which answers WHERE a commit was
+authored rather than WHO authored it). Stated here rather than left implicit,
+because a tool that prints an id every time looks like it is identifying people.
 
 GRAMMAR, stated because two lanes got it wrong within hours of the field existing
 -- which is a docs defect, not two mistakes: letters, digits, `_` `.` `-`, starting
@@ -62,6 +97,8 @@ does not appear, so `quiet` means "nobody has LANDED anything recently", never
 import re, subprocess, sys, time, collections
 
 _LANE_OK = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}$")
+# The id itself, wherever it sits: bare, or at the tail of the URL the spec uses.
+_SESSION_RE = re.compile(r"session_([A-Za-z0-9]{6,})")
 
 WINDOW_MIN = 360
 
@@ -120,10 +157,26 @@ def recent(path, minutes):
                 sess = "!bad"
             break
         if not sess:
-            for tok in body.split():
-                if tok.startswith("session_"):
-                    sess = tok[8:16]
-                    break
+            # MATCH THE ID ANYWHERE IN THE TOKEN, NOT AT ITS START. CLAUDE.md's
+            # spec is a URL -- `Claude-Session: https://claude.ai/code/session_01Bk...`
+            # -- so the whitespace-delimited token BEGINS with `https://` and a
+            # `startswith("session_")` test matched nothing, ever. Measured
+            # 2026-09-06: of 722 commits in twelve hours, 509 carried a URL-form
+            # trailer and 0 carried a bare `session_` token, so this fallback was
+            # dead against the entire corpus the spec produces. The tool then
+            # printed `?×27` for a file whose every recent commit names its
+            # session, plus "you cannot tell who to ask" -- an honest-sounding
+            # warning about a condition that was false.
+            #
+            # ONE-SIGNED, LIKE EVERY OTHER FAILURE THIS TOOL EXISTS TO CATCH: it
+            # can only under-report identification, it never errors, and `?` is
+            # the reading that sends a caller to ask a human. The tool's own
+            # docstring says "present and rejected is visible, present and wrong
+            # is not"; this was the third state -- present and CORRECT, read as
+            # absent.
+            m = _SESSION_RE.search(body)
+            if m:
+                sess = m.group(1)[:8]
         try:
             age = int((now - int(cd)) / 60)
         except ValueError:
@@ -184,16 +237,81 @@ def hot(minutes, top=15):
         print(f"  {n:4d}  {f}")
 
 
+# A string that matches this many files is not locating a topic, it is locating a
+# habit -- `Result :=` is in every file here. The list is still printed in full
+# (truncating it would hide the very thing that makes it useless), but the caller
+# is told the discriminator is weak, because a 40-file "who holds this" answer
+# reads as thoroughness rather than as noise.
+VAGUE_AT = 12
+
+
+def files_containing(needle, pathspec):
+    """Tracked files whose CONTENT has `needle`. Never guesses a filename.
+
+    Fixed-string, not regex: the caller is pasting a line out of the source or
+    out of a peer's message, and a stray `(` or `.` in it must not silently
+    change the population. `-F` also makes an empty needle impossible to
+    mistake for a match-everything pattern -- it is rejected before we get here.
+    """
+    cmd = ["git", "grep", "-l", "-F", needle]
+    if pathspec:
+        cmd += ["--"] + list(pathspec)
+    out = subprocess.run(cmd, capture_output=True, text=True)
+    # rc 1 is "no match" and is NOT an error; anything else is the instrument
+    # failing, and must not be reported as an empty population.
+    if out.returncode not in (0, 1):
+        print("git grep failed (rc=%d): %s" % (out.returncode, out.stderr.strip()),
+              file=sys.stderr)
+        sys.exit(3)
+    return [l for l in out.stdout.splitlines() if l.strip()]
+
+
+def report_containing(needle, pathspec, minutes):
+    paths = files_containing(needle, pathspec)
+    if not paths:
+        print("NO TRACKED FILE CONTAINS THAT STRING.")
+        print("  %r" % needle)
+        print("  This is not 'quiet'. Nothing was measured, because the code you")
+        print("  are asking about was never located. Check the string against the")
+        print("  source (or ask the peer who quoted it for the exact spelling)")
+        print("  before reading any collision answer -- a check aimed at a file")
+        print("  that does not hold the code can only come back clear.")
+        if pathspec:
+            print("  Searched under: %s" % " ".join(pathspec))
+        sys.exit(2)
+    print("string resolves to %d file(s):" % len(paths))
+    for p in paths:
+        print("  %s" % p)
+    if len(paths) > VAGUE_AT:
+        print("  !! %d files is a weak discriminator — this string is probably an"
+              % len(paths))
+        print("     idiom rather than the code you mean. Narrow it before trusting")
+        print("     the holders below; a wide population makes everyone a holder.")
+    report(paths, minutes)
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     mins = WINDOW_MIN
+    needle = None
     for a in sys.argv[1:]:
         if a.startswith("--window="):
             mins = int(a.split("=", 1)[1])
+        elif a.startswith("--containing="):
+            needle = a.split("=", 1)[1]
+    if needle is not None and not needle.strip():
+        # An empty needle would match every file and print a confident census of
+        # the whole tree. Refuse rather than answer.
+        print("--containing= needs a string the code owns, not an empty one.",
+              file=sys.stderr)
+        sys.exit(2)
     if "--hot" in sys.argv:
         hot(mins)
+    elif needle is not None:
+        report_containing(needle, args, mins)
     elif args:
         report(args, mins)
     else:
         print(__doc__.split("\n\n")[0])
-        print("usage: tools/whoholds.py <file>... | --hot [--window=MIN]")
+        print("usage: tools/whoholds.py <file>... | --containing=STRING [pathspec...]"
+              " | --hot [--window=MIN]")
