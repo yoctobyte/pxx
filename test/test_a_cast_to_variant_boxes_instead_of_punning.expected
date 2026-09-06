@@ -1,0 +1,13 @@
+cast   int    233
+assign int    233
+cast   double 1.5
+cast   char   q
+cast   bool   True
+cast   string abc
+cast   ole    233
+cast   variant 233
+round  int    233
+round  double 1.50
+round  string abc
+inline        233
+VARIANT CAST OK

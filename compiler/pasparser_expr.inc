@@ -6878,6 +6878,35 @@ begin
             Expect(tkLParen, '(');
             ParseExpr;
             Expect(tkRParen, ')');
+            { `Variant(x)` / `OleVariant(x)` is the BOXING conversion, and it is
+              the same conversion the implicit `v := x` already performs -- so
+              yield the operand and let the assignment box it, rather than
+              building an AN_PTR_CAST that retags an integer AS a variant
+              record. The pun SEGFAULTED: `v := Variant(y)` for `y: LongInt`
+              died at run time while `v := y` on the line above it printed 233,
+              which is the tell -- one spelling of a conversion crashing while
+              the other, doing strictly more work, is fine.
+
+              UNCONDITIONAL, including when the operand is ALREADY a variant.
+              The first version of this fix exempted that case on the reasoning
+              that `Variant(v)` was "the identity it already is" -- and it was
+              not: `w := Variant(v)` segfaulted too, by the same pun, and the
+              exemption preserved exactly the one shape that had no reason to
+              be preserved. Measured, not reasoned: the row was in the test
+              before the fix was written, and it is the row that failed.
+
+              This makes the expression's static type the OPERAND's rather than
+              tyVariant. That is CLAUDE.md's implementation latitude -- the test
+              is the value stored in its DECLARED type, and `v := Variant(y)`
+              now stores 233 exactly as fpc 3.2.2 does. `WriteLn(Variant(y))`
+              prints 233 on both, by the integer route here and the variant
+              route there.
+              bug-p-a-cast-to-variant-segfaults-instead-of-boxing }
+            if castTk = tyVariant then
+            begin
+              LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+              Exit;
+            end;
             { a promotable operand demotes before the pun — see
               PromoDemoteToInt64.
 
