@@ -16900,3 +16900,79 @@ shapes it does not support need a row too, and that row's body is an error.
 answer is "it goes on to the general case", the general case is now silently
 claiming to handle everything the specific arms declined — which is the exact
 population that most needs a diagnostic.
+
+## THE GUARD SAT ON THE SPELLING YOU WRITE WHEN THE CODE WORKS — so every probe written like real code walked through the guarded door
+
+frankB, 2026-09-06, closing `bug-p-a-default-value-is-accepted-on-an-open-array-parameter`
+at `181576cdc` — a ticket the board described as diagnostic-quality tidy-up.
+
+A default value on an open-array parameter has been refused **since
+2026-09-01**. A careful re-measurement on 2026-09-05 concluded the wrong-value arm
+was already unreachable and *"the remaining value is diagnostic quality only"*.
+**That was read off the free-routine spelling.** Measured today:
+`TC.M(const a: array of string = 'x')` declared in a class body and implemented
+without the default **compiles clean, prints `High(a) = 1073741823`, and
+segfaults on the next call.** fpc refuses at the `=`.
+
+**The mechanism is the finding, and it is not "somebody missed three sites".**
+There are four parameter parsers. `ParseSubroutine` parses the free-routine list
+**and a method's IMPLEMENTATION header** — so:
+
+| where the default is written | caught? |
+| --- | --- |
+| free routine | yes |
+| method, in **both** the declaration and the implementation | yes |
+| method, in the **declaration alone** | **no** |
+| interface method (no implementation header exists) | never asked, in any spelling |
+
+**Writing it once is the normal spelling. Writing it twice is the redundant one.
+The guard was sitting on the redundant spelling** — so every probe written the way
+you would write working code walked through the guarded door and reported the
+feature as covered.
+
+**This is a sibling of CLAUDE.md's "nothing observably differs is a claim about
+one target", with a different discriminator: there the invisible population is a
+TARGET nobody builds for; here it is a SPELLING everybody avoids.** frankB's
+generalisation, which is the transferable part:
+
+> **When one construct can be written in two places and a guard lives on only one
+> of them, the guard covers the redundant spelling and misses the idiomatic
+> one — because the guard was written by someone who had just written the
+> redundant form in a test.**
+
+**The tell is concrete: a fix whose own test writes the construct more times than
+a program would.** If the fixture repeats the default in the declaration and the
+implementation, ask what happens when it appears once.
+
+**The repair is the shape to copy: one site, four callers, one case DELETED
+rather than three added.** Moving the refusal into `ParseParamDefaultValue` — the
+one function all four parsers already call — also fixed a wrong-REASON half for
+free, because inside that function it runs ahead of the shape checks.
+
+### A REFUSAL THAT TELLS YOU TO WRITE THE THING IT IS ABOUT TO REFUSE IS A WRONG DIAGNOSTIC, NOT A DIFFERING ONE
+
+Same commit. `array of string = ['x']` had been refused as **"a string
+parameter's default must be a string literal"** — because an open-array parameter
+records its ELEMENT kind, so the stringy check saw a string parameter and demanded
+the literal the array check was about to reject. Follow the advice and you get a
+different refusal.
+
+**Worth distinguishing from the deferred-diagnostic class explicitly, because
+"both compilers refuse" is TRUE here and is not the whole claim.** A differing
+diagnostic is deferred by this repo's rules. A diagnostic that sends the reader
+into a second refusal is not a wording difference — it is a wrong statement about
+what the compiler wants, and it costs the reader a round trip before they learn
+the construct is unsupported at all.
+
+### AND A CONTROL THAT FAILS FOR AN UNRELATED REASON IS A CONTROL NOBODY CAN READ
+
+frankB wrote the ticket's positive control the obvious way — declare an interface
+method, dispatch through the interface — **and it segfaulted for a reason that had
+nothing to do with the refusal it exists to check.** The shipped control declares
+the interface method and dispatches through the CLASS, and the file says why.
+
+A control that goes red is supposed to prove the guard can fail. A control that
+goes red **for the wrong reason** proves nothing and reads as proof, and the next
+person to touch it cannot tell which failure they are looking at. If a control
+fails, establish that it fails for the reason you meant before shipping it — and
+if it does not, say in the file which shape you avoided and what bit you.
