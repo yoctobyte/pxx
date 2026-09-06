@@ -3,11 +3,12 @@ slug: bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself
 track: P
 prio: 20
 type: bug
-status: backlog
+status: working
 blocked-by: []
 created: 2026-09-04
 found-by: frankB
 summary: "`TPair<K, V> = class FSwap: TPair<V, K>; end;` -- a specialization of the same template with its parameters SWAPPED -- is refused with `circular generic specialization: TPair$LongInt$ShortInt requires TPair$ShortInt$LongInt, which requires TPair$LongInt$ShortInt back`. True as stated: pxx specializes by emitting each declaration before its users, and these two need each other. Both surfaces agree since the self-other fix. FPC 3.2.2 also refuses it (differently); real Delphi accepts it. Architectural, not a mis-parse -- the diagnostic is honest and the program does not compile wrong."
+owner: frankS
 ---
 
 # A generic cannot hold a parameter-swapped specialization of itself

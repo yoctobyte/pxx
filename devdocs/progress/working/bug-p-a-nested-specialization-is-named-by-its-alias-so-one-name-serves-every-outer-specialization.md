@@ -5,8 +5,8 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-06
 summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, not under a name carrying the type argument, and `NestedSpecKnown` tests only that name. So `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically."
 ---

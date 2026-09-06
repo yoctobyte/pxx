@@ -5,8 +5,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-05
 found-by: frankS
 summary: "`generic procedure Pair<T, S>(a: T; b: S);` is refused at the IMPLEMENTATION with `expected '>' before ','`. Not a parse slip: `GenericFuncs[].Param` is a single AnsiString and `SetGenericRoutineSubs` takes one paramName, so the data model holds exactly one type parameter for a routine. Generic CLASSES take several (`generic TPair<T, S> = class` parses and builds), so this is routines only. The interface line is accepted and the implementation line is not, which makes the diagnostic point at the wrong section. Blocks measuring the SWAP case of bug-p-a-generic-routines-implementation-type-parameters-are-not-checked-against-its-interface, and that is the reason it was found."
