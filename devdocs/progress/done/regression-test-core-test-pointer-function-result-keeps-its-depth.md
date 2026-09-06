@@ -129,4 +129,4 @@ checks; the only RED is the fleet-wide `pinned builds live lib/rtl`.
 `cast_suffix_walk_probe.py` byte-identical to its pre-merge baseline -- the cast
 openers pass seedDepth 0, for which the helper reduces to exactly what that arm
 already did.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a751a9cd0.
