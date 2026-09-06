@@ -67,17 +67,31 @@ const
   FROZEN_CSTR_CAP = 255;
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
-  { Was 8192, an outlier nobody had revisited: its neighbours in this block are
+  { HISTORY, kept deliberately: MAX_STRS is gone (2026-09-06, the string table
+    grows), and so is MAX_FIXUPS, but this paragraph records the measurement
+    that raised MAX_STRS from 8192 to 65536 and it turned out to explain
+    something the raise itself did not notice.
+
+    Original note: 8192 was an outlier nobody had revisited; its neighbours were
     MAX_SYMS/MAX_FIXUPS 131072 and MAX_PROCS/MAX_USES_EDGES 16384, and it sat
     16x below the symbol table beside it with no comment justifying it. A
     csmith `--paranoid` program (seed 200056, 14125 lines) emits a pointer
     assertion with its own message text at every pointer operation, so its
     literal count scales with the PROGRAM rather than staying flat the way
     hand-written source does: 9426 distinct literals, 15% over the cap, refused
-    with `string table overflow` naming line 2 of an injected unit.
-    At 65536 that program compiles in 2.7s and its checksum agrees with gcc.
-    Cost is ~24 B/entry of BSS, ~1.4 MB, virtual only — the same cost model as
-    MAX_CODE above. bug-a-string-table-cap-refuses-a-14k-line-c-program }
+    with `string table overflow` naming line 2 of an injected unit. At 65536
+    that program compiled in 2.7s and its checksum agreed with gcc.
+    bug-a-string-table-cap-refuses-a-14k-line-c-program
+
+    WHAT THE RAISE COULD NOT SEE, and the reason this is worth keeping: 8192 was
+    reachable, and 65536 was NOT. Every string entry costs at least 40 bytes of
+    Data, and MAX_DATA was 2 MB, so the table could never exceed ~52108 entries
+    -- the new cap sat 13000 above anything Data could fund. The raise did not
+    make the guard generous; it made it UNREACHABLE, and a guard that cannot
+    fire is indistinguishable from one that has not fired yet. Raising a cap
+    without checking the resource it is denominated in is how that happens, and
+    nothing in the raise's own evidence would have shown it: the csmith program
+    that motivated it needed 9426 entries, well inside both limits. }
 
   { ---- the STATIC managed-string block, built at compile time ----------------
     Mirrors the runtime header in compiler/builtin/builtinheap.pas
@@ -118,7 +132,6 @@ const
     the other key classes without pretending to be a general string table. }
   MAX_KEYS    = 1024;
   MAX_USES_EDGES = 16384;  { one slot per `uses X` clause parsed across the whole compile }
-  MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
   { Pascal scope hiding: the compiling scope's rank, above every CompiledUnits
@@ -3221,8 +3234,17 @@ var
   UsesEdgeIface : array[0..MAX_USES_EDGES-1] of Boolean;
   UsesEdgeCount : Integer;
 
-  Fixups   : array[0..MAX_FIXUPS-1]  of TFixup;
+  { Grown by FixupEnsure (util.inc) together with FixupPCRel and FixupPicDelta.
+    ALL THREE MOVE AS ONE -- they are parallel BY INDEX, which is the same rule
+    the two compaction sites obey (dce.inc, and compiler.pas's DATAREF_DROP arm
+    since a8bfcb695). A grow that missed one would be the same defect as a
+    compaction that missed one, and it would be silent in the same way.
+    MAX_FIXUPS was 131072 and is REACHABLE: 200000 short C string literals
+    answer `error: fixup overflow` -- found by pushing past the string-table cap
+    this ticket had just lifted. feature-dynamic-compiler-tables }
+  Fixups   : array of TFixup;
   FixCount : Integer;
+  FixCap   : Integer;
 
   GlobFix  : array of TGlobFix;
   { Parallel to GlobFix: is entry i a rip-relative displacement rather than an
@@ -3240,7 +3262,7 @@ var
     record (REC_TFIXUP, size asserted at 16). True = the site is a 4-byte
     rip-relative displacement from a rewritten `movabs`, not an 8-byte
     absolute address. }
-  FixupPCRel : array[0..MAX_FIXUPS-1] of Boolean;   { fixed, like Fixups itself }
+  FixupPCRel : array of Boolean;   { grown with Fixups itself, never alone }
   { i386 --emit-obj: how far THIS fixup sits past its body's PC anchor. SHT_REL
     has no addend field, so the addend lives in the four bytes being patched and
     must be symOffset + (fixupPos - anchorPos) for the linker's S + A - P to come
@@ -3249,7 +3271,7 @@ var
     body's anchor and the writer runs long after every body is emitted -- the
     same reason GlobFixTrail is per site rather than a constant. Zero for every
     absolute fixup, so it is inert unless GlobFix/FixupPCRel is also set. }
-  FixupPicDelta : array[0..MAX_FIXUPS-1] of Integer;
+  FixupPicDelta : array of Integer;   { grown with Fixups itself, never alone }
   GlobFixPicDelta : array of Integer;
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;

@@ -961,7 +961,7 @@ procedure EmitDataRef(dataOff: Integer);
 var drRex, drOp, drReg: Byte;
     drPopReg: Integer;
 begin
-  if FixCount >= MAX_FIXUPS then Error('fixup overflow');
+  FixupEnsure;
   FixupPCRel[FixCount] := False;
   FixupPicDelta[FixCount] := 0;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or

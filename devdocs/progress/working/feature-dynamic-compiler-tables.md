@@ -5,9 +5,9 @@ prio: 45  # auto
 track: A
 type: feature
 status: working
-owner: ""
+owner: "frankH"
 blocked-by: []
-summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars, Data, Strs. STILL FIXED: TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. 2026-09-06: Data converted, 2 MB (90066100 -> 87985348), and it settled a coupling the ticket''s own grep method CANNOT see: TWO TABLES CAN SHARE A CEILING WITHOUT SHARING A CONSTANT. Every string literal costs 32 bytes of managed-string header plus its 8-aligned text, so MAX_DATA (2 MB) capped the string table at ~52108 entries and MAX_STRS (65536) WAS UNREACHABLE -- `Error(''string table overflow'')` was a guard that could not fail. Proven by the SAME 66000-literal input answering `data overflow` before and `string table overflow` after. Converting Strs was worth nothing before this and is load-bearing now. The conversion also segfaulted first: five byte runs and two constant-offset writes reach Data with no overflow check at all, because a fixed bss array never needed one. METHOD ADDITION: after converting a table, enumerate its WRITE sites, not its CAP sites -- the cap sites were already thinking about the limit. 2026-09-06: Strs converted too (1.5 MB, 87985348 -> 86412492) -- FIRST table here whose growth carries a MANAGED field (TStrEntry.Text is an AnsiString), probed before converting. One input crossed three states and that is the whole proof: 66000 short literals said `data overflow`, then `string table overflow`, then compiled and RAN. LANDMINE ON THE LIFTED CAP: InternStr dedups by LINEAR SCAN, so it is O(n^2) -- 5000/10000/20000/40000 literals take 1.29/2.48/6.30/25.69s. Removing the cap swaps a hard error for a time ceiling, which is strictly better but is NOT the same claim; a hash index is the next change. STILL STANDING FOR TokChars: STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so that constant must be SPLIT before TokChars can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
+summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars, Data, Strs, Fixups+FixupPCRel+FixupPicDelta. STILL FIXED: TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. 2026-09-06: Data converted, 2 MB (90066100 -> 87985348), and it settled a coupling the ticket''s own grep method CANNOT see: TWO TABLES CAN SHARE A CEILING WITHOUT SHARING A CONSTANT. Every string literal costs 32 bytes of managed-string header plus its 8-aligned text, so MAX_DATA (2 MB) capped the string table at ~52108 entries and MAX_STRS (65536) WAS UNREACHABLE -- `Error(''string table overflow'')` was a guard that could not fail. Proven by the SAME 66000-literal input answering `data overflow` before and `string table overflow` after. Converting Strs was worth nothing before this and is load-bearing now. The conversion also segfaulted first: five byte runs and two constant-offset writes reach Data with no overflow check at all, because a fixed bss array never needed one. METHOD ADDITION: after converting a table, enumerate its WRITE sites, not its CAP sites -- the cap sites were already thinking about the limit. 2026-09-06: Strs converted too (1.5 MB, 87985348 -> 86412492) -- FIRST table here whose growth carries a MANAGED field (TStrEntry.Text is an AnsiString), probed before converting. One input crossed three states and that is the whole proof: 66000 short literals said `data overflow`, then `string table overflow`, then compiled and RAN. 2026-09-06: the fixup family converted (2752488 bytes, 86425036 -> 83672548), all THREE parallel arrays through ONE helper so there is no site that can grow the table without the columns. THE CHAIN IS NOW COMPLETE FOR ONE INPUT SHAPE AND IT TERMINATES: 52200 literals `data overflow` -> 66000 `string table overflow` -> 40000 a 22.24s TIME ceiling -> 200000 `fixup overflow` -> 500000 COMPILES in 14.04s at 992 MB peak RSS and runs correctly. Each conversion revealed the next ceiling and the reveal is the only way any were known reachable; the terminal state is memory, not a constant. AND THE ORPHANED COMMENT KNEW SOMETHING: the 2026 raise of MAX_STRS from 8192 to 65536 is what MADE that guard unreachable, because 65536 sat 13000 above anything MAX_DATA could fund -- RAISING A CAP WITHOUT CHECKING THE RESOURCE IT IS DENOMINATED IN IS HOW A GUARD STOPS BEING ABLE TO FIRE. LANDMINE ON THE LIFTED CAP: InternStr dedups by LINEAR SCAN, so it is O(n^2) -- 5000/10000/20000/40000 literals take 1.29/2.48/6.30/25.69s. Removing the cap swaps a hard error for a time ceiling, which is strictly better but is NOT the same claim; a hash index is the next change. STILL STANDING FOR TokChars: STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so that constant must be SPLIT before TokChars can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
 ---
 
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
@@ -780,3 +780,65 @@ says nothing about the bug in both directions.
 
 Fixing it anyway: two lines, no cost, and the comment-vs-code disagreement
 resolves cleanly in the comment's favour. Just not on a claim it cannot carry.
+
+## 2026-09-06 (frankH) — the fixup family, and the chain terminates
+
+`Fixups` / `FixupPCRel` / `FixupPicDelta`, all three `array[0..MAX_FIXUPS-1]`,
+converted together through one helper `FixupEnsure` in `util.inc`.
+`MAX_FIXUPS` deleted. **bss 86425036 → 83672548**, 2752488 bytes.
+
+**All three grow in one procedure, and that is the design, not tidiness.** They
+are parallel BY INDEX — the same rule the two compaction sites obey. A grow that
+moved one and not the others is the identical defect to a compaction that does,
+and this tree has already had one of those silently (`a8bfcb695`). Keeping the
+three `SetLength`s in one procedure means **there is no site where you can grow
+the table without growing the columns, because there is only one site.** This is
+also why it did not land in pieces: a partial landing here is silently wrong
+rather than loudly wrong.
+
+The write-site audit found every `[FixCount]` write downstream of the single
+guard in `EmitDataRef`; the other writes are the two compactions, at indices
+already below `FixCount`.
+
+### The chain, complete — one input shape, five states
+
+| entries | answer |
+| --- | --- |
+| 52200 | `error: data overflow` — `MAX_DATA`, 2 MB |
+| 66000 | `error: string table overflow` — `MAX_STRS`, 65536 |
+| 40000 | 22.24s — no cap, a **time** ceiling from the O(n²) intern |
+| 200000 | `error: fixup overflow` — `MAX_FIXUPS`, 131072 |
+| 500000 | **compiles, 14.04s, 992 MB peak RSS**, runs: 500000 lines, last `b6eF` = index 499999 |
+
+**Each conversion revealed the next ceiling, and the reveal is the only way any
+of them were known to be reachable.** The ticket's prescribed method — grep the
+`MAX_` name — found each table's *bound* and could not have ordered them,
+because what ordered them was one oversized input asking the compiler which
+limit it would hit first. The terminal state is memory, not a constant.
+
+### What the orphaned comment turned out to know
+
+Deleting `MAX_STRS` orphaned the paragraph that had justified raising it from
+8192 to 65536 — a csmith `--paranoid` program needing 9426 distinct literals,
+refused at the old cap. Rewritten in place as history rather than dropped,
+because it explains the mechanism this ticket kept running into:
+
+**8192 was reachable and 65536 was not.** At ≥40 bytes of `Data` per entry
+against a 2 MB `MAX_DATA`, the table could never exceed ~52108, so the new cap
+sat 13000 above anything `Data` could fund. **The raise did not make the guard
+generous; it made it unreachable** — and nothing in the raise's own evidence
+would have shown that, because the program that motivated it needed 9426
+entries, comfortably inside both limits.
+
+**Raising a cap without checking the resource it is denominated in is how a
+guard stops being able to fire.** That is the same failure as the `MAX_STRS` /
+`MAX_DATA` coupling recorded above, seen from the other end: the coupling was
+not introduced by anyone, it was introduced by a raise that only looked at one
+of the two numbers.
+
+### Remaining
+
+`TokChars` (`STRING_CAP`) — still blocked behind splitting that constant from
+the shortstring type it also sizes (`ast_syminfer.inc:151`, `ir.inc:2703`).
+`LabelFixupPos`/`LabelFixupTarget` (`MAX_IR`), `UCls*` (`MAX_UCLASS`), and
+`Procs` deliberately.

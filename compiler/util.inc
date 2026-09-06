@@ -316,3 +316,24 @@ begin
     silently and no assertion in this compiler reads .data padding. }
   for i := oldCap to DataCap - 1 do Data[i] := 0;
 end;
+
+{ The relocation table and its TWO PARALLEL COLUMNS grow as one. FixupPCRel and
+  FixupPicDelta are indexed by the same fixup number as Fixups, so a grow that
+  moved one and not the others is the identical defect to a compaction that
+  does -- and this repo has already had one of those, silently, in
+  compiler.pas's DATAREF_DROP arm (a8bfcb695). Keeping the three SetLengths in
+  one procedure is the point: there is no site where you can grow the table
+  without growing the columns, because there is only one site.
+
+  MAX_FIXUPS was 131072 and it was reachable -- 200000 short C string literals
+  answered `error: fixup overflow`, which is how this family was found at all:
+  by pushing an input past the string-table cap that had just been lifted, and
+  reading whatever stopped it next. feature-dynamic-compiler-tables }
+procedure FixupEnsure;
+begin
+  if FixCount < FixCap then Exit;
+  if FixCap = 0 then FixCap := 8192 else FixCap := FixCap * 2;
+  SetLength(Fixups, FixCap);
+  SetLength(FixupPCRel, FixCap);
+  SetLength(FixupPicDelta, FixCap);
+end;
