@@ -5872,6 +5872,100 @@ def pin_epoch(clone, version):
     return None
 
 
+def pin_version_str(version):
+    """Normalise a pin version to the "vN" spelling.
+
+    pin.log writes `pinned v407`; stable_linux_amd64/default/VERSION holds
+    `407`; twatch's own `ver` carries the `v`. One identity, three spellings,
+    and the failure when they are mixed is a None that reads as "no such pin"
+    rather than an error.
+    """
+    v = str(version).strip()
+    return v if v.startswith("v") else "v" + v
+
+
+def pinned_tree_for(clone, version):
+    """The TREE `version` was cut from, per pin.log's git sha column, or None.
+
+    THE PIN COMMIT AND THE PINNED TREE ARE DIFFERENT OBJECTS AND NEITHER NAME
+    SAYS WHICH ONE IT IS. You cut a pin at tree T, then commit the new binary as
+    a CHILD of T, so the pin commit is always a descendant and `pin.log`'s sha
+    column is the TREE. Three sessions confused the two in one evening
+    (2026-09-06) and the distance is not small: 4 commits at v401, 6 at v406,
+    17 at v407, growing with fleet activity rather than shrinking.
+
+    Same end-anchored parse as pinned_ref and pin_epoch -- older lines omit the
+    binary sha256, so only the first and last fields are positionally stable.
+
+    Accepts "v407" or "407". THE TWO SPELLINGS ARE REAL: pin.log writes `pinned
+    v407` while stable_linux_amd64/default/VERSION holds `407`, so a helper that
+    took only one of them would silently return None for a caller holding the
+    other -- an absence that reads exactly like "no such pin".
+    """
+    version = pin_version_str(version)
+    try:
+        out = sh(["git", "show", "origin/%s:%s" % (clone.branch, PIN_LOG_REL)],
+                 cwd=clone.path)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return None
+    for ln in out.splitlines():
+        w = ln.split()
+        if (len(w) >= 5 and w[1] == "pinned" and w[2] == version
+                and len(w[-1]) == 40):
+            return w[-1]
+    return None
+
+
+def pin_commit_for(clone, version, tree):
+    """The commit that INSTALLED `version`, i.e. the one carrying its binary.
+
+    Resolved by walking the VERSION file's changes forward from `tree` and
+    taking the first whose content is this version -- NOT by matching the commit
+    subject. Subjects are close to a convention and not one: v396 and v397 use
+    an em-dash where v398 onward use `--`, and two carry a trailing clause. A
+    parse that works on twelve recent pins and fails on the thirteenth is the
+    kind of instrument that answers rather than errors.
+
+    Returns None when it cannot be resolved, and the caller must treat that as
+    "unknown" rather than falling back to `tree` -- the whole point is that the
+    two are different.
+    """
+    if not tree:
+        return None
+    want = pin_version_str(version)[1:]      # VERSION holds "407", not "v407"
+    try:
+        out = sh(["git", "log", "--reverse", "--format=%H",
+                  "%s..origin/%s" % (tree, clone.branch),
+                  "--", "stable_linux_amd64/default/VERSION"], cwd=clone.path)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return None
+    for c in out.split():
+        try:
+            v = sh(["git", "show", "%s:stable_linux_amd64/default/VERSION" % c],
+                   cwd=clone.path).strip()
+        except (RuntimeError, subprocess.SubprocessError, OSError):
+            continue
+        if v == want:
+            return c
+    return None
+
+
+def commits_between_count(clone, a, b):
+    """How many commits separate two shas, or "?" when it cannot be measured.
+
+    Used only to make a refusal message concrete. It must never raise: this runs
+    inside the path that has already decided to publish nothing, and an
+    exception there would turn a clean refusal into a crashed phase.
+    """
+    if not (a and b):
+        return "?"
+    try:
+        return sh(["git", "rev-list", "--count", "%s..%s" % (a, b)],
+                  cwd=clone.path).strip() or "?"
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return "?"
+
+
 def archive_rows(repo, host):
     """Every row of the uncapped run archive for `host`, oldest first.
 
@@ -6334,6 +6428,58 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
         print("twatch: pin verify produced no usable verdict — publishing "
               "nothing, the pin stays unjudged", flush=True)
         return False
+
+    # THE PIN WE MEASURED MUST BE THE PIN WE FILE THE VERDICT UNDER.
+    #
+    # `clone.checkout(sha)` brings the worktree to the pinned TREE, and
+    # stable_linux_amd64 comes with it -- but a pin commit is a DESCENDANT of
+    # the tree it pins, so at that tree `pinned` still holds v(N-1). Every
+    # $(PXX_STABLE) job (lib-test, demos, test-fpjson) therefore builds with the
+    # PREVIOUS pin while the record says this one. Measured across v398-v400:
+    # three verdicts each judging the outgoing pin under the incoming pin's
+    # name, and the v398 one was annotated by hand as "a load-shaped flake, do
+    # NOT revert on this count alone" -- the reds were not flakes, they were
+    # true statements about a different binary.
+    #
+    # testmgr has recorded the answer in report["pin"] the whole time and
+    # nothing compared it. This compares it. A mismatch publishes NOTHING: the
+    # same rule as INFRA/INVALID above, and for the same reason -- an unjudged
+    # pin is a known unknown, while a confident verdict about the wrong binary
+    # is read, believed and dispatches work.
+    #
+    # This is the REFUSAL half of
+    # bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names. It
+    # stops the wrong records; it does not yet make the right one possible,
+    # because both routes to that need more than a refusal can carry (restoring
+    # the artefacts leaves the worktree dirty for clone_head_back's plain
+    # `git checkout <branch>`; verifying at the pin COMMIT re-keys the archive
+    # row and breaks the pin.log x tstate join). Until one lands, pin verify
+    # publishes a GAP rather than a fiction, which is the direction this repo
+    # prefers and is why the message says what to do.
+    measured = (report.get("pin") or "").split()
+    if measured:
+        want = pin_version_str(ver)
+        got = pin_version_str(measured[0])
+        if got != want:
+            tree = pinned_tree_for(clone, ver)
+            commit = pin_commit_for(clone, ver, tree)
+            print("twatch: pin verify REFUSED to publish — it measured %s and "
+                  "was about to file the verdict under %s. The checkout is the "
+                  "pinned TREE %s, whose stable_linux_amd64 still holds the "
+                  "previous pin; %s is installed by the pin COMMIT %s, %s "
+                  "commit(s) later. Publishing nothing."
+                  % (got, want, (tree or "?")[:12], want,
+                     (commit or "unresolved")[:12],
+                     commits_between_count(clone, tree, commit)), flush=True)
+            return False
+    else:
+        # Not a failure: a tier with no pin-built job has no pin identity to
+        # check, and refusing there would disable the phase for the wrong
+        # reason. Say so, so the absence of the assertion is visible rather
+        # than being mistaken for a passed one.
+        print("twatch: pin verify — no pin-built job ran, so the pin identity "
+              "could not be checked (this run does not confirm the pin)",
+              flush=True)
     verdict = report["verdict"]
     # job_key, NOT j["name"]. `lib-test#117` is a positional index into the
     # target's recipe, so it names a different file as soon as a test is

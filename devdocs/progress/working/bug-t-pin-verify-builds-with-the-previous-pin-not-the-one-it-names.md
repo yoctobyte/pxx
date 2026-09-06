@@ -7,7 +7,8 @@ found: 2026-09-02
 found-by: claude-T
 owner: frank-subcoord
 blocked-by: []
-summary: "verify_pin() does clone.checkout(<the pinned TREE>), which also checks out stable_linux_amd64/** as of that tree. A pin commit is always a DESCENDANT of the tree it pins, so the checked-out binary is the PREVIOUS pin. Every pin verify therefore builds its $(PXX_STABLE) targets with pin v(N-1) while recording the verdict under vN. Evidence: one run logs `verifying PIN v400 (67ae9a62d567)` and then `testmgr: pin=399 sha256=954adef93a7b`; `pin=400` appears ZERO times in the whole watcher log. The already-closed bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label saw this exact symptom (`ver said v347 while the verified tree carried pin 346`) and fixed the LABEL."
+summary: "REFUSAL HALF LANDED 2026-09-06; the structural half is open. verify_pin() does clone.checkout(<the pinned TREE>), and a pin commit is always a DESCENDANT of the tree it pins, so the checked-out stable_linux_amd64 is the PREVIOUS pin: every $(PXX_STABLE) job built with v(N-1) while the verdict was filed under vN. testmgr had recorded the right answer in report['pin'] the whole time and nothing compared it. It is compared now -- a mismatch publishes NOTHING and prints the tree, the pin COMMIT and the gap. So pin verify now produces a GAP rather than a fiction, and WILL PUBLISH NOTHING until the structural half lands. WHAT REMAINS, with the blocker each route actually has: option 1 (restore the artefacts from the pin commit) leaves the worktree dirty for clone_head_back's plain `git checkout <branch>`; option 2 (verify at the pin COMMIT) re-keys the archive row and breaks the pin.log x tstate join. Neither is a one-liner and both need the join in hand. Helpers landed and tested: pin_version_str, pinned_tree_for, pin_commit_for."
+
 ---
 
 # `verify_pin` builds with the previous pin, and files the result under the new one
@@ -220,3 +221,48 @@ that never existed (option 1).**
 
 Three sessions confused these two objects in one evening. The naming remedy this
 ticket already proposes is the load-bearing part.
+
+## Landed 2026-09-06 (frank-subcoord): the refusal, and why only the refusal
+
+**What landed.** `verify_pin` now compares `report["pin"]` — which testmgr has
+written since it was added, and which nothing read — against the version it is
+about to publish under. On a mismatch it publishes nothing and says why:
+
+```
+twatch: pin verify REFUSED to publish — it measured v406 and was about to file
+the verdict under v407. The checkout is the pinned TREE 04559b9d6c5a, whose
+stable_linux_amd64 still holds the previous pin; v407 is installed by the pin
+COMMIT 51901941ef5d, 17 commit(s) later. Publishing nothing.
+```
+
+Plus three helpers, tested against this ticket's own controls:
+`pin_version_str` (pin.log writes `v407`, `VERSION` holds `407`, twatch's `ver`
+carries the `v` — one identity, three spellings, and mixing them yields a `None`
+that reads as "no such pin"), `pinned_tree_for`, `pin_commit_for`. The last
+resolves by walking the `VERSION` file forward rather than matching a commit
+subject, because subjects are close to a convention and not one — v396 and v397
+use an em-dash where v398 onward use `--`.
+
+Controls, all four run: the real shape (measured v406, filing v407) refuses;
+identical identities pass; a spelling difference is not a mismatch; and a tier
+with no pin-built job does not refuse but **announces that the check could not
+run**, so an absent assertion is not mistaken for a passed one.
+
+**Why not the fix itself.** Both routes are larger than they look, and neither
+can be verified from a seat that cannot run the daemon:
+
+- **Option 1** (check out the tree, restore `stable_linux_amd64` from the pin
+  commit) leaves the worktree carrying local changes. `clone_head_back` is a
+  plain `git checkout --quiet <branch>`, which git refuses when it would
+  overwrite them — so the naive version **wedges the daemon** rather than
+  failing a run. It needs a force or a reset, on the fleet's one instrument.
+- **Option 2** (verify at the pin COMMIT) is a one-word change and is the state
+  that actually existed — at the pin commit `$(PXX_STABLE)` is vN by
+  construction. But the run's sha becomes the pin commit, so the archive row is
+  keyed to it and the `pin.log × tstate` join in `trackt.read_pin_log` — which
+  matches on the TREE — stops finding the verdict. The join has to move with it.
+
+**Consequence to state plainly: pin verify publishes nothing until one of those
+lands.** That is the intended direction (a known unknown over a confident wrong
+answer, the same rule the INFRA/INVALID branch above already applies), but it is
+a live behaviour change and not a silent one.
