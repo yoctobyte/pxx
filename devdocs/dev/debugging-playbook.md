@@ -14352,3 +14352,60 @@ mean one is wrong and you do not know which; the same holds for a refusal and a 
 is genuinely the smaller half, that is an argument for filing it with the measurement attached,
 not for landing it alone. Three copies of one arm is also the ordinary `normalise-dont-special-case`
 signal: the third copy is where you notice the concept was never given a single home.
+
+## A CENSUS NEEDS A POSITIVE CONTROL AS MUCH AS A TEST DOES — replay a KNOWN instance through the scan before believing its zero
+
+**"I scanned all 457 open tickets across four apertures and found none" is a sentence with no
+evidence in it.** A scan that cannot fire returns the same zero as a clean board, and a scan is
+much easier to get silently wrong than a test: it is written once, run once, and its output is a
+number nobody can check by reading. This repo already requires a positive control on a guard and on
+a fixture. **It applies unchanged to a one-off census, and that is the case where nobody thinks to
+do it, because a census does not look like an instrument — it looks like counting.**
+
+Measured 2026-09-06 (this seat, after a claim went missing). The question was: how many tickets
+have had their `owner:` eaten by the `set_field` defects? Four apertures — in `working/` with no
+owner anywhere; frontmatter and bullet disagreeing; a value stranded as a bare line under an empty
+bullet; a frontmatter owner with an empty bullet. Result: **0 of 457.** Which is worth exactly
+nothing until the next step:
+
+```
+git show 113e698cd:devdocs/progress/working/feature-pascal-corpus-fpc-testsuite.md > fixture/working/casualty.md
+```
+
+— the file as it stood the moment the damage happened (`- **Owner:**` blank, `frankS` stranded two
+lines below, no `owner:` key at all) — run the same scan over the fixture directory, and **assert
+that two of the four apertures FIRE on it.** They did. Only then is the zero a finding, and only
+then does it corroborate the independent count somebody else got from a different aperture.
+
+**The recipe is cheap and it is always available: git has the broken state.** Any census over a
+tree is a census over a history that contains instances. `git show <sha>:<path>` into a fixture
+directory costs one command, and the scan takes a directory argument anyway if you wrote it to take
+a root rather than to hardcode one. **Write it to take a root.**
+
+### The devtest sibling: when every existing case is green either way, the control needs a BROKEN implementation
+
+The same day, the same file, the other direction. `set_field` had had **four** defects, each
+reporting success while the field did not land, and each found by a human noticing damage
+downstream. The remedy is a read-back — write, then re-read the field from disk in the authority
+order every consumer uses, and say so loudly if it does not say what was asked.
+
+**Every existing devtest case passes with the read-back and passes without it**, because they all
+assert the write LANDED and they were all written against a writer that works. A control drawn from
+that population certifies the check whether or not the check exists — which is precisely the shape
+that let four defects through. So the control has to come from a population that does not exist
+yet, and you build it:
+
+```python
+real = progress._set_field_write
+try:
+    progress._set_field_write = lambda path, marker, value: None   # a writer that does nothing
+    ... assert the wrapper prints DID NOT STICK ...
+finally:
+    progress._set_field_write = real
+... assert the REAL writer is silent ...                            # or it fires on everything
+```
+
+**Generalise: when you add a check whose job is to catch a failure of the code beside it, the
+positive control is a deliberately broken version of that code, not another input.** Inputs cannot
+reach it. And keep the negative control in the same function — a check that fires on the working
+case is as empty as one that never fires, and it is the version people disable.
