@@ -19634,6 +19634,22 @@ test-core: $(COMPILER)
 	# .expected is FPC 3.2.2's own output, byte for byte.
 	./$(COMPILER) test/test_a_sized_boolean_is_a_boolean_at_every_renderer.pas $(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26
 	tools/expect_same.sh test_a_sized_boolean_is_a_boolean_at_every_renderer26 "$$($(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26)" "$$(cat test/test_a_sized_boolean_is_a_boolean_at_every_renderer.expected)"
+	# ...and High/Low of one answer at last. All eight were `undefined variable`:
+	# the name missed OrdinalNameToTk's table and fell through to the variable
+	# path, while declaration, SizeOf, cast and parameter all answered -- one
+	# door of six. NO .expected FROM FPC, deliberately: fpc gives the Int64
+	# extremes for all four widths, its own assembler refuses the value it just
+	# produced (`b := Low(ByteBool)` is "byte value exceeds bounds"), and
+	# reading it through Ord() truncates to exactly the -1/0 we return, so an
+	# Ord-based probe cannot fail. The values here are CHOSEN; see the test
+	# header and the SizedBoolBound comment in pasparser_lval.inc.
+	# BOTH SPELLINGS, because the alias is a second arm and was wrong twice: it
+	# answered 255 from the C-ABI kind (a silent wrong bound beside the direct
+	# spelling's loud refusal), then became a refusal itself once the sized
+	# booleans got an identity, since an alias carries its sem where an ENUM
+	# alias carries its id.
+	./$(COMPILER) test/test_high_low_of_a_sized_boolean.pas $(TESTTMP)/test_sizedboolbounds26
+	tools/expect_same.sh test_sizedboolbounds26 "$$($(TESTTMP)/test_sizedboolbounds26 | tail -1)" "SIZEDBOOLBOUNDS OK"
 	# ...and a type's identity survives every place a declaration can be
 	# WRITTEN DOWN: a symbol, a record field, a parameter, a function result and
 	# the alias table. Every row carries BOTH families -- an enum (identity >= 0)

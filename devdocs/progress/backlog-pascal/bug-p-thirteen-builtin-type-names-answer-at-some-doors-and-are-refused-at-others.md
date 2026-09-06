@@ -3,9 +3,9 @@ track: P
 prio: 35
 type: bug
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
-summary: "THREE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High` and `Low` of ByteBool, LongBool and WordBool -- and the refusal is only the DIRECT spelling: `type b = ByteBool; High(b)` is accepted and answers **255** (WordBool 65535, LongBool 2147483647) where fpc answers TRUE at both spellings, so the one-line alias bypasses the deliberate hold and returns a silent wrong value instead of a refusal. They map to tyUInt8/tyInteger/tyUInt16 ON PURPOSE, to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE -- they need a kind carrying a width AND boolean bounds, which no current table can express, and that is why they are the remainder rather than the next one-liner. The other ten were fixed on 2026-09-06 (26742a0ca, 86f935479, b6815e5b8); the count is the probe's own clean re-run at b6815e5b8, 51 names, 327 cells agreeing and 10 differing. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
-status: new
-owner: ""
+summary: "CLOSED 2026-09-06: all thirteen builtin type names now answer at every door. The last rows were `High`/`Low` of the four sized booleans -- ByteBool, WordBool, LongBool, QWordBool -- refused at the DIRECT spelling and, through a one-line alias, first answering a silent wrong bound (255 / 65535 / 2147483647 from the C-ABI kind) and later refusing too. Answered now from the IDENTITY table rather than the kind table: `SizedBoolBound` in pasparser_lval.inc, wired at both High/Low resolvers and at both spellings. High is True (Ord -1), Low is False (0). THOSE VALUES ARE OURS AND CHOSEN -- fpc 3.2.2 gives the Int64 extremes for all four widths, its own assembler refuses the value it produced, and `Ord()` truncates them to exactly the -1/0 we return, so every earlier reading of fpc here was the wrong instrument. Test `test/test_high_low_of_a_sized_boolean.pas`, 37 rows, both spellings, six controls."
+status: resolved
+owner: "frankB"
 ---
 
 # One name, several doors, and the working ones vouch for the broken ones
@@ -282,3 +282,93 @@ the spelling is an identifier at all*. The test now carries rows for all four.
 **Anyone extending this ticket should ask what the test's rows have in common
 before adding another one to the list** — that shared property is the aperture,
 and it is invisible from inside a passing sweep.
+
+
+## 2026-09-06 (frankB) — CLOSED. The last four rows, and every fpc value in this ticket above was read off the wrong instrument
+
+**THE CORRECTION FIRST, because this ticket's own table is wrong and someone
+implementing from it would have shipped a bug and believed they had parity.**
+Every row above that records fpc answering `TRUE` / `FALSE` for
+`High`/`Low` of a sized boolean was read off `WriteLn`. Measured properly on
+2026-09-06 by casting to Int64 before printing:
+
+```
+Int64(High(ByteBool))   9223372036854775807      Int64(High(Boolean))  1
+Int64(Low(ByteBool))   -9223372036854775808      Int64(Low(Boolean))   0
+Int64(High(WordBool))   9223372036854775807
+Int64(High(LongBool))   9223372036854775807
+```
+
+fpc gives **the Int64 extremes, the same pair for all four widths**, for a type
+whose only values fpc itself materialises are 0 and all-bits-set — and it
+answers 1/0 for plain `Boolean`, so the sized ones are the ones with no range
+recorded, not a considered choice. fpc's own assembler refuses the value fpc's
+front end produced: for `b: ByteBool`, `b := Low(ByteBool)` is
+**"Asm: byte value exceeds bounds -9223372036854775808"**, while
+`SizeOf(High(ByteBool))` answers 1. The expression has the type and the value
+does not fit in it.
+
+**WHY IT READ AS TRUE/FALSE, AND WHY THE PROBE COULD NOT FAIL.** Both `WriteLn`
+and `Ord` truncate the Int64 to the type's width before you see it: 0x7FFF..FF
+keeps 0xFF (−1 signed), 0x8000..00 keeps 0x00. So `Ord(High(ByteBool))` prints
+−1 and `Ord(Low(ByteBool))` prints 0 — **exactly the two values we return** — and
+a probe reading fpc through `Ord` reports agreement with us on a row where we
+disagree completely. CLAUDE.md, *"CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM
+THE DEFAULT"*. The one row that survives truncation is
+`WriteLn(Low(ByteBool))` printing **TRUE** in fpc while its own `Ord` is 0 — a
+self-contradiction inside one compiler's output, and the tell that was visible
+all along.
+
+The same wrong reading was in `OrdinalNameToTk`'s comment (*"it answers TRUE for
+ByteBool/LongBool/WordBool"*); corrected in the same commit, with the method
+written down beside it so the next reader does not repeat it.
+
+**WHAT WE ANSWER, AND IT IS CHOSEN.** `High` is True (all bits set, Ord −1),
+`Low` is False (0) — the bounds of the type the caller named, storable in a
+variable of it, and what `for b := Low(ByteBool) to High(ByteBool)` means.
+CLAUDE.md, *"ON PAR WITH THE LANGUAGE, NOT WITH FPC"*: an input whose fpc answer
+does not fit the type it is an answer about is not a specification. Recorded as
+**chosen, never tolerated**.
+
+**THE MECHANISM WAS ALREADY BUILT AND HIGH/LOW SIMPLY NEVER ASKED IT.** This
+ticket says four times that the sized booleans *"need a kind that carries a
+width AND boolean bounds, which no current table can express"* — and that is
+still true and no longer the obstacle. The width lives in the kind
+(`tyInt8/tyInt16/tyInteger/tyInt64`, the C-ABI mapping) and the booleanness
+lives in the SemId channel beside it (`BuiltinScalarSemId`, `SemBool(1/2/4/8)`),
+which `decide-how-a-type-carries-an-identity-its-kind-cannot-hold` settled and
+which the declaration path has used since QWordBool joined. **High/Low read only
+the kind.** `SizedBoolBound` asks the identity table and derives the storage
+kind back from the width it returns, so both halves of the answer come from one
+row. No new table, no new kind — the fork this ticket was `blocked-by` had
+already been resolved in its favour.
+
+**BOTH SPELLINGS, AND THE ALIAS ARM HAD BEEN WRONG IN TWO DIFFERENT WAYS.** The
+frankA note above records `type b = ByteBool; High(b)` answering **255** — a
+silent wrong bound beside the direct spelling's loud refusal. That is no longer
+what it does: by the time this was taken it had become a **refusal** as well,
+because an alias carries its identity in the same `AliasSemId` slot an ENUM
+alias uses, so the boolean sem was read as an enum id and `FindEnumType` missed
+it. Both failure modes are fixed by the same `SizedBoolSemBound`, which is the
+name-keyed helper's sem-keyed half — one set of values, four call sites (two
+resolvers × two spellings), which is the shape `StringTypeBound` next door
+already has and for the same stated reason.
+
+**Verified:** `make compiler/pascal26` → `converged after 1 round(s)`;
+`test/test_high_low_of_a_sized_boolean.pas` green, 37 rows —
+eight direct High/Low, four `SizeOf` (1/2/4/8, matching fpc, which gets this
+half right), four `Str` rows that assert the value renders TRUE/FALSE and not
+−1/0, **five assignment rows that fpc cannot compile at all**, three const-door
+rows (a second resolver, not the same code), eleven alias rows, and six
+controls (`Boolean` 1/0, `Byte` 255, `LongInt`, `ShortInt` 127/−128) because
+the new arm sits in the slot the ordinal table is read from.
+
+**No `.expected` from fpc, deliberately** — the values are ours and five rows do
+not compile there. Noted in the Makefile beside the target so nobody adds one.
+
+**Residual, and it is genuinely nothing:** the probe
+`tools/type_name_every_door_probe.py` still prints these rows through `Ord()`,
+where fpc's truncated −1/0 now MATCHES ours. It will report agreement, which is
+the right verdict reached by the wrong arithmetic. Left as is rather than
+"fixed": changing it to cast through Int64 would make the sweep report a
+DIFFER on four names that are correct and chosen, which is worse.

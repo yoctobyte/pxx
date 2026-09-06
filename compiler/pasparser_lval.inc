@@ -8144,19 +8144,27 @@ end;
   header makes for staying pure, and it is why the widestring alias break is a
   side effect on the CALLER's arm rather than in the table.
 
-  ONE CALLER, and it must stay one: ParseTypeKindInner's builtin arm, right
-  where it already calls BuiltinScalarTypeKind, which is reached only AFTER
-  FindTypeAlias has missed. That ordering is load-bearing and inverting it is
+  THE INVARIANT IS THE ORDERING, NOT THE CALLER COUNT -- this paragraph said
+  "ONE CALLER, and it must stay one" and there are two now, so the rule is
+  restated as the property it was protecting. A caller must reach this table
+  only AFTER FindTypeAlias has missed, so a user declaration of the same name
+  still wins. Both callers do: ParseTypeKindInner's builtin arm, right where it
+  already calls BuiltinScalarTypeKind, and SizedBoolBound below, which sits at
+  the two High/Low doors in the slot OrdinalNameToTk already occupies -- the
+  builtin ordinal table outranks the alias arm at those doors today, so the new
+  arm inherits that precedence rather than introducing one.
+  That ordering is load-bearing and inverting it is
   silent -- builtinheap's private `PWord = ^NativeInt` once outranked the
   builtin `PWord = ^UInt16` and wrote eight bytes where the source said two,
   at every -O level -- grep symtab.inc for `consulted BEFORE the builtin`, which
   is where that is written down, and cite it by that string rather than by a
   line number: the line moved, and the stale number was copied five times before
   anyone checked it (frankA, 2026-09-06).
-  Adding a second door here would be the same class of mistake with the
-  identity instead of the kind: a name that is BOTH a user alias and a builtin
-  would take its LAYOUT from the user's declaration and its MEANING from this
-  table.
+  The hazard a second caller must not create is a SPLIT: a name that is BOTH a
+  user alias and a builtin taking its LAYOUT from the user's declaration and
+  its MEANING from this table. SizedBoolBound does not split -- it derives the
+  storage kind from the width THIS table returns, so both halves of the answer
+  come from the same row or neither does.
 
   Only the sized booleans answer today. Enums never reach here -- an enum is
   not a builtin name -- so this function returning SEM_NONE for everything
@@ -8238,6 +8246,72 @@ function StringTypeNameKind(const nm: AnsiString): TTypeKind;
 begin
   if CaseEqual(nm, 'shortstring') then Result := tyShortString
   else Result := BuiltinScalarTypeKind(nm);
+end;
+
+
+{ Low/High of a SIZED BOOLEAN type NAME -- ByteBool, WordBool, LongBool,
+  QWordBool -- shared by the two High/Low resolvers for the same reason
+  StringTypeBound above is shared: they are one concept in two places and they
+  change together.
+
+  WHY IT IS AN ARM OF ITS OWN AND NOT A ROW IN THE ORDINAL TABLE.
+  OrdinalNameToTk does not hold these names, and its own header already argues
+  why it must not delegate to BuiltinScalarTypeKind: that table answers with
+  the C-ABI WIDTH, so LongBool comes back tyInteger and `High(LongBool)` would
+  be 2147483647. The width there is RIGHT; it is the MEANING the kind cannot
+  hold, which is the entire reason BuiltinScalarSemId exists -- so this asks
+  the identity table and derives the storage kind back from the width it
+  returns, rather than reading the kind table a second time.
+
+  THE VALUES ARE OURS, AND FPC'S ARE NOT A SPECIFICATION HERE.
+  Measured against fpc 3.2.2, 2026-09-06: `Int64(High(ByteBool))` is
+  9223372036854775807 and `Int64(Low(ByteBool))` is -9223372036854775808 --
+  the Int64 extremes, THE SAME PAIR FOR ALL FOUR WIDTHS, for a type whose only
+  values fpc itself materialises are 0 and all-bits-set. That is not two
+  implementations reporting their own representations honestly: fpc's own
+  assembler REFUSES the value fpc's front end just produced -- for `b:
+  ByteBool`, `b := Low(ByteBool)` is "Asm: byte value exceeds bounds
+  -9223372036854775808" -- while `SizeOf(High(ByteBool))` answers 1. The
+  expression has the type and the value does not fit in it. fpc answers 1 and 0
+  for plain Boolean, so the sized ones are the ones with no range recorded,
+  not a considered choice.
+
+  READING IT THROUGH Ord() HIDES ALL OF THAT, and this file recorded the hidden
+  reading first: `Ord(High(ByteBool))` prints -1 and `Ord(Low(ByteBool))`
+  prints 0, because the Int64 extremes TRUNCATE to the type's width -- 0x7FFF..
+  keeps 0xFF (-1 signed) and 0x8000.. keeps 0x00. Those are exactly the two
+  values we return, so the probe that was supposed to establish fpc's answer
+  reported agreement with us instead. `WriteLn(Low(ByteBool))` printing TRUE in
+  fpc is the tell that survived: the ord is 0 and the untruncated value is not.
+  A probe whose right answer collides with the failure value cannot fail --
+  CLAUDE.md, "CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT".
+
+  So: High is True (all bits set, Ord -1) and Low is False (0) -- the bounds of
+  the type the caller NAMED, assignable to a variable of it, and what
+  `for b := Low(ByteBool) to High(ByteBool)` means. CHOSEN, not tolerated;
+  CLAUDE.md, "ON PAR WITH THE LANGUAGE, NOT WITH FPC".
+
+  `semId` comes back so the EXPRESSION door can stamp ASTSemId and WriteLn
+  prints TRUE/FALSE rather than -1; the const door has no channel for a boolean
+  identity yet and publishes tyBoolean through CEOrdTk instead.
+  bug-p-thirteen-builtin-type-names-answer-at-some-doors-and-are-refused-at-others }
+function SizedBoolSemBound(semId: Integer; wantHigh: Boolean; var v: Int64): Boolean;
+begin
+  Result := SemIsBool(semId);
+  if not Result then Exit;
+  if wantHigh then v := -1 else v := 0;
+end;
+
+{ ...and the same answer keyed by NAME, for the builtin spelling. The pair
+  exists because the ALIAS spelling (`type TB = ByteBool`) reaches the doors
+  with an identity and no name -- AliasSemId already holds SemBool(1) there --
+  and answering it from a second copy of the values is how the ordinal arms
+  next door drifted. }
+function SizedBoolBound(const nm: AnsiString; wantHigh: Boolean;
+                        var v: Int64; var semId: Integer): Boolean;
+begin
+  semId := BuiltinScalarSemId(nm);
+  Result := SizedBoolSemBound(semId, wantHigh, v);
 end;
 
 
@@ -8390,13 +8464,22 @@ begin
 
     NOT delegating this function to BuiltinScalarTypeKind, which is what the
     subset relation invites. Measured against fpc first: of the 21 names only
-    that table has, fpc accepts `High` for four -- SizeUInt and the three sized
-    booleans -- and it answers TRUE for ByteBool/LongBool/WordBool. Those are
-    deliberately mapped to tyUInt8/tyInteger/tyUInt16 there to keep their C-ABI
-    WIDTH, so a delegation would answer High(LongBool) = 2147483647 and be
-    wrong on three names to fix one. The general-looking fix is the one that
-    adds cases. The sized booleans need a kind that carries width AND boolean
-    High/Low, which this table cannot express, and that is not this row's job.
+    that table has, fpc accepts `High` for SizeUInt and for all four sized
+    booleans. The sized booleans are deliberately mapped to
+    tyInt8/tyInt16/tyInteger/tyInt64 there to keep their C-ABI WIDTH, so a
+    delegation would answer High(LongBool) = 2147483647 and be wrong on four
+    names to fix one. The general-looking fix is the one that adds cases. They
+    need a kind that carries width AND boolean High/Low, which this table
+    cannot express -- so they are answered by SizedBoolBound above, off the
+    IDENTITY table, in the slot this call occupies at both High/Low doors.
+
+    THIS PARAGRAPH USED TO SAY fpc "answers TRUE for ByteBool/LongBool/WordBool"
+    AND THAT WAS READ OFF THE WRONG INSTRUMENT. fpc answers the Int64 extremes
+    for all four -- `Int64(High(ByteBool))` is 9223372036854775807 -- and both
+    `WriteLn` and `Ord` truncate them to the type's width before you see them,
+    which is what "TRUE" and "-1" were. Corrected 2026-09-06 by casting to
+    Int64 first; the row that gives it away without a cast is
+    `WriteLn(Low(ByteBool))` printing TRUE while `Ord(Low(ByteBool))` is 0.
     refactor-p-five-dispatch-sites-for-one-named-type-cast }
   else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint')
        or CaseEqual(nm, 'sizeuint') then Result := tyNativeUInt
@@ -8741,6 +8824,7 @@ function TryConstHighLowValueInner(wantHigh: Boolean; var v: Int64): Boolean;
   bug-p-the-constant-evaluator-erases-an-ordinals-type }
 var btk: TTypeKind; strTk: TTypeKind; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
+    sbSem: Integer;                    { SizedBoolBound's identity out-param }
 begin
   Result := False;
   aliasEtid := -1;
@@ -8792,6 +8876,21 @@ begin
     Next; Result := True; Exit;
   end;
 
+  { a SIZED BOOLEAN type name -- ByteBool and its three siblings. In the same
+    slot as the ordinal table below, and there for the same reason the string
+    arm above is: that table does not hold these names, and the kind they would
+    map to is the C-ABI width rather than a boolean. See SizedBoolBound.
+
+    CEOrdTk carries the booleanness the way the tkBoolean_T arm above does, so
+    `const B = High(ByteBool)` declares a boolean and prints TRUE. The WIDTH is
+    dropped at this door -- CEOrdTk is a kind and there is no CESemId -- and
+    that is right for an untyped const, which has no storage of its own to
+    size. }
+  if SizedBoolBound(nm, wantHigh, v, sbSem) then
+  begin
+    Next; CEOrdTk := tyBoolean; Result := True; Exit;
+  end;
+
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then
   begin
@@ -8831,6 +8930,21 @@ begin
         resolves the id and lets the one below answer, so the identity that
         makes WriteLn print `mon` cannot drift between the two spellings.
         bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
+      { A SIZED BOOLEAN alias -- `type TB = ByteBool`. Answered here rather
+        than falling into the enum arm below, which is where it went: an alias
+        carries its identity in the same AliasSemId slot an enum alias uses,
+        so a boolean sem was read as an enum id, FindEnumType missed it, and
+        `High(TB)` came back `undefined variable (TB)`. Before that it was
+        WORSE and this ticket records it -- the alias answered 255 from the
+        C-ABI kind while the direct spelling was refused, a silent wrong bound
+        beside a loud refusal.
+        No `<> 0` guard is needed: AliasSemId is sem+1 with 0 meaning unset, so
+        an unset row arrives here as SEM_NONE and SemIsBool declines it. }
+      sbSem := AliasSemId[aliasIdx] - 1;
+      if SizedBoolSemBound(sbSem, wantHigh, v) then
+      begin
+        Next; CEOrdTk := tyBoolean; Result := True; Exit;
+      end;
       if AliasSemId[aliasIdx] <> 0 then
         aliasEtid := AliasSemId[aliasIdx] - 1
       else
@@ -8895,6 +9009,7 @@ end;
 function TryFoldHighLowTypeInner(wantHigh: Boolean; var outNode: Integer): Boolean;
 var btk: TTypeKind; strTk: TTypeKind; bv: Int64; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
+    sbSem: Integer;                    { SizedBoolBound's identity out-param }
 begin
   Result := False;
   aliasEtid := -1;
@@ -8963,6 +9078,22 @@ begin
   end;
 
 
+  { a SIZED BOOLEAN type name -- the expression twin of the arm in
+    TryConstHighLowValueInner, one concept in two places, changing together.
+
+    The node gets the STORAGE kind (tyInt8 for ByteBool) plus the identity, not
+    tyBoolean: that is the same pair a `var b: ByteBool` carries, so
+    `SizeOf(High(ByteBool))` is 1 as fpc answers, `b := High(ByteBool)`
+    assigns, and ASTSemId is what makes WriteLn print TRUE instead of -1 --
+    the same stamp the enum arm below makes, and for the same reason. }
+  if SizedBoolBound(nm, wantHigh, bv, sbSem) then
+  begin
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+    ASTTk[outNode] := Ord(BoolStorageTypeKind(SemBoolWidth(sbSem)));
+    ASTSemId[outNode] := sbSem;
+    Result := True; Exit;
+  end;
+
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then
   begin
@@ -8993,6 +9124,24 @@ begin
       { the same ENUM-alias rule as TryConstHighLowValue, and for the same
         reason the subrange rule above is duplicated here: these two are one
         concept in two places and they change together }
+      { A SIZED BOOLEAN alias -- `type TB = ByteBool`. Answered here rather
+        than falling into the enum arm below, which is where it went: an alias
+        carries its identity in the same AliasSemId slot an enum alias uses,
+        so a boolean sem was read as an enum id, FindEnumType missed it, and
+        `High(TB)` came back `undefined variable (TB)`. Before that it was
+        WORSE and this ticket records it -- the alias answered 255 from the
+        C-ABI kind while the direct spelling was refused, a silent wrong bound
+        beside a loud refusal.
+        No `<> 0` guard is needed: AliasSemId is sem+1 with 0 meaning unset, so
+        an unset row arrives here as SEM_NONE and SemIsBool declines it. }
+      sbSem := AliasSemId[aliasIdx] - 1;
+      if SizedBoolSemBound(sbSem, wantHigh, bv) then
+      begin
+        Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+        ASTTk[outNode] := Ord(BoolStorageTypeKind(SemBoolWidth(sbSem)));
+        ASTSemId[outNode] := sbSem;
+        Result := True; Exit;
+      end;
       if AliasSemId[aliasIdx] <> 0 then
         aliasEtid := AliasSemId[aliasIdx] - 1
       else
