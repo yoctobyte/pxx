@@ -82,3 +82,54 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+
+## TRIAGE 2026-09-06 — frankB. Six rows fixed, TWO causes, and the range was right about one of them
+
+Fixed and pushed: `667934bc5` and `dbe03f106`. Every row below was reproduced
+NATIVELY on x86-64 at HEAD, which is the part the job list hid: the cascade
+listed only the cross flavours, while tstate had already split the same failures
+out as their own native open regressions.
+
+**Cause 1 — five fixtures of OURS that declare one identifier twice.** fpc
+refuses all five outright; they were passing only because FindSym used to rank
+case-exactness above scope depth (`99c416b54`, in range and correctly named).
+Renamed, not worked around.
+
+| fixture | the pair | what it did |
+| --- | --- | --- |
+| `test_signal_sp_rewrite.pas` | `const SPARE` / `var spare` | `spare[SPARE-1]` became `spare[spare-1]`, so the handler got an SP computed from an array-as-integer and re-faulted until `hits > 3` halted 3 |
+| `test_stack_overflow_raise.pas` | same | same |
+| `test_parallel_for_private.pas` | `const S = 4000` / local `s: AnsiString` | `for i := 0 to S-1` counted a string pointer: 4378472 iterations |
+| `test_critsec_once.pas` | `const K = 50000` / local `k` | `for k := 1 to K` ran zero times |
+| `test_threadsafe_heap_lock_deadlock_diag.pas` | `const RING` / `var ring` | the row frankH's `35328fd10` was assumed to have fixed; it had not, it is this |
+
+**Cause 2 — a real compiler bug, and it is NOT in the range.**
+`cfloat_global_array_implicit_len_b386.c` returned 3 instead of 42 because
+`ParseCProgram` never set `CaseSensitiveMode`: every symbol in a C PROGRAM was
+registered case-INsensitively, so a local `int i` answered for a file-scope
+`double I[]`. `ParseUsesUnitBody` had always done it for a `.c` pulled through
+`uses`. The same hole was in `ParseRustProgram` and `ParseZigProgram`. The
+reordering only made a latent defect observable, so bisecting to `99c416b54`
+would have named a commit that is not where the fix belongs.
+
+## Still open, and NOT mine
+
+- `test-c-conformance#shard3/6` (`FAIL 00040.c`) on all six flavours: expected to
+  clear with the `ParseCProgram` fix, and I cannot verify it -- the c-testsuite
+  corpus is not installed in this checkout. **A SKIP, not a green.**
+- `test-lua#compiler_srchash.sh` and `test-lua-cross`: the failing step is the
+  `$(COMPILER)` dependency, not the lua rows, and the same script was already
+  failing in `test-emit-obj` and `test-zlib` rows in earlier reports. The script
+  exits 0 here and the lua tree is absent, so this box cannot answer it.
+  **UNOWNED.** It needs one.
+
+## What the cascade cost, in one line
+
+Each of the six was diagnosed by `PXXDBG=a.casebind` in one compile -- the
+channel prints the exact candidate the old lookup order would have taken -- and
+none by bisection. The first run reported ZERO for two of them because they need
+`--threadsafe` and the compile dies inside `palthread.pas` before the program
+body: a delta instrument is still conditioned on the input reaching the site.
+`a.casebind` now prints a `TOTAL seen=/fold=/moved=` denominator so that silence
+says which kind of silence it is.
