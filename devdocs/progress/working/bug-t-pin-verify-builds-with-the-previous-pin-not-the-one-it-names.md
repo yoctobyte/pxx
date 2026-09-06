@@ -7,7 +7,7 @@ found: 2026-09-02
 found-by: claude-T
 owner: frank-subcoord
 blocked-by: []
-summary: "FIXED 2026-09-06, fixture-tested, ONE STEP UNCONFIRMED: no live pin verify has run yet, because seven's daemon holds code from 09-05 and only a restart makes this live. verify_pin checked out the pinned TREE, and a pin commit is always a DESCENDANT of the tree it pins, so stable_linux_amd64 came back holding v(N-1): every $(PXX_STABLE) job built with the PREVIOUS pin while the verdict was filed under vN. MEASURED, not reasoned -- VERSION at the pinned tree is exactly N-1 for all nine pins v399..v407. THE FIX (option 1): restore stable_linux_amd64 from the pin COMMIT after checking out the tree, then clean that dirt with `git checkout HEAD -- stable_linux_amd64` before clone_head_back, keeping clone_head_back strict. Option 2 was argued down: re-keying the row to the pin commit breaks trackt.read_pin_log's join on the tree. BACKSTOP: report['pin'] is compared against the version being published and a mismatch publishes NOTHING, so a failed restore degrades to a gap rather than a wrong record. 24 guard rows in twatch_pin_identity_devtest.py on a fixture repo shaped like a real pin, including the defect reproduced and a wedge control. THE WEDGE IS CONDITIONAL, found by that control failing: git refuses the branch checkout only when the tip's artefacts DIFFER from the restored ones, so verifying the current pin usually would not have wedged and verifying an overtaken one would."
+summary: "FIXED 2026-09-06, fixture-tested, ONE STEP UNCONFIRMED and NOT closed by 1f8c2b3a2: seven is measured STALE (code_fp 7327e547732c = 17854b85b, 09-05), and the pin row 1f8c2b3a2 filed tonight is the OLD 10-key shape and is a fresh instance of the defect -- it verified v406 (VERSION at tree 04559b9d6) under the name v407 (pin commit 51901941e). Beware: ordinary run rows have carried 17 keys and a code_fp since 17854b85b, so a 17-key row is NOT evidence the fix is live; only the PIN row discriminates. verify_pin checked out the pinned TREE, and a pin commit is always a DESCENDANT of the tree it pins, so stable_linux_amd64 came back holding v(N-1): every $(PXX_STABLE) job built with the PREVIOUS pin while the verdict was filed under vN. MEASURED, not reasoned -- VERSION at the pinned tree is exactly N-1 for all nine pins v399..v407. THE FIX (option 1): restore stable_linux_amd64 from the pin COMMIT after checking out the tree, then clean that dirt with `git checkout HEAD -- stable_linux_amd64` before clone_head_back, keeping clone_head_back strict. Option 2 was argued down: re-keying the row to the pin commit breaks trackt.read_pin_log's join on the tree. BACKSTOP: report['pin'] is compared against the version being published and a mismatch publishes NOTHING, so a failed restore degrades to a gap rather than a wrong record. 24 guard rows in twatch_pin_identity_devtest.py on a fixture repo shaped like a real pin, including the defect reproduced and a wedge control. THE WEDGE IS CONDITIONAL, found by that control failing: git refuses the branch checkout only when the tip's artefacts DIFFER from the restored ones, so verifying the current pin usually would not have wedged and verifying an overtaken one would."
 
 
 ---
@@ -360,3 +360,44 @@ live until a restart. The first correct row is what closes this ticket:
 daemon log, followed by a published pin-verify row whose `pin` matches the
 version it is filed under. Until then the backstop means the failure mode is a
 missing row, not a wrong one.
+
+## 2026-09-06 — the defect filed a fresh live instance, and the "it looks fixed" reading has a named cause
+
+Two rows on origin read to a careful peer as new-code behaviour, and neither is.
+Seven has **not** been restarted. Two instruments, failing differently:
+
+1. `tools/twatch_live_code.py --host seven` exits **1 (STALE)**: seven publishes
+   `code_fp 7327e547732c`, which resolves to `17854b85b` (2026-09-05 19:45).
+   Ten `tools/twatch.py` commits have landed since and are not live, this
+   ticket's fix (`a695174f0`) and the 10->17 pin-row enrichment (`703bebb14`)
+   among them.
+2. The pin row that `1f8c2b3a2` filed at 2026-09-06T21:25:59Z is **10 keys with
+   no `code_fp`** — the old shape — and it is the defect itself, dated tonight:
+
+   ```
+   "pin": "v407",  "sha": "04559b9d6c5a…",  "pin_baseline": true
+   $ git show 04559b9d6:stable_linux_amd64/default/VERSION   ->  406
+   $ git log --ancestry-path 04559b9d6..origin/master -- stable_linux_amd64
+     51901941e chore(stable): pin v407 -- binary sha256 095ef4811a5b
+   ```
+
+   Seven verified **v406** and filed the verdict under the name **v407**.
+
+**So `1f8c2b3a2` does not close the unconfirmed step — it is a new instance of
+the defect.** The step still needs a restart.
+
+### The trap that produced the misreading, which is worth more than the answer
+
+`c842de35a` carries **17 keys and a `code_fp`**, and that is exactly the shape
+this ticket's fix was going to add — so it reads as proof the fix is live. It is
+not. **Ordinary run rows have carried 17 keys and a `code_fp` since
+`17854b85b`**, which is the code seven is already running; the enrichment in
+`703bebb14` was to the **pin** row, written by a *different* writer in
+`twatch.py`. Seven's last six rows: five are 17-key ordinary runs, and the one
+10-key row is the pin verify.
+
+**A key count on an ordinary run row cannot separate old code from new. Only the
+pin row can, and it is the one that is still short.** This is "the name is not
+the thing" in its usual clothes: the shape you were going to introduce already
+existed next door, so the sample that confirms it is drawn from the wrong
+population.
