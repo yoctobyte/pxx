@@ -16471,3 +16471,39 @@ being true is exactly what made nobody look** — the gap between *"is this
 verified"* and *"what would this be if it were false, and go look at THAT"*. For a
 citation, false means **points somewhere else**, and that never errors.
 
+## A CENSUS OVER THE CORPUS YOU HAVE IS A CENSUS OVER THE HABITS OF THE CODE THAT CORPUS IS MADE OF
+
+frankB, 2026-09-06, correcting a comment they had written and pushed. The comment
+placed `TArray<T>` in SysUtils and claimed that home *"covers every real
+consumer"*, resting on a count that was **genuinely checked**:
+
+| corpus | files naming `TArray<>` | of those, using SysUtils |
+| --- | --- | --- |
+| rtl-generics | 7 | **7** |
+| fpc-testsuite | 6 | **0** |
+
+**7/7 against 0/6, and the inversion is structural rather than unlucky.**
+rtl-generics code uses generic **collections**, which need SysUtils anyway — so
+`TArray` arrives free and no file ever has to ask for it. Testsuite files exercise
+`TArray` **itself** and carry no more `uses` than the feature under test requires.
+
+**So the corpus that shows 7/7 is precisely the one in which the dependency is
+INVISIBLE**, and the corpus that shows 0/6 is the one a conformance run is made
+of. The census did not sample the wrong number of files; it sampled a population
+whose writing habits **conceal the property being counted**.
+
+**This is the population error's hardest form**, because every ordinary defence
+passes: the count was checked rather than assumed, the author said so, the corpus
+was real, and the files were relevant. **What was never asked is what KIND of code
+the corpus is made of, and whether that kind has a reason to answer one way.**
+
+**The question that finds it, and it is one sentence:** *"is there a reason the
+code in this corpus would answer this way regardless of the truth?"* For a `uses`
+census: does anything else in these files pull the unit in anyway? For a call-site
+census: are these callers written by the same hand as the callee? For a failure
+census: is this corpus made of things that fail loudly?
+
+**And the cheap structural check is a SECOND corpus chosen for a different
+reason** — not a bigger one. Seven files and six files settled this; seventy of the
+first kind would not have.
+
