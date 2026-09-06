@@ -46,6 +46,20 @@ investigation and the defaults were removed to get here.
 `nil` handle and a mis-marshalled one can both read as length 0 in a callee that
 only asks `Length`), and the two controls above kept in the same file.
 
-Sibling found in the same sitting, different input, same subsystem:
-[[bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults]].
-No shared cause established.
+## The sibling, and what "no shared cause" does and does not mean
+
+[[bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults]] was found in the same sitting, in the same subsystem, at the same
+priority. **Read that pairing carefully, because the honest statement is weaker
+than either "they are the same bug" or "they are independent."**
+
+What was measured is that each crashes under its own trigger with the other's
+trigger controlled out: this one with a scalar parameter and no array anywhere,
+that one with no default value anywhere. Neither is a special case of the other's
+repro.
+
+What was NOT measured is whether one cause explains both. I did not locate
+either. Two crashes in one dispatch mechanism have every reason to share a
+cause, and a reader who fixes one should expect the other to fall out and check
+rather than assume it will not — **the pair being listed here is not evidence
+that they are two.** If they turn out to be one, close this and say so; that is
+a better outcome than two tickets held apart by a sentence nobody measured.

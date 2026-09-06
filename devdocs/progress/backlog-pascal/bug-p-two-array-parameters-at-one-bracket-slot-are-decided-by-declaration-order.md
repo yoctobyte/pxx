@@ -12,8 +12,11 @@ summary: "When two method overloads both take an ARRAY at the slot a `[...]` arg
 # Two array parameters at one bracket slot are decided by declaration order
 
 - **Type:** bug (compat) — **Track P** (`compiler/pasparser_call.inc`).
-- Found while measuring the controls for
-  [[bug-p-a-bracket-argument-turns-off-method-overload-selection]] (`f00d3d230`).
+- Found while measuring the controls for the fix that landed as `f00d3d230`,
+  *"a bracket argument turned off method overload selection entirely"*. **That
+  fix carries no ticket** — it went straight in — so the wiki-link that used to
+  stand here resolved to nothing and advertised finished work as a pending
+  dependency. De-linked deliberately; the commit is the record.
 
 ## The repro
 
@@ -76,3 +79,35 @@ defect.
 `make compiler/pascal26`, the repro above matching fpc, plus
 `tools/run_fgl_corpus.sh` 7/7 and `tools/run_pascal_conformance.sh` 391/0 —
 the two rows that catch an overload-selection regression; quick alone does not.
+
+
+## The same property exists on the CONSTRUCTOR path (frankB, 2026-09-06)
+
+Widening this ticket rather than filing beside it, because it is one property
+with two addresses.
+
+`ClassCtorArraySigAt` (`pasparser_call.inc`, new at `1c8a6cfd5`) scans a class's
+constructors for one whose parameter at the bracket slot is an array, and
+**takes the first**. So
+
+```pascal
+type TC = class
+  constructor Create(const A: array of Integer); overload;
+  constructor Create(const A: array of const); overload;
+end;
+```
+
+decides how `TC.Create([7, 8])` is PARSED by declaration order, exactly as the
+method case decides which body runs by it. It has the same cause and the same
+reason for not being fixed: **the bracket must be parsed before overload
+resolution can run**, so at the moment of the decision there is nothing to rank
+the candidates by. The predicate it replaced (`ClassCtorWantsVarRecAt`) had the
+same first-match behaviour and additionally always answered TVarRec, which WAS a
+defect and is fixed; the ordering is not.
+
+Noting it here so that whoever makes the probe parameter-aware knows there are
+two call sites to satisfy and not one, and so that nobody re-derives the
+constructor half from scratch.
+
+**Still no real source wanting either answer**, on either path. That is the
+prio, and it has not moved.
