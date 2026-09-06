@@ -11912,6 +11912,56 @@ renumbering. Identical IR with divergent behaviour says the frontend is not
 the defect, and that single measurement moved the hunt into the backend after a
 day of narrowing in the wrong file.
 
+## THE EXPECTED VALUE MUST DIFFER FROM WHAT THE BUG EMITS — which you know while writing the row, unlike the type's default
+
+CLAUDE.md already says to choose a probe whose right answer differs from the
+DEFAULT, and that rule stands. This is the form you can actually apply at the
+moment you write the assertion, and the two come apart exactly where it matters.
+
+**To use the default form you must know the type's default**, which is often the
+thing you are least sure of — `TypeSlotSize(tyUnknown)` being 8, `tyUnknown`
+being 4, an unset pointer being 0, an empty open array's length being 0. Those
+are properties of machinery you are probing precisely because you do not trust
+it. **To use this form you only need to know what your defect PRODUCED**, and you
+have just watched it do so.
+
+Worked, on one target, in one night (frankwasm, 2026-09-06):
+
+- `check_variantptr.sh` expects neither `0` nor `None` anywhere, deliberately —
+  those are what the Variant-through-pointer defect emitted, so a row wanting
+  either would pass with the store doing nothing at all. Written correctly the
+  first time, from the bug's output.
+- `tools/c_wasm32_entry.sh` expects `42`, `21`, `23` and never `0`, because a
+  wasm module with no `_start` runs nothing and exits 0. The ticket's own stated
+  acceptance criterion — *"`int main(void){return 0;}` exits 0 under
+  wasmtime"* — is the same claim written the other way and **passed against a
+  no-op entry stub**.
+
+### UNDERDETERMINED IS NOT WRONG, AND BOTH LOOK LIKE A GREEN
+
+The subtler case is a row that is correct AND that passes for a reason its author
+did not choose. `check_outparam.sh` asserted `OutDyn entry-len=0` to prove a
+managed `out` clear had RUN — and a dropped clear leaves the caller's array
+untouched, so 0 would have been both the wanted value and the failure value. It
+discriminated only because the slice happened to pre-fill with `SetLength(d,3)`.
+
+**That is one obvious refactor from passing for no reason at all, and the
+refactor was MEASURED rather than imagined.** Trimming `s := 'KEEP'` to `s := ''`
+and `SetLength(d,3)` to `SetLength(d,0)` — the plausible "simplify the fixture"
+edit — left the rows printing `ok  the entry clear AND the declared body are
+both present`, a green from a guard with zero discriminating power, and
+**nothing else went red** (`5f8857747`).
+
+So the fix is not a comment explaining why the fixture matters. **Assert the
+fixture**: that check now prints and asserts `before=[KEEP]` and `before-len=3`,
+so deleting the setup goes RED instead of going quiet.
+
+Ask of any passing row: *if someone simplified the fixture, would this still
+pass?* A yes means the discriminating power lives somewhere nobody is guarding.
+
+(The CLAUDE.md sentence is the owner's to change; this is the playbook
+refinement, and a wording change there routes through Track U.)
+
 ## A SHARED-MACHINERY CHANGE NEEDS A CORPUS PER FRONTEND, NOT PER TEST COUNT — and a discrimination control certifies the INSTRUMENT, never the SAMPLE FRAME
 
 Measured 2026-09-06. `a79ea9af6` made the single-candidate method gate

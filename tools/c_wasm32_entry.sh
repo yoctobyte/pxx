@@ -43,9 +43,15 @@ set -eu
 #    check only its quiet arm, and it would report PASS with exactly the
 #    confidence it has now. Measured instance of that shape on this very target:
 #    721f8d534 (a Variant stored through a pointer on wasm32; pristine gave a
-#    silent None/0, live overwrote a tag and trapped on a LATER read). NOT fixed
-#    here -- stated, so nobody reads a green from this script as coverage of
-#    that class.
+#    silent None/0, live overwrote a tag and trapped on a LATER read).
+#
+#    STRUCTURAL, NOT A TODO. `mktemp -d` plus one run per subject IS a
+#    fresh-destination population -- there is no careful afternoon that closes
+#    this. Getting a dirty destination means either running two subjects through
+#    one allocator or writing a fixture that deliberately dirties memory first,
+#    and both are real work with their own failure modes. Stated so nobody reads
+#    a green here as coverage of that class, and so nobody files it as an
+#    oversight.
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COMPILER="$ROOT/compiler/pascal26"
