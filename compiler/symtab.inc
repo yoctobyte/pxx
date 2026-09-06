@@ -14076,8 +14076,37 @@ function SymSkipScopeExitRelease(i: Integer): Boolean;
       wrong. }
 begin
   SymSkipScopeExitRelease := StacklessPersistentSlotSym(i) or
+    Syms[i].IsRef or
     (InUnwindCleanupPad and (i >= 0) and (i < Length(SymIsExcBinder)) and
      SymIsExcBinder[i]);
+  { (3) A BY-REFERENCE SYMBOL. The slot holds a pointer to storage owned
+    somewhere else, so releasing it frees what the caller still holds.
+
+    This arrived here from wasm32, which was the ONLY one of the seven copies
+    that asked it -- `(Kind = skLocal) and not Syms[i].IsRef`. It is asked for
+    all seven now, and the honest statement of what that buys is: NOTHING
+    TODAY, and the reason is stronger than "no test covers it".
+
+    IsRef is True only on a symbol whose Kind is skParam. Every assignment in
+    the compiler was enumerated to say that -- eight sites, five of which set
+    False; AllocParam (symtab.inc) sets it from its argument and sets
+    Kind := skParam two lines later; the two Pascal parameter sites
+    (pasparser_proc.inc) act on an AllocParam result; and the `absolute`
+    overlay (pasparser_decl.inc) sets it only when the TARGET is already
+    IsRef, copying the target's Kind in the same block. So no frontend but
+    Pascal touches it, and Pascal only in the parameter path. Every one of the
+    seven loops already requires Kind = skLocal, which excludes skParam, so
+    the term is REDUNDANT rather than merely unreached, and both directions
+    were measured byte-identical across all seven targets: removing it from
+    wasm32 changed nothing, adding it here changed nothing.
+
+    It is kept, and kept HERE, for the reason the seven-copy ticket exists: a
+    distinction that only exists in prose gets violated by the next writer.
+    The invariant it depends on is not enforced anywhere. If a frontend ever
+    gives a local a borrowed slot, six of the seven backends would release
+    storage they do not own -- silently, because a double free is not a
+    diagnostic. Asking it in one predicate makes that one line to change
+    rather than seven to remember. }
 end;
 
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean;
