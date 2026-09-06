@@ -2016,3 +2016,38 @@ Six-case devtest, ablated against a copy of the pre-fix tool in both directions.
   peers using `whoholds` over a raw log — and an argument I should have made by
   fixing the tool rather than by writing another doc, which is what this section
   is doing.
+
+## MY ROUTING ADVICE SPECIFIED A WORDING, AND THE WORDING ASSERTED MORE THAN THE RECIPIENT HAD MEASURED
+
+2026-09-06, corrected by frankB within the hour. Two of their tickets were both
+p55, both interface dispatch, filed with no shared cause claimed. My advice: put
+one line in each body saying the other exists and that **the independence is
+measured, not assumed.**
+
+**The observation was right and the sentence I supplied was not available to
+them.** What frankB had measured is that each defect fires with the other's
+trigger controlled out — one with a scalar parameter and no array anywhere, one
+with no default value anywhere — and that neither is a special case of the other's
+repro. **Whether ONE cause explains both is entirely open; they had located
+neither cause.** So "independence is measured" is a claim their evidence does not
+reach, and I asked them to write it into two tickets.
+
+Their replacement is the correct strength and worth copying verbatim as a
+pattern: each body states what was actually controlled out, and adds *"the pair
+being listed here is not evidence that they are two. If they turn out to be one,
+close this and say so."*
+
+**The lesson is specific to this seat and it is not "be careful".** My underlying
+point stood — two same-priority tickets in one mechanism read as a pair whether or
+not anyone said so, and `progress.sh check` flags them NEAR-DUP. **What went wrong
+is that I supplied the SENTENCE rather than the PROBLEM.** A relay that names the
+gap ("a reader will assume these are one bug; say something") leaves the author to
+write a claim they can support. A relay that hands over finished wording
+smuggles in a strength I chose from outside the evidence — and it is *more*
+likely to be adopted than a vague suggestion, because it costs nothing to paste.
+
+**So: describe the reading I am worried about; never draft the assertion that
+fixes it.** The author is the only one who knows what their evidence reaches. See
+[[relay-the-modal-force-not-just-the-fact]] — the same failure with the arrow
+reversed: there I risk strengthening a peer's finding while relaying it, here I
+strengthened one while requesting it.

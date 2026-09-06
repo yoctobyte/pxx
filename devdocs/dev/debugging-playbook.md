@@ -17048,3 +17048,103 @@ goes red **for the wrong reason** proves nothing and reads as proof, and the nex
 person to touch it cannot tell which failure they are looking at. If a control
 fails, establish that it fails for the reason you meant before shipping it — and
 if it does not, say in the file which shape you avoided and what bit you.
+
+## A DERIVED CENSUS TELLS YOU WHERE THE DOORS ARE; IT DOES NOT TELL YOU WHAT SHAPE REACHES EACH ONE
+
+frankB, 2026-09-06 (`1c8a6cfd5`), correcting a note they had written themselves
+the day before — and the correction is more useful than the bug.
+
+`bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path` catalogued
+nine doors, four hand-written, and recorded one arm as *"a ninth variant of the
+predicate, not a ninth defect — measured 2026-09-06, does NOT diverge."* **The
+arm is a CONSTRUCTOR door. The probe was `c.M([10, 20, 30])`, a METHOD call,
+which never reaches it.** Measured today, in one file:
+
+```
+ctor  scalar n=3 sum=10      { TC.Create([10, 20, 30]) }
+meth  scalar n=3 sum=60      { o.M([10, 20, 30])       }
+```
+
+fpc says 60 for both. **A silent wrong value in `SomeClass.Create([...])`,
+sitting behind a ticket line that said it had been checked.**
+
+**The ticket's own warning did not protect its author, and the reason is the
+finding.** The ticket says, in capitals, *"DERIVE THE LIST; DO NOT READ THE ONE
+BELOW"*, and lists four line numbers that had drifted the same day. frankB
+derived the list — the discipline worked. **Then they aimed the probe at the
+address they remembered rather than at the code they had just derived.**
+
+> **Deriving the list is only half the discipline. A derived census tells you
+> WHERE the doors are; it does not tell you what SHAPE reaches each one, and the
+> probe has to be built from the second fact.**
+
+**This is not the stale-citation failure and filing it as one loses it.** There
+the artefact was wrong. Here the census was CORRECT and the probe was aimed from
+memory — and the product is a ticket line that reads as verified, in a ticket
+whose whole subject is that its addresses cannot be trusted. **When a census
+yields N sites, write down for each one the shape that reaches it before writing
+any probe**, and check that your repro's shape is on that list. Two of the nine
+doors here are reached only by a constructor call; no method-call probe can ever
+see them, and no amount of care about line numbers helps.
+
+## A COUNT THAT IS THE SAME UNDER BOTH READINGS — the colliding expected value arriving in a DERIVED quantity
+
+frankB, same commit, and it is the third distinct member of the degenerate-probe
+family in three days. `array of Variant` had been excluded from the open-array arm
+since the feature's first commit — scope, not a constraint; the commit subject and
+comment both say scalar/string and neither mentions Variant. On the constructor
+door that produced **a TVarRec vector with the RIGHT COUNT and three EMPTY
+elements.**
+
+**`Length(A)` is the same number for a correct open array and for a TVarRec vector
+of the same arity.** So *any* length assertion certifies the empty one. Only
+reading the ELEMENTS separates them.
+
+**The new sub-shape: the collision is not in the value under test, it is in a
+quantity DERIVED from it.** The earlier members collide on the value itself —
+`sizeof(*s.fp)` = 4 = `sizeof(int)`, `Fn(5)` = TRUE = discarded-call truthiness,
+a repro named `Create` getting the right answer from the ordinary constructor.
+Here the value is plainly wrong and the *count of* the values is right, so the
+assertion everyone writes first — *"did I get three of them"* — passes.
+
+**Length, count, size, arity and non-nil are the derived quantities that survive
+the defect.** They are also the cheapest things to assert, which is why they are
+what a fixture reaches for. frankB's response is the rule worth copying: **not one
+of the fifteen rows in the new test asserts a length**, and the ticket says so
+where a reader will hit it before writing a sixteenth.
+
+## THE GUARD ANSWERED *WHETHER*, NOT *WHICH* — a Boolean predicate leaves its caller only one thing to do
+
+frankD's phrasing from the slot-mask work, adopted by frankB as the shared
+diagnosis of two independent defects in the bracket-argument door.
+
+A predicate that answers *"is there a bracket argument here"* hands the caller a
+`True` and no way to reach the thing the bracket belongs to. **So every caller
+writes its own door**, and the count of hand-written doors grows one locally
+correct copy at a time. Replacing the Boolean with something that returns the
+constructor's `Procs[]` row let the caller reach the door everything else already
+used: **zero hand-written doors remain on the Pascal side, nine call sites of one
+function.**
+
+**The tell is a Boolean whose `True` branch is always followed by a lookup.** If
+every caller, having been told yes, immediately goes and finds the thing itself,
+the predicate is answering the wrong question and the duplication is downstream of
+that — not of carelessness. A predicate cannot be fixed by being called more
+carefully.
+
+> **AND THE REMEDY FOR THE MIRROR CASE IS AN ACCESSOR THAT REFUSES, NOT ANOTHER
+> SHARED PREDICATE** (frankD, seconded by frankS). `Params[j].TypeKind` is the
+> parameter's own kind when `IsArray` is False and its ELEMENT kind when True, and
+> nothing refuses a caller that reads one half — three seats hit it in one day
+> from three doors, filed as
+> `refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither`
+> (P p45). The point of an accessor that returns `tyUnknown` for the wrong
+> question rather than a shared predicate: **a predicate can be called correctly
+> and still be handed the wrong field.** Sharing the test does not share the
+> knowledge of which field the test was about.
+>
+> It was filed rather than done, and the reason is the ranking discipline: ~18
+> readers span `ir_codegen*`, `symtab.inc`, `pyparser.inc`, `cparser.inc`, and
+> **many legitimately want the element kind**. Each site is a judgement; a sweep
+> would break the correct callers. The ticket carries an incremental order that
+> lands green.
