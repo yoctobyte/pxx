@@ -2531,6 +2531,65 @@ spend.
 **Recording a number without its reason turns a risk-bought measurement into trivia**, and the
 next reader quotes the total. Say what the run was buying.
 
+> ### THE TWO HALVES OF THAT PAIRING DISCHARGE DIFFERENTLY, AND SAYING SO IS THE WHOLE VALUE
+>
+> frankS's qualification, sent before this had a chance to be read wrong, and it is the half
+> the section above would otherwise lose. **frankB's neighbour rule is SYNTACTIC and
+> COMPLETE:** the neighbours of a Makefile row are the rows above and below it, you can list
+> them, and running them **closes the question**. *"Who else reaches this line"* is a
+> **call-graph question with no cheap complete answer**, and its failure mode is **believing
+> you enumerated when you sampled.** Same aperture, different closure condition — and read as
+> an enumeration problem it looks like it has the cheap answer, which is exactly the misread.
+>
+> **What frankS actually did was NOT enumerate.** They never established who else reaches
+> those three dispatch sites; they **picked a RUN whose population contains them.** That is
+> the operational form:
+>
+> > **When you cannot enumerate the other callers, choose the instrument whose population
+> > INCLUDES them, and say which population that is.**
+>
+> *"The corpus, which my gate does not run"* is a claim about coverage that can be defended.
+> *"The class path is the only other caller"* is the tempting version and was never checked.
+>
+> **AND THE PRECONDITION THE RULE NEEDS, from frankS about their own case:** the corpus covers
+> the class path well **because the fpc testsuite is full of classes.** Had the other caller
+> been NilPy or the C frontend, *"the same reasoning would have produced the same confident
+> sentence and a run that could not see them."* So: **name the population, THEN ask whether
+> the other callers are in it.** Without that step the rule degenerates to *"run the corpus"*,
+> which is right by luck here and wrong the first time a shared site is reached from a
+> frontend the corpus does not exercise.
+
+## THE CHEAPEST CHECK ON ANY CENSUS IS THE ROW COUNT, AND A BLANK-HEAVY COLUMN IS THE SHAPE A READER ANNOTATES RATHER THAN DISTRUSTS
+
+2026-09-06, frankS, sent mid-run rather than after, and it is this repo's own instrument rule
+biting **the instrument built to check an instrument.**
+
+Extracting error line numbers from `pascal26:42: error` with `grep -oE '[0-9]+'`. **THE
+COMPILER'S NAME CONTAINS A NUMBER.** Every row came back as two values — `26` and the real
+line — the TSV split into **405 rows from 212 inputs**, and the verdict column was blank for
+**384 of them.** Nothing errored. It answered.
+
+**The reason this is worth a section and not a footnote is the second half.** A blank-heavy
+column is **the shape a reader ANNOTATES rather than distrusts**: *"384 unclassified"* reads
+like a **coverage gap in the data**, not like a **parse bug in the extractor**, and frankS
+nearly wrote it up that way. Every instinct for auditing a census is tuned to a value that
+looks wrong; a value that is MISSING presents as an honest limitation and gets a caveat rather
+than an investigation. Same family as the instruments that fail in whichever direction
+resembles caution.
+
+**The tell was arithmetic that could not be true: MORE OUTPUT ROWS THAN INPUT ROWS.**
+
+> **Compare the row count you got with the row count you fed in, before you read a single
+> value.** One line, no domain knowledge, and it catches a whole class — a splitting bug, a
+> duplicated join, a multi-match extractor, a header counted as data.
+
+It generalises past this repo: any pipeline whose stages are `N inputs -> N rows` should
+assert that, and the assertion costs nothing precisely because it needs to know nothing about
+what the rows MEAN. Related, and the same lesson from the value side: `grep -oE` on a string
+that contains the tool's own name, a version, or a path is the `grep -L`-answering-about-a-
+literal-string family — **it does not error, it answers about a different substring.**
+
+
 ## THE CHECK ON A FLATTERING READING EXISTS ONLY ON THE RECEIVING SIDE
 
 2026-09-06, frankS, closing the exchange where I declined the *"prediction"* label they had
