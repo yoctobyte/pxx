@@ -196,4 +196,4 @@ separate change with a new column in it.
   controls and were green before the fix.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5840f4a69.
