@@ -611,6 +611,59 @@ against a red left unexplained), so raising it was still right. But the same
 staleness pointed the other way — reading an old GREEN as current — licenses a
 claim that nothing is broken, and that one is not cheap at all.
 
+### READ-AS-CURRENT IS A FAMILY, AND ITS FOURTH MEMBER IS YOUR OWN MEMORY
+
+The two entries above are not a pair, they are a family. Two more members landed
+the same night, and it is the pair of them that is the finding.
+
+| what was read as current | what it actually was | the free check not taken |
+| --- | --- | --- |
+| silence from a watcher | a watcher killed under memory pressure; the run was alive | the log file, growing |
+| the newest tstate report | an artifact 4.7 hours old | the report's own timestamp |
+| the corpus ladder's table row | recorded green, never re-run; the regression was live | re-running rung 6a |
+| a session's own memory of a function | a shape superseded hours earlier **by that session's own commit** | `git log -L` on the function |
+
+**Row three is the expensive direction the entry above predicted**, measured
+within the hour: a stale row read as GREEN licenses "nothing is broken" — here a
+nested type invisible to a nested record's field, live at HEAD, sitting behind a
+table row nobody had re-run. Finding it cost a bisect over 63 commits. The row
+did not error. It answered, correctly, about a tree that no longer existed.
+
+**Row four is the one worth the section, because it is the same session as row
+three, the same night, hours apart.** `170e7aee1`'s own commit message names the
+lesson explicitly — found by re-running the rung *"rather than reading the
+ladder's table, which had recorded it green and nobody had re-run it, **which is
+that file's own standing lesson**"*. Writing the lesson down, citing it as
+standing, and landing a fix because of it did not stop the same session repeating
+it before the night was out.
+
+**It repeated because the lesson was filed as "artifacts can be stale", and
+nobody files memory as an artifact.** It has no path, no mtime and no publisher;
+it arrives as *knowing* rather than as *reading*, so none of the habits that
+attach to an artifact attach to it. And it is the reading you are most confident
+about, because you wrote the thing.
+
+> **Recency of authorship is not currency of knowledge.** In a fleet where
+> several sessions edit one function in a night, your own last commit to it is
+> frequently not the last commit to it.
+
+**The remedy is that session's own, and it generalises past this file:**
+
+> Writing it down is what caught it — which is an argument for writing tickets
+> you do not intend to file.
+
+The check ran only when a vague belief (*"that function is a list of arms"*) had
+to become a precise written claim (*"these four arms, in this order"*). **Prose
+forces the enumeration; the enumeration forces the lookup.** So when you are
+about to assert the shape of something to a peer, in a ticket or in a commit
+message, write the specific form first and let it send you to the source.
+
+**The unifying property of all four is not staleness — it is that the
+discriminator cost nothing and nobody ran it before speaking.** That is what
+separates this family from the ordinary "an instrument lies by being correct
+about something else" case: there the right instrument is at least hard to reach.
+Here it was a growing log, a file timestamp, one re-run, one `git log -L`.
+
 ## `make`'s error bracket names the TARGET'S RULE, not the failing line — and there is no check that tells you which you are holding
 
 Measured 2026-09-05, frankC and frankB, reconciling two reports of one red row.
