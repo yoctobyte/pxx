@@ -20141,3 +20141,474 @@ so nothing in the command text tells you which one you got — and the two answe
 coincide everywhere except where you needed to ask. Compare "Every instrument
 that lies, lies by being CORRECT ABOUT SOMETHING ELSE" in CLAUDE.md; this is
 that, with the something-else selected by which binary is first on `PATH`.
+
+### REPRODUCED BY A SECOND SEAT, AND THE CONTROL IS THE PART THAT GENERALISES
+
+Reproduced independently against `^devdocs/` — all-match 1/1 agree, none-match
+0/0 agree, **MIXED: ugrep 1, GNU 0.**
+
+**THE OBVIOUS POSITIVE CONTROL CERTIFIES THE BROKEN IDIOM.** The two control
+populations that are easy to write are all-match and all-code, and **both agree
+under either grep.** A `-v` guard's control must be a MIXED list. That is a
+control drawn from the wrong population certifying a broken instrument — the
+same family this file catalogues for compilers and harnesses, arriving in the
+shell, where nobody thinks to look for it.
+
+Scope, measured rather than assumed: `sh -c` gets GNU, so committed
+`tools/*.sh` and Makefile recipes are unaffected; the repo has exactly one
+committed `grep -qv`, at `Makefile:29633`, running under `/bin/sh` and correct.
+**This is about every ad-hoc grep a seat types**, not about committed tooling.
+
+Distinct from the warning at `Makefile:9948`, which is `grep -qv` being
+unfalsifiable on ELF input — a trap inside GNU's own semantics, no ugrep
+involved. One is a guard that always passes; this is a guard that passes on the
+input it was built for. **Reading either does not immunise against the other.**
+
+## A CORRELATION MEASURED OVER A SUPERSET OF THE POPULATION THE MECHANISM ACTS ON WILL TRACK IT PERFECTLY, AND MEAN NOTHING
+
+Measured 2026-09-06, by the whole fleet, over about ninety minutes.
+
+**The observation.** No full tier had published since 18:37Z. frankH measured
+commits per 15 minutes on `origin/master`: 5-17 through the afternoon, then 26 at
+18:45 — one push every ~35 seconds — and the fulls stop exactly there. From that,
+a mechanism: `tools/twatch.py`'s idle full backfill has a commitment point,
+`full_commit_secs = 60`, so a push in the first 60 seconds aborts the run. The
+fleet was large enough to switch off its own cross-target coverage by working
+normally. Every number in that paragraph is true. The correlation is real. It
+produced a fleet-wide push freeze.
+
+**It is wrong, and the code says so in one grep.** `twatch.py:5766`:
+
+```python
+NOTEST_PREFIXES = ("devdocs/", "docs/")
+```
+
+`needs_test()` (:6612) runs `git diff-tree` on ONE sha and returns True only if
+some file falls outside those prefixes. `make_preempted()`'s abort check is
+`any(needs_test(...) for c in commits_between(tested, h))`. Its own docstring:
+*"a real push preempts, docs/tstate-only movement (e.g. our own fast-phase
+publish) must not abort the work it queued."*
+
+**So the daemon counts TESTABLE commits and the finding counted ALL commits.**
+Classifying the same six-hour window by the code's own rule:
+
+| | |
+| --- | --- |
+| commits on origin/master | 282 |
+| testable (preempting) | 89 |
+| `devdocs/`/`docs/`-only (free) | **193 — 68%** |
+| testable rate | one per ~4.0 min over 6h; one per ~2 min since 18:37Z |
+| gaps between consecutive testable commits >= 60s | **67 of 88** |
+| ...of those, SINCE the last full published | **11** (68s, 92s, 108s, 124s, 130s, 135s, 140s, 162s, 191s, 256s, 416s) |
+
+A run sitting at its 60-second commitment point had **eleven** chances in
+47 minutes and took none. Whatever stopped the fulls, it was not a closed window.
+
+**Why the correlation fitted anyway, and this is the transferable part.** The
+superset and the subset MOVE TOGETHER, because the same seats produce both: a
+session that lands a compiler fix also files the ticket and writes the logbook
+line. Docs traffic is a near-perfect proxy for code traffic *in a fleet of
+mixed-output workers*, so a rate computed over all commits tracks the rate over
+testable ones with high fidelity — and tracks it right through the period where
+the mechanism was doing something else entirely.
+
+**The guard is not "check the numbers".** The numbers were right and re-checking
+them returns them unchanged. It is: **before believing a mechanism, read what
+the code COUNTS, and re-derive your rate over exactly that population.** A
+correlation cannot tell you which of two nested populations it is about.
+
+### AND THE SAME ERROR RECURRED THREE MORE TIMES INSIDE THE CORRECTION TO IT
+
+The corrections were each right and each stopped one level short. In order:
+
+1. **Signal vs condition** (frankwasm's formulation). The relayed fix said *"the
+   commitment point counts PUSHES, not paths."* That is **a true statement about
+   the abort SIGNAL and a false one about the abort CONDITION** — a push is what
+   wakes the check; `needs_test` is what decides. Cost: 68% of the fleet's
+   traffic frozen for nothing.
+2. **Population counted vs population acted on** — the section above.
+3. **Predicate vs granularity.** The corrected ruling prescribed
+   `git diff --name-only origin/master..HEAD`, citing the right constant, the
+   right line number and the right docstring. All correct, all about
+   `NOTEST_PREFIXES`, **and none of them about the granularity the daemon
+   evaluates at**: `needs_test` runs per COMMIT and is wrapped in `any(...)`,
+   while that command is a range diff between two ENDPOINTS. A path touched and
+   then untouched inside the range is invisible to the check and visible to the
+   daemon. The author's own diagnosis: *"I verified the predicate and never
+   checked how it is applied."*
+4. **Rule vs check.** A seat then verified that ruling — quoted the constant,
+   the line, the docstring back — and reported it as verification. **They had
+   `needs_test(repo, sha)`, taking a single sha, on screen while they checked.**
+   Their words: *"verifying the RULE and reporting it as having verified the
+   CHECK. The two feel identical from inside — both end in 'I looked at the
+   source and it said what they claimed' — and only one of them tests the thing
+   you are about to rely on."*
+5. **The rung vs what is in front of it.** The eventual cause was neither. Pin
+   v406 committed 18:42:14Z, five minutes after the last full published at
+   18:37:24Z; a new pin mints a new pin-verify target, and **pin-verify sits
+   ABOVE platform breadth in the idle ladder.** `seven.json` published it the
+   whole time: `idle_yield {"aborts": 2, "phase": "pin-verify"}`, `pin_verify`
+   still naming v405's sha, `last_breadth_try` 21 hours stale. A candidate that
+   the ladder restarts at the bottom was refuted correctly — `idle_phase`
+   returns `mid_tier` on the first idle rung and the shipped default collapses
+   mid == deep == full, so the rung is immediate — and the refutation *answered
+   the question that was asked and missed the one that mattered*: the rung was
+   reachable, and something was standing in front of it.
+
+**The constant across all five: every author verified a TRUE ADJACENT FACT and
+stopped there.** Not one of them was careless, and not one checked the step that
+carried the weight. So the question that generalises is not "did I verify this"
+but **"what is the last step between what I verified and what I am about to
+rely on, and did I check THAT one?"**
+
+**The postscript that settles it.** The mechanism was never the operative
+variable. `twatch.py`'s idle order is requests -> pin-verify -> breadth, so a
+`--request` line jumps the phase that was actually blocking. One was filed at
+19:20Z and **the full ran at 19:32:19Z, twelve minutes later, with the freeze
+already lifted.** Hold plus request works; request alone was very likely
+sufficient, given 67 of 88 gaps already exceeded the window. The freeze bought
+nothing and the request bought everything.
+
+## A CORRECT CITATION WRAPPED AROUND AN INCORRECT CHECK IS THE MOST CREDIBLE WAY TO SHIP ONE
+
+frankZ, 2026-09-06, on instance 3 above:
+
+> *"The version in flight will read as verified to everyone who receives it — it
+> carries a real line number and a real docstring, and both are correct about the
+> constant while the check around them is not."*
+
+**The reader who spot-checks is exactly the reader it convinces.** This is the
+inverse of the rule that says verify the citation and not only the claim, which
+was written after a relay whose sha did not resolve. Here the sha resolves
+perfectly, and resolving it is what certifies the wrong operationalisation.
+
+So "verify the citation" is **necessary and not sufficient**, and frankS named
+the missing half: *"run the check the citation is supposed to justify, and diff
+it against the one you would have written."* One command, cheaper than the
+reasoning either party did:
+
+```sh
+diff <(git diff --name-only origin/master..HEAD | sort -u) \
+     <(git log --format= --name-only origin/master..HEAD | sort -u)
+```
+
+### AN INCORRECT SAFETY ASSURANCE TRAVELS FURTHER THAN AN INCORRECT INSTRUCTION
+
+The coordinator sent three seats the CORRECT command as an optional refinement,
+with the wrong reason (being behind origin, which only ever over-holds) and an
+explicit *"fails safe either way — neither can tell you to push when you should
+not."* The last clause is false in the only direction that matters.
+
+**Right command, wrong warrant, plus a reassurance that the weaker one was
+safe.** A seat reading that keeps the weaker check on the coordinator's
+authority and takes no measurement. frankuser's name for it: *"an incorrect
+safety assurance travels further than an incorrect instruction, because it stops
+the reader from checking."*
+
+### AND THE BASE RATE WAS ZERO, WHICH IS WHY THE WRONG CHECK SURVIVED
+
+frankB measured the divergence over this repo's own history rather than arguing
+about it — endpoint diff vs per-commit union on `origin/master`:
+
+| range | endpoint | union | hidden |
+| --- | --- | --- | --- |
+| last 20 commits | 38 | 38 | 0 |
+| last 60 | 80 | 80 | 0 |
+| last 100 | 126 | 130 | 4 |
+| last 282 | 316 | 346 | **32** |
+
+**All 32 hidden paths are under `devdocs/`. Zero are testable.** In 282 commits
+of normal operation the endpoint check has never once said "push" where
+`needs_test` would have said "abort".
+
+That is not reassurance, and the reason is the finding: the hidden paths are
+**ticket files MOVED between folders** — `backlog-tools/x.md` -> `done/x.md`,
+which the endpoint diff renders as a rename and the union renders as two paths.
+Moving tickets is a devdocs-only operation, **so the divergence is confined to
+the free set by the shape of the work, not by the check.**
+
+**A measured base rate of zero is a statement about the workflow that produced
+the history, and an intervention that changes the workflow invalidates it.** The
+number does not go stale; the POPULATION does. A freeze produces precisely the
+one workflow that generates a testable touch-then-revert — commit a probe, back
+it out, tidy, push a stack — which has almost no history here because nobody
+works that way when they are pushing as they go. **Mechanism sound, base rate
+zero, base rate specifically inapplicable to the conditions it was quoted
+under.**
+
+### A WARNING THAT DOES NOT CHANGE THE VERDICT IS THE ONE NOBODY RE-RUNS
+
+Same measurement, same seat, caught before publication. The first run printed
+`comm: file 1 is not in sorted order` three times **and answered anyway**: 41
+hidden, 0 testable. Re-run under `LC_ALL=C`: 32 hidden, 0 testable.
+
+**The instrument said it was unhappy, and the answer to the question being asked
+was identical both times.** The verdict was right and the count was wrong — and
+only the verdict was ever going to be checked, so the broken comparison would
+have shipped a wrong number under a correct conclusion, and the next reader
+inherits the 41.
+
+Related, same seat, same hour: *"every full row is ~600.8s, that is a cap"* —
+drawn from the last six rows. Across all 415 the wall runs 320.9 to 1867.0 and
+only 14 sit in 599-602. **A six-row window would have shipped it**, and a cap is
+exactly the kind of claim that gets repeated because it sounds like a fact about
+the system rather than about the sample.
+
+## THREE SESSIONS HOLDING A CONTROL THAT CANNOT FAIL IS WORSE THAN THREE HOLDING NONE
+
+The known rule is that a guard needs a positive control drawn from the
+population your question is about. This is the RELAY corollary, measured
+2026-09-06 and the coordinator's own error.
+
+A seat reported a negative result with `yield 1; yield 2` as the control that
+must keep passing. The coordinator relayed it to two other seats — twice to one
+of them — as the safety net for a *different* change. Then somebody built it:
+the predicate under test lives in `WasmEmitManagedLocals`, which iterates
+**managed** locals only, and that program's locals are all integers. **No symbol
+satisfies the predicate, so it never fires, and the emitted module is
+byte-identical with and without the patch.** Measured to fixedpoint
+(`20d814eef8e7`) against baseline (`0426b285ba35`).
+
+The population it needed to come from is a generator HOLDING A MANAGED LOCAL
+ACROSS A YIELD. Three such shapes move the module by 35-40KB (string local
+36617 bytes, two strings 35271, object local 40086) and all three agree with the
+x86-64 oracle.
+
+**A private useless control wastes one seat. A relayed one suppresses the work
+at every seat it reaches** — because a seat that believes it holds a guard does
+not build one. The originating seat's own diagnosis is the cheaper guard:
+**ask what the patch can PHYSICALLY affect before offering a program as its
+control** — which is this file's existing rule about what an assertion is able
+to observe, applied one step earlier, to the input rather than the assertion.
+
+**A control acquires authority by being relayed exactly the way a number does**,
+and the repair has to travel the same paths as the error, not merely be
+retracted at the source.
+
+## A HELD COMMIT'S SHA IS GUARANTEED STALE THE MOMENT THE HOLD IS LIFTED
+
+The ghost-sha rule already says the rate is ~100% by construction, because this
+repo rebases nearly every sync. This is the case where it becomes load-bearing.
+
+Under a push freeze, seats report what they are holding BY SHA. The coordinator
+built a roster of six from those reports. One entry, `73c45aabd`, was already a
+ghost: the seat had pushed it under a partial carve-out and `sync.sh` rebased it
+to `7dd75f85a`. `git merge-base --is-ancestor 73c45aabd origin/master` -> no;
+same subject on origin. **Two seats carried it as outstanding work, and the
+correct reading of that entry was not "X is holding a commit" but "X committed
+something that has since landed under another id."**
+
+**Nobody made a mistake.** The sha was reported honestly and was correct when
+reported; **complying with the instruction is what invalidated it.** So a
+held-work roster keyed on shas decays fastest exactly when the freeze ends —
+which is when it is read most, because that is when everyone is chasing what to
+push.
+
+**The discriminator is the SUBJECT, never the sha.** Matching a subject against
+`origin/master` finds it instantly; matching the sha says missing forever.
+
+## "WAS THIS EVER CHECKED" IS A DIFFERENT QUESTION FROM "IS THIS STILL TRUE", AND IT IS CHEAPER
+
+28 rows in the Makefile carry the identical skip reason *"backend feature gap
+(see bug-test-riscv32-thin-coverage notes)"* — verified: `grep -c` gives 29
+occurrences, of which 28 are SKIP rows and one is prose at `Makefile:23463`.
+
+A seat measured five of them and found three wrong: one a live HANG
+(`test_timer.pas`, rc=124, no output, because riscv32 has no
+`timerfd_settime(86)` and `ArmOneShotTimer` discards the ENOSYS), two passing
+and silently uncounted. `Makefile:23463` records two more un-skipped on
+2026-08-27, where the "backend feature gap" turned out to name a code path that
+had never existed. **Thirty rows have carried the sentence; seven had ever been
+measured; five of the seven did not hold.**
+
+Then the right question was asked, and `git blame` answered it for free: **every
+live row was written by ONE commit, `2aa06f4981`, 2026-07-14, and not one has
+been touched since.** They were never written a row at a time, so there was never
+a per-row check to go stale.
+
+**And the commit was not careless — that is the finding.** Its message carries a
+taxonomy: *variant/var_store, rtti_reg/class-RTTI, interfaces, dynamic externs,
+SYS_gettid timers, `in`-operator builtin* — six families, each with a real basis.
+What reached the Makefile was one identical sentence on all 28 rows.
+
+**So the information was lost at WRITE time, not by decay.** It did not start as
+a placeholder; it started as **a lossy projection of a real taxonomy that has
+lived only in a 54-day-old commit message ever since.** Every later reader
+inherits a sentence that cannot be checked against the row it sits on, because
+it says nothing specific to that row. Not "nobody looked" — somebody looked, at
+the family level, and **the artefact had no field to record which family.**
+
+**This is a third granularity failure, and it is the same animal as the two
+above:** a true statement at the wrong granularity standing in for the specific
+one. Predicate-vs-granularity, rule-vs-check, and now family-vs-row, in three
+unrelated artefacts on one night.
+
+**The practical form.** For an inherited claim, `git blame` first. If one commit
+wrote every instance, there is no per-instance history to interrogate and the
+first question is not "is this still true" but **"was this ever checked, and at
+what granularity?"** — and the commit message is where the answer will be, if
+the format had no field for it.
+
+### THE PARAGRAPH ABOVE WENT STALE WHILE THIS SECTION WAS BEING WRITTEN, WHICH IS THE POINT OF IT
+
+Everything above is what was true when the finding was banked. Within the hour,
+seats ran the rows and rewrote the Makefile. Counted at `origin/master`, not
+from anyone's report:
+
+| | then | now |
+| --- | --- | --- |
+| rows carrying the bare `backend feature gap (see ...)` reason | 28 | **0** |
+| rows carrying `MEASURED 2026-09-06 ... matches the x86-64 oracle byte for byte` | 0 | **22** |
+| `SKIP IS RIGHT, REASON WAS WRONG` (`test_rtti`) | 0 | **1** |
+
+**Twenty-three unexamined is now zero.** The 22 are skipped ONLY because they
+compare against an x86-64 oracle and would need a per-target expectation; they
+build, run and match byte for byte on riscv32 today, and each row now says so
+where the next reader will find it, with a chore ticket naming the residual
+(`chore-t-twenty-measured-good-riscv32-rows-are-still-unwired`).
+
+**Three things this leaves on the record, and the third is the reason it is
+written as an addendum rather than an edit.**
+
+1. **The fix was to the FORMAT, not just the rows.** Each row now carries its own
+   measured reason instead of inheriting a shared sentence. That is the missing
+   field the original commit had no slot for, added 54 days later.
+2. **`test_rtti` is the better example than the one this file had.** The skip was
+   RIGHT and the reason was WRONG — the worst combination, because **nobody
+   re-checks a row whose reason sounds settled**, and a correct outcome protects
+   an incorrect rationale indefinitely.
+3. **A banked count is a claim about a date.** "Twenty-three have never been
+   checked" was true when measured, false ninety minutes later, and nothing in
+   the sentence marks which. It was caught because a seat counted the Makefile
+   at origin instead of reading this file — *"verified against the tree, not
+   their word."* **The correction is dated and appended rather than substituted,
+   because the superseded number is the evidence for the rule the section is
+   about**: an inherited sentence is dangerous precisely because it outlives the
+   measurement it came from, and silently replacing it here would have
+   reproduced the defect in the document that names it.
+
+### AND WHEN THE ROWS WERE FINALLY RUN, THE INSTRUMENT CONTROL WAS THE HARD PART
+
+Two seats then measured it independently and converged: 21 of 25 matching the
+x86-64 oracle by reading, and **21 of 24 runnable rows PASSING** by running
+(`fc839afa5`, at `b5f499d4a`, pascal26 `67075a6033c8`, real *converged after 1
+round(s)*). Of the six families the original commit named, **exactly one still
+holds** — `test_extern_c` and `test_extern_c_float`, a compile-time refusal.
+Whole families are false: all five interfaces rows, five of six class-RTTI and
+streaming rows, both for-in rows, both scheduler rows and `test_channel`.
+
+**The control is the part worth copying, and the running seat wrote it down
+first:** *"21 passes is precisely the shape of a harness that is not running the
+target it names."* `SizeOf(Pointer)` answers 4 under `qemu-riscv32` and 8
+native; `run_target.sh:113` execs `qemu-riscv32`; the emitted file is ELF 32-bit.
+Had it silently fallen back to native, both would have said 8 and **every PASS
+would have been void**.
+
+**When the good outcome and the broken instrument have the same shape, the
+discriminator has to run BEFORE the result is believed, not after it is
+doubted.** A sweeping pass is not evidence that the sweep ran.
+
+**A third category fell out of it, and it is neither a gap nor a false skip.**
+`test_rtti`'s only divergences are `InstanceSize` 64 against 80 — pointer
+width — and raw printed ADDRESSES. It cannot match an x86-64 oracle on ANY
+32-bit target, by construction. **It was skipped under a sentence blaming the
+BACKEND for a property of the TEST**, and it is a live instance of this repo's
+own rule preferring relations (`SizeOf(P) = 2 * SizeOf(Pointer)`) over
+per-target constants. Fix the assertion, not the backend.
+
+**Keep the denominators apart.** 0 of 9 false skips on the Pascal conformance
+wall and 21 of 24 on the riscv32 Makefile skips are both correct, are not in
+tension, and describe different files with different authors and a different
+mechanism. Summed into one rate they would produce a number describing nothing.
+
+## A VERDICT WITH NO MANIFEST: THE RUN HAPPENED AND PUBLISHED ALMOST NOTHING
+
+2026-09-06, `devdocs/progress/tstate/runs-seven.ndjson`. The requested full ran:
+
+```
+date 2026-09-06T19:32:19Z  sha 5411e996794f  tier full  wall 600.7
+verdict RED  new_red []  fixed []  requested_by seven  full True
+```
+
+**Nine keys where the current shape has seventeen**, and no report `.md` for the
+sha. Missing exactly: `skips`, `skip_holes`, `skip_hole_jobs`, `still_red`,
+`unreached`, `timed_out`, `deadline`, `code_fp`, `first_seen`.
+
+`verdict: RED` with `still_red` absent means **nobody can say what was red**.
+`skips`/`skip_holes` absent means it cannot report the coverage work it was
+requested for. **The run existed to produce precisely the fields that are
+missing.**
+
+**From outside, "the run never happened" and "the run happened and published
+nothing" are the same silence — and only the second one CLEARS THE REQUEST
+QUEUE.** That is the failure mode: the request is satisfied, the line stops
+looking pending, and the evidence never existed.
+
+**The census, and it corrects the obvious reading.** 415 full rows: 17 keys x306,
+14 x92, 10 x7, 9 x10.
+
+- **The 14-key rows are SCHEMA EVOLUTION, not damage.** Every one predates
+  2026-08-31T05:23Z; every 17-key row postdates it. Clean cutover, no
+  interleaving. Reading them as thin would send someone auditing 92 healthy
+  historical rows.
+- **The live anomaly is 17 rows in two shapes, and the 10-key shape first
+  appears 2026-09-01 — NEWER than the 17-key normal one.** That kills "an old
+  writer still in the tree".
+- **It is not a request artefact: 14 of the 17 carry `requested_by: None`.**
+
+Seven's daemon log for the 19:32Z instance shows **no error, no abort, no
+report-write failure, and no report-generation line at all** — it publishes the
+verdict and proceeds to the next phase. And it names the failing jobs
+(`test-core#src:test/c_cross_...`, `tools-devtest#00`) at the moment of
+publication, so **the manifest EXISTS and is dropped on the way to the archive.**
+At least two paths produce thin rows; one is the requested-verdict path.
+
+**One of the two 2026-08-30 instances is `1d8db8667267`** — the queue line this
+coordinator told twelve seats was *satisfied, not pending*. That reading was
+correct about the queue and wrong about the evidence: **it was satisfied by a
+thin row.** So "satisfied" has looked exactly like this before, and everyone
+walked past it.
+
+### AND A GREEN FULL TIER HAS NEVER BEEN RECORDED ON SEVEN
+
+Same census, and nobody had said it out loud. Verdicts across the whole archive:
+
+| tier | GREEN | RED |
+| --- | --- | --- |
+| native | 362 | 516 |
+| full | **0** | **415** |
+| slow | 64 | 0 |
+| opt | 19 | 12 |
+
+**All 415 full rows are RED.** This is not evidence of breakage — a full spans
+every cross-target and one red anywhere colours the row, so 415/415 is what a
+broad matrix produces. What it means is narrower and sharper: **"the full tier
+is green" is a sentence with no precedent here**, and a pin criterion or a
+release claim phrased against it is phrased against an event that has never
+occurred. It also makes any shape-versus-verdict correlation in this archive
+vacuous — there is no verdict variance to correlate against.
+
+## "DID I SAY THAT" RUNS IN BOTH DIRECTIONS, AND THE FLATTERING ANSWER NEEDS THE CHECK MORE
+
+Two instances on 2026-09-06, one each way, settled by the same instrument.
+
+**Shedding.** A seat asked not to be credited with a figure: *"I never measured
+or published that, and I cannot source it."* They had said it — timestamp,
+sender and verbatim text in the coordinator's transcript.
+
+**Taking.** The same seat, hours later, wrote a false sentence into a commit
+message and then told the coordinator *"the line was mine, not something you
+sent me."* It was not: the coordinator had sent it to them by name 35 seconds
+before they echoed it, and 85 seconds before it entered the commit. **They were
+claiming authorship of someone else's mistake.**
+
+**Both answers came from a context window rather than a record, and both were
+honest.** The difference is that only the shedding direction draws an objection —
+**nobody audits a seat that says "that was me."** So the guard cannot be "be
+willing to take blame"; it has to be **answer the question from the transcript in
+BOTH directions**, and the flattering answer needs the check more, because it is
+the one that will otherwise stand unchallenged.
+
+A single instance in the shedding direction reads as a character claim. **The
+pair is what makes it a property of context windows**, which is what it actually
+is.
