@@ -160,7 +160,7 @@ runs in 40 jobs and fails in 4.
 | row | actual failure | lane |
 | --- | --- | --- |
 | `test-zlib#src:tools/compiler_srchash.sh` | pxx compile error in the zlib runner, after the gcc oracle builds | A or B |
-| `test-emit-obj#src:tools/compiler_srchash.sh` | an i386 object's file-scope initialisers under a `gcc -m32` main | A / C, i386 |
+| `test-emit-obj#src:tools/compiler_srchash.sh` | **WRONG — SUPERSEDED, see the second correction below.** This sentence is a log-tail success echo, not the failure. | A, i386 |
 
 Neither is Track T, neither is harness ordering, neither is a stale tree.
 
@@ -188,3 +188,92 @@ next real stamp mismatch, of which this was not one.
 
 **Re-pointed, not resolved.** The row belongs to whoever takes the zlib compile
 error; this ticket should be closed as MISNAMED rather than fixed.
+
+## 2026-09-06, later still — the SECOND correction: the reason is a log TAIL, so the row's stated subject is the last thing that WORKED
+
+The table above corrects the job NAME and then makes the same error one layer
+up with the job REASON. **Row 2's stated subject is wrong**, and it is wrong by
+the same mechanism it was written to expose.
+
+`test-emit-obj#src:tools/compiler_srchash.sh` is **green at HEAD** and was fixed
+by **`fc000b076`** — *"fix(A): the i386 PIC prefix guard stops reading a
+displacement byte as a prefix"*. Its subject was never the file-scope
+initialisers.
+
+### Where the wrong subject came from
+
+`tools/testmgr.py:job_reason()` returns **the log's tail**, deliberately and for
+a good reason its own docstring gives (a signature list goes stale silently; a
+tail is true for every failure shape). `tools/twatch.py:stub_reason()` then cuts
+that to `CASCADE_REASON_MAX = 200` chars for a cascade bullet. What survived for
+this row in `regression-cascade-6758c7ce7dbd.md` was:
+
+> `ok: $TMP [code=470952B …] | test-emit-obj: an i386 object's file-scope initialisers run under a gcc -m32 main | ok: $TMP [code=186531B data=1360B bss=38460B procs=490]…`
+
+All three fragments are **success echoes**. The middle one is the Makefile's own
+`echo` on the line *after* the assertion it describes, i.e. the line that prints
+only when that check has already PASSED. It became "the actual failure" in the
+table above because it was the last human-readable sentence in a truncated
+string, and the other two fragments are compiler statistics that do not look
+like a subject.
+
+**A tail brackets the failure; it does not contain it.** Read the last fragment
+as *"everything up to here worked"* and go to the recipe line AFTER it. Here
+that is the third fragment — building `i386_pcrel_globals.o` — and the very next
+assertion is the one that was red:
+
+```
+if [ "$abs" -ne 0 ]; then echo "test-emit-obj: i386 .text still has $abs absolute relocation(s) ..."
+```
+
+### The real defect, and why the green is not the accidental one
+
+`compiler/emit.inc:I386PrefixBefore` refuses a PC-relative rewrite when the byte
+before the opcode is a legacy prefix. It could not tell a prefix from the last
+byte of the previous instruction, so **a displacement byte that happens to equal
+`$F0` reads as LOCK**. `Halt(code)` in `PXXIoCheck` emits `8b 45 f0`
+(`mov -0x10(%ebp),%eax`) followed by the absolute store, and the `f0` of
+`-0x10` disarmed the conversion — one absolute `.text` relocation, nothing
+wrong with the code. `fc000b076` adds `X386InstrStart`, which lets a call site
+announce that its opcode begins the instruction.
+
+**This row could go green by accident and this green is not that.** One extra
+unrelated local in `PXXIoCheck` moves `code` off `-0x10`, the displacement stops
+ending in a prefix byte, and the count goes 1 -> 0 with the defect untouched —
+measured by frankH, and the reason a green here needs a discriminator rather
+than an exit code. The discriminator is **whether the load-bearing condition is
+still present in the artefact**, and it is:
+
+```
+28f22: 8b 45 f0              mov    eax,DWORD PTR [ebp-0x10]   <- code still at -0x10
+28f25: 51                    push   ecx                         <- converted store wrapper
+28f26: 8b 8d ec ff ff ff     mov    ecx,DWORD PTR [ebp-0x14]    <- PIC anchor
+28f2c: 89 81 46 94 00 00     mov    DWORD PTR [ecx+0x9446],eax  <- ModRM rebased
+28f32: 59                    pop    ecx
+```
+
+Same offset, same `f0`, and the store converts anyway. Measured at HEAD
+`2699f5769`, binary `c9de36a3754e`, `pascal26 -Fulib/rtl --target=i386
+--emit-obj test/test_emit_obj.pas`: **0 absolute `R_386_32` in `.rel.text`, 587
+`R_386_PC32`.** The row's own single-job repro line (the one printed at the top
+of every auto-filed regression stub) returns **PASS, 1/1, GREEN**, with the i386
+arm exercised rather than skipped (`gcc -m32` present on this box).
+
+### Row 2 of the table above is superseded
+
+| row | actual failure | lane |
+| --- | --- | --- |
+| `test-emit-obj#src:tools/compiler_srchash.sh` | i386 `.text` carried an absolute relocation because a `$F0` displacement byte read as a LOCK prefix — **fixed, `fc000b076`** | A, i386 |
+
+### The durable half
+
+This ticket's thesis is *"the name is not the thing"*. The sharpening is that
+**the reason is not the thing either, and it is more dangerous than the name**,
+because a name is obviously an identifier while a reason looks like content. A
+truncated tail is the worst case of all: it reads as a finished sentence about
+the subject, and it is a receipt for the last step that succeeded.
+
+Nothing here is a defect in `job_reason` — the tail is the right thing for it to
+return, and the untruncated 400-char form in `tstate/<host>.json` may well
+contain the error line that the 200-char bullet cut. The failure is entirely in
+the READING, which is why the fix is this paragraph and not a patch.
