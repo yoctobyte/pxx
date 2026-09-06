@@ -83,4 +83,4 @@ and then never declares the function). Filed as
 
 ## Log
 
-- 2026-09-06 — fixed, commit PENDING-COMMIT.
+- 2026-09-06 — fixed, commit c5618133d.
