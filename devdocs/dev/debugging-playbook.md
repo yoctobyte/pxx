@@ -11708,6 +11708,22 @@ The corollary for whoever routes: send the narrowing AND the reason not to trust
 and say plainly that a second narrowing from the same instrument is not a second
 opinion.
 
+**AND THE CHEAP REMEDY FOR THE PRESENTATION HALF** (frankA): *give the file list a
+QUESTION rather than a name.* Not `Also touched: pasparser_call.inc, symtab.inc` but
+**`Also touched: pasparser_call.inc, symtab.inc — does the failing symbol live in shared
+machinery?`** It costs one clause and it converts a wide arm from decorative into
+searchable. The caveat that missed had the facts; **what it lacked was an instruction.**
+Generalise it: a hedge naming EVIDENCE is furniture, a hedge naming the next MEASUREMENT
+is a branch.
+
+**Postscript, and it is why this rule is not "narrowings are unreliable".** The second
+narrowing that night was RIGHT — `a0780b56d`, confirmed by the revert-alone control with
+the binary sha moving `509821fe8a97 -> b134a22c70e9`, green on revert and red on restore.
+Sending the caveat with it was still correct, and the holder said so unprompted: *"that is
+a coincidence of this range, and I would not have believed the file intersection on its
+own either."* **A narrowing that turns out right does not retroactively become evidence.**
+What made it evidence was a control anyone could have run before knowing the answer.
+
 ## WHEN A MINIMISATION DROPS THE THING THE SUSPECT COMMIT IS ABOUT, THE MINIMISATION IS WHAT IS WRONG — read the candidate's own subject line as the list of variables you must keep
 
 Measured 2026-09-06 (frankA), reducing a corpus regression to something anyone could run.
