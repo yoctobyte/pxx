@@ -3,10 +3,10 @@ slug: bug-t-progress-near-devtest-measures-a-ticket-summary-length-so-the-board-
 track: T
 prio: 45
 type: bug
-status: backlog-tools
+status: done
 owner:
 blocked-by: []
-summary: "`tools/progress_near_devtest.py`'s `a slug reaches its own ticket with a usable score` builds its corpus from `progress.Board()` — the LIVE board — and asserts a floor of 0.10 over the 25 first open tickets. The quantity it actually measures is the LENGTH OF ONE TICKET'S `summary:` FIELD: `feature-dynamic-compiler-tables` scored 0.138 at 125 summary-tokens (`2ecd771d9`), 0.098 at 247, and 0.089 today at 292, with the tool's code unchanged throughout. So `make tools-devtest` is RED fleet-wide because a session did what CLAUDE.md tells it to do — keep a ticket's summary true — and no tool defect exists. Needs a calibration DECISION (fixed synthetic corpus for the metric properties, live board only for the corpus-shape assertions; or an IDF/length normalisation; or a floor expressed relative to the corpus rather than absolute), which is why this is filed rather than fixed: bumping the threshold would re-green it until the next long summary and would delete the evidence that the instrument is aimed at the wrong thing."
+summary: "RESOLVED 2026-09-06 by the fork this ticket recommended: the METRIC properties moved to a fixed written corpus (`tools/progress_near_corpus.py`, 25 hand-written documents) and the BOARD properties stayed on the board. The devtest no longer reads any ticket's `summary:` at all. A fresh measurement removed the last argument for the cheap options: before any change, the failing probe was no longer `feature-dynamic-compiler-tables` at 0.089 but `feature-pascal-corpus-expansion` at **0.076**, which frankZ had measured at 0.113 hours earlier — IDF is computed over the corpus, so filing or closing ANY ticket moves EVERY score. A threshold bump needs both the outlier's identity and its score to be stable and neither is; a fixed corpus needs neither. The corpus is a control only while the two REJECTED metrics still fail against it, asserted in the same run: Similarity floor 0.286 / saturation 0.137, Jaccard floor 0.071 (fails the floor), containment saturation 0.800 (fails saturation). HEAD LENGTH IN THE CORPUS IS LOAD-BEARING: a first draft with one-line heads scored 0.364 under Jaccard, so the control PASSED and the guard above it had silently stopped guarding. A working `progress.py` change (cap the summary at 1200 chars inside `_ticket_head` only) was built, measured to green the job, and DISCARDED — it is one step sideways from the option this ticket already declined, because it still changes what `near` ranks and it was decided by a devtest; `near` was checked and is not broken."
 ---
 
 # `near`'s devtest fails on board prose, not on the tool
@@ -171,3 +171,68 @@ above were measured on this checkout with `python3 tools/progress_near_devtest.p
 `#00` job on seven is also red for this reason follows from the glob and from the corpus
 being the committed board, but **no tstate report was read** — `tstate/` is not in this
 checkout. If someone with the archive can confirm it, that closes the inference.
+
+## RESOLVED 2026-09-06 — the fixed corpus, and a fresh measurement that removes the last argument for the cheap options
+
+**Taken as filed: the metric properties moved to a written corpus, the board
+properties stayed on the board.** `tools/progress_near_corpus.py` is 25
+hand-written documents. `progress_near_devtest.py` now scores
+`a slug reaches its own ticket` and `a short unrelated query does not saturate`
+against it, and both positive controls (Jaccard, containment) run against the
+same corpus. The known-duplicate-pair rows still read the live board, because
+they are about the board.
+
+**The measurement that arrived while this was being fixed is the reason not to
+argue the alternatives again.** frankZ's calibration was *"exactly ONE below the
+floor, median 0.401"*, with `feature-pascal-corpus-expansion` second-worst at
+**0.113** and outside the slice. Re-measured today, before any change:
+
+```
+FAIL  a slug reaches its own ticket with a usable score
+      — worst 0.076 for feature-pascal-corpus-expansion
+```
+
+**The outlier changed identity and the second-worst got worse, not better.**
+`feature-dynamic-compiler-tables` at 0.089 was not the subject any more;
+`feature-pascal-corpus-expansion` had gone from 0.113 to 0.076 with the tool
+untouched. IDF is computed over the corpus, so filing and closing tickets moves
+EVERY score — which is precisely why frankZ's own caveat said the slice property
+is *"one observation, not a stable fact"*. A threshold bump needs both numbers
+stable and neither is. The fixed corpus needs neither.
+
+### What makes the corpus a control and not decoration
+
+**The two REJECTED metrics must still fail against it**, in the same run, or the
+corpus has quietly become agreeable. Measured, and these numbers cannot drift:
+
+```
+                   self-score floor    saturation vs the long doc
+  Similarity           0.286                   0.137
+  Jaccard              0.071                     -      <- fails the floor
+  Containment            -                     0.800    <- fails saturation
+```
+
+**Head LENGTH in that corpus is load-bearing, not padding**, and this is the
+part a tidy corpus gets wrong. `_ticket_head` is slug + title + summary, and
+Jaccard's documented failure is that the union becomes the whole ticket and a
+short query rounds away. A first draft with one-line heads scored **0.364** under
+Jaccard — comfortably above the floor, so the control PASSED and the guard above
+it had stopped guarding. The heads carry realistic multi-sentence summaries for
+that reason alone.
+
+### The option I built first and threw away
+
+I had a working change to `progress.py`: cap the summary at 1200 characters
+inside `_ticket_head` only, leaving `_ticket_doc` whole. It greened the devtest.
+**It is the option this ticket already declined**, one step sideways — it does
+not normalise by length, but it does change what `near` ranks for any ticket
+whose summary is long, and it was decided by a devtest. Checked before
+discarding it, on the outlier's own words: `near` returns sensible neighbours
+today at every rank that matters. **There is nothing wrong with the score.** The
+change is not in the tree.
+
+**Do not "repair" this by shortening a summary** still stands, and now costs
+nothing: the guard no longer reads any ticket's summary at all.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

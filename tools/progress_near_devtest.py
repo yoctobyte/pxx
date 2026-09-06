@@ -15,17 +15,23 @@ one was chosen, and two of them fail in ways that are invisible from the output:
     `feature-dwarf-debug-info` for sharing the words "static", "arithmetic" and
     "logical".
 
-The cases below pin the properties those two failed, not the exact numbers:
-scores drift as the board grows, orderings do not.
+The cases below pin the properties those two failed. The METRIC properties run
+against a fixed written corpus (`tools/progress_near_corpus.py`) so their
+numbers are reproducible and a red means the metric changed; the BOARD
+properties — the known duplicate pair is still there and still outscores an
+ordinary pair — run against the live board, which is what they are about.
+Mixing the two was the defect:
+bug-t-progress-near-devtest-measures-a-ticket-summary-length-so-the-board-turns-the-tool-devtest-red
 bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance
 
-No repo state touched: reads the live board, writes nothing.
+No repo state touched: reads the live board and a written corpus, writes nothing.
 """
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import progress  # noqa: E402
+import progress_near_corpus  # noqa: E402
 
 FAILS = []
 
@@ -97,37 +103,70 @@ def main() -> int:
     # queries is the documented failure), and saturation against the full DOC
     # rejects containment. Neither flips when a sibling ticket is filed, which
     # is what made the rank test brittle.
-    probes = [t for t in board.tickets if t.status in progress.OPEN_STATUSES][:25]
-    longest = max((t for t in board.tickets if t.status in progress.OPEN_STATUSES),
-                  key=lambda t: len(full[t.slug]))
+    # ---- the two calibration properties, on a FIXED corpus ----
+    #
+    # These are properties of the METRIC, and until 2026-09-06 they were measured
+    # on the live board, which cannot separate a metric that changed from a
+    # population that moved. The same named check printed 0.098 and then 0.089
+    # hours apart with nothing touched, and the worst probe changed identity
+    # outright once tickets were filed and closed — IDF is computed over the
+    # corpus, so every score moves when any ticket moves. The probe slice was
+    # also the first 25 open tickets in BOARD ORDER, 4% of the board, so the
+    # check had both failure directions: it reds when a long summary happens to
+    # land inside the slice, and it goes GREEN with the identical condition
+    # present the moment that ticket drifts out of it.
+    #
+    # `tools/progress_near_corpus.py` is 25 hand-written documents with
+    # realistic heads. Head length is load-bearing there and not padding:
+    # Jaccard's documented failure is that the union becomes the whole ticket
+    # and a short query rounds away, so a corpus of terse one-line heads scores
+    # 0.364 under Jaccard, the control below passes, and the guard above it
+    # stops guarding.
+    #
+    # What the three metrics do on that corpus, and none of these numbers can
+    # drift, because the corpus does not:
+    #
+    #   metric        self-score floor   saturation vs the long DOC
+    #   Similarity        0.286                 0.137
+    #   Jaccard           0.071                 -         <- fails the floor
+    #   Containment       -                     0.800     <- fails saturation
+    #
+    # Properties of the BOARD — the known duplicate pair above — legitimately
+    # want the board and stay on it.
+    c_head_text, c_full_text = progress_near_corpus.documents()
+    c_heads = {k: progress._tokens(v) for k, v in c_head_text.items()}
+    c_full = {k: progress._tokens(v) for k, v in c_full_text.items()}
+    ch = progress.Similarity(c_heads)
+    cf = progress.Similarity(c_full)
+    longest = max(c_full, key=lambda k: len(c_full[k]))
     q_unrelated = progress._tokens(
         "a variant shr is arithmetic where the static shr is logical")
 
     def self_floor(index, metric):
-        """Lowest score a probe's own slug gets against its own head."""
+        """Lowest score a document's own slug gets against its own head."""
         worst = None
-        for t in probes:
-            q = progress._tokens(t.slug.replace("-", " "))
+        for slug in index:
+            q = progress._tokens(slug.replace("-", " "))
             if len(q) < 3:
                 continue
-            sc = metric.score(q, index[t.slug])
+            sc = metric.score(q, index[slug])
             if worst is None or sc < worst[0]:
-                worst = (sc, t.slug)
+                worst = (sc, slug)
         return worst
 
     def saturation(metric_full):
         """A short unrelated query against the longest DOCUMENT — full, not
-        head, or the comparison is against a ticket that is not long."""
-        return metric_full.score(q_unrelated, full[longest.slug])
+        head, or the comparison is against a document that is not long."""
+        return metric_full.score(q_unrelated, c_full[longest])
 
-    floor = self_floor(heads, sh)
+    floor = self_floor(c_heads, ch)
     check("a slug reaches its own ticket with a usable score",
           floor is not None and floor[0] >= 0.10,
           "worst %.3f for %s" % floor if floor else "n/a")
-    sat = saturation(sf)
+    sat = saturation(cf)
     check("a short unrelated query does not saturate against the longest doc",
           sat < 0.5,
-          "%.3f against %s (%d tokens)" % (sat, longest.slug, len(full[longest.slug])))
+          "%.3f against %s (%d tokens)" % (sat, longest, len(c_full[longest])))
 
     # POSITIVE CONTROL. Both properties above are numbers measured on live board
     # data, so both can drift into being unfailable — which is exactly what
@@ -143,14 +182,14 @@ def main() -> int:
         def __init__(self, index): pass
         def score(self, q, d): return (len(q & d) / len(q | d)) if (q | d) else 0.0
 
-    j_floor = self_floor(heads, _Jaccard(heads))
+    j_floor = self_floor(c_heads, _Jaccard(c_heads))
     check("CONTROL: Jaccard still fails the self-score floor",
           j_floor is not None and j_floor[0] < 0.10,
           "Jaccard floor %.3f — the floor no longer rejects it" % (j_floor[0] if j_floor else -1))
     check("CONTROL: containment still fails the saturation check",
-          saturation(_Containment(full)) >= 0.5,
+          saturation(_Containment(c_full)) >= 0.5,
           "containment saturation %.3f — the check no longer rejects it"
-          % saturation(_Containment(full)))
+          % saturation(_Containment(c_full)))
 
     # Self-similarity is 1 and the metric is symmetric — cheap, and both were
     # briefly false while the denominator was being changed.

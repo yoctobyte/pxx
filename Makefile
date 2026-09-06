@@ -5929,16 +5929,19 @@ test-core: $(COMPILER)
 	@# was recorded as a scope. Two of the three are asserted here -- see the
 	@# note under the first for why gtk3 is not, and where it is covered instead.
 	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_casedup_cs26
-	@# The gtk3 control is deliberately NOT here, and the reason is the whole
-	@# point of a negative control: `test_c_gtk_types.pas` needs compiler/gtk.h,
-	@# which most boxes do not have, so naming it in this recipe made testmgr's
-	@# pre-run dependency scan SKIP the entire job -- taking the two refusal
+	@# The gtk3 control is deliberately NOT here, and the reason outlives the bug
+	@# that found it. Naming `test_c_gtk_types.pas` in this recipe gave the job a
+	@# gtk header dependency it does not need, and on any box without one
+	@# testmgr's pre-run scan SKIPS the whole job -- taking the two refusal
 	@# assertions above with it. Measured: with the diagnostic's grep string
 	@# deliberately corrupted, the job reported SKIP and scored passlike. A guard
-	@# that cannot fail is not a guard, and this one printed GREEN. The 340 GDK
-	@# keysym pairs are exercised by the test_c_gtk* jobs themselves wherever
-	@# gtk.h exists; tying this refusal to a header nobody has cost more than it
-	@# bought.
+	@# that cannot fail is not a guard, and this one printed GREEN.
+	@# (What made it visible HERE was a second defect, since fixed: testmgr read
+	@# the compiler's `uses` fallback roots by regex over string LITERALS, and the
+	@# gtk root had moved behind CGtkIncludeRoot, so five gtk jobs were skipped on
+	@# a box that has gtk-3.0 installed. That is fixed and they run again -- but
+	@# a job must still not inherit a dependency it has no use for.)
+	@# The 340 GDK keysym pairs are exercised by the test_c_gtk* jobs themselves.
 	./$(COMPILER) test/test_exception_handler_binder_is_scoped_to_its_handler.pas $(TESTTMP)/test_casedup_binder26
 	@out=$$(PXXDBG=a.casedup ./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26 2>&1 | grep -c 'a.casedup n idx=.* vs=N .*samescope=1'); \
 	  [ "$$out" = "1" ] || { echo "a.casedup: want exactly 1 samescope=1 line for the parameter/local pair, got $$out"; exit 1; }
@@ -6473,9 +6476,23 @@ test-core: $(COMPILER)
 	# a concat that dropped or reversed an operand still yields a plausible
 	# length. The `a + []` row is the IDENTITY case and is labelled as one -- it
 	# can only report that the call compiles.
-	./$(COMPILER) test/test_a_dynamic_array_concatenates_with_an_element_list.pas $(TESTTMP)/test_dynconcat26
+	# ...and its BINARY needs its own name. `test_dynconcat26` is already written
+	# by test_dynamic_array_concatenation.pas (test-core, further down), so two
+	# sources compile to one $(TESTTMP) path and overwrite each other.
+	# MEASURED, and the severity is smaller than it first reads: every collision
+	# pair in this file -- these two, test_nilpy_boolop26, test_nilpy_mcall26,
+	# test_nilpy_minmax26 -- asserts IMMEDIATELY after its own compile, so under
+	# a serial make each assertion does run its own program and the collision is
+	# benign today. The hazard is latent, not observed: it becomes a pass for the
+	# wrong reason under a parallel make, under a reordering, or when one row is
+	# re-run alone against a binary the other left behind. Distinct names cost
+	# nothing and remove the latency.
+	# It stayed invisible because testmgr gives each job its own scratch dir; a
+	# plain `make` collides. npy_cross_target_expectation_devtest.py's collision
+	# guard is what caught it.
+	./$(COMPILER) test/test_a_dynamic_array_concatenates_with_an_element_list.pas $(TESTTMP)/test_dynconcat_elemlist26
 	tools/expect_same.sh test_a_dynamic_array_concatenates_with_an_element_list \
-	  "$$($(TESTTMP)/test_dynconcat26)" \
+	  "$$($(TESTTMP)/test_dynconcat_elemlist26)" \
 	  "$$(cat test/test_a_dynamic_array_concatenates_with_an_element_list.expected)"
 	# A named SUBRANGE type is a type NAME, and three doors that take a type name
 	# had never been told subranges exist: `for x in T`, `T.member`, and

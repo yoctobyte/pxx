@@ -1567,6 +1567,29 @@ DEV_PKG_BY_ROOT = [
 # my_* spelling, and the test still compiles from a directory that has none.
 _USES_FALLBACK_RE = re.compile(
     r"ConcatThree\(\s*'([^']*)'\s*,\s*cName\s*,\s*'\.h'")
+# ...and the arm whose root is an EXPRESSION rather than a literal, which the
+# regex above cannot see by construction:
+#
+#     ConcatThree(CGtkIncludeRoot + 'gtk/', cName, '.h', path);
+#
+# CGtkIncludeRoot is a function returning one of three version roots. When the
+# gtk root was a literal this file found it; the moment it moved behind that
+# function the extraction above silently lost it, and five gtk jobs on a box
+# with gtk-3.0 INSTALLED were skipped as "host dev dependency absent" --
+# measured 2026-09-06, and `./compiler/pascal26 test/test_c_gtk_types.pas`
+# compiles on the same box. A false skip, which is worse than a false red
+# because a red is loud and a skip is silent.
+#
+# NOT A HARDCODED '/usr/include/gtk-3.0'. That is the mistake this guard's own
+# devtest records making one file over: a fallback flip from gtk-2.0 to gtk-3.0
+# turned a correct assertion red three minutes after it was written. The
+# version arms are read out of the function body, so a flip is followed rather
+# than re-broken, and ALL of them are taken because testmgr cannot know which
+# CGtkVersion a given job will select -- over-resolving means "run it and let
+# it fail honestly", which is the direction this file must err in.
+_GTK_ROOT_FN_RE = re.compile(
+    r"function\s+CGtkIncludeRoot\b.*?\bbegin\b(.*?)\bend;", re.S)
+_GTK_ROOT_LIT_RE = re.compile(r"Result\s*:=\s*'([^']*)'")
 UNIT_SEARCH_DIRS = ("lib/rtl", "lib/pcl", "lib/asmcore", "compiler/builtin",
                     "lib/crtl/include")
 _DASH_I_RE = re.compile(r"-I(/usr/include/[^\s'\"]+)")
@@ -1632,7 +1655,13 @@ def uses_fallback_roots():
             src = f.read()
     except OSError:
         return []
-    return _USES_FALLBACK_RE.findall(src)
+    roots = _USES_FALLBACK_RE.findall(src)
+    m = _GTK_ROOT_FN_RE.search(src)
+    if m:
+        for r in _GTK_ROOT_LIT_RE.findall(m.group(1)):
+            if r not in roots:
+                roots.append(r + "gtk/")
+    return roots
 
 
 def _pkg_for(path):

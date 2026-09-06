@@ -2,12 +2,12 @@
 track: T
 prio: 75
 type: chore
-status: backlog
+status: done
 found: 2026-09-03
 found-by: claude-T
 owner: ""
 blocked-by: []
-summary: "tools-devtest#00 is the ONLY red job left in the full tier and has been red in all 8 full runs of 2026-09-02, while native is GREEN — so it is invisible to every lane gating on native or `gate.sh quick`. Its 6 failing guards are FOUR causes, not one: a sync.sh fold-safety refusal added 2026-08-29 trips two guards written before it; three are censuses/ratchets working correctly and reporting real tree drift (one already has a decide- ticket); one is a genuine behavioural gap (the bench fingerprint ignores the CPU governor). Only ONE of the four is a plain bug to fix. **A FIFTH CAUSE APPEARED AFTER THIS CENSUS AND THE SLUG'S COUNTS ARE THEREFORE BOTH STALE** (frank-coordinator, 2026-09-06): `tools/progress_near_devtest.py` builds its corpus from the LIVE board, so its floor assertion measures ONE TICKET'S `summary:` LENGTH (0.138 at 125 summary-tokens, 0.098 at 247, 0.089 at 292, tool code unchanged) and it is red for every session on `make tools-devtest`, which globs `tools/*devtest*.py`. Filed separately as `bug-t-progress-near-devtest-measures-a-ticket-summary-length-so-the-board-turns-the-tool-devtest-red` because it needs a calibration decision. Measured LOCALLY; that it also reds the `#00` job on seven is an inference from the same glob, not a report read. The slug keeps 6/4 because that is what was true on 2026-09-03."
+summary: "RESOLVED 2026-09-06: the job is not a hang and not a resource artefact — it is a GROWING SEQUENTIAL SWEEP (`make tools-devtest` globs `tools/*devtest*.py`, 149 files minus the bench skip = 148, run one after another) that had outgrown the reading everyone was giving it. Run to completion: **354.5s over 148 scripts, 0 failures**, against a 600s `guards` budget. And the budget has NEVER ONCE been tested against a completing run — metrics are `n:0, esc:1, dur:90.2`, so `dur` is not a duration of anything, the single escalation is spent, and the 600 was \"207s on plexus 2026-09-01, tripled\", from before this class existed. 354.5s is the first real number this job has ever had, and it rises monotonically as devtests are added. The timeout is what stopped anyone reading the FOUR reds underneath it, all now fixed: (1) testmgr read the compiler's `uses` fallback roots by regex over string LITERALS, so the gtk root behind `CGtkIncludeRoot` was invisible and five gtk jobs were SKIPPED on a box that has gtk-3.0 — a false skip, worse than a false red because a skip is silent; un-skipped, all four gtk jobs and seven neighbours are GREEN; (2) `test_a_text_file_reached_through_a_field.pas` read `TESTTMP`, which testmgr's environment allowlist does not pass through, so it fell back to the shared /tmp — `testmgr_hardcoded_tmp_devtest` was reporting truthfully and is fixed at the source, not re-armed; (3) two Makefile rows compiled different sources to one binary name (`test_dynconcat26`), a LATENT hazard and not an observed silent pass — every collision pair asserts immediately after its own compile, so a serial make is benign; (4) `progress_near_devtest` asserted a METRIC property against the LIVE BOARD, resolved in its own ticket. The slug's 6/4 counts stay: they were true on 2026-09-03 and repairing a dated claim in place makes it look freshly measured."
 ---
 
 # `tools-devtest#00` is six reds with four causes
@@ -455,3 +455,108 @@ Cause 2, each of which needs a ruling and not a patch. No census was re-armed.
 **Not verified from here:** that seven's run agrees. This box is not that box,
 and the claim above is "the condition seven has, reproduced here, is fixed here".
 The confirming instrument is seven's next full tier.
+
+## RESOLVED 2026-09-06 — the timeout was a sweep that had outgrown nobody's budget, and four reds were hiding behind it
+
+**Disposition first: neither a resource artefact nor a hang.** `tools-devtest#00`
+reports as a TIMEOUT, and a timeout is an unknown, not a red. Established by
+running the job to completion:
+
+```
+TOTAL 354.5 s over 148 scripts, 0 failures
+```
+
+against a `CLASSES["guards"]["timeout"] = 600`. It is a **growing sequential
+sweep**: `make tools-devtest` globs `tools/*devtest*.py` — 149 files, minus the
+`bench_timing_devtest.py` skip = 148 — and runs them one after another. Nothing
+hangs. Nothing is a resource artefact. The job simply takes longer every time
+somebody adds a devtest, which everybody is encouraged to do.
+
+**And the budget has never once been tested against a completing run.** The
+job's metrics are `n:0, esc:1, dur:90.2`. `n:0` means it has never completed, so
+`dur` is not a duration of anything; `esc:1` means its single escalation was
+spent, and `unproven_budget()` returns None once `esc >= UNPROVEN_ESCALATIONS`.
+The 600 was calibrated from *"207s on plexus 2026-09-01, tripled"* — an
+observation from before this class existed. **354.5s is the first real number
+this job has ever produced.** The next person to read `600` will read it as
+headroom; it is not headroom, it is an untested guess that happens to be larger.
+
+**The timeout is what stopped anyone reading the four reds underneath it.**
+
+### The four, and none of them is the same shape
+
+**1. `testmgr` read the compiler's `uses` fallback roots by regex over string
+LITERALS, so five gtk jobs were skipped on a box that HAS gtk-3.0.**
+`_USES_FALLBACK_RE` matches `ConcatThree('<root>', cName, '.h')`. The gtk arm
+had moved behind `CGtkIncludeRoot`, a function returning one of three version
+roots, and the moment it did the extraction lost it silently. testmgr then
+declared the host dev dependency absent and SKIPPED — while
+`./compiler/pascal26 test/test_c_gtk_types.pas` compiles on the same box. **A
+false skip is worse than a false red: a red is loud and a skip is silent.** Fixed
+by reading the version arms out of the function body and taking ALL of them,
+because testmgr cannot know which `CGtkVersion` a job will select; over-resolving
+means "run it and let it fail honestly", which is the direction this file must
+err in. Deliberately NOT a hardcoded `/usr/include/gtk-3.0` — the guard's own
+devtest records that mistake, where a fallback flip from gtk-2.0 to gtk-3.0
+turned a correct assertion red three minutes after it was written.
+
+Roots before: `['/usr/include/', 'lib/rtl/', 'lib/pcl/', 'compiler/']`.
+After: the same plus `/usr/include/gtk-2.0/gtk/`, `-3.0`, `-4.0`.
+
+**This makes the red count go UP and that is the target working.** Un-skipped:
+`test_c_gtk`, `test_c_gtk_call`, `test_c_gtk_types`, `test_c_gtk_window` —
+**all four GREEN**. Seven neighbours reachable through the same roots —
+`test_c_crypt`, `test_c_define_const`, `test_sqlite_crud`,
+`test_sqlite_crud_autotyped`, `test_sqlite_crud_lazy`,
+`test_string_to_pchar_auto`, `test_c_gtk3_stock` — **also all GREEN**. So on this
+box the count does not move; on a box where one of them is broken it will, and
+that red will have existed for as long as the regex has been blind.
+
+**2. `test_a_text_file_reached_through_a_field.pas` read `TESTTMP`, which does
+not reach a testmgr job.** testmgr launches jobs through an environment
+ALLOWLIST (`PXX_` / `TESTMGR_` / `LC_` / `QEMU_` plus a fixed set), so the read
+returned empty and the fallback landed on the shared `/tmp` that every
+concurrent job also writes — which is the collision the literal had been
+replaced to avoid. This is `testmgr_hardcoded_tmp_devtest`, one of the three
+censuses this ticket's Cause 2 listed, and it was **reporting truthfully**: the
+source really did reach a hardcoded `/tmp`. Fixed at the source, not by
+re-arming the census: `TESTMGR_TMP` first, `TESTTMP` second (that is what
+`make test TESTTMP=$(mktemp -d)` exports), `/tmp` last.
+
+**3. Two Makefile rows compiled different sources to one binary name.**
+`test_dynconcat26` is written both by
+`test_a_dynamic_array_concatenates_with_an_element_list.pas` and by
+`test_dynamic_array_concatenation.pas`. Caught by
+`npy_cross_target_expectation_devtest.py`'s collision guard. **The severity is
+smaller than it first reads and I overstated it before measuring:** every
+collision pair in the Makefile — this one, `test_nilpy_boolop26`,
+`test_nilpy_mcall26`, `test_nilpy_minmax26` — asserts IMMEDIATELY after its own
+compile, so under a serial make each assertion does run its own program and the
+collision is benign today. `test_nilpy_minmax26` even disambiguates its
+`expect_same` keys. The hazard is **latent, not observed**: it becomes a pass
+for the wrong reason under a parallel make, under a reordering, or when one row
+is re-run alone against a binary the other left behind. Renamed to
+`test_dynconcat_elemlist26`.
+
+**It only stayed invisible because testmgr gives each job its own scratch
+directory, and a plain `make` collides** — so the harness that runs these rows
+most often is the one that structurally cannot see the defect, and the build
+everyone actually runs is the one that exposes it.
+
+**4. `progress_near_devtest` asserted a property of a METRIC against the LIVE
+BOARD.** Filed separately as
+`bug-t-progress-near-devtest-measures-a-ticket-summary-length-so-the-board-turns-the-tool-devtest-red`
+and resolved there; it is the fifth cause this ticket's slug predates.
+
+### What is left
+
+Nothing in this job. `exit_observable_devtest` and `test_wiring_gate_devtest` —
+the other two censuses of Cause 2 — are green in the run above; their rulings
+(`decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work`)
+remain worth having on their own merits, but they are not holding this job red.
+
+**The slug stays `six-reds-with-four-causes`.** It was true on 2026-09-03 and
+repairing a dated claim in place would make it look freshly measured.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

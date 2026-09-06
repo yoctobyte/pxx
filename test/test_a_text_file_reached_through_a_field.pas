@@ -128,7 +128,14 @@ var
   dir, pa, pb, pc: AnsiString;
   lg: TLogger;
 begin
-  dir := GetEnvironmentVariable('TESTTMP');
+  { TESTMGR_TMP FIRST. testmgr launches jobs through an environment ALLOWLIST
+    (PXX_ / TESTMGR_ / LC_ / QEMU_ plus a fixed set), so TESTTMP alone does not
+    reach the job -- the read returns empty and the fallback lands on the shared
+    /tmp every concurrent job also writes, which is the collision the literal
+    was replaced to avoid. TESTTMP second, because that is what
+    `make test TESTTMP=$(mktemp -d)` exports. tools/testmgr_hardcoded_tmp_devtest.py }
+  dir := GetEnvironmentVariable('TESTMGR_TMP');
+  if dir = '' then dir := GetEnvironmentVariable('TESTTMP');
   if dir = '' then dir := '/tmp';
   pa := dir + '/test_text_field_a.txt';
   pb := dir + '/test_text_field_b.txt';
