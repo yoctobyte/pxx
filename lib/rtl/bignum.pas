@@ -492,14 +492,19 @@ end;
 { (base^exp) mod m via square-and-multiply. exp treated as non-negative
   magnitude; result is the least non-negative residue (sign of m ignored). }
 function BigModPow(const base, exp, m: TBigInt): TBigInt;
-var result, b, e, q, two: TBigInt; odd: Boolean;
+var acc, b, e, q, two: TBigInt; odd: Boolean;   { `acc`, NOT `result`: a local
+    spelled that way collides case-insensitively with the implicit Result, which
+    is ONE identifier declared twice and fpc refuses outright (Duplicate
+    identifier "RESULT"). It only survived here because lib/rtl is built by
+    $(PXX_STABLE) and never by the fpc seed.
+    bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols }
 begin
   if BigIsZero(m) then
   begin
     BigModPow := BigFromInt(0);
     Exit;
   end;
-  result := BigFromInt(1);
+  acc := BigFromInt(1);
   two := BigFromInt(2);
 
   { b := base mod m (non-negative) }
@@ -518,15 +523,15 @@ begin
     odd := (e.limbs[0] mod 2) = 1;
     if odd then
     begin
-      BigDivMod(BigMul(result, b), m, q, result);
-      result.neg := False;
+      BigDivMod(BigMul(acc, b), m, q, acc);
+      acc.neg := False;
     end;
     BigDivMod(BigMul(b, b), m, q, b);
     b.neg := False;
     BigDivMod(e, two, e, q);     { e := e div 2 (quotient -> e, remainder discarded into q) }
   end;
 
-  BigModPow := result;
+  BigModPow := acc;
 end;
 
 end.
