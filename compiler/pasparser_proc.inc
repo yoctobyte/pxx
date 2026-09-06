@@ -365,7 +365,22 @@ end;
   feature-pascal-management-operators-nested-and-array }
 
 { Does this record type itself declare a management operator? }
-function RecHasManagementOp(recId: Integer): Boolean;
+function RecHasScopeManagementOp(recId: Integer): Boolean;
+{ INITIALIZE/FINALIZE ONLY -- the two operators this scope desugar has to
+  synthesise code for, not "does this record have a management operator".
+  Copy and AddRef are dispatched elsewhere (the assignment lowering and the
+  by-value argument temp) and need nothing from this pass, so a record
+  declaring only those is NOT a target here and must not be refused by it.
+
+  Renamed from RecHasManagementOp 2026-09-06: the old name claimed all four
+  and the refusal below quoted it back to the user as "a record with a
+  management operator", which is a rule the compiler does not apply -- a
+  Copy-only record satisfies that wording and compiles anyway. Measured, one
+  operator at a time, on `var d: array of TR`: Copy only compiles, AddRef only
+  compiles, Initialize only refuses, Finalize only refuses. That wording cost a
+  real misreading: two sessions measured "an array of a record with Copy",
+  reached opposite results because one record also declared Initialize, and
+  spent a round trip on it. }
 begin
   Result := (recId <> REC_NONE) and
             ((FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), recId) >= 0) or
@@ -390,7 +405,7 @@ begin
       { UFldTk carries the ELEMENT kind, so an `array of TFoo` field lands here
         too — also unsupported, also refused. }
       frec := UFldRec_[base + i];
-      if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+      if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
       begin
         Result := True;
         Exit;
@@ -424,7 +439,7 @@ begin
       frec := UFldRec_[base + i];
       if UFldIsArray[base + i] then
       begin
-        if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+        if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
         begin
           Result := True;
           Exit;
@@ -487,7 +502,7 @@ begin
        (UFldRec_[base + i] <> REC_NONE) then
     begin
       frec := UFldRec_[base + i];
-      if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+      if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
       begin
         fldNode := AllocNode(AN_FIELD);
         ASTLeft[fldNode] := CloneAST(baseNode);
@@ -643,9 +658,12 @@ begin
         has bounds this pass can read -- a dynamic array's extent is a runtime
         length and the desugar would have to call Length(). }
       if Syms[i].IsArray and (not SymIsLoopableManagedArray(i)) and
-         (RecHasManagementOp(mrec) or RecContainsManagementOp(mrec, 0)) then
-        Error('a dynamic or multi-dimensional array of a record with a management '
-              + 'operator is not supported yet '
+         (RecHasScopeManagementOp(mrec) or RecContainsManagementOp(mrec, 0)) then
+        Error('a dynamic or multi-dimensional array of a record declaring '
+              + 'Initialize or Finalize is not supported yet: those two need a '
+              + 'synthesised per-element loop and this array has no bounds the '
+              + 'desugar can read. Copy and AddRef are unaffected and an array '
+              + 'of a record declaring only those compiles '
               + '(feature-pascal-management-operators-nested-and-array)');
       { ...and a loopable array whose ELEMENT hides a managed field behind an
         array field keeps the refusal the element's own shape would get. }

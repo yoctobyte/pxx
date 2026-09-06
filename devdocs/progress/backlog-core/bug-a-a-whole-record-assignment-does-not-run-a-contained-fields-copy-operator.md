@@ -169,10 +169,18 @@ Measured one operator at a time, `var d: array of TR`:
 | `Finalize` only | refused |
 
 Only the two that need a synthesised per-element loop at scope entry and exit
-trip it, which is correct — but the diagnostic says *"a record with a management
-operator"*, and that names four operators when it means two. **A record with
-only `Copy` is a record with a management operator by that wording and compiles
-anyway**, so the message describes a rule the compiler does not apply.
+trip it, which is correct. **The diagnostic was not** — it said *"a record with a
+management operator"*, naming four operators where the rule uses two, so a
+`Copy`-only record satisfied the stated rule and compiled anyway.
+
+**FIXED, since it is what caused the misreading above** rather than merely
+describing it. The predicate was named `RecHasManagementOp` and tests
+`OPK_INITIALIZE`/`OPK_FINALIZE` only; it is now `RecHasScopeManagementOp` and
+the message names those two operators, says why (they need the per-element
+loop), and states that `Copy` and `AddRef` are unaffected. Behaviour is
+unchanged — verified one operator at a time, before and after — and the two
+fixtures asserting this refusal grep the ticket SLUG, not the prose, so they are
+untouched.
 
 This also corrects an earlier note here. It said the guard "asks whether the
 ELEMENT record has a management operator, and a record that merely contains one
