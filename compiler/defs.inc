@@ -2325,6 +2325,7 @@ const
                                at the cap. }
   MAX_PENDING_SPECS = 256;
   MAX_PENDING_CONSTRAINTS = 256;   { deferred generic-constraint checks; see PendCon* }
+  MAX_PENDING_PTRTARGETS  = 512;   { deferred `^T` pointee names; see PendPtr*. Overflow STOPS RECORDING rather than erroring -- a capacity limit must never manufacture a refusal, so a program past the cap degrades to the silent acceptance that was the behaviour everywhere before this list existed. }
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;
   MAX_GENERIC_METHOD_SPECS = 256;   { see GMSpecMeth }
@@ -2670,6 +2671,31 @@ var
   PendConLine      : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
   PendConCount     : Integer;
   PendConCurLine   : Integer;   { >0 only while draining: the line a deferred constraint error belongs to, since the parser is nowhere near it }
+  { The pointee names the PtrElemDepth hatch let through, re-asked once the whole
+    program is parsed. `PNode = ^TNode;` above TNode is ordinary Pascal, so the
+    hatch has to tolerate an unknown name -- but until 2026-09-06 it tolerated
+    it FOREVER: nothing ever re-asked, so `PNever = ^TNeverDeclared` compiled
+    clean and `SizeOf(p^)` answered 4, which is TypeStorageSize(tyUnknown) and
+    not a size at all. fpc says `Forward type not resolved "TNeverDeclared"`.
+
+    Drained at the END OF THE PARSE, not at the end of the type section where
+    ResolvePendingPointerAliases and DrainPendingConstraints run. Two reasons,
+    both measured: the inline `var p: ^TRec` / `const P: ^TRec = nil` spellings
+    are not in a type section at all (they are how tgeneric83/tgeneric85 write
+    it), and a forward `^T` resolved by a LATER type section -- which fpc
+    rejects and pxx accepts and runs correctly today -- must keep working,
+    because accepting what fpc rejects is not a defect.
+
+    Names live in TokChars rather than as AnsiStrings for the same BSS reason as
+    PendCon* above. The owner columns carry the class scope the name was written
+    in, so the drain can ask FindNestedType the same question ParseTypeKind
+    asked. bug-p-an-unspecialized-generic-name-used-as-a-type-is-accepted-and-sized-as-nothing }
+  PendPtrNOff      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrNLen      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrLine      : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;
+  PendPtrClassCi   : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;   { ParsingClassBodyCi at the hatch, else -1 }
+  PendPtrMethCi    : array[0..MAX_PENDING_PTRTARGETS-1] of Integer;   { MethImplOwnerCi at the hatch, else -1 }
+  PendPtrCount     : Integer;
   PendingSpecTi    : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecIdx   : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecCount : Integer;

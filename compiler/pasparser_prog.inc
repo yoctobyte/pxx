@@ -784,6 +784,7 @@ begin
   PendingInitCount := 0;
   PIPathCount := 0;
   ArrTypeCount := 0;
+  PendPtrCount := 0;   { deferred `^T` pointee names; reset with the rest of the type tables }
   StrConstCount := 0;
   SetConstCount := 0;
   ClassConstCount := 0;
@@ -1944,6 +1945,10 @@ begin
       if Syms[i].Kind = skGlobal then DbgRecordVar(-1, i, True);
   Expect(tkEnd, 'end');
   Eat(tkDot);
+
+  { ...and every `^T` whose T the PtrElemDepth hatch let through unresolved.
+    Here rather than at the end of the type section: see DrainPendingPtrTargets. }
+  DrainPendingPtrTargets;
 
   { Verify all forward goto fixups were resolved }
   for i := GotoLabelBase to GotoLabelCount - 1 do
