@@ -69,4 +69,4 @@ set) returns the same answer for every character.
 
 ## Log
 
-- 2026-09-06 — fixed, commit PENDING-COMMIT.
+- 2026-09-06 — fixed, commit ffefbeeb3.
