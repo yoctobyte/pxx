@@ -15976,6 +15976,15 @@ end;
   A DYNAMIC pointee still refuses: it is an array without a compile-time
   EXTENT, and this predicate exists to report one. DerefPtrArrayDynDepth is
   the arm that answers for it. }
+{ FORWARD, and the reason is the instrument that caught it: pxx PRESCANS
+  headers and FPC is SINGLE-PASS, so calling DerefPtrArrayShape from above its
+  body built cleanly under `make compiler/pascal26` AND under
+  `testmgr --tier quick`, and gate.sh quick's FPC SEED CANARY was the only
+  thing that saw it. Placed here rather than moving the body, because the body
+  belongs beside DerefPtrArrayNDInfo, which is the contract it is the general
+  form of. }
+function DerefPtrArrayShape(node: Integer): Boolean; forward;
+
 function DerefPtrArrayInfo(node: Integer;
                            var elemCount, lowBound, flatCount: Integer): Boolean;
 var dpaD: Integer;
