@@ -4,7 +4,7 @@ title: "PyPalPoll passes a 64-bit TPyPalTimespec to ppoll on i386/arm32, which e
 track: N
 type: bug
 prio: 35
-status: open
+status: done
 found: 2026-08-29
 found-by: claude-N
 ---
@@ -65,3 +65,48 @@ execute one.
 
 A `.npy` polling stdin with a sub-second timeout, cross-compiled for i386 and
 run under qemu, before and after.
+
+## RESOLVED 2026-09-06 (frank-subcoord, Track N)
+
+`compiler/builtin/pypal.pas`: `NR_PPOLL` is now **414** (`ppoll_time64`) on
+i386, arm32 and riscv32. aarch64 keeps its own 73 and x86-64 its 271.
+
+**The fix the file had already argued for and not applied.** pypal's clock note
+says the 32-bit targets use `clock_gettime64` (403) precisely so that
+`TPyPalTimespec` can be two Int64 on every target. ppoll was left on the legacy
+number, so the one record was right for one caller and wrong for the other —
+which is what this ticket reported. `ppoll_time64` takes the `__kernel_timespec`
+we already build, so no second record is needed. The time64 block was assigned
+the SAME numbers on every 32-bit ABI, which is why one 414 serves all three;
+confirmed against i386's own `asm/unistd_32.h` (`__NR_ppoll_time64 414`) and
+`asm-generic/unistd.h`.
+
+**Measured end to end, with the pin as the control.** `select.select([sys.stdin],
+[], [], 0.4)` against a pipe with no data, timed INSIDE the program:
+
+| target | built by pin (pre-fix) | built by this fix |
+| --- | --- | --- |
+| x86-64 | 400ms | 400ms (must not change — it does not) |
+| i386 | **0ms** | 400ms |
+| arm32 | **13ms** | 413ms |
+
+The two zeros are the ticket's observable exactly: a sub-second timeout silently
+became a poll that returned immediately. riscv32 could not be exercised through
+NilPy — `bug-a-nilpy-on-cross-targets-four-remaining-walls` stops it earlier,
+at "a heap arena needs mmap" — so rv32's 414 here is verified by header and by
+the identical number working in the PAL, NOT end to end. Saying so rather than
+implying the row ran.
+
+**Do not "harmonise" this with the PAL.** `platform_backend.pas` keeps i386 309
+and arm32 336, and that is also correct: its timespec is native-width there, so
+the LEGACY call is the matching one. Two tables, two different right answers,
+because the structs differ. Only riscv32 is 414 in both.
+
+**Gate:** `make compiler/pascal26` — `converged after 1 round(s)`, fixedpoint
+holds. `tools/gate.sh quick` green.
+
+**Inert until pinned: YES.** pypal is a compiler builtin, so nothing gets this
+until a pin carries it. The next pin does.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

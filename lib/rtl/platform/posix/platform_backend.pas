@@ -147,6 +147,41 @@ implementation
   NUMBERING. That distinction is why SYS_exit exists below. }
 {$ifdef CPU_XTENSA}{$define PAL_GENERIC_SYSCALLS}{$endif}
 
+{ rv32 IS TIME64-ONLY, AND THAT IS A PROPERTY OF THE ARCHITECTURE, NOT A GAP.
+  riscv32 was merged into Linux after y2038 was decided, so it is the one target
+  here that NEVER had the 32-bit-time_t syscalls: no nanosleep, no
+  clock_gettime, no ppoll, no utimensat, no rt_sigtimedwait at their
+  asm-generic numbers. Those slots are simply unassigned for a 32-bit port, and
+  the kernel answers -ENOSYS -- measured, every one of them, not read off a
+  table. Userspace is expected to call the *_time64 variants (403 clock_gettime64,
+  404 clock_settime64, 407 clock_nanosleep_time64, 412 utimensat_time64,
+  414 ppoll_time64, 421 rt_sigtimedwait_time64) and to hand them a
+  __kernel_timespec, whose fields are 64-bit ON A 32-BIT MACHINE.
+
+  So rv32 needs BOTH a different number and a different struct width, and either
+  one alone is silently wrong: the right number with 32-bit fields makes the
+  kernel read tv_nsec out of the high half of tv_sec. That is why this is a
+  define rather than five edits.
+
+  EVERY OTHER 32-BIT TARGET HERE IS THE OPPOSITE CASE. i386, arm32 and xtensa
+  predate the split and keep legacy calls taking a 32-bit timespec, so their
+  fields must stay native-width. PAL_TIME64 is therefore riscv32 alone, and a
+  future 32-bit port added after 2020 will want it too. }
+{$ifdef CPU_RISCV32}{$define PAL_TIME64}{$endif}
+
+type
+  { THE KERNEL'S timespec WORD, WHICH IS NOT ALWAYS THE NATIVE WORD -- see
+    PAL_TIME64 above. One declaration, because nine call sites used to build
+    this struct by hand as `array[0..1] of NativeInt' and every one of them was
+    a place the rv32 width could be got wrong independently. }
+  TPalTimeWord = {$ifdef PAL_TIME64} Int64 {$else} NativeInt {$endif};
+
+  TTimeSpec = record
+    Sec: TPalTimeWord;
+    Nsec: TPalTimeWord;
+  end;
+  TTimeSpecPair = array[0..1] of TTimeSpec;   { utimensat's (atime, mtime) }
+
 const
   PAL_PLATFORM_POSIX = 1;
   { A send to a peer that has closed must return EPIPE, not kill the process
@@ -293,16 +328,23 @@ const
   SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic, the same table aarch64 uses }
   SYS_getpriority = 141; SYS_setpriority = 140; SYS_getsid = 156;    { asm-generic, the same table aarch64 uses }
   SYS_setpgid = 154; SYS_getpgid = 155;    { asm-generic, the same table aarch64 uses }
-  SYS_setitimer = 103; SYS_sethostname = 161; SYS_setgroups = 159; SYS_rt_sigtimedwait = 137;  { asm-generic, the same table aarch64 uses }
+  SYS_setitimer = 103; SYS_sethostname = 161; SYS_setgroups = 159;
+  SYS_rt_sigtimedwait = 421;               { rt_sigtimedwait_time64 -- NOT aarch64's 137 }
   SYS_rt_sigprocmask = 135;                { asm-generic, the same table aarch64 uses }
-  SYS_clock_settime = 112;                 { asm-generic; rv32's time calls keep the legacy generic numbers qemu implements, as the note above says of clock_gettime }
+  { THE TIME FAMILY IS time64 HERE AND ONLY HERE -- see PAL_TIME64. Read off
+    /usr/include/asm-generic/unistd.h's `__BITS_PER_LONG == 32' block, which is
+    the block rv32 compiles, and then MEASURED end to end under qemu-riscv32.
+    The asm-generic numbers one line below (112/113/101/88/73) are the ones a
+    64-bit port gets; on rv32 every one of them is unassigned and returns
+    -ENOSYS. }
+  SYS_clock_settime = 404;                 { clock_settime64 }
   SYS_fsync = 82; SYS_fdatasync = 83; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
   SYS_getsockopt=209; SYS_getsockname=204; SYS_getpeername=205; SYS_ioctl=29;
-  SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
+  SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=414;   { ppoll_time64 }
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_kill = 129;
   { rv32 IS THE ONE TARGET WITH NO wait4 AT ALL, and the 260 that used to sit
     on this line was not a wrong number -- it was an ABSENT one. asm-generic
@@ -316,8 +358,13 @@ const
     made PalBackendWait4 issue a call the kernel answers ENOSYS: fork() worked,
     a real child existed, and nothing could ever reap it. }
   SYS_waitid = 95;
-  SYS_clock_gettime = 113;
-  SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_clock_gettime = 403;                 { clock_gettime64 }
+  { rv32 has NO nanosleep. clock_nanosleep_time64 replaces it and takes four
+    arguments -- PalBackendNanosleep carries that difference. 407, not the 423
+    an earlier note guessed: 423 is sched_rr_get_interval_time64, and issuing it
+    here would have slept for nothing and returned a plausible 0. }
+  SYS_clock_nanosleep = 407;
+  SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_utimensat = 412; { utimensat_time64 }
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160; SYS_prlimit64 = 261;
@@ -993,15 +1040,15 @@ function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): I
 
   A negative `sec' means "no timeout": a NULL timespec pointer, which blocks. }
 var
-  ts: array[0..1] of NativeInt;
+  ts: TTimeSpec;
   tsp: PtrUInt;
 begin
 {$ifdef CPU_XTENSA}
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
-  ts[0] := NativeInt(sec);
-  ts[1] := NativeInt(nsec);
-  if sec < 0 then tsp := 0 else tsp := PtrUInt(@ts[0]);
+  ts.Sec := TPalTimeWord(sec);
+  ts.Nsec := TPalTimeWord(nsec);
+  if sec < 0 then tsp := 0 else tsp := PtrUInt(@ts);
   Result := Integer(__pxxrawsyscall(SYS_rt_sigtimedwait, PtrUInt(setPtr), 0, tsp,
                                     PtrUInt(setSize), 0, 0));
 {$endif}
@@ -1042,20 +1089,22 @@ end;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 { clock_settime(2). The kernel takes a `struct timespec', so the two halves are
   marshalled here rather than passed as registers -- and it is TWO NATIVE
-  WORDS, not two Int64s: on a 32-bit target the kernel's timespec is 32-bit and
-  handing it a 16-byte one writes past the struct it was given.
+  WORDS ON A LEGACY-TIME32 TARGET: on i386/arm32/xtensa the kernel's timespec is
+  32-bit and handing it a 16-byte one writes past the struct it was given. On
+  riscv32 the opposite holds and TTimeSpec carries that difference; do not
+  re-hardcode either width here.
 
   Almost every call fails with EPERM, which is correct and is not a stub: only
   root may set the clock. A caller that cannot tell "refused" from "not
   implemented" is exactly what a stub would have produced. }
-var ts: array[0..1] of NativeInt;
+var ts: TTimeSpec;
 begin
 {$ifdef CPU_XTENSA}
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
-  ts[0] := NativeInt(sec);
-  ts[1] := NativeInt(nsec);
-  Result := Integer(__pxxrawsyscall(SYS_clock_settime, PtrUInt(clockId), PtrUInt(@ts[0]), 0, 0, 0, 0));
+  ts.Sec := TPalTimeWord(sec);
+  ts.Nsec := TPalTimeWord(nsec);
+  Result := Integer(__pxxrawsyscall(SYS_clock_settime, PtrUInt(clockId), PtrUInt(@ts), 0, 0, 0, 0));
 {$endif}
 end;
 
@@ -1201,25 +1250,34 @@ begin
 end;
 
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
-var ts: array[0..1] of NativeInt;   { struct timespec (tv_sec; tv_nsec), native-word fields per arch }
+var ts: TTimeSpec;   { struct timespec (tv_sec; tv_nsec) -- width per PAL_TIME64 }
 begin
-  ts[0] := NativeInt(sec); ts[1] := NativeInt(nsec);
-  Result := Integer(__pxxrawsyscall(SYS_nanosleep, Int64(@ts[0]), 0, 0, 0, 0, 0));
+  ts.Sec := TPalTimeWord(sec); ts.Nsec := TPalTimeWord(nsec);
+{$ifdef PAL_TIME64}
+  { rv32 HAS NO nanosleep AT ALL, so this is a different CALL, not the same call
+    at another number: clock_nanosleep(clockid, flags, request, remain) takes the
+    request THIRD, where nanosleep takes it first. Passing @ts first here would
+    be read as a clockid and the sleep would return EINVAL forever. }
+  Result := Integer(__pxxrawsyscall(SYS_clock_nanosleep, 0 { CLOCK_REALTIME }, 0 { relative },
+                                    Int64(@ts), 0, 0, 0));
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_nanosleep, Int64(@ts), 0, 0, 0, 0, 0));
+{$endif}
 end;
 
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
-var ts: array[0..1] of NativeInt;
+var ts: TTimeSpec;
 begin
-  ts[0] := 0; ts[1] := 0;
-  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, 0, Int64(@ts[0]), 0, 0, 0, 0)); { 0 = CLOCK_REALTIME }
-  sec := ts[0]; nsec := ts[1];
+  ts.Sec := 0; ts.Nsec := 0;
+  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, 0, Int64(@ts), 0, 0, 0, 0)); { 0 = CLOCK_REALTIME }
+  sec := ts.Sec; nsec := ts.Nsec;
 end;
 
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
-var ts: array[0..3] of NativeInt;  { struct timespec[2] (atime, mtime) }
+var ts: TTimeSpecPair;  { struct timespec[2] (atime, mtime) }
 begin
-  ts[0] := NativeInt(atimeSec); ts[1] := 0;
-  ts[2] := NativeInt(mtimeSec); ts[3] := 0;
+  ts[0].Sec := TPalTimeWord(atimeSec); ts[0].Nsec := 0;
+  ts[1].Sec := TPalTimeWord(mtimeSec); ts[1].Nsec := 0;
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PAL_AT_FDCWD, Int64(path), Int64(@ts[0]), 0, 0, 0));
 end;
 
@@ -1227,21 +1285,21 @@ end;
   and stays a separate entry because it is the hot one and its callers have no
   clock to pass.
 
-  TWO NATIVE WORDS, not two Int64s -- the same rule PalBackendClockSetTime states
-  for the write direction, and for the same reason: on a 32-bit target the
-  kernel's timespec is 32-bit. The widening into the Int64 outputs is IMPLICIT
-  and must stay that way (bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit).
+  TWO TPalTimeWord FIELDS, which is NOT the same as two native words -- see
+  PAL_TIME64 at the top of the implementation. On i386/arm32/xtensa the kernel's
+  timespec is 32-bit and the field is the native word; on riscv32 it is 64-bit
+  on a 32-bit machine. The widening into the Int64 outputs is IMPLICIT and must
+  stay that way (bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit).
 
-  Note for whoever fixes riscv32: 113 is the asm-generic clock_gettime and rv32
-  does not have it -- measured -38 (-ENOSYS) here, same rv32 time64 story as
-  nanosleep. See bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall,
-  which covers the whole family rather than one entry. }
+  riscv32 was fixed 2026-09-06: it now issues clock_gettime64(403) rather than
+  the asm-generic clock_gettime(113), which rv32 does not have and which
+  answered -38 (-ENOSYS) for every caller of this function. }
 function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
-var ts: array[0..1] of NativeInt;
+var ts: TTimeSpec;
 begin
-  ts[0] := 0; ts[1] := 0;
-  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, clockId, Int64(@ts[0]), 0, 0, 0, 0));
-  sec := ts[0]; nsec := ts[1];
+  ts.Sec := 0; ts.Nsec := 0;
+  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, clockId, Int64(@ts), 0, 0, 0, 0));
+  sec := ts.Sec; nsec := ts.Nsec;
 end;
 
 { exit_group(code), with exit(code) behind it.
@@ -1321,13 +1379,13 @@ function PalBackendUtimensat(dirFd: Integer; path: PChar;
   so they are passed through rather than normalised. NATIVE WORDS, not Int64:
   a 32-bit kernel's timespec is two 32-bit fields and handing it a 16-byte
   struct writes past what it was given. }
-var ts: array[0..3] of NativeInt;
+var ts: TTimeSpecPair;
 begin
 {$ifdef CPU_XTENSA}
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
-  ts[0] := NativeInt(aSec); ts[1] := NativeInt(aNsec);
-  ts[2] := NativeInt(mSec); ts[3] := NativeInt(mNsec);
+  ts[0].Sec := TPalTimeWord(aSec); ts[0].Nsec := TPalTimeWord(aNsec);
+  ts[1].Sec := TPalTimeWord(mSec); ts[1].Nsec := TPalTimeWord(mNsec);
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PtrUInt(dirFd), PtrUInt(path),
                                     PtrUInt(@ts[0]), PtrUInt(flags), 0, 0));
 {$endif}
@@ -1692,11 +1750,6 @@ begin
     ParseSockAddrIpv6(@sa[0], outAddr, outPort, outScopeId);
 end;
 
-type
-  TTimeSpec = record
-    Sec: NativeInt;
-    Nsec: NativeInt;
-  end;
 
 { Readiness poll via ppoll (available on every PAL arch; aarch64 lacks legacy
   poll). pollfd is int fd then short events then short revents; we pack the
