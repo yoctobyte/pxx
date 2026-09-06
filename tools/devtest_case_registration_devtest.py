@@ -105,6 +105,69 @@ def t_the_unhacked_harnesses_are_the_negative_control():
         assert missing == [], "%s reports %r before any edit" % (path, missing)
 
 
+def t_a_PREFIX_discovering_harness_is_exempt():
+    """The real auto-discovery idiom, which the synthetic control below missed.
+
+    Every prefix-discovering harness in the tree spells it this way, and the
+    string `"case_"` is therefore in the file BY CONSTRUCTION. `_referenced`
+    collected that bare prefix as a case name, the exemption saw a non-empty set
+    and declined, and `tools/park_superseded_devtest.py` was reported as having
+    four unrun cases while running all four -- RED in every lane's `gate.sh
+    quick` on 2026-09-06.
+
+    THE CONTROL BELOW PASSED THROUGHOUT. It builds its fixture as
+    `for k in globals(): pass`, which discovers nothing and filters on nothing,
+    so it never carries a prefix string. This file's own docstring says the
+    rejecting control must come from a real harness because "a synthetic fixture
+    would test the shape I imagined" -- and the EXEMPTING control is the one that
+    stayed synthetic. A positive control drawn from the wrong population.
+    """
+    src = ("def case_a():\n    pass\n\n"
+           "def case_b():\n    pass\n\n"
+           "def main():\n"
+           "    cases = [v for k, v in sorted(globals().items())"
+           " if k.startswith('case_')]\n"
+           "    for fn in cases:\n        fn()\n")
+    assert _unlisted(src) == [], "a PREFIX-discovering harness must be exempt"
+
+
+def t_the_real_prefix_discovering_harness_in_the_tree_is_exempt():
+    """The same claim against the file that actually broke, not a fixture.
+
+    Ties the regression to the population rather than to my reconstruction of
+    it: if the idiom changes, this fails and the fixture above does not.
+    """
+    path = os.path.join(TOOLS, "park_superseded_devtest.py")
+    assert os.path.exists(path), fail_detail(
+        "the harness this regression is keyed to is gone",
+        "expected %s" % path,
+        "re-key this case to another prefix-discovering harness, or drop it")
+    n, unlisted, auto = dcr.audit(path)
+    assert n > 0, "fixture harness defines no cases -- the assertion cannot fail"
+    assert auto and unlisted == [], fail_detail(
+        "a real prefix-discovering harness is not exempt",
+        "audit(%s) -> cases=%d unlisted=%r self_discovering=%r" % (path, n, unlisted, auto),
+        "_self_discovering must intersect `referenced` with the module's own defs")
+
+
+def t_a_globals_selfcheck_with_a_hand_LIST_is_still_not_exempt():
+    """The must-fire direction, and the reason the exemption is not just `globals() in file`.
+
+    Loosening the exemption to fix the prefix case must not re-open this one:
+    a harness that calls globals() to self-check a hand-maintained list still
+    NAMES its cases, so the intersection is non-empty and it stays policed.
+    """
+    src = ("def case_a():\n    pass\n\n"
+           "def case_b():\n    pass\n\n"
+           "TESTS = (case_a,)\n\n"
+           "def main():\n"
+           "    for k in globals():\n        pass\n"
+           "    for fn in TESTS:\n        fn()\n")
+    assert _unlisted(src) == ["case_b"], (
+        "a globals() self-check beside a hand-maintained list must stay policed; got %r"
+        % (_unlisted(src),))
+
+
 def t_a_self_discovering_harness_is_exempt():
     """A harness that names no case and reads globals() cannot drift."""
     src = ("def t_one():\n    pass\n\n"
@@ -136,6 +199,9 @@ def t_an_empty_population_is_not_a_pass():
 
 
 TESTS = (
+    t_a_PREFIX_discovering_harness_is_exempt,
+    t_the_real_prefix_discovering_harness_in_the_tree_is_exempt,
+    t_a_globals_selfcheck_with_a_hand_LIST_is_still_not_exempt,
     t_the_repo_is_clean_right_now,
     t_an_unregistered_case_is_caught_module_level_list,
     t_an_unregistered_case_is_caught_inline_tuple,

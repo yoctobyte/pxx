@@ -99,7 +99,18 @@ def _case_defs(tree):
 
 
 def _referenced(tree):
-    """Every case name mentioned outside the body of a case function."""
+    """Every case NAME mentioned outside the body of a case function.
+
+    A BARE PREFIX IS NOT A NAME, and treating it as one broke the exemption
+    below in the direction that flags a correct harness. A prefix-discovering
+    harness spells its discovery `k.startswith("case_")`, so the string
+    `"case_"` is present in every such file BY CONSTRUCTION -- it is the
+    discovery mechanism, not a hand-maintained reference. Collected as a name it
+    made `referenced` non-empty, `_self_discovering` returned False, and the
+    file was reported as having four unrun cases while running all four.
+    Measured 2026-09-06: `tools/park_superseded_devtest.py`, RED in every lane's
+    `gate.sh quick`.
+    """
     seen = set()
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name.startswith(CASE_PREFIXES):
@@ -108,7 +119,8 @@ def _referenced(tree):
             if isinstance(sub, ast.Name) and sub.id.startswith(CASE_PREFIXES):
                 seen.add(sub.id)
             elif (isinstance(sub, ast.Constant) and isinstance(sub.value, str)
-                  and sub.value.startswith(CASE_PREFIXES)):
+                  and sub.value.startswith(CASE_PREFIXES)
+                  and sub.value not in CASE_PREFIXES):
                 seen.add(sub.value)
     return seen
 
@@ -124,9 +136,17 @@ def _self_discovering(tree, referenced):
     grew the guard. Caught by a control that stopped controlling.
 
     A harness that truly discovers its cases never NAMES one. So: it calls
-    globals(), and it references no case by name.
+    globals(), and it references no case THAT IT DEFINES by name.
+
+    `referenced` is asked for the intersection with this module's own cases
+    rather than for emptiness. Emptiness was the first spelling and it is too
+    strong: any case-prefixed string in the file defeated the exemption, and a
+    prefix-discovering harness carries its own prefix by construction. The
+    motivating case is unaffected -- a harness that calls globals() for a
+    self-check while hand-maintaining its list NAMES the cases in that list, so
+    the intersection is non-empty and it is correctly not exempt.
     """
-    if referenced:
+    if referenced & set(_case_defs(tree)):
         return False
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "globals":
