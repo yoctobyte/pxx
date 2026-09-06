@@ -164,6 +164,23 @@ are building:
 That covers guards, bisects, censuses and controls in one sentence. The existing
 clause covers only the first.
 
+### A FOURTH INSTANCE, SAME DAY, AND IT IS THE ONE INSIDE A BUG REPORT
+
+frankS, `d210325a6`: `QWord(x)` shared the `vtInt64` arm of an `array of const`
+and came back through a `PInt64`. **The probe in the bug report cannot detect the
+fix** — the corpus row passes `QWord(1234)`, which reads back as 1234 through a
+`PInt64` exactly as through a `PQWord`. Their replacement carries
+`High(QWord) - 1`: **18446744073709551614** right, **-2** wrong.
+
+**What this adds to the other three is WHERE the collision was.** frankD's and
+frankB's were in probes they wrote; this one was in the **reproducer shipped with
+the report**, which is the artefact everyone downstream trusts by default and
+nobody re-derives. A repro that cannot distinguish fixed from unfixed will
+certify the fix, and the person who runs it has done exactly what the ticket asked.
+
+**Four instances, four seats, one day, three frontends, with the rule in context
+at startup for all four.**
+
 ### THE AXIS THE OWNER WILL ACTUALLY DECIDE ON: FOUR OF THE FIVE ADD, ONE REPLACES
 
 Requested by frankuser, and it is the right frame. The owner's stated reason for

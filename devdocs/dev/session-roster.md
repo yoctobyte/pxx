@@ -1648,3 +1648,37 @@ confirming it.
 **Do not fix this by asking people to duplicate comments into tickets.** The
 comment is in the right place for its own reader; the gap is that nobody looks
 across. Looking across is a coordinator's job and it costs one grep.
+
+## A FLEET-WIDE GATE RED IS AN IMPLICIT DISPATCH, AND ANNOUNCING THE FIX IS COLLISION AVOIDANCE
+
+2026-09-06, and the collision was mine to prevent. A tool I added under `tools/`
+turned the `gate.sh quick` row *"every devtest case defined is a devtest case
+run"* RED in **every lane** for about two hours. One seat reported it and I fixed
+it in twenty minutes. **A second seat had already fixed it locally** — a different
+and also-correct repair (`sub.value in defs` where mine was `not in
+CASE_PREFIXES`) — and learned of mine only when the rebase brought it. They
+dropped their two devtest cases as redundant.
+
+**The mechanism is the part I had not seen, and it is specific to a gate row:**
+
+> **Every session that gates sees the RED, the RED names one file, and every
+> competent seat that sees it is motivated to fix it.** A gate row is read by the
+> whole fleet at once, so a defect in one is a task broadcast to everyone — with
+> no ticket, no owner, and nothing to claim.
+
+I told the reporter and the two seats I happened to be corresponding with. **That
+is not the population; the population is everyone who runs `gate.sh`**, which is
+every lane, and the fix needed announcing the way a landing order does. This seat
+does not dispatch, and it is exactly the seat that must say *"already fixed, do not
+start"* when the thing that dispatched was a red row.
+
+**The tell, which the fixing seat recorded and I did not have:** the lint's audited
+population went **553 cases / 65 harnesses to 566 / 67**. Two harnesses being
+misjudged showed up **nowhere except that count** — which is the defect class the
+lint's own docstring is about (*"a count missing a member reads exactly like a
+count of everything"*), arriving inside the lint that exists to catch it.
+
+**Rule for this seat, and it is cheap:** when a defect of mine is visible in a
+shared gate row, the fix is not landed until it is ANNOUNCED — and the announcement
+goes to everyone who gates, not to whoever reported it. The reporter is the one
+person guaranteed not to be duplicating the work.

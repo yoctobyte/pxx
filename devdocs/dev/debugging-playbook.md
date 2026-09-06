@@ -16245,3 +16245,31 @@ grep for the operation it performs. If the answer is "five neighbours do this by
 hand", you have found a design flaw, not a convention — and by
 `root-cause-over-microfix.md`'s counting, three is already the threshold.
 
+## A TAG INTRODUCED NEXT TO AN EXISTING ONE INHERITS NONE OF ITS HANDLING — the guard is an ENUMERATION wearing the shape of a property
+
+frankS, 2026-09-06, `d210325a6`. Adding `vtQWord` to `array of const` boxing: the
+new tag was produced correctly at every producer, and the consumer's decision to
+box-by-reference is
+
+```pascal
+if (vrTag = 16) or (vrTag = 3) then     { and now `or (vrTag = 17)` }
+```
+
+**That reads like a property of the tag and it is a list of tag numbers.** So the
+new tag was tagged right and put the VALUE where the reader dereferenced a
+pointer. **It segfaulted, which is the lucky outcome** — the same shape one value
+away from a plausible wrong number is a silent one.
+
+**The general form, and it is why "I added the case everywhere it is produced" is
+not the check:** a value's handling is spread across sites that each enumerate the
+values they know. Adding a member updates the producers, because those are the
+sites the compiler and your grep both point at. **The consumers that enumerate do
+not fail to compile and do not appear in a grep for the new name** — they mention
+only the OLD names, so nothing you can search for connects them to what you added.
+
+**The check that finds them:** grep for the SIBLING you are copying, not for the
+thing you are adding. Every site that names `vtInt64` is a site that has an
+opinion about `vtQWord` and has not been asked. That is the same instrument as
+*grep for the sibling before closing a double case*, applied before writing rather
+than after fixing.
+
