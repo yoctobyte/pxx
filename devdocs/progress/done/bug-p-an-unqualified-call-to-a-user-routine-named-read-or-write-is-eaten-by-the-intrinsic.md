@@ -254,4 +254,4 @@ producing a dedicated kind. That is the whole fix for row 6 too, and it is why
 it cannot be done ahead of the call side.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1ead40679.
