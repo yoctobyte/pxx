@@ -578,3 +578,4 @@
 2026-09-06T08:39:07Z	seven	1d9d36ff36bbda7edb91102b149977c8a4060575	would NOT pin 1d9d36ff36bb — 2 red(s) the current pin does not have, 7 inherited from the current pin: test-core#src:test/test_libwriteln_parity.pas, test-debug-g#src:tools/compiler_srchash.sh
 2026-09-06T08:57:11Z	seven	503e608717a47c33042a37be3b4dc645128b2cd8	would NOT pin 503e608717a4 — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-core#src:test/test_libwriteln_parity.pas
 2026-09-06T09:10:55Z	seven	b64c289f1ce5f3dd21e0820934dc7d6533e5c200	would NOT pin b64c289f1ce5 — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-core#src:test/test_libwriteln_parity.pas
+2026-09-06T09:33:45Z	seven	2abf23679541885d7bb1b3dac1c17558b3d19fdf	would NOT pin 2abf23679541 — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-core#src:test/test_libwriteln_parity.pas
