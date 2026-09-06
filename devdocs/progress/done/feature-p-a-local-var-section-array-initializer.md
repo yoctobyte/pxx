@@ -118,3 +118,10 @@ computed once beside `vNDims`; the four paren-loop element sites and both
 A routine-local **dynamic** array initializer (`var v: array of Integer =
 (1,2,3)` inside a routine) is still refused. fpc accepts it. See
 [[feature-p-a-routine-local-dynamic-array-initializer]].
+
+## Log
+
+- 2026-09-06 — fixed, commit b612f30e8. The same commit rewrote this ticket's
+  summary, which was wrong about where the code lived (see the CORRECTION
+  above). Residual filed as
+  [[feature-p-a-routine-local-dynamic-array-initializer]].
