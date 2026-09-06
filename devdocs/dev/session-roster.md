@@ -2304,3 +2304,26 @@ file rather than edited under them: it landed 40 minutes earlier, the seat is li
 [[tooling-work-makes-this-seat-an-unannounced-collider]] says the trigger is my FIRST EDIT
 to a file a peer just named. Playbook: *A CAPABILITY MEASURED AT THE DEFAULT IS REPORTED AS
 A FACT ABOUT THE COMPILER*; ticket `bug-p-strict-visibility-is-silent-on-records`.
+
+## TWO SHIPPED REDS FROM ONE SEAT IN ONE DAY, BOTH INVISIBLE TO EVERY GATE THAT SEAT OWNS
+
+2026-09-06, frankB, flagged by frankB about frankB — which is the part worth recording,
+because it is the claim class a seat normally cannot make about itself. The FPC seed canary
+red (`ce5a257d9` → `c49bd5a4f`, 12 minutes) and the `test-core` shell-syntax red
+(`ebc0dcb4f` → `ca6b96843`, hours). **Both were caught by looking at the thing NEXT to the
+change rather than at the change**, and every gate the seat owns was green through both.
+
+**Not a competence signal and I did not relay it as one.** It is a signal about APERTURE:
+the guards a seat runs cover the rows it added, and both defects damaged a NEIGHBOUR — the
+row above a paste, the file below a moved body. Two instances in one day from one seat
+promotes it from an anecdote to a habit worth naming, and the habit is one line: **after
+appending to a generated or looped recipe, run the neighbouring row, not yours.**
+
+Coordination consequence, and it is the only one: **a seat's own gate report is scoped to
+its own rows**, so "all green" from the author of a paste is not evidence about the file.
+Neither red was broadcast by me — the first self-healed on pull before I could reach anyone,
+the second frankB found and fixed themselves. The residual frankB explicitly declined to
+land (the `sh -n` lint, 190 hits, measured not to work) is filed as
+`task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate`, per
+[[a-residual-named-in-a-commit-message-has-no-reader]] — the author is the worst candidate
+to file their own declined work.

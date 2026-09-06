@@ -12831,6 +12831,78 @@ naming another file or another rule → the row was masked, and the sha the mask
 a fix, not a break.** The exit code is identical in both cases, which is why "it failed at
 the pin too" is not the check.
 
+## WHEN THE FIX IS "ADD A PREFERENCE", THE REGRESSION POPULATION IS EVERY OTHER PAIR THE SAME PREFERENCE NOW REORDERS — and that population is not in the ticket
+
+Measured 2026-09-06 (frankB, `8b9616041`), closing
+`bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature`.
+
+A literal `nil` against `P(const a: TLA)` / `P(const a: array of LongInt)` bound whichever
+overload was declared FIRST. The tidy fix — and it is where the ticket put it, and where
+frankB's own first draft put it — is an arm in `MatchParamExact`: prefer the named dynamic
+array when the argument is `nil`. **It would have fired, and it would have been a
+regression.** `P(a: Pointer)` against `P(const a: TLA)` given `nil` binds the POINTER under
+fpc in both declaration orders, and pxx already agreed. So the arm trades one
+declaration-order bug for another **in a program that contains no array overload pair at
+all** — the victims are pairs the ticket never mentions, in files that were already right.
+
+Landed instead as **`MatchProcCall` phase 1c3**, entered only when a literal `nil` lands on a
+`ProcParamDynDepth > 0` parameter. It grants nothing and withdraws nothing; it only reorders,
+and only inside the population the ticket is about. Both declaration orders now bind the
+named dyn array, matching fpc.
+
+**The rule, and it generalises past overload resolution to every ranking, scoring or
+tie-break table:** a fix phrased as *"prefer X over Y here"* has a blast radius equal to
+**everything else that currently reaches that same ranking level**, and none of it is in the
+ticket, because the ticket was written by someone looking at the one pair that was wrong.
+A reproducer confirms the fix helps its own case; it is structurally incapable of reporting
+the pairs it just demoted.
+
+**The diagnostic that finds them, one question:** *what else is already CORRECT at this
+ranking level, and does my preference move it?* That is a different search from "does my fix
+work" and it runs over the code, not over the ticket. Companion to
+`## A PREMISE CHECK IS NOT A CHECK THAT THE PROPOSED FIX DOES ANYTHING` — that one is about a
+fix that does nothing; this one is about a fix that does something to strangers. **Both are
+invisible to a repro-driven loop and both are found by leaving the reproducer.**
+
+## THE FIFTH INSTRUMENT IS THE ROW YOU DID NOT ADD — a file-scoped `--job` is correct about the recipe line it names and blind to the loop it was pasted into
+
+Measured 2026-09-06 (frankB, `ebc0dcb4f`/`ce5a257d9` → fixed `ca6b96843`). Group 28's five
+fixtures were appended to `test-core` at an anchor that sat **inside the qemu-user
+cross-target `for arch ... done` continuation.** From `ebc0dcb4f` onward,
+`testmgr --tier native --job src:test/test_nd_subarray_as_param.pas` was RED on origin —
+`sh: 17: Syntax error: ")" unexpected (expecting "done")` — for hours.
+
+**Five green instruments, each correct about something else, and the list is the finding:**
+
+| instrument | what it was correct about |
+| --- | --- |
+| `--job src:<file>` on each of the five | the recipe line for the file you NAME — all five reported PASS |
+| `make compiler/pascal26` | the fixedpoint. It does not read `test-core` |
+| `testmgr --tier quick` | the quick tier. It does not run `test-core` |
+| `gate.sh quick`'s Makefile-assertion row | that assertions can FAIL and can say why — **not that a recipe is valid `sh`** |
+| `gate.sh quick` overall | GREEN across all of it |
+
+**The instrument that sees it is the job BEFORE yours — the neighbour you had no reason to
+run.** That is a genuinely new fifth-instrument shape: not a wider tier, not a different
+assertion class, not a positive control. The population your guards cover is *the rows you
+added*, and a paste-site defect damages *the row above the paste*. **A file-scoped selector
+is the exact tool that cannot see it**, because selecting by name is what makes each of your
+five rows independent of the syntax around them.
+
+**Same seat, same day, second shipped red invisible to every gate it owns** (the other was
+the 12-minute FPC-seed-canary red at `ce5a257d9` → `c49bd5a4f`) — **both caught by looking at
+the thing NEXT to the change rather than at the change.** Two instances from one seat in one
+day promotes this from an anecdote to a habit worth naming: **after appending to a generated
+or looped recipe, run the neighbouring row, not yours.** Yours is the one your selector
+guarantees.
+
+**And the lint was ATTEMPTED and correctly not filed.** `sh -n` over every logical recipe
+line: **190 hits, essentially all the regex mangling `$(...)` across continuations.** A check
+whose hit rate is ~100% is as empty as one that never fires, and frankB stopped rather than
+landing a gate row on that evidence. **Recorded here so the next person to have the idea
+starts from the 190 instead of from zero** — the idea is sound and the naive implementation
+is measured not to work; the hard part is the continuation join, not the `sh -n`.
+
 ## A CAPABILITY MEASURED AT THE DEFAULT IS REPORTED AS A FACT ABOUT THE COMPILER — and the sentence is true of every invocation anyone runs
 
 Measured 2026-09-06 by this seat, checking a peer's finding before relaying it, which is the
