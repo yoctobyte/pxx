@@ -86,3 +86,46 @@ invisible; `library_candidates/fpc-testsuite/` was not in the population at all.
 `class` measured 0 fires of 6287. **Any claim here about which `class X`
 spellings exist should be read as "the ones two instruments happened to reach",
 not as an enumeration.**
+
+## 2026-09-06 — the corpus census that was missing, and it was not a zero
+
+`library_candidates/fpc-testsuite/` has now been run through the catch-all
+probe. **`processed=2294  compiled=803  refused=1491  fires=12`** — and the
+refused column is the point: 1491 files never reached the probe (`{ %FAIL }`
+rows by design, plus units, which pxx cannot compile standalone), so this is
+**twelve fires over the 803 files the probe actually read**, not over 2294.
+
+Twelve fires, four files, three token kinds — and **`tkClass` is not among
+them**, in this population either:
+
+| file | kinds | source |
+| --- | --- | --- |
+| `tclass13c.pp` | `tkDot`, `tkInteger_T` | `Value: TRootClass.Integer;` |
+| `tclass13d.pp` | `tkDot` | `V2: Integer = TObj.Val;` |
+| `trtti12.pp`, `trtti16.pp` | `tkLt`, `tkInteger_T`, `tkGt` ×2 | `A: TArray<byte>;` |
+
+**Not one of them argues for widening the allow-list**, and the reason is the
+finding. They are `X.Y` and `X<Y>` — a qualified name and a generic
+specialisation — arriving from three different sub-parsers in three different
+positions (a field's TYPE, a class-const's INITIALIZER EXPRESSION, a field's
+type again), each of which stopped after `X` and left the continuation
+unconsumed. **The terminus is not a member-recognition arm; it is where
+unclaimed tokens go**, which is precisely why an incomplete lookahead list
+above it could stay incomplete for years.
+
+`tclass13c.pp` is a `{ %fail }` row FPC rejects, and the probe build — which is
+behaviourally the pre-`76efae23e` terminus — **accepts** it, discarding
+`.Integer` and typing the field `TRootClass`. The narrowing makes pxx refuse
+it. That is a parity gain, not a cost.
+
+Split out as
+[[bug-p-a-generic-specialisation-suffix-on-an-unknown-name-is-dropped-in-field-position]]
+for the `TArray<byte>` half. The `TObj.Val` half (a qualified reference to a
+class const from inside the same class body) is refused today for an unrelated
+downstream reason and is not yet filed.
+
+**What this does NOT establish.** Twelve fires over 803 reachable files says
+nothing about the 1491, and the `class X` question this ticket is about is
+*still* answered only by "the spellings two instruments happened to reach".
+A census cannot enumerate a lookahead list's missing members; only replacing the
+list with an opener can.
