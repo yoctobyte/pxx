@@ -518,6 +518,7 @@ end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
+  mBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
   qualNameTok: Integer;   { token index of the member name in `TClass.member` }
   augPow: Boolean;   { `d[k] **= v` — `**` has no binary token, see PyAugDunderName }
@@ -3449,13 +3450,15 @@ begin
                 fills, which drives the by-ref / open-array decisions below. }
               mkw := PyKwArgIndex(mpi, 1);
               if mkw > 0 then mslot := mkw - 1 else mslot := mai;
-              if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mslot) then
-                mexprNode := ParseVarRecLiteralAST
-              else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mslot) then
-                { `[...]` open-array literal to an instance/record method
-                  (r.SumAll([10,20])) — was parsed as a SET literal (b334) }
-                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mslot].TypeKind,
-                  OpenArrayCtorRowLen(mpi, mslot), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
+              { THE BRACKET DOOR, DELEGATED. `[...]` at an argument position is a SET to
+                the grammar and an open-array / array-of-const LITERAL to the callee, and
+                only the PARAMETER can say which. This arm used to ask that question by
+                hand; TryParseBracketArgForSlot (pasparser_lval.inc) is the same two arms
+                and is now the only place they are written.
+                bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+              mBrkArg := TryParseBracketArgForSlot(mpi, mslot);
+              if mBrkArg >= 0 then
+                mexprNode := mBrkArg
               else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
                 if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mslot)) then
@@ -3705,6 +3708,7 @@ function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer;
   UMeth. Shared by the metaclass-var path (ParseLValueAST) and the inline
   metaclass-cast path `TFooClass(expr).Create` (ParseFactor). }
 var mpi, mcallNode, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
+    xBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
 begin
   { mmi = -1 is the IMPLICIT root constructor: the class declares none anywhere up
     its chain, so `Create` means FPC's empty TObject.Create. The static `TFoo.Create`
@@ -3758,13 +3762,23 @@ begin
       PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
     while mai <= Procs[mpi].ParamCount-1 do
     begin
-      if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+      { THE BRACKET DOOR, DELEGATED -- AND THIS ONE WAS A DEFECT, not merely a
+        ninth variant of the predicate. It asked `IsArray` alone and sent every
+        `[...]` to ParseVarRecLiteralAST, so a CONSTRUCTOR taking
+        `const A: array of Integer` built a TVarRec vector and the callee read
+        it with an Integer stride: `TC.Create([10, 20, 30])` summed to 10 where
+        fpc sums 60, while `o.M([10, 20, 30])` on the identical signature -- the
+        same file, the same literal -- was correct. The ticket recorded this arm
+        as measured-and-not-diverging; that measurement was taken on a METHOD
+        call, which never reaches here, after the ticket's own line numbers had
+        drifted. Derive the site, then aim the probe at it.
+        bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+      xBrkArg := TryParseBracketArgForSlot(mpi, mai);
+      if xBrkArg >= 0 then
+        mexprNode := xBrkArg
+      else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
       begin
-        if (CurTok.Kind = tkLBrack) and Procs[mpi].Params[mai].IsArray then
-          { `[e0, e1, ...]` open-array/array-of-const literal argument
-            (Exception.CreateFmt(Msg, [Data]) shape) }
-          mexprNode := ParseVarRecLiteralAST
-        else if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+        if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
         begin
           { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
           ParseArgExpr; mexprNode := CurASTNode;
@@ -4359,15 +4373,31 @@ begin
 end;
 
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean;
-{ True when param argNo is an `array of T` whose element is scalar/string (not
-  `array of const` = tyRecord) — the signal to parse a `[...]` argument as an
-  array constructor (temp dyn-array) rather than a set literal. }
+{ True when param argNo is an `array of T` whose element is NOT TVarRec — the
+  signal to parse a `[...]` argument as an array constructor (temp dyn-array)
+  rather than a set literal. `array of const` is the one excluded shape, because
+  it has its own builder.
+
+  IT ALSO EXCLUDED tyVariant UNTIL 2026-09-06, and that exclusion was scope, not
+  a constraint. It arrived with the original feature (6d285d57a, 2026-06-23),
+  whose subject and comment both say scalar/string and neither mentions Variant:
+  `array of Variant` was simply not in that slice, and the guard was written to
+  the cases that had been tested. Nothing recorded a Variant element breaking
+  the lowering, and it does not -- measured 2026-09-06,
+  `TC.Create([11, 22, 33])` against `const A: array of Variant` now yields
+  11 / 22 / 33 through VarToStr, byte-for-value with fpc 3.2.2, where before the
+  exclusion sent it to whichever wrong answer the call path happened to hold:
+  a set descriptor read as a length (n = 17291059250749801) on the method paths,
+  and a TVarRec vector with the right COUNT and empty CONTENTS on the ctor one.
+  The count matching is why it survived -- Length(A) is the same number for a
+  correct open array and a TVarRec vector of the same arity, so only reading the
+  ELEMENTS separates them.
+  bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
 begin
   Result := (procIdx >= 0) and (argNo >= 0) and
             (argNo < Procs[procIdx].ParamCount) and
             Procs[procIdx].Params[argNo].IsArray and
-            (Procs[procIdx].Params[argNo].TypeKind <> tyRecord) and
-            (Procs[procIdx].Params[argNo].TypeKind <> tyVariant);
+            (Procs[procIdx].Params[argNo].TypeKind <> tyRecord);
 end;
 
 function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer;
@@ -4969,6 +4999,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     thNode: Integer;   { a chained type-helper call on the value so far }
     mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
     dpsTk, dpsRec, dpsCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
+    cBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
     fldSig: Integer;   { a chained member's PROCEDURAL signature — see the call arm below }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
@@ -5329,19 +5360,15 @@ begin
           end;
           while mai <= Procs[mpi].ParamCount - 1 do
           begin
-            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
-            begin
-              { `[...]` array-of-const literal to a method reached through a
-                value/selector chain — same as the plain-call path (b287) }
-              aNode := ParseVarRecLiteralAST;
-            end
-            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
-            begin
-              { `[...]` open-array literal (r.SumAll([10,20]) on a record
-                method) — was parsed as a SET literal and crashed (b334) }
-              aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
-                OpenArrayCtorRowLen(mpi, mai), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai]);
-            end
+            { THE BRACKET DOOR, DELEGATED. `[...]` at an argument position is a SET to
+              the grammar and an open-array / array-of-const LITERAL to the callee, and
+              only the PARAMETER can say which. This arm used to ask that question by
+              hand; TryParseBracketArgForSlot (pasparser_lval.inc) is the same two arms
+              and is now the only place they are written.
+              bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+            cBrkArg := TryParseBracketArgForSlot(mpi, mai);
+            if cBrkArg >= 0 then
+              aNode := cBrkArg
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
               if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then

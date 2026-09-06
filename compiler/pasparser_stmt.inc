@@ -5683,6 +5683,7 @@ var
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
+  sBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
   isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
   slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
   slCastTk: TTypeKind;   { ...and the kind that decided it }
@@ -7667,11 +7668,15 @@ begin
           begin
             kwIdx := PyKwArgIndex(procIdx, 0);
             if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
-            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
-              CurASTNode := ParseVarRecLiteralAST
-            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
-              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
-              OpenArrayCtorRowLen(procIdx, slotIdx), ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+            { THE BRACKET DOOR, DELEGATED. `[...]` at an argument position is a SET to
+              the grammar and an open-array / array-of-const LITERAL to the callee, and
+              only the PARAMETER can say which. This arm used to ask that question by
+              hand; TryParseBracketArgForSlot (pasparser_lval.inc) is the same two arms
+              and is now the only place they are written.
+              bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+            sBrkArg := TryParseBracketArgForSlot(procIdx, slotIdx);
+            if sBrkArg >= 0 then
+              CurASTNode := sBrkArg
             else
             begin
               node := TryDelphiBareProcArg;

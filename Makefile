@@ -10283,6 +10283,23 @@ test-core: $(COMPILER)
 	  || { echo "imt-arity: the RESOLUTION CLAUSE spelling compiled where the plain one refused -- the two paths have diverged"; exit 1; }
 	grep -q 'no matching implementation for interface method "M" found (the class method is "MyM")' $(TESTTMP)/imtarity_clause.log \
 	  || { echo "imt-arity: the clause refusal must name the INTERFACE method and then the class method:"; cat $(TESTTMP)/imtarity_clause.log; exit 1; }
+	@# bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path.
+	@# `[1, 2, x]` at an argument position is a SET to the grammar and an
+	@# open-array / array-of-const LITERAL to the callee, and only the PARAMETER
+	@# can say which. Ten call paths asked that question and six answered it by
+	@# hand; they now all reach TryParseBracketArgForSlot. The constructor door
+	@# was not a variant but a DEFECT: its predicate was a Boolean, so every
+	@# bracket became a TVarRec vector and `TC.Create([10,20,30])` against
+	@# `array of Integer` summed to 10 where fpc sums 60 -- while `o.M` on the
+	@# identical signature was right.
+	@# EVERY ROW ASSERTS A VALUE AND NOT A LENGTH, which is the whole design of
+	@# the file: Length(A) is the same number for a correct open array and for a
+	@# TVarRec vector of the same arity, so the `array of Variant` constructor row
+	@# passed a length check for months with three EMPTY elements. Both spellings
+	@# of every shape are in ONE file on purpose -- two files each printing a
+	@# plausible number both pass; two numbers on adjacent lines disagree.
+	./$(COMPILER) test/test_a_bracket_argument_reaches_the_same_door_at_every_call_path.pas $(TESTTMP)/test_bracketdoor26
+	tools/expect_same.sh test_bracketdoor26 "$$($(TESTTMP)/test_bracketdoor26 | tail -n 2)" "$$(printf 'fails=0\nBRACKETDOOR OK')"
 	@# bug-p-a-default-value-is-accepted-on-an-open-array-parameter -- FOUR
 	@# PARAMETER PARSERS, ONE REFUSAL. A default on an open-array parameter cannot
 	@# mean anything: there is no array-literal syntax for it, so the value parsed

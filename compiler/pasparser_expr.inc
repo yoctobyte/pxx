@@ -668,6 +668,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     castSem: Integer;    { the SEMANTIC IDENTITY a named-type cast confers — an enum's type index for `TEnum(x)`, a sized boolean's for `ByteBool(x)`, else SEM_NONE. See the cast arm }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
+    ctorSig, ctorBrk: Integer;   { WHICH ctor wants an array at this slot, and the shared door's answer }
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     { rcDelegated LEFT THIS BLOCK with the record-name cast's own suffix loop:
       ParseCastPostfixSuffix carries the equivalent bit (pcMovedOff) as its own
@@ -7445,9 +7446,26 @@ begin
           Next;
           while CurTok.Kind <> tkRParen do
           begin
-            { an `array of const` / open-array LITERAL argument -- not a set }
-            if (CurTok.Kind = tkLBrack) and ClassCtorWantsVarRecAt(ctorCi, ctorArgN) then
-              CurASTNode := ParseVarRecLiteralAST
+            { THE BRACKET DOOR, DELEGATED -- and this one was answering the
+              wrong half of the question, not merely asking it locally. It sent
+              every `[...]` to ParseVarRecLiteralAST because its predicate is a
+              Boolean, so `TC.Create([10, 20, 30])` against
+              `constructor Create(const A: array of Integer)` built a TVarRec
+              vector the callee read with an Integer stride: sum 10 against
+              fpc's 60, while `o.M([10, 20, 30])` on the identical signature in
+              the same file was right. ClassCtorArraySigAt returns the ctor row,
+              which is what TryParseBracketArgForSlot needs.
+              bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+            ctorSig := -1;
+            ctorBrk := -1;
+            if CurTok.Kind = tkLBrack then
+            begin
+              ctorSig := ClassCtorArraySigAt(ctorCi, ctorArgN);
+              if ctorSig >= 0 then
+                ctorBrk := TryParseBracketArgForSlot(ctorSig, ctorArgN + 1);
+            end;
+            if ctorBrk >= 0 then
+              CurASTNode := ctorBrk
             else
               ParseExpr;
             Inc(ctorArgN);

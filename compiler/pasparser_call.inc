@@ -2086,6 +2086,7 @@ end;
 function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
 var callNode, lastArg, argSeq, exprNode, argIdx, ai: Integer;
     mkw, kwHead, kwCount: Integer;
+    brkArg: Integer;   { the shared bracket door's result -- see the delegation below }
 begin
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := mpi;
@@ -2138,11 +2139,15 @@ begin
         unless isNilPy, so every Pascal call through here is byte-identical.
         bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments }
       mkw := PyKwArgIndex(mpi, 1);
-      if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, ai) then
-        exprNode := ParseVarRecLiteralAST
-      else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, ai) then
-        exprNode := ParseArrayCtorAST(Procs[mpi].Params[ai].TypeKind,
-          OpenArrayCtorRowLen(mpi, ai), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
+      { THE BRACKET DOOR, DELEGATED. `[...]` at an argument position is a SET to
+        the grammar and an open-array / array-of-const LITERAL to the callee, and
+        only the PARAMETER can say which. This arm used to ask that question by
+        hand; TryParseBracketArgForSlot (pasparser_lval.inc) is the same two arms
+        and is now the only place they are written.
+        bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+      brkArg := TryParseBracketArgForSlot(mpi, ai);
+      if brkArg >= 0 then
+        exprNode := brkArg
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
         if ByRefArgStartsExpression(ParamIsConstVariant(mpi, ai)) then
@@ -3347,6 +3352,49 @@ begin
       if Procs[mpi].Params[argIdx + 1].IsArray then
       begin
         Result := True;
+        Exit;
+      end;
+  end;
+end;
+
+function ClassCtorArraySigAt(ci, argIdx: Integer): Integer;
+{ WHICH constructor wants an array at this argument slot, not WHETHER one does.
+
+  ClassCtorWantsVarRecAt above answers the Boolean, and a Boolean is all the
+  caller could act on: it sent EVERY `[...]` to ParseVarRecLiteralAST, so a
+  constructor taking `const A: array of Integer` got a TVarRec vector and the
+  callee read it with an Integer stride. Measured 2026-09-06:
+  `TC.Create([10, 20, 30])` summed to 10 against fpc's 60, while `o.M([10, 20,
+  30])` on the identical signature in the same file was correct -- the METHOD
+  paths ask the two-armed question and the constructor path did not.
+
+  Returning the Procs[] row lets the caller reach TryParseBracketArgForSlot, the
+  same door every other call path now goes through, so the decision is written
+  once rather than a tenth time.
+
+  FIRST MATCH WINS, which is what the Boolean did too, and it is not a choice
+  this function can improve: the bracket must be PARSED before overload
+  resolution can run, so with two constructors declaring different array kinds
+  at one slot there is nothing here to rank them by. That is
+  bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
+  in the constructor's clothing; do not fix it here.
+  bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+var mi, mpi, base, cnt, k: Integer;
+begin
+  Result := -1;
+  if (ci < 0) or (ci >= UClsCount) then Exit;
+  base := UClsMBase[ci];
+  cnt := UClsMCount[ci];
+  for k := 0 to cnt - 1 do
+  begin
+    mi := base + k;
+    if not UMthIsCtor[mi] then continue;
+    mpi := UMthProc_[mi];
+    if mpi < 0 then continue;
+    if (argIdx + 1) < Procs[mpi].ParamCount then
+      if Procs[mpi].Params[argIdx + 1].IsArray then
+      begin
+        Result := mpi;
         Exit;
       end;
   end;

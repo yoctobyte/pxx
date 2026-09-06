@@ -88,6 +88,12 @@ procedure EmitProgramRuntimeStubsForTarget; forward;        { THE finish-the-run
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
 function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer; forward;
+{ The bracket door itself, not just its two predicates. pasparser_call.inc is
+  included BEFORE pasparser_lval.inc, so the call path that reaches it first
+  needs the signature stated here; the other callers sit after the body. FPC's
+  seed is single-pass, so this forward is load-bearing rather than tidy.
+  bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
+function TryParseBracketArgForSlot(procIdx, slotIdx: Integer): Integer; forward;
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
 function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
