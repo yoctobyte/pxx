@@ -1,0 +1,24 @@
+1 var  .P :=
+  [SetV]
+  v=1
+2 cast .P :=
+  [SetV]
+  v=21
+3 var  .A[] :=
+  [SetA]
+  arr2=2
+4 cast .A[] :=
+  [SetA]
+  arr2=22
+5 var  [] :=
+  [SetA]
+  arr3=3
+6 cast [] :=
+  [SetA]
+  arr3=23
+7 var  proc
+  [Bump]
+  v=22
+8 cast proc
+  [Bump]
+  v=23

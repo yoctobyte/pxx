@@ -7969,11 +7969,52 @@ begin
                 devdocs/dev/normalise-dont-special-case.md }
               ParseCastTargetSuffix(valNode, castTk, castRec,
                                     Ord(tyUnknown), REC_NONE, False);
-              Expect(tkAssign, ':=');
-              ParseExpr;
-              node := AllocNode(AN_ASSIGN);
-              ASTLeft[node]  := valNode;
-              ASTRight[node] := CurASTNode;
+              { THE DELEGATED WALK MAY HAVE PERFORMED THE WHOLE STORE.
+                ParseClassRecordSelectors asks PropAccessIsWrite for itself, and
+                when the target is a property it emits the SETTER call and
+                consumes the `:=` and the value with it. Both cast arms then ran
+                `Expect(tkAssign)` on a token that was no longer there, so
+                `PTC(raw)^.P := 21`, `PTC(raw)^.A[2] := 22` and
+                `PTC(raw)^[3] := 23` were all refused with `expected ':=' before
+                ';'` -- fpc accepts all three, and all three are correct through
+                the plain-variable spelling `pc^...`. Pre-dates pin v403.
+
+                The convention is the one this file already uses ~150 lines
+                below for the non-cast spellings: A CALL NODE IN TARGET POSITION
+                IS THE STATEMENT. The extra conjunct is what makes it sound
+                here, and the three cases are worth spelling out because the
+                node kind alone does not separate them:
+
+                  - a property STORE: call node, `:=` consumed -> the statement
+                  - a bare `PTC(raw)^.Proc;`: call node, no `:=` -> also the
+                    statement, and this arm used to refuse it
+                  - `PTC(raw)^.Func := 5`: call node, `:=` STILL THERE -> falls
+                    through to Expect and builds an AN_ASSIGN over the call,
+                    which is refused. MEASURED, not assumed: before this change
+                    that spelling reported `IR_UNSUPPORTED ... could not lower
+                    AST node (kind 8)` -- an internal error for a user mistake,
+                    identical on the pin -- because the single-exit guard tests
+                    the RETURNED node for being a call and here the returned
+                    node is the ASSIGN. Extended at that guard rather than here,
+                    so every branch that builds an assign over a call is
+                    covered; `o.GetV := 5` and `pc^.GetV := 5` already said
+                    "cannot assign to the result of a function call" and still
+                    do.
+
+                So the test is "did the `:=` survive", which is the same fact a
+                consumed-assignment out-parameter would carry, read off the one
+                place that cannot disagree with itself -- the token stream.
+                refactor-p-one-lvalue-path-for-statements-and-expressions }
+              if ASTNodeIsCall(valNode) and (CurTok.Kind <> tkAssign) then
+                node := valNode
+              else
+              begin
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                node := AllocNode(AN_ASSIGN);
+                ASTLeft[node]  := valNode;
+                ASTRight[node] := CurASTNode;
+              end;
             end;
           end;
 
@@ -8163,11 +8204,52 @@ begin
               castElemRec := castRec;
               ParseCastTargetSuffix(valNode, castTk, castRec,
                                     castElemTk, castElemRec, True);
-              Expect(tkAssign, ':=');
-              ParseExpr;
-              node := AllocNode(AN_ASSIGN);
-              ASTLeft[node]  := valNode;
-              ASTRight[node] := CurASTNode;
+              { THE DELEGATED WALK MAY HAVE PERFORMED THE WHOLE STORE.
+                ParseClassRecordSelectors asks PropAccessIsWrite for itself, and
+                when the target is a property it emits the SETTER call and
+                consumes the `:=` and the value with it. Both cast arms then ran
+                `Expect(tkAssign)` on a token that was no longer there, so
+                `PTC(raw)^.P := 21`, `PTC(raw)^.A[2] := 22` and
+                `PTC(raw)^[3] := 23` were all refused with `expected ':=' before
+                ';'` -- fpc accepts all three, and all three are correct through
+                the plain-variable spelling `pc^...`. Pre-dates pin v403.
+
+                The convention is the one this file already uses ~150 lines
+                below for the non-cast spellings: A CALL NODE IN TARGET POSITION
+                IS THE STATEMENT. The extra conjunct is what makes it sound
+                here, and the three cases are worth spelling out because the
+                node kind alone does not separate them:
+
+                  - a property STORE: call node, `:=` consumed -> the statement
+                  - a bare `PTC(raw)^.Proc;`: call node, no `:=` -> also the
+                    statement, and this arm used to refuse it
+                  - `PTC(raw)^.Func := 5`: call node, `:=` STILL THERE -> falls
+                    through to Expect and builds an AN_ASSIGN over the call,
+                    which is refused. MEASURED, not assumed: before this change
+                    that spelling reported `IR_UNSUPPORTED ... could not lower
+                    AST node (kind 8)` -- an internal error for a user mistake,
+                    identical on the pin -- because the single-exit guard tests
+                    the RETURNED node for being a call and here the returned
+                    node is the ASSIGN. Extended at that guard rather than here,
+                    so every branch that builds an assign over a call is
+                    covered; `o.GetV := 5` and `pc^.GetV := 5` already said
+                    "cannot assign to the result of a function call" and still
+                    do.
+
+                So the test is "did the `:=` survive", which is the same fact a
+                consumed-assignment out-parameter would carry, read off the one
+                place that cannot disagree with itself -- the token stream.
+                refactor-p-one-lvalue-path-for-statements-and-expressions }
+              if ASTNodeIsCall(valNode) and (CurTok.Kind <> tkAssign) then
+                node := valNode
+              else
+              begin
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                node := AllocNode(AN_ASSIGN);
+                ASTLeft[node]  := valNode;
+                ASTRight[node] := CurASTNode;
+              end;
             end
             else
             begin
@@ -8583,10 +8665,24 @@ begin
     A property or default-property setter never reaches this with an assignment
     still pending — ParseLValueAST consumes its own `:=` and value and returns
     the setter call already complete.
-    bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+    bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong
+
+    …AND THE ASSIGN MAY ALREADY BE BUILT. The check above sees a call returned
+    with `:=` still pending, which is what the plain-call and lvalue branches
+    produce. The cast-headed branches instead CONSUME the `:=` themselves and
+    hand back an AN_ASSIGN whose left side is the call — so they slipped past
+    this and reached IR lowering, where `PTC(raw)^.GetV := 5` answered
+    `IR_UNSUPPORTED: frontend could not lower AST node (kind 8) — would
+    miscompile`. An internal error for an ordinary user mistake, on the pin too,
+    while the same mistake spelled `o.GetV := 5` or `pc^.GetV := 5` got the real
+    diagnostic. One construct, three spellings, one of them answering with a
+    compiler-internal message: the second-path-stays-broken shape again, and the
+    reason the fix belongs at this single exit rather than in the branch. }
   if (node >= 0) and
-     (CurTok.Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq]) and
-     ASTNodeIsCall(node) then
+     (((CurTok.Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq]) and
+       ASTNodeIsCall(node)) or
+      ((ASTKind[node] = AN_ASSIGN) and (ASTLeft[node] >= 0) and
+       ASTNodeIsCall(ASTLeft[node]))) then
   begin
     ErrorRecover('cannot assign to the result of a function call');
     while not (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF]) do Next;

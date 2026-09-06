@@ -14296,6 +14296,16 @@ test-core: $(COMPILER)
 	# named through the same cast -- were right throughout
 	./$(COMPILER) test/test_a_default_property_subscript_through_a_pointer_cast.pas $(TESTTMP)/test_dfltprop26
 	tools/expect_same.sh test_dfltprop26 "$$($(TESTTMP)/test_dfltprop26)" "$$(cat test/test_a_default_property_subscript_through_a_pointer_cast.expected)"
+	# a property STORE whose target is headed by a cast: every cast row paired
+	# with the same store through a plain variable, which was right on the pin
+	./$(COMPILER) test/test_a_property_store_through_a_cast_headed_target.pas $(TESTTMP)/test_castprop26
+	tools/expect_same.sh test_castprop26 "$$($(TESTTMP)/test_castprop26)" "$$(cat test/test_a_property_store_through_a_cast_headed_target.expected)"
+	# …and the illegal target through the same cast must give the REAL
+	# diagnostic, not IR_UNSUPPORTED. Asserts the message: both answers fail,
+	# so an exit-code check cannot tell them apart
+	! ./$(COMPILER) test/test_a_call_result_is_not_an_assignment_target_through_a_cast.pas $(TESTTMP)/test_calltgt26 > $(TESTTMP)/test_calltgt.log 2>&1
+	grep -q "cannot assign to the result of a function call" $(TESTTMP)/test_calltgt.log
+	! grep -q "IR_UNSUPPORTED" $(TESTTMP)/test_calltgt.log
 	# DIAGNOSTIC LOCATION, both asserted on the MESSAGE and not the exit code:
 	# each file was always refused, and the whole defect was where the refusal
 	# pointed, so an exit-code row passes on the bug.
