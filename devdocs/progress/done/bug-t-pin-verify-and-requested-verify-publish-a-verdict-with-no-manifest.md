@@ -3,7 +3,7 @@ slug: bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest
 track: T
 prio: 60
 type: bug
-status: backlog-tools
+status: done
 found: 2026-09-06
 found-by: frankB
 owner: ""
@@ -151,3 +151,6 @@ cleanly. That is still worth having — it is exactly the check that would have
 stopped `1d8db8667267` being reported to the fleet as satisfied — but it is a
 request-path detector, not a thin-row detector, and calling it the latter would
 put the next reader back where I just was.
+
+## Log
+- 2026-09-06 — resolved, commit Both halves landed. PIN-VERIFY half: the archive row carried 10 keys where an ordinary row carries 17, so skips, skip_holes, skip_hole_jobs, still_red, timed_out, unreached and code_fp were absent on exactly the rows describing the artifact every track builds against. skip_holes is the sharp one -- CLAUDE.md's rule is that skip_holes == 0 does not mean every job ran, and without the key you cannot even ask, so a GREEN pin verify covering 3031 of 3081 jobs and one covering 3081 were indistinguishable. The report held all of them and the row dropped them: the same shape as the hardcoded new_red [] fixed in that writer earlier, an absent value in a file whose other rows train the reader to read a measurement. still_red is DERIVED (reds minus new_red) so it cannot disagree. REQUESTED-VERIFY half: it wrote no report at all -- every requested row in the archive, every host, all time, had none, so the row was the only record the run happened and somebody asked for each one. It writes one now. The labelling needed care: NEW-RED/FIXED/STILL-RED are all claims about a PREVIOUS state and verify_requested deliberately does not walk the HEAD progression, so a fifth section says what is known (red HERE, unclassified) with parent_tested: none as the front-matter half. Guards: twatch_requested_report_devtest.py (12 rows) whose control renders the same red under unclassified_red and under still_red and asserts the two are DISTINGUISHABLE in the markdown a human reads -- a section rendering identically to STILL-RED would be a distinction existing only in the author's head while every other row passed. Verified failable: collapsing the category back into STILL-RED reddens 3 rows including the control. devtest_pin_verify's source-shape window was re-anchored to the writer rather than a magic 900 chars, controlled by simulating the original defect against the new window..
