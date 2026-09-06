@@ -3,7 +3,7 @@ slug: bug-p-an-abstract-override-in-the-middle-of-a-chain-hides-the-concrete-ove
 track: P
 prio: 45
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankS
@@ -50,3 +50,6 @@ shape where a plausible story is available for either answer.
 implementation is deliberately withdrawn from a subtree. The failure is silent
 and returns the ancestor's answer, so it is the expensive kind: a plausible
 wrong value far from the cause, with no crash to locate it.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
