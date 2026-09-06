@@ -8,7 +8,7 @@ found: 2026-09-05
 found-by: frankwasm, filed by frank-coordinator
 owner: ""
 blocked-by: []
-summary: "`test-wasm32` exists (`a6d7bfc08`, 2026-09-02) and appears in NO tier: `grep -c wasm tools/testmgr.py` is 0, and `gate.sh` names wasm only in two comments. So wasm32 is sampled by nothing -- not the inner loop and not the watcher -- while being a real backend with a target number, a runner arm and 22 of 27 measured-green rows. The cost is not tidiness: frankD's wasm32 defect is a name scan that stops matching silently, producing a module that compiles `ok:`, links, and traps at run time on a host function it never imported, at byte-identical size to a program that never touches a file. A silent-wrong-answer class behind a green, in the one backend nothing samples. frankwasm landed two import-asserting rows in `test-quick` (no wasmtime needed) and stopped at enrollment because that is a Track T cost judgement, not its call -- and because the hook denies `make test*`, so it could not verify `test-wasm32` passes and declined to go around the guard. VERIFIED 2026-09-05 by frankD: `test-wasm32` is GREEN -- 53 rows, exit 0, at 4ef367091 / binary 25113fd3. AND ENROLLING IT TODAY IS STILL WRONG, for a reason this ticket did not have: the harness CANNOT TELL A HOST GAP FROM A REGRESSION. `run_target.sh` signals a missing runtime well (distinct RUNNER-ABSENT text on both streams, exit 2), the Makefile rows discard that exit code through command substitution, `expect_same.sh` compares the RUNNER-ABSENT TEXT against expected output and reports MISMATCH exit 1, and `grep -n RUNNER-ABSENT tools/testmgr.py` returns NOTHING. So a missing runtime auto-files as a compiler regression -- not wasm32-specific, every qemu arm reaches `runner_absent` the same way. Enrolling in `full` today reproduces the six-regressions-in-one-run incident on seven BY CONSTRUCTION. The blocker is SKIP ACCOUNTING, a Track T design call, not wiring."
+summary: "`test-wasm32` exists (`a6d7bfc08`, 2026-09-02) and appears in NO tier: `grep -c wasm tools/testmgr.py` is 0, and `gate.sh` names wasm only in two comments. So wasm32 is sampled by nothing -- not the inner loop and not the watcher -- while being a real backend with a target number, a runner arm and 22 of 27 measured-green rows. The cost is not tidiness: frankD's wasm32 defect is a name scan that stops matching silently, producing a module that compiles `ok:`, links, and traps at run time on a host function it never imported, at byte-identical size to a program that never touches a file. A silent-wrong-answer class behind a green, in the one backend nothing samples. frankwasm landed two import-asserting rows in `test-quick` (no wasmtime needed) and stopped at enrollment because that is a Track T cost judgement, not its call -- and because the hook denies `make test*`, so it could not verify `test-wasm32` passes and declined to go around the guard. VERIFIED 2026-09-05 by frankD: `test-wasm32` is GREEN -- 53 rows, exit 0, at 4ef367091 / binary 25113fd3. AND ENROLLING IT TODAY IS STILL WRONG, for a reason this ticket did not have: the harness CANNOT TELL A HOST GAP FROM A REGRESSION. `run_target.sh` signals a missing runtime well (distinct RUNNER-ABSENT text on both streams, exit 2), the Makefile rows discard that exit code through command substitution, `expect_same.sh` compares the RUNNER-ABSENT TEXT against expected output and reports MISMATCH exit 1, and `grep -n RUNNER-ABSENT tools/testmgr.py` returns NOTHING. So a missing runtime auto-files as a compiler regression -- not wasm32-specific, every qemu arm reaches `runner_absent` the same way. Enrolling in `full` today reproduces the six-regressions-in-one-run incident on seven BY CONSTRUCTION. The blocker is SKIP ACCOUNTING, a Track T design call, not wiring. RE-MEASURED 2026-09-06 at d11b8a1a9: still green, 53 rows, MAKE_EXIT=0. AND THE JOB IS BIGGER THAN THIS TICKET SAID: `test/wasm/check_all.sh` is a SECOND suite, 42 checks, invoked from NOWHERE outside `test/wasm/` -- no Makefile target, no tier, no script -- so wiring `test-wasm32` alone still leaves the larger of the two unwired."
 ---
 
 # Enrol `test-wasm32` in a tier so something samples the backend
@@ -178,3 +178,48 @@ for an *incidental* probe.
 *"compiler/pascal26 is OLDER than the last commit touching compiler/ — that is a
 STALE BINARY, not a miscompile"*. **The row that fired was not aimed at the probe
 at all.**
+
+
+## RE-MEASURED 2026-09-06 by frankwasm, at `d11b8a1a9`
+
+Taken for the beta-0.1 release question ("is wasm32 covered?"), so the numbers
+are stated with their apertures rather than as a verdict.
+
+| probe | result |
+| --- | --- |
+| `make test-wasm32` | **MAKE_EXIT=0**, 53 rows green (46 default + 7 shortstring, 0 excluded), 578 log lines, 0 anchored `make: ***` stops, 0 MISMATCH |
+| `bash test/wasm/check_all.sh` | **42 checks, all pass** |
+| `grep -i wasm tools/testmgr.py` | **0**, unchanged |
+| slices running under node / under wasmtime | **39 / 2** |
+| open wasm rows, counted BY FOLDER | 5 `backlog-core`, 1 `backlog-tools`, 0 urgent/working/blocked |
+
+**THE SCOPE FACT THIS TICKET DID NOT HAVE: there are TWO unwired suites, and
+`test-wasm32` is the smaller one.** `test/wasm/check_all.sh` runs 42 checks and
+is invoked from nowhere outside `test/wasm/` — no Makefile target, no tier, no
+script. Every occurrence of the string in the tree is a comment inside its own
+slices. It runs only when a human types it. So "enrol `test-wasm32`" is half
+the job; whoever takes this should decide about both, and they have different
+costs (the 42 checks need node and `wasm-validate`; two of them need wasmtime).
+
+**`Makefile:21464` in the section above is STALE — the recipe is at 22435
+today.** Kept rather than silently corrected, because it is the failure mode
+CLAUDE.md names: a stale line number does not error, it points somewhere.
+
+**THE EVIDENCE THAT ENROLMENT IS NECESSARY AND NOT SUFFICIENT, which is the
+part worth carrying into the design call.** On 2026-09-06 both suites were
+**fully green** — 53 rows and 41 checks — while a silent memory-corrupting
+wasm32 defect was live: `p^ := 42` through a `^Variant` wrote the payload over
+the tag (native 42, wasm32 0; 12 lines of plain Pascal, no NilPy and no
+generator). It was found chasing an unrelated NilPy ticket, not by any
+assertion in either suite, and fixed in `99fa7984f` — which IS in pin v406
+(`99fa7984f` is an ancestor of `1b903c1dd`, checked with `merge-base
+--is-ancestor`). A regression test came with it, `check_variantptr.sh`.
+
+So sampling this backend on a schedule would not have caught that one. The
+suites were not stale or broken; they were green about what they ran. Enrolment
+buys regression detection, which is real and worth having — it does not buy
+coverage of shapes nobody wrote a row for.
+
+**APERTURE of everything above:** one box, one tree, node as the host for 39 of
+41 slices. Not measured on seven. `feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host`
+is the row for the second host.
