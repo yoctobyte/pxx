@@ -829,6 +829,7 @@ AN_EXIT Left PyMakeNone
 AN_EXIT Left RMakeIdent(tmpSym)
 AN_EXIT Left ZParseExpr
 AN_EXIT Left valNode
+AN_FIELD Left CloneAST(baseNode)
 AN_FIELD Left GenMakeIdent(cselfSym, tyClass)
 AN_FIELD Left GenMakeIdent(eSym, eTk)
 AN_FIELD Left GenMakeIdent(selfIdx, tyClass)

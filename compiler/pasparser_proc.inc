@@ -398,6 +398,117 @@ begin
     end;
 end;
 
+{ Does `recId` contain a managed field the FIELD WALK below cannot reach?
+
+  The walk descends plain record-typed fields. It does not descend an ARRAY
+  field -- `arr: array[0..1] of TFoo` inside a record needs the same synthesised
+  loop the array-of-record symbol case needs, and that is the other arm of
+  feature-pascal-management-operators-nested-and-array. Those stay REFUSED
+  rather than silently skipped, which is this pass's whole convention: a
+  declared invariant that never runs is a plausible wrong value far from the
+  cause.
+
+  UFldTk carries the ELEMENT kind for an array field, so `tyRecord` alone does
+  not separate the two; UFldIsArray is what does. }
+function RecContainsUnreachableManagedField(recId, depth: Integer): Boolean;
+var ci, i, base, cnt, frec: Integer;
+begin
+  Result := False;
+  if (recId < REC_UCLASS_BASE) or (depth > 8) then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+    if IntToTypeKind(UFldTk[base + i]) = tyRecord then
+    begin
+      frec := UFldRec_[base + i];
+      if UFldIsArray[base + i] then
+      begin
+        if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end
+      else if RecContainsUnreachableManagedField(frec, depth + 1) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+end;
+
+{ Append one management-operator call for `argNode` to a seq chain. The two
+  copies this replaces differed only in which overload kind they asked for. }
+procedure AppendManagedOpCall(opIdx, argNode: Integer; var head, tail: Integer);
+var callNode, newSeq: Integer;
+begin
+  callNode := GenMakeCall6(opIdx, tyUnknown, argNode, -1, -1, -1, -1, -1);
+  newSeq := GenMakeSeq(callNode, -1);
+  if head = -1 then head := newSeq else ASTRight[tail] := newSeq;
+  tail := newSeq;
+end;
+
+{ Walk the managed fields of `recId` under `baseNode` and append their calls.
+
+  ORDER IS MEASURED, NOT ASSUMED, and it is not the same in both directions.
+  Against fpc 3.2.2, for a record that has its OWN operator and a managed field:
+
+      init Foo   <- the FIELD                 Initialize: fields, then self
+      init Bar   <- the containing record
+      fin  Bar   <- the containing record     Finalize:   self, then fields
+      fin  Foo   <- the FIELD
+
+  So Initialize is POST-order and Finalize is PRE-order, the construct/destruct
+  symmetry. Within one level it is declaration order FORWARD for both -- fpc
+  does NOT reverse siblings, array elements or the locals of a scope on the way
+  out, which is the part that looks wrong beside the nesting rule and was
+  measured separately (`a`, `n.p`, `n.q`, `b` finalize 0,1,2,3).
+
+  `baseNode` is CLONED at every use. It has to be: the same path appears once as
+  a call argument and again as the base of the recursion, and CloneAST exists
+  for exactly this ("a value node must appear in two places without the two
+  occurrences aliasing one node"). Sharing it would put one node under two
+  parents.
+
+  Array fields are skipped here and refused by the caller -- see
+  RecContainsUnreachableManagedField. }
+procedure AppendManagedFieldOps(baseNode, recId, depth, opk: Integer;
+                                postOrder: Boolean; var head, tail: Integer);
+var ci, i, base, cnt, frec, fldNode, opIdx: Integer;
+begin
+  if (recId < REC_UCLASS_BASE) or (depth > 8) then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+    if (IntToTypeKind(UFldTk[base + i]) = tyRecord) and
+       (not UFldIsArray[base + i]) and
+       (UFldRec_[base + i] <> REC_NONE) then
+    begin
+      frec := UFldRec_[base + i];
+      if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+      begin
+        fldNode := AllocNode(AN_FIELD);
+        ASTLeft[fldNode] := CloneAST(baseNode);
+        ASTSOffset[fldNode] := UFldNOff[base + i];
+        ASTSLen[fldNode] := UFldNLen[base + i];
+        ASTTk[fldNode] := Ord(tyRecord);
+        opIdx := FindOpOverload(opk, Ord(tyRecord), frec);
+        if postOrder then
+        begin
+          AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
+          if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
+        end
+        else
+        begin
+          if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
+          AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
+        end;
+      end;
+    end;
+end;
+
 { The record id a symbol's management operators would belong to.
 
   For a plain record variable that is `RecName` (mirrored as `SymTR[].RecId`).
@@ -425,7 +536,7 @@ end;
 
 function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
                                bodyNode: Integer): Integer;
-var i, ip, fp, callNode, headInit, tailInit, headFin, tailFin, newSeq, tryNode: Integer;
+var i, ip, fp, headInit, tailInit, headFin, tailFin, tryNode: Integer;
     mrec: Integer;
     isTarget: Boolean;
 begin
@@ -446,7 +557,20 @@ begin
       if Syms[i].IsArray and RecHasManagementOp(mrec) then
         Error('an array of a record with a management operator is not supported yet '
               + '(feature-pascal-management-operators-nested-and-array)');
-      if RecContainsManagementOp(mrec, 0) then
+      { A CLASS field is still refused, and it is not the same shape at all: a
+        class instance's lifetime is not scope-bound. Measured against fpc
+        3.2.2 -- for `c: TCls` whose field is a managed record, fpc runs the
+        field's Initialize at TCls.Create and NEVER runs Finalize, because
+        nothing frees the object. Emitting a scope-bound try/finally here would
+        finalize a live heap object at every scope exit, which is worse than
+        refusing. }
+      if (Syms[i].TypeKind = tyClass) and RecContainsManagementOp(mrec, 0) then
+        Error('a field of a record with a management operator is not managed yet '
+              + '(feature-pascal-management-operators-nested-and-array)');
+      { ...and an ARRAY field at any depth needs the same synthesised loop the
+        array SYMBOL above needs, so it keeps the same refusal. }
+      if (Syms[i].TypeKind = tyRecord) and (not Syms[i].IsArray) and
+         RecContainsUnreachableManagedField(mrec, 0) then
         Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
     end;
@@ -454,24 +578,20 @@ begin
        (not Syms[i].IsArray) and (i <> retSym) and
        (SymTR[i].RecId <> REC_NONE) then
     begin
+      { INITIALIZE IS POST-ORDER: every managed field, depth-first in
+        declaration order, and THEN this record's own operator. FINALIZE is the
+        mirror -- own operator first, then the fields. Measured against fpc
+        3.2.2 rather than assumed; see AppendManagedFieldOps for the run. }
+      AppendManagedFieldOps(GenMakeIdent(i, tyRecord), SymTR[i].RecId, 0,
+                            OPK_INITIALIZE, True, headInit, tailInit);
       ip := FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), SymTR[i].RecId);
       if ip >= 0 then
-      begin
-        callNode := GenMakeCall6(ip, tyUnknown, GenMakeIdent(i, tyRecord),
-                                 -1, -1, -1, -1, -1);
-        newSeq := GenMakeSeq(callNode, -1);
-        if headInit = -1 then headInit := newSeq else ASTRight[tailInit] := newSeq;
-        tailInit := newSeq;
-      end;
+        AppendManagedOpCall(ip, GenMakeIdent(i, tyRecord), headInit, tailInit);
       fp := FindOpOverload(OPK_FINALIZE, Ord(tyRecord), SymTR[i].RecId);
       if fp >= 0 then
-      begin
-        callNode := GenMakeCall6(fp, tyUnknown, GenMakeIdent(i, tyRecord),
-                                 -1, -1, -1, -1, -1);
-        newSeq := GenMakeSeq(callNode, -1);
-        if headFin = -1 then headFin := newSeq else ASTRight[tailFin] := newSeq;
-        tailFin := newSeq;
-      end;
+        AppendManagedOpCall(fp, GenMakeIdent(i, tyRecord), headFin, tailFin);
+      AppendManagedFieldOps(GenMakeIdent(i, tyRecord), SymTR[i].RecId, 0,
+                            OPK_FINALIZE, False, headFin, tailFin);
     end;
   end;
   if (headInit = -1) and (headFin = -1) then Exit;

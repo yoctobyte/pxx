@@ -13580,8 +13580,18 @@ test-core: $(COMPILER)
 	# divergences the test header states and explains.
 	./$(COMPILER) test/test_mgmt_operators.pas $(TESTTMP)/test_mgmt_operators26
 	$(TESTTMP)/test_mgmt_operators26 | diff -u test/test_mgmt_operators.expected -
-	# ...and the three shapes that are REFUSED rather than silently skipped: an
-	# array of a managed record, a record holding one in a field, and Copy/AddRef
+	# ...and a record that CONTAINS a managed record, at any depth. The ORDER is
+	# what this one pins and it is not uniform: Initialize is POST-order (fields,
+	# then the record's own operator) and Finalize is PRE-order (own, then
+	# fields), while WITHIN one level both go in declaration order forward. Every
+	# row prints a distinguishable number, because a test asserting only that
+	# both ran passes with the order inverted. .expected is fpc 3.2.2's, byte for
+	# byte, no divergence.
+	./$(COMPILER) test/test_mgmt_operators_nested_field.pas $(TESTTMP)/test_mgmt_op_nf26
+	$(TESTTMP)/test_mgmt_op_nf26 | diff -u test/test_mgmt_operators_nested_field.expected -
+	# ...and the four shapes that are REFUSED rather than silently skipped: an
+	# array of a managed record, a record holding one in an ARRAY field, a CLASS
+	# holding one in a field, and Copy/AddRef
 	# (recognised, but the copy event is not dispatched yet). Each must name its
 	# follow-up ticket, because a declared invariant that never runs is worse
 	# than a program that does not compile.
@@ -13591,12 +13601,17 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a record holding a managed record in a field compiled"; exit 1; \
 	fi
+	if ./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 >/dev/null 2>&1; then \
+	  echo "FAIL: a class holding a managed record in a field compiled -- fpc runs those at Create/Free, not at scope"; exit 1; \
+	fi
 	if ./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 >/dev/null 2>&1; then \
 	  echo "FAIL: class operator Copy compiled while nothing dispatches it"; exit 1; \
 	fi
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
+	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"

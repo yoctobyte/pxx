@@ -100,6 +100,39 @@ def prog(name, door):
         return HDR + "program p; begin WriteLn(TypeInfo(%s) <> nil); end." % name
     raise AssertionError(door)
 
+ALIAS_TN = 'zz_alias'
+
+def aliasprog(name, door):
+    """The same door, asked through a ONE-LEVEL alias to the same builtin.
+
+    `type zz_alias = ByteBool;` then `High(zz_alias)`. This is a different
+    RECOGNITION path -- FindTypeAlias answers instead of the builtin-name table
+    -- and the two are asked at different sites, so a name can be handled at one
+    and not the other. The direct spelling is the one every test in the tree is
+    written in, which is exactly why the alias spelling is where an untested arm
+    survives.
+
+    Measured 2026-09-06: `High(ByteBool)` is REFUSED and `type b = ByteBool;
+    High(b)` answers 255 (WordBool 65535, LongBool 2147483647) against fpc's
+    TRUE at both. The refusal is deliberate -- those names map to integer kinds
+    to keep their C-ABI width, so answering High from the kind gives an ordinal
+    -- which makes it a door DECLINING a question it cannot answer correctly
+    while its sibling answers wrongly. A refusal is loud and a wrong bound is
+    silent, so the accepted spelling is the worse of the two and the one nothing
+    was looking at.
+    """
+    src = prog(name, door)
+    head, body = src.split('program p;', 1)
+    body = re.sub(r'\b%s\b' % re.escape(name), ALIAS_TN, body)
+    return head + 'program p;\ntype ' + ALIAS_TN + ' = ' + name + ';\n' + body
+
+
+# The doors this phase can ask. `decl`, `cast` and `castval` are covered for the
+# alias spelling by tools/scalar_cast_door_probe.py, which asks them with the
+# operand shapes that matter there; asking them again here would be a second
+# instrument answering a question that already has one.
+ALIAS_DOORS = ['sizeof', 'high', 'low', 'typeinfo']
+
 DOORS = ['decl', 'sizeof', 'cast', 'castval', 'high', 'low', 'typeinfo']
 
 def run(cmd, cwd):
@@ -128,6 +161,42 @@ def ask(src, d):
         rc, out = run([os.path.join(d, 'p')], d)
         res['fpc'] = out.decode('latin-1').strip() if rc == 0 else None
     return res
+
+def ask_pxx(src, d):
+    """pxx only. The alias phase compares two SPELLINGS inside one compiler, so
+    a second implementation adds nothing: the claim is self-consistency, not
+    conformance. It also halves the run."""
+    f = os.path.join(d, 'q.pas')
+    open(f, 'w').write(src)
+    rc, _ = run([PXX, f, os.path.join(d, 'q_pxx')], d)
+    if rc != 0:
+        return None
+    rc, out = run([os.path.join(d, 'q_pxx')], d)
+    return out.decode('latin-1').strip() if rc == 0 else None
+
+
+def alias_phase(d):
+    """(rows, findings). Every name asked in BOTH spellings at every ALIAS_DOOR."""
+    rows, findings = [], []
+    for name in ALL_NAMES:
+        cells = []
+        for door in ALIAS_DOORS:
+            direct = ask_pxx(prog(name, door), d)
+            alias  = ask_pxx(aliasprog(name, door), d)
+            if direct == alias:
+                cells.append('%s=.' % door)
+            elif direct is None:
+                cells.append('%s=ALIAS-ONLY(%s)' % (door, alias))
+                findings.append((name, door, 'refused direct, answers %r through an alias' % alias))
+            elif alias is None:
+                cells.append('%s=DIRECT-ONLY(%s)' % (door, direct))
+                findings.append((name, door, 'answers %r direct, refused through an alias' % direct))
+            else:
+                cells.append('%s=DIFFER(%s|%s)' % (door, direct, alias))
+                findings.append((name, door, 'direct %r, alias %r' % (direct, alias)))
+        rows.append('%-16s %s' % (name, '  '.join(cells)))
+    return rows, findings
+
 
 def artefact_id():
     """sha256 of the compiler under test, or None if it is not there."""
@@ -201,6 +270,43 @@ def main():
                 asym.append((name, refused_here))
             rows.append('%-16s %s' % (name, '  '.join(cells)))
     print('\n'.join(rows))
+    # --- PHASE 2: the same names, asked through a one-level alias -----------
+    #
+    # MUST-DIFFER CONTROL FIRST. Phase 2 reports by SILENCE -- its healthy
+    # output is "no name differs" -- and a comparison that can never report a
+    # difference prints exactly that. So hand it two spellings that are known
+    # to disagree and require it to say so; without this row, a broken ask_pxx
+    # returning None for everything scores every name as agreeing.
+    with tempfile.TemporaryDirectory() as d:
+        a = ask_pxx(prog('byte', 'sizeof'), d)
+        b = ask_pxx(aliasprog('int64', 'sizeof'), d)
+        if a is None or b is None or a == b:
+            print('CONTROL FAILED: the alias phase cannot report a difference '
+                  '(SizeOf(byte)=%r vs SizeOf(alias of int64)=%r)' % (a, b))
+            return 1
+        # and the other direction: an alias to a name must not be refused
+        # outright, or every row would be ALIAS-ONLY's mirror and mean nothing
+        if ask_pxx(aliasprog('integer', 'sizeof'), d) is None:
+            print('CONTROL FAILED: `type zz_alias = integer` was refused')
+            return 1
+    print()
+    print('alias phase controls ok: a known-unequal pair reports unequal, '
+          'and a plain alias compiles')
+    with tempfile.TemporaryDirectory() as d:
+        arows, afind = alias_phase(d)
+    print()
+    print('\n'.join(arows))
+    print()
+    if afind:
+        print('SPELLING DISAGREES -- the same name answers differently direct and through an alias:')
+        for n, door, what in afind:
+            print('  %-16s %-9s %s' % (n, door, what))
+        print('The direct spelling is the one every test in the tree uses, so an')
+        print('arm reachable only through an alias has never been asserted on.')
+    else:
+        print('alias phase: every name answers identically direct and through a '
+              'one-level alias, at %s' % '/'.join(ALIAS_DOORS))
+
     ended_at = artefact_id()
     if ended_at != started_at:
         print()
@@ -208,6 +314,8 @@ def main():
         print('Every row before the swap measured the old binary and every row after')
         print('measured the new one, so the results partition along the ALPHABET and')
         print('not along anything about the names. Re-run on a settled tree.')
+        print('The window covers BOTH phases: phase 2 is another ~400 compiles and')
+        print('a rebuild during them partitions the alias rows the same way.')
         return 1
     print()
     print('names=%d  cells-agree=%d  cells-differ=%d  (compiler %s throughout)'
@@ -220,7 +328,7 @@ def main():
         print('This is the SizeUInt shape. A name with working synonyms hides it.')
     else:
         print('no name is accepted at one door and refused at another')
-    return 0
+    return 1 if afind else 0
 
 if __name__ == '__main__':
     sys.exit(main())

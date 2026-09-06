@@ -1,0 +1,15 @@
+init Foo 0
+init Foo 1
+init Foo 2
+init Foo 3
+body 0123
+fin  Foo 0
+fin  Foo 1
+fin  Foo 2
+fin  Foo 3
+init Foo 4
+init Own
+body 4
+fin  Own
+fin  Foo 4
+done

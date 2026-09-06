@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:21 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:141 backlog-nilpy:98 backlog-tools:43 backlog-pascal:27 backlog-decide:42 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3432 rejected:79`
+`working:22 unfinished:21 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:141 backlog-nilpy:98 backlog-tools:43 backlog-pascal:25 backlog-decide:42 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3432 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -25,6 +25,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankS
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
+- `feature-pascal-management-operators-copy-and-addref` [P] — owner: frankA
+- `feature-pascal-management-operators-nested-and-array` [P] — owner: frankA
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
@@ -63,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 400, ranked
+## Ready — top 30 of 398, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -74,8 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
-- `[p 75] [P]` feature-pascal-management-operators-copy-and-addref (unblocks 1)
-- `[p 75] [P]` feature-pascal-management-operators-nested-and-array (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 70] [A]` decide-how-a-type-carries-an-identity-its-kind-cannot-hold (unblocks 4)
@@ -95,5 +95,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-5
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
+- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
-_370 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_368 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
