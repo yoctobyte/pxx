@@ -129,3 +129,62 @@ and I am not claiming it. That question belongs with Track T (harness build
 ordering), not Track A — the compiler is not implicated either way. The next
 occurrence answers it without anyone bisecting: the message now says whether the
 set or the contents moved, and names the files if they are local.
+
+## 2026-09-06, later — CORRECTION: the srchash check never failed. This is a job NAME.
+
+Everything above about *which sub-cause fired* is answering a question that does
+not exist. Read the 17:09Z full tier at `b76fce8` — which contains `85f8ad370`,
+so the improved message was live — and the row reads:
+
+> `self-host fixedpoint: verified — 1 round(s), 5375cb2828e8 (stamp read back;
+> sources match it) | building gcc oracle ... | compiling pxx zlib runner ... | pascal`
+
+**That is the guard PASSING**, inside the row we were all calling a srchash
+failure. The job died later, compiling the zlib runner. The sibling row,
+`test-emit-obj#src:tools/compiler_srchash.sh`, carries no srchash text at all —
+it is `an i386 object's file-scope initialisers run under a gcc -m32 main`.
+
+**Why 40 jobs carry a `compiler_srchash.sh` row.** `tools/testmgr.py:2538`:
+
+```python
+return "%s#src:%s" % (job.target, srcs[0])
+```
+
+A job is named after its FIRST source file, and every job depending on
+`$(COMPILER)` inherits that target's own prerequisites at the head of its list
+(`tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +11`). No single check
+runs in 40 jobs and fails in 4.
+
+### The two rows, correctly stated
+
+| row | actual failure | lane |
+| --- | --- | --- |
+| `test-zlib#src:tools/compiler_srchash.sh` | pxx compile error in the zlib runner, after the gcc oracle builds | A or B |
+| `test-emit-obj#src:tools/compiler_srchash.sh` | an i386 object's file-scope initialisers under a `gcc -m32` main | A / C, i386 |
+
+Neither is Track T, neither is harness ordering, neither is a stale tree.
+
+### This ticket's own header said so, and I read it and misapplied it
+
+> This job names a MECHANISM rather than a subject — the source it was fed
+> (`tools/compiler_srchash.sh`) is what the mechanism was run ON, not what is
+> being tested, so a lane guessed from it would be wrong by construction.
+
+I quoted that line the same afternoon as being about the *lua* framing and did
+not apply it to the *srchash* framing in the same sentence.
+
+**And my local reproduction was real and about something else.** I made
+`livesrc != stampsrc` fire on my own box by pulling without rebuilding, and took
+it as reproducing the CI failure. It never errors; it answers a different
+question — which is the failure mode CLAUDE.md names for every instrument that
+lies.
+
+### What survives
+
+`85f8ad370` improves a genuine diagnostic and is green, positive-controlled, and
+carries two dry-run tripwires that caught a real trap. **It is not a fix for
+these rows and must not be cited as one.** The `srccount` field will help the
+next real stamp mismatch, of which this was not one.
+
+**Re-pointed, not resolved.** The row belongs to whoever takes the zlib compile
+error; this ticket should be closed as MISNAMED rather than fixed.
