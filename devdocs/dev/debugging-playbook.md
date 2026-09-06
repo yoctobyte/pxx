@@ -14962,6 +14962,22 @@ bisect either** — it was the better-looking candidate and it was innocent.
    differently from both. And if you compare their sizes as a sanity check, compare **one host's
    reports to that host's ndjson** — `reports/` is four hosts deep, and the mixed ratio reads as
    surplus while the coverage is 869 of 1256.
+4. **A TIER VERDICT IS AN AGGREGATE OVER JOBS, SO ITS "last GREEN" FREEZES AT THE FIRST RED — and
+   after that it bounds nothing.** Once any job is red the tier is red, every later tier verdict is
+   red, and the last GREEN stops advancing while the world keeps moving. A window taken from it for
+   a job that failed later is too wide by *however long the tier has been red*. Measured
+   2026-09-06: the native tier went red at 05:14 for one job; a different job first failed at
+   05:55; the tier's last GREEN was still `f1148d82c` from 05:09, giving a 31-commit window with 9
+   code commits, while the watcher's per-job bisect had reached `d0f14a2608ad` — **26 commits
+   later, one commit in range**, and correct. Third one-signed source in one day, same direction as
+   the other two: always wider, never empty, always plausible.
+
+   **So a per-job bisect beats a tier aggregate for a per-job question, and the ticket's `## Range`
+   is that bisect.** The relation is decidable, not a judgement call:
+   `git merge-base --is-ancestor <log's GREEN> <ticket's last good>` — TRUE means the ticket is
+   NARROWER and wins; FALSE means a real conflict, because a narrowing bisect can only move
+   forward; and a sha git cannot resolve means neither, which must not collapse into "they agree".
+   `tools/regression_window.py` does all three and prints which.
 
 **And do not hand-bisect it. T bisects backwards on its own** — that is the documented behaviour and
 the whole reason a ~8-commit sampling gap is acceptable. The value a reader adds is the WINDOW and
@@ -15342,3 +15358,27 @@ resolves to real text in the wrong place consumes the reduction budget before
 anyone doubts it — which is the same animal as
 *[an instrument that lies by being correct about something else]*, applied to a
 citation rather than to a measurement.
+
+## TWO DIAGNOSTICS THAT MISLEAD A READER THE SAME WAY DO NOT SHARE A FIX
+
+A correction to a sentence this file nearly grew: *"if two mechanisms produce the
+same wrong-file citation, fix it at the citation."* That smuggles in an unchecked
+premise — that the two are one mechanism wearing two symptoms. Measured
+2026-09-06, two wrong-file citations on one day:
+
+| | what it prints | why it misleads |
+| --- | --- | --- |
+| a **prescan desync** | a `near:` window that disagrees with its own line number | two live positions drifting apart |
+| a **parked diagnostic** | no `near:` window at all, by construction | a bare line number with no file, so the reader supplies the wrong one |
+
+**The discriminator is whether a `near:` window is printed at all**, and it splits
+them cleanly: the second has no second position to disagree with. Two fixes. What
+they share is only **what the reader experiences** — a citation that resolves to
+real text in the wrong place — and that is worth writing down once, as the class,
+without implying a common repair.
+
+This is *a shared name is not a shared mechanism* applied to symptoms rather than
+to identifiers, and it is easiest to get wrong when relaying **someone else's**
+comparison: the person who put the two side by side had the discriminator and the
+relayer had only the resemblance. **Ask what would distinguish them before
+carrying a pair forward as a pair.**
