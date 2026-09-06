@@ -694,3 +694,58 @@ real element-type logic (frozen strings, N-D folding, dyn-array element kinds),
 and `ApplyCallResultPtrSuffix` carries the call's own constants. Each arm has to
 be shown RIGHT before it can be shown redundant, and the instrument for that is
 an opener × chain differential, not a reading.
+
+## 2026-09-06 (frankA) — the record-cast `[` arm is LIVE, and the probe that said otherwise was the wrong program
+
+The ticket's own summary names the divergence that makes this merge harder than
+the statement-side one: **the record-cast twin hand-builds its own `AN_INDEX`
+arm where the pointer-alias twin has real element-type logic.** So the first
+question is whether that hand-built arm is reachable at all — a dead arm makes
+the merge a deletion instead of a parameterisation.
+
+**It is reachable, and it has a committed test.** Measured at `85c81be85`,
+canary binary `c5b9f15c6811` (a `WriteLn` literal planted at the top of the
+`tkLBrack` arm, `pasparser_expr.inc:6839`, removed after; the restored tree
+rebuilt back to `faa41e4b920f`, which is the byte-identity check that the
+restore was clean):
+
+| program | canary fires |
+| --- | --- |
+| `TRec(q)[0]` / `TRec(q)^[0]` | **1** |
+| `TArr(q)[1]`, `TArr(q)^[1]`, `PArr(q)^[1]` | 0 |
+| `test/test_record_name_cast_strides_by_its_record.pas` | **4** |
+| `test_a_default_property_subscript_through_a_pointer_cast`, `test_cast_to_array_type`, `test_alias_cast_assign_target`, `test_cast_default_property_target`, `test_indexing_a_string_cast_of_a_pointer_slot` | 0 |
+| `compiler.pas` (the whole self-host) | 0 |
+
+`TRec(raw)[i]` is a **deliberate pxx extension** — `PRec(ptr)` without a
+declared `PRec` — with **no fpc oracle by construction** (fpc refuses it:
+`Illegal type conversion: "Pointer" to "TRec"`). Its test asserts the alias
+spelling and the record-name spelling of the *same* access agree, and it exists
+because they once did not: `TRec(raw)[0..2].a` gave `10 0 0`, element 0 right by
+coincidence, because the cast node's `ASTIVal` was stamped `0` for "plain
+reinterpret" and `ir.inc` reads that field as an ALIAS INDEX.
+
+**So the arm's hard-coded `tk := tyRecord; recName := baseRec` is CORRECT for
+this opener** — the record-name cast's element *is* the record — and the merge
+must parameterise the element type rather than pick either twin's version. That
+is the shape of the work: the shared loop takes `elemTk`/`elemRec` as inputs,
+the record-name caller passes the record, the pointer-alias caller passes what
+its alias row says.
+
+**And my first probe could not have answered this.** I asked `TRec(q)[0]` with
+no trailing `.a`, which prints a whole record as an integer — `94489280523`,
+garbage from a program that means nothing, next to fpc's refusal. It fires the
+canary, so the reach answer was right, but the *value* row was uninterpretable
+and would have read as "the arm is broken" rather than "the arm is live". The
+corrected shape `TRec(raw)[1].a` answers `11` and agrees with the alias spelling.
+
+### What the merge's guard has to be, and why fpc cannot be all of it
+
+`castwalk/gen.py` is 64 rows over cast openers: `agree=54  PXX-ONLY(no
+oracle)=9  DIFFER=1(control)`. **Nine rows have no oracle** — they are this
+extension and its relatives, which fpc refuses on purpose. An fpc differential
+is therefore blind on exactly the rows the record-cast twin exists to serve.
+Those nine need a **pxx-before vs pxx-after byte-identity** check instead: a
+refactor that is meant to change nothing makes byte-identity a bug detector,
+where an oracle differential can only say "still refused by fpc".
+

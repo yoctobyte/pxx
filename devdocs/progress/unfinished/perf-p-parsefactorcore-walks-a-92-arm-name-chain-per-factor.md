@@ -1,8 +1,8 @@
 ---
 track: P
 prio: 30
-status: working
-owner: frankA
+status: unfinished
+owner: 
 type: perf
 blocked-by: []
 summary: "RE-MEASURED at HEAD -O2 (frankZ, 2026-09-04): the share has NOT dropped (9.92/9.94/10.35% over three runs vs the original 9.44%), so 440c822e6 did not remove it — but the premise is refuted for a THIRD time and the ticket is now mostly in the wrong lane. Disassembled, ParseFactorCore is 1,146,385 bytes of which 84% is managed-local TEARDOWN: exactly 150 runs of exactly 532 AnsiString releases (532 locals x 150 return points), carrying 36.1% of the function's samples. The 92-arm walk this ticket is NAMED for is 114 CaseEqual call sites carrying 3.2% of the function's samples = ~0.32% of a compile; a perfect hash dispatch has a generous ceiling of ~3% only if it also took all of CaseEqual's 3.1% body, and it carries the three documented hazards (name reassigned at 8 points, 25 duplicate names, the arms are not a ladder). The teardown is bigger, is Track A codegen, and is filed as perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. WHAT IS LEFT FOR P is the ~0.3-3% dispatch question, ranked below its own hazards — not the 9.4% this ticket was opened for."
@@ -397,3 +397,9 @@ contains exactly ONE `CaseEqual` of the ~122**, so removing those 614 lines is a
 size and maintenance change and is **not** a dispatch-cost change; it must not be
 credited to this ticket.
 
+
+## Parked 2026-09-06
+
+Parked by frankA 2026-09-06. Not in flight and has not been since the premise was refuted: the walk this ticket is named for carries ~3.2% of the function and ~0.32% of a compile, while 84% of the function's bytes are managed-local teardown filed as perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. The board read working+owner:frankA as live work and a peer held a 614-line patch inside the same procedure for a day rather than collide with a restructure nobody was doing. What is left here is the ~0.3-3% dispatch question ranked below its own three hazards; it belongs in ready at p30, not held.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
