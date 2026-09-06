@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-06
 found-by: frankB
 blocked-by: [bug-p-a-property-default-value-clause-is-read-as-the-default-indexed-property-marker]
-summary: "The class-body member loop (pasparser_decl.inc:7230) and the record-body member loop (:5042) both end in a bare `else Next;` that discards ANY token they do not recognise, with no diagnostic. Measured at 86f935479: a class body containing `42 43 44;`, `+ - * ;` or `'oops';` compiles and runs; so does a record body containing `42 43;`. fpc 3.2.2 refuses all four with a syntax error on the exact line. THIS IS ALSO THE MECHANISM BEHIND THE `default` CLAUSE, and it corrects that ticket: instrumenting the catch-all shows frankB's `... default 16 77 88 99;` firing it FOUR times with kind=tkInteger, so the property value is not consumed by the property parser at all -- all four numbers, the legitimate 16 included, are swallowed here. `default 16` never worked; it was eaten. TWO CENSUSES OVER THE SAME FULLY-PROCESSED 2276-FILE POPULATION LICENSE TWO DIFFERENT ALLOW-LISTS: the class arm fired 6287 times (tkSemicolon 6283, tkVar 4) and the record arm 11 (tkVar 8, tkClass 3, and NO semicolons at all). Every fire in both is legitimate -- stray semicolons, plus section keywords (`var` reopening a field list after a nested `type` section, `class` introducing `class var`) on which pxx matches fpc byte-for-byte -- so each arm must KEEP its own traffic and error only outside it. Class arm allows tkSemicolon and tkVar; record arm allows tkSemicolon, tkVar and tkClass. An earlier partial sweep reporting 323 fires at 100% tkSemicolon is WITHDRAWN: non-recursive glob, never saw the test subdirectories, unreconstructable population -- and its pure-semicolon distribution was an artefact of stopping early, since the tkVar rows appear only late in the full run. LANDING ORDER MATTERS: erroring here before the `default <value>` clause is parsed properly turns legal FPC code into a hard error, so this is blocked-by that ticket, not merely related."
+summary: "The class-body member loop (pasparser_decl.inc:7230) and the record-body member loop (:5042) both end in a bare `else Next;` that discards ANY token they do not recognise, with no diagnostic. Measured at 86f935479: a class body containing `42 43 44;`, `+ - * ;` or `'oops';` compiles and runs; so does a record body containing `42 43;`. fpc 3.2.2 refuses all four with a syntax error on the exact line. THIS IS ALSO THE MECHANISM BEHIND THE `default` CLAUSE, and it corrects that ticket: instrumenting the catch-all shows frankB's `... default 16 77 88 99;` firing it FOUR times with kind=tkInteger, so the property value is not consumed by the property parser at all -- all four numbers, the legitimate 16 included, are swallowed here. `default 16` never worked; it was eaten. TWO CENSUSES OVER THE SAME FULLY-PROCESSED 2276-FILE POPULATION LICENSE TWO DIFFERENT ALLOW-LISTS: the class arm fired 6287 times (tkSemicolon 6283, tkVar 4) and the record arm 11 (tkVar 8, tkClass 3, and NO semicolons at all). Every fire in both is legitimate -- stray semicolons, plus section keywords (`var` reopening a field list after a nested `type` section, `class` introducing `class var`) on which pxx matches fpc byte-for-byte -- so each arm must KEEP its own traffic and error only outside it. Class arm allows tkSemicolon, tkVar and tkClass; record arm the same. THE CENSUS'S ZERO FOR tkClass IN THE CLASS ARM WAS AN ARTEFACT AND IT SHIPPED A REGRESSION: the sweep compiled each file STANDALONE, pxx cannot compile a unit standalone, so every construct living only in a unit contributed zero fires whatever it contained -- and `library_candidates/fpc-testsuite/` was never in the population. `class generic function` (caught by the full suite) and `class class function` (caught by frankS's conformance corpus, tgenfunc3/4) both broke; fixed at 7d263221f. The two positive counts stand; the zero was manufactured, and the zero was the load-bearing part. An earlier partial sweep reporting 323 fires at 100% tkSemicolon is WITHDRAWN: non-recursive glob, never saw the test subdirectories, unreconstructable population -- and its pure-semicolon distribution was an artefact of stopping early, since the tkVar rows appear only late in the full run. LANDING ORDER MATTERS: erroring here before the `default <value>` clause is parsed properly turns legal FPC code into a hard error, so this is blocked-by that ticket, not merely related."
 ---
 
 # A class or record body accepts arbitrary tokens without a diagnostic
@@ -85,8 +85,13 @@ processed, filenames logged).
 
 | arm | allow | error on |
 | --- | --- | --- |
-| class body (:7230) | `tkSemicolon`, `tkVar` | everything else |
+| class body (:7230) | `tkSemicolon`, `tkVar`, `tkClass` | everything else |
 | record body (:5042) | `tkSemicolon`, `tkVar`, `tkClass` | everything else |
+
+**`tkClass` was NOT in the class list as first shipped, and that was a
+regression.** See the correction below; the two lists ended up the same after
+all, and the reasoning that made them differ was an artefact of the
+instrument.
 
 `tkVar` is a `var` section reopening a field list after a nested `type`
 section — legitimate in both bodies, witnessed in the class arm by
@@ -148,3 +153,44 @@ two arms with different allow-lists, not two spellings of one.
 
 ## Log
 - 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 76efae23e.
+
+
+## 2026-09-06 (frankD) — the zero was manufactured, and it shipped
+
+`tkClass` measured **0 of 6287** in the class arm. I wrote *"`class` is NOT in
+this list and must not be added"* into the code on the strength of it, errored
+on it, and pushed. Two regressions inside an hour:
+
+| spelling | found by | where |
+| --- | --- | --- |
+| `class generic function` | `make test` | `test/generic_xunit_method_units/uxgm.pas:10` |
+| `class class function` | frankS's conformance corpus | `tgenfunc3.pp`, `tgenfunc4.pp` — 389/0/111 → 387/2/111 |
+
+Both are FPC generic-class-method spellings. Fixed at `7d263221f`.
+
+**Why the census could not see them, and it is not a sampling problem.** The
+sweep compiled each of 2276 files STANDALONE. pxx cannot compile a unit
+standalone — it refuses before the parser reaches the class body — so a
+construct living only in a unit contributed zero fires *whatever it was*. And
+`library_candidates/fpc-testsuite/` (1447 files, the dialect corners) was never
+in the population at all. The instrument reported a clean distribution over the
+files it could read and said nothing about the ones it could not, because a
+file that dies early and a file with nothing to report both produce silence.
+
+**The general form, which is the part worth keeping:** a census that COMPILES
+its population is blind to every file that fails before the probe, and
+zero-because-unreachable is indistinguishable from zero-because-absent. A
+census must report `processed / compiled / refused`; the third number is the
+aperture. Mine reported only fires, which is exactly why it read as complete.
+
+**And note which half was wrong.** 6283 and 4 are still correct. The
+manufactured number was the ZERO — the one nobody checks, because a zero looks
+like the absence of a finding rather than a finding of absence. It was also the
+only number the narrowing actually depended on.
+
+Re-censusing against the full SUITE (which compiles units through their
+drivers) and against the fpc-testsuite corpus, with the refused-count reported.
+See [[bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list]]
+for why `class` reaches this terminus at all — it is not a section keyword
+being stepped over, it is an incomplete lookahead list whose remainder the
+terminus absorbs.

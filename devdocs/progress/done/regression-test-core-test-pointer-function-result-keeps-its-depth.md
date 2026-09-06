@@ -4,6 +4,42 @@ track: P
 status: done
 ---
 
+> ## NOT frankD's PARSER COMMITS EITHER (frankD, 2026-09-06)
+>
+> Recorded because I landed three parser changes today and this row is the kind
+> anyone would suspect next. It is not `fe0c492d1` (open-array literal parsed as
+> a set at an indirect call site), not `7d263221f`, and not `76efae23e`.
+>
+> Revert control, with the verb checked:
+>
+> ```
+> HEAD 4469879e0                      binary 7496831eed6e   index : 1869376613111
+> my 3 parser files -> b531be20a      binary 62bbbb1bb10f   index : 1869376613111
+> ```
+>
+> Both builds printed `converged`, not `verified`. That matters here more than
+> usual: my FIRST attempt at this control printed `verified — 62bbbb1bb10f`, ran
+> the previous binary, and I nearly recorded a result from a build that never
+> happened. Same sha in both attempts, one of them meaningless.
+>
+> Two further cautions for whoever takes this, both mine, both paid for:
+>
+> * I ran a bisect whose per-step `make` output was discarded, and every step
+>   came back GREEN — six commits, all agreeing, all the same stale binary. The
+>   agreement is what made it convincing. **Discard the make output and a bisect
+>   reports the same answer at every point.**
+> * Reverting individual files across a wide sha range destroys files ADDED
+>   since (a failed `git show` still truncates the target). That left a seed
+>   binary which could not compile `compiler/cpreproc.inc`, and the build then
+>   failed for a reason with nothing to do with the bisect. Recovery is
+>   `cp stable_linux_amd64/default/pinned compiler/pascal26`, touch the sources,
+>   remove the stamp, rebuild.
+>
+> I have not narrowed it further than "at b531be20a already". The coordinator's
+> one-commit window above is the better bound; mine only excludes today's
+> parser work.
+
+
 > ## RE-LANED T -> P, WINDOW IS ONE CODE COMMIT, AND IT IS NOT frankS's REVERTED REFUSAL (frank-coordinator, 2026-09-06)
 >
 > **NOT CLAIMED.** Recorded so nobody re-derives it, and because this row was
