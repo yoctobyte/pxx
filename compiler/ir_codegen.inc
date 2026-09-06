@@ -13942,6 +13942,7 @@ end;
   frame has always needed to call it from two places. }
 procedure EmitManagedLocalCleanupForTarget(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
+    act, a1, a2, a3: Integer;   { the ONE classification -- ScopeExitReleaseAction, symtab.inc }
 begin
   { The release-side twin of EmitZeroFrameSlot's arm, and named here for the
     same reason: this chain's final `end` is an unnamed fall-through, and an
@@ -13979,7 +13980,8 @@ begin
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
         begin
-          if SymIsComInterface(i) then
+          act := ScopeExitReleaseAction(i, a1, a2, a3);
+          if act = SXR_INTF then
           begin
             { COM/ARC interface local: _Release the held reference (nil-safe). }
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
@@ -13991,8 +13993,7 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
-          else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                  (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+          else if act = SXR_ARRIMM then
           begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit. Without this arm an `array[0..N] of string` either fell into
@@ -14021,7 +14022,7 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(16);               { add esp, 16 }
           end
-          else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+          else if act = SXR_STR then
           begin
             { A SCALAR AnsiString local. `not IsArray` is load-bearing: an
               array's TypeKind IS its element kind, so without it a local
@@ -14037,7 +14038,7 @@ begin
             { add esp, 4 }
             EmitB($81); EmitB($C4); EmitI32(4);
           end
-          else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+          else if act = SXR_VAR then
           begin
             { Variant local: clear (releases any managed payload). arg0 = address.
               i386 had no variant, promotable-int or record arm at all, so each
@@ -14050,8 +14051,7 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
           end
-          else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                  NilPyUserCode and PyClassSymArcEligible(i) then
+          else if act = SXR_OBJ then
           begin
             { NilPy-user class local: drop the binding's reference at scope exit — the
               trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14079,7 +14079,7 @@ begin
               EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
             end;
           end
-          else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+          else if act = SXR_PROMO then
           begin
             { Promotable-int local/temp: release a heap-tier payload at scope
               exit (bug-a-runtime-variant-heap-grows-unbounded). }
@@ -14092,8 +14092,7 @@ begin
               EmitB($81); EmitB($C4); EmitI32(4);               { add esp, 4 }
             end;
           end
-          else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                  RecordHasManagedFields(SymTR[i].RecId) then
+          else if act = SXR_RECORD then
           begin
             { Record-with-managed-fields local: release each managed field via
               the portable helper. arg0 = record address, arg1 = descriptor.
@@ -14121,7 +14120,7 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
-          else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+          else if act = SXR_DYNARR then
           begin
             { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
             exit. Only x86-64 had this arm; the other four leaked the whole

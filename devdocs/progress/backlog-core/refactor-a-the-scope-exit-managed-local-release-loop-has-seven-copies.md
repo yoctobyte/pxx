@@ -86,3 +86,57 @@ Coverage that already exists and will move if this does:
 `check_variantptr.sh`, `check_nilpy_objlocal.sh`. Note these are not enrolled in
 a tier — [[feature-t-enrol-test-wasm32-in-a-tier-so-something-samples-the-backend]]
 — so they are run by hand today.
+
+## How it is being landed — one backend per commit
+
+Not one diff. **Convert one copy to the shared helper at a time; each step is
+independently correct, each is separately gateable, and the tree is shippable
+between any two of them.**
+
+The shared piece is `ScopeExitReleaseAction(i; var a1, a2, a3): Integer` in
+symtab.inc, immediately above `EmitManagedLocalCleanup`. It answers the nine-way
+classification and NOTHING else — it returns an `SXR_*` code (defs.inc) plus up
+to three already-computed operands, and emits no bytes. The emission stays
+per-target, because that part genuinely is per-target: how to load a slot
+address, how to push an argument, how to call.
+
+| step | copy | commit |
+| --- | --- | --- |
+| 1 | x86-64 (`EmitManagedLocalCleanup`, symtab.inc) + the SXR constants | `491035cfe` |
+| 2 | i386 | this one |
+| 3..6 | arm32, aarch64, xtensa, riscv32 | pending |
+| 7 | wasm32 | pending — see the open difference below |
+
+**The control at each step is a byte-identical A/B**, not a green: the previous
+step's compiler and this step's compiler compile the same corpus for all seven
+targets, and every object must `cmp` equal. A refactor that changes one emitted
+byte is not this refactor. The corpus is the string/interface/record/class/
+variant/array tests plus `compiler.pas` itself, and the harness asserts the
+artefact EXISTS before comparing — a `cmp` of two files that were never built
+reports identical and means nothing.
+
+Two things the A/B cannot see, so both are run beside it:
+
+- **A leak passes every value assertion, by construction.** The releases could
+  vanish entirely and the corpus would still print the right answers. So
+  `tools/assert_no_leak.sh` runs a program holding a local of every class the
+  chain distinguishes: `allocs=31686 frees=31680 live=6` against a bound of 200,
+  and the same numbers from the previous step's compiler.
+- **The self-host fixedpoint proves nothing about a construct `compiler.pas`
+  never writes**, which is every non-Pascal frontend. So a one-line probe from
+  each — `x = "a" * 3` and its C, Rust and Zig equivalents — is compiled and RUN
+  at each step. It costs under a second and it is the only thing here that
+  would have caught a marshalling change.
+
+## The one difference that must NOT be normalised away
+
+wasm32's loop carries `not Syms[i].IsRef`; the other six do not. That is a real
+divergence between the seven copies and step 7 must NAME it before it either
+keeps or drops it — the trap section above is exactly this, and the refactor is
+the moment the difference becomes invisible.
+
+The classifier's own comment carries the reason it exists as code and not as a
+convention: **a distinction that only exists in prose gets violated by the next
+writer.** That is the whole argument for this ticket. Seven copies stayed in
+sync by hand for as long as someone kept re-syncing them, and the copy that
+drifted — wasm32, missing an entire arm — is the one nobody was measuring.
