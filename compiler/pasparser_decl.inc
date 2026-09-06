@@ -9890,7 +9890,44 @@ begin
     Tokens[namePos[k]].SOffset := mOff;
     Tokens[namePos[k]].SLen := mLen;
     Tokens[namePos[k]].Kind := tkIdent;   { see the header rename above }
-    if (nact > 0) and (Tokens[namePos[k] + 1].Kind <> tkAssign) then
+    { A BARE OWN NAME HAS THREE READINGS, NOT TWO, AND THIS SITE HAD TWO.
+      `not followed by :=` was read as "therefore a recursive call", so the
+      third reading -- a bare own-name VALUE READ, which in objfpc/default is
+      the result var (`if F >= 0`, `q := F`, `F.Row`, `F[i]`) -- took the call
+      arm and had the captures spliced onto it. The routine's OWN parameters
+      are absent at a bare read by construction, so what came out was
+      `F$21(Top)` against `F$21(Top; out R)`:
+
+        no overload of F$21 matches these arguments
+          argument types: (Integer)
+          candidates:  F$21(Integer, record)
+
+      and the accused name is the one the programmer never wrote. THE LOUD
+      FACE IS THE LUCKY ONE. When the nested function is PARAMLESS the spliced
+      call is well-formed -- `F(Top)` matches `F(Top)` exactly -- so it
+      compiles clean and recurses forever; measured 2026-09-06, a 10-line
+      program where fpc prints 6 and we segfault with no diagnostic at all.
+      Arity is what made the other face visible, and arity is an accident of
+      the repro.
+
+      Only a FUNCTION has the third reading. For a nested PROCEDURE a bare own
+      name is unambiguously a recursive call (`P;`), and in {$mode delphi} a
+      bare own-name read is a reference to the routine rather than to the
+      result -- pasparser_expr.inc's own-name branch is guarded `not
+      DelphiMode` for exactly that reason and this guard mirrors it. Both keep
+      the splice.
+
+      What this narrows: inside a CAPTURING nested function, statement-position
+      `F;` no longer self-recurses -- write `F()`. That is not a new rule, it is
+      the existing one reaching here: the paramless flip (bug-bare-function-
+      name-call-vs-resultvar) already made `F()` the spelling for self-
+      recursion everywhere else, and a nested routine was silently exempt.
+      fpc refuses that spelling outright (`Illegal expression`, measured), so
+      no fpc-compatible source is losing anything.
+      bug-p-a-nested-functions-bare-own-name-read-is-compiled-as-a-recursive-call }
+    if (nact > 0) and (Tokens[namePos[k] + 1].Kind <> tkAssign) and
+       ((Tokens[namePos[k] + 1].Kind = tkLParen) or
+        (Tokens[nestedStart].Kind <> tkFunction) or DelphiMode) then
     begin
       if Tokens[namePos[k] + 1].Kind = tkLParen then
       begin

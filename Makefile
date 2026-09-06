@@ -15403,6 +15403,27 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_paramless_method_as_const_byref_arg.pas $(TESTTMP)/test_plessmeth26
 	tools/expect_same.sh test_plessmeth26 "$$($(TESTTMP)/test_plessmeth26)" "$$(cat test/test_paramless_method_as_const_byref_arg.expected)"
+	# A BARE OWN NAME INSIDE A CAPTURING NESTED FUNCTION IS A RESULT READ, NOT A
+	# RECURSIVE CALL. The hoist pass split own-name occurrences two ways --
+	# followed by `:=` is a result write, everything else is a recursive call --
+	# and spliced the hidden capture actuals onto the second arm, so a bare READ
+	# came out as `F$$21(Top)` against `F$$21(Top; out R)`, accusing a name the
+	# programmer never wrote and blaming builtinheap.pas for it.
+	# THE ARITY ERROR IS THE LUCKY FACE AND THIS ROW EXISTS FOR THE OTHER TWO.
+	# When the nested function is PARAMLESS the spliced call is well-formed --
+	# `F(Top)` matches `F(Top)` -- so it compiled clean and recursed forever:
+	# fpc prints 6, we segfaulted with no diagnostic. Same for a trailing `.f`
+	# or `[i]` on the own name. Both silent faces are VALUE rows below; a
+	# compiles/does-not-compile row would have passed on the version that
+	# segfaults. The controls in the same file (a nested PROCEDURE's bare
+	# self-call, an explicit `F()`) are the ones that fail if the narrowing
+	# went a step too far, and the delphi row is a SEPARATE file because a bare
+	# own-name read is a routine reference in that mode and keeps the splice.
+	# .expected IS fpc 3.2.2's own output on both sources.
+	./$(COMPILER) test/test_nested_fn_bare_own_name_read.pas $(TESTTMP)/test_nestown26
+	tools/expect_same.sh test_nestown26 "$$($(TESTTMP)/test_nestown26)" "$$(cat test/test_nested_fn_bare_own_name_read.expected)"
+	./$(COMPILER) test/test_nested_fn_bare_own_name_delphi.pas $(TESTTMP)/test_nestowndel26
+	tools/expect_same.sh test_nestowndel26 "$$($(TESTTMP)/test_nestowndel26)" "$$(cat test/test_nested_fn_bare_own_name_delphi.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out

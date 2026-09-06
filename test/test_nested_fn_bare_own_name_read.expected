@@ -1,0 +1,8 @@
+reads_own_name  = 20 r.Row=1
+reads_via_result= 20 r.Row=1
+paramless       = 6
+selector_field  = 5,1
+selector_index  = 5,10
+down            = 0
+ping            = 100
+sum_from        = 7
