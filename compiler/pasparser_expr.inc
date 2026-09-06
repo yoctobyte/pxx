@@ -9635,6 +9635,53 @@ begin
                  + ' — PXXDBG=a.opovl prints the lookup and every candidate');
 end;
 
+procedure ParsePowTerm;
+{ The `**` precedence LEVEL, between ParseTerm's multiplicative one and
+  ParseFactor. It is a level of its own because fpc puts it there, measured
+  rather than assumed (fpc 3.2.2 + the math unit):
+
+    2 ** 3 ** 2  = 64    -> LEFT-associative, (2**3)**2 and not 2**(3**2)
+    2 *  3 ** 2  = 18    -> binds tighter than `*`
+    2 ** 3 +  1  =  9    -> and tighter than `+`
+
+  NO BUILTIN ARITHMETIC. fpc's core language does not implement `**` either --
+  its math unit DECLARES `operator **` for floats and an advanced record may
+  declare `class operator **` -- so an unoverloaded `a ** b` is a diagnostic in
+  both compilers and no backend gains an opcode. The lookup is the ordinary
+  two-key one, so a global `operator ** (a, b: LongInt): LongInt` answers here
+  exactly as a record's does.
+
+  Only the PASCAL lexer mints tkPow: Python's `**` is pylexer's and C has none,
+  so this loop cannot fire in PyExprMode or CProgramMode and needs no gate. }
+var opSOffset, opSLen, left, right, node, opci: Integer;
+begin
+  ParseFactor;
+  while CurTok.Kind = tkPow do
+  begin
+    opSOffset := Tokens[TokPos - 1].SOffset;
+    opSLen := Tokens[TokPos - 1].SLen;
+    Next;
+    left := CurASTNode;
+    ParseFactor;
+    right := CurASTNode;
+    opci := FindOpOverload2(Ord(tkPow), ASTTk[left], ResolveNodeRec(left),
+                            ASTTk[right], ResolveNodeRec(right));
+    if opci < 0 then
+      Error('operator ** is not overloaded for these operands: `**` has no '
+          + 'built-in meaning in Pascal -- declare `operator **` (or a `class '
+          + 'operator **` on a record) for the operand types, which is what '
+          + 'FPC''s math unit does for floats');
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkPow);
+    ASTLeft[node] := left;
+    ASTRight[node] := right;
+    ASTSOffset[node] := opSOffset;
+    ASTSLen[node] := opSLen;
+    ASTTk[node] := Ord(Procs[opci].RetType);
+    CurASTNode := node;
+  end;
+end;
+
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
@@ -9642,7 +9689,7 @@ var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     shiftLitLeft: Boolean;        { shift over an operand with no DECLARED width }
     shiftPromoS, shiftPromoU: TTypeKind;
 begin
-  ParseFactor;
+  ParsePowTerm;   { the `**` level sits between here and ParseFactor -- see ParsePowTerm }
   while (((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr'))) and
         not (PyExprMode and (CurTok.Kind in [tkAnd, tkShl]))) or
@@ -9667,7 +9714,7 @@ begin
       bug-a-shr-reaches-the-ir-spelled-as-tkident }
     if op = tkIdent then op := tkShrLogical;
     left := CurASTNode;
-    ParseFactor;
+    ParsePowTerm;
     right := CurASTNode;
     { `and` between two truth values is LOGICAL, and a sized boolean reaching
       it as a bare integer makes it bitwise -- see SemBoolNormalisePair. }

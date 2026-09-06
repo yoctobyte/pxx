@@ -3391,6 +3391,14 @@ begin
          else CurTok.Kind := tkMinus;
     '*': if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
            begin Inc(SrcPos); CurTok.Kind := tkStarEq; end
+         else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '*') then
+           { `**` = exponentiation (FPC). One token, like the `><` arm below and
+             for the same reason: `operator ** (a, b: T): T` otherwise arrives as
+             two tkStar and dies on `expected ':'`. Pascal has no unary `*`, so
+             `**` here can only be this operator -- there is no `a * *b` spelling
+             for the merge to steal. `(*` is a COMMENT opener and never reaches
+             this case at all; comment scanning owns the text first. }
+           begin Inc(SrcPos); CurTok.Kind := tkPow; end
          else CurTok.Kind := tkStar;
     '/': if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
            begin Inc(SrcPos); CurTok.Kind := tkSlashEq; end

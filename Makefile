@@ -14709,6 +14709,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_unit_interface_operator_is_visible_to_a_circular_uses \
 	  "$$($(TESTTMP)/test_opcirc_ir26)" \
 	  "$$(cat test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.expected)"
+	# Pascal `**`: it had no lexer token at all, and it is a precedence LEVEL of
+	# its own between the multiplicative level and the factor. Every precedence
+	# and associativity row was measured against fpc 3.2.2 + math before being
+	# written down -- `2**3**2` is 64 (LEFT-associative), `2*3**2` is 18 and
+	# `2**3+1` is 9. `**` has no built-in meaning in either compiler, so every
+	# row is an overload call and the `*`/`+`/`div` rows are the controls that
+	# the new level did not move anything. Byte-identical to fpc.
+	./$(COMPILER) test/test_the_exponent_operator_has_its_own_precedence_level.pas $(TESTTMP)/test_pow_ir26
+	tools/expect_same.sh test_the_exponent_operator_has_its_own_precedence_level \
+	  "$$($(TESTTMP)/test_pow_ir26)" \
+	  "$$(cat test/test_the_exponent_operator_has_its_own_precedence_level.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope_ir26
 	tools/expect_same.sh test_op_unit_scope_ir26 "$$($(TESTTMP)/test_op_unit_scope_ir26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading_ir26
@@ -15806,6 +15817,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_unit_interface_operator_is_visible_to_a_circular_uses \
 	  "$$($(TESTTMP)/test_opcirc26)" \
 	  "$$(cat test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.expected)"
+	# Pascal `**`: it had no lexer token at all, and it is a precedence LEVEL of
+	# its own between the multiplicative level and the factor. Every precedence
+	# and associativity row was measured against fpc 3.2.2 + math before being
+	# written down -- `2**3**2` is 64 (LEFT-associative), `2*3**2` is 18 and
+	# `2**3+1` is 9. `**` has no built-in meaning in either compiler, so every
+	# row is an overload call and the `*`/`+`/`div` rows are the controls that
+	# the new level did not move anything. Byte-identical to fpc.
+	./$(COMPILER) test/test_the_exponent_operator_has_its_own_precedence_level.pas $(TESTTMP)/test_pow26
+	tools/expect_same.sh test_the_exponent_operator_has_its_own_precedence_level \
+	  "$$($(TESTTMP)/test_pow26)" \
+	  "$$(cat test/test_the_exponent_operator_has_its_own_precedence_level.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
 	tools/expect_same.sh test_op_unit_scope26 "$$($(TESTTMP)/test_op_unit_scope26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	# `TFn(p)(args)` -- calling straight through a procedural-type cast -- was

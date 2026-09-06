@@ -143,7 +143,8 @@ begin
     the language does not draw. `not` is the unary one; the arity branch below
     is what separates it. }
   if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
-                tkAnd, tkOr, tkXor, tkShl, tkShr, tkNot, tkIn, tkSymDiff] then
+                tkAnd, tkOr, tkXor, tkShl, tkShr, tkNot, tkIn, tkSymDiff,
+                tkPow] then
     opKey := Ord(opKind)
   else if opKind = tkAssign then
     { `operator :=(src): TDst` — implicit conversion at assignment }
@@ -596,7 +597,21 @@ begin
       of the operands actually IS an aggregate, and take no fallback when the
       left one is not. See decide-operator-table-keyed-on-one-operand-or-two.
       feature-a-operator-table-keyed-on-both-operands }
-    if (recId = REC_NONE) and (not TkIsRecordOrClass(rightTk)) then
+    { `**` IS THE ONE BINARY SYMBOL WITH NO PREDEFINED MEANING, so the rule this
+      check states does not reach it: there is nothing for a scalar `**` overload
+      to shadow. fpc agrees and its own math unit relies on it -- `operator **`
+      there is declared on plain floats, and toperator78 declares
+      `operator ** (left, right: LongInt)` at top level as a row that must
+      COMPILE.
+
+      The safety argument the comment above makes for the widened check is what
+      lets this through rather than an exception to it. What made a scalar-keyed
+      entry dangerous was the FALLBACK: `3 * 5` would find an (tkStar, tyInteger)
+      row. ParsePowTerm has no fallback to poison -- `**` has no arithmetic path
+      at all, so the table lookup is the ONLY thing it can do and a scalar entry
+      is exactly what it must find. }
+    if (recId = REC_NONE) and (not TkIsRecordOrClass(rightTk)) and
+       (opKey <> Ord(tkPow)) then
       Error('impossible operator overload: this operation is predefined for built-in operand types');
   end;
   { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }
@@ -2301,7 +2316,7 @@ begin
       the same reason the tail exists at all.
       bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand }
     if CurTok.Kind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod,
-                       tkAnd, tkOr, tkXor, tkShl, tkSymDiff,
+                       tkAnd, tkOr, tkXor, tkShl, tkSymDiff, tkPow,
                        tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
       ErrorRecover('an argument to ' + Procs[mpi].Name
         + ' was read as a bare variable and stops at an operator: a `var`/`out`'
