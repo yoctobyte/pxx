@@ -14226,3 +14226,78 @@ since dynamic and fixed take different element paths.
 **That is the ceiling on "add an error channel" as a remedy.** An unmatched-row report can only
 name rows the pass can SEE; a row with no storage is absent from the enumeration, not failing
 inside it. **Ask what the pass ITERATES before asking what it reports.**
+
+## A CAPTURE WHOSE VALUE IS THE SAME FOR EVERY ROW IS A GUARD THAT CANNOT FIRE — and a full-looking map is how it hides
+
+**A capture is not an assertion, so "can this guard fail" does not obviously apply to it. It
+does.** A tool that records one value per row and later diffs two recordings can only ever fire
+if the recorded values VARY ACROSS THE POPULATION. Record something constant and the diff is
+green forever, over a file that looks completely populated.
+
+Measured 2026-09-06 (`147b8a2ac`, this file's coordinator, fixing its own `ece9bf592` from four
+hours earlier). `run_pascal_conformance.sh --diag-map` captured **the first non-blank line of the
+compiler's output** for each retried skip row. Against `pascal26` that is the diagnostic, which is
+why it verified clean end to end. Against a compiler that prints a **banner** it is:
+
+```
+tarray12.pp	pxx 26.0 [x86_64-linux] -- self-hosted
+```
+
+— the same string for all 88 rows. `skip_diag_diff.py` would then report `MOVED: none of 88
+shared rows changed diagnostic` on every run, in perpetuity, and that sentence is exactly what a
+healthy instrument prints. **The failure is invisible in the artefact and invisible in the
+report.** `grep -m1 'error:'` fixes it, and also drops the cascade diagnostics, which churn
+freely for reasons that are not the mechanism.
+
+**The generalisation: for any capture, ask what it would record if the thing it is aimed at were
+ABSENT, and whether that value is the same for every subject.** A banner, a version line, a
+prompt, a "no such file" from a wrapper — these are the shapes that answer identically for
+everything. This is the sibling of *"choose a probe whose right answer differs from the default"*:
+there, the DEFAULT collides with the expected value; here, the CAPTURED value collides with
+itself across the population.
+
+### The same harness lie has two directions, and only one of them looks like a problem
+
+frankS lost a sweep the same night from the other end: the fpc side wrote its binaries into a
+different directory and **every row came back `rc=127`**, which read as a measurement. Loud —
+every row moves at once. The quiet direction is the one this seat shipped: the capture used the
+**exit code** as its success test, so a run that exits 0 without compiling anything recorded
+
+```
+tarray13.pp	<compiles clean>
+```
+
+**`<compiles clean>` is the value that says a skip row can be BURNED.** The rc=127 direction
+produces a pile of false MOVED rows that somebody investigates; the exit-0 direction produces
+false CLOSURES that nobody investigates, because a green closes the row. Between two failure
+modes of one instrument, the dangerous one is the one whose output ENDS a conversation.
+
+**The remedy is to test success on the thing the tool PRINTS WHEN IT SUCCEEDS, not on its exit
+code** (frankS's decision; the same animal as *"a refusal fixture must assert the message, not
+the exit code"*, one rung further out). `pascal26` writes `ok: <out>  [code=… data=… bss=…
+procs=…]` on every successful compile — `compiler.pas` has it on both the normal and the `-S`
+path — so `grep -q '^ok:'` is available here and is strictly stronger than `rc == 0`. Three
+outcomes, never two: the diagnostic, `<compile failed with no error: line> …`, and `<exit 0 but
+no 'ok:' line>`.
+
+### And a run-level failure wears the shape of a fleet of moved rows
+
+Once the two run-failure values exist, the diff tool has to decide what a move INTO one means. It
+is not a mechanism change — but it is not nothing either: a row that started CRASHING instead of
+diagnosing is a real finding. So report it, MARK it, and add one shape check with **no threshold
+in it**: if EVERY moved row moved into a not-measured value, say `BROKEN RUN` instead of
+enumerating mechanisms. The control matters more than the check — assert that a MIXED run (one
+real move, one unmeasured) is NOT called broken, or the sentence is false often enough that
+readers learn to scroll past it.
+
+### The measurement that retired a guess
+
+The same commit records something this seat had explicitly flagged as unmeasured: whether to strip
+line numbers out of a captured diagnostic. frankS diffed two full sweeps — **86 shared rows: 81
+identical including the line number, 5 differed, ZERO pure line-number churn.** Every difference
+was a MESSAGE change. `tgenfunc8` differed **at the same line 26**, so any positional key misses
+it; `tarray3` went **13 → 129** inside a fixed file, which is a mechanism change and the signal
+you want. **The caveat carries the 81 and must travel with it: the corpus sources are FIXED.**
+Point the tool at a tree that changes and an edit above the failure moves every line below it —
+the measurement does not transfer, and the honest move is to re-measure rather than to inherit
+the number. *A normalisation is a claim about noise; it needs a rate, not a plausible story.*
