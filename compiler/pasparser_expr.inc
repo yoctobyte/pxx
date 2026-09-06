@@ -11728,7 +11728,30 @@ begin
         class rather than the enclosing one.
         fcl-passrc pparser.pp:286, `FTokenRing: array[0..FTokenRingSize-1]`.
         bug-p-a-class-const-is-not-a-constant-in-a-field-array-bound }
-      else if ParsingClassBodyCi >= 0 then ccBaseCi := ParsingClassBodyCi;
+      else if ParsingClassBodyCi >= 0 then ccBaseCi := ParsingClassBodyCi
+      { ...and the FOURTH, which needed no new state because the parser already
+        maintains it: a method's OUT-OF-LINE header.
+
+          procedure TC.A(V: Integer = K);   { K is TC's own class const }
+
+        defs.inc says it outright where MethImplOwnerCi is declared -- "a class's
+        own body is TWO ranges of source: the declaration, and the out-of-line
+        method implementations", and MethImplOwnerCi is the class ci across the
+        second range, where ParsingClassBodyCi is -1. The other lookups that
+        care already treat the two as a PAIR: FindNestedType consults both
+        (pasparser_decl.inc), and so does alias visibility (symtab.inc). This
+        chain consulted one of them, so a class const was a constant in the
+        declaration of a default value and not in its repetition on the
+        implementation header -- the same class, the same const, the same
+        expression, refused in the second of the two places the language
+        requires it to be written.
+        Set at pasparser_proc.inc:1077, before the parameter list is parsed and
+        restored at every exit, so it already spans exactly what is needed.
+        LAST in the chain, below ParsingClassBodyCi, for that entry's own
+        reason: the earlier arms are narrower and are the better answer wherever
+        they apply, and these two are never both live.
+        bug-p-a-class-const-is-not-a-constant-in-an-out-of-line-method-header }
+      else if MethImplOwnerCi >= 0 then ccBaseCi := MethImplOwnerCi;
       if ccBaseCi >= 0 then
       begin
         ccReg := FindClassConst(ccBaseCi, cName);
