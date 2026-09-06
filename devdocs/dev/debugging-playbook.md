@@ -14017,3 +14017,59 @@ generic one were run side by side with identical bodies — both failed.**
 > corpus is partitioned by feature, every defect found through it arrives pre-labelled with
 > that feature, and the label survives every reduction that stays inside the partition. **The
 > control is a specimen from OUTSIDE the partition with the same body** — here, the plain class.
+
+## CONVERTING ONE TABLE CAN SILENTLY UN-BOUND ANOTHER — because the WRITE sites and the CAP site belong to different tables
+
+frankH, 2026-09-06, answering a sequencing question and finding the trap inside the answer.
+**This is the sharpest instance of `## COUNT THE CAP SITES BEFORE DECIDING HOW TO CONVERT A
+FAMILY` yet, because here the count is RIGHT and still misleads.**
+
+`MAX_TEMPLATE_TOKENS` is the `MAX_FIXUPS` shape, cleanly:
+
+```
+6 arrays, two parallel trios   TemplateTokens  TemplateSrcOff  TemplateSrcLen
+                               SpecializeTokens  SpecSrcOff  SpecSrcLen
+2 cap sites                    pasparser_generic.inc, both testing TemplateTokenCount
+10 refs total, 8 of them declarations/comments in defs.inc
+```
+
+Against `MAX_IR` — 10 unrelated arrays, 20 cap sites, 7 validity predicates, 54 refs — this is
+the opposite end, and a conversion is one `Ensure` growing six arrays. **The count says GO.**
+
+> **And the Specialize trio has NO cap site of its own.** It does not need one *today*: it is
+> bounded **implicitly**, through the Template pool's. `SpecializeToBuffer` runs
+> `while i < count` with `subCount` incrementing at most once per iteration — all three
+> `Inc(subCount)` sites checked, and the two that look like they might outrun `i` both jump it
+> FORWARD (`i := HoistEnd+1`, `i := gEnd+1`), as does the rewind-looking path (`i := gSelf`,
+> where `SelfSpecGroupEnd` returns a position at or after `i`). So `subCount <= count <=
+> MAX_TEMPLATE_TOKENS`, always, **with no guard anywhere.**
+
+**Therefore converting the Template trio ALONE silently un-bounds the Specialize trio.** The
+moment `Template` grows dynamically, `count` can exceed 65536, and **six arrays are written at
+`subCount` with no cap site to fail and nothing naming the dependency.** It would not error. It
+would write past the end of a fixed array and the symptom would surface somewhere else
+entirely.
+
+> **A CAP-SITE CENSUS FINDS TWO AND A WRITE-SITE CENSUS FINDS TWENTY-ONE.** The rule *"after
+> converting a table, enumerate its WRITE sites, not its cap sites"* has teeth here because the
+> write sites belong to a **different table** than the cap site does. **A shared ceiling with no
+> shared constant is benign right up until somebody moves the constant** — and the person
+> moving it is looking at the table that HAS the guard, not the one that borrows it.
+
+**The sequencing answer:** convert all six together or none, and **add the Spec guard as part
+of the same change rather than trusting the implicit bound you are removing.** The implicit
+bound is not documented anywhere; it exists only as a property of a loop, and it was
+established by reading three `Inc` sites and their control flow.
+
+### And this is what a routed sequencing question is FOR
+
+The trigger was an unrelated ticket —
+`bug-a-a-generic-body-takes-its-directive-state-from-the-specialization-site`, whose fix wants
+**ten new columns** on exactly these pools — arriving at a session that was mid-way through
+removing fixed tables from `defs.inc`.
+
+> **Neither party could have found this alone.** The ticket's author saw ten columns and a
+> fixed pool; the table author saw a clean conversion candidate. **The trap lives in the
+> interaction**, and it surfaced because the routing carried the SHAPE of the pending work
+> ("~10 new columns on MAX_TEMPLATE_TOKENS") rather than only its slug. A route that names the
+> mechanism gets an answer; a route that names the ticket gets an acknowledgement.
