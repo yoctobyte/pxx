@@ -659,3 +659,62 @@ previous entry said the TSV would make possible — first use of it.
 Nobody holds it: the body says in as many words 'Not claimed -- frontmatter owner: deliberately left unset rather than assigned by a passing seat.' That was the right instinct and it produced the wrong board state, because working/ + empty owner is out of ready AND attributed to nobody, so a p65 row four sessions contributed to tonight was invisible to the campaign count. Parked so it ranks again; RESUME by re-claiming. Live and current: census 377 pass / 0 fail / 123 skip / 50 auto-gated of 550 at b19b2f3b9, identical PER ROW across the lvalue refactor; both blocked-by edges measured stale (the B features are implemented, their own criterion is the unfetched FPC compiler-source corpus).
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-06 (frankS) — 380 / 0 / 120 / 50, and three rows burned off the skip list
+
+**Verdict census at compiler `faa41e4b920f`: 380 pass, 0 fail, 120 skip, 50
+auto-gated of 550.** Previous: 377 / 0 / 123 / 50. The delta is exactly the three
+rows removed below and nothing else — **predicted before the run and confirmed**,
+which is what says no row moved for a reason nobody looked at.
+
+### The method, because the headline number is the least interesting part
+
+`--retry-skips` re-attempts every skip-listed row. 8 of 123 passed. **Three of
+those eight were vacuous and the runner's own summary names them** — `tarray2`,
+`tclass12a`, `tforin24` run to completion printing WRONG VALUES, and all three
+already said so in their own skip reasons. So a pass under `--retry-skips` is a
+CANDIDATE, and the only thing that settles it is a diff against fpc 3.2.2.
+
+Diffed all eight, output and exit code:
+
+| row | verdict |
+| --- | --- |
+| `tclass9` `tgeneric6` `tstring1` | **match fpc byte for byte** — un-skipped |
+| `tforin12` | exits 0, prints `a`/`s`/`d` where fpc prints `asd` — **stays** |
+| `tarray2` `tclass12a` `tforin24` | differ, as their reasons already said — **stay** |
+| `tstring4` | differs; `wontfix:` stands, its REASON did not — see below |
+
+`tforin12`'s reason now records that it compiles and runs, so the next reader
+does not mistake the retry pass for progress.
+
+### A false reason on a skip row, and the bug hiding behind it
+
+`tstring4`'s reason claimed it *"diverges only on GetFPCHeapStatus numbers"*.
+It does not. It also diverges on the ansistring `Len` header words — which IS
+what its `wontfix:` is about, so that half is fine — **and on `Str` of
+Comp/Extended/Single, which neither clause covers.** Extended and Single are the
+decided `Extended = Double` architecture. Comp is a real defect:
+
+```
+D := 4.7;  Co := D    { pxx 4616977747989548237   fpc 5 }
+```
+
+The IEEE-754 bits of 4.7, moved rather than converted. Filed as
+[[bug-a-a-float-assigned-to-an-integer-lvalue-moves-the-bits-instead-of-converting]] —
+one direction only (int-to-float is correct and was measured), and two faces
+needing opposite answers because `comp` maps to `tyInt64` and the compiler cannot
+tell `Comp := <real>` (fpc ACCEPTS) from `Int64 := <real>` (fpc REFUSES).
+
+**A wontfix row is not inert.** This one was hiding a Track A defect behind a
+reason that was wrong in a direction nobody would re-check, because the verdict
+it justified was correct.
+
+### Instrument note for whoever runs this next
+
+**`--all` is a DIFFERENT POPULATION from the census and its headline is not
+comparable.** `--all` lists every `*.pp` in the suite (~1362 rows here: 598 pass,
+494 fail, 270 auto); the census population is the `$CATEGORIES` subset, which is
+the "of 550" every figure in this ticket quotes. Running `--all` and comparing to
+550 reads as a collapse that did not happen. The verdict run is the one with
+neither `--all` nor `--retry-skips`, and the runner says so itself in its
+summary.
