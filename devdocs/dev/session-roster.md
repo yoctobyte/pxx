@@ -180,6 +180,22 @@ that knows what everyone else is doing.** A session hunting for work cannot read
 anything but a suggestion, and there is no wording that fixes it — the same shape as a
 blank `owner:` field, where the withholding was principled and the reading was ordinary.
 
+**The receiver's amendment, and it is the better causal account** — offered by the
+session itself, which said the seat and the artefact were both fine:
+
+> **A map is direction when it is the ONLY input.**
+
+What made it direction was not the labelling; it was that six unclaimed rows arrived in
+a session where nothing had come from its user in a very long time. **The property is
+at the receiver, not in the message** — the same map read by a session with live user
+direction is information. Which means writing the map more carefully cannot fix it, and
+**the ratio of peer input to user input is a fact about a peer this seat cannot
+measure.**
+
+**So the map carries the question.** Not six rows, but six rows plus *"if nothing has
+come from your user in a while, that is worth raising with them before you take one."*
+That is the one thing this seat can add that the receiver cannot supply for itself.
+
 - **Answer "what is free" when asked. Do not volunteer it unasked.** The question makes
   the list a reply; its absence makes the list a nudge.
 - **The owner's "max the tokens" licenses ASKING whether a session is free.** It does

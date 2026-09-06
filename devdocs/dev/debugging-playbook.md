@@ -8877,6 +8877,84 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## A DIAGNOSTIC MUST BE ABLE TO REPRESENT THE VALUE IT IS COMPLAINING ABOUT
+
+Measured 2026-09-06 (frankB), caught by a test row and not by reading.
+
+A new warning reports a set element outside `0..255`. Its formatter was `AIntToStr`,
+which takes an **`Integer`**. So for the element `4294967297` the diagnostic would have
+printed:
+
+```
+set element 1 is outside a set's 0..255 domain
+```
+
+**A range diagnostic that range-truncates the value it is complaining about** — and
+`1` is not merely wrong, it is *inside* the domain the message says it is outside, so
+the report contradicts itself while looking well-formed.
+
+> **Any reporter whose own types are narrower than the domain it polices will misreport
+> exactly the cases it exists for.** The failure is concentrated on the extreme inputs,
+> which are the only inputs that reach it.
+
+Check the formatter's width against the checked domain's width, not against the common
+case. Here the repair was `AInt64ToStr` with the reason in its header.
+
+**What caught it was the TEST ROW carrying a value above 2^32** — which existed only
+because the ticket's own table used that value. Reading the code would not have; the
+truncation is invisible at the call site and the message is grammatical either way.
+
+## A TEST ROW DRAWN FROM THE GRAMMAR BEATS ONE DRAWN FROM THE CALL GRAPH YOU ARE LOOKING AT
+
+Same fix, and it is the reason the above was reachable at all.
+
+The new arm was gated on `ASTKind = AN_CALL`. **A method returning a set is
+`AN_VIRTUAL_CALL`**, so row G failed. The four call kinds are a disjunction **spelled
+out per site — the full form appears 8 times** — and this was a **ninth copy, short by
+three members, written in the same hour and the same file as a write-up about absent
+members.**
+
+> **Nothing in the call graph you are reading tells you which spellings exist.** Rows
+> drawn from *the ways a thing can be written* — the grammar-shaped population — probe
+> the axis a code-reading census holds constant.
+
+Same shape as a throwaway probe widened by two calls turning up two more sites the same
+night: **the finding came from the population, not from the reasoning.**
+
+The repair is one `NodeCallProcIdx` with the census in its header **so the next reader
+asks instead of writing a tenth copy** — and deliberately **not** a migration of the
+existing eight, which is a separate refactor with its own blast radius.
+
+### And a guard that cannot decide should ASK, not judge
+
+The `AST slot-write census` gate row went RED on two legitimate node writes. It is a
+**diff, not a predicate**, so it cannot distinguish a legitimate new child from a
+payload parked in a node slot — **and that inability is exactly why it asks for review
+and `--update` rather than passing or failing on its own judgement.**
+
+> **A guard whose question is undecidable from what it can see should surface the
+> change, not adjudicate it.** The failure mode to avoid is a guard that guesses, is
+> right most of the time, and is therefore believed the time it is wrong.
+
+## AND A GREP FOR A TARGET CAN MATCH AN AUTHOR
+
+This seat, the same night, widening a search after a peer correctly noted its aperture.
+
+The narrow search — open tickets containing `unknown tag` — returned **one** hit and it
+was genuinely unrelated. Widening it to *tickets mentioning wasm AND a quiet-arm phrase
+(`wrong value`, `got=0`, `None`)* returned **fourteen**, and the mechanism is that
+**the session name `frankwasm` contains `wasm`**. Every extra hit was *"Filed
+2026-08-30 by frankwasm"* — an author, not a target.
+
+> **A search term that also names a person matches provenance, not subject.** The
+> author line, the `found-by:` field and the commit trailer all carry it.
+
+**The widened aperture was not a wider view of the same question; it was a different
+question that answers 14.** Same animal as *a check that flags everything is as empty
+as one that never fires* — and the honest conclusion is that the quiet arm of that
+defect **cannot be screened by grep at all** and needs the probe re-run instead. Say
+that, rather than reporting fourteen candidates nobody will open.
+
 ## THE RESTORE THAT RESTORES THE REVERT — `git checkout <sha> -- <file>` WRITES THE INDEX TOO
 
 Measured 2026-09-06 (frankwasm), and the two commands are **one token apart**.
