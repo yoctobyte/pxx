@@ -843,3 +843,35 @@ to be answered first is the two helpers that exist only on the call side —
 **Not attempted in this pass.** Banked with the instrument rather than
 half-merged: the probe is committed and red on exactly two rows, so the merge
 has an acceptance criterion that is not "the tests still pass".
+
+### The two call-side-only helpers are not structural blockers, and the merge splits in two
+
+Both were looked up rather than reasoned about:
+
+- **`RequireRecMember`** is a SHARED diagnostic helper with callers all over the
+  frontend — `pasparser_lval.inc:3479` and `:5252`, `pasparser_expr.inc:1533`,
+  and two in `pyparser.inc`. Nothing about it belongs to the call-result loop;
+  the cast loop simply reports a bad member a different way. A merged body can
+  call it.
+- **`DerefPtrArrayElemPtr`** is one site, in the `[` arm at `:5830`, reading a
+  shared predicate in `symtab.inc:15796` whose own comment records that it *"had
+  no caller at all before this one"*. Also absorbable.
+
+So the merged body is the cast loop PLUS two arms, not a line-by-line
+reconciliation of two 200-line bodies. **Split it the way `e40274490` /
+`27e656541` were split, so each step has its own exact expected result:**
+
+1. **Point the call-result site at `ParseCastPostfixSuffix` with a seed computed
+   from its `ProcRet*` columns, and add NOTHING.** Expected result is precise
+   and falsifiable: `tools/call_result_suffix_probe.py`'s `defprop` and
+   `frozen-str` rows go GREEN, and whatever rows the two absent helpers own go
+   RED. That MEASURES which rows those helpers own instead of reading it off the
+   grep above — and the two sets are disjoint by construction, so a row that
+   moves the wrong way says the seed is wrong rather than the plan.
+2. **Port the two arms**, guarded so the cast route is unchanged, with
+   `tools/cast_suffix_walk_probe.py` byte-identical across the step. A refactor
+   meant to change nothing on one route makes byte-identity a bug detector there.
+
+Step 1 needs rows for what the two absent helpers do; the probe does not have
+them yet, and adding them BEFORE step 1 is what makes its red rows readable
+rather than alarming.
