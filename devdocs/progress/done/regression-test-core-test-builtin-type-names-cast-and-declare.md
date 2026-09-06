@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > ## RE-LANED T -> P (frank-coordinator, 2026-09-06 05:30Z)
@@ -222,3 +223,42 @@ The session trailer `session_017JQMYrELfziEkCq3rod2Ny` also authored `217e530a0`
 `b3b7214a9`, `63a7f55d4` and `5c65ae3d9` — the postfix-walker merge and the
 every-door probe — so whoever holds THAT arc is the person who can read the
 29 lines in one pass.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Resolved — b531be20a
+
+The window was one code commit, `b6815e5b8`, and it was mine. `SizeOf(vov)` = 16
+against `SizeOf(Variant(x))` = 8, every other row in the file green.
+
+**The exemption for this row was written into b6815e5b8's own comment** — "that
+is CLAUDE.md's implementation latitude". It is not. That clause is about an
+intermediate's type differing from FPC's; this row never mentions FPC, it asserts
+that OUR `OleVariant` and OUR `Variant(x)` agree with EACH OTHER. A relation
+between two of our own answers is the assertion shape CLAUDE.md prefers and no
+parity clause reaches it. Written while making the fix rather than while checking
+it, then believed instead of re-tested, for a day, by its author.
+
+**The two readings collide in one field.** `SizeOf` reads the NODE's tk, not
+`LastExprTk` — measured by setting `LastExprTk := tyVariant` alone and rebuilding
+with the row still red. And stamping `tyVariant` on the operand node is not
+available either: `IRLowerBoxOperand` takes the box's SOURCE kind from that same
+field, so the store would copy 16 bytes from a 4-byte integer, which is the pun
+`b6815e5b8` removed.
+
+`VariantBoxToTemp` separates them, the mirror of `VariantCastToTemp`: assign the
+operand into a hidden `tyVariant` temp (the RHS keeps its scalar kind, so the box
+is the one `v := x` already performs) and hand back a READ of that temp.
+
+**And that segfaulted, for the reason worth keeping:** `AN_STR_FROM_CHAR` had a
+value arm in `IRLowerAST` and NO arm in `IRLowerAddress`, and `rhsIsLValue` is a
+four-kind list that does not name it — so the variant-to-variant store, which
+takes `IRLowerAddress` for an lvalue RHS, got the temp's CONTENTS where it wanted
+its address. A sequencing node's address is its result's address. `String(c)` is
+the construct that node was built for and it reaches the same stores; both
+spellings verified.
+
+Guarded in BOTH files: this one is green, and
+`test_a_cast_to_variant_boxes_instead_of_punning` gained
+`SizeOf(Variant(y)) = SizeOf(v)` — a relation, carrying no platform width. The
+file that found it is about builtin type NAMES; the file that owns the behaviour
+is the one the next editor of that arm will read.

@@ -3084,6 +3084,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive-2 | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 7d4a3dbb99ce (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
+| regression-test-core-test-builtin-type-names-cast-and-declare | P | 70 | regression | regression: test-core#src:test/test_builtin_type_names_cast_and_declare.pas at b6815e5b8675 in step 2/2, `tools/expect_same.sh test_typenames26 "$(/tmp/test_typenames26 \| tail -1)" "ALL OK"` (auto-filed by twatch) | — |
 | regression-test-core-test-c-abi-intra-c-calls | T | 70 | regression | regression: test-core#src:test/test_c_abi_intra_c_calls.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_intra26 "$(/tmp/test_c_a` (auto-filed by twatch) | — |
 | regression-test-core-test-c-abi-pascal-caller | T | 70 | regression | regression: test-core#src:test/test_c_abi_pascal_caller.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_pascal_caller26 "$(/tmp/` (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
