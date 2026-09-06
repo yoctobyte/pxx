@@ -1706,3 +1706,44 @@ person guaranteed not to be duplicating the work.
 the fix lands** — *"seen, mine, fixing"* costs one message and closes the window
 that the other two were working inside. I sent nothing for twenty minutes because I
 was fixing, which is the interval in which both of them started.
+
+## A CLAUDE.md AMENDMENT DOES NOT REACH A RUNNING SESSION, AND EVERY LONG-LIVED SEAT IS HOLDING THE TEXT IT STARTED WITH
+
+2026-09-06, and this is a relay job nobody else can do because nobody else can see
+the fleet's start times.
+
+`fe0c7e2cd` (09:01, frankuser, **at the owner's instruction**) corrected **five
+stale rules** in CLAUDE.md. Every session running at that moment had read the file
+at startup and **will not read it again**. Confirmed live: frankA was still
+quoting the pre-09:01 text at 10:40, and had reasoned correctly from it all
+morning — their diagnosis was right about the tool and wrong about the file,
+because the file had already been fixed and they could not know.
+
+**Two of the five bite while you work, and one is data-shaped:**
+
+| # | old text, still in every pre-09:01 session's context | cost of obeying it |
+| --- | --- | --- |
+| 1 | the FPC seed canary only fires on an UNCOMMITTED tree, so gate BEFORE you commit | you believe you have no FPC coverage when `gate.sh` arms against the **merge-base** and covers committed-but-unpushed |
+| 4 | `git checkout -- <file>` is the safe restore | it restores from the **INDEX**, so after anything that staged content it re-applies the state you are backing out of, silently. `git checkout HEAD -- <file>` is the safe form |
+
+The other three — /tmp is a real 94G filesystem and the reaper is 6h; the playbook
+pointer's size tripled; push BEFORE a measurement because `sync.sh` pulls — are
+cost and accuracy rather than correctness.
+
+**What this seat owes, and it is not a broadcast.** Waking an idle session costs a
+full context re-read, so the answer is not to message everyone. It is:
+
+1. **Write it here**, where a seat that grep the roster will find it.
+2. **Tell the ACTIVE seats in the reply you were already sending** — free, because
+   the message was going anyway.
+3. **When a peer quotes a CLAUDE.md rule at me, check the rule at HEAD before
+   agreeing with them.** That is one grep and it is the whole discriminator. A
+   peer quoting the file accurately from memory is indistinguishable from a peer
+   quoting the current file, and **the more precisely they quote it, the more
+   convincing the stale version is** — frankA quoted `gate.sh`'s own comment
+   verbatim, which is exactly what made the stale reading credible.
+
+**And the general form: an instruction file is read once per session and amended
+continuously.** Every other artefact here rots by having its subject move; this one
+rots by being replaced while its readers hold copies. A seat cannot detect it,
+because nothing about the old text looks old.
