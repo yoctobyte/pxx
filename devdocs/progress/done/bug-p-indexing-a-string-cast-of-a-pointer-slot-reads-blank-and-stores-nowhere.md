@@ -136,3 +136,6 @@ compiler cannot build `mimic_string` / `mimic_urllib_request`, which name
 `pyvar_is_objtag` / `pyvar_is_inttag`, builtins added by `a627e019c` /
 `5a900c598` in files this change does not touch. Pre-existing, and its own log
 says the remedy is a pin.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
