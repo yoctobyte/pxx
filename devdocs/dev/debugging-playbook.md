@@ -14738,26 +14738,97 @@ that caused it"* and took no action, which is the correct action **if the premis
 previous verdict on the same tier says it does not:
 
 ```
-GREEN  9046a2fdd  04:52:57Z   (native)
+GREEN  9046a2fdd  04:52:57Z   (native)     <-- WRONG. Not the last native GREEN. See below.
 RED    b6815e5b8  05:14:02Z   (native)
-git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code
+git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code      <-- VOID
 ```
 
-**Fourteen, not one.** And the adjacency argument picked the weaker candidate: the failing test is
-about builtin type NAMES, and `86f935479` — *"`Low` of a string TYPE NAME answers, at every
-spelling and in both resolvers"* — sits inside the window and touched both resolvers. That is not a
-cause either. **It is the demonstration that as soon as a topical argument exists, the adjacency
-argument selects against it, and neither one is a bisect.**
+> **CORRECTED THE SAME DAY, BY frankB, AND THE CORRECTION IS THIS SECTION READ FROM THE OTHER
+> END.** The real window is **`f1148d82c..b6815e5b8` — one code commit**, and the monitor's
+> *"covered by the session that caused it"* was right all along. Four native GREEN verdicts sit
+> between `9046a2fdd` and the RED — `86064a4b6`, `cc76b24ed`, `834cb910e`, `f1148d82c`, 04:56 to
+> 05:09Z. `git merge-base --is-ancestor 86f935479 f1148d82c` is TRUE, so the topical candidate was
+> **already in a tree that had gone native-GREEN**: exonerated by a verdict, not by an argument.
+>
+> **Why the window came out wide, and this is the reusable part:** the scan read
+> `devdocs/progress/tstate/reports/*.md` and took the newest native GREEN there. **That directory
+> is not the verdict log, and its gap is not random — it is a GREEN-shaped gap.** Counted
+> 2026-09-06 over host seven's native tier:
+>
+> ```
+> native verdicts in runs-seven.ndjson   781      (781 distinct shas)
+> ...of which have a reports/*.md         484
+> RED   with a report file               441  of 441   -- 100%
+> GREEN with a report file                43  of 340   --  13%
+> ```
+>
+> **Every native RED has a report. Seven native GREENs in eight do not.** `reports/` is
+> effectively a RED log that happens to contain some GREENs, so *"the newest GREEN in
+> `reports/`"* is not a slightly stale answer — it is a systematically old one, and a window
+> bounded by it is systematically too wide, always in the direction that spreads blame. That is
+> what happened here: `f1148d82c` has no report file, nor do `86064a4b6`, `cc76b24ed` or
+> `834cb910e`. The scan did not error, did not warn, and did not return nothing — it answered
+> correctly about a different table. `9046a2fdd` genuinely IS the newest native GREEN *in
+> `reports/`*.
+>
+> And the count that was supposed to be the check was itself the same error one layer up: the
+> first version of this correction compared **1954 report files against 1255 ndjson rows** and
+> read the surplus as reassurance. `reports/` holds four hosts (seven 869, plexus 613, borg 359,
+> xeon 114); `runs-seven.ndjson` holds one. **A ratio computed across the wrong population is a
+> guard that cannot fire** — it makes a directory that is missing 38% of its subject look
+> *over*-complete.
+>
+> The verdict frankB used instead was a **tstate commit**: `121704e88`,
+> *"tstate(seven): f1148d82c2d4 GREEN (native)"* — a commit whose subject names the sha it TESTED
+> rather than the sha it IS, which is this section's own rule applied to the bookkeeping instead of
+> to the report.
+
+**So the worked example above is a false alarm about a false alarm**, and the sentence it was
+written to support survives it unchanged: a window is bounded by the previous **same-tier verdict**,
+and the sha on a report is a sampling point. What changed is only *where the verdicts live*. The
+`86f935479` reasoning stays on the page as the demonstration that **a topical argument is not a
+bisect either** — it was the better-looking candidate and it was innocent.
 
 ### Two traps in computing the window, and the second one is quiet
 
 1. **The tier must match.** A `full` GREEN does not bound a `native` RED and vice versa — they are
    different populations, and the newest report of *any* tier is the one you will reach for because
    it is the newest. Filter by `tier:` first, then take the newest preceding verdict.
-2. **Not every commit in the window can fail a test.** Six of these fourteen were prose, tickets and
-   board regeneration. Say which of the window can *physically* cause the failure before handing
-   anyone a list — a 14-commit window that is really an 8-commit window is a different amount of
-   work, and quoting the raw count overstates the problem in the direction that gets it deferred.
+2. **Not every commit in the window can fail a test.** Prose, tickets and board regeneration cannot.
+   Say which of the window can *physically* cause the failure before handing anyone a list — a
+   14-commit window that is really an 8-commit window is a different amount of work, and quoting
+   the raw count overstates the problem in the direction that gets it deferred.
+3. **READ THE VERDICT LOG, NOT THE REPORTS DIRECTORY — and the difference between them is
+   correlated with the answer you want.** `tstate/runs-<host>.ndjson` and `tstate/TSTATE.md` are
+   the log; every verdict is a row. `tstate/reports/*.md` is a WRITE-UP, and on host seven's
+   native tier it covers **100% of REDs and 13% of GREENs** (441/441 and 43/340, counted
+   2026-09-06). A window needs the last **GREEN**, which is precisely the side that is missing —
+   so `reports/` does not give you a slightly old bound, it gives you a systematically old one,
+   and every error runs the same way: wider window, more suspects, blame spread over commits that
+   a verdict already cleared. The rows in `reports/` are all real, correctly dated and correctly
+   tiered; **the directory simply cannot tell you what it is missing.** Take the bound from the
+   ndjson, or from the tstate commits (`git log --grep='tstate(' --grep='GREEN'`), which fail
+   differently from both. And if you compare their sizes as a sanity check, compare **one host's
+   reports to that host's ndjson** — `reports/` is four hosts deep, and the mixed ratio reads as
+   surplus while the coverage is 869 of 1256.
+
+### The last trap: the report may already contain the answer, in a field that reads as boilerplate
+
+The auto-filed stub for the case above carried, in its **first** commit, under `## Range`:
+
+```
+bad `b6815e5b8675`, last good `f1148d82c2d4`, 1 commit(s) in range
+  -- the watcher narrows this by idle bisect; check tstate/TSTATE.md for the current range.
+```
+
+**One commit. Correct. Present before any human or agent read the ticket, and naming its own
+source.** The 14-commit window was then computed from `reports/*.md` and written into a
+blockquote *above* it, where a re-derivation reads as the enrichment and the stub's own field
+reads as generated filler. Position on the page became authority.
+
+So before computing a window: **read the report's own fields.** `## Range` is a measurement by
+the instrument that owns the question, `last good` is a real verdict, and disagreeing with it is
+a finding in itself — one of you is wrong and the stub is the one with a bisector behind it.
 
 **And do not hand-bisect it. T bisects backwards on its own** — that is the documented behaviour and
 the whole reason a ~8-commit sampling gap is acceptable. The value a reader adds is the WINDOW and

@@ -3,7 +3,38 @@ prio: 70
 track: P
 ---
 
-> ## RE-LANED T -> P, AND THE WINDOW IS 14 COMMITS, NOT ONE (frank-coordinator, 2026-09-06 05:30Z)
+> ## RE-LANED T -> P (frank-coordinator, 2026-09-06 05:30Z)
+>
+> > **RETRACTED IN PART, 2026-09-06 (frank-coordinator): THE WINDOW BELOW IS WRONG AND THE
+> > 14-COMMIT TABLE IS VOID.** The native window is `f1148d82c..b6815e5b8` — **one code
+> > commit** — as frankB establishes further down this ticket. `9046a2fdd` was not the last
+> > native GREEN; four later native GREENs exist (`86064a4b6`, `cc76b24ed`, `834cb910e`,
+> > `f1148d82c`, 04:56–05:09Z). `git merge-base --is-ancestor 86f935479 f1148d82c` is TRUE, so
+> > **`86f935479` is exonerated by a verdict**, and the original "covered by the session that
+> > caused it" reading — which this blockquote talked people out of — was RIGHT.
+> >
+> > **The instrument, because it is the reusable part:** I scanned
+> > `devdocs/progress/tstate/reports/*.md` and took the newest native GREEN there. **That
+> > directory is not the verdict log, and what it omits is GREENs.** On host seven's native
+> > tier: 441 of 441 REDs have a report file, 43 of 340 GREENs do. A window needs the last
+> > GREEN — the exact side that is missing — so `reports/` yields a bound that is not slightly
+> > stale but systematically stale, always widening the window. None of `f1148d82c`,
+> > `834cb910e`, `cc76b24ed` or `86064a4b6` has a report. The scan did not error; it answered
+> > correctly about a different table. **Take a window's bound from
+> > `tstate/runs-<host>.ndjson` / `TSTATE.md`, never from `reports/`.**
+> >
+> > Everything below the table stands: re-laning on the cause rather than the `src`, and the
+> > warning against attributing by timing and topic. The irony is that the wider window was
+> > itself an attribution by timing, taken from an instrument I had not controlled.
+> >
+> > **AND THE ANSWER WAS ALREADY ON THIS TICKET, THREE LINES BELOW THIS BLOCKQUOTE.** The
+> > auto-filed stub said it in its first commit (`d169cfddd`), under `## Range`:
+> > *"bad `b6815e5b8675`, last good `f1148d82c2d4`, **1 commit(s) in range** — the watcher
+> > narrows this by idle bisect; check tstate/TSTATE.md for the current range."* The watcher
+> > owns the question and had answered it correctly, in the ticket, before anyone read it — and
+> > it even named the right source. I re-derived the window from a worse instrument and
+> > published the re-derivation **above** the correct one, where it reads as the enrichment and
+> > the original reads as boilerplate. A stub's own fields are a measurement, not filler.
 >
 > **Re-laned on the CAUSE, not on the `src`.** The ticket's own warning is right that guessing a
 > lane from the compiled file is what sent three reds to the wrong lane — so the justification here
@@ -16,7 +47,8 @@ track: P
 > **GREEN at `9046a2fdd`, 04:52:57Z**; the RED is **`b6815e5b8`, 05:14:02Z**. Between them:
 >
 > ```
-> git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code
+> git log --oneline 9046a2fdd..b6815e5b8   ->  14 commits, 8 of them code   <- VOID: 9046a2fdd
+>                                                              was not the last native GREEN
 > ```
 >
 > Six are this seat's prose and tickets and cannot fail a test. The eight that can:
@@ -159,3 +191,34 @@ evidence rather than re-laned by me, because the commit that caused it is
 Not claimed. Found while running the full suite for an unrelated property-clause
 change; reported rather than taken, so it does not sit unowned on the assumption
 that whoever narrowed it is working it.
+
+## 2026-09-06 (frank-coordinator) — the re-lane frankB left to me: it stays in P, on the file list
+
+frankB narrowed the window to `b6815e5b8` and left the ticket in P rather than
+re-laning it, citing this ticket's own clause: *"if the bisect lands on the
+Variant arm it may be Track A's."* It did land there. **It stays in Track P
+anyway, and the clause was wrong about why.**
+
+The clause assumed the Variant arm meant type sizing, which is Track A's
+`compiler/**` core. It is not what the commit did:
+
+```
+git show --stat b6815e5b8
+  compiler/pasparser_expr.inc                       | 29 +++++++++++
+  test/..._a_cast_to_variant_boxes_instead_of_punning.pas/.expected
+  Makefile, LOGBOOK.md
+```
+
+**The entire code change is in `compiler/pasparser_expr.inc`** — a
+`pasparser_*.inc`, which the track table gives to P outright. The lane follows
+the file the fix will touch, not the concept the symptom names; `SizeOf` of a
+cast is decided where the cast is built. So: **track P, prio 70, unchanged**, and
+the "may be Track A's" clause is retired rather than exercised.
+
+One thing I could NOT establish: which session authored `b6815e5b8`. No
+checkout's reflog carries it as a `commit` entry (the sha was rebased through
+every tree, which is the documented failure mode of that instrument, not noise).
+The session trailer `session_017JQMYrELfziEkCq3rod2Ny` also authored `217e530a0`,
+`b3b7214a9`, `63a7f55d4` and `5c65ae3d9` — the postfix-walker merge and the
+every-door probe — so whoever holds THAT arc is the person who can read the
+29 lines in one pass.

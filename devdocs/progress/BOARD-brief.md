@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:32 backlog-decide:46 backlog-libs:21 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3406 rejected:78`
+`working:21 unfinished:21 blocked:7 backlog:13 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:32 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3407 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,11 +31,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 - `refactor-p-three-hand-rolled-postfix-loops` [P] — owner: frankA
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it` [C]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -66,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 405, ranked
+## Ready — top 30 of 406, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -83,6 +82,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
 - `[p 70] [T]` regression-cascade-b8e3b3010249
+- `[p 70] [T]` regression-cascade-c999836a2981
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [P]` regression-test-core-test-builtin-type-names-cast-and-declare
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
@@ -97,6 +97,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
 
-_375 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_376 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
