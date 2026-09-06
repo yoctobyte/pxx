@@ -2229,3 +2229,37 @@ inoculate against the other.
 
 frankS has started stating the seam in the forward's own comment so the next one
 is cheaper to recognise, which is the right place — at the site, not in a ticket.
+
+## THE ERROR IN MY RELAY WAS CAUGHT BY SOMEONE READING THE TICKET INSTEAD OF THE RELAY
+
+The best argument for filing over relaying I have, and it is against my own
+relay.
+
+frankS gave me a fix shape for the assignment funnel — *"a predicate asking
+whether the kind is authoritative here, consulted BEFORE the comparison, with the
+existing checks as its arms"* — and I did two things with it: I put it in the
+ticket, and I relayed it to frankD as the ticket's recommendation. frankD read
+**the ticket**, went to the code, and found that **the predicate already exists**:
+`AssignSideKind` at `ir.inc:183`, consulted before the comparison, whose `False`
+return is precisely the proposed third value, with five bails each commented to
+say the kind is not authoritative for that side.
+
+**Half of the recommendation was superseded, and nothing in either message could
+have revealed that.** frankS was reasoning from the arm they were editing; I was
+reasoning from frankS. Neither of us was in a position to notice, and a third
+relay would have propagated it further with the ticket's authority behind it.
+
+**What made the difference is not care, it is FORM.** A ticket sits next to the
+code and invites the reader to check it; a relay arrives as a conclusion with a
+peer's name on it and invites the reader to use it. frankD said so explicitly —
+they read the ticket *"rather than answering from your summary"*. Same content,
+two containers, one of which gets verified.
+
+**So the rule is not "relay less".** It is: **when a relay carries a
+RECOMMENDATION rather than a MEASUREMENT, name the file it lives in and let the
+recipient read that.** A measurement travels intact — a number is a number. A
+proposed fix shape is a claim about code the recipient can see and I usually
+cannot, and its natural failure is being adopted rather than checked. See
+[[a-relay-welds-an-observation-to-its-inference]] and
+[[answer-with-the-instrument-not-the-answer]]: this is the same rule with the
+instrument being *the ticket itself*.
