@@ -1,0 +1,9 @@
+sym    cBlue
+sym    TRUE ord=-1 not=FALSE
+field  cGreen
+field  TRUE ord=-1 not=FALSE
+param  cRed
+param  TRUE ord=-1 not=FALSE
+ret    cGreen
+ret    TRUE ord=-1 not=FALSE
+alias  TRUE ord=-1 not=FALSE

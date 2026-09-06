@@ -6795,8 +6795,8 @@ begin
             AliasElemTk -- and TryScalarNamedCast declines those targets so they
             still reach their own code. }
           aliasEtid := -1;
-          if AliasEnumId[aliasIdx] <> 0 then
-            aliasEtid := AliasEnumId[aliasIdx] - 1
+          if AliasSemId[aliasIdx] <> 0 then
+            aliasEtid := AliasSemId[aliasIdx] - 1
           else if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
             aliasEtid := FindEnumType(name);
           if TryScalarNamedCast(IntToTypeKind(AliasTk[aliasIdx]), aliasEtid) then Exit;
@@ -9015,7 +9015,7 @@ begin
     ASTTk[scNode]   := Ord(castTk);
     { the SEMANTIC IDENTITY comes in as a PARAMETER, from whichever table the
       caller asked -- FindEnumType or BuiltinScalarSemId at the builtin door,
-      the alias table's AliasEnumId column at the alias door -- and is never
+      the alias table's AliasSemId column at the alias door -- and is never
       re-derived from the kind here. A guard on the layout kind is a bet the
       layout kind never narrows, and {$PACKENUM 1} is that bet losing.
       It was `enumId` and tested `>= 0`; that is now one FAMILY of identity
@@ -10056,28 +10056,43 @@ begin
   end;
 end;
 
-{ Enum type index of an expression node, or -1.
+{ THE SEMANTIC IDENTITY of an expression node, or SEM_NONE — an enum's type
+  index, or the width of the sized boolean it is.
 
-  Enum identity is not carried by the TYPE (a pxx enum is tyInteger at codegen),
-  so every shape that can name an enum value has to be asked separately:
+  THIS FUNCTION IS WHERE "WHOSE IDENTITY IS IT" IS WRITTEN DOWN, and that is the
+  one obligation the identity design is under. Identity is not carried by the
+  TYPE (an enum is tyInteger at codegen; a ByteBool is tyInt8), so every shape
+  that can name such a value has to be asked separately — and each has to be
+  asked about the RIGHT SUBJECT:
 
-    ident            SymSemId       tagged at the var decl
-    folded member    ASTSemId       a member const folds to its ordinal literal
+    ident            SymSemId        tagged at the var decl — the value's OWN
+    folded member    ASTSemId        a member const folds to its ordinal literal
     a[i]             SymElemEnumId   an array symbol's TypeKind IS its element kind,
                                      so the ELEMENT's identity needs its own slot
-    r.f              UFldEnumId      the field twin of SymSemId
+    r.f              UFldSemId       the field twin of SymSemId
+    F(...)           ProcRetSemId    a call node has no symbol and no field
 
-  ASTSemId doubles as the stamp for anything the parser can DERIVE — Succ/Pred
-  of an enum, an explicit `TE(i)` cast — so those need no arm here.
+  An ARRAY ident answers NOTHING here even when its elements have an identity,
+  and a WHOLE array field likewise: `WriteLn(a)` must not claim to be an enum.
+  A bare "is there an identity" read is what hands `set of TCol` its ELEMENT's
+  member names. Add a shape by adding an arm that names its subject, never by
+  widening an existing one.
+
+  READ THE `= SEM_NONE` FALLBACKS BELOW AS LOAD-BEARING. They were `< 0` while
+  the only family was enums and every real value was >= 0; a sized boolean's
+  identity is NEGATIVE, so `< 0` silently discarded it and fell through to
+  ASTSemId. Measured 2026-09-06: `function F: LongBool` and `r.f: ByteBool` both
+  stamped their channels correctly and both still printed the ordinal, because
+  this line threw the answer away three lines after finding it.
 
   Whatever migrates type identity into one vehicle
-  ([[feature-a-typeref-migrate-consumers]]) should absorb all four; until then a
+  ([[feature-a-typeref-migrate-consumers]]) should absorb all five; until then a
   shape that is missing here prints the ORDINAL where FPC prints the name, which
   is the whole of bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal. }
 function NodeSemIdOf(node: Integer): Integer;
 var neBase, neRec, neFld: Integer;
 begin
-  Result := -1;
+  Result := SEM_NONE;
   if node < 0 then Exit;
   if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
   begin
@@ -10092,7 +10107,7 @@ begin
     { ASTLeft of an AN_INDEX is the base NODE (defs.inc's "base sym idx" comment
       predates the Pascal path), so an indexed array reaches its element identity
       through the base ident's SymElemEnumId, and an indexed array FIELD through
-      that field's UFldEnumId — which holds the ELEMENT's enum for an array. }
+      that field's UFldSemId — which holds the ELEMENT's enum for an array. }
     neBase := ASTLeft[node];
     { `dd[0][1]` over `array of array of TEnum`: every level has the same element
       identity, so walk down to the base the declaration actually named. }
@@ -10108,11 +10123,11 @@ begin
         if neRec >= REC_UCLASS_BASE then
         begin
           neFld := FindUField(neRec - REC_UCLASS_BASE, GetASTIdentName(neBase));
-          if (neFld >= 0) and UFldIsArray[neFld] then Result := UFldEnumId[neFld];
+          if (neFld >= 0) and UFldIsArray[neFld] then Result := UFldSemId[neFld];
         end;
       end;
     end;
-    if Result < 0 then Result := ASTSemId[node];
+    if Result = SEM_NONE then Result := ASTSemId[node];
     Exit;
   end;
   if ASTKind[node] = AN_FIELD then
@@ -10121,11 +10136,11 @@ begin
     if neRec >= REC_UCLASS_BASE then
     begin
       neFld := FindUField(neRec - REC_UCLASS_BASE, GetASTIdentName(node));
-      { UFldEnumId holds the ELEMENT's enum for an array field, so a WHOLE array
+      { UFldSemId holds the ELEMENT's enum for an array field, so a WHOLE array
         field must not answer it — same rule as the ident arm above. }
-      if (neFld >= 0) and (not UFldIsArray[neFld]) then Result := UFldEnumId[neFld];
+      if (neFld >= 0) and (not UFldIsArray[neFld]) then Result := UFldSemId[neFld];
     end;
-    if Result < 0 then Result := ASTSemId[node];
+    if Result = SEM_NONE then Result := ASTSemId[node];
     Exit;
   end;
   if ASTNodeIsCall(node) and (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
@@ -10143,12 +10158,12 @@ begin
       control is what says it is the node shape and not the feature.
 
       Found by a census of the ProcRet* columns (2026-09-04) rather than by a
-      report: the procedural-signature path did not fill ProcRetEnumId either,
+      report: the procedural-signature path did not fill ProcRetSemId either,
       and fixing only that changed nothing, because this reader could not see
       the node. Both halves were needed and neither is sufficient -- which is
       the argument for measuring a fix rather than reasoning about it. }
-    Result := ProcRetEnumId[ASTIVal[node]];
-    if Result < 0 then Result := ASTSemId[node];
+    Result := ProcRetSemId[ASTIVal[node]];
+    if Result = SEM_NONE then Result := ASTSemId[node];
     Exit;
   end;
   { An enum MEMBER reached here as a folded ordinal literal; ASTSemId is the only

@@ -6877,7 +6877,7 @@ begin
   else if ASTKind[node] = AN_FIELD then
   begin
     { A record/class FIELD. UFldTk holds the ELEMENT kind for an array field --
-      defs.inc says so at UFldEnumId and makes the same demand of its readers:
+      defs.inc says so at UFldSemId and makes the same demand of its readers:
       check IsArray FIRST, or a scalar Char field answers as a 1-char string. }
     rec := ResolveNodeRec(ASTLeft[node]);
     if rec = REC_NONE then Exit;
@@ -8488,8 +8488,8 @@ begin
         resolves the id and lets the one below answer, so the identity that
         makes WriteLn print `mon` cannot drift between the two spellings.
         bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
-      if AliasEnumId[aliasIdx] <> 0 then
-        aliasEtid := AliasEnumId[aliasIdx] - 1
+      if AliasSemId[aliasIdx] <> 0 then
+        aliasEtid := AliasSemId[aliasIdx] - 1
       else
         btk := IntToTypeKind(AliasTk[aliasIdx]);
     end;
@@ -8650,8 +8650,8 @@ begin
       { the same ENUM-alias rule as TryConstHighLowValue, and for the same
         reason the subrange rule above is duplicated here: these two are one
         concept in two places and they change together }
-      if AliasEnumId[aliasIdx] <> 0 then
-        aliasEtid := AliasEnumId[aliasIdx] - 1
+      if AliasSemId[aliasIdx] <> 0 then
+        aliasEtid := AliasSemId[aliasIdx] - 1
       else
         btk := IntToTypeKind(AliasTk[aliasIdx]);
     end;

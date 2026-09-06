@@ -1447,12 +1447,14 @@ begin
                   Alloc* stamps Syms[].ElemType and `x[i]` uses the right stride }
                 if AliasStrElemTk[aliasIdx] <> 0 then
                   LastTypeStrElemTk := IntToTypeKind(AliasStrElemTk[aliasIdx]);
-                { …and an ENUM alias hands back its IDENTITY, so the decl site
-                  stamps SymSemId and WriteLn prints the member name rather
-                  than the ordinal. Sixth in this list; see RegisterGeneralAlias
-                  for why it is stored +1. }
-                if AliasEnumId[aliasIdx] <> 0 then
-                  LastTypeSemId := AliasEnumId[aliasIdx] - 1;
+                { …and an alias hands back its SEMANTIC IDENTITY, so the decl
+                  site stamps SymSemId: an enum alias so WriteLn prints the
+                  member name rather than the ordinal, and `type TFlag =
+                  LongBool` so the alias is still a boolean. Sixth in this list;
+                  see RegisterGeneralAlias for why it is stored +1 and why that
+                  bias survives the wider domain unchanged. }
+                if AliasSemId[aliasIdx] <> 0 then
+                  LastTypeSemId := AliasSemId[aliasIdx] - 1;
                 if AliasIsSub[aliasIdx] then
                 begin
                   { named subrange: hand the retained bounds to Alloc* for
@@ -3418,7 +3420,7 @@ procedure ParseConstSection(clsCi, clsVis: Integer; isResStr: Boolean);
   ours after (bug-pascal-class-const-visibility, C-frontend crtl-autopull leak). }
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
-    cEnumId: Integer;   { typed const of an enum type: its enum index, else -1 }
+    cSem: Integer;   { typed const of an enum type: its enum index, else -1 }
     cOrdIdx: Integer;   { the sym just added for a folded ENUM const, to stamp SymSemId on }
     isLocalConst: Boolean;
     constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
@@ -3900,7 +3902,7 @@ begin
       else
       begin
         cTk := ParseTypeKind;
-        cEnumId := LastTypeSemId;
+        cSem := LastTypeSemId;
         if cTk = tySet then
         begin
           { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
@@ -3984,7 +3986,7 @@ begin
         cIdx := AllocVar(name, cTk);
         AllocStaticLocal := False;
         { `const K: TEnum = Two` is an enum-typed value like any var of that type. }
-        if EnumKindMatches(cTk, cEnumId) then SymSemId[cIdx] := cEnumId;
+        if SemKindMatches(cTk, cSem) then SymSemId[cIdx] := cSem;
         if cTk = tyPointer then
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
@@ -4355,7 +4357,7 @@ var
   variantBaseOff, variantMax, branchFieldOff, curOff: Integer;
   arrLen, loVal, hiVal, fRec, fSize, fAlign, nFldNames, fni: Integer;
   fStrCap: Integer;
-  fEnumId: Integer;   { the field's ENUM identity -- see the stamp below }
+  fSem: Integer;   { the field's ENUM identity -- see the stamp below }
   fAi: Integer;       { a NAMED array type named in a branch, else -1 }
   isArr: Boolean;
   fTk: TTypeKind;
@@ -4949,7 +4951,7 @@ var
   arrLen, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi: Integer;
-  fEnumId: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
+  fSem: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -4972,7 +4974,7 @@ begin
   end;
   Expect(tkColon, ':');
   isArr := False;
-  fEnumId := -1;   { `f: TEnum` / `array[..] of TEnum`: the enum type index }
+  fSem := -1;   { `f: TEnum` / `array[..] of TEnum`: the enum type index }
   arrLen := 1;
   fIsDyn := False;
   fDynDepth := 0;
@@ -5012,7 +5014,7 @@ begin
       Expect(tkOf, 'of');
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeSemId;
+      fSem := LastTypeSemId;
       isArr := True;
     end
     else
@@ -5029,7 +5031,7 @@ begin
       end;
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeSemId;
+      fSem := LastTypeSemId;
       { THE ELEMENT'S CAPACITY, CAPTURED HERE BECAUSE NOTHING ELSE WILL.
         `fIsDyn` short-circuits the frozen-field arm below, which is the one
         place fStrCap was ever assigned -- so a dynamic-array field kept
@@ -5061,7 +5063,7 @@ begin
       fDynDepth := ArrTypeDynDepth[fAi];
       fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
       fRec := ArrTypeElemRec[fAi];
-      fEnumId := ArrTypeElemEnumId[fAi];
+      fSem := ArrTypeElemEnumId[fAi];
       { The alias row is the carrier here -- same reason as the inline arm
         above, one spelling over. }
       fStrCap := ArrTypeElemStrCap[fAi];
@@ -5081,7 +5083,7 @@ begin
       isArr := True;
       fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
       fRec := ArrTypeElemRec[fAi];
-      fEnumId := ArrTypeElemEnumId[fAi];
+      fSem := ArrTypeElemEnumId[fAi];
       LoadPointeeFromArrType(fAi);
       if ArrTypeNDims[fAi] >= 2 then
       begin
@@ -5107,7 +5109,7 @@ begin
     begin
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeSemId;
+      fSem := LastTypeSemId;
     end;
   end;
   if fIsDyn then
@@ -5200,7 +5202,7 @@ begin
     end
     else
       AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-    if EnumKindMatches(fTk, fEnumId) then UFldEnumId[UFldCount-1] := fEnumId;
+    if SemKindMatches(fTk, fSem) then UFldSemId[UFldCount-1] := fSem;
     UFldIsArray[UFldCount-1] := isArr or fIsDyn;
     if fIsDyn then UFldArrLen[UFldCount-1] := -1
     else UFldArrLen[UFldCount-1] := arrLen;
@@ -5239,7 +5241,7 @@ var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
-  fEnumId: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
+  fSem: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
   opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
   savedPCB: Integer;  { ParsingClassBodyCi around this body -- see below }
   isArr, fIsDyn: Boolean;
@@ -5607,7 +5609,7 @@ procedure ParseFuncReturnTypeShape(var retType: TTypeKind;
                                    var retElemRec: Integer;
                                    var retFixedArrBytes: Integer;
                                    var retArrAi: Integer;
-                                   var retEnumId: Integer;
+                                   var retSem: Integer;
                                    var retSetEnumId: Integer;
                                    var retSetElemTk: Integer;
                                    var retStrElemTk: Integer;
@@ -5745,11 +5747,14 @@ begin
       kind and whatever enum the last unrelated parse left behind, and the
       RESULT of such a call is an array, not an enum value — so it gets -1
       rather than its element's identity. }
-    if retType = tyInteger then
-    begin
-      if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
-      else retEnumId := LastTypeSemId;
-    end;
+    { SemKindMatches and not `retType = tyInteger`: that spelling was exact
+      while every carrier of an identity was integer-sized, and {$PACKENUM} and
+      the sized booleans (tyInt8/tyInt16) each broke it. It also IS the window
+      guard -- the `set of TCol` rule the paragraph above states -- so the two
+      questions are one call. }
+    if (retArrAi >= 0) or retIsDynArr then retSem := SEM_NONE
+    else if SemKindMatches(retType, LastTypeSemId) then retSem := LastTypeSemId
+    else retSem := SEM_NONE;
     { The SET result's element identity, under exactly the rule the enum arm
       above states and for the same reason: an ARRAY result reaches here with
       retType = the ELEMENT kind, so `function F: array of TMs` would be
@@ -5866,7 +5871,7 @@ var
   mRetIsDynArr: Boolean;
   mRetElemTk: TTypeKind;
   mRetDynDepth, mRetElemRec, mRetFixedArrBytes, mRetArrAi: Integer;
-  mRetEnumId, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk: Integer;
+  mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk: Integer;
   mRetRecId, mRetProcSig: Integer;
   mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec: Integer;
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias: Integer;
@@ -5888,7 +5893,7 @@ begin
       mRetDynDepth := 0;
       mRetFixedArrBytes := 0; mRetArrAi := -1;
       mRetSetEnumId := -1; mRetSetElemTk := 0;
-      mRetStrElemTk := 0; mRetEnumId := -1;
+      mRetStrElemTk := 0; mRetSem := -1;
       mRetRecId := REC_NONE; mRetProcSig := -1;
       mRetPtrElemTk := Ord(tyUnknown); mRetPtrElemRec := REC_NONE; mRetPtrAlias := -1;
       mRetPtrStrElemTk := 0;
@@ -5958,7 +5963,7 @@ begin
         Expect(tkColon, ':');
         ParseFuncReturnTypeShape(mRetType, mRetIsDynArr, mRetDynDepth, mRetElemTk,
                                  mRetElemRec, mRetFixedArrBytes, mRetArrAi,
-                                 mRetEnumId, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk,
+                                 mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk,
                                  mRetRecId, mRetProcSig,
                                  mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec,
                                  mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias);
@@ -6016,7 +6021,7 @@ begin
       ProcRetSetEnumId[mpi] := mRetSetEnumId;
       ProcRetSetElemTk[mpi] := mRetSetElemTk;
       ProcRetStrElemTk[mpi] := mRetStrElemTk;
-      ProcRetEnumId[mpi] := mRetEnumId;
+      ProcRetSemId[mpi] := mRetSem;
       ProcRetRecId[mpi] := mRetRecId;
       ProcRetProcSig[mpi] := mRetProcSig;
       ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
@@ -6415,7 +6420,7 @@ var
   tdIdxTk, tdIdxEnumId: Integer;   { dimension 0's index type -> ArrTypeIdxTk }
   aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
   aElemEnumId: Integer;   { `array[..] of TEnum`: the enum type index, captured where it is parsed }
-  fEnumId2: Integer;      { CLASS-body field: enum type of the field (its ELEMENT for an array field), else -1 }
+  fSem2: Integer;      { CLASS-body field: enum type of the field (its ELEMENT for an array field), else -1 }
   aPtrArrAi: Integer;     { `PFixed = ^TFixed`: the pointee's ArrType index, else -1 }
   aElemDynDepth: Integer; { `array[..] of TRow`, TRow a named DYNAMIC array: TRow's dyn depth }
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -6477,7 +6482,7 @@ var
   mPDefaultIsFloat: array[0..MAX_PROC_PARAMS-1] of Boolean; { ...and for FLOAT defaults (`d: Double = 2.5`): mPDefaultVal holds the IEEE bits }
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
-  mRetEnumId: Integer;     { …and its ENUM identity (ProcRetEnumId), for a DECL-ONLY method that no body will ever fill }
+  mRetSem: Integer;     { …and its ENUM identity (ProcRetSemId), for a DECL-ONLY method that no body will ever fill }
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
   mRetPtrElemTk, mRetPtrElemRec, mRetPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
@@ -6812,7 +6817,7 @@ begin
             Expect(tkRParen, ')');
           end;
           mRetRecId := REC_NONE;
-          mRetEnumId := -1;
+          mRetSem := -1;
           mRetPtrElemTk := Ord(tyUnknown);
           mRetPtrAlias := -1;
           mRetPtrStrElemTk := 0;
@@ -6832,7 +6837,7 @@ begin
               TCol printed **1** where FPC prints **cGreen**, while the same
               method called on the CLASS printed cGreen, which is exactly the
               body-fills-it asymmetry. }
-            mRetEnumId := LastTypeSemId;
+            mRetSem := LastTypeSemId;
             if mRetType = tyAnsiString then
             begin
               if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -6874,7 +6879,7 @@ begin
             result could not resolve. `.DumpJSON` silently degraded to a FIELD access, and the
             statement then demanded a ':='. }
           if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
-          if mIsFunc and (mRetType = tyInteger) then ProcRetEnumId[mpi] := mRetEnumId;
+          if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
           if mIsFunc and (mRetType = tyAnsiString) then
             ProcRetStrElemTk[mpi] := mRetStrElemTk;
           if mIsFunc and (mRetType = tyPointer) then
@@ -7529,7 +7534,7 @@ begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
               mRetRecId := LastTypeRecId;   { see the twin site above }
-              mRetEnumId := LastTypeSemId; { see the twin site above }
+              mRetSem := LastTypeSemId; { see the twin site above }
               if mRetType = tyAnsiString then
               begin
                 if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -7546,7 +7551,7 @@ begin
             else
             begin
               mRetRecId := REC_NONE;
-              mRetEnumId := -1;
+              mRetSem := -1;
             end;
             Eat(tkSemicolon);
 
@@ -7644,7 +7649,7 @@ begin
                   ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(mPPtrElemTk[i]);
               end;
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
-              if mIsFunc and (mRetType = tyInteger) then ProcRetEnumId[mpi] := mRetEnumId;
+              if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
               if mIsFunc and (mRetType = tyAnsiString) then
                 ProcRetStrElemTk[mpi] := mRetStrElemTk;
               if mIsFunc and (mRetType = tyPointer) then

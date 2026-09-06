@@ -2074,7 +2074,7 @@ begin
     Result := ProcRetPtrElemStrTk[ASTIVal[ASTLeft[node]]]
   { The RESULT of a call. A call node has no symbol and no field to ask, so the
     callee's row is the only place the width can live -- the same argument
-    ProcRetEnumId makes for an enum-typed result. All three call shapes carry
+    ProcRetSemId makes for an enum-typed result. All three call shapes carry
     the Procs[] index in IVal, and the virtual/interface ones belong here for
     the reason IsNodePChar's arm 4 gives: a method reached through a VMT or an
     interface returns just as concrete a string as a direct call does, and an
@@ -4510,6 +4510,32 @@ begin
      (not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
      OpenArrayCopyEligible(argAST) then
     argAST := MakeWholeDynCopy(argAST);
+
+  { A plain Boolean argument bound to a SIZED BOOLEAN parameter materialises
+    ALL BITS SET, exactly as an assignment to one does -- `P(True)` where
+    `P(b: ByteBool)` must give the callee's own `Ord(b)` the -1 FPC gives it,
+    and must hand C the bit pattern C is promised.
+
+    Read off ProcParamSemId and not off the param SYMBOL: RegisterProc leaves
+    Params[].SymIdx = -1 and a param symbol does not outlive the callee's
+    scope, so asking the symbol here is not merely unreliable, it is reliably
+    WRONG once a later scope reuses the slot -- the finding
+    ProcParamPtrElemTk's own comment records at length.
+
+    Only a PLAIN Boolean source, the same rule as the AN_ASSIGN arm: a sized
+    argument is a reinterpret and keeps its bits. `not isRefArg` because a
+    `var b: ByteBool` parameter takes the caller's storage and there is no
+    conversion to make.
+    decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+  if (not isRefArg) and (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     SemIsBool(ProcParamSemId[cpi * MAX_PROC_PARAMS + pathIdx]) and
+     ((IntToTypeKind(ASTTk[argAST]) = tyBoolean) or
+      (IntToTypeKind(ASTTk[argAST]) = tyBool8)) then
+    argAST := SemBoolMaterialise(argAST,
+                BoolStorageTypeKind(
+                  SemBoolWidth(ProcParamSemId[cpi * MAX_PROC_PARAMS + pathIdx])));
 
   { A by-VALUE SET or FROZEN-STRING param gets its OWN COPY too — the same rule
     as the open array above, on the two remaining parameter kinds that got it

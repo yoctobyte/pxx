@@ -18390,6 +18390,15 @@ test-core: $(COMPILER)
 	# .expected is FPC 3.2.2's own output, byte for byte.
 	./$(COMPILER) test/test_a_sized_boolean_is_a_boolean_at_every_renderer.pas $(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26
 	tools/expect_same.sh test_a_sized_boolean_is_a_boolean_at_every_renderer26 "$$($(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26)" "$$(cat test/test_a_sized_boolean_is_a_boolean_at_every_renderer.expected)"
+	# ...and a type's identity survives every place a declaration can be
+	# WRITTEN DOWN: a symbol, a record field, a parameter, a function result and
+	# the alias table. Every row carries BOTH families -- an enum (identity >= 0)
+	# and a sized boolean (identity negative) -- because two of these sites were
+	# green for enums and red for booleans at the same commit, the fallback tests
+	# inside NodeSemIdOf having been `< 0`. The pairing is the assertion.
+	# .expected is FPC 3.2.2's own output, byte for byte.
+	./$(COMPILER) test/test_a_type_identity_survives_every_carry_site.pas $(TESTTMP)/test_a_type_identity_survives_every_carry_site26
+	tools/expect_same.sh test_a_type_identity_survives_every_carry_site26 "$$($(TESTTMP)/test_a_type_identity_survives_every_carry_site26)" "$$(cat test/test_a_type_identity_survives_every_carry_site.expected)"
 	# a cast to a FLOAT type converts at every door that recognises the name.
 	# fpc refuses the program (Illegal type conversion), so each row asserts a
 	# RELATION between two of our own spellings rather than an oracle value; the

@@ -759,7 +759,7 @@ var
   ptypesSetElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { set param: element TTypeKind ordinal; 0 = not a set }
   ptypesSetElemLo : array[0..MAX_PROC_PARAMS-1] of Int64;    { …and the element subrange bounds, Hi < Lo = none }
   ptypesSetElemHi : array[0..MAX_PROC_PARAMS-1] of Int64;
-  ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
+  ptypesSem : array[0..MAX_PROC_PARAMS-1] of Integer;  { a param's SEMANTIC IDENTITY (the ELEMENT's, for an array param), SEM_NONE otherwise -- an enum type index, or the width of a sized boolean. Was ptypesEnum and held only the first; enum SemIds are numerically unchanged. Staged here and persisted at the three registration sites, for the reason ProcParamRecId's note gives: a caller cannot ask the param symbol }
   ptypesStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { managed-string param: the ELEMENT width, Ord(tyChar) or Ord(tyWideChar); 0 = not a managed string. Staged here and persisted to ProcParamStrElemTk, for the reason ptypesSetEnum's twin gives: a caller cannot read it back off the param symbol. }
   ptypesStrCap : array[0..MAX_PROC_PARAMS-1] of Integer;  { frozen-string param: the declared capacity N of a `string[N]`, or of an open array's ELEMENT; 0 = not a frozen string. The FOURTH member of the return-channel family above, and the one that was missing: AllocParam read LastTypeStrCap itself, in the ALLOCATION loop, which runs after every parameter's type has been parsed -- so a `string[N]` param got whatever capacity the LAST parameter's type left behind. bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
   ptypesFileRecSize : array[0..MAX_PROC_PARAMS-1] of Integer;  { `file of T` param: T's width in bytes; 0 = not a file. Staged here for EXACTLY the reason ptypesStrCap above is: the allocation loop runs after every parameter's type has been parsed, so LastTypeFileRecSize describes the LAST one. feature-pascal-typed-and-untyped-files }
@@ -815,7 +815,7 @@ var
   retPtrElemTk, retPtrElemRec, retPtrAlias : Integer;
   retPtrStrElemTk : Integer;   { ...and that pointee's element width when it is a managed string }
   retStrElemTk : Integer;   { managed-string result: element width ord, 0 = not one }
-  retEnumId : Integer;   { enum-typed result: its enum index, else -1 }
+  retSem : Integer;   { enum-typed result: its enum index, else -1 }
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
   retDynDepth : Integer;   { `array of` levels of a dyn-array result }
   savedSC, savedFS, savedCurProc : Integer;
@@ -1055,7 +1055,7 @@ begin
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesAlias[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetElemTk[i] := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do begin ptypesSetElemLo[i] := 0; ptypesSetElemHi[i] := -1; end;
-  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSem[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesStrElemTk[i] := 0;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retSetEnumId := -1; retSetElemTk := 0;
@@ -1064,7 +1064,7 @@ begin
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE; retPtrAlias := -1;
   retPtrStrElemTk := 0;
   retStrElemTk := 0;
-  retEnumId := -1;
+  retSem := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
   { Lambda-lift: a nested routine lifted to top level (matched by its mangled
@@ -1373,10 +1373,17 @@ begin
           ptypesSetElemLo[i] := 0;
           ptypesSetElemHi[i] := -1;
         end;
-        { ...and the same rule for a plain enum param: LastTypeSemId is only
-          meaningful when the type just parsed WAS one. }
-        if tk = tyInteger then ptypesEnum[i] := LastTypeSemId
-        else ptypesEnum[i] := -1;
+        { ...and the same rule for a param's SEMANTIC IDENTITY: LastTypeSemId
+          is only meaningful when the type just parsed actually HAS one, which
+          is what SemKindMatches asks and what a bare `tk = tyInteger` could
+          not. That spelling was exact while every carrier of an identity was
+          integer-sized, and it stopped being so twice over: {$PACKENUM} narrows
+          an enum, and a ByteBool param is tyInt8. `procedure P(b: ByteBool)`
+          therefore lost the booleanness at the parameter list and `not b`
+          inside the body complemented an integer.
+          decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+        if SemKindMatches(tk, LastTypeSemId) then ptypesSem[i] := LastTypeSemId
+        else ptypesSem[i] := SEM_NONE;
         { ...and the same rule a third time for a managed string's ELEMENT
           WIDTH -- the window read and the normalisation are both stated where
           ParamStrElemOf is defined (symtab.inc), because ParseTypeSection's
@@ -1462,7 +1469,7 @@ begin
       bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
     ParseFuncReturnTypeShape(retType, retIsDynArr, retDynDepth, retElemTk,
                              retElemRec, retFixedArrBytes, retArrAi,
-                             retEnumId, retSetEnumId, retSetElemTk, retStrElemTk,
+                             retSem, retSetEnumId, retSetElemTk, retStrElemTk,
                              retRecId, retProcSig,
                              retPtrElemTk, retPtrStrElemTk, retPtrElemRec,
                              retPtrDepth, retPtrBaseTk, retPtrBaseRec, retPtrAlias);
@@ -1656,7 +1663,7 @@ begin
     ProcRetPtrAlias[procIdx] := retPtrAlias;
     ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
     ProcRetStrElemTk[procIdx] := retStrElemTk;
-    ProcRetEnumId[procIdx] := retEnumId;
+    ProcRetSemId[procIdx] := retSem;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
     ProcRetPtrDepth[procIdx] := retPtrDepth;
     ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -1710,6 +1717,7 @@ begin
         if ptypes[i] = tySet then
           ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
           ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
+          ProcParamSemId[procIdx * MAX_PROC_PARAMS + i] := ptypesSem[i];
         if ptypes[i] = tyAnsiString then
           ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
         { The capacity twin of the width above, and NOT under that `if`: the width
@@ -1770,7 +1778,7 @@ begin
       ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
       ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
       ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
-      ptypesEnum[i] := ptypesEnum[i-1];
+      ptypesSem[i] := ptypesSem[i-1];
       ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesStrCap[i] := ptypesStrCap[i-1];   { shifts like every other per-param column -- pconst's note above is about the one time this was forgotten }
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
@@ -1982,7 +1990,7 @@ begin
       ptypesSetElemTk[i] := ptypesSetElemTk[i-1];
       ptypesSetElemLo[i] := ptypesSetElemLo[i-1];
       ptypesSetElemHi[i] := ptypesSetElemHi[i-1];
-      ptypesEnum[i] := ptypesEnum[i-1];
+      ptypesSem[i] := ptypesSem[i-1];
       ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
@@ -2168,6 +2176,7 @@ begin
             if ptypes[i] = tySet then
               ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
               ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
+              ProcParamSemId[procIdx * MAX_PROC_PARAMS + i] := ptypesSem[i];
             if ptypes[i] = tyAnsiString then
               ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
             { The capacity twin of the width above, and NOT under that `if`: the width
@@ -2218,7 +2227,7 @@ begin
       ProcRetPtrAlias[procIdx] := retPtrAlias;
       ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
       ProcRetStrElemTk[procIdx] := retStrElemTk;
-      ProcRetEnumId[procIdx] := retEnumId;
+      ProcRetSemId[procIdx] := retSem;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
       ProcRetPtrDepth[procIdx] := retPtrDepth;
       ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -2274,7 +2283,7 @@ begin
   ProcRetPtrAlias[procIdx] := retPtrAlias;
   ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
   ProcRetStrElemTk[procIdx] := retStrElemTk;
-  ProcRetEnumId[procIdx] := retEnumId;
+  ProcRetSemId[procIdx] := retSem;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
   ProcRetPtrDepth[procIdx] := retPtrDepth;
   ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -2544,12 +2553,17 @@ begin
       SymSetElemLo[idx] := ptypesSetElemLo[i];
       SymSetElemHi[idx] := ptypesSetElemHi[i];
     end;
-    { An enum param is an enum-typed value inside the body — the same stamp the
-      var-decl sites make, so WriteLn(p) prints the member name there too. }
-    if (ptypes[i] = tyInteger) and (ptypesEnum[i] >= 0) then
+    { A param with an identity is a value with that identity INSIDE the body —
+      the same stamp the var-decl sites make, so WriteLn(p) prints the member
+      name there too and `not p` on a sized boolean is logical there too.
+      SemEnumOf on the ELEMENT arm and not on the value arm, for the reason the
+      var-decl sites give: SymElemEnumId has not been widened past enums, and a
+      channel handed an identity from a family its readers do not know is how a
+      set inherits its element's member names. }
+    if SemKindMatches(ptypes[i], ptypesSem[i]) then
     begin
-      if parr[i] then SymElemEnumId[idx] := ptypesEnum[i]
-      else SymSemId[idx] := ptypesEnum[i];
+      if parr[i] then SymElemEnumId[idx] := SemEnumOf(ptypesSem[i])
+      else SymSemId[idx] := ptypesSem[i];
     end;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
@@ -2646,6 +2660,7 @@ begin
       if ptypes[i] = tySet then
         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
         ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
+        ProcParamSemId[procIdx * MAX_PROC_PARAMS + i] := ptypesSem[i];
       if ptypes[i] = tyAnsiString then
         ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
       { The capacity twin of the width above, and NOT under that `if`: the width
@@ -2942,6 +2957,18 @@ begin
         SymProcSig[SymCount-1] := retProcSig;
         SymSyncTypeRef(SymCount-1);
       end;
+      { ...and its SEMANTIC IDENTITY, furnished from the row the return type
+        already filled, for exactly the reason the paragraph above gives: Result
+        is not DECLARED, it is minted from the return KIND alone, so every fact
+        a declaration would have carried has to be restated here or it is lost.
+        `function F: LongBool; begin Result := True; end` stored a plain 1 --
+        the store is an ordinary assignment and ir.inc's AN_ASSIGN arm asks the
+        DESTINATION's identity, which Result did not have. ProcRetSemId is
+        already guarded by SemKindMatches at every site that writes it, so it
+        needs no second guard here.
+        decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+      if ProcRetSemId[procIdx] <> SEM_NONE then
+        SymSemId[SymCount-1] := ProcRetSemId[procIdx];
     end;
     LastTypeRecId := savedLastTypeRecId;
     if not retIsDynArr and (RetViaHiddenDest(retType) or (retFixedArrBytes > 0)) then

@@ -569,10 +569,17 @@ begin
 
     Stored +1; the column's comment in defs.inc says why, and the reason is this
     bug's own history. }
-  if EnumKindMatches(IntToTypeKind(tk), LastTypeSemId) then
-    AliasEnumId[AliasCount] := LastTypeSemId + 1
+  { SemKindMatches rather than EnumKindMatches: the column carries any
+    semantic identity now, so `type TFlag = LongBool` keeps its booleanness
+    through the alias exactly as `type TDays = D` keeps its enum.
+    THE +1 BIAS STILL WORKS UNCHANGED across every family, and that is worth
+    stating because it looks like it should not: no valid identity is -1
+    (SEM_NONE is), so `sem + 1` is never 0 for a real one, and an unwritten row
+    still reads as NONE. A sized boolean lands at -16 and below. }
+  if SemKindMatches(IntToTypeKind(tk), LastTypeSemId) then
+    AliasSemId[AliasCount] := LastTypeSemId + 1
   else
-    AliasEnumId[AliasCount] := 0;
+    AliasSemId[AliasCount] := 0;
   AliasCommit;
 end;
 
@@ -2151,7 +2158,7 @@ begin
   SetLength(UFldArrLen, n);     SetLength(UFldDynDepth, n);     SetLength(UFldPub, n);
   SetLength(UFldVis, n);        SetLength(UFldStrCap, n);       SetLength(UFldIsSub, n);
   SetLength(UFldSubLo, n);      SetLength(UFldSubHi, n);        SetLength(UFldSetEnumId, n);
-  SetLength(UFldEnumId, n);
+  SetLength(UFldSemId, n);
   SetLength(UFldSetElemTk, n);  SetLength(UFldBitWidth, n);     SetLength(UFldBitShift, n);
   SetLength(UFldStrElemTk, n);
   SetLength(UFldBitBytes, n);   SetLength(UFldArrNDims, n);
@@ -2208,7 +2215,7 @@ begin
       UFldPtrBaseRec[dst+k] := UFldPtrBaseRec[src];
       UFldPtrAlias[dst+k] := UFldPtrAlias[src];
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
-      UFldEnumId[dst+k] := UFldEnumId[src];
+      UFldSemId[dst+k] := UFldSemId[src];
       UFldSetElemTk[dst+k] := UFldSetElemTk[src];
       UFldStrElemTk[dst+k] := UFldStrElemTk[src];
       UFldIsArray[dst+k] := UFldIsArray[src];  UFldArrLen[dst+k] := UFldArrLen[src];
@@ -2268,7 +2275,7 @@ begin
     and it arrives with tk=tyInteger and a stale LastTypeSemId from whatever
     Pascal type was parsed last. The Pascal field-decl site stamps this, the way
     SymSemId is stamped at var-decl sites and not inside AllocVar. }
-  UFldEnumId[fi] := -1;
+  UFldSemId[fi] := -1;
   if tk = Ord(tySet) then
   begin
     UFldSetEnumId[fi] := LastTypeSetEnumId;
@@ -11748,7 +11755,7 @@ begin
   SetLength(ProcRetStrElemTk, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);  SetLength(ProcRetPtrAlias, n);
   SetLength(ProcRetPtrElemStrTk, n);
-  SetLength(ProcRetEnumId, n);
+  SetLength(ProcRetSemId, n);
   SetLength(ProcRetSetEnumId, n);  SetLength(ProcRetSetElemTk, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
   SetLength(ProcRetDynDepth, n);
@@ -11760,6 +11767,7 @@ begin
   SetLength(DceEdgeHead, n+1);
   SetLength(ProcParamPtrDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamRecId, n*MAX_PROC_PARAMS);  SetLength(ProcParamSetEnumId, n*MAX_PROC_PARAMS);
   SetLength(ProcParamAliasIdx, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamSemId, n*MAX_PROC_PARAMS);
   SetLength(ProcParamPtrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamPtrElemRec, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
@@ -11817,7 +11825,7 @@ begin
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemStrTk[ProcCount] := 0;   { the POINTEE's width, same recycled-slot rule }
   ProcRetStrElemTk[ProcCount]  := 0;
-  ProcRetEnumId[ProcCount]     := -1;
+  ProcRetSemId[ProcCount]     := -1;
   ProcRetSetEnumId[ProcCount]  := -1;
   ProcRetSetElemTk[ProcCount]  := 0;
   ProcRetPtrDepth[ProcCount]   := 0;
@@ -11859,6 +11867,7 @@ begin
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamSetEnumId[ProcCount * MAX_PROC_PARAMS + i] := -1;
     ProcParamAliasIdx[ProcCount * MAX_PROC_PARAMS + i] := -1;
+    ProcParamSemId[ProcCount * MAX_PROC_PARAMS + i] := SEM_NONE;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
