@@ -952,16 +952,9 @@ begin
       begin
         Next;
         Expect(tkOf, 'of');
-        if CurTok.Kind = tkConst then
+        if ParseArrayOfConstElem(tk) then
         begin
-          { `array of const` (TVarRec open array): each element is a TVarRec
-            record from builtinheap. The callee reads it like any open array of
-            records; the call site builds the element vector (AN_VARREC_ARRAY). }
-          if TVarRecId = REC_NONE then
-            Error('array of const requires the builtinheap unit (use an array/heap feature)');
-          Next;
-          tk := tyRecord;
-          LastTypeRecId := TVarRecId;
+          { nothing further: the helper set tk and LastTypeRecId. }
         end
         else
         begin

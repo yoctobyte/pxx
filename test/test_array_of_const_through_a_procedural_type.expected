@@ -1,0 +1,6 @@
+freebare n=4 t0=0 t3=11
+freeconst n=2 t0=2
+methbare n=1 t0=0
+methfmt why n=2 t0=0 t1=11
+freebare n=4 t0=0 t3=11
+methfmt direct n=2 t0=0 t1=11

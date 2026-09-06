@@ -6837,12 +6837,29 @@ test-core: $(COMPILER)
 	@# -Mdelphi, so the parse fix looks like three obvious lines -- it has been
 	@# written and reverted twice. Making the declaration parse routes the call
 	@# into the open-array-literal length bug (`c([7,8,9])` answers 263845145632,
-	@# the `of object` spelling answers 0, fpc says 3), turning a clean refusal
-	@# into a silent wrong number. Delete this row when that bug lands; do not
-	@# edit it to expect success.
-	@./$(COMPILER) test/test_array_of_const_in_a_procedural_type_is_refused.pas $(TESTTMP)/test_aocproctype26 2>&1 \
-	  | grep -q 'unknown type: const' \
-	  || { echo 'test_array_of_const_in_a_procedural_type_is_refused: FAIL - array of const in a procedural type compiled, or refused for another reason'; exit 1; }
+	@# `array of const` THROUGH A PROCEDURAL TYPE, now that it parses. Replaces
+	@# the refusal row that stood here: the parse arm was written and reverted
+	@# twice because the declaration compiling only exposed the open-array
+	@# literal losing its length (fe0c492d1 fixed that). Every row reads an
+	@# ELEMENT as well as a Length and no row is empty -- `[]` prints 0
+	@# correctly even when broken, so the expected value collides with the
+	@# failure value, and Length alone cannot see a wrong stride.
+	@./$(COMPILER) test/test_array_of_const_through_a_procedural_type.pas $(TESTTMP)/test_aocproctype26
+	@tools/expect_same.sh test_array_of_const_through_a_procedural_type \
+	  "$$($(TESTTMP)/test_aocproctype26)" \
+	  "$$(cat test/test_array_of_const_through_a_procedural_type.expected)"
+	@# A USER ENUM NAMED LIKE ONE OF THE COMPILER'S OWN INTERNAL RECORDS.
+	@# IsRecordType hard-codes fourteen names so compiler.pas's records keep
+	@# known ids across the self-host; the shadow guard consulted only the
+	@# ALIAS table, and an enum is not an alias, so fcl-passrc's
+	@# `TToken = (tkEOF, ...)` gave a tyRecord ARRAY ELEMENT and a tyInteger
+	@# VARIABLE in one declaration block. Mixed rows only: the element-to-
+	@# element move that pscanner's own sort does has both sides wrong the same
+	@# way and passes.
+	@./$(COMPILER) test/test_a_user_enum_named_like_a_compiler_internal_record.pas $(TESTTMP)/test_enumtok26
+	@tools/expect_same.sh test_a_user_enum_named_like_a_compiler_internal_record \
+	  "$$($(TESTTMP)/test_enumtok26)" \
+	  "$$(cat test/test_a_user_enum_named_like_a_compiler_internal_record.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

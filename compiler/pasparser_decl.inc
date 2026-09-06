@@ -1320,16 +1320,38 @@ begin
         else
         begin
           LastTypeRecId := IsRecordType(lo);
-          { A user `type X = ...` alias SHADOWS a same-named builtin record. The
-            compiler exposes internal descriptor records (TProc, TParam, ...) under
-            common names; a user program defining e.g. `type TProc = procedure(...)`
-            must get its own type, not the builtin (FPC does not reserve these).
-            Only triggers when both a record-name match and a user alias exist —
-            which in valid source is exactly the user-alias-vs-builtin case. }
-          if (LastTypeRecId <> REC_NONE) and (FindTypeAlias(lo) < 0) then
+          { A user `type X = ...` declaration SHADOWS a same-named builtin
+            record. The compiler exposes its OWN internal descriptor records
+            (TToken, TSymbol, TProc, TParam, ...) under common names, because
+            the self-host needs compiler.pas's own records to carry known ids;
+            a user program defining e.g. `type TProc = procedure(...)` must get
+            its own type, not the builtin (FPC does not reserve these).
+
+            THE ALIAS TABLE WAS NOT THE WHOLE OF "user-declared". An ENUM is
+            registered in the enum table and is not an alias, so
+            `TToken = (tkEOF, ...)` -- fcl-passrc's, and a name fourteen of
+            these occupy -- lost to the compiler's own TToken record: `array of
+            TToken` recorded a tyRecord element while `t: TToken` stayed
+            tyInteger, and pscanner's three-line swap was refused as
+            `incompatible types` with no position, three times. The row that
+            did NOT complain is the tell: `Sorted[J] := Sorted[J+K]` is
+            element-to-element, both sides wrong the same way, so the agreement
+            check agrees. Only the mixed assignments could see it.
+
+            Case mattered too, which is how one program held both readings:
+            IsRecordType's list is compared case-SENSITIVELY, so the same unit's
+            `array of TToken` took the record and `Array[ttoken] of String` took
+            the enum.
+            bug-p-a-user-enum-loses-its-name-to-a-compiler-internal-record }
+          if (LastTypeRecId <> REC_NONE) and (FindTypeAlias(lo) < 0) and
+             (FindEnumType(lo) < 0) then
             Result := tyRecord
           else
           begin
+            { Not the builtin record after all -- do not leave its id behind for
+              whoever reads LastTypeRecId next (AllocFromDeclTypeDesc threads it
+              into ElemRecName). }
+            LastTypeRecId := REC_NONE;
             aliasIdx := FindTypeAlias(lo);
             if aliasIdx >= 0 then
             begin
@@ -5532,6 +5554,30 @@ begin
   end;
 end;
 
+function ParseArrayOfConstElem(var tk: TTypeKind): Boolean;
+{ The element type after `array of`, when that element is `const`: a TVarRec
+  open array (`Format`, `Exception.CreateFmt`). The callee reads it like any
+  open array of records; the call site builds the element vector
+  (AN_VARREC_ARRAY). Returns False and consumes nothing when the element is
+  anything else, so every caller keeps its own default arm.
+
+  ONE COPY BECAUSE THERE WERE ALREADY THREE PLACES THAT NEEDED IT AND ONLY TWO
+  THAT HAD IT. The free-routine list (pasparser_proc.inc) and the method list
+  (~7155 below) each carried these eight lines character for character; the
+  PROCEDURAL-TYPE list (~5600 below) did not, so
+  `TCb = procedure(Args: array of const)` was `unknown type: const` while the
+  identical routine and method declarations compiled.
+  bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap }
+begin
+  Result := CurTok.Kind = tkConst;
+  if not Result then Exit;
+  if TVarRecId = REC_NONE then
+    Error('array of const requires the builtinheap unit (use an array/heap feature)');
+  Next;
+  tk := tyRecord;
+  LastTypeRecId := TVarRecId;
+end;
+
 function ParseProcTypeSignature: Integer;
 { `procedure(...)` / `function(...): R` — the SIGNATURE only, from the keyword
   up to (not including) any `of object`. Returns the body-less Procs[] index
@@ -5608,7 +5654,9 @@ begin
           mIsArr := False;
           if CurTok.Kind = tkArray then
           begin
-            Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True;
+            Next; Expect(tkOf, 'of');
+            if not ParseArrayOfConstElem(mTk) then mTk := ParseTypeKind;
+            mIsArr := True;
           end
           else
             mTk := ParseTypeKind;
@@ -7156,17 +7204,7 @@ begin
                   begin
                     Next;
                     Expect(tkOf, 'of');
-                    if CurTok.Kind = tkConst then
-                    begin
-                      { `array of const` method param (Exception.CreateFmt):
-                        TVarRec open array, same as the free-routine case. }
-                      if TVarRecId = REC_NONE then
-                        Error('array of const requires the builtinheap unit (use an array/heap feature)');
-                      Next;
-                      mTk := tyRecord;
-                      LastTypeRecId := TVarRecId;
-                    end
-                    else
+                    if not ParseArrayOfConstElem(mTk) then
                       mTk := ParseTypeKind;
                     mIsArr := True;
                   end
