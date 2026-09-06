@@ -4056,6 +4056,53 @@ begin
   Result := node;
 end;
 
+function ParseDynArrayInitElemsAST: Integer;
+{ `(e0, e1, ...)` or `[e0, e1, ...]` in a dynamic-array VAR/CONST initialiser.
+
+  Yields the SAME node an expression `[...]` yields -- an AN_SET_LIT holding an
+  AN_ARG chain -- so both spellings meet the single retag in ir.inc's AN_ASSIGN
+  and there is no second place that decides what a dynamic-array literal is.
+  The paren spelling is objfpc's (fpc-testsuite tarray15) and the bracket one
+  Delphi's (tarray16); they differ in nothing but the delimiter.
+
+  Elements are full expressions, not set elements: an initialiser is not a set
+  and the one-character rule has no business here. A nested `(...)` / `[...]`
+  is itself an element list, for `array of array of T`. }
+var node, argNode, lastArg, itemNode, closeTk: Integer; done: Boolean;
+begin
+  node := AllocNode(AN_SET_LIT);
+  ASTTk[node] := Ord(tySet);
+  ASTLeft[node] := -1;
+  ASTSLen[node] := 0;
+  lastArg := -1;
+  if CurTok.Kind = tkLBrack then begin closeTk := Ord(tkRBrack); Next; end
+  else begin Expect(tkLParen, '('); closeTk := Ord(tkRParen); end;
+  if Ord(CurTok.Kind) <> closeTk then
+  begin
+    done := False;
+    while not done do
+    begin
+      if (CurTok.Kind = tkLParen) or (CurTok.Kind = tkLBrack) then
+        itemNode := ParseDynArrayInitElemsAST
+      else
+      begin
+        ParseExpr;
+        itemNode := CurASTNode;
+      end;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := itemNode;
+      ASTRight[argNode] := -1;
+      if lastArg = -1 then ASTLeft[node] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      if not Eat(tkComma) then done := True;
+    end;
+  end;
+  if closeTk = Ord(tkRBrack) then Expect(tkRBrack, ']')
+  else Expect(tkRParen, ')');
+  Result := node;
+end;
+
 function MakeVarRecArrayFromArgs(elemHead: Integer): Integer;
 { THE one place that decides what an AN_VARREC_ARRAY *is*. `elemHead` is an
   AN_ARG chain of element expressions (-1 for `[]`).

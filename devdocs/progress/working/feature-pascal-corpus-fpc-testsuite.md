@@ -4,7 +4,7 @@ blocked-by: []
 track: P
 status: working
 owner: "frankS"
-summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **391 pass, 0 fail, 109 skip, 50 auto-gated of 550** at compiler `5dec56ae8b3f`, re-confirmed at `88a0b3d93835` (frankS, 2026-09-06), superseding 377 at `e929e720f` and 368 at `36d7e5fd4`. PARK CONDITION SUPERSEDED: the 2026-07-10 park in the body is not a live block -- its three named tickets are in `done/` and sole-A confirmation no longer exists in this repo. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
+summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **392 pass, 0 fail, 108 skip, 50 auto-gated of 550** at compiler `6ae3a04d3e5c` (frankS, 2026-09-06; 391/0/109 confirmed twice earlier the same day at `88a0b3d93835`), superseding 377 at `e929e720f` and 368 at `36d7e5fd4`. PARK CONDITION SUPERSEDED: the 2026-07-10 park in the body is not a live block -- its three named tickets are in `done/` and sole-A confirmation no longer exists in this repo. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
@@ -819,3 +819,45 @@ The general shape, and it is the second time today in this ticket: **a skip
 reason describes the FILE and gets read as describing the WALL.** Five of six
 tmoperator rows were wrong the same way this morning. Any reason that names a
 FEATURE rather than a LINE has not been measured since it was written.
+
+## 2026-09-06 (frankS) — 392 / 0 / 108, tarray16 burned, and the aperture the array cluster showed
+
+Census at compiler `6ae3a04d3e5c`: **392 pass, 0 fail, 108 skip, 50 auto-gated
+of 550.** `tarray16.pp` is burned — it compiles and its output is byte-identical
+to fpc 3.2.2. `tarray2.pp` moved from `gap:` to `wontfix:` (see the entry above).
+
+**THE APERTURE, AND IT IS THE SHARPEST FORM OF IT I HAVE HIT.** tarray15 and
+tarray16 are about `var v: array of LongInt = (1, 2, 3)` — the DECLARATION
+spelling. Before touching them I checked the STATEMENT spelling as a control:
+
+```pascal
+var a: array of LongInt;
+begin a := [1, 2, 3]; writeln(Length(a)); end.
+```
+
+It compiled clean, printed `len=435728179526`, and segfaulted. fpc prints 3.
+**That spelling was not on the skip list at all** — not as a `gap:`, not as a
+wrong reason, not anywhere. A missing name announces itself and a wrong branch
+does not, but **a form the corpus never spells has no row to be wrong on.** The
+corpus is an instrument for what FPC's suite happens to write; the form real
+code writes had no row, and the defect was a silent wrong value ending in a
+crash.
+
+**What the rows actually cost, measured:** tarray15's reason named the
+initialisers (`Nil`, `()`, nested) and every one of them is now done. What it
+never named is the wall it stops on today — `array of array[0..2] of LongInt`,
+a DYNAMIC array of FIXED arrays, refused deliberately. Line 31 to line 36, and
+the reason was about the wrong five lines. Same failure as the tmoperator rows
+this morning: **the reason described the FILE.**
+
+Three defects behind those two rows, none visible from either reason:
+
+1. `array[0..2] of array of LongInt` answered `unknown type: array`, while
+   `type TD = array of LongInt; var v: array[0..2] of TD` — the same slot shape
+   — compiled and ran. One concept, two spellings, one implemented.
+2. Its per-element initialiser read the inner lists as extra DIMENSIONS.
+3. **Two initialised dynamic arrays in one var section broke the compile**, one
+   did not: the AST arena is per-proc scratch and the new pending-init kind is
+   the only one that keeps a NODE rather than a constant, so the second array's
+   nodes were re-allocated as the first array's assignment. The minimum test
+   that exercises the feature passes; it takes two.

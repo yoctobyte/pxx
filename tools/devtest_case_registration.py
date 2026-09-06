@@ -98,10 +98,10 @@ def _case_defs(tree):
                   and n.name.startswith(CASE_PREFIXES))
 
 
-def _referenced(tree):
+def _referenced(tree, defs):
     """Every case NAME mentioned outside the body of a case function.
 
-    A BARE PREFIX IS NOT A NAME, and treating it as one broke the exemption
+    `defs` is the gate. A BARE PREFIX IS NOT A NAME, and treating it as one broke the exemption
     below in the direction that flags a correct harness. A prefix-discovering
     harness spells its discovery `k.startswith("case_")`, so the string
     `"case_"` is present in every such file BY CONSTRUCTION -- it is the
@@ -110,6 +110,14 @@ def _referenced(tree):
     file was reported as having four unrun cases while running all four.
     Measured 2026-09-06: `tools/park_superseded_devtest.py`, RED in every lane's
     `gate.sh quick`.
+
+    Excluding only the BARE prefix closed the case that went red and left a
+    narrower one open: a string naming a case some OTHER module defines still
+    counted here. Requiring the string to name a case THIS module defines closes
+    both with one predicate, which is what a reference means anyway --
+    `_self_discovering` intersects with the same set, so the two readers now
+    agree by construction rather than by both being careful. (frankS's
+    predicate, taken after two seats fixed this row independently.)
     """
     seen = set()
     for node in tree.body:
@@ -119,8 +127,7 @@ def _referenced(tree):
             if isinstance(sub, ast.Name) and sub.id.startswith(CASE_PREFIXES):
                 seen.add(sub.id)
             elif (isinstance(sub, ast.Constant) and isinstance(sub.value, str)
-                  and sub.value.startswith(CASE_PREFIXES)
-                  and sub.value not in CASE_PREFIXES):
+                  and sub.value in defs):
                 seen.add(sub.value)
     return seen
 
@@ -168,7 +175,7 @@ def audit(path):
     defs = _case_defs(tree)
     if not defs:
         return 0, [], False
-    ref = _referenced(tree)
+    ref = _referenced(tree, set(defs))
     if _self_discovering(tree, ref):
         return len(defs), [], True
     return len(defs), [d for d in defs if d not in ref], False

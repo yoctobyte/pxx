@@ -6208,6 +6208,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_bracket_literal_assigned_to_a_dynamic_array \
 	  "$$($(TESTTMP)/test_brklit_dynarr26)" \
 	  "$$(cat test/test_a_bracket_literal_assigned_to_a_dynamic_array.expected)"
+	# the DECLARATION spelling of the same literal: `var v: array of T = (...)`.
+	# A dynamic array is a heap object with no constant form, so the initialiser
+	# stays an expression and runs at program entry -- kind 10, the one pending
+	# init that keeps an AST node. TWO initialised arrays is the row that
+	# matters: the arena is per-proc scratch and the second one's nodes were
+	# re-allocated as the first one's assignment. One array was fine.
+	./$(COMPILER) test/test_a_dynamic_array_var_can_be_initialised_at_its_declaration.pas $(TESTTMP)/test_dynarr_varinit26
+	tools/expect_same.sh test_a_dynamic_array_var_can_be_initialised_at_its_declaration \
+	  "$$($(TESTTMP)/test_dynarr_varinit26)" \
+	  "$$(cat test/test_a_dynamic_array_var_can_be_initialised_at_its_declaration.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

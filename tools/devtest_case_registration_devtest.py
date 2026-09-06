@@ -31,7 +31,7 @@ INLINE_TUPLE_LIST = os.path.join(TOOLS, "twatch_full_commit_devtest.py")
 def _unlisted(text):
     tree = ast.parse(text)
     defs = dcr._case_defs(tree)
-    ref = dcr._referenced(tree)
+    ref = dcr._referenced(tree, set(defs))
     if dcr._self_discovering(tree, ref):
         return []
     return [d for d in defs if d not in ref]
@@ -50,7 +50,7 @@ def _drop_one_registration(path):
     tree = ast.parse(text)
     defs = dcr._case_defs(tree)
     assert defs, "%s defines no cases; wrong file for this control" % path
-    ref = dcr._referenced(tree)
+    ref = dcr._referenced(tree, set(defs))
     victim = next((d for d in defs if d in ref), None)
     assert victim, "%s registers none of its cases; wrong file" % path
 
@@ -176,6 +176,19 @@ def t_a_self_discovering_harness_is_exempt():
     assert _unlisted(src) == [], "a globals()-discovering harness must be exempt"
 
 
+def t_a_string_naming_ANOTHER_modules_case_registers_nothing():
+    """The half that `not in CASE_PREFIXES` alone left open.
+
+    `'t_elsewhere'` is not a bare prefix, so the prefix exclusion admitted it,
+    and the module's own `t_one` was then covered by a reference to a case it
+    does not define. Requiring the string to name a case THIS module defines is
+    the same set `_self_discovering` intersects with.
+    """
+    src = ("def t_one():\n    pass\n\nTESTS = ['t_elsewhere']\n")
+    assert _unlisted(src) == ["t_one"], (
+        "a string naming another module's case registered this module's")
+
+
 def t_a_case_referenced_only_as_a_string_counts():
     """A string in the run list is a registration."""
     src = ("def t_one():\n    pass\n\nTESTS = ['t_one']\n")
@@ -207,6 +220,7 @@ TESTS = (
     t_an_unregistered_case_is_caught_inline_tuple,
     t_the_unhacked_harnesses_are_the_negative_control,
     t_a_self_discovering_harness_is_exempt,
+    t_a_string_naming_ANOTHER_modules_case_registers_nothing,
     t_a_case_referenced_only_as_a_string_counts,
     t_a_file_defining_no_cases_is_not_counted,
     t_an_empty_population_is_not_a_pass,

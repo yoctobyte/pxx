@@ -37,7 +37,7 @@
 tarray12.pp	gap: IInterface/TInterfacedObject base + specialize TArray<T> as result type
 tarray13.pp	gap: DynArraySize/DynArrayIndex/DynArraySetLength RTL helpers missing
 tarray14.pp	gap: Concat() on dynamic arrays and array-of-array constructors
-tarray15.pp	gap: dynamic-array typed constants/initializers (Nil, (), nested)
+tarray15.pp	gap: MEASURED at compiler 6ae3a04d3e5c — the row now stops at LINE 36, `v6: array of array[0..2] of LongInt`, on `mixed static/dynamic nested arrays not supported`: a DYNAMIC array whose element is a FIXED array, refused deliberately in pasparser_decl.inc. The declaration initialisers this reason used to name are done (Nil, (), the (1,2,3) form, and `array[0..2] of array of LongInt` per element) — its Delphi twin tarray16 is burned and matches fpc byte for byte. EVERYTHING PAST LINE 36 IS UNVERIFIED.
 tarray17.pp	gap: {$modeswitch arrayoperators} — dynarray + and += concatenation
 tarray2.pp	wontfix: array of const / TVarRec — diffed line by line vs fpc 3.2.2 at compiler e313d353df5f. Every tag and value matches except two rows, neither a defect: one prints @Testit's ADDRESS, and the two Extended rows follow from this RTL modelling Extended as Double (CLAUDE.md records that as the architecture). The four that WERE defects are fixed — VPChar printed its pointer, VObject.ClassName was empty, a class reference tagged vtPointer(5) not vtClass(8), QWord(x) tagged vtInt64(16) not vtQWord(17). The old reason named none of them because it described the FILE, not the line the output diverges on. Detail: working/feature-pascal-corpus-fpc-testsuite.md
 tarray7.pp	gap: open-array slice syntax a[lo..hi] passed to open-array param
@@ -107,7 +107,6 @@ tprocvar3.pp	decided: delphi-mode procvar-of-object, @-less proc assignment, cod
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)
 tsealed6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as an acceptance test; wants `object abstract` / `object sealed` on top of the base feature.
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
-tarray16.pp	gap: dynamic-array const initializers ([1,2,3]) and delphi-mode generic function CheckArray<T>
 tarray18.pp	gap: `specialize` in RESULT-TYPE position -- `function AssignArray(a: array of LongInt): specialize TArray<LongInt>` at line 37 gives `unknown type: specialize`. The `class operator :=` / `Explicit` declarations this reason used to name are at lines 21 and 26 and COMPILE; the row never reaches a question about them.
 tclass12a.pp	gap: Extended-precision Str formatting — value identical, pxx prints double-width 3.1400000000000001E+000 vs FPC's 20-digit extended (no 80-bit Extended print path)
 tclass12c.pp	gap: class-local const/type/var sections, `type Integer` distinct type, property default

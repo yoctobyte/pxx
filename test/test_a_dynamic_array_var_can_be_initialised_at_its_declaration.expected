@@ -1,0 +1,8 @@
+v1=0 v2=0
+v3: 1 2 3
+v4: Alpha Beta Gamma
+v5[0]: (len 0)
+v5[1]: (len 0)
+v5[2]: 1 2 3 (len 3)
+v6: 9 8
+v3 after: 1 7

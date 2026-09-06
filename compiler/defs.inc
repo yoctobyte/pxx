@@ -5621,7 +5621,14 @@ var
   PendingInitElem : array of Integer;  { array index (MAY BE NEGATIVE), or PI_ELEM_NONE / PI_ELEM_ADDRG }
   PendingInitVal  : array of Int64;    { constant value }
   PendingInitValAux: array of Integer; { string length / spare }
-  PendingInitKind : array of Integer;  { 0=int, 1=string literal, 2=proc addr }
+  PendingInitKind : array of Integer;  { 0=int, 1=string literal, 2=proc addr,
+    3=float, 4=addr-of-sym, 5=metaclass, 8=classref, 9=baked set mask,
+    10=Val IS AN AST NODE INDEX. Kind 10 is the escape from an enumeration:
+    the other nine each name a CONSTANT SHAPE the emitter knows how to
+    rebuild, which is right for everything that bakes into Data[] and wrong
+    for `var v: array of LongInt = (1, 2, 3)` -- a dynamic array is a heap
+    object with no constant form at all, so the initialiser has to stay an
+    EXPRESSION and run at program entry like the assignment it is. }
   PendingInitTk   : array of Integer;  { value type kind }
   { Record typed-const field: source span of the field name, so the emitter builds
     `sym.field := value` instead of `sym[elem]`. SOff = -1 when not a field. }

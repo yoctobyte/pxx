@@ -379,6 +379,16 @@ begin
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
     end
+    else if PendingInitKind[i] = 10 then
+    begin
+      { The value is an AST the DECLARATION already parsed -- see kind 10 in
+        defs.inc. Nothing to rebuild: the node is handed straight to the
+        AN_ASSIGN below, and for a dynamic-array initialiser it is the same
+        bracket/paren element list a statement `v := [...]` builds, so both
+        spellings meet the one retag in ir.inc's AN_ASSIGN rather than growing
+        a second lowering here. }
+      valNode := PendingInitVal[i];
+    end
     else if PendingInitKind[i] = 9 then
     begin
       { SET element of a const array: Val is the Data[] offset of the 32-byte mask

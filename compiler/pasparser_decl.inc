@@ -1805,6 +1805,30 @@ begin
           Next;                 { consume the named array type }
         end;
       end;
+      { …and the ANONYMOUS spelling of the same thing:
+        `array[0..2] of array of LongInt`. The named-alias arm just above has
+        worked for as long as SymElemDynDepth has; this one answered
+        `unknown type: array`, because the element falls through to
+        ParseTypeKind and that has no arm for a bare `array`. One slot shape,
+        two spellings, one implemented — see normalise-dont-special-case.md.
+        fpc-testsuite tarray15/tarray16 both declare it. }
+      if VDIsArr and (not VDIsDyn) and (not elemResolved) and
+         (CurTok.Kind = tkArray) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkOf) then
+      begin
+        VDElemDynDepth := 0;
+        while (CurTok.Kind = tkArray) and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkOf) do
+        begin
+          Next;                 { 'array' }
+          Expect(tkOf, 'of');
+          Inc(VDElemDynDepth);
+        end;
+        VDElemTk := ParseTypeKind;
+        VDElemEnumId := LastTypeEnumId;
+        VDTk := VDElemTk;
+        elemResolved := True;
+      end;
       if not elemResolved then
       begin
         VDElemTk := ParseTypeKind;
@@ -2611,7 +2635,58 @@ begin
 	        Eat(tkSemicolon);
 	        Continue;
 	      end;
-	      if isDyn then Error('dynamic array initializer not supported');
+	      if isDyn then
+	      begin
+	        { `var v: array of LongInt = (1, 2, 3);` -- objfpc spells it with
+	          parens (fpc-testsuite tarray15), Delphi with brackets (tarray16).
+	          A dynamic array is a HEAP object, so there is no constant form to
+	          bake into Data[]: the initialiser stays an expression and runs at
+	          program entry as the assignment it is (PendingInit kind 10). That
+	          also means it meets the SAME retag in ir.inc's AN_ASSIGN the
+	          statement spelling meets, so `v := (1,2,3)` at declaration and
+	          `v := [1,2,3]` below it cannot disagree about what the literal is.
+
+	          `= Nil` needs nothing: a dynamic array is already nil, and emitting
+	          an assignment for it would only give the entry code work to do. }
+	        if CurTok.Kind = tkNil then
+	        begin
+	          Next;
+	          SkipHintDirectives;
+	          Eat(tkSemicolon);
+	          Continue;
+	        end;
+	        if (CurTok.Kind <> tkLParen) and (CurTok.Kind <> tkLBrack) then
+	          Error('dynamic array initializer must be nil or an element list');
+	        EnsurePendingInitCapacity(PendingInitCount);
+	        PendingInitSym[PendingInitCount]  := idx;
+	        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
+	        PendingInitFOff[PendingInitCount] := -1;
+	        PendingInitFLen[PendingInitCount] := 0;
+	        PendingInitPStart[PendingInitCount] := 0;
+	        PendingInitPCount[PendingInitCount] := 0;
+	        PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
+	        PendingInitKind[PendingInitCount] := 10;
+	        PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST;
+	        { THE AST ARENA IS PER-PROC SCRATCH and this is the one pending-init
+	          kind that keeps a NODE rather than a constant, so it is the one that
+	          can be handed out again before it is read. Every proc body parsed
+	          between here and CompilePendingGlobalInits resets ASTNodeCount to the
+	          floor, and so does that emitter itself after EACH init -- so with two
+	          initialised arrays the second one's nodes were re-allocated as the
+	          first one's assignment and the compile died with `invalid IR node
+	          reference in store_mem value`. One array was fine; the shape needed
+	          the first list to be at least as long as the second. Raise the floor,
+	          which is exactly what ASTArenaFloor exists for (see defs.inc, and
+	          bug-nilpy-module-ast-recycled-by-nested-unit-compile, the same defect
+	          in the NilPy module parse). }
+	        if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
+	        PendingInitValAux[PendingInitCount] := 0;
+	        PendingInitTk[PendingInitCount]   := Ord(tk);
+	        Inc(PendingInitCount);
+	        SkipHintDirectives;
+	        Eat(tkSemicolon);
+	        Continue;
+	      end;
 	      { How many dimensions the flat store really has -- SymArrNDims is 0 for a
 	        1-D array and >= 2 otherwise -- read here because BOTH initialiser
 	        shapes below need it: the parenthesised loop to tell a char ROW from a
@@ -2660,6 +2735,42 @@ begin
 	          begin
 	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
 	            ParseRecordInitializerInto(idx, Syms[idx].ElemRecName, arrLo + initElem, False);
+	            Eat(tkComma);
+	            Inc(initElem);
+	          end
+	          else if (initDepth = 1) and (SymElemDynDepth[idx] > 0) and
+	                  (CurTok.Kind in [tkNil, tkLParen, tkLBrack]) then
+	          begin
+	            { A FIXED array of DYNAMIC arrays, initialised element by element:
+	              `v: array[0..2] of array of LongInt = (Nil, (), (1, 2, 3))`.
+	              Each element is a heap handle, so it cannot be baked and cannot
+	              be counted as a flat run either -- the paren-depth arm below
+	              read the inner lists as extra DIMENSIONS and the whole thing
+	              came back as `too many array initializer elements`. One pending
+	              init per element, the same kind-10 AST the 1-D case records, so
+	              `v[k] := (...)` and a written `v[k] := [...]` meet the same
+	              retag. `Nil` needs nothing: the element is already nil. }
+	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
+	            if CurTok.Kind = tkNil then Next
+	            else
+	            begin
+	              if (CurTok.Kind <> tkLParen) and (CurTok.Kind <> tkLBrack) then
+	                Error('dynamic array element initializer must be nil or an element list');
+	              EnsurePendingInitCapacity(PendingInitCount);
+	              PendingInitSym[PendingInitCount]  := idx;
+	              PendingInitElem[PendingInitCount] := arrLo + initElem;
+	              PendingInitFOff[PendingInitCount] := -1;
+	              PendingInitFLen[PendingInitCount] := 0;
+	              PendingInitPStart[PendingInitCount] := 0;
+	              PendingInitPCount[PendingInitCount] := 0;
+	              PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
+	              PendingInitKind[PendingInitCount] := 10;
+	              PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST;
+	              if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
+	              PendingInitValAux[PendingInitCount] := 0;
+	              PendingInitTk[PendingInitCount]   := Ord(elemTk);
+	              Inc(PendingInitCount);
+	            end;
 	            Eat(tkComma);
 	            Inc(initElem);
 	          end
