@@ -2270,3 +2270,49 @@ diagnostic — pxx says `default property is write-only` where fpc says
 Not fixed here because it is three changes and one unknown: where the LITERAL
 is currently consumed is NOT established, and a constant-expression parse
 dropped in beside whatever is swallowing it would fight it.
+
+## 2026-09-06 (frankS, relayed by frankD) — the skip list is an inventory of what the suite SPELLS
+
+frankS, working the array cluster: `tarray15`/`tarray16` are both about the
+DECLARATION spelling of a dynamic-array initialiser
+(`var a: array of LongInt = (1,2,3)`). The STATEMENT spelling — `a := [1,2,3]` —
+was checked as a CONTROL, expecting the working case that made the declaration
+case a gap. It compiled clean, printed `len=435728179526`, and segfaulted. It
+was not on the skip list and never had been.
+
+**A missing name announces itself, a wrong branch does not, and a form the
+corpus never spells has no row to be wrong on.** The skip list is an inventory
+of what the FPC testsuite happens to write. Where the suite writes only one of
+two spellings of a construct, the other is not measured as passing — it is not
+measured. **392/0/108 is a true number about 550 files and it is not a claim
+about the language.**
+
+frankS's operational consequence, and it is the reusable part: **a new corpus
+test has more leverage when it is the SIBLING SPELLING of a construct the suite
+already covers than when it is a new construct.** Both spellings of dyn-array
+init, both spellings of a set/array literal, statement vs declaration, alias vs
+anonymous type, bare vs qualified receiver. Two segfaults in one day, neither
+with a row. (Fixed: `4640dc523` statement form, `0455ce596` declaration form.)
+
+**Corroborated the same day, twice, from this ticket's own rung 7 — and note
+that in both cases the WORKING spelling is what made the broken one invisible:**
+
+| construct | spelling that worked | sibling that did not |
+| --- | --- | --- |
+| `SizeOf` of a field in a method | `SizeOf(Self.FBuffer)` | `SizeOf(FBuffer)` (`f8b0e0098`) |
+| `.Free` on a computed receiver | `b.FA[i].Free` | `b.Objects[i].Free`, `b.Pick(i).Free` (ticket) |
+
+The `SizeOf` case carries frankS's point further than a missing row does. Fixing
+the refusal exposed a SECOND divergence in the same pair: with a global of the
+field's name in scope, `SizeOf(G)` answered about the GLOBAL (100) while
+`Length(G)` on the identical name answered about the field (16). fpc says 16 for
+both. **That one was never a refusal at all** — a plausible number, no
+diagnostic, and it would have survived the first fix untouched. So the sibling
+rule is not only "the other spelling may be missing a row"; it is **"the other
+spelling may be answering a different question", which no skip list can
+represent.**
+
+Practical rule for rows added under this ticket from here on: when a row is
+written for construct X, write the sibling spelling of X in the same file, and
+assert a VALUE on both rather than a clean compile. A refusal-only row is green
+for the whole of the second failure mode above.
