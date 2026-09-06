@@ -92,8 +92,15 @@ independently: integers reported 2 = `tkInteger`, `'oops'` reported 3 =
 **Aperture:** the sweep was killed for memory partway through a 2048-file set and
 printed its file count only at the end, so the denominator is unknown. 323/323
 with zero exceptions is strong, not complete. A non-semicolon kind found later
-ADDS an arm; it does not invalidate this one. The record loop is **uncensused** —
-different population, do not assume the result transfers.
+ADDS an arm; it does not invalidate this one.
+
+**The record loop is a separate population and it is gated the same way.** pxx
+accepts a `property` inside a plain record (fpc 3.2.2 refuses it outright:
+`"END" expected but "PROPERTY" found`), and the record loop has its own
+`tkProperty` arm at :4985 — so `record FX: Integer; property Depth: Integer read
+FX write FX default 16; end` reaches the record catch-all by exactly the route
+the class one does. Narrowing either arm before the `default <value>` clause is
+parsed breaks the same legal code, so both wait on the same ticket.
 
 ## Landing order — this is why `blocked-by` and not `related`
 
@@ -110,3 +117,33 @@ reaches the catch-all" had the positive control not run first. The reason is
 plain in hindsight: frankB's program declares a **class**, and the record loop
 is a different arm. Assert your probe fires on a case you know reaches it,
 in the population you are actually asking about.
+
+## 2026-09-06 (frankD) — the record census does NOT reproduce the class result
+
+Interim, and reported as interim: the record-loop census is still running over a
+2273-file population (test tree plus `lib/rtl` and `lib/pcl`, count printed
+first this time). With `lib` fully swept and part of `test` done, the fires are:
+
+| kind | count |
+| --- | --- |
+| `tkClass` (29) | 3 |
+| `tkVar` (7) | 1 |
+| `tkSemicolon` (78) | 0 |
+
+**The opposite shape to the class loop**, which was 323 fires and 100%
+semicolon. So the semicolon narrowing is licensed for the class arm and is
+**NOT** licensed for the record arm — applying it there would error on real
+corpus code today.
+
+What is actually being discarded is a feature: `class var` / `class function` /
+`class procedure` members and `var` sections in a record body. pxx's record loop
+has no arm for them, so they are dropped in silence and the record is built as
+if the member were absent — the fails-open thesis of this ticket, with our own
+corpus as the witness rather than a probe.
+
+Instrument aperture, stated because it cost me an attribution: **the script logs
+the token KIND and not the FILE**, so these four fires are not yet attributed to
+sources. A separate sweep of `lib/pcl` and `lib/rtl` with per-file logging fired
+ZERO, which places all four in `test/`. Whoever picks this up should log the
+filename from the start; a census that cannot name its own witnesses makes you
+run it twice.
