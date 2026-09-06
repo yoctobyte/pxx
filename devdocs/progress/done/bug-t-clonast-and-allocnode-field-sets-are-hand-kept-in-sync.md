@@ -79,4 +79,4 @@ the header regex lacked `re.M`. It reported "CANNOT SCOPE … this is not a pass
 instead of "0 missing", which is the whole reason the third state is there.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c0c3d7979.
