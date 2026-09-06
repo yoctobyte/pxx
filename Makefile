@@ -5760,6 +5760,12 @@ test-core: $(COMPILER)
 	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32 riscv32; do \
 	    ./$(COMPILER) --target=$$arch test/test_nd_subarray_as_param.pas $(TESTTMP)/test_ndsub_$$arch >/dev/null; \
+	    tools/expect_same.sh $$arch/test_ndsub_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_ndsub_$$arch)" "ND SUBARRAY OK" \
+	      || { echo "cross N-D sub-array param FAIL on $$arch"; exit 1; }; \
+	  done; echo "cross N-D sub-array param ok: i386 aarch64 arm32 riscv32"; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross N-D sub-array param ==="; \
+	fi
 	@# ...and the same row through EVERY BASE SPELLING, which is the regression
 	@# guard on deleting NDRowSourceInfo's second switch. NodeArrNDInfo resolves
 	@# an array through four arms and used to publish the spans and nothing else,
@@ -5792,12 +5798,6 @@ test-core: $(COMPILER)
 	@# bug-p-a-pointer-to-a-fixed-array-segfaults-as-a-copying-open-array-argument
 	./$(COMPILER) test/test_a_pointer_to_a_fixed_array_is_a_copying_open_array_argument.pas $(TESTTMP)/test_ptrarrarg26
 	tools/expect_same.sh test_ptrarrarg26 "$$($(TESTTMP)/test_ptrarrarg26 | tail -n 2)" "$$(printf 'fails=0\nPTRARRARG OK')"
-	    tools/expect_same.sh $$arch/test_ndsub_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_ndsub_$$arch)" "ND SUBARRAY OK" \
-	      || { echo "cross N-D sub-array param FAIL on $$arch"; exit 1; }; \
-	  done; echo "cross N-D sub-array param ok: i386 aarch64 arm32 riscv32"; \
-	else \
-	  echo "=== test-core: qemu-user not present, skipping cross N-D sub-array param ==="; \
-	fi
 	# feature-a-x86-64-object-output-is-position-dependent
 	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
 	# TRAILS the displacement. A rip-relative displacement is measured from the
