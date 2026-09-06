@@ -3,8 +3,8 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-06
 found-by: frankB
 summary: "`function WordPosition(const N: Integer; ...): Integer; var i, n, count: Integer;` declares a parameter `N` and a local `n` in one routine. Pascal is case-insensitive, so that is ONE identifier declared twice and fpc refuses it as a duplicate; pxx accepts it silently and registers two symbols. Three routines in our own `lib/rtl/strutils.pas` were written that way and read the two as different variables. Found only because a name-resolution fix (bug-p-an-exact-case-match-in-an-outer-scope-beats-a-case-insensitive-one-in-a-nearer-scope) made the two collapse onto one symbol and broke them -- the duplicate itself is invisible today. THE VALUE IS THE DECLARATION-SITE DIAGNOSTIC: the collision is trivially detectable where it is written and is otherwise found three functions later as a wrong value. Not landed with the resolution fix because a refusal is a NARROWING over a population nobody has enumerated, and that commit already moved name resolution. CENSUS DONE 2026-09-06 (frankA) AND IT DECIDES: ERROR -- the narrowing costs exactly ONE site corpus-wide, lib/rtl/bignum.pas:495, a routine-local `result` beside the implicit `Result`, which fpc refuses outright (Duplicate identifier 'RESULT') and which only survives because lib/rtl is built by $(PXX_STABLE) and never by the seed. Re-ranked 35->45. THE STATED BOUNDARY IS TOO NARROW: four of the five cascade instances were `const SPARE` beside `var spare` at PROGRAM scope, neither two locals nor an outer-scope collision -- the population is two declarations in ONE scope differing only in case, at ANY level. BEWARE THE COUNT: 342 of the 350 same-scope hits are gtk3 GDK keysyms arriving through a C header import, where the two names are legitimately distinct and DO resolve correctly (probed with four differing values), so ranking by hit count sends a reader straight to the one file that is fine."
