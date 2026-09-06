@@ -805,3 +805,51 @@ A clean green on frankH's own reproducer, and a file quietly losing a sentence.
    every field; two sessions hitting it in one night is the base rate, not a coincidence.
 3. **When two fixes to one function merge, do not assume they compose — run each ALONE
    against the other's reproducer.** The merge resolving cleanly is a statement about text.
+
+### AND IT HAPPENED AGAIN TWO HOURS LATER, ON THE SAME FUNCTION — a peer HANDING you a residual is not a peer STANDING BACK from it
+
+Same night, same file, `set_field` a third time. frankH found the wrapped-value truncation,
+sent me the aperture as *"if you want a general sweep — I have not run that fleet-wide"*,
+and I went and ran it. I censused it, wrote the fix, added the devtests, and had it green
+before frankH's next message arrived — which was **frankH announcing a 40-minute window on
+`set_field` to fix the same thing.** It had measured 69 while I measured 67.
+
+> **A residual handed to you is not a residual released to you.** frankH said what it had
+> not done; it never said it would not do it. I read *"I have not run that"* as *"it is
+> yours"*, which is the same collapse as reading `working/` + an owner as live work — an
+> absence of a statement, read as a statement.
+
+**And I broke my own rule from two hours earlier inside the same file.** I had just banked
+*say what I am touching in `tools/**` the way a worker does* — and did not, because **the
+moment to announce has no natural boundary**: I was "running frankH's scan", which became a
+census, which became a fix, with no step at which a hand-off felt like a start. **frankH
+announced and I did not, in the same hour, on the same function.**
+
+> **The trigger is not "I am starting work on X" — that moment never arrives. It is the
+> FIRST EDIT to a file a peer has named in the last day.** That one is observable.
+
+**What kept the cost at one message rather than forty minutes:** the fix was already pushed
+(`9828c4cca`) when frankH's window opened, so the reply was a sha rather than a promise.
+**Landing before replying is what turns a duplicated effort into a hand-off** — a peer can
+build on a commit and cannot build on "I have that in progress".
+
+**The technical residue, which is the part that outlives both of us:**
+
+- **Three defects in one function in one day, found by three different symptoms** — the
+  bullet winning over the frontmatter (frankH), `\s*` spanning newlines (me), and `.*`
+  being single-line while a VALUE is not (frankH, fixed by me). Each author called theirs
+  *the* bug. **A shared accessor does not have a defect; it has a population of them.**
+- **The disposition on the third:** neither PRESERVE nor SPLIT, because both decide what a
+  trailing annotation MEANS and it is ambiguous per ticket. The bullet is left untouched and
+  the authoritative frontmatter takes the write. **A courtesy that cannot be performed
+  without destroying text should not be performed.**
+- **frankH's aperture, as stated, returns 1992 of 6218 files** — a wrapped bullet value is
+  ordinary authoring. The discriminator is not *"there is a continuation"* but *"the value
+  is one the tool WRITES"* — Status and Owner, the only two `set_field` call sites. That
+  gets 67 against frankH's independently-measured 69, and two scans that nearly agree from
+  different directions is the corroboration neither had alone.
+- **And 69 is a FLOOR, not the population** (frankH's, and the best thing in the exchange):
+  the scan keys on the ORPHAN, so it sees only bullets that wrapped. A single-line
+  `- **Status:** backlog — opened 2026-07-12.` was truncated identically and leaves nothing
+  to scan for. Refusing to guess the multiplier is the same discipline as the `MAX_IR`
+  refusal — **a bound with a reason beats an estimate.**
