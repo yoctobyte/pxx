@@ -4,10 +4,10 @@ title: "A string-alias cast over a Pointer slot is treated as a no-op, so the ex
 track: P
 prio: 55
 type: bug
-status: backlog
+status: working
 found: 2026-09-05
 found-by: frankH
-owner: ""
+owner: frankB
 blocked-by: []
 summary: "`type t = AnsiString; var p: Pointer; t(p) := 'abc'; writeln(t(p))` prints `4261104` -- the POINTER rendered as a number -- where fpc 3.2.2 -Mdelphi prints `abc`. Silent wrong value, no diagnostic. The loud face of the same cause is `SetLength(t(p), 2)` answering `SetLength expects a string variable in IR codegen` while fpc accepts it and prints `ab`. CAUSE, located: the C4 string-alias cast arm in pasparser_expr.inc treats the cast as a VALUE-LEVEL NO-OP and returns the operand with its own kind. That is correct and load-bearing when the operand is already a string (tagging it tyPointer is what made `Pos(tbtstring(' '), s)` miss every string overload) and wrong when the operand is a POINTER, where the same cast is a real REINTERPRET. THE OPERAND'S KIND IS THE DISCRIMINATOR, not the alias's. Boundary measured: casts over a string VARIABLE, a `^AnsiString` deref, and an AnsiString record FIELD all work; only a Pointer-typed slot fails, with or without indirection. A RETYPE-ONLY FIX WAS TRIED AND REVERTED, and the reason is the useful part: retagging the node to tyAnsiString makes `writeln(t(p))` print `abc` followed by out-of-bounds memory and leaves `Length(t(p))` answering the pointer value (4265208 against fpc's 3), because the IR still lowers the load as a pointer -- the store is already CORRECT (`p = Pointer(s)` is TRUE). So the fix spans the parser AND ir.inc's lvalue/length lowering, not the cast arm alone. Third face of the cause 9339d6661 fixed the second of."
 ---
@@ -155,3 +155,75 @@ in the file that declares it is a weaker claim than it feels.
    string operand must survive, it is why that arm exists.
 4. A frozen-string alias operand keeps whatever it does today; only the
    non-string operand changes.
+
+## RESOLVED 2026-09-06 (requirements 1, 3, 4) — requirement 2 SPLIT OUT, because it is not an alias defect
+
+### The fix is a ROUTE, not a new lowering, and the measurement that showed it took one probe
+
+`AnsiString(p)` and `String(p)` over a `Pointer` slot **have always been
+correct** — they print `abc` and answer `Length` 3 on the unfixed compiler. Only
+the ALIAS spelling was wrong. So this is the same two-spellings-one-taught seam
+as the rest of this file's history, and the built-in path's own node is the
+answer: an `AN_PTR_CAST` with `ASTIVal = -1`, tagged with the cast's string kind.
+The alias arm now builds exactly that when the operand is a pointer.
+
+That is also why the previous session's retype-in-place was worse than the bug:
+`ASTTk` is not what the lowering reads. **The cast NODE is.** The reverted diff
+was a correct diagnosis of "the tag does not help" and the wrong conclusion from
+it.
+
+### THE DISCRIMINATOR IS `= tyPointer`, AND `not TypeIsAnyString` BREAKS REQUIREMENT 3
+
+Written the obvious way — "if the operand is not already a string, reinterpret" —
+this arm passes every pointer row and **silently breaks `Pos(tbtstring(' '), s)`**,
+which is requirement 3 and the reason the no-op exists. The one-character literal
+`' '` arrives tagged `tyChar`, so a negative test sweeps it into the reinterpret
+and `Pos` answers nothing. Measured on a build that was otherwise green.
+
+A char operand is a CONVERSION — the built-in `String(c)` has a whole
+`AN_STR_FROM_CHAR` arm for it. The boundary table in this ticket measured exactly
+one failing operand, a `Pointer`-typed slot, so that is the operand the arm
+changes. **A wider negative test is not a wider fix; it is a wider blast radius
+wearing the same green.**
+
+### THE STORE WAS NOT ALREADY CORRECT — the ticket measured one of its two shapes
+
+This ticket recorded *"the store is already correct: `t(p) := s; p = Pointer(s)`
+is TRUE"*. That is true for a string **variable** source and false for a
+**literal**:
+
+```
+t(p) := s;      Length(AnsiString(p))  ->  3            (as the ticket says)
+t(q) := 'abc';  Length(AnsiString(q))  ->  1073741824   (not measured before)
+AnsiString(q) := 'abc';                ->  3            (the built-in spelling)
+```
+
+Nothing at the call site distinguishes them. The variable form writes the live
+payload pointer, which happens to be exactly what a raw pointer store produces;
+the literal form does not. Fixed by routing the pointer-operand store to the same
+`ParseCastAsLValueStore` tail the built-in spelling takes —
+`FinishCastAsLValueStore`, split out rather than copied, because the C4 arm has
+already consumed `( expr )` by the time it knows the operand's kind.
+
+The existing string-operand arm (`TS(s) := 'z'` → `s := v`, keeping refcounting)
+is untouched and sits directly above the new one.
+
+### Requirement 2 is now [[bug-p-setlength-over-a-string-cast-of-a-pointer-slot-has-no-lowering]]
+
+`SetLength(t(p), 2)` and `SetLength(AnsiString(p), 2)` fail **identically**, so
+the alias is not in the cause and closing an alias ticket on it would have been
+closing it on a fix that had nothing to do with aliases. The parser drops the
+cast and hands the classifier a `Pointer` symbol; forcing the other arm answers
+`SetLength expects an ARRAY variable` instead, so neither classification has a
+lowering and it is an `ir.inc` job with five per-target twins. Probe reverted,
+binary sha back to `b8985660920b` byte-identical.
+
+### Landed
+
+- `compiler/pasparser_expr.inc` — the C4 string-alias arm reinterprets a
+  `tyPointer` operand through the built-in cast node, no-ops everything else.
+- `compiler/pasparser_stmt.inc` — `FinishCastAsLValueStore` split out of
+  `ParseCastAsLValueStore`; the C4 store arm routes a `tyPointer` operand to it.
+- `test/test_a_string_alias_cast_over_a_pointer_slot.{pas,expected}` — fpc 3.2.2
+  oracle, byte-identical, eight rows. D–H are controls, green before the fix;
+  E is the positive control for the discriminator; C is the literal store.

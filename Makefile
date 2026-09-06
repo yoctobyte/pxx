@@ -6689,6 +6689,23 @@ test-core: $(COMPILER)
 	@# covering N sites would not have been evidence either.
 	@$(TESTTMP)/test_qualnestedalias26 | diff -u test/test_a_qualified_nested_alias_is_a_type_and_a_scope.expected - \
 	  || { echo 'test_a_qualified_nested_alias_is_a_type_and_a_scope: FAIL - a TOwner.TNested spelling means different things in different positions'; exit 1; }
+	./$(COMPILER) test/test_a_string_alias_cast_over_a_pointer_slot.pas $(TESTTMP)/test_straliasptrslot26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROWS D..H ARE CONTROLS AND WERE GREEN BEFORE THE FIX: the no-op over a
+	@# string literal, a string variable, a `^AnsiString` deref, a record field,
+	@# and the BUILT-IN spelling. The built-in row is the load-bearing one --
+	@# `AnsiString(p)` has always been right, so this fix is a route to a node
+	@# that already existed and not a new lowering.
+	@# ROW E IS THE POSITIVE CONTROL FOR THE DISCRIMINATOR. `Pos(t(' '), 'a b')`
+	@# must answer 2. Written as "not a string" instead of "is a pointer" the
+	@# guard sweeps the one-character literal (tagged tyChar) into the
+	@# reinterpret and Pos answers nothing -- measured while writing this, on a
+	@# build that passed every pointer row.
+	@# ROW C IS THE LITERAL STORE and is the half the ticket did not have: it
+	@# recorded the store as already correct, which holds for `t(p) := s` (the
+	@# live payload pointer, so p = Pointer(s)) and not for `t(p) := 'abc'`.
+	@$(TESTTMP)/test_straliasptrslot26 | diff -u test/test_a_string_alias_cast_over_a_pointer_slot.expected - \
+	  || { echo 'test_a_string_alias_cast_over_a_pointer_slot: FAIL - a string-alias cast over a Pointer slot is not a reinterpret, or the no-op over a string operand was lost'; exit 1; }
 	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
 	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
 	@# RELATION, never a byte count: the absolute numbers are allocator- and

@@ -590,6 +590,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     strAliasCast: Boolean;   { the C4 cast names a STRING alias -- a value no-op, but its postfix tail is still the shared suffix loop }
+    strAliasOpTk: TTypeKind; { ...and the OPERAND's kind, which is what decides no-op vs reinterpret }
     strAliasIdx: Boolean;    { ...and it is FOLLOWED BY `[`, so the tail is the shared suffix loop rather than an Exit }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
@@ -7039,8 +7040,58 @@ begin
 
               An INDEX after the cast is the one thing this exit must not take
               with it: it falls through to the shared suffix loop below instead.
-              See the note at the fall-through. }
-            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+              See the note at the fall-through.
+
+              THE NO-OP IS CORRECT ONLY WHEN THE OPERAND IS ALREADY A STRING,
+              AND THE OPERAND'S KIND IS THEREFORE THE DISCRIMINATOR -- not the
+              alias's, which is a string in both cases. Over a POINTER-typed
+              slot the same cast is a real REINTERPRET, and returning the
+              operand unchanged left `t(p)` a pointer: `type t = AnsiString;
+              var p: Pointer; t(p) := 'abc'; writeln(t(p))` printed 4261104 --
+              the pointer as a number, no diagnostic -- where fpc 3.2.2 prints
+              abc. uPSCompiler.pas stores every string this way, 93 times.
+
+              THE BUILT-IN SPELLING ALREADY DID THIS RIGHT, which is what makes
+              the fix a route rather than an invention: `AnsiString(p)` and
+              `String(p)` both print abc and answer Length 3 today, on this arm's
+              own model -- an AN_PTR_CAST with ASTIVal = -1, built by the
+              identifier path and by tkString_T's final else. Two spellings of
+              one concept, one of them taught. So the non-string operand takes
+              the same node the built-in takes, with the ALIAS's string kind
+              rather than the dialect default, because that is the only thing
+              the alias adds.
+
+              Retagging ASTTk in place was tried by a previous session and
+              REVERTED for being worse than the bug -- `writeln` then printed
+              abc plus out-of-bounds memory and `Length` still answered the
+              pointer. That is the tell that the tag is not what the lowering
+              reads; the CAST NODE is.
+
+              THE TEST IS `= tyPointer` AND NOT `not TypeIsAnyString`, and the
+              difference is requirement 3 of the ticket. Written the second way
+              this arm compiles and passes the pointer rows and SILENTLY BREAKS
+              `Pos(tbtstring(' '), s)` -- the one-character literal ' ' arrives
+              tagged tyChar, so "not a string" swept it into the reinterpret and
+              Pos answered nothing. A char operand is a CONVERSION (the built-in
+              String(c) has a whole AN_STR_FROM_CHAR arm for it), never a
+              reinterpret. The ticket's boundary table measured exactly one
+              failing operand -- a Pointer-typed slot, with or without
+              indirection -- so that is the operand this arm changes, and
+              nothing else moves. A wider negative test is not a wider fix; it
+              is a wider blast radius wearing the same green.
+              bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer }
+            strAliasOpTk := IntToTypeKind(ASTTk[CurASTNode]);
+            if strAliasOpTk <> tyPointer then
+              LastExprTk := strAliasOpTk
+            else
+            begin
+              node := AllocNode(AN_PTR_CAST);
+              ASTLeft[node] := CurASTNode;
+              ASTIVal[node] := -1;              { built-in cast, as the ident path does }
+              ASTTk[node]   := AliasTk[aliasIdx];
+              CurASTNode := node;
+              LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
+            end;
             Exit;
           end;
           if AliasTk[aliasIdx] = Ord(tyRecord) then

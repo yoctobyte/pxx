@@ -5598,6 +5598,11 @@ begin
   end;
 end;
 
+{ Defined just below; ParseCastAsLValueStore is its `(` -consuming wrapper and
+  the FPC seed build is single-pass, so the forward is mandatory rather than a
+  style choice. }
+function FinishCastAsLValueStore(valNode: Integer; castTk: TTypeKind): Integer; forward;
+
 function ParseCastAsLValueStore(castTk: TTypeKind): Integer;
 { `<TypeName>(target) := value` as a STATEMENT. Call with the type name already
   consumed and CurTok on the `(`; castTk is what the name resolved to.
@@ -5616,12 +5621,30 @@ function ParseCastAsLValueStore(castTk: TTypeKind): Integer;
   The retag is the point of the whole thing: the target deref is stamped with the
   CAST's kind, so the store writes at the cast's width rather than the pointer's.
   bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name }
-var valNode, node, castPrevTok: Integer;
+var valNode: Integer;
 begin
   Expect(tkLParen, '(');
   ParseExpr;
   valNode := CurASTNode;
   Expect(tkRParen, ')');
+  ParseCastAsLValueStore := FinishCastAsLValueStore(valNode, castTk);
+end;
+
+{ The half of the above that runs AFTER the operand exists: normalise a plain
+  lvalue into a deref, retag it with the CAST's kind, then take `:= value`.
+
+  SPLIT OUT RATHER THAN COPIED, because the second caller is the C4 string-alias
+  arm, which cannot call the whole thing: it has already consumed `( expr )` by
+  the time it knows the operand's kind, and the operand's kind is the only thing
+  that tells a REINTERPRET (`type t = AnsiString; var p: Pointer; t(p) := 'abc'`)
+  apart from a no-op over a string variable (`TS(s) := 'z'`, which must stay
+  `s := v` and keep its refcounting). A copy here would have been the fourth
+  copy of a store this file's own comments record being fixed one spelling at a
+  time.
+  bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer }
+function FinishCastAsLValueStore(valNode: Integer; castTk: TTypeKind): Integer;
+var node, castPrevTok: Integer;
+begin
   if ASTKind[valNode] <> AN_DEREF then
   begin
     { `Integer(v) := x` over a plain LVALUE, not a pointer deref: ordinary
@@ -5662,7 +5685,7 @@ begin
   node := AllocNode(AN_ASSIGN);
   ASTLeft[node] := valNode;
   ASTRight[node] := CurASTNode;
-  ParseCastAsLValueStore := node;
+  FinishCastAsLValueStore := node;
 end;
 
 function ParseStatementAST: Integer;
@@ -8143,6 +8166,41 @@ begin
                 ASTLeft[node] := valNode;
                 ASTRight[node] := CurASTNode;
                 ParseStatementAST := node;
+                Exit;
+              end;
+              { ...and the OTHER operand kind through the same string alias,
+                which is the reinterpret rather than the no-op: `type t =
+                AnsiString; var p: Pointer; t(p) := 'abc'`. The arm above tests
+                the operand for a STRING and drops the cast; a POINTER slot
+                needs the opposite, a store at the CAST's width, which is
+                exactly what the BUILT-IN spelling `AnsiString(p) := 'abc'`
+                already does two arms up through ParseCastAsLValueStore.
+
+                ONE STORE, TWO SPELLINGS, ONE OF THEM TAUGHT -- the same seam as
+                the rvalue half of this ticket, and visible in the builtin arm's
+                own guard, which excludes an alias name (`FindTypeAlias(name) <
+                0`) and hands it here. Measured before and after: `t(q) :=
+                'abc'` then `Length(AnsiString(q))` answered 1073741824 and now
+                answers 3, while `AnsiString(q) := 'abc'` answered 3 throughout.
+
+                THE TICKET SAID THE STORE WAS ALREADY CORRECT AND IT IS CORRECT
+                ONLY FOR A STRING VARIABLE SOURCE. `t(p) := s` writes the live
+                payload pointer, so `p = Pointer(s)` is TRUE and every read
+                works -- which is the shape that was measured. `t(p) := 'abc'`
+                with a LITERAL source does not, and the two differ by nothing
+                visible at the call site.
+                bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer }
+              if (not pcharCast) and (aliasIdx >= 0) and
+                 (AliasPtrDepth[aliasIdx] = 0) and
+                 (CurTok.Kind = tkAssign) and
+                 ((AliasTk[aliasIdx] = Ord(tyAnsiString)) or
+                  (AliasTk[aliasIdx] = Ord(tyString))) and
+                 (ASTTk[ASTLeft[indexNode]] = Ord(tyPointer)) and
+                 IsASTLValue(ASTLeft[indexNode]) then
+              begin
+                ParseStatementAST :=
+                  FinishCastAsLValueStore(ASTLeft[indexNode],
+                                          IntToTypeKind(AliasTk[aliasIdx]));
                 Exit;
               end;
               { ...and the SUFFIXED spelling of the same mistake,
