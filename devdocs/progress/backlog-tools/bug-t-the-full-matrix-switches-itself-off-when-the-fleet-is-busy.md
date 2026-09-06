@@ -9,110 +9,87 @@ owner: frankH
 
 ## summary
 
-The full tier's breadth is starved when TESTABLE commits arrive closer together
-than **`native_wall + full_commit_secs` (~230s)** — and above that rate breadth
-degrades **silently**, because the native tier keeps publishing green.
+**A NEW PIN STOPS THE FULL TIER, because `pin-verify` sits above platform
+breadth in the idle ladder and cannot finish while pushes arrive.** Fleet push
+rate is a contributing factor, not the cause.
 
-**CORRECTED 2026-09-06, and the first version of this ticket had the wrong
-population.** It said "one push per 60 seconds", counting ALL commits. The code
-does not count all commits: `needs_test()` (twatch.py:6612) returns False for a
-commit whose every path is under `NOTEST_PREFIXES = ("devdocs/", "docs/")`, and
-the abort check is `any(needs_test(...) for c in commits_between(...))`. Since
-18:37Z, 50 of 69 commits were docs-only — **72% of the traffic is free.**
-Corrected by frankuser and frank-coordinator; the raw-commit correlation was
-real and fitted the outage perfectly, and it fitted because docs traffic and
-code traffic are produced by the same seats and move together. **A correlation
-measured over a superset tracks the subset whenever the two move together**,
-which is why the check has to be against what the code counts, never against
-the quality of the fit.
+**CORRECTED TWICE, 2026-09-06.** The first two versions of this ticket named the
+push rate as the mechanism. Both were wrong, and the history is kept below
+because the way it was wrong is more useful than the fix.
 
-## the mechanism, measured 2026-09-06
+## the cause, from published state
 
-`twatch.py`'s phase ladder is priority-ordered and step 1 (new push -> fast
-tier) preempts everything below. The idle full backfill has a commitment point,
-`full_commit_secs = 60` (`CONF_DEFAULTS`, used at the backfill and at the
-request queue): a push inside the first 60s aborts the run and it publishes
-nothing; after 60s it is allowed to finish. So a full needs **60 contiguous
-push-free seconds to become uninterruptible.**
-
-**THE TERM BOTH CORRECTIONS MISSED: the native verdict must finish first.** A
-full is an IDLE-cycle phase, and the box is not idle while it is running the
-fast native verdict for the newest sha — ~170s wall, measured. So a full does
-not need 60 quiet seconds; it needs the native to complete AND THEN 60 seconds,
-i.e. a testable gap of roughly `170 + 60 = 230s`.
-
-Gaps between consecutive TESTABLE commits since the last published full:
+Last full published **18:37:24Z**. Pin v406 committed **18:42:14Z**. Five
+minutes apart, and `tstate/seven.json` says why:
 
 ```
-  all 18 gaps >= 60s :  11   [68, 92, 108, 124, 130, 135, 140, 162, 191, 256, 416]
-  ... but >= 230s    :   2   [256, 416]
+idle_yield        {"aborts": 2, "phase": "pin-verify", "target": "1b903c1dd..."}
+pin_verify        {"date": "2026-09-06T08:19:39Z", "sha": "36eb642d6240..."}  <- still v405's
+last_breadth_try  {"date": "2026-09-05T21:51:18Z"}                            <- 21h ago
 ```
 
-So the run had **two** opportunities in forty minutes, not eleven, and the
-longer of the two leaves 186s of margin while the shorter leaves 26s. Zero
-published fulls is what that distribution predicts. The eleven-gap count is what
-made "sixty seconds" look refuted; the two-gap count is the one the mechanism
-acts on.
+A new pin mints a new pin-verify target. `pin-verify` is a HIGHER idle phase
+than platform breadth (the `elif pin_mid ...` arm precedes the breadth arm; only
+the request queue is above it). It has held the idle slot since 18:42Z, is
+preempted before its `full_commit_secs` commitment point, and at `aborts: 2`
+against `IDLE_YIELD_AFTER = 3` has not yet yielded even one slot downward. It
+has also never verified v406 — `pin_verify` still names v405's sha.
 
-The pre-18:37 fulls were COMPLETE, not truncated — `timed_out: False`,
-`unreached: 0`, deadline 4547s never approached. They read ~601s because
-partial-resume carries decided jobs forward; the cold cost is 1867s (the
-16:16:30Z run). A commit touching `compiler/**` invalidates the partial
-(`load_resume()` keeps it only if the compiler rebuilds byte-identical), so a
-busy fleet also raises the price of each attempt.
+**twatch.py predicted this in its own comment**, which is better evidence than
+any reasoning here: *"Measured on seven 2026-08-29: 7 pin-verify attempts, 7
+preemptions, 0 completions... IDLE_YIELD_AFTER bounds the damage to other phases
+but does nothing for the pin: yielding the slot is not the same as ever
+verifying."*
 
-## the "never STARTED" alternative is refuted, not merely untested
+So the push rate matters — it is what stops pin-verify finishing — but the
+EVENT that changed at 18:37Z was the pin, and a rate cannot explain a sharp
+edge.
 
-It was proposed that `idle_phase`'s ladder restarts at the bottom on every
-testable push and, with the shipped default collapsing mid and deep to `full`,
-the daemon might never REACH the full rung — a different failure, since a full
-never started and one started-then-aborted are indistinguishable in the archive.
+## the escape hatches, and their order
 
-The code settles it against that reading. `idle_phase` is:
+Idle phases run: **requests -> pin-verify -> breadth**.
 
-```python
-lf = st.get("last_full") or {}
-if lf.get("sha") != tested:        return mid_tier     # == "full" by default
-if mid_tier != deep_tier and lf.get("tier") != deep_tier:  return deep_tier
-return None
-```
+- `breadth_overdue()` reserves a slot ahead of the fast verdict with
+  `commit_after=0`, so nothing can abort it. It arms only when `last_full` is
+  stale past `breadth_stale_secs()`, **6h by default** — from an 18:37Z full
+  that is ~00:37Z. Waiting does not work on a timescale anyone wanted.
+- The **request queue** (`--request <sha> --request-tier full`) is above
+  pin-verify, so it bypasses this entirely. It still needs
+  `full_commit_secs` of no testable push to commit. **Hold plus request works;
+  hold alone does not.**
 
-Under `mid_tier == deep_tier == "full"` the FIRST idle rung already returns
-`full`; there is no two-step climb to be interrupted before reaching it. The
-collapse that was thought to hide the rung is what makes it immediate. So the
-archive's silence is started-and-aborted, which is what a commitment window
-describes.
+## not measured
 
-## why it is not just "ask for one"
+`breadth_stale_secs` and `full_commit_secs` come from `twatch.conf` in seven's
+clone, unreadable from plexus; the numbers above are the shipped defaults.
+Whether the full rung was ENTERED during any slot pin-verify yielded is not in
+published state — `last_breadth_try` covers only the reservation path, which
+provably has not fired since 2026-09-05. **That question is open** and the
+daemon's stdout on seven settles it.
 
-The request queue (`--request <sha> --request-tier full`) is drained FIRST among
-idle phases and is the documented escape hatch — but it carries the **same 60s
-commitment requirement**, so it jumps the queue without escaping the starvation.
-`twatch.py` records exactly this, 2026-08-27: *"a `full` request sat undrained
-while the log showed the phase being ENTERED and then 'preempted by a push —
-will resume', 15 times. The queue's position was never the problem — it is
-reached fine and cannot FINISH."*
+## the two wrong versions, kept because the shape repeats
 
-## why this is a decision and not a patch
+**v1 — wrong population.** "One push per 60s", counting ALL commits.
+`needs_test()` returns False for a commit whose every path is under
+`NOTEST_PREFIXES = ("devdocs/", "docs/")`; 50 of 69 commits after 18:37Z were
+docs-only, so 72% of the traffic cannot abort anything. The raw-commit
+correlation was real and fitted the outage perfectly — and it fitted because
+docs traffic and code traffic come from the same seats and move together.
+**A correlation measured over a superset tracks the subset whenever the two move
+together**, so the check must be against what the code counts, never against the
+quality of the fit.
 
-Every piece behaves as designed and the design is documented and reasoned. What
-is new is FLEET SIZE: enough concurrent workers and the repo never goes quiet
-for 60s, so the fleet switches off its own cross-target coverage by working
-normally, and nothing reports that it has.
+**v2 — right population, missing term, and still the wrong cause.** Corrected to
+testable commits, then added that the box is not idle while the ~170s native
+verdict runs, so the requirement is `native_wall + full_commit_secs` ~= 230s:
+of 18 testable gaps, 11 exceed 60s and only 2 exceed 230s. All true, and it
+still named a rate rather than the pin.
 
-CLAUDE.md's breadth guarantee — *"T samples the tip every ~8 commits, a
-persistent regression is caught within ~8"* — is being satisfied by the NATIVE
-tier while the full matrix falls behind. Those are different claims and the
-rule does not distinguish them.
+**v2 also "refuted" the right answer.** It was proposed that the ladder never
+REACHES the full rung. `idle_phase` returns `mid_tier` on its first rung and the
+shipped default collapses `mid == deep == "full"`, so the rung IS immediate —
+correct, and beside the point: `idle_phase` is only consulted after the higher
+`elif` arms decline, and pin-verify is one of those. **Verifying the predicate
+and never checking how it is applied**, which is the same error frankuser made
+on `NOTEST_PREFIXES` the same hour, one layer out.
 
-Options, none taken: raise `full_commit_secs`; reserve a periodic full slot that
-pushes may not preempt; make breadth age a reported signal that goes RED on its
-own; or accept it and treat a landing hold as the standing procedure before any
-tier that matters. **The last is what worked on 2026-09-06** — but it needs a
-human to call it, which is the part that does not scale.
-
-## not claimed
-
-Measured on seven, on one day, at one fleet size. The threshold is derived from
-`full_commit_secs` and the observed push rate, not from an experiment that
-varied the rate.
