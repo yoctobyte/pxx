@@ -4036,6 +4036,78 @@ trace that the assumption ever held, and the next reader cannot tell a rule that
 was never true from one that stopped being true.
 
 
+## A HEADER SAYING "THIS LIST IS COMPLETE" IS WHY NOBODY RE-DERIVES IT — and the same sentence hid two missing entries in one function
+
+`CloneAST` (`compiler/ast_arena.inc`) copies AST-indexed slots **by name**, one
+assignment per field, and its header said it copied *"the full per-node field set
+AllocNode initialises (the only AST-indexed arrays)"*.
+
+It did not. `ASTEnumId` was missing, and so was `ASTCLongRank`. Both are
+AST-indexed, both are initialised by `AllocNode` within a few lines of fields the
+list *does* copy, and a clone got the fresh-node default where the original had a
+value. **One sentence, two missing entries, and the sentence is the reason
+neither was found for months**: a hand-maintained list under a header that
+asserts its own completeness reads as checked, so the next person edits *around*
+it instead of re-deriving it. A list with no such claim invites a glance at the
+constructor; this one closed the question in advance.
+
+**THE LEAD ARRIVED WITH ITS OWN LIMITS STATED, WHICH IS WHY IT WAS ACTIONABLE.**
+frankA sent it (2026-09-06) as *"an unverified observation, not a demonstrated
+defect"* — a slot not copied, a comment claiming it was, and **no repro**, after
+trying the promising `CloneAST` call sites. That framing is what made it worth
+acting on rather than worth arguing about: an unreproduced lead that says so can
+be weighed, and one dressed as a finding cannot.
+
+### The value of a dormant slot CHANGES when the slot's meaning widens
+
+This is the part that generalises past `CloneAST`. While `ASTEnumId` held only an
+enum type index, a dropped copy cost a **missed diagnostic** — annoying, rarely
+observed, genuinely hard to repro. The same slot then became the carrier for
+*"integer kind, boolean semantics"*
+([[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]]), and the cost of
+the same omission became **a silent control-flow inversion in cloned subtrees
+only** — `not` complementing an integer inside a `for..in`, a `SetLength`
+desugar or an inline expansion, and **nowhere else**.
+
+Read that failure mode carefully, because it is the expensive shape this file
+exists for: intermittent *by construct*, correct everywhere a small repro would
+look, and bearing no resemblance to the change that caused it. Nobody chasing it
+would have suspected the type system.
+
+**So: when you widen what a channel MEANS, re-audit who copies it, not just who
+reads it.** The readers are what you think about; the copiers are what silently
+downgrade to a default. A dormant omission is not a stable quantity — its price
+is set by the field's current meaning, and it is repriced by every widening.
+
+### What to do about it, in order of cost
+
+1. **Grep the constructor for the rest of the claim.** `ASTCLongRank` was found
+   by taking `CloneAST`'s "full per-node field set AllocNode initialises"
+   literally and diffing it against `AllocNode`. Two minutes, one more bug.
+2. **Delete the completeness claim** if you are not going to enforce it. The
+   header now describes what the code does rather than asserting a property
+   nothing checks.
+3. **Enforce it mechanically.** The honest guard is a devtest asserting that the
+   set of fields `CloneAST` copies equals the set `AllocNode` initialises,
+   **derived from the source rather than hand-listed** — same shape as
+   `test/ast_slot_writes.expected`. That would have caught both at once.
+   Filed as `bug-t-clonast-and-allocnode-field-sets-are-hand-kept-in-sync`.
+
+### The census that bounded it, and why it is still not a proof
+
+frankA then censused both ends rather than leaving it at "fixed anyway":
+`CloneAST` has callers in six files, **none of them a C frontend file**;
+`ASTCLongRank` has exactly **one** reader, in `cparser.inc`, during C parsing.
+The two sets do not intersect, twice over — which is why no repro existed for
+that slot.
+
+**But a call-site census is closed-world for the FIELD and open-world for
+REACHABILITY.** One `CloneAST` call added to `cparser.inc` opens it immediately.
+That is an argument *for* having fixed it and *for* describing it as a slot that
+was missing rather than a defect that was observed. Necessity was not
+demonstrated; saying so is the honest form, and it is what lets the next reader
+tell this apart from a bug with a repro behind it.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a

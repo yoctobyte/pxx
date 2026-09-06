@@ -201,6 +201,7 @@ AN_ARG Left polAddr
 AN_ARG Left ppBase
 AN_ARG Left ppExp
 AN_ARG Left procAddr
+AN_ARG Left raDest
 AN_ARG Left rbVal
 AN_ARG Left rcSelf
 AN_ARG Left recv
@@ -369,6 +370,7 @@ AN_ASSIGN Left lhsIdent
 AN_ASSIGN Left lhsIncNode
 AN_ASSIGN Left lhsNode
 AN_ASSIGN Left node
+AN_ASSIGN Left raDest
 AN_ASSIGN Left sTarget
 AN_ASSIGN Left slot
 AN_ASSIGN Left target
@@ -470,6 +472,7 @@ AN_ASSIGN Right operand
 AN_ASSIGN Right paramNode
 AN_ASSIGN Right powAddr
 AN_ASSIGN Right r
+AN_ASSIGN Right raTmpIdent
 AN_ASSIGN Right rawNode
 AN_ASSIGN Right rhs
 AN_ASSIGN Right rhsNode

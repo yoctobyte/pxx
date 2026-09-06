@@ -15127,6 +15127,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_record_multifield26 "$$($(TESTTMP)/test_record_multifield26)" "$$(printf '11 22\n0 1 2\n0 10 20')"
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_readln26
 	tools/expect_same.sh test_readln26 "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_readln26)" "$$(printf -- '100\n200\n300\n-5\n30\nhello world\nQ')"
+	# ...and reading into a FROZEN string, at BOTH doors, which had no test at
+	# all. From a Text file it SEGFAULTED (a `var AnsiString` RTL parameter
+	# handed an inline [len][chars] slot); from stdin it silently wrote the
+	# characters at dest+8 in the word-prefix layout, where Length alone still
+	# read right and only a BYTE DUMP can fail. The `string[4]` rows assert the
+	# capacity clamp that path never had. .expected is FPC 3.2.2's own output.
+	./$(COMPILER) test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26
+	tools/expect_same.sh test_read_into_a_frozen_string_from_stdin_and_a_file26 "$$(printf 'abc\nlonger-than-four\n77\n' | $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26)" "$$(cat test/test_read_into_a_frozen_string_from_stdin_and_a_file.expected)"
 	./$(COMPILER) test/test_record_copy.pas $(TESTTMP)/test_record_copy26
 	tools/expect_same.sh test_record_copy26 "$$($(TESTTMP)/test_record_copy26)" "$$(printf '1 2 3 4\n20 21 22 23')"
 	./$(COMPILER) test/test_static_methods.pas $(TESTTMP)/test_static_methods26

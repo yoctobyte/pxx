@@ -3724,6 +3724,46 @@ begin
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
       tailSeq := newSeq;
     end
+    else if TypeIsFrozenString(trTk) then
+    begin
+      { A FROZEN-string destination goes through a managed TEMP and is then
+        ASSIGNED, because TextReadStrTo's parameter is `var s: AnsiString` and
+        handing it a ShortString slot writes a managed string into inline
+        [len][chars] storage. `readln(f, s)` on `s: ShortString` SEGFAULTED --
+        at HEAD and on pin v405 alike, so it long predates the identity work
+        this session did; fpc 3.2.2 prints the line. `string[32]` and `read`
+        as well as `readln` are the same crash, and `s: string` escaped it only
+        because this build spells that tyAnsiString (SizeOf 8) -- in a
+        non-managed build it is tyString and lands here too, which is why the
+        guard is TypeIsFrozenString and not a list of the two kinds that were
+        observed to crash.
+
+        THE CHAR ARM ABOVE PREDICTED THIS ONE, IN WRITING, and stopped one type
+        short: "whose `var AnsiString` slot would have written a string handle
+        into ONE BYTE". Same sentence, same slot, a wider destination -- so it
+        did not write into one byte, it wrote a managed string through a frozen
+        one. Fixed one arm of a double case; this is the sibling
+        (normalise-dont-special-case.md).
+
+        A TEMP AND AN ASSIGNMENT rather than a second RTL entry point, for the
+        reason the NUMERIC arm above already works this way: the managed ->
+        frozen conversion is one the assignment path already performs
+        correctly, and adding a frozen-aware reader to the textfile RTL would
+        be a second copy of a conversion that exists.
+        bug-p-readln-from-a-text-file-into-a-frozen-string-segfaults }
+      trTmpSym := AllocVar('', tyAnsiString);
+      callNode := GenMakeCall6(procStrTo, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                               GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
+      newSeq := GenMakeSeq(callNode, -1);
+      if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+      tailSeq := newSeq;
+      trIdent := AllocNode(AN_IDENT);
+      ASTIVal[trIdent] := trTmpSym; ASTTk[trIdent] := Ord(tyAnsiString);
+      trAsn := AllocNode(AN_ASSIGN);
+      ASTLeft[trAsn] := destNode; ASTRight[trAsn] := trIdent;
+      newSeq := GenMakeSeq(trAsn, -1);
+      ASTRight[tailSeq] := newSeq; tailSeq := newSeq;
+    end
     else
     begin
       { A string destination reads up to but NOT over the terminator, so a
@@ -3920,10 +3960,12 @@ function ParseReadArgsAST(isLn: Boolean): Integer;
   args are kept as an AN_ARG chain; IR lowering takes each one's address and
   parses a value from the line buffer by the target's type. }
 var node, argNode, lastArg, fileSym: Integer;
+    raDest, raTmpSym, raTmpIdent, raAsn, raSeq, raHead, raTail: Integer;
 begin
   node := AllocNode(AN_READLN);
   if not isLn then ASTKind[node] := AN_READ;
   ASTLeft[node] := -1;
+  raHead := -1; raTail := -1;
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -3946,8 +3988,51 @@ begin
     lastArg := -1;
     repeat
       ParseExpr;
+      raDest := CurASTNode;
+      { A FROZEN-string target reads into a managed TEMP and is ASSIGNED after,
+        exactly as the Text-file reader's frozen arm does — one rule, two
+        statements, rather than two spellings of a conversion.
+
+        EmitReadVarParse has no frozen arm at all. Its `tyString` case writes a
+        QWORD length at [dest] and the characters at dest+8, which is the
+        WORD-prefix layout; a ShortString is [len:byte][chars] and read that
+        way, so `ReadLn(s)` on input 'abc' left Length(s) = 3 (the low byte of
+        the qword, right by accident) with the characters at s[8], s[9] and
+        s[10]. Measured 2026-09-06 against fpc 3.2.2, which puts them at s[1].
+        A silent wrong VALUE with no diagnostic, and no capacity clamp either —
+        a line longer than the declared `string[N]` writes past the slot.
+
+        FIXED HERE AND NOT IN THE BACKENDS because there are SIX of them and
+        the conversion already exists: routing the destination through
+        tyAnsiString means every backend's read parser only ever sees the
+        managed case, which each of them already gets right, and the
+        managed->frozen narrowing is the assignment path's job. Six inline-asm
+        arms carrying a prefix-width rule is the shape that had already gone
+        wrong once here.
+
+        NOTE FOR WHOEVER PRUNES: this makes EmitReadVarParse's `tyString` arm
+        unreachable FROM SOURCE in every backend, since `string` is tyAnsiString
+        in a managed build and goes through this temp in a frozen one. It is NOT
+        deleted here — that would be deleting code believed rather than measured
+        to be dead, and this session did not measure the five non-x86 copies.
+        bug-p-read-into-a-frozen-string-uses-the-wrong-prefix-width }
+      if TypeIsFrozenString(IntToTypeKind(ASTTk[raDest])) then
+      begin
+        raTmpSym := AllocVar('', tyAnsiString);
+        raTmpIdent := AllocNode(AN_IDENT);
+        ASTIVal[raTmpIdent] := raTmpSym; ASTTk[raTmpIdent] := Ord(tyAnsiString);
+        raAsn := AllocNode(AN_ASSIGN);
+        ASTLeft[raAsn] := raDest;
+        ASTRight[raAsn] := raTmpIdent;
+        raSeq := GenMakeSeq(raAsn, -1);
+        if raHead = -1 then raHead := raSeq else ASTRight[raTail] := raSeq;
+        raTail := raSeq;
+        raTmpIdent := AllocNode(AN_IDENT);
+        ASTIVal[raTmpIdent] := raTmpSym; ASTTk[raTmpIdent] := Ord(tyAnsiString);
+        raDest := raTmpIdent;
+      end;
       argNode := AllocNode(AN_ARG);
-      ASTLeft[argNode] := CurASTNode;
+      ASTLeft[argNode] := raDest;
       if lastArg = -1 then
         ASTLeft[node] := argNode
       else
@@ -3956,7 +4041,10 @@ begin
     until not Eat(tkComma);
     Expect(tkRParen, ')');
   end;
-  Result := node;
+  { the read itself first, then the temp -> destination stores, in the order
+    the destinations were written }
+  if raHead >= 0 then Result := GenMakeSeq(node, raHead)
+  else Result := node;
 end;
 
 function ParsewriteArgsAST(isLn: Boolean): Integer;

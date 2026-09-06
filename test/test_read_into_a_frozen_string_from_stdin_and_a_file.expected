@@ -1,0 +1,7 @@
+stdin len=3 [abc]
+97 98 99 35 35 35 35 35 35 0 0 0 
+stdin4 [long] len=4
+stdin n=77
+file  [from a file] len=11
+file4 [seco]
+mgd   [from a file]
