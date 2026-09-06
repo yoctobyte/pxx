@@ -92,8 +92,17 @@ PASSED FOR THE REASON IT NAMES" ARE DIFFERENT CLAIMS`, and in the same pass that
 other skips rather than adding any (`tgenfunc9`, `tgenfunc3`) — families now `tgeneric*`
 75/0 and `tgenfunc*` 6/0.
 
-**This is the second auto-filed red in six hours whose answer was already on origin when the
-ticket was written.** The watcher tags a callback to the sha it tested and says so in its own
-banner (*"origin/master has advanced 19 commit(s) since this sha — re-verify at current HEAD
-before acting"*). **That banner is the instrument; read it before the log tail.** Both times
-the log tail was the compelling part and the banner was the true one.
+**CORRECTION, same commit-hour, by the author of the sentence above.** I first wrote *"the
+second auto-filed red in six hours whose answer was already on origin."* **That is not
+established and I have not checked it.** The other four auto-filed reds tonight
+(`test-fgl`, `test-core#fpc_compat_batch2`, and the two NilPy star-args rows) were all filed
+BEFORE their fixes landed, so they were live when written. **This is the first one I have
+measured with that shape**, and a count I did not take does not become true by sitting next
+to one I did.
+
+The rule stands on this instance and on the banner's own existence, and does not need the
+count: the watcher tags a callback to the sha it TESTED and says so itself — *"origin/master
+has advanced 19 commit(s) since this sha — re-verify at current HEAD before acting."*
+**That banner is the instrument; read it before the log tail.** Here the log tail was the
+compelling part and the banner was the true one, and the check it asks for is one
+`merge-base --is-ancestor`.
