@@ -10002,6 +10002,18 @@ test-core: $(COMPILER)
 	# SizeOf of an ARRAY field reports the array's size, not the element's
 	./$(COMPILER) test/test_sizeof_array_field.pas $(TESTTMP)/test_sizeof_array_field26
 	tools/expect_same.sh test_sizeof_array_field26 "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" "total ok 22 / 22"
+	@# bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width
+	@# `SizeOf(p^)` for a `^string[10]` answered 8 against fpc's 11 -- the deref
+	@# shape the 2026-09-02 capacity fix did not reach. Rows A B D E F are fpc
+	@# 3.2.2's own output for the same program, byte for byte; C and G have NO
+	@# oracle (fpc refuses `PS = ^string[10]` and caps a shortstring at 255) and
+	@# assert OUR layout. Rows E and F are FillChar and Move through the pointer
+	@# -- the consequence rather than the number, and the pair that a partial
+	@# clear or a short copy fails. G is the row that separates a correct sizer
+	@# from one that is right by coincidence: above 255 the wrong kind and the
+	@# right kind have the same eight-byte prefix.
+	./$(COMPILER) test/test_sizeof_through_a_pointer_to_a_string_n.pas $(TESTTMP)/test_sizeof_deref_strn26
+	tools/expect_same.sh test_sizeof_deref_strn26 "$$($(TESTTMP)/test_sizeof_deref_strn26 | tail -n 2)" "$$(printf 'fails=0\nSIZEOFDEREFSTRN OK')"
 	# a method at the end of a cast-deref chain: PRec(q)^.o.F(1), PRec(q)^.cr.NewN(3)
 	./$(COMPILER) test/test_pascal_cast_chain_method_call.pas $(TESTTMP)/test_pascal_cast_chain26
 	tools/expect_same.sh test_pascal_cast_chain26 "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" "total ok 9 / 9"

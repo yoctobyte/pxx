@@ -34,3 +34,68 @@ have put a second, unrelated cause under one commit's positive control.
 `test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee.pas`
 deliberately asserts the STORE through a `^string[4]` and not the SizeOf, so it
 makes no claim it cannot keep.
+
+
+## Resolved 2026-09-06 — frankB, Group 19 ("how many bytes is this type", asked through a door that never reaches the capacity table)
+
+Fixed, and **not the way this ticket proposed.** The ticket said the expression
+path already consults three shape-specific sizers before its fallthrough and
+this is the fourth. It is the fourth arm, but the arm the ticket described
+would have been WRONG, and the reason is the group's whole finding.
+
+### The obvious repair answers 24, not 11
+
+`SizeOfSlot(szExprTk, FrozenStrCapOfDeref(node))` supplies the missing capacity
+and leaves the kind alone. **An ident node for a frozen string carries the
+legacy overloaded `tyString` whatever the symbol holds** — measured on the
+sibling ticket with a `PXXDBG p.fiosize` probe, `nodeTk=4 symTk=25 symCap=10`,
+and confirmed here with a `p.szexpr` probe printing `tk=4` for both a
+`^string[10]` and a `^string[300]`. `tyString`'s length prefix is eight bytes
+and a shortstring's is one, so that spelling answers `AlignTo(10+8,8) = 24`.
+A loud wrong answer replacing a quiet one.
+
+### Both facts were already recorded, on the same symbol
+
+    Syms[sym].PtrElemTk      the pointee's KIND      probed: 25 / 26
+    SymPtrElemStrCap[sym]    the pointee's CAPACITY  probed: 10 / 300
+
+`DerefFrozenStrSlotSize` (symtab.inc, beside `FrozenStrCapOfDeref`) reads both
+out of that one symbol and calls `SizeOfSlot`. It is deliberately one function
+rather than a capacity reader plus a kind reader at each call site — the
+invariant the group established is that **the kind and the capacity must come
+out of the same record**, and a helper is where an invariant can be stated once.
+
+### Why the wide kind is in the test
+
+`string[N]` is `tyShortString` up to 255 and `tyFixedString` above it, and
+`tyFixedString`'s prefix is also eight bytes. So the wrong kind is right by
+coincidence above the boundary, and a test that only carries `string[10]`
+cannot tell a correct sizer from a lucky one. Row G asserts 312 for a
+`^string[300]`.
+
+### Verified
+
+| row | | pxx | fpc 3.2.2 |
+| --- | --- | --- | --- |
+| A | `PT = ^TT; TT = string[10]` | 11 | 11 |
+| B | `PE = ^TU; TU = string[7]` (pointer declared first) | 8 | 8 |
+| C | `PS = ^string[10]` direct | 11 | *refused: local type definition* |
+| G | `PW = ^TW; TW = string[300]` | 312 | *refused: shortstring capped at 255* |
+| D | `SizeOf(v)` control | 11 | 11 |
+| E | `FillChar(p^, SizeOf(p^), 0)` then `Length(v)` | 0, guard intact | 0, guard intact |
+| F | `Move(p^, g, SizeOf(p^))` | whole slot | whole slot |
+
+Rows A, B, D, E, F are byte-identical to fpc's own output for the same program.
+E and F are the consequence rather than the number: before the fix the FillChar
+cleared 8 of 11 bytes.
+
+`make compiler/pascal26`: `converged after 1 round(s)`.
+
+### One correction to this ticket's own body
+
+It says the defect reproduces "for both the `PT = ^TT` and the direct
+`PT = ^string[10]` spellings", which is true of us and reads as though both are
+FPC-comparable. They are not: **fpc refuses `^string[N]` in a type block
+outright** — `Parameters or result types cannot contain local type definitions`
+— so the direct spelling is ours alone and has no oracle. Noted because the
+ticket's evidence is otherwise stated against fpc.

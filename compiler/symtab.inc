@@ -15634,6 +15634,42 @@ begin
   Result := SymPtrElemStrCap[ASTIVal[ASTLeft[node]]];
 end;
 
+function DerefFrozenStrSlotSize(node: Integer): Integer;
+{ The BYTE WIDTH of `p^` when the pointee is a `string[N]`, or 0 when it is not
+  one -- the sizing companion to FrozenStrCapOfDeref just above, and deliberately
+  a single function rather than a capacity reader plus a kind reader at each
+  call site.
+
+  BOTH FACTS COME OUT OF ONE SYMBOL, AND THAT IS THE ENTIRE POINT. A frozen
+  string's width is its capacity PLUS a length prefix whose size depends on the
+  KIND: one byte for tyShortString, eight for tyFixedString and for the legacy
+  overloaded tyString. Handing SizeOfSlot a capacity from one record and a kind
+  from another produces a plausible number for a variable that does not exist,
+  which is exactly what `file of string[N]` did until 2026-09-06 -- it read the
+  capacity off the symbol and the kind off the AST node, and an ident node for a
+  frozen string carries tyString whatever the symbol says.
+
+  THE WRONG KIND IS RIGHT ABOVE 255, so that mistake is invisible in the obvious
+  probe: `string[N]` is tyShortString up to 255 and tyFixedString above it, and
+  tyFixedString's prefix is eight bytes just like tyString's. Sizing `^string[300]`
+  from the node's kind gives 312 and is correct; sizing `^string[10]` the same way
+  gives 24 against fpc's 11. A caller that passes only the capacity does not fix
+  this bug, it replaces a quiet wrong answer (pointer width) with a loud one.
+  bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width }
+var sym: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+  sym := ASTIVal[ASTLeft[node]];
+  if (sym < 0) or (sym >= SymCount) then Exit;
+  if not TypeIsFrozenString(Syms[sym].PtrElemTk) then Exit;
+  if SymPtrElemStrCap[sym] <= 0 then Exit;
+  Result := SizeOfSlot(Syms[sym].PtrElemTk, SymPtrElemStrCap[sym]);
+end;
+
 function DerefPtrArraySymAny(node: Integer): Integer;
 var dpaB: Integer;
 begin

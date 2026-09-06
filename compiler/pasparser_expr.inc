@@ -3270,7 +3270,28 @@ begin
             a plausible number. }
           if (szExprTk = tyUnknown) or (szExprTk = tyRecord) then
             Error('SizeOf: cannot size this expression (record or untyped) -- name the type or the variable instead');
-          prevTok := TypeSlotSize(szExprTk);
+          { `SizeOf(p^)` where the pointee IS a `string[N]` -- the fourth shape
+            this dispatch has to ask about before its fallthrough, beside the
+            pointer-to-array, the field and the pointer-to-record above.
+
+            The fallthrough is TypeSlotSize, which takes a KIND and no capacity,
+            so it answered pointer width: 8 for a `^string[10]` where fpc says
+            11, in both declaration orders and for both the `PT = ^TT; TT =
+            string[10]` and the direct `PT = ^string[10]` spellings. It reaches a
+            value the same way its parent bug did -- `FillChar(p^, SizeOf(p^), 0)`
+            clears 8 of 11 bytes.
+
+            NOT SizeOfSlot(szExprTk, FrozenStrCapOfDeref(...)), which is the
+            obvious repair and is wrong: an ident node for a frozen string
+            carries the legacy overloaded tyString whatever the symbol holds, and
+            tyString's length prefix is eight bytes against a shortstring's one.
+            That spelling answers 24 here -- a loud wrong number replacing a
+            quiet one. DerefFrozenStrSlotSize takes the kind and the capacity out
+            of the SAME symbol, which is the invariant its own comment carries.
+            bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width }
+          prevTok := DerefFrozenStrSlotSize(szExprNode);
+          if prevTok = 0 then
+            prevTok := TypeSlotSize(szExprTk);
           Expect(tkRParen, ')');
           { The operand subtree is DROPPED, so nothing in it is ever lowered and
             `SizeOf(F(x))` cannot call F -- FPC discards the expression too and
