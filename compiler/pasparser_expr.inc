@@ -4022,7 +4022,7 @@ begin
       if CaseEqual(name, '__pxxTlsBase') then
       begin
         { The calling thread's TLS base. Reading it is the only part that needs a
-          compiler: INSTALLING a block is arch_prctl(ARCH_SET_FS) and goes through
+          compiler: INSTALLING a block is arch_prctl(ARCH_SET_GS) and goes through
           __pxxrawsyscall like any other syscall, from the thread itself -- which is
           why this ticket did NOT need CLONE_SETTLS, a sixth __pxxclone argument, or
           four backend changes to IR_CLONE (see

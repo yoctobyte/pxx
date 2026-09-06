@@ -18,6 +18,15 @@ try it.
 Everything below was measured against the pinned build **v406**, commit
 `ab72ab352`, compiler binary sha256 `4bfd73d70588`.
 
+**THE PIN HAS MOVED SINCE, AND THAT LINE IS THE INSTRUMENT.** v407 landed at
+`51901941e` (binary `095ef4811a5b`, tree `04559b9d6`) the same night this draft
+stopped. Every figure below still says what it said — about v406. Nobody has
+re-measured any of them against v407, and v407 carries two wasm32 silent
+defects v406 did not. **Re-state this line before quoting a single number from
+here**, or the whole document silently re-scopes to a binary it was never
+measured on: the heading would name one compiler and the figures another, which
+is the exact failure the "how much of this is tested" section below is about.
+
 ---
 
 ## What it is

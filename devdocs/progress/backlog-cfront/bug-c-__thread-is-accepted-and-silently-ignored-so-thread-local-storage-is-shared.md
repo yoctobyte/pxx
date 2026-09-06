@@ -8,7 +8,7 @@ created: 2026-09-06
 found-by: frankA
 tags: [tls, threads, c-frontend, errno]
 blocked-by: []
-summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything."
+summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything. CONSTRAINT CORRECTED 2026-09-06 (frankC): the `FS base is zero in every thread` reading that bounded this ticket was taken on a register pxx DELIBERATELY DOES NOT USE -- thread_emit.inc:142 installs a per-thread block with arch_prctl(ARCH_SET_GS), `GS, not fs: fs belongs to libc`. Re-measured on a pxx-native BeginThread with the same sentinel control: GS is DISTINCT and non-zero per thread (main 42D110 in .bss, child 7BDB21FF7A80 off its own stack), FS is 0 in both. So step (1), `a per-thread TCB with a distinct base`, is ALREADY DONE on x86-64, with a slot map (TLS_SLOT_*, TLS_BLOCK_SIZE=1152, three free map slots plus a 64-slot tail) that ir_codegen.inc:78 records as unused rather than absent. Two real constraints replace the wrong one: (a) GS-relative is NOT the psABI, so this serves pxx-compiled code and not TLS relocations in gcc-built objects -- a fork to be ruled on, not defaulted; (b) a thread pxx did not create INHERITS the parent`s GS base rather than getting its own (measured: glibc pthread_create gives main and child the IDENTICAL 4298F0), which is the same hazard the clone stub`s comment cites -- a valid-looking pointer into another thread`s storage, not a null you could test for. The ticket does not get smaller: __thread still compiles to one shared .bss object."
 ---
 
 # `__thread` is accepted and silently ignored
@@ -61,32 +61,86 @@ with a separately written probe: **A saw a foreign errno 33 times, B 4 times,
 over 200000 iterations each; gcc/glibc 0 and 0.** That is the third independent
 reading (franks-ab, frankD, and this one), each with its own probe.
 
-## THE CONSTRAINT THAT BOUNDS ANY FIX — measured, not assumed
+## THE CONSTRAINT THAT BOUNDS ANY FIX — CORRECTED 2026-09-06 (frankC)
 
-**pxx programs run with FS base ZERO, in every thread.**
+**The constraint recorded here was measured on the wrong register, and the
+step-1 it prescribes is already done.** What stood here said *"pxx programs run
+with FS base ZERO, in every thread"* and concluded that emitting TLS symbols
+alone *"would be worse than nothing"* because there is no per-thread base to
+resolve against. The FS reading is correct and the conclusion drawn from it is
+not, because **pxx deliberately does not use FS.**
 
-    arch_prctl(ARCH_GET_FS, &v)     rc    value
-    gcc/glibc, main thread           0    7a45fdb9c740
-    gcc/glibc, pthread child         0    7a45fd7ff6c0     <- distinct
-    pxx --threadsafe, main thread    0    0
-    pxx --threadsafe, pthread child  0    0                <- same, and zero
+`thread_emit.inc:142`, in the clone stub, says so in its own comment: *"GS, not
+fs: fs belongs to libc, and a pxx program may link one."* The stub issues
+`arch_prctl(ARCH_SET_GS)` on every thread it creates, before anything Pascal
+runs.
 
-Positive control on the instrument itself: the output variable is preloaded with
-`0xdeadbeef` and the syscall's return value is read, so "the FS base is 0" and
-"arch_prctl did not run" are distinguishable. `rc=0` and the sentinel overwritten
-— the syscall ran and reports zero.
+Re-measured with the same sentinel control (out variable preloaded with
+`$DEADBEEFDEADBEEF`, syscall rc kept, so "the base is 0" and "arch_prctl never
+ran" stay distinguishable), reading **both** registers:
 
-**So the errno ticket's stated fix — "grow TLS symbols in the object writer" —
-is necessary and not sufficient, and on its own it would be worse than nothing:**
-fs-relative accesses in a process with no FS base either fault or resolve every
-thread to the same address, which is the bug it was meant to fix, now with an
-ELF section to make it look fixed. Ordering matters:
+**A pxx-native thread, via `BeginThread` — i.e. through pxx's own clone stub:**
 
-1. a per-thread TCB with a distinct FS base, set in the thread PAL's child
-   entry (x86-64 `arch_prctl(ARCH_SET_FS)`; the per-target equivalent
-   elsewhere), **and** for the main thread at startup;
-2. `.tbss`/`.tdata` and the TLS relocations in the object writer, per backend;
+    thread   rc   FS                  rc   GS
+    main      0   0000000000000000     0   000000000042D110   <- .bss, the main block
+    child     0   0000000000000000     0   00007BDB21FF7A80   <- carved off its own stack
+
+    gs-differs-per-thread = TRUE      fs-differs-per-thread = FALSE
+
+**So a per-thread base EXISTS on x86-64, is distinct per thread, is non-zero in
+both, and is installed before user code runs.** Step (1) of the ordering below
+is not work that needs doing; it is work that was done and filed under another
+ticket (`feature-a-thread-local-storage-via-clone-settls`). There is even a slot
+map already — `TLS_SLOT_*` in `defs.inc`, `TLS_BLOCK_SIZE = 1152`,
+`TLS_SLOT_FIRST_FREE = 13` with three free map slots and a 64-slot tail — and
+`ir_codegen.inc:78` records that **nothing uses it yet**, which is a different
+fact from it not existing and is the one that matters here.
+
+### Two real constraints replace the one that was wrong
+
+**(a) GS-relative is not the psABI.** Standard x86-64 ELF TLS is FS-relative,
+so a GS-based scheme serves pxx-compiled code and does NOT interoperate with
+TLS relocations in a gcc-built object. For `errno` and for `__thread` in
+pxx-compiled sources that is sufficient; for linking against foreign objects
+that expect standard TLS it is not. **This is a genuine fork and it should be
+decided, not defaulted** — the comment in the clone stub already argues one
+side of it ("fs belongs to libc, and a pxx program may link one").
+
+**(b) A thread pxx did not create does not get its own block — it INHERITS the
+parent's.** Measured on the same probe with `pthread_create` from
+`libpthread.so.0` instead of `BeginThread`:
+
+    thread   FS                  GS
+    main     0000737CBB197740    00000000004298F0
+    child    0000737CBADFF6C0    00000000004298F0   <- IDENTICAL to main
+
+    gs-differs-per-thread = FALSE    fs-differs-per-thread = TRUE
+
+GS base is inherited across `clone`, and a glibc-created thread never passes
+through pxx's stub, so it silently shares the creator's block. The FS column
+flips at the same time for the same reason — glibc is present and sets FS.
+**This is the failure mode the original entry was reaching for, and it is real;
+it just is not "the base is zero", it is "the base is someone else's".** That
+is strictly worse to debug, because it is a valid-looking pointer into another
+thread's storage rather than a null you could test for — the exact hazard the
+clone stub's own comment cites as its reason for installing GS first.
+
+**Neither correction makes this ticket smaller.** `__thread` still compiles to
+one shared `.bss` object and still warns rather than refuses. What changes is
+the plan: the missing piece is not a per-thread base, it is (2) and (3) below
+plus a ruling on (a) and a decision about (b).
+
+### Ordering, corrected
+
+1. ~~a per-thread TCB with a distinct FS base~~ — **done, on GS, x86-64 only**.
+   `__pxxTlsBase` refuses on every other target, and that refusal is the real
+   target-set constraint: aarch64 and arm32 have a readable thread register
+   (`tpidr_el0`, `tpidruro`) and no way to SET one yet.
+2. per-thread storage for `__thread` variables, GS-relative, allocated out of
+   the existing block — and a ruling on (a) before anyone emits a relocation.
 3. `__thread` stops being skipped in `cparser.inc`.
+4. and (b): decide what a foreign-created thread gets, because today it gets
+   the creator's block and nothing says so.
 
 ## A cheaper path exists for errno alone, and it is worth pricing before (1)-(3)
 
