@@ -1336,3 +1336,45 @@ sample. Two instruments, different failure modes, one conclusion.
 > on measurements the recipient COULD check. The checkable parts were right every
 > time. **That is what carried the unbounded part**, and it is why the guard has
 > to be structural rather than a judgement about credibility.
+
+## "IS ANYONE ON THIS TOPIC" ANSWERED BY CHECKING THE DEFECT IS A DIFFERENT QUESTION, AND ITS "NO" IS INDISTINGUISHABLE
+
+2026-09-06, this seat's core function, got wrong. frankS asked: *"Nobody else
+should be in Pascal-frontend name-position parsing right now; tell me if that is
+wrong."* I checked whether anyone was on frankS's DEFECT — `read`/`write`/`exit`/
+`halt` shadowed by the intrinsic — found nobody, and answered **"nobody is editing
+Pascal-frontend name-position parsing."** True about the defect. False about the
+question. **Two seats had eleven commits in `compiler/pasparser_expr.inc` since
+05:14**, both reshaping `ParseFactorCore`'s recognition arms: frankA collapsing
+cast doors, frankD deleting eleven arms from the same function.
+
+**The narrowing is invisible in the answer, which is the whole problem.**
+*"Nobody"* reads identically whether the population searched was the mechanism or
+one bug inside it, and the recipient has no way to tell which was taken. A
+correctly-measured no over the wrong population is the most credible wrong answer
+this seat can produce, because it IS a measurement and it was taken honestly.
+
+**CLAUDE.md already says the separator is the TOPIC, not the file. The failure
+mode is one level in from that: taking the topic to be the DEFECT.** A defect is
+a symptom plus a mechanism; another seat can be in the mechanism through an
+entirely different symptom and neither of you will ever collide in git. Here the
+mechanisms were the same table-precedence question at three positions — frankA:
+builtin table before user-alias table in a CAST position (`4be17cb8f`); frankS:
+intrinsic before user routine in CALL and DECLARATION positions; frankD: one
+recognition door claiming a token that belonged to another (`fe0c492d1`). Three
+symptoms nobody would grep for together.
+
+**The repair is a population question, asked out loud before answering:** *what is
+the set of seats who could be in this MECHANISM through a symptom I would not
+recognise?* Then measure that set — `git log origin/master --since=<today> -- <the
+file(s) the mechanism lives in>` with session trailers, which costs one command
+and names the seats. And **say which population was searched in the answer
+itself**, so a "no" carries its own aperture: *"nobody is on your defect; two
+seats are in the file's recognition machinery"* is a different sentence from
+*"nobody is there"* and only one of them can be checked by its reader.
+
+**A census is the operation most damaged by this**, and it was in flight here:
+frankA was enumerating `ParseFactorCore`'s doors while frankD deleted eleven arms
+from it. A census produces a number, the number looks right, and nothing in it
+records when it was taken. Whoever counted first counted a population the other
+was editing — see also *"a clean sweep certifies only the axis it varied"*.
