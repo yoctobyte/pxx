@@ -111,3 +111,27 @@ nested type per instantiation.
 
 Either way the guard has to be keyed on `(alias, argument list)` — the pair the
 diagnostic already proves is not currently distinguished.
+
+## A warning for whoever reduces this further
+
+The reduction in this ticket fails at COMPILE time, which is the easy case. The
+`fgl` arm does not — it compiles, runs, and prints the right answer with the
+duplicate warning showing. **So any smaller reduction that runs rather than
+refusing has to be built to discriminate, and two ordinary choices both hide
+it:**
+
+- **Do not assert the FIRST field of the inner class.** Offset 0 is what a lost
+  or wrongly-bound base resolves to, so the first member is the one that cannot
+  tell a correct read from a broken one. Give the inner class at least two
+  fields and read the SECOND. (frank-optimize's rule, banked `5b93e5046`; it is
+  the same shape as the "expected value collides with the default" rule this
+  file already carries.)
+- **Do not specialize the outer on two type arguments of the same width.**
+  `<Integer>` and `<LongInt>` merge into a body that is wrong and harmless.
+  The pair has to differ in a way the merged body cannot survive — which is why
+  `<Integer>` against `<String>` is the pair in the reduction above, and why
+  fgl's own `TFPGList<Integer>` + `TFPGList<String>` still runs correctly: the
+  two enumerator bodies it merges happen to stay compatible.
+
+Both are the same question asked of a reduction rather than of a guard: **if the
+machinery did nothing at all, would this row still pass?**
