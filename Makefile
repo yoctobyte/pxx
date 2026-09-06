@@ -6829,6 +6829,17 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_a_half_dereferenced_call_result_is_refused.pas $(TESTTMP)/test_halfderefcall26 2>&1 \
 	  | grep -q 'this value is still a POINTER here' \
 	  || { echo 'test_a_half_dereferenced_call_result_is_refused: FAIL - a two-short chain through a call result compiled, or refused for another reason'; exit 1; }
+	@# `array of const` IN A PROCEDURAL TYPE MUST STAY REFUSED, and this row is a
+	@# guard on the REASON. fpc 3.2.2 accepts all four spellings under -Mobjfpc and
+	@# -Mdelphi, so the parse fix looks like three obvious lines -- it has been
+	@# written and reverted twice. Making the declaration parse routes the call
+	@# into the open-array-literal length bug (`c([7,8,9])` answers 263845145632,
+	@# the `of object` spelling answers 0, fpc says 3), turning a clean refusal
+	@# into a silent wrong number. Delete this row when that bug lands; do not
+	@# edit it to expect success.
+	@./$(COMPILER) test/test_array_of_const_in_a_procedural_type_is_refused.pas $(TESTTMP)/test_aocproctype26 2>&1 \
+	  | grep -q 'unknown type: const' \
+	  || { echo 'test_array_of_const_in_a_procedural_type_is_refused: FAIL - array of const in a procedural type compiled, or refused for another reason'; exit 1; }
 	@# A BARE ROUTINE NAME INTO A PROCEDURAL SLOT, all four spellings in one
 	@# compile. Outside {$$mode delphi} the name is a CALL, so the Integer RESULT
 	@# went into a function-pointer slot and calling it jumped through 7 --
