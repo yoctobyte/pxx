@@ -8270,9 +8270,26 @@ begin
                   and SIGSEGV'd, where FPC calls it. See
                   MethodResultSatisfiesTarget.
                   bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings }
+                { KEYED ON THE DESTINATION NODE, NOT ON A SYMBOL. Both arms
+                  below asked `SymProcSig[idx] >= 0` where idx is the symbol the
+                  statement OPENED with, so `r.f := G` asked about `r` and
+                  `a[0] := G` asked about `a` -- neither is itself proc-typed,
+                  the arm declined, and the bare `G` fell to ParseExpr and was
+                  read as a CALL. fpc 3.2.2 -Mdelphi prints 7 for all three
+                  spellings; on pin v404 the two non-variable ones compiled and
+                  SIGSEGV'd, and since a80cbef31 they are REFUSED, which is
+                  louder and still not what fpc does.
+
+                  PasNodeProcSig is the fact, and it already existed in the right
+                  file -- its own note says it exists because "is this designator
+                  a procedural value?" was answered SPELLING BY SPELLING and only
+                  the first spelling was ever taught. This site was one of the
+                  ones that had not been. On an AN_IDENT it answers exactly
+                  SymProcSig[idx], so the variable spelling is unchanged.
+                  bug-p-delphi-mode-binds-a-bare-routine-name-only-for-a-variable-target }
                 mrefNode := -1;
-                if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
-                   (Syms[idx].TypeKind = tyRecord) then
+                if DelphiMode and (PasNodeProcSig(valNode) >= 0) and
+                   (IntToTypeKind(ASTTk[valNode]) = tyRecord) then
                   mrefNode := TryParseParenlessMethodRef;
                 if mrefNode >= 0 then
                 begin
@@ -8289,10 +8306,11 @@ begin
                   gets the call reading for free -- a paramless function used as
                   a value is called there, which is the precedence
                   TryDelphiBareProcArg names for argument position. }
-                else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
+                else if DelphiMode and (PasNodeProcSig(valNode) >= 0) and
                    (CurTok.Kind = tkIdent) and (argIdx < 0) and
                    (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) and
-                   (not ProcResultSatisfiesTarget(FindProc(CurTok.SVal), idx)) then
+                   (not ProcResultSatisfiesKind(FindProc(CurTok.SVal),
+                                                IntToTypeKind(ASTTk[valNode]))) then
                 begin
                   CurASTNode := AllocNode(AN_PROCADDR);
                   ASTIVal[CurASTNode] := FindProc(CurTok.SVal);

@@ -1179,14 +1179,19 @@ end;
   retry, so the decision has to be made up front, which is what this is.
   A routine that REQUIRES arguments cannot be the call reading: there are no
   arguments here (the `(` case exits earlier). }
-function ProcResultSatisfiesTarget(pi, targetIdx: Integer): Boolean;
+{ The same question asked about the target's KIND rather than its SYMBOL, so a
+  destination that is not a plain variable can ask it. A record FIELD and an
+  array ELEMENT of a procedural type are procedural slots with no symbol of
+  their own -- the symbol in hand is the record or the array, whose own
+  TypeKind and SymProcSig say nothing about the slot being written.
+  bug-p-delphi-mode-binds-a-bare-routine-name-only-for-a-variable-target }
+function ProcResultSatisfiesKind(pi: Integer; targetTk: TTypeKind): Boolean;
 begin
   Result := False;
   if (pi < 0) or (pi >= ProcCount) then Exit;
-  if (targetIdx < 0) or (targetIdx >= SymCount) then Exit;
   if not Procs[pi].IsFunc then Exit;
   if Procs[pi].ParamCount > 0 then Exit;
-  if Syms[targetIdx].TypeKind = tyRecord then
+  if targetTk = tyRecord then
     { a method-pointer target: "fits" is "returns a method pointer", exactly as
       for the method arm -- no other result type is assignable there. }
     Result := (MethodPtrRecId <> REC_NONE) and
@@ -1198,6 +1203,15 @@ begin
       LastTypeProcSig onto it for bug-p-result-is-not-a-method-pointer-lvalue --
       the two fixes are the same missing fact read by two different consumers. }
     Result := (Procs[pi].RetType = tyPointer) and (ProcRetProcSig[pi] >= 0);
+end;
+
+function ProcResultSatisfiesTarget(pi, targetIdx: Integer): Boolean;
+{ the symbol-keyed spelling, unchanged in meaning: it reads the kind off the
+  symbol and asks the one question above. }
+begin
+  Result := False;
+  if (targetIdx < 0) or (targetIdx >= SymCount) then Exit;
+  Result := ProcResultSatisfiesKind(pi, Syms[targetIdx].TypeKind);
 end;
 
 { `obj.M` / `TClass.M` with no `@` and no argument list, read as a method

@@ -6866,6 +6866,15 @@ test-core: $(COMPILER)
 	@# the default-mode crash by adopting Delphi's binding everywhere would also
 	@# have removed the crash and would have deleted the delta; that is a dialect
 	@# decision, not something to arrive at while fixing a segfault.
+	@# TEN ROWS, fpc 3.2.2 -Mdelphi's own output. Rows C/D and H/I are the record
+	@# FIELD and array ELEMENT targets, which the arm never reached while it was
+	@# keyed on the destination SYMBOL -- `r.f := G` asked about `r`. They
+	@# SIGSEGV'd on pin v404 and were REFUSED between that fix and this one.
+	@# ROWS E AND F SEPARATE THIS RULE FROM THE NEXT-WIDER ONE: `f := MakeCb` is a
+	@# bare routine name that Delphi CALLS rather than binds, because its result
+	@# fits the target. A rule spelled "a bare routine name is its address" passes
+	@# every other row and fails exactly those two, and failing them is not a
+	@# diagnostic -- it stores a code address where a value belongs.
 	./$(COMPILER) test/test_delphi_mode_binds_a_bare_routine_name.pas $(TESTTMP)/test_delphibare26
 	@$(TESTTMP)/test_delphibare26 | diff -u test/test_delphi_mode_binds_a_bare_routine_name.expected - \
 	  || { echo 'test_delphi_mode_binds_a_bare_routine_name: FAIL - the {$$mode delphi} @-optional binding moved'; exit 1; }
