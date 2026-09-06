@@ -329,9 +329,16 @@ def t_stem_evidence_reaches_direct_children_only():
 # and exited 1 all day, and one was a campaign's acceptance test run by nothing
 # but its author's hand.
 
-def _committed_tree(makefile, base_tests, new_tests, unwired=""):
+def _committed_tree(makefile, base_tests, new_tests, unwired="",
+                    new_blobs=None, uncommitted_blobs=None):
     """A tree with a base COMMIT, then a second commit adding `new_tests`.
-    -> (root, base_sha). Scoped mode needs real history, not just an index."""
+    -> (root, base_sha). Scoped mode needs real history, not just an index.
+
+    `new_blobs` ({name: bytes}) go in that second COMMIT; `uncommitted_blobs`
+    are left untracked. The split matters and is not decoration: of the three
+    real probe binaries that reached origin, two were COMMITTED, so a guard
+    exercised only against an untracked file would have passed on them.
+    """
     root = _tree(makefile=makefile, tests=base_tests, unwired=unwired)
     env = ["-c", "user.email=t@pxx", "-c", "user.name=devtest"]
     subprocess.run(["git"] + env + ["commit", "-q", "-m", "base"],
@@ -342,10 +349,20 @@ def _committed_tree(makefile, base_tests, new_tests, unwired=""):
         full = os.path.join(root, "test", name)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         open(full, "w").write("x\n")
+    for name, blob in (new_blobs or {}).items():
+        open(os.path.join(root, "test", name), "wb").write(blob)
     subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
     subprocess.run(["git"] + env + ["commit", "-q", "-m", "add tests"],
                    cwd=root, capture_output=True)
+    for name, blob in (uncommitted_blobs or {}).items():
+        open(os.path.join(root, "test", name), "wb").write(blob)
     return root, base
+
+
+# A minimal ELF header. Only the first four bytes are read, but a truncated
+# stub would make the guard look stricter than it is -- this is the magic plus
+# enough of a header that the file is what it claims to be.
+ELF_STUB = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 56
 
 
 def _run_since(root, rev):
@@ -394,6 +411,82 @@ def t_since_that_cannot_resolve_its_rev_is_NOT_a_pass():
     assert rc == 2, "cannot-scope must not be 0 or 1, got %d: %s" % (rc, out)
     assert "CANNOT SCOPE" in out and "not a pass" in out, out
     return "an unresolvable --since says so instead of passing"
+
+
+def t_since_refuses_a_COMMITTED_elf_under_test():
+    """The population the guard is actually about.
+
+    Three unreferenced x86-64 executables reached origin under test/ from three
+    different seats in ten days, and TWO OF THEM WERE COMMITTED. A guard
+    exercised only against an untracked file would have passed on those two
+    while looking like it worked, so the committed case is the control that
+    counts, not the convenient one.
+    """
+    root, base = _committed_tree("all:\n\techo hi\n", [], [],
+                                 new_blobs={"trf": ELF_STUB})
+    rc, out = _run_since(root, base)
+    assert rc == 1, "a committed ELF under test/ must fail the push gate: %s" % out
+    assert "test/trf" in out, out
+    assert "COMPILED BINARY" in out, out
+    return "a committed probe binary is refused, not just an untracked one"
+
+
+def t_since_refuses_an_UNTRACKED_elf_too():
+    """The state the prescribed workflow is in: gate BEFORE you commit."""
+    root, base = _committed_tree("all:\n\techo hi\n", [], [],
+                                 uncommitted_blobs={"tgf": ELF_STUB})
+    rc, out = _run_since(root, base)
+    assert rc == 1, "an untracked ELF under test/ must fail too: %s" % out
+    assert "test/tgf" in out, out
+    return "the same refusal before the file is ever added"
+
+
+def t_an_elf_named_like_nothing_is_still_caught():
+    """The reason this is a magic-number read and not a name pattern.
+
+    .gitignore carries test/test_* and test/tmp_* and both are correct; the
+    names that got through match neither, BECAUSE AN AD-HOC NAME IS ARBITRARY
+    BY DEFINITION. So the guard must not depend on the name at all, and this
+    case uses one no pattern could have anticipated.
+    """
+    root, base = _committed_tree("all:\n\techo hi\n", [], [],
+                                 new_blobs={"qq7": ELF_STUB})
+    rc, out = _run_since(root, base)
+    assert rc == 1 and "test/qq7" in out, out
+    return "an arbitrary name is caught, because the check reads bytes"
+
+
+def t_a_text_test_file_is_not_reported_as_a_binary():
+    """The negative control, and it must fail for the RIGHT REASON.
+
+    An unwired new .pas fails this checker anyway -- that is the pre-existing
+    arm doing its job -- so `rc == 1` alone cannot show the ELF arm stayed
+    quiet. The discriminator is WHICH message came out.
+    """
+    root, base = _committed_tree("all:\n\techo hi\n", [], ["plain.pas"])
+    rc, out = _run_since(root, base)
+    assert "COMPILED BINARY" not in out, \
+        "a text test source was reported as a compiled binary: %s" % out
+    assert "THIS PUSH ADDS" in out, out
+    return "a text source trips the wiring arm, never the binary one"
+
+
+def t_an_exempted_elf_is_let_through():
+    """The documented escape hatch still opens.
+
+    test/UNWIRED.txt is the one out, and a guard with no out is one people
+    route around. It is deliberately not free: an entry there says "nothing
+    runs this file", which is a different claim from "this executable belongs
+    in the repo", and the reason has to carry that weight.
+    """
+    root, base = _committed_tree("all:\n\techo hi\n", [], [],
+                                 unwired="test/keepme  a real binary fixture, "
+                                         "checked in on purpose\n",
+                                 new_blobs={"keepme": ELF_STUB})
+    rc, out = _run_since(root, base)
+    assert "COMPILED BINARY" not in out, \
+        "an exempted binary was still refused: %s" % out
+    return "an explicit UNWIRED.txt entry still opens the gate"
 
 
 # --------------------------------------------------- PARKS: not-yet, owned --
@@ -482,6 +575,11 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_since_ignores_an_orphan_that_was_ALREADY_there,
          t_since_passes_when_the_new_test_IS_wired,
          t_since_that_cannot_resolve_its_rev_is_NOT_a_pass,
+         t_since_refuses_a_COMMITTED_elf_under_test,
+         t_since_refuses_an_UNTRACKED_elf_too,
+         t_an_elf_named_like_nothing_is_still_caught,
+         t_a_text_test_file_is_not_reported_as_a_binary,
+         t_an_exempted_elf_is_let_through,
          t_a_park_on_a_live_ticket_covers_a_whole_directory,
          t_a_park_is_printed_not_silently_passed,
          t_a_park_whose_ticket_CLOSED_is_refused,

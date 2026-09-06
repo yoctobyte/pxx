@@ -24,7 +24,11 @@ test/tmp_*
 # There is no pattern to add -- the names are arbitrary by definition -- so
 # what is listed here is only the shape, and the real guard is
 # bug-t-nothing-stops-a-probe-binary-being-committed-under-test.
-# Build probes OUTSIDE the repo (the session scratchpad) and this cannot happen.
+# Build probes outside the repo AND SPELL THE OUTPUT PATH. Being outside is
+# not enough on its own: `fpc -o<name> <repo>/test/x.pas` writes <name> next
+# to the SOURCE, not into your cwd (measured 2026-09-06), so diffing a repo
+# fixture against fpc from the scratchpad still lands a binary here. Give -o
+# an absolute path. check_test_wiring.py now refuses \177ELF under test/.
 /tmp/
 __pycache__/
 *.swp

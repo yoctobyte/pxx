@@ -449,6 +449,54 @@ def added_since(rev):
     return set(committed) | set(staged) | set(untracked)
 
 
+def elf_adds(paths, exempt):
+    """Files this push adds under test/ whose first four bytes are \\177ELF.
+
+    A compiled executable is never a test source and never a fixture, so this is
+    a magic-number read over a list added_since() has already built -- which is
+    the whole reason the check lives here rather than in gate.sh: gate.sh is
+    read INCREMENTALLY by /bin/sh, so editing it corrupts a run in flight, while
+    a Python tool is loaded whole.
+
+    WHY A PATTERN CANNOT DO THIS JOB. .gitignore already carries `test/test_*`
+    and `test/tmp_*` and they are correct. Three ELF probes still reached origin
+    from three different seats in ten days -- test/tgf, test/tfr_fpc, test/trf --
+    because an ad-hoc probe name matches neither, and the names are arbitrary BY
+    DEFINITION. Adding one to the ignore list fixes exactly one member of an
+    unbounded set. What is not arbitrary is the first four bytes.
+
+    AND THE MITIGATION EVERYONE REACHES FOR DOES NOT WORK. "Build probes outside
+    the repo" is the advice the filing carried, and it fails for the commonest
+    reason anyone runs fpc here: `fpc -oNAME /path/in/repo/test/x.pas` writes
+    NAME NEXT TO THE SOURCE, not into the current directory. Measured
+    2026-09-06 -- source in one directory, cwd in another, the binary landed
+    beside the source and the cwd stayed empty. So a session diffing a repo
+    fixture against fpc from its own scratchpad still drops an executable into
+    test/, which is a fourth instance the day the first three were cleaned up.
+    Being outside the repo is not enough; the OUTPUT PATH has to be spelled.
+
+    Honours test/UNWIRED.txt, since that is the documented escape hatch, but
+    an exemption there says "nothing runs this file" -- a different claim from
+    "this executable belongs in the repo" -- so a reason that only says the
+    former is not really an answer here.
+    """
+    bad = []
+    for q in sorted(paths):
+        if _covered(q, exempt):
+            continue
+        try:
+            with open(os.path.join(ROOT, q), "rb") as fh:
+                if fh.read(4) == b"\x7fELF":
+                    bad.append(q)
+        except OSError:
+            # Enumerated by git and not on disk: added then deleted or renamed
+            # in the working tree. Not this check's business, and NOT a reason
+            # to fail -- a guard that fires on a file nobody has teaches people
+            # to bypass it.
+            continue
+    return bad
+
+
 def main(argv=None):
     # --since <rev>: ask the PER-PUSH question instead of the census one.
     #
@@ -532,6 +580,28 @@ def main(argv=None):
                        and not any(q.startswith(d) for d in SKIP_DIRS)
                        and q not in subs
                        and os.path.exists(os.path.join(ROOT, q)))
+        # BEFORE the extension filter above narrows to test sources, ask the
+        # other question of the same list: is any of this a compiled binary?
+        # `extra` keeps only SUBJECT_EXT paths, so a probe called `trf` -- no
+        # extension, which is what an ad-hoc name looks like -- is dropped one
+        # line up and would never be seen again.
+        elfs = elf_adds(added, exempt)
+        if elfs:
+            print("check-test-wiring: %d COMPILED BINARY(S) added under test/:"
+                  % len(elfs))
+            for q in elfs:
+                print("  %s" % q)
+            print("  These are \\177ELF executables. A compiled binary is never a "
+                  "test source and never a fixture, and three reached origin "
+                  "from three seats in ten days because .gitignore can only "
+                  "match names and ad-hoc probe names are arbitrary.")
+            print("  Delete it, and spell the OUTPUT PATH when you build a "
+                  "probe: `fpc -o<name> <repo>/test/x.pas` writes <name> NEXT "
+                  "TO THE SOURCE, not into your current directory, so running "
+                  "fpc from a scratchpad does not save you. Give -o an "
+                  "absolute path into the scratchpad instead.")
+            print("  bug-t-nothing-stops-a-probe-binary-being-committed-under-test")
+            return 1
         subs = sorted(set(subs) | set(extra))
 
     reached = consumed_by(wired, subs, dir_refs)
