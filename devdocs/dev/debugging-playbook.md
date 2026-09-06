@@ -15085,3 +15085,48 @@ And frankB landed it as a **separate commit with its own gate**, on the stated g
 refusal's risk is refusing working code* — having already had exactly one such refusal go green on
 three repros and on `gate.sh quick` that session. Adding a refusal and relaxing one are not
 symmetric changes and should not share a gate.
+
+## ON A TARGET WHERE "DID NOTHING" AND "SUCCEEDED" ARE THE SAME OBSERVATION, EVERY ZERO-EXPECTING ASSERTION IS BLIND
+
+CLAUDE.md's rule is *"choose a probe whose right answer differs from the
+default"*. This is the version where the default is supplied by the RUNTIME
+rather than by a type, so no amount of care about the expected value helps —
+you have to know the platform.
+
+Measured 2026-09-06 (frankC, the wasm32 C entry stub). The ticket's acceptance
+criterion was:
+
+```
+int main(void) { return 0; }        exits 0 under wasmtime
+```
+
+**A module exporting no `_start` is rejected by nothing.** wasmtime instantiates
+it, runs nothing, and exits 0. So the criterion's expected value collides exactly
+with its failure value, and **it passed against a no-op entry stub during
+development.** `return 42` is what separated them.
+
+The general shape: a target's "nothing happened" exit status is 0, and 0 is the
+conventional success value, so **the entire class of assertions that expect
+success-by-exit-code cannot distinguish success from absence there.** wasm32 has
+a lot of that surface, and so does any embedded or emulated target where a
+harness reports a run it never performed.
+
+**Two things that make an assertion honest on such a target:**
+
+1. **Assert a nonzero result you chose.** `return 42`, a printed sentinel, a
+   written byte — anything the machinery must have executed to produce.
+2. **Assert the premise in the same file, as a row.** `tools/c_wasm32_entry.sh`
+   carries as its last assertion that *a hand-written module exporting only
+   `main` must still give rc=0* — the fact that makes row one meaningful. Keeping
+   it executable rather than in a comment is what stops the reason decaying while
+   the check keeps passing. Ablated to prove it reads: stub out the emitter and
+   it fails on row one.
+
+> **And the ordering of walls is part of the claim.** The same session first wrote
+> that its per-target va_arg script *"would grade the wasm32 prologue the day it
+> lands"*, then measured: the script's subject needs `printf`, hence `<stdio.h>`,
+> which stops at an `environ` wall UPSTREAM of the prologue — so a prologue-only
+> change would leave the script reporting *"refuses, no environ"* and **passing**.
+> A check aimed past an earlier wall is not aimed at all. The fix was a second,
+> freestanding subject reporting through an exit code, which clears the upstream
+> wall and fires earlier.

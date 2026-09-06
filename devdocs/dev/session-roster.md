@@ -1120,3 +1120,54 @@ likely to be true of several sessions simultaneously.
 mechanisable, and there is exactly ONE observed instance — declined out loud, therefore handled.
 A tool is justified by a measured rate and this is an anecdote with a good ending. Recorded so that
 if it happens twice, the second one is recognisable as the second.
+
+## AN OBLIGATION ATTACHED TO A FUTURE EVENT HAS NO READER AT THE MOMENT IT COMES DUE
+
+Measured 2026-09-06, on a ticket that had done everything right except choose
+where to put the sentence.
+
+`bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet`
+said, in its own summary: *"wasm32 IS STILL ABSENT from the set and the trigger
+stays armed for it, gated only by `bug-c-no-c-program-entry-stub-for-wasm32` —
+**whoever lands that stub owes the same one-line widening in the same commit.**"*
+
+The stub landed. The widening did not. Not through carelessness: **the person
+landing the stub was reading the stub's ticket, which is the only ticket they had
+any reason to open.** The obligation lived in the body of a *different* ticket,
+addressed to a future actor who by definition arrives through a different door.
+It was found only because this seat happened to be holding both.
+
+**So `whoever does X owes Y` is not a note. It is a check that must go red, or an
+edge on the ticket X closes.** Anything else is a message left in a room the
+recipient has no reason to enter. The three placements that work:
+
+- a `blocked-by:` or an explicit pointer **on ticket X**, so it is visible on the
+  route the actor actually takes (this is
+  [[a pointer on a ticket is only visible on one route into the work]] read
+  forwards);
+- a guard that fails when X lands and Y has not;
+- the work itself, done now.
+
+**AND THE FOLLOW-UP IS THE BETTER HALF.** Told about it, frankC measured instead
+of complying — and the obligation named the **wrong gate**. The four sites are the
+CONSUMER side (which helper reads a `va_list`); what actually refuses on wasm32 is
+the PRODUCER side, a variadic prologue with six per-target arms and none for
+wasm32. Landing the entry stub changed nothing about reachability; the same
+refusal appears at the same line. **A C-capable target was never the trigger
+condition — a target with a variadic prologue is.** It was also never one line: a
+new member needs a `vaRegSz` and a `__va_save`/`__va_overflow` pair that only a
+prologue arm creates.
+
+So the right discharge was to **correct the trigger, not to satisfy it**
+(`92a9c0b38`), and widening would have asserted a `va_list` layout for a target
+that cannot produce one — unmeasurable by construction, and afterwards
+indistinguishable from a verified decision. **That is the ticket's own defect
+pointed the other way.**
+
+**The coordination lesson, which is the durable one:** when relaying an
+undischarged obligation, hand over the *sentence and the evidence*, and say which
+half you cannot check. I could see the obligation was open (four sites, no
+wasm32, stub landed) and could not see whether it was RIGHT. Saying so is what
+turned a compliance request into a measurement — and the measurement is what found
+that the ticket had been wrong for two days in a way nobody could have noticed by
+reading it.
