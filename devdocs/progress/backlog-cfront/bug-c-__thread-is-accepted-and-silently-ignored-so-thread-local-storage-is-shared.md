@@ -126,7 +126,27 @@ test. The two can fail independently, and a probe that only reads the variable
 cannot tell "TLS is not emitted" from "TLS is emitted and every thread resolves
 it to the same block".
 
-## RELEASE-RISK: SILENT-WRONG
+## RELEASE-RISK: DIAGNOSED
+
+**Re-categorised 2026-09-06 by frankC, who owns the sweep — this was
+`RELEASE-RISK: SILENT-WRONG` and the heading changed because the FACT changed,
+not because the ticket got smaller.** frankA left the old heading in place and
+asked rather than demoting it, which is the right way round: the set is derived
+from these headings, so an edit is a ruling and should be made by whoever has to
+defend the list.
+
+The ruling: **a defect that gains a diagnostic changes STATE, it does not leave
+the family.** The storage is still shared and the ticket is still open. What
+changed is the only property the sweep was ever about — whether a user can
+discover it from a message rather than from a race. Verified independently here
+before re-tagging: 0 warnings for a program with no thread storage class, 1 for
+one declaration, 1 for two (`__thread` + `_Thread_local`), and the defect
+unchanged — still runs, still prints `tv=7`, still zero `.tbss`/`.tdata`.
+
+It is now the ONLY member of the family a user can find out about, which is a
+release-notes distinction and not a bookkeeping one.
+
+### The original marker text, kept for history
 
 The program compiles, runs, and is WRONG with no diagnostic — so a user cannot
 discover it from a message and cannot work around what they cannot see. Marked
