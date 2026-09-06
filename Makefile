@@ -5933,6 +5933,14 @@ test-core: $(COMPILER)
 	# property rows, which FPC raises on and we answer the accessor's zero for.
 	./$(COMPILER) -Fulib/rtl test/lib_typinfo_byname.pas $(TESTTMP)/lib_typinfo_byname
 	tools/expect_same.sh lib_typinfo_byname "$$($(TESTTMP)/lib_typinfo_byname)" "$$(printf 'name=zaphod\ncount=42\nbig=5000000000\nfloat=2.50\nenum1=clBlue\nenum3=clBlue\nset=clRed,clBlue\nsetbr=[clRed,clBlue]\nobj=TRUE\nstored=TRUE\nmissstr=[]\nmissord=0\nmissstored=FALSE\nunchanged=zaphod\nTYPINFO-BYNAME OK')"
+	# The FLOAT exception family (EMathError) vs the INTEGER one (EIntError).
+	# BUILT WITH $(COMPILER), NOT $(PXX_STABLE): EZeroDivide/EOverflow/EUnderflow
+	# do not exist under the pin. Moves to the pinned set at the next pin.
+	# Every row matches fpc 3.2.2 -Mobjfpc byte for byte. THE TWO `FALSE` ROWS
+	# ARE THE TEST -- reparenting everything onto EMathError passes all four
+	# TRUE rows and is still wrong.
+	./$(COMPILER) -Mobjfpc -Fulib/rtl test/lib_math_exception_tree.pas $(TESTTMP)/lib_math_exception_tree
+	tools/expect_same.sh lib_math_exception_tree "$$($(TESTTMP)/lib_math_exception_tree)" "$$(printf 'int-div-is-int   : TRUE\nint-div-not-math : FALSE\ninvalidop-is-math: TRUE\nzerodiv-is-math  : TRUE\noverflow-is-math : TRUE\nunderflow-is-math: TRUE\nzerodiv-not-int  : FALSE\ncaught-by-base   : EZeroDivide\nint-escapes-math : EDivByZero\nMATH-EXCEPTION-TREE OK')"
 	# ...and the same gate reaching the FREE path's own refusal predicate, which
 	# it could not before: an ARRAY argument must not bind a SCALAR parameter
 	# through a method, exactly as it already could not through a free call.

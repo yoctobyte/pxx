@@ -287,12 +287,23 @@ type
   EInOutError       = class(Exception) end;
   EAccessViolation  = class(Exception) end;
   EInvalidCast      = class(Exception) end;   { a failed `as` downcast }
-  EInvalidOp        = class(Exception) end;
   EIntError         = class(Exception) end;
-  EDivByZero        = class(EIntError) end;
+  EDivByZero        = class(EIntError) end;      { INTEGER division by zero }
   ERangeError       = class(EIntError) end;
   EIntOverflow      = class(EIntError) end;
+  { The FLOAT family, and it descends from EMathError rather than from Exception
+    -- verified against fpc 3.2.2, which answers EInvalidOp.InheritsFrom(
+    EMathError) = TRUE and EDivByZero.InheritsFrom(EMathError) = FALSE. The two
+    trees are deliberately separate in FPC: EIntError for the integer unit,
+    EMathError for the FPU one, and `on E: EMathError` is how real code catches
+    "any float error". EInvalidOp used to descend from Exception here, so that
+    idiom caught nothing. Found 2026-09-06 attempting uPSCompiler, which catches
+    EZeroDivide and EMathError by name. }
   EMathError        = class(Exception) end;
+  EInvalidOp        = class(EMathError) end;
+  EZeroDivide       = class(EMathError) end;     { FLOAT division by zero }
+  EOverflow         = class(EMathError) end;
+  EUnderflow        = class(EMathError) end;
   EInvalidPointer   = class(Exception) end;
   EOutOfMemory      = class(Exception) end;
   EAssertionFailed  = class(Exception) end;
@@ -1264,9 +1275,9 @@ begin
     reRangeError:        raise ERangeError.Create('Range check error');
     reIntOverflow:       raise EIntOverflow.Create('Arithmetic overflow');
     reInvalidOp:         raise EInvalidOp.Create('Invalid floating point operation');
-    reZeroDivide:        raise EDivByZero.Create('Floating point division by zero');
-    reOverflow:          raise EIntOverflow.Create('Floating point overflow');
-    reUnderflow:         raise EMathError.Create('Floating point underflow');
+    reZeroDivide:        raise EZeroDivide.Create('Floating point division by zero');
+    reOverflow:          raise EOverflow.Create('Floating point overflow');
+    reUnderflow:         raise EUnderflow.Create('Floating point underflow');
     reInvalidCast:       raise EInvalidCast.Create('Invalid type cast');
     reAccessViolation:   raise EAccessViolation.Create('Access violation');
     reStackOverflow:     raise EOutOfMemory.Create('Stack overflow');
