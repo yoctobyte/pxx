@@ -69,4 +69,4 @@ carries a comment saying why the lowercase alias may not be declared beside
 it: Pascal is case-insensitive, so the one declaration answers to both
 spellings. That is the correct fix and not a relaxed diagnostic — the
 duplicate-identifier error was right about the source.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 94e8ab171.
