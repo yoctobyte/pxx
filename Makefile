@@ -6316,6 +6316,25 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_insert_takes_an_element_list_like_a_named_array \
 	  "$$($(TESTTMP)/test_inslist26)" \
 	  "$$(cat test/test_insert_takes_an_element_list_like_a_named_array.expected)"
+	# `d := s` for `d: array of LongInt` and `s: array[0..2] of LongInt` stored the
+	# STATIC array's ADDRESS in the handle slot: Length(d) = 4310328 and a SEGFAULT
+	# walking it, where fpc prints len=3: 2 4 6. The kind check cannot see it --
+	# an array symbol's TypeKind is its ELEMENT's kind, so both sides are
+	# tyInteger. NEGATIVE half: must not compile, and the message must name the
+	# address.
+	@./$(COMPILER) test/test_a_static_array_is_not_a_dynamic_array_fail.pas $(TESTTMP)/test_statdyn26 2>&1 \
+	  | grep -q 'cannot assign a fixed-length array to a dynamic array' \
+	  || { echo 'test_a_static_array_is_not_a_dynamic_array_fail: FAIL - expected the fixed-length-to-dynamic refusal'; exit 1; }
+	# POSITIVE CONTROL, drawn from the population the guard is about and NOT
+	# hypothetical: the first version tested `ArrLen > 0` and refused this file,
+	# because AllocParam stamps ArrLen := 1000 on EVERY array parameter as the
+	# open-array placeholder. `ArrLen` does not mean "fixed length". No fpc oracle
+	# for this one -- fpc REFUSES `t := o` from an open array, so the values are
+	# ours; us accepting what fpc rejects is not a defect.
+	./$(COMPILER) test/test_an_open_array_parameter_still_assigns_to_a_dynamic_array.pas $(TESTTMP)/test_openasg26
+	tools/expect_same.sh test_an_open_array_parameter_still_assigns_to_a_dynamic_array \
+	  "$$($(TESTTMP)/test_openasg26)" \
+	  "$$(cat test/test_an_open_array_parameter_still_assigns_to_a_dynamic_array.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

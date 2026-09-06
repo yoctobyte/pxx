@@ -12379,6 +12379,57 @@ begin
             ' to ' + TypeKindSpelling(asgDstTk));
       end;
 
+      { ...AND A SECOND PAIR THE KIND CANNOT EXPRESS: a FIXED-length array
+        assigned to a DYNAMIC one. `var d: array of LongInt; s: array[0..2] of
+        LongInt; d := s` -- both sides are tyInteger, because an array symbol's
+        TypeKind is its ELEMENT's kind, so the check above sees a matching pair
+        and waves it through. It then stored the static array's ADDRESS into the
+        handle slot, so Length read the words in front of `s` as a managed-block
+        header: measured `Length(d) = 4310328` and a SEGFAULT walking it, where
+        fpc prints `len=3: 2 4 6`. Silent garbage, then a crash, from four lines
+        of ordinary Pascal.
+
+        REFUSED RATHER THAN COPIED, and the two neighbours say exactly why this
+        is the narrow guard it looks like:
+          `d := e`  dyn -> dyn    already correct, must stay.
+          `t := o`  OPEN ARRAY param -> dyn: already correct AND FPC REJECTS IT
+                    ("Incompatible types: got {Open} Array Of LongInt"), so it
+                    is us accepting what fpc rejects -- not a defect, per
+                    CLAUDE.md, and it must keep working. It works because the
+                    open-array marshalling temp already carries [len:8][data],
+                    which is the very header the handle slot wants.
+        So the guard is a fixed length AND NOT A PARAMETER, which is narrower
+        than it first looks and deliberately so. `ArrLen > 0` does NOT mean
+        "fixed length": AllocParam stamps ArrLen := 1000 on EVERY array
+        parameter as the open-array placeholder, so an ArrLen test alone refuses
+        the open-array case that must keep working -- measured, it did, and the
+        binary that "proved" the open case still passed was the previous build
+        left on disk by the failed compile. `Kind <> skParam` is the property
+        that actually separates them. It also means a static array PARAMETER
+        assigned to a dynamic one is NOT refused here: the placeholder makes a
+        param's recorded length untrustworthy in the other direction too, and a
+        guard that fires on an unreliable reading is worse than one that misses.
+        The local and global case is what was measured to crash.
+
+        THE COPY IS THE REAL FIX AND THE ROUTE IS ALREADY IN THE TREE: the
+        open-array arm one line above builds the header this needs, so a static
+        source wants materialising the same way rather than a new ABI. Filed as
+        bug-a-a-static-array-assigned-to-a-dynamic-array-stores-its-address;
+        until then a named refusal, because a fall-through is not a diagnostic. }
+      if (not CProgramMode) and (not PyProgramMode) and
+         (NodeDynDepth(ASTLeft[node]) >= 1) and
+         (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_IDENT) and
+         (ASTIVal[ASTRight[node]] >= 0) and (ASTIVal[ASTRight[node]] < SymCount) and
+         Syms[ASTIVal[ASTRight[node]]].IsArray and
+         (Syms[ASTIVal[ASTRight[node]]].ArrLen > 0) and
+         (SymDynDepth[ASTIVal[ASTRight[node]]] = 0) and
+         (Syms[ASTIVal[ASTRight[node]]].Kind <> skParam) then
+        ErrorAtRecover(ASTLine[node],
+          'cannot assign a fixed-length array to a dynamic array: the handle slot '
+        + 'would take its ADDRESS and Length would read whatever sits in front of it '
+        + '-- use SetLength and copy the elements '
+        + '(bug-a-a-static-array-assigned-to-a-dynamic-array-stores-its-address)');
+
       { ...AND THE ONE PAIR THE KIND CANNOT EXPRESS AT ALL, which is why it is
         its own check and not another arm of the one above: a bare routine NAME
         stored into a procedural slot.
