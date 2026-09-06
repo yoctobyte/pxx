@@ -12,8 +12,10 @@ uses pylib;
 var
   A4: TPyList;
   A5: TPyList;
-  LETTER: TPyList;
-  letter: TPyList;
+  LETTER: TPyList;   { reportlab also exports the lowercase alias `letter`.
+                       Pascal is case-insensitive, so this ONE declaration
+                       answers to both spellings; declaring `letter` beside it
+                       is a duplicate identifier, not an alias. }
   landscape_A4: TPyList;
 
 implementation
@@ -32,6 +34,5 @@ initialization
   A4 := Pair(595.2755905511812, 841.8897637795277);
   A5 := Pair(419.5275590551181, 595.2755905511812);
   LETTER := Pair(612.0, 792.0);
-  letter := LETTER;
   landscape_A4 := Pair(841.8897637795277, 595.2755905511812);
 end.
