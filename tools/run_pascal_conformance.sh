@@ -61,11 +61,26 @@ while [ $# -gt 0 ]; do
     --only=*)  ONLY="${1#--only=}" ;;
     --report)  REPORT="$2"; shift ;;   # per-test TSV: status name category tag reason
     --report=*) REPORT="${1#--report=}" ;;
+    # --diag-map: one line per skip row, "name<TAB>first compiler diagnostic"
+    # (or "<compiles clean>"). NOT the verdict -- the DIAGNOSTIC, which is the
+    # only thing that moves when a skip reason stops being true while the row
+    # keeps failing. See the note above the capture below.
+    --diag-map)   DIAGMAP="$2"; shift ;;
+    --diag-map=*) DIAGMAP="${1#--diag-map=}" ;;
     *) echo "run_pascal_conformance: unknown option $1" >&2; exit 2 ;;
   esac
   shift
 done
 SKIPLIST="$ROOT/test/pascal-conformance/pxx.skip"
+DIAGMAP="${DIAGMAP:-}"
+# A MAP BUILT WITHOUT ATTEMPTING THE ROWS WOULD BE EMPTY AND LOOK CLEAN, which
+# is the collision this repo keeps paying for: "nothing changed" and "nothing
+# was measured" must not produce the same artefact. So --diag-map REQUIRES
+# --retry-skips rather than quietly writing a file of nothing.
+if [ -n "$DIAGMAP" ] && [ "${RETRY_SKIPS:-0}" != "1" ]; then
+  echo "run_pascal_conformance: --diag-map requires --retry-skips (the skip rows must actually be compiled for their diagnostic to exist)" >&2
+  exit 2
+fi
 LABEL="test-pascal-conformance"
 WORK="${TMPDIR:-/tmp}/pxx_pas_conformance.$$"
 # BOTH scales, not just the hardware one. TESTMGR_LOAD_SCALE (= cap/cores) is
@@ -161,10 +176,36 @@ bump_fail() {  # bump_fail TAG
 emit() {  # emit STATUS NAME REASON
   [ -n "$REPORT" ] || return 0
   _st="$1"; _nm="$2"; _rs="$3"; _tag="-"
+  # FOUR TAGS ARE IN USE AND THIS KNEW TWO. Measured 2026-09-06: pxx.skip
+  # carries gap (86), wontfix (22), decided (5) and accepts-invalid (2). The
+  # file's own header documents only the first two, so the last seven rows were
+  # reported to the dashboard as "untriaged" -- i.e. as rows nobody had judged --
+  # with their tag still glued to the front of the reason text. A tag the tool
+  # does not know was silently downgraded to NO TAG, which is the sentinel
+  # collision this repo keeps paying for: "not classified" and "classified as
+  # something I do not recognise" are different facts and must not share a value.
+  #
+  # So an unrecognised leading tag is reported AS ITSELF, prefixed, rather than
+  # absorbed -- a new tag shows up in the dashboard as a name nobody expected
+  # instead of vanishing into the untriaged bucket. "untriaged" now means
+  # genuinely untagged. Deliberately conservative about what counts as a tag:
+  # a leading lowercase word of <=20 chars followed by a colon, so a reason
+  # beginning "note: ..." is caught as an unknown tag and looked at, while
+  # prose containing a colon later in the line is untouched.
   case "$_rs" in
-    wontfix:*) _tag="wontfix"; _rs="$(printf '%s' "$_rs" | sed 's/^wontfix:[ \t]*//')" ;;
-    gap:*)     _tag="gap";     _rs="$(printf '%s' "$_rs" | sed 's/^gap:[ \t]*//')" ;;
-    *) [ "$_st" = skip ] && _tag="untriaged" ;;
+    wontfix:*)         _tag="wontfix";         _rs="$(printf '%s' "$_rs" | sed 's/^wontfix:[ \t]*//')" ;;
+    gap:*)             _tag="gap";             _rs="$(printf '%s' "$_rs" | sed 's/^gap:[ \t]*//')" ;;
+    decided:*)         _tag="decided";         _rs="$(printf '%s' "$_rs" | sed 's/^decided:[ \t]*//')" ;;
+    accepts-invalid:*) _tag="accepts-invalid"; _rs="$(printf '%s' "$_rs" | sed 's/^accepts-invalid:[ \t]*//')" ;;
+    *)
+      _lead="$(printf '%s' "$_rs" | sed -n 's/^\([a-z][a-z-]\{0,19\}\):.*/\1/p')"
+      if [ -n "$_lead" ]; then
+        _tag="UNKNOWN-TAG:$_lead"
+        _rs="$(printf '%s' "$_rs" | sed "s/^$_lead:[ \t]*//")"
+      elif [ "$_st" = skip ]; then
+        _tag="untriaged"
+      fi
+      ;;
   esac
   # strip stray tabs from reason so the TSV stays 5-column
   _rs="$(printf '%s' "$_rs" | tr '\t' ' ')"
@@ -173,6 +214,10 @@ emit() {  # emit STATUS NAME REASON
 if [ -n "$REPORT" ]; then
   : > "$REPORT"
   printf '# status\tname\tcategory\ttag\treason\n' > "$REPORT"
+fi
+if [ -n "$DIAGMAP" ]; then
+  : > "$DIAGMAP"
+  printf '# name\tfirst-diagnostic  (run: %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DIAGMAP"
 fi
 
 pass=0; fail=0; skip=0; auto=0; failed=""; idx=-1
@@ -276,6 +321,42 @@ EOF
     norun=1
   else
     ( cd "$SUITE" && timeout "$TIMEOUT_S" "$CC" $CCFLAGS "$name" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+  fi
+
+  # ---- --diag-map capture ------------------------------------------------
+  # WHY THE DIAGNOSTIC AND NOT THE EXIT CODE. --retry-skips can only see a row
+  # that started PASSING. A row whose VERDICT is still correct -- it genuinely
+  # fails -- while its REASON now names the wrong mechanism is invisible to it,
+  # by construction. Measured 2026-09-06 (frankS): a full retry sweep of 117
+  # rows found ZERO stale reasons, and clustering the same rows by their FIRST
+  # DIAGNOSTIC found FIVE reasons naming a mechanism that was not the cause --
+  # three tmoperator rows blaming record management operators, which are
+  # implemented and work, while all three actually stop at `undefined variable
+  # (InitializeArray)`; and two tgeneric rows blaming generics for a construct
+  # refused in a plain class with no generics in it. Every one of the five would
+  # have misrouted whoever read it, and two already had.
+  #
+  # A NULL RESULT INHERITS THE APERTURE OF THE INSTRUMENT THAT PRODUCED IT: the
+  # retry sweep's zero was a true answer to a different question. The diagnostic
+  # is the channel that can observe this class; the exit code cannot.
+  #
+  # A row whose diagnostic MOVED is a row whose reason is now suspect, whether
+  # or not its verdict changed. This captures; tools/skip_diag_diff.py compares.
+  if [ -n "$DIAGMAP" ] && [ "${retrying:-0}" = "1" ]; then
+    if [ "$compile_ok" != "0" ]; then
+      # First non-blank line of the compiler's output. The WORK directory carries
+      # the PID and so differs on every run -- left in, every row would read as
+      # MOVED every time and the tool would be ignored within a day.
+      _diag="$(sed -n '/[^ \t]/{p;q;}' "$WORK/cc.log" \
+               | sed -e "s|$WORK/||g" -e "s|$WORK|<work>|g" -e "s|$SUITE/||g" \
+               | tr '\t' ' ')"
+      [ -n "$_diag" ] || _diag="<no diagnostic on a failed compile>"
+    else
+      # A VALUE, never an absence. An empty field would be indistinguishable
+      # from "row not attempted", and those are different facts.
+      _diag="<compiles clean>"
+    fi
+    printf '%s\t%s\n' "$name" "$_diag" >> "$DIAGMAP"
   fi
 
   if [ "$expect_fail" = "1" ]; then
