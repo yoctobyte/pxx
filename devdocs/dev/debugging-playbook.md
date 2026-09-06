@@ -17574,3 +17574,54 @@ only ever return the claim.
 Related: "The name is not the thing" in `CLAUDE.md`, and *a whole-base slice is
 indistinguishable from its base* — same shape, a true narrow reading standing in
 for a false wide one.
+
+## A CONTROL THAT ENCODES A DEFECT STOPS BEING A CONTROL THE MOMENT THE DEFECT IS FIXED
+
+And it fails in the direction that looks like a broken instrument, so the reading
+is *"my census is wrong"* rather than *"the tree got better"*.
+
+Measured 2026-09-06, ninety minutes end to end. A census of names our
+`lib/rtl/sysutils.pas` declares that FPC resolves with no uses clause took its
+positive control from the population the question was about — the right rule —
+and the two rows it chose were `Delete` and `Insert`, **because those were the
+measured defect**: the pair whose declaration shadowed dynamic-array
+`Delete`/`Insert` for every program in the tree. `475528dae` removed both
+declarations. The census then exited 3, saying *"`Delete` is measured in fpc's
+system by two seats and this census did not find it"* — a **true sentence**, on
+a tree where nothing was wrong, from a guard doing exactly what it was told.
+
+**The tell is which side of the comparison the control lives on.** A control
+drawn from the defect asserts a property of the BROKEN tree. A control drawn from
+the ORACLE asserts a property of the instrument. Only the second survives the
+fix, and a census's job outlives the first defect that motivated it. Rewritten:
+`Delete`, `Insert` and `DynArraySize` are now **probed directly against fpc** —
+fpc resolves them ambiently whatever we declare — and only one row is required to
+survive into the result, the one with a live vehicle behind it (`DynArraySize`,
+which is what kills tarray13 at line 23).
+
+**Ask of every positive control: if the bug it names were fixed tomorrow, would
+this control still be asserting something true?** If not, it is a regression test
+wearing a control's clothes — useful, and it belongs where regression tests go,
+not in the guard that decides whether the instrument may print a result.
+
+### Two companion rules from the same measurement, both frankH's
+
+**A CENSUS REPORTING *ALL* OF ITS CANDIDATES IS THE TELL.** Their first two probe
+shapes for *"is this name reachable in pxx with no uses clause"* — `if @Length =
+nil then ;` and a bare `Length;` — each answered **17 of 17 absent**, because
+neither shape is how pxx resolves an intrinsic. A 100% hit rate reads as a
+finding and is nearly always an instrument measuring its own blindness. The
+must-find rows (`Copy`, `Pos`, `UpCase` — names plainly present) are what
+separate the two, and a `not-all-of-them` guard is worth carrying on its own.
+Compare *a check that flags everything is as empty as one that never fires*: this
+is the same animal with the sign flipped, and both directions need a row.
+
+**A WORKAROUND REMOVED ON A PROBE THAT CANNOT FAIL IS NOT A RECEIPT.** After the
+removal, `classes.pas:805`/`:910` could drop their `Self.Delete`/`Self.Insert`
+workarounds — **and so could the tree with the declarations restored, and the
+pinned compiler, and NilPy.** The probe did not discriminate, so it says nothing
+about which change retired them (it was the NilPyUserCode fix). They were left in
+place. **"It works without the workaround now" is a claim about today's tree;
+"this change retired the workaround" needs the probe to fail without the
+change** — the ordinary positive-control rule, applied to a deletion rather than
+to an assertion, which is where nobody looks for it.

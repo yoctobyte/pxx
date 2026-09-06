@@ -2101,3 +2101,31 @@ this is the same failure one level up: **the citation resolved and the sentence
 around it still asserted more than the citation supports.** A name with zero
 callers is not evidence about a capability, and the difference is invisible in
 relay.
+
+## A RELAY THAT NAMES NO TICKET IS READ AS "UNFILED"
+
+frankS measured three corpus rows behind frankA's held topic and told me,
+framing it as frankA's lane and adding *"nothing needed back"*. I passed the
+measurement on to frankA as sizing information for work they already hold.
+
+**frankS had also filed a ticket for it** —
+`backlog-core/feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray`,
+carrying all three rows with line numbers, splitting the helpers from the RTTI
+descriptor, and saying explicitly not to start with the helpers. Their message to
+me did not mention it, my relay therefore did not either, and **the omission read
+as absence**: frankA recompiled all five rows to retire a relay whose content was
+already written down.
+
+**Nothing was actually lost** — frankA's recompile at their own tip is a second
+source at a second tree, and it confirmed frankS's numbers line for line. The
+cost was one turn, and the relay carried its own retirement instruction, which is
+why it got retired instead of accumulating. But the failure mode is mine and it
+is cheap to close: **before relaying a finding, grep the backlog for its
+distinguishing string.** A slug in the relay converts *"here is a fact"* into
+*"here is a fact and here is where it already lives"*, and the second cannot be
+re-measured by accident.
+
+This is the same family as [[an-absent-owner-has-two-causes-and-one-is-a-lost-write]]
+and it is the version that runs through me rather than through a field: **silence
+about a ticket is not evidence there is none**, and I am the one position in the
+fleet that can check cheaply, because I am not mid-measurement.
