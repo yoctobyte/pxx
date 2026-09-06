@@ -675,10 +675,13 @@ produced a second one the same night, hours later, by this rule's own author.
 
 **A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
 line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
-which compiler is on disk. Four routes to a stale one: a seeded tree (`cp`
+which compiler is on disk. Five routes to a stale one: a seeded tree (`cp`
 stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, a
-sync that pulled someone else's `compiler/**`, and — measured 2026-09-01,
-`df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
+sync that pulled someone else's `compiler/**`, **`make bootstrap`** — it ends in
+`mv $(BUILD_COMPILER) $(COMPILER)`, so it REPLACES your binary, and it is the
+only route where the replacement is *legitimate*, so nothing looks wrong
+afterwards; record the sha first and reseed from the pin after — and — measured
+2026-09-01, `df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
 reverting it is revert→rebuild→restore→rebuild, and EACH REBUILD SEEDS FROM THE
 PREVIOUS LOCAL BINARY; after a few cycles, with other agents' `compiler/**` and
 **`lib/rtl/**` (also a compiler build input, which is the part nobody expects)**
