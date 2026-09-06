@@ -28906,7 +28906,18 @@ test-emit-obj: $(COMPILER)
 	# WHAT THIS STEP CAN STILL FAIL ON, since generating the stubs narrows it: it
 	# cannot fail on a missing IMPORT any more -- everything the object asks for
 	# is answered -- and it still fails on the relocations, which is what it was
-	# written for. Two guards keep that honest. The stub COUNT is asserted
+	# written for.
+	#
+	# AND ON THE IMPORT COUNT GROWING, which is a RATCHET and not a gate. The
+	# hand-written shim was an accidental alarm for
+	# bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
+	# (prio 65, bisected to f0a1a8be9), and generating the stubs took that alarm
+	# away. Gating at ZERO would manufacture a red this row never carried on
+	# purpose and would hold it red against an open compiler bug nobody has
+	# taken; asserting nothing would let the surface grow unwatched. So the count
+	# is asserted <= the number measured on 2026-09-06, and the NOTE beside it
+	# prints the count every run so a reader can see why that number is not zero.
+	# The two answer different questions and both are wanted. Two guards keep that honest. The stub COUNT is asserted
 	# non-zero -- the UND count SEEN, not the stubs emitted, because riscv32's
 	# object legitimately needs zero stubs (it imports only the two names this
 	# shim owns) and a zero there is a real answer rather than a silent failure
@@ -28940,9 +28951,20 @@ test-emit-obj: $(COMPILER)
 	  echo "xtensa windowed .o links ok"; \
 	  pal=$$(readelf -sW $(TESTTMP)/test_emit_obj_xt.o | awk '$$7 == "UND" && ($$8 ~ /^lwip_/ || $$8 == "vTaskDelay" || $$8 == "esp_timer_get_time")' | wc -l); \
 	  if [ "$$pal" != 0 ]; then \
-	    echo "test-emit-obj: NOTE -- the xtensa object still imports $$pal ESP-IDF symbols for a routine it never calls."; \
+	    echo "test-emit-obj: NOTE -- the xtensa object imports $$pal ESP-IDF symbols for a routine it never calls."; \
 	    echo "test-emit-obj:         That is bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (prio 65, bisected to f0a1a8be9), NOT this row."; \
-	    echo "test-emit-obj:         This step used to be its only alarm and deliberately is not any more -- see that ticket for why the count is printed and not asserted."; \
+	  fi; \
+	  if [ "$$pal" -gt 20 ]; then \
+	    echo "test-emit-obj: the xtensa ESP-IDF import count GREW, $$pal against a ratchet of 20."; \
+	    echo "test-emit-obj:   The ratchet is the count measured on 2026-09-06, not a target. It is here because the"; \
+	    echo "test-emit-obj:   link step stopped reporting this defect when its stub shim became generated, and a"; \
+	    echo "test-emit-obj:   gate at ZERO would manufacture a red that never existed -- this row never reported the"; \
+	    echo "test-emit-obj:   over-import on purpose, an accident of hand-written stubs did, and that accident is"; \
+	    echo "test-emit-obj:   why the shim went stale in the first place."; \
+	    echo "test-emit-obj:   If you INTENDED to change what the RTL imports, move the 20 to the new measured"; \
+	    echo "test-emit-obj:   number in the same commit and say why -- the same re-baselining the size canary uses."; \
+	    echo "test-emit-obj:   Otherwise something just widened the PAL surface an --emit-obj object retains."; \
+	    exit 1; \
 	  fi; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
 	# ---- the 19 test_esp_* programs nothing ran (sweep batch 4) ----

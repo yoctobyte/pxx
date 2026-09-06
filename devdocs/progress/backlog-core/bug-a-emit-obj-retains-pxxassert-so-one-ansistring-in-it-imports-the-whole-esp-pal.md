@@ -224,3 +224,56 @@ Measurement that still shows the defect, unchanged:
 **Whatever fixes this should land its own assertion rather than relying on the
 link**, since the link no longer has an opinion. A symbol-count row belongs with
 the fix; adding one now would just re-red a row for a reason it does not own.
+
+### Corroboration moved here from the folded duplicate
+
+Measured 2026-09-06, linking each object against the OLD hand-written shim:
+
+| object built by | ABI | undefined references |
+| --- | --- | --- |
+| `stable_linux_amd64/default/pinned` | windowed | **25** |
+| HEAD (`189e9b74036e`) | windowed | **25** |
+| HEAD | default | **25** |
+| HEAD, riscv32 | — | **0** |
+
+**The pin and HEAD agreeing at 25 is the not-a-regression control** — this is
+older than anything in the current tree, which your bisect to `f0a1a8be9`
+already establishes from the other end. **The two xtensa ABIs agreeing is what
+rules the windowed ABI out as a variable**, and that mattered because the recipe
+made it look like one: the two links were separated by `;`, so the first one's
+rc was swallowed and only the windowed line could ever reach a log. Both are
+`|| exit 1` now. That is CLAUDE.md's `&&`-not-`;` rule producing a wrong
+DIAGNOSIS rather than a missed failure, which is the more expensive half.
+
+### And the ratchet that replaces the accidental alarm
+
+`test-emit-obj` now asserts the ESP-IDF import count is **<= 20**, the number
+measured today, and PRINTS it every run beside this ticket's slug. It is a
+ratchet, not a gate: it stays green at today's surface and reddens if the
+over-import grows. Gating at zero would manufacture a red this row never carried
+on purpose — the hand-written stub list reported it by accident, and that
+accident is why the shim went stale — and would hold a row red against an open
+compiler bug under a full-green target. frankuser ruled on that; a stricter
+assertion on this ticket's own terms is yours to argue.
+
+**Whatever fixes this should move the 20 in the same commit**, the way the size
+canary re-baselines, and can then assert on both targets rather than only
+xtensa: riscv32's object has 2 UND and 0 stubs against xtensa's 35 and 33, but
+carries the same 114 PalBackend symbols — it defines rather than imports them.
+
+### What the symptom-side search would have had to look like
+
+I filed a duplicate of this ticket because I searched for the CAUSE I had just
+inferred and not for the SYMPTOM I was looking at. The searches that would have
+found this ticket from a bare `ld` failure, in the order they cost:
+
+    grep -rl 'lwip_' devdocs/progress/          # the undefined symbol itself
+    grep -rli 'esp.pal\|vTaskDelay' devdocs/progress/
+    tools/progress.sh ready --track A | grep -i 'emit-obj'
+
+The first one hits this ticket's summary directly. **The rule that generalises:
+search on the words the FAILURE gave you — an undefined symbol, an error string,
+a job name — never on the cause you have reasoned your way to, because the
+existing ticket is filed under a cause you do not know yet.** A red row you are
+the first to SEE is not a red row nobody has FILED, and a failure that was
+unreachable behind an earlier one is indistinguishable from a new one.

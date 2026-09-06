@@ -13,43 +13,31 @@ summary: "RESOLVED, and IT IS THE HARNESS HALF OF frankZ's [[bug-a-emit-obj-reta
 
 # The emit-obj xtensa link shim does not provide the PAL backend's ESP-IDF symbols
 
+**FOLDED. The DEFECT is
+[[bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal]]
+and always was.** This ticket keeps only the HARNESS half — the link step naming
+its stubs by hand, and the two xtensa links separated by `;`. Everything it once
+said about why the object imports lwip has been moved to frankZ's ticket, which
+had it a day earlier and with a bisect; leaving a second copy here would have
+been one defect on two tickets, and the shallower copy is the one people find
+first because it is named after the symptom.
+
 Found 2026-09-06 while closing
 [[bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix]] — a
 textbook case of the loud defect hiding the quiet one. The i386 relocation
-assertion aborted `test-emit-obj` roughly 700 recipe lines before this, so this
-step had not been reached in however long the i386 row had been red.
+assertion aborted `test-emit-obj` roughly 700 recipe lines before this step, so
+it had not been reached in however long the i386 row had been red, and its
+failure therefore arrived looking brand new.
 
-## Measured
+## Why the recipe's own comment pointed the wrong way
 
-    XT=…/xtensa-esp32s3-elf-gcc
-    $XT -nostartfiles -Wl,-e,main <shim>.c <obj> -o /dev/null
-
-| object built by | ABI | undefined references |
-| --- | --- | --- |
-| `stable_linux_amd64/default/pinned` | windowed | **25** |
-| HEAD (`189e9b74036e`) | windowed | **25** |
-| HEAD | default | **25** |
-| HEAD, riscv32 | — | **0** |
-
-Names: `lwip_getsockname`, `lwip_getpeername`, `lwip_getsockopt`, `lwip_ioctl`,
-`lwip_accept`, `esp_timer_get_time`, `vTaskDelay` and the rest of the PAL
-socket/timer surface, in `PalBackend*` functions.
-
-**The pin and HEAD agreeing at 25 is what makes this not a regression**, and the
-two ABIs agreeing is what makes it not about the windowed ABI. Only the windowed
-line appears in a log because the recipe runs it last and the earlier failure's
-`&&` swallows its echo.
-
-## Why the recipe's own comment now points the wrong way
-
-The recipe carries a paragraph from `regression-test-emit-obj-test-emit-obj`
+The recipe carried a paragraph from `regression-test-emit-obj-test-emit-obj`
 saying the shim's gap *"read as riscv32-specific and is not: all three objects
 carry `UND ext_aliased_link` identically … Only the riscv32 line appeared in the
 log because make ABORTS there and never reaches the xtensa links."* That was
-right about `ext_aliased_link`, which the shim now defines. The remaining gap is
-a different set of symbols and it **is** target-specific — riscv32 links clean
-because its PAL backend does not import lwip or FreeRTOS. Reading that paragraph
-today tells you the opposite of what is true.
+right about `ext_aliased_link`, which the shim defines. The gap that replaced it
+is a different set of symbols and **is** backend-specific. Reading that
+paragraph today told you the opposite of what held.
 
 ## What the step is actually for
 
