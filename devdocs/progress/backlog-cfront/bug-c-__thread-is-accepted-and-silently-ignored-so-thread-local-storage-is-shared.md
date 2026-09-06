@@ -8,7 +8,7 @@ created: 2026-09-06
 found-by: frankA
 tags: [tls, threads, c-frontend, errno]
 blocked-by: []
-summary: "`__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything."
+summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything."
 ---
 
 # `__thread` is accepted and silently ignored
@@ -134,3 +134,51 @@ discover it from a message and cannot work around what they cannot see. Marked
 an unenumerated silent-wrong is the class it must not ship.
 
 Re-measured 2026-09-06 by this lane, independently of the filing: `__thread int tv = 7;` compiles, runs, prints `tv=7`, and `readelf -SW` finds ZERO `.tbss`/`.tdata` sections in the pxx object against gcc's one. Every thread shares one copy.
+
+**AND IT IS NO LONGER SILENT — a warning landed the same evening, hours after
+this marker.** The storage is still shared, so the DEFECT is unchanged and this
+ticket stays open; what changed is that the compiler now says so, which is the
+property the marker is about. Left marked rather than quietly demoted, so it
+does not vanish from `grep -rl 'RELEASE-RISK: SILENT-WRONG'` without the sweep's
+owner seeing it: **whether a diagnosed limitation still belongs in that set is
+frankC's call, not a decision to take by editing a heading.** For release notes
+the distinction is real — a user can now discover this one from a message, which
+is exactly what the other members of the set cannot offer.
+
+## 2026-09-06 (frankA) — IT WARNS NOW, and that is a different ticket from fixing it
+
+The storage is still shared. What changed is that the compiler says so:
+
+    pascal26:2: warning: '__thread' is not implemented and is being IGNORED — the
+    variable gets ONE copy shared by every thread, not one per thread.
+    Single-threaded code is unaffected; threaded code will read and write another
+    thread's value with no further warning
+
+Once per compilation, not once per declaration — two `_Thread_local`
+declarations produce one warning, measured. A program with no thread storage
+class produces none, also measured, because a warning that fires on everything
+is not a warning.
+
+**A warning and not a refusal, and the reason is not the empty population.** The
+measured count of `__thread` under `test/`, `lib/` and `examples/` is ZERO, so
+refusing would be free in this tree — that is exactly why it is not the
+argument. Refusing would stop a SINGLE-threaded program that merely mentions
+`__thread`, and such a program is correct today: one copy shared is one copy.
+It would break working programs to protect broken ones. Real C from outside
+this tree is where that cost lands.
+
+**What this does and does not change.** A user can now discover the limitation
+from a diagnostic instead of from a race, which moves it out of the
+silent-wrong class a release cannot publish unenumerated. It does not implement
+thread-local storage, and the FS-base constraint above is untouched.
+
+Canary rather than a reading: the site was confirmed by planting an `Error` in
+`CIsTopLevelSkipIdent` and watching it fire on `__thread int tv = 7;`, because
+the declaration-specifier loop at `cparser.inc:5779` also consumes storage
+classes and does NOT list these two — reading the source would have left two
+candidate sites and no way to choose. The backward scanner `CDeclSawSpecifier`
+calls the same predicate and deliberately does not warn: it READS the token
+stream rather than skipping a declaration.
+
+Verified: `make compiler/pascal26` converged, `dd5f6da0ac5b`.
+`tools/gate.sh quick` GREEN.

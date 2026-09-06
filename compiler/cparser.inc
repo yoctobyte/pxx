@@ -12680,6 +12680,38 @@ begin
         / specifier keywords (extern, static, inline, ...) still fall through to
         the skip below, as does stray punctuation, preserving prior leniency. }
       Error('stray token at top level (not a declaration): ''' + CurTok.SVal + '''')
+    else if (CurTok.Kind = tkIdent) and
+            ((CurTok.SVal = '__thread') or (CurTok.SVal = '_Thread_local')) then
+    begin
+      { SKIPPED, AND SAY SO. Every other name in CIsTopLevelSkipIdent is a HINT
+        -- `register`, `__restrict`, `inline` -- and dropping a hint changes
+        nothing a program can observe. A thread storage class is not a hint: the
+        declaration means one copy per thread and we give it one copy, shared,
+        with no .tbss or .tdata in the object and no diagnostic anywhere. The
+        program compiles, runs, and is wrong only when a second thread touches
+        it, which is the failure this repo pays most for.
+
+        A WARNING AND NOT A REFUSAL, deliberately. Refusing would stop a
+        SINGLE-threaded program that merely mentions `__thread` -- which is
+        correct today, because one copy shared is one copy -- so it would break
+        working programs to protect broken ones. The measured population of
+        `__thread` under test/, lib/ and examples/ is ZERO, so a refusal is
+        cheap in this tree and that is not the argument; what it costs is real
+        C from outside it.
+
+        Pascal REFUSES `threadvar` outright, which is the honest failure and is
+        why the C side is the one that needed this line.
+        bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
+      if not CTlsIgnoredWarned then
+      begin
+        CTlsIgnoredWarned := True;
+        Warn('''' + CurTok.SVal + ''' is not implemented and is being IGNORED — ' +
+             'the variable gets ONE copy shared by every thread, not one per ' +
+             'thread. Single-threaded code is unaffected; threaded code will ' +
+             'read and write another thread''s value with no further warning');
+      end;
+      Next;
+    end
     else
       Next;
   end;

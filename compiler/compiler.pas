@@ -2112,6 +2112,7 @@ begin
   ValidateBuiltinRecordLayout;
   CodeLen  := 0;
   X386InstrStart := -1;
+  CTlsIgnoredWarned := False;
   { The fixed low block of .data -- INTBUF, then the two single bytes below --
     is written at CONSTANT offsets, never through DataLen, so it is the one
     place that needs the buffer to exist before anything appends to it. With
