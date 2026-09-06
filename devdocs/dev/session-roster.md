@@ -2204,9 +2204,11 @@ produced it was unsound, and the next one will not be free.
 ## THE FPC SEED CANARY'S CATCHES ARE CONCENTRATED IN ONE SHAPE — three in one day, all the same
 
 frankS, 2026-09-06: `TokSliceStr`, then `SetLitElemsArePlain`, then
-`NodeDynElemRowLen`. **All three are a parser file calling into `ir.inc`, and all
-three passed `make compiler/pascal26` AND `--tier quick`.** The canary was the
-only instrument that saw any of them.
+`NodeDynElemRowLen`, then a fourth on the static-array materialisation. **All
+four are a parser file calling into `ir.inc`, and all four passed `make
+compiler/pascal26` AND `--tier quick`.** The canary was the only instrument that
+saw any of them. Four in one day in one seam, which is no longer a run of luck:
+treat a canary red during forward-threading as this seam until shown otherwise.
 
 That is CLAUDE.md's declaration-order class with a specific address: PXX prescans
 headers and FPC is single-pass, so a call across the parser/`ir.inc` boundary
