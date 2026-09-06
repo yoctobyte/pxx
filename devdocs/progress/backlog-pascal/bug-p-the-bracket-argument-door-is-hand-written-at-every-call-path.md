@@ -67,6 +67,35 @@ door:
 
 Each was a real fix. None removed the next copy.
 
+## Why the count GROWS — frankB, 2026-09-06, from the inside of a near miss
+
+frankB had the ninth door half-written before a message stopped it: a fresh
+argument loop beside the one at `pasparser_lval.inc:5251`, in the same function.
+Their account of what made it feel correct is the mechanism this ticket is
+really about:
+
+> the surrounding code hand-rolls its argument loops five times; copying the
+> local idiom is what produces the ninth copy, and **the local idiom is the most
+> persuasive thing in view.**
+
+So the copies are not carelessness and a reviewer will not catch them by reading
+the diff — a sixth hand-rolled loop in a function holding five is the most
+locally consistent thing anyone could write. **The count grows because each copy
+is locally correct.** That is the argument for one shared loop rather than a
+convention, a comment, or a check: nothing that relies on a reader noticing will
+survive contact with five neighbours agreeing.
+
+What they wrote instead was
+`node := BuildIndirectCallAST(node, fldSig, tk = tyRecord)` (`f89f5ffec`), which
+inherits `TryParseBracketArgForSlot` at `:106` and adds no door.
+
+**And the boundary between that fix and this ticket is worth keeping, in
+frankB's words, because it protects the count:** the eight below are paths that
+ASK the bracket question and answer it by hand. The selector walker never asked
+one — there was no door to duplicate, only a missing `(` arm — so it is not a
+ninth address, it is a new consumer of the shared constructor. **This number is a
+count of hand-written doors, and only that.**
+
 ## The fix
 
 One argument loop, or failing that one predicate every loop must call — the
