@@ -625,6 +625,7 @@ var
   initialiser says the same thing without depending on when anything runs. }
   WasmCEntryMain    : Integer = -1;   { proc index of C's `main` }
   WasmCEntryFini    : Integer = -1;   { ... and of __pxx_run_finalizers }
+  WasmCEntryEnvp    : Integer = -1;   { ... and of __pxx_set_environ, if the program needs environ }
 
 procedure WasmBeginModuleOnce;
 var i: Integer;
@@ -2946,6 +2947,153 @@ function WasmEmitArgvRelease(vecL: Integer): Boolean;
 begin
   WasmLocalGet(vecL);
   WasmEmitArgvRelease := WasmCallRtl('PXXFree');
+end;
+
+{ ---- environ: the C environment, Phase 9j -------------------------------
+
+  The same two-call shape as argv one function up -- `environ_sizes_get`
+  reports the counts and `environ_get` fills a caller-provided vector and
+  buffer -- and it is a SEPARATE function rather than a parameter on the argv
+  one because of the two places the shapes genuinely differ, both of which are
+  correctness and neither of which is spelling.
+
+  ONE: `environ` IS NULL-TERMINATED AND `argv` IS NOT ASKED TO BE. WASI writes
+  exactly `count` pointers for either call; argv survives that because argc is
+  carried separately and every reader has it, while `environ` has no count at
+  all -- `getenv` and every `for (e = environ; *e; e++)` walk to a NULL that
+  the host never wrote. So the vector is allocated with room for `count + 1`
+  pointers and the last one is stored as 0 HERE. Omit it and the walk reads
+  past the array into the character buffer that follows, interprets the first
+  four bytes of `PATH=...` as a pointer, and dereferences it: a wrong answer
+  in a program that asked the environment, arriving as a trap or as garbage
+  depending on what the heap held. wasi-libc allocates the same `count + 1`
+  for the same reason.
+
+  TWO: THIS BLOCK IS NEVER FREED, AND THE ARGV ONE ALWAYS IS. `environ` points
+  into it for the whole life of the program, so the release that follows the
+  `main` call for argv would leave `environ` dangling at the first line of
+  user code. Freeing it after main returns would be legal and buys nothing --
+  the module is about to proc_exit -- so there is no free at all, and this
+  comment is why a reader who greps for the matching PXXFree will not find one.
+
+  The scratch pair IS freed: it is two out-parameters nothing keeps.
+
+  Errno dropped, like the argv arm: a host that fails leaves the counts at the
+  zeros PXXAlloc gave us, which yields a vector of exactly one NULL -- an
+  EMPTY environment, which is the right reading of "the host told us nothing"
+  and is what a Unix process with an empty envp sees.
+
+  THIS CODE HAS NEVER EXECUTED, AND THE NEXT READER MUST NOT ASSUME IT HAS.
+  Reaching it needs a C program that names `environ`, which pulls unistd.h,
+  which drags the crtl -- and the crtl does not compile for wasm32 yet. Both
+  walls were measured on 2026-09-06 at this commit's parent, individually, by
+  moving one and re-running:
+
+    stdio.c   `wasm: too many params+locals`   MAX_WASM_BODY_VARS = 288
+    fcntl.c   variadic C functions (va_arg)    the wasm32 va_arg gap
+
+  Raising the bound to 2048 locally moved the failure from the first to the
+  second, which is how both were established rather than just the outer one;
+  the raise was reverted (it is the wasm backend's call, not this arm's) and
+  the compiler rebuilt to the byte-identical sha it had before, 63f56a42bef6.
+  So BOTH must land before one line of this runs.
+
+  It is INERT until then rather than merely untested: WasmCEntryEnvp stays -1
+  for every program that compiles today, so this function is not called at
+  all. Verified by the two wasm32 C programs that DO compile -- `return 42`
+  exits 42 and an argc/argv program exits 31 -- both unchanged across this
+  commit.
+
+  Written ahead of its gate deliberately, because the alternative was leaving
+  the old refusal in place saying "environ is not available on wasm32 yet"
+  when the actual gate is the crtl -- a diagnostic naming the wrong wall,
+  which is the failure this file has spent the week cataloguing.
+
+  AND THE REPLACEMENT IS NOT A NICER MESSAGE. `wasm: too many params+locals`
+  is compiler-internal wording where the old one was a sentence written for a
+  C author, so a user who names `environ` today gets a WORSE-READING refusal
+  that happens to be about the true obstacle. That is the trade made here and
+  it should be made back the moment either wall lands: the two messages do at
+  least name the crtl file they come from, so the reader can tell it is our
+  runtime and not their program. Do not quote any of this as "environ works
+  on wasm32". }
+function WasmEmitEnvironFetch(envpProc: Integer): Boolean;
+var szImp, getImp, scratchL, cntL, bufszL, vecL, alloc: Integer; pvt: Byte;
+begin
+  WasmEmitEnvironFetch := False;
+  alloc := FindProc('PXXAlloc');
+  if alloc < 0 then
+  begin
+    WasmUnsupported('the builtin unit has no PXXAlloc');
+    Exit;
+  end;
+  szImp := WasmHostImport('wasi_snapshot_preview1', 'environ_sizes_get',
+                          [WT_I32, WT_I32], [WT_I32]);
+  getImp := WasmHostImport('wasi_snapshot_preview1', 'environ_get',
+                           [WT_I32, WT_I32], [WT_I32]);
+  scratchL := WasmAddLocal(WT_I32, 'envsizes');
+  cntL     := WasmAddLocal(WT_I32, 'envcount');
+  bufszL   := WasmAddLocal(WT_I32, 'envbufsz');
+  vecL     := WasmAddLocal(WT_I32, 'envvec');
+
+  { scratch := PXXAlloc(8, 8) -- two i32 out-parameters, same reasoning as the
+    argv arm: the heap, not the 16 bytes below $sp. }
+  if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmParamValType(alloc, 1, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmCallRtl('PXXAlloc') then Exit;
+  WasmLocalSet(scratchL);
+
+  WasmLocalGet(scratchL);
+  WasmLocalGet(scratchL); WasmI32Const(4); WasmOp($6A, 'i32.add');
+  WasmCallImport(szImp, 'environ_sizes_get');
+  WasmOp($1A, 'drop');
+
+  WasmLocalGet(scratchL); WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLocalSet(cntL);
+  WasmLocalGet(scratchL); WasmMemOp($28, 'i32.load', 2, 4);
+  WasmLocalSet(bufszL);
+
+  { vec := PXXAlloc((count + 1) * 4 + bufSize, 8) -- the +1 is the NULL
+    terminator's slot, and it is the whole reason this is not the argv arm. }
+  WasmLocalGet(cntL); WasmI32Const(1); WasmOp($6A, 'i32.add');
+  WasmI32Const(4); WasmOp($6C, 'i32.mul');
+  WasmLocalGet(bufszL); WasmOp($6A, 'i32.add');
+  if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
+  WasmWidenI32To(pvt);
+  if not WasmParamValType(alloc, 1, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmCallRtl('PXXAlloc') then Exit;
+  WasmLocalSet(vecL);
+
+  { environ_get(vec, vec + (count + 1) * 4) -- the buffer starts AFTER the
+    terminator slot, so the host never writes over it. }
+  WasmLocalGet(vecL);
+  WasmLocalGet(vecL);
+  WasmLocalGet(cntL); WasmI32Const(1); WasmOp($6A, 'i32.add');
+  WasmI32Const(4); WasmOp($6C, 'i32.mul');
+  WasmOp($6A, 'i32.add');
+  WasmCallImport(getImp, 'environ_get');
+  WasmOp($1A, 'drop');
+
+  { vec[count] := 0 }
+  WasmLocalGet(vecL);
+  WasmLocalGet(cntL); WasmI32Const(4); WasmOp($6C, 'i32.mul');
+  WasmOp($6A, 'i32.add');
+  WasmI32Const(0);
+  WasmMemOp($36, 'i32.store', 2, 0);
+
+  WasmLocalGet(scratchL);
+  if not WasmCallRtl('PXXFree') then Exit;
+
+  { The half that knows what `environ` IS. Split exactly as it is on every
+    other target: unistd.c's __pxx_set_environ holds the assignment and this
+    holds the platform's answer to "where does the environment live", so
+    neither can drift into the other. }
+  WasmLocalGet(vecL);
+  WasmCall(WasmSlotForProc(envpProc), '__pxx_set_environ');
+  WasmEmitEnvironFetch := True;
 end;
 
 { strlen, synthesised, leaving the length in `lenL`. `ptrL` is unchanged.
@@ -7641,6 +7789,15 @@ begin
     if not WasmEmitArgvFetch(argcL, vecL) then Exit;
     fetched := True;
   end;
+
+  { environ BEFORE main, and unconditionally on the request rather than on
+    main's arity: a program that reads `environ` or calls getenv need not take
+    argc/argv at all, and `int main(void)` reading getenv("PATH") is the
+    ordinary shape. The C frontend runs pending global initialisers at the top
+    of `main` itself, so "before the call" is also before anything a C program
+    can observe. }
+  if WasmCEntryEnvp >= 0 then
+    if not WasmEmitEnvironFetch(WasmCEntryEnvp) then Exit;
 
   { argc is WASI's raw count, which INCLUDES argv[0] -- and that is exactly
     what C wants. Pascal's ParamCount subtracts one; C's argc does not, so the
