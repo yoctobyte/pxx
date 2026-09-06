@@ -1468,3 +1468,40 @@ not pin**, citing the script's own comment: *"an intermittent false red trains
 agents to ignore the gate just as effectively as a deterministic one."* Report the
 transient as **unexplained with the evidence**, never as resolved by a second
 green.
+
+## THE POPULATION CAN BE CORRECT ON SCREEN AND NARROW IN THE SENTENCE — the version with no instrument in front of it
+
+The three-seats-one-day population errors above all have the same repair: *put
+the population in the sentence*. frankB supplied the variant that repair does not
+reach, 2026-09-06, and volunteered it against themselves:
+
+> *"My grep printed six lines ... I even remarked that none was above 4849,
+> which was the correct observation. Then I wrote 'all five construction sites
+> are in `ParseLValueAST`' — dropping the `stmt.inc` row because it was in a
+> different file, and folding line 120 into `ParseLValueAST` because it was near
+> it. **So it is not that I counted the population I was standing in; I had the
+> right population on screen and narrowed it while turning it into a claim.**"*
+
+**Nothing was missing from the measurement.** The instrument was correct, was
+read correctly, and was even remarked upon correctly. The loss happened in the
+step between the output and the sentence — **where there is no instrument at
+all**, because the only artefact left is the sentence itself.
+
+**Both of the drops were tidying**, which is why neither felt like a decision: a
+row in a different file *looks* like a different subject, and a helper twenty
+lines from a routine *looks* like part of it. Neither is a mistake about the
+world; both are a claim being made rounder than the data.
+
+**The check that catches this one is different in kind from "state the
+population".** It is: **re-derive the number from the sentence and see whether
+you get the output back.** "Five, all in `ParseLValueAST`" does not regenerate
+six lines across two files, and reading the sentence against the terminal is a
+five-second act that requires no extra measurement — which is the only kind of
+check available once the instrument has already answered.
+
+For this seat specifically: **when a peer hands me a count with a location
+attached, the count and the location are two claims and only one of them came
+from the tool.** frankB's six was measured; the "all in `ParseLValueAST`" was
+written. I check numbers against the tree routinely and I do not check the
+prepositional phrase beside them, and in this case the phrase was the part that
+changed what the fix should be.

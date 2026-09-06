@@ -65,3 +65,52 @@ That is worth more than either proposal, because it is not a request for a new
 rule — it is a report that an existing rule was scoped narrower than it was
 meant. **Rewording the marshalling rule may be cheaper than adding anything.**
 Owner's call.
+
+## 2026-09-06 — A FIFTH PROPOSAL, AND IT IS THE ONLY ONE SO FAR THAT DOES NOT GROW THE FILE
+
+**Proposed by frankB, carried here by frank-coordinator. Neither of us edited
+CLAUDE.md and neither of us is claiming its current text is wrong.** The claim is
+narrower and it is measured: **the rule fires too late.**
+
+CLAUDE.md line 431 (`927435d457`, 09-02 17:47) already says:
+
+> *"AND CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT — an expected
+> value that COLLIDES with the failure value is a guard that cannot fail ... the
+> question is not only 'can this guard fail' but **'if the machinery did nothing
+> at all, would this row still pass?'**"*
+
+**Two seats hit that exact defect on 2026-09-06, in two different frontends, with
+the rule in context at startup in both cases:**
+
+| seat | probe | the collision |
+| --- | --- | --- |
+| frankD, C frontend | `sizeof(*s.fp)` for `int (*p)[4]` answered **4** | 4 is `TypeStorageSize(tyUnknown)` — *nothing was recorded* — and it equals `sizeof(int)` |
+| frankB, Pascal frontend | `Fn(5)` through a chained call answered **TRUE** | the argument list is discarded and the truthiness of the method pointer is TRUE; the correct answer for 5 is also TRUE |
+
+Only `double (*dp)[4]` separated the first; only `Fn(-5)` separated the second.
+
+**frankB's original proposal was to promote it to a checklist item. That is
+withdrawn, and the reason is the finding: there is nowhere higher to promote it
+to.** It has been in the file every session reads at startup for four days. **A
+rule that is read and not applied is a wording problem, and adding a copy is the
+response that cannot help.**
+
+**The difference is what the sentence asks you to DO.** CLAUDE.md states a
+property to NOTICE — *"wherever a type's default, a zero, a `sizeof(int)` or a
+pointer width is also the expected value"* — which requires you to already be
+suspicious of the default, and to know what it is. `6ccba196e`'s playbook heading
+states an act to PERFORM at the moment you choose the argument:
+
+> ### THE EXPECTED VALUE MUST DIFFER FROM WHAT THE BUG EMITS — which you know while writing the row, unlike the type's default
+
+**That trailing clause is the whole improvement.** You always know what the bug
+emits when you write the probe, because reproducing it is what you just did. You
+do not necessarily know the type's default, and you are certainly not thinking
+about it.
+
+**PROPOSAL: replace the second half of the CLAUDE.md clause with the playbook's
+phrasing, keeping the `sizeof` measurement as its example.** This is the only one
+of the five queued proposals that is a REPLACEMENT rather than an addition — it
+leaves the file the same length or shorter, which is the failure mode this ticket
+opened by naming (*"they should be judged together, or the file grows by
+accretion"*).

@@ -12,6 +12,34 @@ title: "`Boolean16` / `Boolean32` / `Boolean64` do not exist — a whole FPC typ
 summary: "fpc has two sized-boolean families and we have one. `ByteBool`/`WordBool`/`LongBool` resolve (badly -- see bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time) and `Boolean16`/`Boolean32`/`Boolean64` are refused outright: `unknown type: Boolean16`. fpc sizes them 2/4/8 with Ord(True)=1, which is what distinguishes them from the *Bool family's all-bits-set. MEASURED CORPUS COST: uthlp.pp declares a Boolean16 and TWELVE tthlp* test files use that unit, so one missing name blocks twelve. They land in BuiltinScalarTypeKind, which frankA is actively collapsing with FindTypeAlias under refactor-p-five-dispatch-sites-for-one-named-type-cast -- ask them whether the rows go into the table as it stands or into the merged resolver before writing any. READ THE SIBLING BUG FIRST: adding these four names moves the corpus wall forward while `not` stays inverted on the three names we already ship, which looks like progress and is not."
 ---
 
+
+> ### THE BLOCK WAS TRUE IN THE WORLD AND ABSENT FROM THE GRAPH — added 2026-09-06 by frank-coordinator, measured by frankA
+>
+> This row was filed today with `blocked-by: []`, at p45, where `next` would
+> hand it to somebody who would then hit the wall the summary describes. The
+> edge is added on frankA's measurement, in their words:
+>
+> > *"`defs.inc` has exactly two boolean kinds and both are one byte, so every
+> > spelling `Boolean16` could have today is already a defect — `tyUInt16` is
+> > right on width and wrong on `not`, `WriteLn` and `Ord`; `tyBoolean` is the
+> > reverse and is the width failure the mapping's own comment exists to
+> > forbid. There is no third option until the fork moves."*
+>
+> **That is a schedule claim, not a preference**, and it is what separates this
+> row from the fork's other consumers: the other five are wrong behaviours in
+> code that already exists — real, ranked, survivable. This one is code that
+> **cannot be written correctly** at any spelling available today.
+>
+> **The coordination lesson is the absence, not the edge.** I had just told
+> frankA that the fork has two edged consumers and that the ranker's
+> `(unblocks 2)` therefore already reflected the picture — a correction that was
+> arithmetically right and concluded the wrong thing, because I counted edges
+> and read that as counting dependencies. **A missing edge is invisible to
+> exactly the instrument you reach for to check whether an escalation is
+> justified**, and the fork's real count was three. The sibling defect it names
+> (`bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time`) already
+> carried the edge; this one had the same blocker and no line saying so.
+
 # The `BooleanNN` family does not exist
 
 > **ORDERING HAZARD — READ THIS BEFORE DOING EITHER TICKET.** Every spelling

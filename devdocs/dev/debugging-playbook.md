@@ -16057,3 +16057,43 @@ cross-references anything at all). **Same sentences, both times.**
 **Operationally: when a group member closes, re-read every OTHER member's
 comparative sentences before working any of them** — and re-measure rather than
 re-read, because there is nothing in the stale ticket to notice.
+
+## WHEN A REFACTOR IS SUPPOSED TO CHANGE NOTHING, COMPARE THE ARTEFACT — "every test still passes" cannot tell "nothing changed" from "nothing changed that anything asserts"
+
+Measured 2026-09-06 by frankA, collapsing four cast-door arms into one
+`TryScalarNamedCast` body. The control was a **byte comparison of the generated
+artefact** across the merge, over a 15-file corpus. 14 files came out identical.
+One moved: `test_a_variant_cast_to_widechar_converts_like_char`.
+
+**Its output was unchanged. So was every other test's.** The difference was a
+redundant `AN_PTR_CAST` — a no-op cast from a kind to itself — that one door
+wrapped around a variant conversion and the other did not. **No value assertion
+anywhere in the tree could have seen it**, and the merge would have silently
+added that node to every variant-to-ordinal cast in the compiler.
+
+**This is the complement of the assertion-class rule, not a repeat of it.** The
+leak case (`assert_no_leak.sh`, `allocs=3000 frees=1496` behind a green
+`OPENARRAYFRESH OK`) is a defect that outputs cannot observe *because the
+quantity is elsewhere*. This is a defect **observable in no output at all** —
+there is no instrument to point at the right quantity, because the right quantity
+is the code. A byte comparison found it in one run.
+
+**The rule, and it is cheap:** a change that claims to be behaviour-preserving
+has a free, total control available to it — build both sides and `cmp` the
+output. Use it, and read a moved file as a QUESTION rather than a failure; one of
+frankA's two moved rows was the redundant node being *removed*, which is a
+correct change with an identical output on both binaries.
+
+> **AND SAY THE TWO CLAIMS SEPARATELY.** frankA's 15-file corpus did not reach
+> the arm on the ALIAS side. Rather than let the byte-identity result stand as
+> coverage of it, they wrote the missing file: there the bytes DO differ and the
+> output is identical on both binaries. *"Two different claims, said
+> separately"* — a corpus that is byte-identical proves nothing about a path it
+> never entered, and the strength of the result on 14 files is exactly what makes
+> the 15th easy to assume.
+
+**Why nobody reaches for it:** a refactor's author is the person most confident
+nothing changed, and the test suite agrees with them. The suite is answering a
+different question — "does anything I assert differ" — and on a refactor that is
+the question you already know the answer to.
+
