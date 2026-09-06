@@ -24,7 +24,10 @@ Reads the repo's real Makefile for the phantom case (the recipe that provoked
 it is still there); no repo state touched. Run:
     python3 tools/testmgr_corpus_skip_devtest.py
 """
+import os
 import pathlib
+import shutil
+import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -66,6 +69,42 @@ def case_no_phantom_from_prose():
     assert not bad, f"punctuation leaked into corpus names: {bad}"
     assert "stb)" not in found, "the 'stb)' phantom is back"
     return f"names from the SKIP line: {sorted(set(found))}"
+
+
+def case_expanded_recipe_yields_only_real_trees():
+    """THE REAL POPULATION: `make -n test-zlib`, which is what the detector
+    reads.
+
+    The case below scans the Makefile SOURCE and is kept, but it could not have
+    caught the 2026-09-06 `zlib.` phantom for two independent reasons: the
+    source still says `$(ZLIB_SRC).` there, so the string never appears in it,
+    and its punctuation filter does not list `.`. Wrong population AND wrong
+    alphabet.
+
+    Makefile:27405 -- `: '  other zlib header still resolves out of
+    $(ZLIB_SRC).'; \\` -- is deliberately LEFT IN PLACE as the live specimen
+    (frankH's line, kept at their offer rather than reworded), so this case has
+    a real subject and not a transcription of one. If someone rewords it, this
+    case still passes and the synthetic PROSE_PERIOD_LINE case above still
+    guards the shape; the two are complements.
+
+    One target, ~0.4s. The whole-tier listing form is the better manual control
+    -- it prints the phantom with its trailing period while the bug is live,
+    over every target at once -- but it takes ~57s, too slow for this family."""
+    if not shutil.which("make"):
+        raise AssertionError(
+            "no `make` on PATH — this control could not run, and a control "
+            "that did not run must not report ok")
+    env = dict(os.environ, PXX_ALLOW_FULL_SUITE="1")
+    r = subprocess.run(["make", "-n", "test-zlib"], cwd=REPO, env=env,
+                       capture_output=True, text=True, timeout=120)
+    text = r.stdout
+    assert "library_candidates/" in text, (
+        "no corpus path in the expanded recipe — did test-zlib stop naming "
+        "$(ZLIB_SRC)? This control is aimed at nothing")
+    names = sorted(set(testmgr.CORPUS_RE.findall(text)))
+    assert names == ["zlib"], f"phantom corpora from the EXPANDED recipe: {names}"
+    return "expanded test-zlib recipe yields exactly ['zlib']"
 
 
 def case_real_makefile_yields_only_real_trees():
@@ -143,6 +182,7 @@ CASES = [
     case_no_phantom_from_prose,
     case_trailing_period_is_not_part_of_the_name,
     case_a_dot_inside_a_name_survives,
+    case_expanded_recipe_yields_only_real_trees,
     case_real_makefile_yields_only_real_trees,
     case_self_guarded_line_does_not_skip_the_job,
     case_unguarded_line_still_skips,
