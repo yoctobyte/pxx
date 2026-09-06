@@ -797,7 +797,25 @@ class Clone:
         local commit is dropped (latest-only), so a busy origin can at worst
         cost this cycle's publish, not wedge the daemon."""
         paths = list(paths or [TSTATE_REL])
+        # A caller may have DELETED one of these paths: close_stub_tickets
+        # moves a stub out of backlog/ with os.unlink before calling here.
+        # The checkout below switches from the detached sha under test back to
+        # the branch, and that RESTORES anything the caller unlinked -- `git
+        # add` then sees the file present and stages nothing for it, so the
+        # move lands as an addition with NO deletion and the ticket exists in
+        # two buckets at once. `next` goes on ranking the dead copy: measured
+        # on 50ca24994, which closed two cascades and deleted neither stub,
+        # and cost a seat that claimed one of them a day later.
+        # close_stub_tickets' own comment already warned about this shape --
+        # it was right about the consequence and wrong about the cause, which
+        # is not the staging but this checkout undoing the unlink first.
+        gone = [p for p in paths
+                if not os.path.exists(os.path.join(self.path, p))]
         sh(["git", "checkout", "--quiet", self.branch], cwd=self.path)
+        for p in gone:
+            fp = os.path.join(self.path, p)
+            if os.path.exists(fp):
+                os.unlink(fp)
         sh(["git", "add", "--"] + paths, cwd=self.path)
         if not sh(["git", "status", "--porcelain", "--"] + paths, cwd=self.path):
             return
