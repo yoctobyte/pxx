@@ -1,6 +1,14 @@
 # pxx / pascal26 — beta 0.1
 
-**Draft for review. Not published.**
+**Draft, 2026-09-06. Review INCOMPLETE and stopped mid-pass; not published.**
+
+Beta 0.1 was deferred while this was under review, so the document stops where
+it stopped rather than at a finish line. Six seats reviewed it and their
+corrections are folded in; further review diffs were outstanding when work
+stopped and are in those seats' own commits and messages, not here. **Counts
+and coverage claims are not all independently verified** — where a number could
+not be reconciled across reviewers it was left out rather than picked, which is
+why one paragraph below deliberately carries no total.
 
 An arbitrary point in a long piece of work. There is a real backlog, some of it
 in this document. There is also a compiler that compiles real programs for seven
