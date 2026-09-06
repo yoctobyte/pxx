@@ -17760,3 +17760,62 @@ Two RTTI blobs for one type, so `if p = TypeInfo(Integer)` — the entire reason
 **A `nil` ARGUMENT IS A ONE-SIGNED PROBE.** `FindUMethOverloadAhead` skips its type question for `IsArray` parameters on one line and for `nil` arguments on the next, so the ticket's own repro `i.A(nil)` compiled and segfaulted while `i.A(t)` was refused. **A nil handle and a mis-marshalled one both read as `Length 0`** — the row cannot tell the fix from the bug. It is kept in the fixture and labelled as such, which is the right disposal: a probe that cannot discriminate is not deleted, it is annotated.
 
 **A REGRESSION ASSERTION WEARING THE SHAPE OF A CONTROL.** Widening a by-ref-argument gate to admit `const array of T`, frankB added a `var` open-array row asserting the callee's writes reach the caller and called it the positive control. **It is not one:** a bare variable followed by `)` takes the lvalue path *whatever the gate says*, so it is green under the correct gate AND under one widened to every array parameter. The real control had to be a **must-not-compile** file — the single spelling whose answer changes if `ProcParamIsConst` is dropped. Second instance in a day of *the cheapest thing to assert is the thing the defect survives*; the first was a control that encoded a defect and stopped controlling when the defect was fixed.
+
+## THE TEST RIG CONVERTS A LOUD FAILURE INTO A QUIET ONE — `/dev/null` ON STDIN TURNS A HANG INTO A PLAUSIBLE NUMBER
+
+Measured 2026-09-06 (frankD), on fcl-passrc's `pscanner.pp` after the unit
+reached **zero errors and linked clean**. One missing lookup, two faces:
+
+```
+WriteLn(F, 'x')         printed `3x` ON THE CONSOLE -- the 3 is the Text record
+                        formatted as an ordinary write argument -- and left the
+                        file created and EMPTY, exit 0.
+ReadLn(F, s) / EOF(F)   read STDIN, so EOF never came and the program HUNG.
+```
+
+`IOHandleSymAt` asks `FindSym`; a `Text` **field** has no `Syms[]` row;
+`TextIOFileSym` answered -1; the console path took the call. The whole Text
+lowering was keyed on a symbol index (`GenMakeIdent(fileSym, tyRecord)` at seven
+sites), so there was nowhere for a field to go — and `TFileLineReader` is exactly
+that shape.
+
+**Three instruments could not see it, and each fails differently, which is why
+they are worth listing as a set:**
+
+| instrument | why it is blind |
+| --- | --- |
+| a wall / error count | **there is no wall.** The compile is clean; zero errors is where this defect *starts* |
+| an exit code | the write half returns **rc=0** — file created, empty, no complaint |
+| a harness that redirects stdin from `/dev/null` | **the hang becomes "zero lines read"** |
+
+**The third is the one to carry, because the harness does it as a courtesy.**
+Redirecting stdin is standard hygiene in nearly every test rig — it stops an
+interactive prompt from wedging CI. Here it takes the single loudest symptom
+available, an infinite hang, and converts it into **a small plausible number**
+that every downstream assertion accepts. The rig did not hide a subtle failure;
+**it manufactured a quiet one out of a loud one.**
+
+So: before trusting a "0 rows / empty / nothing read" result, **ask what the
+harness fed that program's stdin**, and whether the same run under a terminal
+would hang. Related: *match the assertion class to the defect class* — here the
+assertion class was right and the INPUT plumbing changed which class the defect
+presented as.
+
+### Two more from inside the same fix, both silent if wrong
+
+**A GUARD ASKED ONE TOKEN OFF PRODUCES NO DIAGNOSTIC — IT PRODUCES THE OLD
+BEHAVIOUR.** The new detector had to be asked at `TokPos - 1` because the callers
+leave `CurTok` ON the identifier. Off by one and it simply never fires: no error,
+no message, the pre-fix path. **That is the failure mode of every "widen a guard"
+change**, and it is why frankD re-ran all four probes rather than the one being
+debugged — three of them would have gone on passing while the fix did nothing.
+
+**"FOUND NOTHING" AND "ANSWERED A VALUE THAT MEANS NONE" ARE DIFFERENT
+ANSWERS.** The `Self` fallback had to fire when the symbol lookup answered
+**`REC_NONE`**, not only when it found nothing: `Self` IS a symbol in a method,
+and `SymOwnRecOf` answers `REC_NONE` for it. An `else` there left
+`WriteLn(Self.F, x)` printing to the console while `WriteLn(F, x)` two lines
+above wrote correctly — **two spellings of one construct, one silently wrong**,
+caught only because the test carried both. The sibling-spelling rule paying for
+itself *inside* the fix rather than after it, and another entry in the family
+where an absence has more than one cause and the code branches as if it had one.
