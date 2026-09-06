@@ -1,0 +1,20 @@
+TB.Create 7 seven
+TA.Create 7 seven
+TB.NoArgs
+TA.NoArgs
+TB.Bump 42
+TA.Bump 42
+TB.Grow 30
+TA.Grow 31
+after Grow 31
+TB.Three 1 two TRUE
+TA.Three 1 two TRUE
+TB.Destroy
+TA.Destroy
+TB.Create 9 nine
+TA.Create 9 nine
+TC.Bump 5
+TB.Bump 5
+TA.Bump 5
+TB.Destroy
+TA.Destroy

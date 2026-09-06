@@ -14720,6 +14720,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_the_exponent_operator_has_its_own_precedence_level \
 	  "$$($(TESTTMP)/test_pow_ir26)" \
 	  "$$(cat test/test_the_exponent_operator_has_its_own_precedence_level.expected)"
+	# `inherited;` with NO name forwards THIS method's own parameters to the
+	# ancestor -- pxx called it with zero arguments and refused the universal
+	# Delphi constructor idiom with `inherited call argument count mismatch`
+	# (fpc testsuite tclass3). ONLY the bare form forwards, measured: fpc refuses
+	# `inherited Create;` against a two-parameter ancestor ctor. The zero-argument
+	# destructor and NoArgs rows are the controls that the case which already
+	# worked still does; the `var` row is the one that breaks quietly if the
+	# forward copies instead of passing the caller's own symbol.
+	./$(COMPILER) test/test_a_bare_inherited_forwards_the_callers_arguments.pas $(TESTTMP)/test_bareinh_ir26
+	tools/expect_same.sh test_a_bare_inherited_forwards_the_callers_arguments \
+	  "$$($(TESTTMP)/test_bareinh_ir26)" \
+	  "$$(cat test/test_a_bare_inherited_forwards_the_callers_arguments.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope_ir26
 	tools/expect_same.sh test_op_unit_scope_ir26 "$$($(TESTTMP)/test_op_unit_scope_ir26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading_ir26
@@ -15828,6 +15840,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_the_exponent_operator_has_its_own_precedence_level \
 	  "$$($(TESTTMP)/test_pow26)" \
 	  "$$(cat test/test_the_exponent_operator_has_its_own_precedence_level.expected)"
+	# `inherited;` with NO name forwards THIS method's own parameters to the
+	# ancestor -- pxx called it with zero arguments and refused the universal
+	# Delphi constructor idiom with `inherited call argument count mismatch`
+	# (fpc testsuite tclass3). ONLY the bare form forwards, measured: fpc refuses
+	# `inherited Create;` against a two-parameter ancestor ctor. The zero-argument
+	# destructor and NoArgs rows are the controls that the case which already
+	# worked still does; the `var` row is the one that breaks quietly if the
+	# forward copies instead of passing the caller's own symbol.
+	./$(COMPILER) test/test_a_bare_inherited_forwards_the_callers_arguments.pas $(TESTTMP)/test_bareinh26
+	tools/expect_same.sh test_a_bare_inherited_forwards_the_callers_arguments \
+	  "$$($(TESTTMP)/test_bareinh26)" \
+	  "$$(cat test/test_a_bare_inherited_forwards_the_callers_arguments.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
 	tools/expect_same.sh test_op_unit_scope26 "$$($(TESTTMP)/test_op_unit_scope26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	# `TFn(p)(args)` -- calling straight through a procedural-type cast -- was

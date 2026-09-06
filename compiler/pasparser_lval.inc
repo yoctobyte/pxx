@@ -5004,6 +5004,8 @@ function ParseInheritedCallAST: Integer;
 var
   ci, parentCi, mmi, mpi, selfIdx, node, selfArg, lastArg, argSeq, argNo: Integer;
   name: AnsiString;
+  bare: Boolean;   { `inherited;` with NO name -- see the argument forwarding below }
+  fwdJ, fwdSym: Integer;
 begin
   if (CurSelfClass < REC_UCLASS_BASE) or (CurProc < 0) then
     Error('inherited call outside method');
@@ -5011,6 +5013,7 @@ begin
   parentCi := UClsParent[ci];
 
   Next; { consume inherited }
+  bare := (CurTok.Kind <> tkIdent);
   if CurTok.Kind = tkIdent then
   begin
     name := CurTok.SVal;
@@ -5045,7 +5048,21 @@ begin
   if parentCi < 0 then Error('inherited call has no parent class');
   { overload-aware: `inherited Insert(i)` must pick the parent overload
     matching THIS call's arg count (CurTok = '(' or the follower) }
-  mmi := FindUMethOverloadAhead(parentCi, name, CountCallArgsAhead);
+  { A BARE `inherited;` FORWARDS THIS METHOD'S OWN PARAMETERS, unchanged, to the
+    ancestor's method of the same name -- so the overload it selects is the one
+    with THIS arity, not the zero-argument one CountCallArgsAhead would report
+    for a cursor sitting on `;`.
+
+    Only the bare form, and that is measured rather than assumed: fpc 3.2.2
+    refuses `inherited Create;` against `constructor Create(LongInt;
+    ShortString)` with "Wrong number of parameters", while `inherited;` in the
+    same body compiles and prints the caller's own arguments. Naming the method
+    makes it an ordinary call with an ordinary argument list; leaving it out is
+    what asks for the forward. bug-p-a-bare-inherited-does-not-forward-arguments }
+  if bare then
+    mmi := FindUMethOverloadAhead(parentCi, name, Procs[CurProc].ParamCount - 1)
+  else
+    mmi := FindUMethOverloadAhead(parentCi, name, CountCallArgsAhead);
   if mmi < 0 then Error('inherited method not found: ' + name);
   EnforceMethVis(mmi, name);
   mpi := UMthProc_[mmi];
@@ -5061,6 +5078,24 @@ begin
   ASTLeft[node] := selfArg;
   lastArg := selfArg;
   argNo := 1;
+
+  { ...and the forward itself: one AN_IDENT per parameter of the CURRENT method,
+    in order, skipping Self at index 0. They are the caller's own symbols, so a
+    `var` parameter forwards as the lvalue it already is and a managed one is
+    not copied. }
+  if bare then
+    for fwdJ := 1 to Procs[CurProc].ParamCount - 1 do
+    begin
+      fwdSym := Procs[CurProc].Params[fwdJ].SymIdx;
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := AllocNode(AN_IDENT);
+      ASTIVal[ASTLeft[argSeq]] := fwdSym;
+      ASTTk[ASTLeft[argSeq]] := Ord(Syms[fwdSym].TypeKind);
+      ASTTk[argSeq] := Ord(Syms[fwdSym].TypeKind);
+      ASTRight[lastArg] := argSeq;
+      lastArg := argSeq;
+      Inc(argNo);
+    end;
 
   if CurTok.Kind = tkLParen then
   begin

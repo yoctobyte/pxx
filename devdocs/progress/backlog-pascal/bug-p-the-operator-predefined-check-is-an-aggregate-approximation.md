@@ -66,6 +66,34 @@ cannot happen: a registered scalar entry can only exist for a pair the table
 says has no predefined meaning, so "predefined → builtin, otherwise → table" is
 a partition and not a race. Do not land half 2 without half 1.
 
+## A THIRD half, found after the ticket was written, and it is the one that
+## actually gates toperator78
+
+`OperandTypeKindRec` (pasparser_call.inc:26) resolves an operand type name from
+exactly three places: `IsRecordType`, `FindUClass`, and `BuiltinTypeNameTk`
+(plus `string`/`ansistring` by hand). **A user-declared non-record type has no
+path at all** — measured at `b0e691210256`, all three of these are
+`operator overloading: <name> is not a supported operand type`:
+
+```
+operator ** (left, right: ShortString) ...
+operator ** (left, right: TSet)   ...   TSet  = set of TEnum
+operator ** (left, right: TEnum)  ...   TEnum = (eA, eB, eC)
+```
+
+So the 209-cell matrix above UNDERSTATES the gap in one direction and overstates
+it in another: three of its type columns never reach the predefined check at all,
+and relaxing that check alone would not accept them. toperator78 declares
+`operator and (left, right: TTests)` over a set and two `array of Char`
+operands, so it needs this half as well as the other two.
+
+**tforin15 fails on this same message** (`Twice is not a supported operand
+type`, `Twice = type Integer`) and is NOT fixed by widening it: resolving
+`Twice` to tyInteger makes it collide with the `operator enumerator(Integer)`
+declared beside it, which is that row's real subject — a distinct scalar type
+has no identity in a table keyed on (typeKind, recId). One message, two rows,
+two different causes underneath it.
+
 ## Not the same as toperator91/94
 
 Those are the duplicate-CONVERSION check keying on the result type KIND
