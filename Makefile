@@ -6912,6 +6912,19 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_bracket_argument_still_selects_a_method_overload \
 	  "$$($(TESTTMP)/test_brkovl26)" \
 	  "$$(cat test/test_a_bracket_argument_still_selects_a_method_overload.expected)"
+	@# A NESTED ROUTINE'S CAPTURES USED TO EAT ITS DEFAULT PARAMETERS. A
+	@# capturing nested routine is lifted to top level and its captures were
+	@# appended as TRAILING params, which is the slot an omitted default needs:
+	@# `Show(1, [0], False, [3])` became `Show(1, [0], False, [3], Self, Param)`
+	@# against (own0..own5, Self, Param) and was refused. Captures now lead.
+	@# Three rows for the three splice paths (enclosing-body call, self-
+	@# recursive call via __nestself, bare call with no argument list) -- they
+	@# are three separate pieces of code and a tail-splice regression in any one
+	@# of them binds a wrong value rather than failing to build.
+	@./$(COMPILER) test/test_a_nested_routine_keeps_its_default_parameters.pas $(TESTTMP)/test_nestdef26
+	@tools/expect_same.sh test_a_nested_routine_keeps_its_default_parameters \
+	  "$$($(TESTTMP)/test_nestdef26)" \
+	  "$$(cat test/test_a_nested_routine_keeps_its_default_parameters.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

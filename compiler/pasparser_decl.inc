@@ -9151,14 +9151,19 @@ begin
           else if Tokens[rp].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
           Inc(rp);
         end;
+        { HEAD, not tail: the lifted routine carries its captures as its FIRST
+          parameters, so an omitted DEFAULT still falls on the tail where the
+          ordinary default filling puts it. rp is still computed because the
+          empty-list test below reads the token after '('. }
         ins2Count := 0;
+        for j := 0 to coreSelfCount - 1 do begin ins2[ins2Count] := coreSelf[j]; ins2[ins2Count].Line := Tokens[namePos[k]].Line; Inc(ins2Count); end;
         if Tokens[namePos[k] + 2].Kind <> tkRParen then
         begin
-          ins2[0].Kind := tkComma; ins2[0].IVal := 0; ins2[0].Line := Tokens[namePos[k]].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
-          ins2Count := 1;
+          ins2[ins2Count].Kind := tkComma; ins2[ins2Count].IVal := 0; ins2[ins2Count].Line := Tokens[namePos[k]].Line; ins2[ins2Count].SOffset := 0; ins2[ins2Count].SLen := 0;
+          Inc(ins2Count);
         end;
-        for j := 0 to coreSelfCount - 1 do begin ins2[ins2Count] := coreSelf[j]; ins2[ins2Count].Line := Tokens[namePos[k]].Line; Inc(ins2Count); end;
-        InsertTokens(rp, ins2, ins2Count);
+        if rp >= TokCount then Error('nested routine: unterminated call argument list');
+        InsertTokens(namePos[k] + 2, ins2, ins2Count);
       end
       else
       begin
@@ -9250,14 +9255,16 @@ begin
               else if Tokens[rp].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
               Inc(rp);
             end;
+            { HEAD, not tail -- see the twin splice above. }
             ins2Count := 0;
-            if Tokens[i+2].Kind <> tkRParen then   { non-empty arg list: prepend a comma }
-            begin
-              ins2[0].Kind := tkComma; ins2[0].IVal := 0; ins2[0].Line := Tokens[i].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
-              ins2Count := 1;
-            end;
             for k := 0 to coreCount - 1 do begin ins2[ins2Count] := core[k]; ins2[ins2Count].Line := Tokens[i].Line; Inc(ins2Count); end;
-            InsertTokens(rp, ins2, ins2Count);
+            if Tokens[i+2].Kind <> tkRParen then   { non-empty arg list: append a comma }
+            begin
+              ins2[ins2Count].Kind := tkComma; ins2[ins2Count].IVal := 0; ins2[ins2Count].Line := Tokens[i].Line; ins2[ins2Count].SOffset := 0; ins2[ins2Count].SLen := 0;
+              Inc(ins2Count);
+            end;
+            if rp >= TokCount then Error('nested routine: unterminated call argument list');
+            InsertTokens(i + 2, ins2, ins2Count);
           end
           else
           begin

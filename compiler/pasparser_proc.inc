@@ -841,6 +841,103 @@ begin
   retEnumId := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
+  { Lambda-lift: a nested routine lifted to top level (matched by its mangled
+    name) gains its captured enclosing state as LEADING params here, with type
+    metadata snapshotted at the capture site — no synthetic type tokens needed.
+    Runs for both the forward decl and the real definition (both pass through
+    here with the same mangled name), so their signatures match.
+
+    LEADING, and it used to be trailing. A trailing capture occupies the slots
+    an omitted DEFAULT parameter needs, and a nested routine may have both:
+
+      procedure SetMode(const M: TModeSwitch; ...; UseOtherwise: Boolean = True);
+      SetMode(msFpc, FPCModeSwitches, false, bsFPCMode);   { 4 of 6 written }
+
+    became `SetMode(..., bsFPCMode, Self, Param)` -- six actuals against
+    (own0..own5, Self, Param), so Self landed on `RemoveBoolSwitches` and the
+    call was refused. Filling the defaults at the call site would mean copying
+    each default's token run out of the header; putting the captures FIRST
+    costs nothing, because the parameter loop below indexes off nparams and
+    ordinary default filling then works on the tail where it already belongs.
+    The actual lists spliced by ParseNestedRoutine go in at the head to match.
+    bug-p-a-nested-routine-with-default-parameters-loses-them-to-its-captures }
+  liftIdx := FindLiftDesc(name);
+  if liftIdx >= 0 then
+  begin
+    if LiftNeedSelf[liftIdx] then
+    begin
+      { MAX_PROC_PARAMS, not a smaller round number: the staging arrays and
+        TProc.Params are both 32 wide, so 32 is the real bound and the literal
+        16 refused half the space that exists.
+
+        The message NAMES THE NUMBER, which is the other half of that bug. For
+        as long as the bound was 16 the text read "too many params after
+        capture" -- a limit asserted without a value, which the reader can only
+        accept. Anyone who hit it counted their captures, got a number under
+        what they would have guessed, and reshaped the routine instead of
+        disbelieving the compiler; the code they wrote instead cannot be found
+        from this side. Printing the cap and the count makes the claim
+        CHECKABLE: a reader whose routine captures 17 things and is told the
+        max is 32 has a contradiction in front of them, and a wrong bound
+        becomes a bug report instead of a workaround. }
+      if nparams >= MAX_PROC_PARAMS then
+        Error('nested routine: too many params after capture (' +
+              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
+      pnames[nparams] := '__nestself';
+      ptypes[nparams] := tyClass;
+      ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
+      ptypesPtrElemTk[nparams] := tyUnknown; ptypesPtrElemRec[nparams] := REC_NONE;
+      ptypesPtrDepth[nparams] := 0;
+      ptypesPtrBaseTk[nparams] := Ord(tyUnknown);
+      ptypesPtrBaseRec[nparams] := REC_NONE;
+      ptypesProcSig[nparams] := -1;
+      parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
+      ptypesStrCap[nparams] := 0;   { synthesized param: no declared capacity }
+      pout[nparams] := False;
+      pNDims[nparams] := 0; pDynDepth[nparams] := 0;
+      pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
+      pElemDynDepth[nparams] := 0;
+      Inc(nparams);
+    end;
+    lcb := LiftCapStart[liftIdx];
+    for i := 0 to LiftCapCount[liftIdx] - 1 do
+    begin
+      { names the number, for the reason at the sibling site above }
+      if nparams >= MAX_PROC_PARAMS then
+        Error('nested routine: too many params after capture (' +
+              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
+      pnames[nparams] := LiftCapName[lcb + i];
+      ptypes[nparams] := LiftCapTk[lcb + i];
+      ptypesRec[nparams] := LiftCapRec[lcb + i];
+      ptypesPtrElemTk[nparams] := LiftCapPtrTk[lcb + i];
+      ptypesPtrElemRec[nparams] := LiftCapPtrRec[lcb + i];
+      ptypesPtrDepth[nparams] := LiftCapPtrDepth[lcb + i];
+      ptypesPtrBaseTk[nparams] := LiftCapPtrBaseTk[lcb + i];
+      ptypesPtrBaseRec[nparams] := LiftCapPtrBaseRec[lcb + i];
+      ptypesProcSig[nparams] := LiftCapProcSig[lcb + i];
+      parr[nparams] := LiftCapArr[lcb + i];
+      ptypesStrCap[nparams] := 0;   { a lifted capture carries no declared capacity }
+      pbyref[nparams] := True;            { captured by reference }
+      pconst[nparams] := False;
+      pout[nparams] := False;
+      pNDims[nparams] := 0;
+      pDynDepth[nparams] := LiftCapDyn[lcb + i];
+      { A captured FIXED array becomes exactly the named-fixed-array `var` param
+        the arm below already handles: without the extent it would keep
+        AllocParam's open-array placeholder (ArrLen := 1000) and size a
+        whole-array copy at 1000 elements, and without the low bound IR_INDEX
+        would subtract 0 and put `g[1]` of an `array[1..3]` one slot high.
+        ALWAYS written -- these staging rows are reused across routines, so 0
+        has to clear a previous capture's shape. }
+      pFixedLen[nparams] := LiftCapFixedLen[lcb + i];
+      pFixedLo[nparams] := LiftCapFixedLo[lcb + i];
+      pElemRowLen[nparams] := 0;
+      pElemRowLo[nparams] := 0;
+      pElemDynDepth[nparams] := 0;
+      Inc(nparams);
+    end;
+  end;
+
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -1291,87 +1388,6 @@ begin
   if isStackless and not (isGenerator or isAsync) then
     Error('stackless directive is only valid on a generator or async routine');
 
-  { Lambda-lift: a nested routine lifted to top level (matched by its mangled
-    name) gains its captured enclosing state as trailing params here, with type
-    metadata snapshotted at the capture site — no synthetic type tokens needed.
-    Runs for both the forward decl and the real definition (both pass through
-    here with the same mangled name), so their signatures match. }
-  liftIdx := FindLiftDesc(name);
-  if liftIdx >= 0 then
-  begin
-    if LiftNeedSelf[liftIdx] then
-    begin
-      { MAX_PROC_PARAMS, not a smaller round number: the staging arrays and
-        TProc.Params are both 32 wide, so 32 is the real bound and the literal
-        16 refused half the space that exists.
-
-        The message NAMES THE NUMBER, which is the other half of that bug. For
-        as long as the bound was 16 the text read "too many params after
-        capture" -- a limit asserted without a value, which the reader can only
-        accept. Anyone who hit it counted their captures, got a number under
-        what they would have guessed, and reshaped the routine instead of
-        disbelieving the compiler; the code they wrote instead cannot be found
-        from this side. Printing the cap and the count makes the claim
-        CHECKABLE: a reader whose routine captures 17 things and is told the
-        max is 32 has a contradiction in front of them, and a wrong bound
-        becomes a bug report instead of a workaround. }
-      if nparams >= MAX_PROC_PARAMS then
-        Error('nested routine: too many params after capture (' +
-              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
-      pnames[nparams] := '__nestself';
-      ptypes[nparams] := tyClass;
-      ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
-      ptypesPtrElemTk[nparams] := tyUnknown; ptypesPtrElemRec[nparams] := REC_NONE;
-      ptypesPtrDepth[nparams] := 0;
-      ptypesPtrBaseTk[nparams] := Ord(tyUnknown);
-      ptypesPtrBaseRec[nparams] := REC_NONE;
-      ptypesProcSig[nparams] := -1;
-      parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
-      ptypesStrCap[nparams] := 0;   { synthesized param: no declared capacity }
-      pout[nparams] := False;
-      pNDims[nparams] := 0; pDynDepth[nparams] := 0;
-      pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
-      pElemDynDepth[nparams] := 0;
-      Inc(nparams);
-    end;
-    lcb := LiftCapStart[liftIdx];
-    for i := 0 to LiftCapCount[liftIdx] - 1 do
-    begin
-      { names the number, for the reason at the sibling site above }
-      if nparams >= MAX_PROC_PARAMS then
-        Error('nested routine: too many params after capture (' +
-              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
-      pnames[nparams] := LiftCapName[lcb + i];
-      ptypes[nparams] := LiftCapTk[lcb + i];
-      ptypesRec[nparams] := LiftCapRec[lcb + i];
-      ptypesPtrElemTk[nparams] := LiftCapPtrTk[lcb + i];
-      ptypesPtrElemRec[nparams] := LiftCapPtrRec[lcb + i];
-      ptypesPtrDepth[nparams] := LiftCapPtrDepth[lcb + i];
-      ptypesPtrBaseTk[nparams] := LiftCapPtrBaseTk[lcb + i];
-      ptypesPtrBaseRec[nparams] := LiftCapPtrBaseRec[lcb + i];
-      ptypesProcSig[nparams] := LiftCapProcSig[lcb + i];
-      parr[nparams] := LiftCapArr[lcb + i];
-      ptypesStrCap[nparams] := 0;   { a lifted capture carries no declared capacity }
-      pbyref[nparams] := True;            { captured by reference }
-      pconst[nparams] := False;
-      pout[nparams] := False;
-      pNDims[nparams] := 0;
-      pDynDepth[nparams] := LiftCapDyn[lcb + i];
-      { A captured FIXED array becomes exactly the named-fixed-array `var` param
-        the arm below already handles: without the extent it would keep
-        AllocParam's open-array placeholder (ArrLen := 1000) and size a
-        whole-array copy at 1000 elements, and without the low bound IR_INDEX
-        would subtract 0 and put `g[1]` of an `array[1..3]` one slot high.
-        ALWAYS written -- these staging rows are reused across routines, so 0
-        has to clear a previous capture's shape. }
-      pFixedLen[nparams] := LiftCapFixedLen[lcb + i];
-      pFixedLo[nparams] := LiftCapFixedLo[lcb + i];
-      pElemRowLen[nparams] := 0;
-      pElemRowLo[nparams] := 0;
-      pElemDynDepth[nparams] := 0;
-      Inc(nparams);
-    end;
-  end;
 
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the

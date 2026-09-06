@@ -1,0 +1,6 @@
+lm=1 isd=FALSE uo=TRUE add=TRUE rem=FALSE cap=P2
+lm=2 isd=TRUE uo=TRUE add=TRUE rem=TRUE cap=P2
+lm=3 isd=TRUE uo=FALSE add=TRUE rem=TRUE cap=P2
+lm=4 isd=FALSE uo=TRUE add=FALSE rem=FALSE cap=P2
+one acc=18 p=P
+k acc=124 p=P
