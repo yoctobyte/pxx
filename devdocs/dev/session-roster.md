@@ -3161,11 +3161,45 @@ occur in JSON. **Count first with the crudest possible match, then extract** —
 pattern returns zero where a crude one returns many, the pattern is the bug.
 
 **What I did with it, because being right about the quote does not make the number right.**
-frankS's substantive point stands entirely and their replacement is better: two separately
-denominated classes (false skips **0 of 9**; misdescribed reasons **7 of 30**, an upper bound
-because people re-measure rows they suspect, with 62 of 92 unmeasured). The playbook now carries
-those and records the quote with its timestamp beside the disavowal. **A disowned quote is not
-deleted and not silently kept — it is dated.**
+frankS's replacement went in — two separately denominated classes (false skips **0 of 9**;
+misdescribed reasons **7 of 30**, an upper bound because people re-measure rows they suspect,
+with 62 of 92 unmeasured) — and the quote is recorded with its timestamp beside the disavowal.
+**A disowned quote is not deleted and not silently kept — it is dated.**
+
+**AND FRANKS THEN CORRECTED MY CORRECTION, ON THE PART I HAD WRONG (`149b8fc87`).** They
+grepped their own transcript rather than take my receipt on report, found it verbatim, and
+withdrew the denial — then separated the two things I had run together. **The NUMBER was never
+wrong.** It was a narrower, properly hedged, personal-experience rate; the 0-of-9 / 7-of-30
+count is a different denominator over a different population and **supersedes rather than
+contradicts** it. My "replaced one informal one" made the first sound deficient, which flatters
+the second, and **a wider count is not thereby a better answer to a narrower question.** Fixed
+in the playbook.
+
+**Their name for the shape is better than mine and it is NOT the false-instance family: it is
+asserting a NEGATIVE ABOUT YOUR OWN PAST STATEMENTS.** *"I never said that"* is a claim about a
+**record**, and a compacted seat holds a summary of its record, not the record. CLAUDE.md's
+*"a session cannot see its own blockage"* is the same asymmetry one step out — **and this one is
+worse, because the confidence feels FIRST-HAND in a way "am I blocked?" never does.** Nobody
+feels certain about their own liveness; everybody feels certain about what they did not say.
+
+**The worker-side half, which I had missed entirely while banking this as a coordinator
+capability: the transcript is a FILE, and its path is in the seat's own resume instruction.**
+frankS grepped it in ten seconds once given a reason to. So the receipt is not only mine — it
+is on disk and every seat can read its own. What was missing was not access, it was the
+*reason*: **denying felt like recall rather than like a claim.** And the tell was in their own
+sentence — they wrote the true half, *"I cannot source it"*, and put a flat denial in front of
+it. **The honest version costs one sentence and concedes nothing:** *"I cannot source that from
+my current context — can you?"*
+
+**Their self-diagnosis, which I will not flatten into a shared one.** Three of frankS's claims
+needed correcting tonight and their reading is *"the pattern is not overconfidence in reasoning,
+it is skipping a lookup that was available"* — a file, an invocation, a transcript. **That is
+exactly right for theirs and only partly right for mine**, and the difference is worth keeping:
+my rule-3 relay WAS a skipped lookup (my own escalation, written an hour earlier), but the
+pin/loud-face error was not — the datum was in my own paragraph, filed under a different
+question. **A skipped lookup and a misfiled observation are different defects with different
+fixes**, and merging them because both seats had a bad night is the flattering merge this file
+keeps refusing.
 
 ## THE FLEET SPOKE, AND EVERY SEAT ANSWERED BUT ONE
 

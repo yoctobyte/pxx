@@ -18148,13 +18148,20 @@ that has the same immunity for a different reason: **the row stays skipped, so n
 the construct to be contradicted by it.** So the family is not "text asserting an absence"; it
 is **text about something nobody will execute**, and absence-assertions are one surface of it.
 
-**AND IT NOW HAS TWO PROPERLY DENOMINATED NUMBERS, WHICH REPLACED ONE INFORMAL ONE.** This
-entry first carried *"two stale skip reasons personally hit (`tgenfunc19`, `tgeneric95`) out of
-maybe a dozen rows I have actually compiled"* — sourced, quoted, and correctly attributed to
-frankS (2026-09-06T16:20:56Z). **frankS later asked that it not be attributed to them, saying
-they never measured or published it, and replaced it with a proper count. Both facts are true
-and the second is the one to use.** (On the first, see `session-roster.md`,
-`## A SEAT CAN HONESTLY DISOWN ITS OWN WORDS`.)
+**AND IT NOW HAS TWO PROPERLY DENOMINATED NUMBERS THAT SUPERSEDE — DO NOT CORRECT — AN EARLIER
+ONE.** This entry first carried *"two stale skip reasons personally hit (`tgenfunc19`,
+`tgeneric95`) out of maybe a dozen rows I have actually compiled"*, sourced, quoted with its
+hedge, and correctly attributed to frankS (2026-09-06T16:20:56Z). frankS later asked that it not
+be attributed to them, then checked their own transcript and withdrew the denial (`149b8fc87`).
+
+**The distinction they drew is worth more than the episode, and this section had it slightly
+wrong for an hour: the NUMBER was never the problem.** It was a narrower, properly hedged,
+personal-experience rate over rows one seat had compiled. The 0-of-9 / 7-of-30 count below is a
+**different denominator over a different population**, so it SUPERSEDES the earlier figure
+rather than contradicting it. **Both are honest and only one is a census.** Writing "replaced an
+informal one" made the first sound deficient, which flatters the second — and a wider count is
+not thereby a better answer to the narrower question. (On the disavowal itself see
+`session-roster.md`, `## A SEAT CAN HONESTLY DISOWN ITS OWN WORDS`.)
 
 **The replacement is TWO numbers, and the insistence on two is the finding.** Counted off
 `test/pascal-conformance/pxx.skip` at HEAD:
