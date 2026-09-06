@@ -419,7 +419,7 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (40)
+## backlog-pascal (41)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -440,6 +440,7 @@ _none_
 | bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token | P | 40 | bug | Once any nested routine has been lambda-lifted, every LATER syntax error in the file reports the right LINE with the wrong token and the wrong `near:` window. Nine-line repro: `if q 2 then` on line 18 is reported as `pascal26:18: error: expected 'then' before 'q'` with `near: procedure TC . Later ; var >>> q : Integer` -- line 15's tokens. Without the nested routine the identical error reads `before '2'` with the right window. So CurTok (which supplies the line) and TokPos (which supplies both the name and the window) are out of step after a lift. WHICH of the two moved is NOT established and must not be guessed: this diagnostic cost a session an hour by sending it to a routine 128 lines from the actual defect, and a ticket that names the wrong mechanism would cost the next one the same. | — |
 | bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name | P | 45 | bug | An alias in a used unit loses to a same-named class row from another unit | — |
 | bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section | P | 40 | bug | An imported generic routine is spliced before the program's own type section | — |
+| bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten | P | 45 | bug | An inline `specialize` used before the generic routine's BODY is not rewritten | — |
 | bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid | P | 60 | bug | An interface name in a var initialiser stores the GUID's ADDRESS, not the GUID | — |
 | bug-p-declared-cannot-see-a-used-units-declarations | P | 50 | bug | `{$if declared(X)}` cannot see a used unit's declarations, and answers False rather than refusing | — |
 | bug-p-routine-local-name-scoping-is-implemented-in-one-of-three-tables | P | 55 | bug | Routine-local name scoping is implemented in one of FIVE tables, and the one implementation is wrong at the edge | — |
@@ -1197,6 +1198,7 @@ _none_
 - [p 45] [P] bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles
 - [p 45] [P] bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse
 - [p 45] [P] bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name
+- [p 45] [P] bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten
 - [p 45] [S] bug-s-c-on-the-esp-profile-cannot-reach-crtl
 - [p 45] [T] bug-t-a-gate-red-does-not-say-whether-it-is-yours-or-the-trees
 - [p 45] [T] bug-t-a-negative-test-row-cannot-say-which-way-it-flipped
