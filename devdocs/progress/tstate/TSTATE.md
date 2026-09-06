@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 6d22h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `b64c289f1ce5` | 2026-09-06T09:01:09Z | RED (native) | 159.5s | `503e608717a4` RED |
+| seven | `b64c289f1ce5` | 2026-09-06T09:10:55Z | RED (full) | 561.3s | `b64c289f1ce5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `503e608717a4` on seven, 2026-09-06T08:57:11Z (3m ago).**
+**Newest full tier in the fleet: `b64c289f1ce5` on seven, 2026-09-06T09:10:55Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `503e608717a4` | RED | 3m | — (newest) |
+| seven | `b64c289f1ce5` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 6d22h | 6d22h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
