@@ -3371,6 +3371,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 35 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-class-return | N | 70 | regression | a def whose body is a FORWARD call loses its annotated class result, so attribute access on the call no longer parses | — |
 | regression-test-nilpy-test-nilpy-delitem-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy red at 954727cee668 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-dotted-package-import-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1 at 6d04b14cd88d in step 1/2, `./compiler/pascal26 test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-for-two-names-over-a-variant | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy red at b51f4eeffbf9 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-from-import-as-alias | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_from_import_as_alias.npy red at 954727cee668 (auto-filed by twatch) | — |
