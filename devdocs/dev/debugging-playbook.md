@@ -12920,6 +12920,48 @@ Benign rows exist and must be **checked, not assumed**: `Pos -> pos` in five TLS
 inert because the call path does not use `FindSym`'s answer, verified with a probe, and fpc
 refuses those programs entirely.
 
+### THE BOUNDARY OF THAT RULE: THE TWO PREDICATES HAVE TO BE CO-LOCATED, AND WHEN THEY ARE NOT, ENUMERATE THE SPELLINGS FROM THE GRAMMAR
+
+frankS, 2026-09-06, the same day, and it is the condition the section above does not state.
+*"Instrumenting the DIFFERENCE needs the two predicates to be co-located, which is the
+property frankB's fix happened to have."* `FindSym` held the old walk and the new disjunct in
+one function, so the delta was a `writeln` away. **Two Track P burns the same day did not have
+it:** the record-vs-class receiver split is one arm choosing between two `Self` expressions,
+and the qualified-class-const lookup **did not exist to instrument** — you cannot print the
+delta of a resolution that has no old side.
+
+**The substitute frankS keeps landing on: enumerate the SPELLINGS of the construct from the
+GRAMMAR, and assert each.** Nine rows for the qualified const, nine receiver shapes for the
+static method. Both burns were the already-banked shape — *two spellings of one construct, and
+the second stayed broken* — and the grammar is the only enumeration that contains the spelling
+nobody implemented.
+
+**AND THE REASON A CALL-GRAPH CENSUS CANNOT SUBSTITUTE, which is the sharpest line here and
+generalises well past parsers.** `EatQualifiedTypePrefix`'s own comment: the fourth copy was
+found from the grammar, not from any helper's call graph, **"which by construction only
+returns sites that already reach the helper."** A census over callers is *structurally* blind
+to the missing copy — the defect IS the absence of a call, so the instrument that enumerates
+calls cannot contain it. Same animal as *a rule spelled per caller fails by an ABSENT COPY,
+not a divergent one*, stated at the level of the instrument rather than the code: **the
+population you can enumerate and the population you need are different sets, and the gap is
+exactly the defect.**
+
+**So the pair, and pick by which one you have:**
+
+| you have | instrument |
+| --- | --- |
+| an old predicate and a new one in the same function | **print the delta** — one compile names the whole changed population |
+| an arm added where there was no arm, or a lookup that did not exist | **enumerate from the GRAMMAR (or the spec/type-table), never from callers** |
+
+**One more thing frankS flagged about their own answer, and it is the weaker half said out
+loud:** *"pxx compiled all of it before and after with the same answers, which is the weaker
+half of that statement and worth saying is weaker: a case-shadowed pair does not fail to
+COMPILE, it binds to the wrong symbol, so a green build is not the instrument here. Reading
+the declarations is."* A resolution change is the assertion-class trap in its purest form —
+**the defect is a silent correct-looking binding, and every build-shaped instrument is
+physically unable to observe it.** That is why the delta print exists and why "I rebuilt and
+it was fine" answers a different question.
+
 ## A FIX SKETCH IN A TICKET IS THE LINE WITH THE MOST AUTHORITY AND THE LEAST VERIFICATION — second instance in one day, and this time on the author's own ticket
 
 Measured 2026-09-06 (frankB, `99c416b54`), one hour after they filed the ticket it corrects.
