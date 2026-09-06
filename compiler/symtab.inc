@@ -455,6 +455,42 @@ begin
   end;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
+  { AN ALIAS OF AN UNRESOLVED FORWARD POINTER ALIAS INHERITS ITS TARGET NAME,
+    because otherwise NOTHING EVER REPAIRS IT. `TIter = PItem` copies the whole
+    pointer triple out of the LastTypePointer* window just above — which is the
+    right thing to copy and is REC_NONE when PItem is still the forward half of
+
+      PItem = ^TItem;  TItem = record data: Integer; next: PItem; end;
+      TIter = PItem;
+
+    ResolvePendingPointerAliases repairs PItem at the END of the type section,
+    long after this row took its snapshot, and it finds its rows by TARGET NAME
+    (its guard is tyPointer + ElemRec = REC_NONE + TargetNLen > 0). Only
+    RegisterPtrAlias — the `X = ^T` spelling — records one, so this row was
+    invisible to the pass and kept REC_NONE for the life of the program.
+
+    Copying the SOURCE's target name is right rather than merely expedient:
+    TIter and PItem are the same pointer type, so the name the pass must resolve
+    is the same name, and the owning-class column this row already carries makes
+    a nested spelling resolve in its own body.
+
+    THE SYMPTOM IS OFFSET-0 SHAPED, which is why it reads as working: `it^.data`
+    is CORRECT through the broken row because data sits at offset 0, and only a
+    SECOND field shows it — `it^.next` reads the wrong slot, so `it^.next^` is
+    refused outright as `dereferenced value is not a pointer` while
+    `it := it^.next` compiles and segfaults. The pass's own field-repair loop
+    below documents this exact tell for its own case.
+
+    Declaration ORDER is the discriminator, as it is for the two forward arms in
+    that pass: the same three lines in a SEPARATE type section compile and run,
+    and so does the version with no forward at all.
+    bug-p-an-alias-of-a-forward-pointer-alias-never-gets-its-pointee }
+  if (tk = Ord(tyPointer)) and (AliasElemRec[AliasCount] = REC_NONE) and
+     (LastTypePointerAlias >= 0) and (AliasTargetNLen[LastTypePointerAlias] > 0) then
+  begin
+    AliasTargetNOff[AliasCount] := AliasTargetNOff[LastTypePointerAlias];
+    AliasTargetNLen[AliasCount] := AliasTargetNLen[LastTypePointerAlias];
+  end;
   AliasProcSig[AliasCount] := -1;
   { A frozen-string alias keeps its CAPACITY. ParseTypeKind has just run for the
     right-hand side, so LastTypeStrCap holds the N of `T = string[N]`; without
