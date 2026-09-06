@@ -53,6 +53,50 @@ module.exports = function host() {
     },
   }};
 
+  // ---- the imports a module REACHES but this harness does not implement ----
+  //
+  // A module imports what its code can reach, not what the program calls, and
+  // the sentence at the top of this file is the whole reason: instantiation
+  // fails on a MISSING import, so one slice reaching a new corner of the RTL
+  // breaks with a LinkError that says nothing about the program.
+  //
+  // That is not hypothetical. Building any program -dPXX_ALLOC_CENSUS pulls the
+  // census reporter, which pulls the file layer, which lands fourteen more WASI
+  // names in the import section — none of which the program calls. Before this
+  // block, `check_nilpy_objlocal.sh` could not instantiate its own fixture.
+  //
+  // These return ERRNOS, they do not throw. A throw would be the tempting
+  // choice — "nobody should be calling this" — and it is wrong twice over:
+  // fd_prestat_get is called at startup by the preopen-enumeration loop, which
+  // terminates ON EBADF and would instead take the harness down; and a stub
+  // that cannot return leaves a future slice unable to reach the code past it.
+  //
+  // Every call is recorded in st.wasiStubs. A slice that needs one of these to
+  // do real work should implement it here rather than locally — six inline
+  // copies is the thing this file exists to prevent — and can assert on
+  // st.wasiStubs meanwhile to prove its subject never depended on a stub.
+  const EBADF = 8, ENOSYS = 52;
+  st.wasiStubs = [];
+  const stub = (name, errno) => (...args) => {
+    st.wasiStubs.push({ name, args });
+    return errno;
+  };
+  for (const [name, errno] of [
+    ['fd_prestat_get', EBADF], ['fd_prestat_dir_name', EBADF],
+    ['fd_read', ENOSYS], ['fd_seek', ENOSYS], ['fd_sync', ENOSYS],
+    ['fd_close', ENOSYS],
+    ['path_open', ENOSYS], ['path_unlink_file', ENOSYS],
+    ['path_rename', ENOSYS], ['path_create_directory', ENOSYS],
+    ['path_remove_directory', ENOSYS],
+    ['clock_time_get', ENOSYS], ['random_get', ENOSYS],
+    ['args_sizes_get', ENOSYS], ['args_get', ENOSYS],
+  ]) {
+    // Never shadow a real implementation above: this block only FILLS GAPS, so
+    // adding a genuine fd_read up there silently wins and this loop skips it.
+    if (!(name in st.imports.wasi_snapshot_preview1))
+      st.imports.wasi_snapshot_preview1[name] = stub(name, errno);
+  }
+
   st.bind = (inst) => { st.mem = inst.exports.memory; return inst; };
   st.text = (fd) => Buffer.from(
     st.writes.filter(w => fd === undefined || w.fd === fd)

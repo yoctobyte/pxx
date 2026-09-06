@@ -1,0 +1,30 @@
+# A NilPy class instance BOUND TO A LOCAL, in a loop, so the question the
+# checker asks is a SLOPE and not a single count.
+#
+# `b` is the whole point: it is an skLocal whose TypeKind is tyClass and which
+# PyClassSymArcEligible answers yes for, which is the exact shape of the arm
+# that was missing from WasmEmitManagedLocals until 2026-09-06. Inlining it to
+# `return Box(n).v` would remove the local and with it the defect.
+#
+# N_ITERS is substituted by check_nilpy_objlocal.sh, which builds this twice at
+# two different counts. Do not hard-code it: one count cannot express a slope,
+# and a single live figure is exactly the reading that made this leak look like
+# a constant overhead on the target where it was present.
+
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+def hold(n):
+    b = Box(n)
+    return b.v
+
+def run():
+    t = 0
+    i = 0
+    while i < N_ITERS:
+        t = t + hold(i)
+        i = i + 1
+    print(t)
+
+run()
