@@ -10531,6 +10531,27 @@ test-core: $(COMPILER)
 	@# one both read as Length 0.
 	./$(COMPILER) test/test_a_named_array_type_parameter_survives_a_method_that_has_no_implementation_header.pas $(TESTTMP)/test_namedarrayparam26
 	tools/expect_same.sh test_namedarrayparam26 "$$($(TESTTMP)/test_namedarrayparam26 | tail -n 1)" "NAMEDARRAYPARAM OK"
+	@# bug-p-a-var-record-parameters-write-back-is-dropped-for-every-declaration-that-has-no-implementation-header
+	@# -- the SAME mechanism as the row above, one column over, and found while
+	@# grepping the readers of the row that fix rewrote. ProcParamExplicitByRef
+	@# ("declared var/out/const at the SOURCE level", as opposed to promoted to
+	@# by-ref by the >8-byte record ABI) was written only by ParseSubroutine, so
+	@# it was repaired for every routine with an implementation header and read
+	@# False for the three declarations that have none: an interface method, a
+	@# `virtual; abstract` method, and a procedural TYPE. ir.inc's by-ref arm
+	@# then takes the private-copy path meant for an ABI-promoted by-value
+	@# parameter: THE CALLEE WRITES A TEMP AND THE CALLER'S RECORD IS NEVER
+	@# TOUCHED. No crash, no diagnostic, a plausible value.
+	@# The 4-byte `iface small rec` row was written as a control that could not
+	@# fail -- no ABI promotion, so surely the column is never consulted -- and
+	@# it FAILED the positive control. A `var` parameter is by-ref at any size,
+	@# so the arm keys on the column and not on the size the column exists for.
+	@# The const and by-value rows are the regression control for the other
+	@# half: ByRefArgNeedsLvalue asks `ExplicitByRef and not IsConst`, so the
+	@# two parsers that wrote neither had to gain both or a `const` record
+	@# parameter would start refusing a non-lvalue argument.
+	./$(COMPILER) test/test_a_var_record_parameter_writes_back_through_every_receiver_that_has_no_implementation_header.pas $(TESTTMP)/test_varrecwriteback26
+	tools/expect_same.sh test_varrecwriteback26 "$$($(TESTTMP)/test_varrecwriteback26 | tail -n 1)" "VARRECWRITEBACK OK"
 	@# bug-p-a-named-dynamic-array-default-declared-in-a-class-body-is-lost-if-the-implementation-omits-it
 	@# -- and it is ALSO the regression control for the row above. Teaching the
 	@# four parameter parsers about named array types made the declaration and

@@ -4641,6 +4641,7 @@ var
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   rmHasDef, rmStrDef, rmArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  rmConst: array[0..MAX_PROC_PARAMS-1] of Boolean;   { `const` per parameter -- see the note at the row-write below }
   rmDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
   rmDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { ...per parameter. A `var a: TDyn` needs the by-ref HANDLE ABI and reads as an open array without it -- measured: it segfaulted. }
   rmFloatDef, rmSetDef: array[0..MAX_PROC_PARAMS-1] of Boolean;
@@ -4657,6 +4658,7 @@ begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
   begin
     rmHasDef[k] := False; rmStrDef[k] := False; rmArr[k] := False; rmDynA[k] := 0;
+    rmConst[k] := False;
     rmFloatDef[k] := False; rmSetDef[k] := False;
     rmValDef[k] := 0; rmSOffDef[k] := 0; rmSLenDef[k] := 0;
   end;
@@ -4766,6 +4768,7 @@ begin
         rmDynA[k] := rmDyn;
         { a const record/variant param goes by reference, as everywhere else }
         pRef[k] := byref or (sawConst and ((curTk = tyRecord) or (curTk = tyVariant)));
+        rmConst[k] := sawConst;
       end;
       { default value: `Normalize: Boolean = False` (typshrdh.inc's TRect.Contains).
         Every shape, via the one shared parser — this site used to know only two
@@ -4910,6 +4913,31 @@ begin
   begin
     Procs[mpi].Params[i].IsRef := pRef[i];
     Procs[mpi].Params[i].IsArray := rmArr[i];
+    { ...and ProcParamExplicitByRef, the column that tells a genuine source-level
+      `var`/`out`/`const` from a parameter the >8-byte record ABI promoted to
+      by-ref on its own. NONE of the four parameter parsers in this file wrote
+      it; only ParseSubroutine did. A method is declared TWICE -- class body plus
+      implementation header -- and the header goes through ParseSubroutine, so
+      the row was repaired for every method with a body and stayed False for the
+      three declarations that have no implementation header: an interface
+      method, a `virtual; abstract` method, and a procedural TYPE.
+      MEASURED 2026-09-06: `procedure Bump(var r: TBig)` with a 24-byte record,
+      one file, six receivers -- pxx 301/401/1/1/501/1 against fpc
+      301/401/101/201/501/401. ir.inc's by-ref arm reads the False and takes the
+      private-copy path meant for an ABI-promoted by-value param, so THE
+      CALLEE'S WRITE GOES TO A TEMP AND THE CALLER'S RECORD IS NEVER TOUCHED.
+      No crash, no diagnostic, a plausible value.
+      ProcParamIsConst goes with it and is not optional: symtab.inc's
+      ByRefArgNeedsLvalue asks `ExplicitByRef and not IsConst`, so writing one
+      without the other turns a `const` record parameter -- which carries
+      by-ref for exactly the ABI reason above -- into one that refuses a
+      non-lvalue argument.
+      bug-p-a-var-record-parameters-write-back-is-dropped-for-every-declaration-that-has-no-implementation-header }
+    if i < MAX_PROC_PARAMS then
+    begin
+      ProcParamExplicitByRef[mpi * MAX_PROC_PARAMS + i] := pRef[i];
+      ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := rmConst[i];
+    end;
     if (i < MAX_PROC_PARAMS) and (rmDynA[i] > 0) then
       ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := rmDynA[i];
     if (pt[i] = tyRecord) or (pt[i] = tyClass) then
@@ -5947,6 +5975,7 @@ var
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPAliases: array[0..MAX_PROC_PARAMS-1] of Integer;   { the alias each param was declared through, -1 = none. Filled beside mPTypesRec. }
   mPArr, mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPConstPT: array[0..MAX_PROC_PARAMS-1] of Boolean;   { `const` per parameter -- see the note at the row-write below }
   mPDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { see rmDynA }
   mDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
   mPStrCapPT: array[0..MAX_PROC_PARAMS-1] of Integer;  { the frozen `string[N]` capacity of each param, 0 = none. See the note at its fill site. }
@@ -6016,6 +6045,7 @@ begin
             mPArr[i] := mIsArr;
             mPDynA[i] := mDyn;
             mPByRef[i] := mIsByRef;
+            mPConstPT[i] := mSawConst;
             { ...and the frozen CAPACITY of a `string[N]` parameter, which is the
               FOURTH instance of the dropped-field pattern this routine's own
               comments already name three times for the RESULT (the pointee, the
@@ -6109,6 +6139,31 @@ begin
       begin
         Procs[mpi].Params[i].IsArray := mPArr[i];
         Procs[mpi].Params[i].IsRef := mPByRef[i];
+        { ...and ProcParamExplicitByRef, the column that tells a genuine source-level
+      `var`/`out`/`const` from a parameter the >8-byte record ABI promoted to
+      by-ref on its own. NONE of the four parameter parsers in this file wrote
+      it; only ParseSubroutine did. A method is declared TWICE -- class body plus
+      implementation header -- and the header goes through ParseSubroutine, so
+      the row was repaired for every method with a body and stayed False for the
+      three declarations that have no implementation header: an interface
+      method, a `virtual; abstract` method, and a procedural TYPE.
+      MEASURED 2026-09-06: `procedure Bump(var r: TBig)` with a 24-byte record,
+      one file, six receivers -- pxx 301/401/1/1/501/1 against fpc
+      301/401/101/201/501/401. ir.inc's by-ref arm reads the False and takes the
+      private-copy path meant for an ABI-promoted by-value param, so THE
+      CALLEE'S WRITE GOES TO A TEMP AND THE CALLER'S RECORD IS NEVER TOUCHED.
+      No crash, no diagnostic, a plausible value.
+      ProcParamIsConst goes with it and is not optional: symtab.inc's
+      ByRefArgNeedsLvalue asks `ExplicitByRef and not IsConst`, so writing one
+      without the other turns a `const` record parameter -- which carries
+      by-ref for exactly the ABI reason above -- into one that refuses a
+      non-lvalue argument.
+      bug-p-a-var-record-parameters-write-back-is-dropped-for-every-declaration-that-has-no-implementation-header }
+        if i < MAX_PROC_PARAMS then
+        begin
+          ProcParamExplicitByRef[mpi * MAX_PROC_PARAMS + i] := mPByRef[i];
+          ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConstPT[i];
+        end;
         if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
           ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
         { ...and the parameter's class/record id, which this path COMPUTED into
@@ -6978,6 +7033,12 @@ begin
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
+            { ...and ProcParamExplicitByRef: see the note in ParseRecordMethodDecl.
+              THIS arm and the `virtual; abstract` one are two of the three
+              declarations that no implementation header ever repairs, so they
+              are where the dropped `var` write-back was measured. }
+            if i < MAX_PROC_PARAMS then
+              ProcParamExplicitByRef[mpi * MAX_PROC_PARAMS + i] := mPByRef[i];
             if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
               ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
             { ...and the parameter's class/record id, which this path computed and
@@ -7784,6 +7845,12 @@ begin
                 end;
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
+                { ...and ProcParamExplicitByRef: see the note in
+                  ParseRecordMethodDecl. A method WITH an implementation header
+                  had this repaired by ParseSubroutine; `virtual; abstract` has
+                  no header, and this is the write that reaches it. }
+                if i < MAX_PROC_PARAMS then
+                  ProcParamExplicitByRef[mpi * MAX_PROC_PARAMS + i] := mPByRef[i];
                 if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
                   ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
                 if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
