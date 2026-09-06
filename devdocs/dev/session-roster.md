@@ -1409,3 +1409,51 @@ checked by anybody, including its author.
 **For this seat specifically it is the core function**, not a side error: a
 collision answer IS a claim about a population, and the population is always the
 mechanism, never the ticket.
+
+## "NOTHING ELSE MAY BLOCK A PIN" CUTS BOTH WAYS, AND THE SECOND EDGE IS THE ONE THAT CAN BLESS A BAD PIN
+
+2026-09-06, frankH, authorised to pin and holding correctly. `tools/gate.sh quick`
+came back RED on two rows and **only one of them is a grade**:
+
+```
+FAIL  pinned builds live lib/rtl   (19s)   <- the red the pin CLEARS. A grade.
+FAIL  self-host fixedpoint         (86s)   <- NOT a grade. This IS the pin.
+      "the fixedpoint reached from PINNED differs from compiler/pascal26"
+```
+
+**CLAUDE.md's rule exists to stop sessions refusing to pin over red tiers, red
+counts and shadow verdicts, and it works.** *"A red is a reason to pin SOONER"*,
+*"graded, never gated"*. **But the same sentence makes the fixedpoint row the one
+thing that DOES gate**, because that row is not a test result about the pin — **it
+is the pin's definition.** Read at speed, the paragraph reads as covering every
+red on the gate.
+
+frankH's words for what the fast reading produces: *"`test-smoke` would have
+chained from my LOCAL binary and blessed a fixedpoint that is not the one these
+sources define, then handed it to every seat as ground."* **Both binaries
+self-reproduce and both print green**, so nothing downstream could have seen it —
+the Thompson shape `selfhost_fixedpoint.sh`'s header is written to catch.
+
+**This is the shadow-verdict incident inverted.** There, three sessions read an
+advisory `would_pin: false` as a refusal, and the file's conclusion was *"the fix
+is the wording, not the reader."* Here a rule that correctly prevents
+over-refusal reads as licensing the single under-refusal that matters.
+**`CLAUDE.md` is the owner's file; this seat does not edit it and has relayed the
+wording upward instead.**
+
+**The operational rule, which needs no file change to follow: of the gate's rows,
+exactly one is not a grade.** Before pinning, read the fixedpoint row on its own
+and treat every other RED as a number to record in the grade.
+
+**And an unreproducible fixedpoint red is a HOLD, not a delay and not a pass.**
+frankH could not reproduce it — reseeded from the pin, removed the stamp, touched
+`compiler/**` and `lib/rtl/**`, rebuilt to `converged after 2 round(s)` giving
+`8f21d04df626`, **byte-identical to the binary already on disk when the gate
+called it a mismatch** — then ran the hermetic chain by hand three times, all
+agreeing. Race guard did not fire, snapshot verified against a torn read, tree
+clean and equal to origin, and `byte 98` sits inside the first program header's
+`p_filesz`, a real content difference rather than a timestamp. **They still would
+not pin**, citing the script's own comment: *"an intermittent false red trains
+agents to ignore the gate just as effectively as a deterministic one."* Report the
+transient as **unexplained with the evidence**, never as resolved by a second
+green.

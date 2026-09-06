@@ -15561,9 +15561,14 @@ while pgrep -f "gate.sh quick" >/dev/null; do sleep 20; done
 ```
 
 **`pgrep -f` matches the FULL COMMAND LINE, and the waiter's command line
-contains the string it is grepping for.** Each waiter matches every other waiter
-*and itself*. With the real gates long finished, four waiters sat seeing three
-peers each and none could ever exit:
+contains the string it is grepping for.** **Each waiter is deadlocked on ITSELF,
+independently** — that is the load-bearing statement, and the mutual-matching one
+is not: the patterns differed (`bash tools/gate.sh quick` against `gate.sh
+quick`), so they matched each other only asymmetrically. **This decides WHO HAS TO
+ACT**: killing one waiter frees none of the others, and a seat cannot be tidied
+out of this by a peer. The first report of it here said "four waiters seeing three
+peers each", which is wrong in the direction that misroutes the fix (frankS's
+correction). With the real gates long finished:
 
 ```
 ps -eo args= | grep -c "^bash tools/gate[.]sh"   ->  0    real gates running
@@ -15751,3 +15756,53 @@ reconciled. See *"two numbers you cannot make agree, where one cannot be re-run"
 waiters'."* A verification claim scopes to exactly what the instrument could
 physically see, and publishing it without naming that scope is how a correct
 measurement becomes a wrong answer.
+
+## THE PREDICATE YOU WOULD REACH FOR FIRST CAN BE ONE NAME AWAY AND ANSWER THE OPPOSITE QUESTION
+
+frankS, 2026-09-06, fixing `exit := x` — assigning a function result by its own
+name where that name is a soft-keyword intrinsic (`exit`, `halt`, `break`,
+`continue`; four names with a bare-statement arm, all with the same hole).
+
+`OwnNameResultSym` **looks** like the rule, and is already used by thirteen lvalue
+sites. **It answers about a READ**, and it carries `if DelphiMode then Exit` —
+correct for a read, because in Delphi a bare own-name read is a reference to the
+routine, not a call.
+
+**A WRITE is the `Result` synonym in Delphi too.** fpc 3.2.2 `-Mdelphi` compiles
+and runs `function f(x): Boolean; begin f := x > 0; end`, and so does pxx today
+through a different arm. **Reusing the read predicate for the write question would
+have imported a read-only mode guard and refused Delphi sources that work.** The
+write condition already existed, spelled inline in two places; it is now
+`OwnNameLValueHere` with three callers.
+
+**The tell is a mode guard inside a predicate you are about to reuse.** A
+`DelphiMode` branch is a claim about ONE question; a predicate carrying one is
+answering that question and not the neighbouring one, however well its name
+generalises. **Thirteen existing callers is evidence the predicate is right for
+them, not that it is right for you** — a well-used helper is the most credible
+wrong answer available, because its correctness has been demonstrated on a
+population you are not in.
+
+## A CONTROL THAT CANNOT LIVE IN THE TEST IT BELONGS IN — total shadowing eats its own controls
+
+Same fix, and it is a general trap for any shadowing feature. The natural test
+declares all four names as user routines and then uses bare `break`/`continue`
+statements below **as controls that the intrinsics still work**.
+
+**Both compilers refuse that file, at the same line, for the same reason: once
+declared, shadowing is TOTAL.** So a file that declares the names and claims to
+test the statements is **testing the user routines under the statements' names** —
+the control is not weak, it is measuring the wrong thing entirely, and it fails in
+a way that reads as the feature being broken.
+
+**The shape is: a feature whose whole content is "X now means something else here"
+cannot host a control asserting "X still means the old thing here".** Two files
+are required — the declarations, and an unshadowed control — and no amount of care
+inside one file substitutes.
+
+**And both halves of the unshadowed control must be asserted.** frankS's exits 5
+on purpose, because its bare `halt(5)` really is the intrinsic: **an output-only
+check passes a compiler whose `halt` stopped halting, and an rc-only check passes
+one whose `break` stopped bounding the loop.** One assertion class per defect
+class, in the same file, because the two intrinsics fail observably in different
+channels.
