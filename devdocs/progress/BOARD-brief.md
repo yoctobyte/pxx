@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:20 unfinished:21 blocked:7 backlog:15 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:32 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3409 rejected:79`
+`working:21 unfinished:21 blocked:7 backlog:15 backlog-umbrella:7 backlog-core:137 backlog-nilpy:98 backlog-tools:41 backlog-pascal:31 backlog-decide:46 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3409 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule` [P] — owner: frankB
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
@@ -64,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 408, ranked
+## Ready — top 30 of 407, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -97,4 +98,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 
-_378 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_377 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
