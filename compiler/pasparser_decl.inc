@@ -4564,6 +4564,52 @@ begin
   UPropPub[pri] := 0;
 end;
 
+function ParamNamedArrayType(var tk: TTypeKind; var dynDepth: Integer): Boolean;
+{ CurTok may be a TYPE NAME naming an array type (`TDyn = array of Integer`,
+  `TFix = array[0..2] of Integer`). Consume it and answer with the ELEMENT kind,
+  the pointee, and the dynamic depth; the caller sets its own IsArray flag.
+
+  THE FOUR PARAMETER PARSERS KNEW ONLY THE LITERAL `array of` SPELLING. A named
+  array type reached `ParseTypeKind`, which collapses it to a scalar, so the row
+  recorded IsArray = False and the element kind as the parameter's OWN kind:
+
+    type TDyn = array of Integer;
+    TBase = class procedure Dy(a: TDyn); virtual; abstract; end;
+    b.Dy(d);   -> no overload of Dy matches these arguments
+
+  ParseSubroutine has had this arm since the named-fixed-array work and the
+  three method parsers never grew it. THAT ASYMMETRY IS WHY IT LOOKED LIKE AN
+  INTERFACE BUG: a class or record method is declared here and then declared
+  AGAIN by its implementation header, which goes through ParseSubroutine and
+  overwrites the row -- so the wrong row exists for every method and is repaired
+  for every method that has a body in the same unit. An INTERFACE method has no
+  implementation header, and neither does `virtual; abstract`, and those are the
+  two spellings where it survives to the call site.
+
+  WHAT THIS DOES NOT FIX, stated because a half-filled row is the defect the
+  durable-param-row note in pasparser_proc.inc is about: ParseSubroutine's arm
+  also records the FIXED length and low bound, the N-D dimensions, and the
+  element-row geometry, and the three method parsers have no channels for those.
+  A named FIXED array parameter of an abstract or interface method therefore
+  still carries the open-array `ArrLen := 1000` placeholder, which is wrong for
+  a whole-array assignment inside the callee and right for reading, indexing and
+  High(). Adding those channels is the rest of the job.
+  bug-p-an-interface-dispatched-call-passing-a-named-dynamic-array-segfaults }
+var pnAi: Integer;
+begin
+  Result := False;
+  dynDepth := 0;
+  if CurTok.Kind <> tkIdent then Exit;
+  pnAi := FindArrayType(CurTok.SVal);
+  if pnAi < 0 then Exit;
+  tk := IntToTypeKind(ArrTypeElemTk[pnAi]);
+  LastTypeRecId := ArrTypeElemRec[pnAi];
+  LoadPointeeFromArrType(pnAi);
+  if ArrTypeIsDyn[pnAi] then dynDepth := ArrTypeDynDepth[pnAi];
+  Next;                      { consume the type name }
+  Result := True;
+end;
+
 procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean);
 { A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
   own RTL leans on it — TPoint/TSize/TRect are all advanced records).
@@ -4595,6 +4641,8 @@ var
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   rmHasDef, rmStrDef, rmArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  rmDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
+  rmDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { ...per parameter. A `var a: TDyn` needs the by-ref HANDLE ABI and reads as an open array without it -- measured: it segfaulted. }
   rmFloatDef, rmSetDef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   rmIsArr: Boolean;
   rmValDef: array[0..MAX_PROC_PARAMS-1] of Int64;
@@ -4608,7 +4656,7 @@ var
 begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
   begin
-    rmHasDef[k] := False; rmStrDef[k] := False; rmArr[k] := False;
+    rmHasDef[k] := False; rmStrDef[k] := False; rmArr[k] := False; rmDynA[k] := 0;
     rmFloatDef[k] := False; rmSetDef[k] := False;
     rmValDef[k] := 0; rmSOffDef[k] := 0; rmSLenDef[k] := 0;
   end;
@@ -4690,6 +4738,7 @@ begin
       Expect(tkColon, ':');
       { open-array param: `const Points: array of TPoint` (typshrdh.inc's TRect.Union) }
       rmIsArr := False;
+      rmDyn := 0;
       if CurTok.Kind = tkArray then
       begin
         { open-array param `const Points: array of TPoint` (typshrdh.inc's
@@ -4701,13 +4750,20 @@ begin
         Next;
         Expect(tkOf, 'of');
         rmIsArr := True;
-      end;
-      curTk := ParseTypeKind;
+        curTk := ParseTypeKind;
+      end
+      { ...and the NAMED array type, which this parser did not know about at all
+        -- see ParamNamedArrayType above. }
+      else if ParamNamedArrayType(curTk, rmDyn) then
+        rmIsArr := True
+      else
+        curTk := ParseTypeKind;
       for k := startIdx to nP - 1 do
       begin
         pt[k] := curTk;
         ptRec[k] := LastTypeRecId;
         rmArr[k] := rmIsArr;
+        rmDynA[k] := rmDyn;
         { a const record/variant param goes by reference, as everywhere else }
         pRef[k] := byref or (sawConst and ((curTk = tyRecord) or (curTk = tyVariant)));
       end;
@@ -4854,6 +4910,8 @@ begin
   begin
     Procs[mpi].Params[i].IsRef := pRef[i];
     Procs[mpi].Params[i].IsArray := rmArr[i];
+    if (i < MAX_PROC_PARAMS) and (rmDynA[i] > 0) then
+      ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := rmDynA[i];
     if (pt[i] = tyRecord) or (pt[i] = tyClass) then
       ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := ptRec[i];
     if rmHasDef[i] then
@@ -5889,6 +5947,8 @@ var
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPAliases: array[0..MAX_PROC_PARAMS-1] of Integer;   { the alias each param was declared through, -1 = none. Filled beside mPTypesRec. }
   mPArr, mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { see rmDynA }
+  mDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
   mPStrCapPT: array[0..MAX_PROC_PARAMS-1] of Integer;  { the frozen `string[N]` capacity of each param, 0 = none. See the note at its fill site. }
 begin
       mIsFunc := (CurTok.Kind = tkFunction);
@@ -5930,12 +5990,16 @@ begin
           end;
           Expect(tkColon, ':');
           mIsArr := False;
+          mDyn := 0;
           if CurTok.Kind = tkArray then
           begin
             Next; Expect(tkOf, 'of');
             if not ParseArrayOfConstElem(mTk) then mTk := ParseTypeKind;
             mIsArr := True;
           end
+          { ...and the NAMED array type -- see ParamNamedArrayType. }
+          else if ParamNamedArrayType(mTk, mDyn) then
+            mIsArr := True
           else
             mTk := ParseTypeKind;
           { A `const` record/variant param is passed by reference — must match
@@ -5950,6 +6014,7 @@ begin
             mPTypes[i] := mTk;
             mPTypesRec[i] := LastTypeRecId;
             mPArr[i] := mIsArr;
+            mPDynA[i] := mDyn;
             mPByRef[i] := mIsByRef;
             { ...and the frozen CAPACITY of a `string[N]` parameter, which is the
               FOURTH instance of the dropped-field pattern this routine's own
@@ -6044,6 +6109,8 @@ begin
       begin
         Procs[mpi].Params[i].IsArray := mPArr[i];
         Procs[mpi].Params[i].IsRef := mPByRef[i];
+        if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
+          ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
         { ...and the parameter's class/record id, which this path COMPUTED into
           mPTypesRec above and then dropped -- the same dropped-field pattern as
           the return type just above and as the interface-method path. It was
@@ -6478,6 +6545,8 @@ var
     way free routines already do. }
   mPPtrElemTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDynA: array[0..MAX_PROC_PARAMS-1] of Integer;   { see rmDynA }
+  mDyn: Integer;   { ParamNamedArrayType's dynamic depth -- see the note there }
   fldNOffs: array[0..MAX_PROC_PARAMS-1] of Integer;   { comma-separated field-name spans }
   fldNLens: array[0..MAX_PROC_PARAMS-1] of Integer;
   nFldNames, fni: Integer;
@@ -6800,6 +6869,10 @@ begin
               begin
                 Expect(tkColon, ':');
                 if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
+                { ...and the NAMED array type -- see ParamNamedArrayType. THIS is
+                  the arm the bug was reported against, because an interface
+                  method has no implementation header to repair its row. }
+                else if ParamNamedArrayType(mTk, mDyn) then mIsArr := True
                 else mTk := ParseTypeKind;
               end;
               { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
@@ -6820,7 +6893,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPStrElemTk[i] := ParamStrElemOf(mTk); mPStrCap[i] := ParamStrCapOf(mTk); mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk)); mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPStrElemTk[i] := ParamStrElemOf(mTk); mPStrCap[i] := ParamStrCapOf(mTk); mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk)); mPArr[i] := mIsArr; mPDynA[i] := mDyn; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -6864,8 +6937,8 @@ begin
           while EatIntfMethodDirective do ;
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPStrCap[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPUntyped[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPDynA[i] := mPDynA[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPStrCap[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPDynA[0] := 0; mPByRef[0] := False; mPConst[0] := False; mPUntyped[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           { The ROW's name, for the reason the class and record arms give: a
             NESTED interface is registered qualified when the bare name is
@@ -6904,6 +6977,8 @@ begin
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
+            if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
+              ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
             { ...and the parameter's class/record id, which this path computed and
               then dropped -- so a class-typed interface PARAMETER was REC_NONE and
               nothing downstream could tell two overloads of it apart. The
@@ -7488,6 +7563,11 @@ begin
                       mTk := ParseTypeKind;
                     mIsArr := True;
                   end
+                  { ...and the NAMED array type -- see ParamNamedArrayType. The
+                    implementation header repairs this row for an ordinary
+                    method, which is why `virtual; abstract` is where it shows. }
+                  else if ParamNamedArrayType(mTk, mDyn) then
+                    mIsArr := True
                   else
                     mTk := ParseTypeKind;
                   { Default value: `n: Integer = 5` — mirror ParseSubroutine
@@ -7516,6 +7596,7 @@ begin
                   mPStrElemTk[i] := ParamStrElemOf(mTk); mPStrCap[i] := ParamStrCapOf(mTk);
                   mPPtrElemTk[i] := IntToTypeKind(ParamPtrElemOf(mTk));
                   mPArr[i] := mIsArr;
+                  mPDynA[i] := mDyn;
                   mPByRef[i] := mIsByRef;
                   mPConst[i] := mSawConst;
                   mPUntyped[i] := mIsUntyped;
@@ -7577,6 +7658,7 @@ begin
                 mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1];
                 mPPtrElemTk[i] := mPPtrElemTk[i-1];
                 mPArr[i]   := mPArr[i-1];
+                mPDynA[i]  := mPDynA[i-1];
                 mPByRef[i] := mPByRef[i-1];
                 mPConst[i] := mPConst[i-1];
                 mPUntyped[i] := mPUntyped[i-1];
@@ -7607,6 +7689,7 @@ begin
               mPStrElemTk[0] := 0; mPStrCap[0] := 0;
               mPPtrElemTk[0] := tyUnknown;
               mPArr[0]   := False;
+              mPDynA[0]  := 0;
               mPByRef[0] := False;
               mPConst[0] := False;
               mPUntyped[0] := False;
@@ -7699,6 +7782,8 @@ begin
                 end;
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
+                if (i < MAX_PROC_PARAMS) and (mPDynA[i] > 0) then
+                  ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := mPDynA[i];
                 if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
                   Procs[mpi].Params[i].SymIdx := -1;

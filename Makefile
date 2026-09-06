@@ -10436,6 +10436,24 @@ test-core: $(COMPILER)
 	  || { echo "var-open-array: an expression bound to a var open-array parameter COMPILED"; exit 1; }
 	grep -q 'binds a VARIABLE, not an expression' $(TESTTMP)/varoaexpr.log \
 	  || { echo "var-open-array: refused, but not by the var-binding rule (an arity message here is the bug this row exists for):"; cat $(TESTTMP)/varoaexpr.log; exit 1; }
+	@# bug-p-an-interface-dispatched-call-passing-a-named-dynamic-array-segfaults
+	@# -- AND IT IS NOT AN INTERFACE BUG. The four parameter parsers in
+	@# pasparser_decl.inc knew only the LITERAL `array of` spelling, so a NAMED
+	@# array type parameter fell to ParseTypeKind, which collapses it to a
+	@# scalar: the row recorded IsArray = False and the ELEMENT kind as the
+	@# parameter's own. A class or record method is declared TWICE -- in the body
+	@# and again by its implementation header, which goes through ParseSubroutine
+	@# and OVERWRITES the row -- so the wrong row was written for every method in
+	@# the language and repaired for every method with a body. The two spellings
+	@# with no implementation header are an INTERFACE method and `virtual;
+	@# abstract`, and the `abstract *` rows are the ones that say so: a plain
+	@# class reference, no interface anywhere, failing identically before the fix.
+	@# The `iface var` row needs the dynamic-DEPTH column and not just IsArray --
+	@# with IsArray alone it compiled and segfaulted. Every row prints CONTENTS:
+	@# the ticket's own repro passed `nil`, and a nil handle and a mis-marshalled
+	@# one both read as Length 0.
+	./$(COMPILER) test/test_a_named_array_type_parameter_survives_a_method_that_has_no_implementation_header.pas $(TESTTMP)/test_namedarrayparam26
+	tools/expect_same.sh test_namedarrayparam26 "$$($(TESTTMP)/test_namedarrayparam26 | tail -n 1)" "NAMEDARRAYPARAM OK"
 	@# bug-p-a-default-value-is-accepted-on-an-open-array-parameter -- FOUR
 	@# PARAMETER PARSERS, ONE REFUSAL. A default on an open-array parameter cannot
 	@# mean anything: there is no array-literal syntax for it, so the value parsed
