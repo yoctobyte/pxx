@@ -14713,7 +14713,10 @@ begin
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+       begin
+        act := ScopeExitReleaseAction(i, a1, a2, a3);
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe).
             riscv32 was the only target without this arm, which is why it
@@ -14728,8 +14731,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-           (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+                (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit, as the other four backends do. This arm was held back while
@@ -14752,7 +14754,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+                (act = SXR_STR) then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
           procIdx := FindProc('PXXStrDecRef');
@@ -14760,7 +14762,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+                (act = SXR_VAR) then
         begin
           { Variant local: clear (releases any managed payload). a0 = address. }
           EmitSlotAddrRISCV32(reg_a0, i);
@@ -14769,8 +14771,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) then
+                (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14798,7 +14799,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+                (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
             (bug-a-runtime-variant-heap-grows-unbounded). }
@@ -14810,8 +14811,7 @@ begin
           end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
+                (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
             portable helper. a0 = record address, a1 = layout descriptor.
@@ -14836,7 +14836,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+                (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
             exit. Only x86-64 had this arm; the other four leaked the whole
@@ -14872,6 +14872,7 @@ begin
           EmitLoadDataRefRISCV32(reg_a1, GetOrAllocSymRTTI(i));   { a1 = desc }
           EmitCallProc(procIdx);
         end;
+       end;
     Exit;
   end;
 end;
