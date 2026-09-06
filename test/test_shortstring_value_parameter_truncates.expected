@@ -1,0 +1,7 @@
+byval=[lite] len=4 sizeof=5
+byval=[ABCD] len=4 sizeof=5
+byval=[ABCD] len=4 sizeof=5
+byconst=[literalfar] len=10
+byconst=[ABCDEFGH] len=8
+byconst=[ABCD] len=4
+byval=[ABCD] len=4 sizeof=5

@@ -946,8 +946,24 @@ begin
     string, a character variable does not convert.
 
     Pascal only. C's `f((char)x)` to a `char*` is the caller's business, and the
-    Nil-Python frontend never builds this shape. }
+    Nil-Python frontend never builds this shape.
+
+    AND IT IS ABOUT A POINTER PARAMETER, WHICH IS THE HALF THE MESSAGE NAMES.
+    ParamTakesCharLitAsStr answers True for a FROZEN-STRING parameter as well,
+    and there `fpc refuses this too` is simply false: measured 2026-09-06,
+    `procedure sst(st: string[4])` fed a `Char` VARIABLE prints `sst=[Q] len=1`
+    under fpc 3.2.2. A Char converts to a one-character string, it does not
+    convert to a pointer -- two different questions that this one predicate
+    answers for both. So refuse only where the destination is the pointer, and
+    let the frozen-string destination fall through to the ordinary conversion.
+    A static `array of Char` argument has the same tyChar tag on its node (the
+    element kind is what the identifier carries), so this refusal was also the
+    thing standing in front of `array[1..4] of Char` -> `string[4]`, which fpc
+    takes and tarray3.pp exercises four times. }
   if (argNode >= 0) and (IntToTypeKind(ASTTk[argNode]) = tyChar) and
+     (cpi >= 0) and (cpi < ProcCount) and
+     (pi >= 0) and (pi < Procs[cpi].ParamCount) and
+     (not TypeIsFrozenString(Procs[cpi].Params[pi].TypeKind)) and
      (not CProgramMode) and (not PyExprMode) then
     Error('argument type: a Char VALUE is not a PChar — only a character '
           + 'CONSTANT converts (fpc refuses this too)');

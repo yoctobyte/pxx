@@ -8404,6 +8404,25 @@ test-core: $(COMPILER)
 	grep -q "cannot assign a value of enum type" $(TESTTMP)/test_enumid.log
 	./$(COMPILER) test/test_enum_identity_ok.pas $(TESTTMP)/test_enumid_ok26
 	tools/expect_same.sh test_enumid_ok26 "$$($(TESTTMP)/test_enumid_ok26 | tail -1)" "PASS"
+	# a `string[N]` VALUE parameter holds at most N characters, and `const` does
+	# NOT truncate -- the four const rows are FPC's own rule, measured, and a fix
+	# that clamps every frozen parameter to its own N breaks two of them. The
+	# repeated ByVal(s8) call is the capacity-CARRIER control: the N used to be
+	# read back off the parameter's SYMBOL, which a hidden argument temp recycles,
+	# so a one-call program read 4 (right) and this one read 255 (clobbered).
+	./$(COMPILER) test/test_shortstring_value_parameter_truncates.pas $(TESTTMP)/test_sstrunc26
+	@$(TESTTMP)/test_sstrunc26 | diff -u test/test_shortstring_value_parameter_truncates.expected - \
+	  || { echo 'test_shortstring_value_parameter_truncates: FAIL - a string[N] parameter lost its capacity'; exit 1; }
+	# a Char-shaped argument to a `string` parameter converts: a Char VALUE (was
+	# REFUSED with a message about PChar, which fpc accepts here) and a static
+	# array of Char (fell out of an enumerated [tyString, tyAnsiString] set).
+	./$(COMPILER) test/test_char_argument_to_a_string_parameter.pas $(TESTTMP)/test_chrarg26
+	@$(TESTTMP)/test_chrarg26 | diff -u test/test_char_argument_to_a_string_parameter.expected - \
+	  || { echo 'test_char_argument_to_a_string_parameter: FAIL - a Char-shaped argument stopped converting'; exit 1; }
+	# ...and the refusal that STAYS: a Char value where a PChar is read has no
+	# safe meaning, and narrowing the check must not take the whole check with it.
+	! ./$(COMPILER) test/test_char_value_to_a_pchar_parameter_fail.pas $(TESTTMP)/test_chrptr26 > $(TESTTMP)/test_chrptr.log 2>&1
+	grep -q "a Char VALUE is not a PChar" $(TESTTMP)/test_chrptr.log
 	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
 	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas $(TESTTMP)/test_defgen26 > $(TESTTMP)/test_defgen.log 2>&1
 	grep -q "must be specialized" $(TESTTMP)/test_defgen.log

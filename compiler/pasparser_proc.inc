@@ -1474,6 +1474,7 @@ begin
           ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
         if ptypes[i] = tyAnsiString then
           ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+          ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
         if ptypes[i] = tyPointer then
         begin
           ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
@@ -1909,6 +1910,7 @@ begin
               ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
             if ptypes[i] = tyAnsiString then
               ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+              ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
             { The six columns this path did NOT write, the pointee among them.
               The ticket predicted this path was benign "because the body fills
               it in later" -- measured FALSE on 2026-08-30, because "later" is
@@ -2377,6 +2379,7 @@ begin
         ProcParamAliasIdx[procIdx * MAX_PROC_PARAMS + i] := ptypesAlias[i];
       if ptypes[i] = tyAnsiString then
         ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+        ProcParamStrCap[procIdx * MAX_PROC_PARAMS + i] := ptypesStrCap[i];   { the capacity twin; defs.inc says why it cannot be read back off the param SYMBOL }
     end;
     { The SYMBOL needs the width too, for a different reader than the durable
       column above: that one answers a CALLER, this answers the callee's own

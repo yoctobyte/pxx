@@ -1,0 +1,7 @@
+byval=[Q] len=1
+byconst=[Q] len=1
+ansi=[Q] len=1
+byval=[ABCD] len=4
+byconst=[ABCD] len=4
+ansi=[ABCD] len=4
+assign=[ABCD] len=4

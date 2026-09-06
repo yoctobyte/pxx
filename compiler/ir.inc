@@ -3956,9 +3956,20 @@ begin
   Result := callNode;
 end;
 
-procedure IRCoerceCharArrayArg(cpi, pathIdx, item: Integer);
-{ A static `array of Char` handed to a `string` PARAMETER converts, the same way
-  it does in an assignment or a comparison.
+procedure IRCoerceCharArgToString(cpi, pathIdx, item: Integer);
+{ A Char-shaped argument handed to a `string` PARAMETER converts, the same way
+  it does in an assignment or a comparison. TWO shapes, one destination: a
+  static `array of Char`, and a plain `Char` VALUE.
+
+  The Char-value half was a REFUSAL until 2026-09-06 -- CoerceCharLitArg said
+  `a Char VALUE is not a PChar ... (fpc refuses this too)`, which is true of a
+  PChar parameter and false of a string one: fpc 3.2.2 prints `sst=[Q] len=1`
+  for a Char variable passed to `st: string[4]`. Scoping that refusal to the
+  pointer destination is what uncovered the missing conversion here, and
+  without this arm the callee received a string of length zero -- a wrong
+  VALUE where there used to be a wrong DIAGNOSTIC, which is the worse of the
+  two. A char LITERAL never reaches this arm: CoerceCharLitArg has already
+  retagged it as a string, so its node is no longer tyChar.
 
   Rewritten in the ARGUMENT LOOP rather than inside IRLowerCallArg, for exactly
   the reason the NilPy char-to-pystr wrap next to it gives: the loop builds its
@@ -3975,9 +3986,22 @@ begin
   if pathIdx >= Procs[cpi].ParamCount then Exit;
   if Procs[cpi].Params[pathIdx].IsArray then Exit;
   if Procs[cpi].Params[pathIdx].IsRef then Exit;
-  if not (Procs[cpi].Params[pathIdx].TypeKind in [tyString, tyAnsiString]) then Exit;
-  if ASTCharArrayCap(ASTLeft[item]) < 0 then Exit;
-  ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
+  { EVERY string kind, not the two spellings that happened to be enumerated
+    when this was written. `string[N]` is tyShortString/tyFixedString and fell
+    out of the set, so a Char array handed to a `string[4]` parameter was never
+    converted -- which is the second half of what tarray3.pp's testvalueconv
+    rows need, the first being the Char-value refusal in CoerceCharLitArg.
+    TypeIsAnyString exists for exactly this: its own note in symtab.inc says a
+    guard meaning "is this a string" must not enumerate kinds, because the set
+    of frozen kinds is what the byte-prefix work keeps changing. }
+  if not TypeIsAnyString(Procs[cpi].Params[pathIdx].TypeKind) then Exit;
+  if ASTCharArrayCap(ASTLeft[item]) >= 0 then
+  begin
+    ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
+    Exit;
+  end;
+  if (ASTLeft[item] >= 0) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyChar) then
+    ASTLeft[item] := WrapCharToStringExpr(ASTLeft[item]);
 end;
 
 { Does parameter `pathIdx` of proc `cpi` want an OWNING managed-string temp?
@@ -4326,6 +4350,7 @@ var argTk: TTypeKind;
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
     oaEligible: Boolean;
+    pStrCap: Integer;   { the frozen-string PARAMETER's own N; see the frozen-temp arm }
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
   arcArg1, arcArg2, arcArg3, arcCall: Integer;
   isComIntfArg: Boolean;
@@ -4472,7 +4497,31 @@ begin
         aliased. An AnsiString argument is deliberately NOT matched here — it is
         a CONVERSION, and the managed->frozen arm below already materialises its
         own temp. }
-      LastTypeStrCap := 255;
+      { ...255 ONLY where the parameter has no narrower N of its own. A BY-VALUE
+        `string[4]` parameter truncates at 4 -- that is the semantics of the
+        copy, not damage to it -- and a universal 255 is where the truncation
+        went missing: `sst('literalfar')` into `st: string[4]` reached the
+        callee with `Length(st) = 10` while `SizeOf(st)` answered 5, in the same
+        program. The literal path runs through THIS arm (a literal's node is
+        frozen, so it takes the by-value copy), which is why fixing it here
+        covers the literal, the string[8] variable and the char array at once
+        rather than growing a per-shape arm for each.
+
+        `const` is excluded, and that is FPC's rule rather than caution.
+        Measured 2026-09-06 against fpc 3.2.2, four rows from two programs:
+        by-value truncates for a literal AND for a string[8] variable (both 4);
+        `const st: string[4]` does NOT truncate either of them (10 and 8) --
+        it binds the original -- while `const` fed an ANSISTRING does truncate
+        to 4, because that one is a CONVERSION and materialises its own temp in
+        the managed->frozen arm below. The first disjunct of this arm's
+        condition already excludes const; the prefix-size disjunct does not, so
+        the exclusion has to be here as well or a const parameter would start
+        truncating whenever the two frozen kinds' prefix widths differ. }
+      pStrCap := 0;
+      if not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx] then
+        pStrCap := ProcParamStrCap[cpi * MAX_PROC_PARAMS + pathIdx];
+      if pStrCap > 0 then LastTypeStrCap := pStrCap
+      else LastTypeStrCap := 255;
       tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
     end;
     caIdent := AllocNode(AN_IDENT);
@@ -4780,7 +4829,26 @@ begin
       tmpSym := AllocVar('', tyString)
     else
     begin
-      LastTypeStrCap := 255;   { ShortString / string[N] params: 255 covers }
+      { THE TEMP CARRIES THE PARAMETER'S OWN CAPACITY, and a universal 255 is
+        where `string[4]` stopped truncating. The store below coerces through
+        the ordinary assignment path, and that path clamps to the DESTINATION's
+        SymStrCap -- so a 255-capacity temp clamps at 255 and the callee, whose
+        own `SizeOf(st)` says 5, was handed a ten-character string with
+        `Length(st) = 10`. Measured 2026-09-06 against fpc 3.2.2: `sst('literalfar')`
+        into `st: string[4]` printed `len=10` here and `len=4` there, while the
+        same value assigned to a string[4] RECORD FIELD truncated correctly --
+        the parameter path was the only one that did not clamp.
+        The N comes from ProcParamStrCap, NOT from SymStrCap through
+        Params[pathIdx].SymIdx -- a param symbol does not outlive the callee's
+        scope, and that read returned 4 in a small program and 255 in the same
+        program with one earlier call added, because a hidden argument temp had
+        already recycled the slot. 4 is the RIGHT answer, so the stale read
+        looked correct until a second call site existed. 255 stays the fallback
+        for a plain ShortString parameter, which has no narrower N.
+        tarray3.pp asserts exactly this -- `If Length(st)>4 then Error(...)`. }
+      pStrCap := ProcParamStrCap[cpi * MAX_PROC_PARAMS + pathIdx];
+      if pStrCap > 0 then LastTypeStrCap := pStrCap
+      else LastTypeStrCap := 255;
       tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
     end;
     { coerce via the ordinary ASSIGNMENT path (it owns managed->frozen):
@@ -9590,7 +9658,7 @@ begin
       PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       while item <> -1 do
       begin
-        IRCoerceCharArrayArg(cpi, pathIdx, item);
+        IRCoerceCharArgToString(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
@@ -10693,7 +10761,7 @@ begin
           actually RETURNS, not what the parameter is declared as -- on the
           plain path that is a freshly copied managed temp, which the original
           node's type describes and the parameter's kind does not. Same
-          invariant IRCoerceCharArrayArg states from the other side (~:2995):
+          invariant IRCoerceCharArgToString states from the other side (~:2995):
           convert the VALUE inside IRLowerCallArg and the arg node keeps the old
           tag, so the callee reads a handle as one byte.
 
@@ -13494,7 +13562,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             { Param-aware arg lowering + the managed-string temp slot — the
               same shape as AN_METACLASS_NEW's ctor-arg loop, for the same
               reasons (see the comments there). }
-            IRCoerceCharArrayArg(cpi, pathIdx, item);
+            IRCoerceCharArgToString(cpi, pathIdx, item);
             isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
             value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
             argIsManagedTemp :=
@@ -13542,7 +13610,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           ASTLeft[item] := WrapCharToPyStr(ASTLeft[item]);
         { …and the Pascal shape of the same question, one type up: a static
           `array of Char` bound to a `string` parameter. }
-        IRCoerceCharArrayArg(cpi, pathIdx, item);
+        IRCoerceCharArgToString(cpi, pathIdx, item);
         isRefArg := False;
         if cpi >= 0 then
         begin
@@ -14200,7 +14268,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       pathIdx := 0;
       while item <> -1 do
       begin
-        IRCoerceCharArrayArg(cpi, pathIdx, item);
+        IRCoerceCharArgToString(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         { Same auto const char* marshalling the direct AN_CALL path applies: a
@@ -14341,7 +14409,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       pathIdx := 1;
       while item <> -1 do
       begin
-        IRCoerceCharArrayArg(cpi, pathIdx, item);
+        IRCoerceCharArgToString(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=
@@ -15915,7 +15983,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           frozen string forgave the difference. An Integer argument worked everywhere all
           along, which is what made the bug look target-specific rather than
           argument-specific. }
-        IRCoerceCharArrayArg(cpi, pathIdx, item);
+        IRCoerceCharArgToString(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=
