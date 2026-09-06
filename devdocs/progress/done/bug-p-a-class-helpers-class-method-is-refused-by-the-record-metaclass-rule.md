@@ -4,7 +4,7 @@ title: "a class helper's `class function` is refused by the RECORD metaclass rul
 track: P
 prio: 40
 type: bug
-status: working
+status: done
 owner: frankB
 blocked-by: []
 summary: "MEASURED 2026-09-06 at 67d173f13, compiler 98b6693be7f5. `TH = class helper for TA` with a non-static `class function Other: LongInt` is refused at the DECLARATION with `a class method of a record must be declared static` (pasparser_decl.inc:4357). fpc 3.2.2 -Mobjfpc compiles it and prints its result. TWO DEFECTS IN ONE LINE: the rule is CORRECT for records and for `type helper for <scalar>` -- neither has a metaclass, and terecs5 asserts it -- but ParseRecordMethodDecl also parses the members of a `class helper for T`, whose target IS a class and DOES have one; and the message tells the reader their class helper is a record. Adding `static` makes it compile, so the workaround hides the bug. WIDTH: 9 rows in the full 1362-file corpus fail on exactly this diagnostic (from the --all diag census), all in the helper cluster (182 files, 68 pass, 113 fail -- the corpus's largest). One curated skip row, tgenfunc19.pp, whose reason blames `generic global function + class helper method resolution via specialize` and never reaches either: it stops at line 15 on this. I ATTEMPTED THE FIX AND PARKED IT AT THE THIRD LAYER, which is why this is filed rather than landed -- each layer was measured, not predicted."
@@ -146,3 +146,6 @@ canary; the only RED is `pinned builds live lib/rtl`, frankZ's `8374118ec`
 waiting on an owner-only pin) AND `PXX_ALLOW_FULL_SUITE=1 make test` — the
 change alters how `Self` is typed for a whole method class, and the quick tier
 has no class helper in it.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
