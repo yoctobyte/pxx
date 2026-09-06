@@ -363,6 +363,56 @@ CLASSES = {
     # TIMEOUT. A budget calibrated against a broken run is a budget that
     # punishes the fix.
     "guards":      {"est_mem": 550 << 20,  "timeout": 600},
+    # ...AND THE SAME SENTENCE AGAIN, WITH "BROKEN" REPLACED BY "UNLOADED".
+    # The note above says a budget calibrated against a broken run punishes the
+    # fix. 600 was calibrated against a run that was green but IDLE -- 207s on
+    # plexus, tripled -- and on 2026-09-06, the evening the last of its four
+    # failing guards was fixed, `tools-devtest#00` completed for the first time
+    # ever and then TIMED OUT INSIDE THE TIER AT 600.1s AGAINST 600, at load
+    # 13.8 on 24 cores with 19 usable, inside a 4447-job full run. A tenth of a
+    # second. The job is most likely to time out precisely when it runs inside
+    # the tier that matters, because that tier is what creates the contention.
+    #
+    # WHY THE SCALE MACHINERY DOES NOT COVER THIS, and it is the reason a bigger
+    # number is the honest fix rather than a lazy one. calibrate() times a probe
+    # ONCE, before the run, and every budget is `cls_to * scale` for the whole
+    # run. On seven that probe reads native 0.48 / emulated 0.89, so
+    # scale = max(1.0, ...) = 1.0, THE FLOOR: seven gets no inflation at all.
+    # The scale is a true measurement of the box's IDLE speed being used as a
+    # statement about the conditions a job will run under -- and the run itself
+    # destroys those conditions. Its own docstring scopes it to weak hardware,
+    # never to a busy box.
+    #
+    # 1200 IS SIZED TO OBTAIN A COMPLETING OBSERVATION, NOT AS A CLAIM ABOUT
+    # WHAT THE JOB NEEDS, and the distinction is the whole point. 600.1s is a
+    # CENSORED reading -- the job was killed, so the only thing it establishes
+    # is a lower bound, and the contention factor is >= 600.1/354.5 = 1.69 with
+    # no upper bound in evidence. Nobody can calibrate a budget from a run that
+    # did not finish, which is exactly the trap the 600 fell into: `n:0, esc:1`
+    # means this job has still never completed under tier load, so
+    # unproven_budget() cannot help it either -- its one escalation was spent
+    # before this class existed. 1200 = 354.5 x 3.4 (the measured COMPLETING
+    # run, quiet plexus, 149 scripts, 2026-09-06) and 2x the censored bound.
+    # Under the 1800s ceiling (MAX_JOB_DEADLINE_FRAC x DEFAULT_DEADLINE).
+    # WHEN A COMPLETING TIER OBSERVATION EXISTS, DERIVE THE NUMBER FROM IT AND
+    # SAY SO HERE -- that is the measurement this entry is buying.
+    #
+    # AND IT WILL GO STALE, BY DESIGN OF THE THING IT MEASURES. This is a
+    # growing sequential sweep and everyone is encouraged to add to it: 207s
+    # over ~130 scripts on 2026-09-01, 354.5s over 149 on 2026-09-06. That is
+    # 1.71x in five days against 1.15x more scripts, so the scripts are getting
+    # heavier faster than they are getting more numerous, and no constant
+    # survives that. The fix for the TREND is to shard the sweep the way
+    # conformance is sharded; see
+    # bug-t-tools-devtest-is-a-growing-sequential-sweep-behind-one-budget.
+    #
+    # SEPARATE FROM `guards` ON THE GLOB, not on the target name, for the reason
+    # the classifier's own comment gives -- and so `tools-devtest-sh#00` (24.2s
+    # in the same tier) keeps a 600s budget instead of inheriting a 50x slack it
+    # has no use for. A future third sweep falls through to `guards` and is
+    # classed conservatively before anyone notices, which is the property that
+    # comment exists to protect.
+    "guards-py":   {"est_mem": 550 << 20,  "timeout": 1200},
 }
 # Runtime-nondeterministic classes: they RUN a program whose scheduling/socket/
 # thread timing can flake under a loaded full-matrix run (asyncecho = qemu,
@@ -832,7 +882,7 @@ HEARTBEAT_PERIOD = 10.0         # beat interval; must be << HEARTBEAT_STALE
 # used only for the progress estimate, never for scheduling
 CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
                 "corpus": 45.0, "conformance": 90.0, "opt": 30.0,
-                "guards": 20.0}
+                "guards": 20.0, "guards-py": 35.0}
 # TWO TABLES KEYED BY CLASS, AND ADDING A CLASS TO ONE IS NOT AN ERROR ANYWHERE
 # UNTIL A JOB OF THAT CLASS RUNS. Adding `guards` to CLASSES alone on
 # 2026-09-01 got a KeyError out of write_live() a minute into the run -- after
@@ -2892,6 +2942,11 @@ def classify(lines):
     # conformance arm above gives: tools-devtest and tools-devtest-sh are two
     # targets of one shape today and the next one should be classed right
     # before anyone notices.
+    # The .py sweep first: it is 15x the .sh one in TIME and it is the one that
+    # grows, so a single budget for both is set by the outlier. Order matters --
+    # the general arm below still catches a future third sweep.
+    if re.search(r"tools/\*devtest\*\.py", text) or "*_devtest.py" in text:
+        return "guards-py"
     if re.search(r"tools/\*devtest\*", text) or "*_devtest.py" in text:
         return "guards"
     return "unit"
