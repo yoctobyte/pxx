@@ -349,17 +349,40 @@ key can equally be a stable id assigned at registration. Different claims, and t
 how a hazard gets ranked without ever being real. Both readings now exist and they fail
 differently.
 
-**Reading 1 — the code.** `tools/testmgr.py`:
+**Reading 1 — the code.** Cited by SYMBOL, not by line, for the reason below:
 
-```
-2913    for i, g in enumerate(groups):
-2914        jobs.append(Job(target, i, g))
-1960        self.name = "%s#%02d" % (target, index)
-```
+- `tools/testmgr.py`, **`split_jobs(target, lines)`** — its last statement is
+  `for i, g in enumerate(groups): jobs.append(Job(target, i, g))`.
+- `tools/testmgr.py`, **`class Job.__init__(self, target, index, lines)`** — sets
+  `self.name = "%s#%02d" % (target, index)`.
 
-`groups` is the recipe's line-groups in recipe order (`sorted(buckets)` over the union-find
-representative, which is the lowest line index in each group). **The index is a POSITION in the
-Makefile, not a registered id and not derived from content.**
+`groups` is the recipe's line-groups in recipe order: `split_jobs` runs a union-find over the
+temp files each group produces and consumes, then rebuilds `groups = [buckets[k] for k in
+sorted(buckets)]`, sorted by the representative — the lowest line index in each merged group.
+**So the index is a POSITION in the Makefile, not a registered id and not derived from
+content.**
+
+`split_jobs` contains **three** `for i, g in enumerate(groups)` loops. Only the last builds
+`Job`s; the other two are the union-find `owner` map and the bucket merge, and they are what
+determine the final ORDER — so they are the same mechanism rather than siblings that a fix
+must also touch.
+
+### THE LINE NUMBERS IN THE FIRST VERSION OF THIS SECTION WERE CORRECT AND WERE ALSO CORRECTED, AND BOTH READINGS WERE RIGHT
+
+This section originally cited `2913` / `2914` / `1960`. A reviewer corrected them to
+`2634` / `1673` / `1680` and noted, accurately, that `2913` lands mid-docstring — *"the same
+failure this repo already booked when three `Makefile:<n>` citations drifted and one landed on
+`fi; \`."*
+
+**Both sets are right, at different trees.** `324304f1e` (2026-09-05 22:04) added **281 lines**
+to `testmgr.py`; at `324304f1e^` the name line is at **1680**, and at HEAD it is at **1960**.
+The reviewer's checkout was one commit behind.
+
+> **A line citation drifted by 281 inside twenty-four hours, and the correction to it drifted
+> by the same 281 in the other direction.** The rule this repo already carries — cite the
+> RECIPE or the SYMBOL, never `file:line` — was demonstrated by the act of enforcing it. Neither
+> reader was careless; a line number is simply not a fact about a file, it is a fact about a
+> file at a tree, and nothing in the citation says which.
 
 **Reading 2 — the archive, which fails differently and gives a RATE.** The rdrand skip is one
 job with an unmistakable reason string, present in every `full` report from `seven`. Following
