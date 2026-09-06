@@ -3424,7 +3424,7 @@ procedure EmitHeapLockStubs;
   turn the heap magazine OFF, so under either instrument EVERY allocation takes
   this lock and pays the identity check. That is a measurement-speed cost, not a
   shipped one. }
-var jePatch, jzPatch, callStart, unlockJnzPatch, cfmPi: Integer;
+var jePatch, jzPatch, callStart, unlockJnzPatch: Integer;
 begin
   if HeapLockAddr <> 0 then Exit;
   if not ThreadSafeMode then Exit;
@@ -3432,15 +3432,17 @@ begin
   BSS_HEAP_OWNER := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_DEPTH := BSSSize; Inc(BSSSize, 8);
 
-  { STAMPED HERE, ONCE PER COMPILATION, and that is the point rather than a
-    convenience. HeapLockedCallProcIdx1 keys on the CALLEE, so one stamp wraps
-    EVERY call to PXXClassFinalizeManaged in the lock -- including the one
-    PXXClassFinalize now makes itself. It used to be stamped by the `Free`
-    desugar, which meant a program that never desugars a Free never stamped it,
-    and the managed walk then ran unlocked. Four drivers reach this procedure
-    and none of them has to know. }
-  cfmPi := FindProc('PXXClassFinalizeManaged');
-  if cfmPi >= 0 then HeapLockedCallProcIdx1 := cfmPi + 1;
+  { THE STAMP IS NOT HERE, AND IT WAS, AND THAT SHIPPED A RACE. This procedure
+    runs from the PROLOGUE -- before builtinheap.pas is parsed -- so
+    FindProc('PXXClassFinalizeManaged') answers -1 (measured, not inferred), the
+    `if >= 0` guard quietly did nothing, and HeapLockedCallProcIdx1 stayed 0.
+    Every call to the managed walk then emitted with NO heap lock around it,
+    which is exactly the defect test_threadsafe_class_finalize_race.pas exists
+    to catch. The comment immediately below about forwards says this unit has
+    not parsed yet; that was true when written and I stamped here anyway.
+    It is resolved at the CALL SITE now (IR_CALL, this file), where the callee
+    is in hand and a name lookup cannot answer -1 about a proc it is looking
+    straight at. }
 
   if PasDefineExists('PXX_NO_REENTRANT_HEAPLOCK') then Exit;   { A/B probe }
 
@@ -9980,6 +9982,20 @@ begin
         procIdx := IRA[node];
         if procIdx >= 0 then
         begin
+          { RESOLVED HERE, AGAINST THE CALLEE ITSELF, and the form is the point.
+            This used to be a FindProc stamp in EmitHeapLockStubs; that runs in
+            the prologue, before builtinheap.pas is parsed, so it answered -1 and
+            the `if >= 0` guard silently left HeapLockedCallProcIdx1 at 0 -- every
+            managed-field walk emitted UNLOCKED, and both
+            test_threadsafe_class_finalize_* rows segfaulted. A lookup by name
+            can be wrong about which proc it found; a comparison against the proc
+            we are emitting a call TO cannot. One string compare per emitted call
+            until it matches, compile-time only. }
+          if ThreadSafeMode and (TargetArch = TARGET_X86_64) and
+             (HeapLockedCallProcIdx1 = 0) and
+             (Procs[procIdx].Name = 'PXXClassFinalizeManaged') then
+            HeapLockedCallProcIdx1 := procIdx + 1;
+
           if procIdx + 1 = HeapLockedCallProcIdx1 then
           begin
             { The one call that must run under the heap lock (defs.inc,

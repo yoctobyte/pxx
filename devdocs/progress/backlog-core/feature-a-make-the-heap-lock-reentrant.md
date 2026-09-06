@@ -9,7 +9,7 @@ owner: frankH
 created: 2026-09-06
 found-by: owner (decision), vehicle filed by frankuser
 blocked-by: []
-summary: "DECIDED 2026-09-06 (decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, arm (a)) and LANDED THE SAME DAY in three steps. The reentrancy half of feature-a-reentrant-heap-lock-and-per-thread-arenas -- parked by the owner 2026-08-21 with an explicit unpark trigger, 'a deadlock, or a new managed member kind whose release cannot be hoisted out of the lock' -- is unparked because a deadlock arrived. BSS_HEAP_OWNER/BSS_HEAP_DEPTH sit ON TOP of BSS_HEAP_LOCK, so the contended path and its exit-212 diagnosis are untouched; identity is EmitIoLockStubs' sequence (cached TLS tid, trusted only when rsp is inside that block's recorded stack bounds, else gettid), because gs:[0] is INHERITED across clone and recording the tid harder at thread start cannot help a thread that has no thread-start of ours. IT CLOSES TWO ROWS, MEASURED WITH A DISCRIMINATING CONTROL: the threadsafe dyn-array Variant/interface leak goes 7939 -> 3 live at the SAME allocation count, and the same program under -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis -- so the reentrancy is load-bearing rather than assumed; and the NilPy threadsafe class-field leak goes 19760 kB -> 1048 kB maxrss. THE COST OBJECTION HAD SUBSTANCE AND THIS SUMMARY USED TO SAY IT WAS NEVER MEASURED: it is +7% with the magazine on and +14% off, 1M construct/free iterations, min-of-5 interleaved, allocation-saturated upper bound on a shared box. Fork NOT re-opened -- the owner ruled with the objection in front of him. Narrowing avenue if it ever matters: only acquires inside a HeapLockedCallProcIdx1 region can nest, so every other site could keep the inline TTAS."
+summary: "DECIDED 2026-09-06 (decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, arm (a)) and LANDED THE SAME DAY in three steps. The reentrancy half of feature-a-reentrant-heap-lock-and-per-thread-arenas -- parked by the owner 2026-08-21 with an explicit unpark trigger, 'a deadlock, or a new managed member kind whose release cannot be hoisted out of the lock' -- is unparked because a deadlock arrived. BSS_HEAP_OWNER/BSS_HEAP_DEPTH sit ON TOP of BSS_HEAP_LOCK, so the contended path and its exit-212 diagnosis are untouched; identity is EmitIoLockStubs' sequence (cached TLS tid, trusted only when rsp is inside that block's recorded stack bounds, else gettid), because gs:[0] is INHERITED across clone and recording the tid harder at thread start cannot help a thread that has no thread-start of ours. IT CLOSES TWO ROWS, MEASURED WITH A DISCRIMINATING CONTROL: the threadsafe dyn-array Variant/interface leak goes 7939 -> 3 live at the SAME allocation count, and the same program under -dPXX_NO_REENTRANT_HEAPLOCK hits rc=212 with the heap-lock diagnosis -- so the reentrancy is load-bearing rather than assumed; and the NilPy threadsafe class-field leak goes 19760 kB -> 1048 kB maxrss. THE COST OBJECTION HAD SUBSTANCE AND THIS SUMMARY USED TO SAY IT WAS NEVER MEASURED: it is +7% with the magazine on and +14% off, 1M construct/free iterations, min-of-5 interleaved, allocation-saturated upper bound on a shared box. Fork NOT re-opened -- the owner ruled with the objection in front of him. Narrowing avenue if it ever matters: only acquires inside a HeapLockedCallProcIdx1 region can nest, so every other site could keep the inline TTAS. STEP 2 SHIPPED A RACE AT 3bb71fd79 AND IT IS FIXED: the stamp was moved into EmitHeapLockStubs, which runs from the PROLOGUE before builtinheap.pas is parsed, so FindProc answered -1, the `if >= 0` guard silently did nothing, and the managed walk emitted with NO lock -- both test_threadsafe_class_finalize_* rows segfaulted 30/30. Resolution is at the CALL SITE now (Procs[procIdx].Name against the callee, which cannot answer -1 about a proc it is looking straight at); 30/30 green both rows, acceptance numbers unchanged. THE LESSON IS THE ASSERTION CLASS: restoring the CALL fixes the leak and the LOCK is a separate property, so every leak- and maxrss-shaped instrument I had improved identically with the acquire missing -- which the race test's own header had predicted in writing a week earlier."
 ---
 
 # Make the heap lock reentrant
@@ -280,3 +280,91 @@ bug — are NOT done here. `builtinheap.pas` still carries two
 dyn-array-of-records walks. They are the same shape and should fall the same
 way; they are left for a change that can measure them on their own rather than
 riding in on a commit whose control is about elements.
+
+## 2026-09-06 — THE STAMP WAS NEVER APPLIED, AND MY ACCEPTANCE TESTS COULD NOT SEE IT
+
+`3bb71fd79` shipped a **race**. Both `test_threadsafe_class_finalize_race` and
+`test_threadsafe_class_finalize_kinds` segfault at that sha, 30/30 on this box —
+deterministic here, intermittent on seven. Caught by frankuser off the tstate
+reports, not by anything I ran.
+
+### What was wrong
+
+Step 2 moved the `HeapLockedCallProcIdx1` stamp into `EmitHeapLockStubs`, which
+runs from the **prologue** — before `builtinheap.pas` is parsed. So
+
+```pascal
+cfmPi := FindProc('PXXClassFinalizeManaged');
+if cfmPi >= 0 then HeapLockedCallProcIdx1 := cfmPi + 1;
+```
+
+answered **-1** (printed, not inferred), the `>= 0` guard quietly did nothing,
+and the stamp stayed 0. Every call to the managed walk then emitted with **no
+heap lock around it**. Confirmed in the binary before reasoning about it: the one
+call site in `PXXClassFinalize` was a bare `call 0x409e72`, `leave`, `ret`.
+
+The comment eight lines below my own edit says this unit *"has not parsed yet"*.
+It was correct, it was about exactly this, and I stamped there anyway.
+
+### Why every instrument I had said green
+
+**The call and the lock are two separate properties, and everything I measured
+observed only the first.** Restoring the call is what fixes the leak; the lock is
+what makes the walk safe. So `7939 -> 3 live`, `19760 kB -> 1048 kB` and the
+`rc=212` control were all true, all reproducible, and all silent about the defect
+— they improve identically whether or not the acquire is there.
+
+`test_threadsafe_class_finalize_race.pas` says so in its own header, written
+2026-08-31, a week before I broke it:
+
+> the fix with the acquire removed, NT=4 → SIGSEGV (3/3)
+> with the acquire removed the leak is still fixed, which is exactly why a leak
+> probe alone could never have caught row 5
+
+I re-created row 5 exactly, and my leak-shaped instruments certified it. The
+header also states the design I violated: the lock is *"emitted at the call site
+in ir_codegen.inc"*.
+
+CLAUDE.md's rule is **match the assertion class to the defect class**. I did —
+for the leak. The lock's defect class is a data race, whose only instrument is a
+concurrent stress test, and `gate.sh quick` does not run the test-threads tier.
+
+### The fix
+
+Resolution moved to the **call site** (`IR_CALL`, `ir_codegen.inc`), against the
+proc being called:
+
+```pascal
+if ThreadSafeMode and (TargetArch = TARGET_X86_64) and
+   (HeapLockedCallProcIdx1 = 0) and
+   (Procs[procIdx].Name = 'PXXClassFinalizeManaged') then
+  HeapLockedCallProcIdx1 := procIdx + 1;
+```
+
+A name *lookup* can answer -1 about a table that is not populated yet. A
+comparison against the callee you are emitting a call **to** cannot — the failure
+mode that just shipped is structurally unavailable to it. One string compare per
+emitted call until it matches, compile-time only.
+
+Receipt, same program, after: `call 0x4001c0` (acquire) / `mov rax,rdi` /
+`call 0x409e72` / `call 0x40022a` (release).
+
+| | race | kinds |
+| --- | --- | --- |
+| `3bb71fd79` | 0/30 | 0/30 |
+| fixed | **30/30** | **30/30** |
+
+Acceptance rows re-measured after the fix and unchanged: 13891 allocs / 13888
+frees / **3 live**, and `-dPXX_NO_REENTRANT_HEAPLOCK` still gives rc=212 with the
+heap-lock text. Also green under `--threadsafe`: `test_multithreading`,
+`test_heap_magazine_foreign_thread`, `test_dce_threadsafe_heaplock`,
+`test_interface_byval_param_no_leak`, `test_interface_result_temp_leaks`,
+`test_thread_heap_mixed`, `test_managed_dynarray_field_leaks`.
+
+### The generalisation worth keeping
+
+**A conservative guard converts a missing precondition into a silent no-op.**
+`if found >= 0 then` reads as defensive and is indistinguishable, at the call
+site, from "this never runs". The population is every `FindProc` in a
+prologue-time emitter. Where the thing looked up is *required*, the guard should
+be loud or the lookup should happen where the answer cannot be absent.

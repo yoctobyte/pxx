@@ -4161,6 +4161,89 @@ survives a rename, a move and a re-number, and — the part that matters for the
 invented-name case — **you cannot quote a string you did not read.** Writing the
 citation forces the visit that would have caught it.
 
+## ONE CHANGE RESTORED A CALL *AND* WRAPPED IT IN A LOCK — AND EVERY INSTRUMENT I HAD MEASURED ONLY THE CALL
+
+`3bb71fd79` (feature-a-make-the-heap-lock-reentrant, step 2) made
+`PXXClassFinalize` finalize its own managed fields again, and moved the
+`HeapLockedCallProcIdx1` stamp — the thing that wraps that call in the heap
+lock — into `EmitHeapLockStubs`. That procedure runs from the **prologue**,
+before `builtinheap.pas` is parsed, so
+
+```pascal
+cfmPi := FindProc('PXXClassFinalizeManaged');
+if cfmPi >= 0 then HeapLockedCallProcIdx1 := cfmPi + 1;
+```
+
+answered **-1**, the guard quietly did nothing, and every managed-field walk
+emitted **unlocked**. Both `test_threadsafe_class_finalize_*` rows segfaulted
+30/30. It shipped green.
+
+**The defect is not that the tests were weak. It is that the change had TWO
+properties and the assertion class only covered one.**
+
+| property | what it does | what observes it |
+| --- | --- | --- |
+| the call is emitted | fixes the leak | `assert_no_leak.sh`, census, maxrss |
+| the call is under the lock | makes the walk safe | a concurrent stress test, and nothing else |
+
+Restoring the call is what fixes the leak. The lock is what makes it correct.
+So `7939 -> 3 live`, `19760 kB -> 1048 kB`, and even the `rc=212` A/B control
+were all true, all reproducible, and **all improve identically whether or not
+the acquire is there**. The controls were not sloppy — they were aimed at the
+other half.
+
+CLAUDE.md already says *match the assertion class to the defect class*. This is
+the next turn of that screw: **when one change carries two properties, it needs
+two assertion classes, and the cheap one will look like it covered both.** The
+leak instrument is louder, faster and more satisfying, which is exactly why it
+gets mistaken for sufficient.
+
+### The test had written the warning down a week earlier
+
+`test/test_threadsafe_class_finalize_race.pas`, header, 2026-08-31:
+
+> the fix with the acquire removed, NT=4 → SIGSEGV (3/3)
+> with the acquire removed the leak is still fixed, which is exactly why a leak
+> probe alone could never have caught row 5
+
+Row 5 is *the shipped fix with only the acquire taken back out* — precisely what
+I re-created. The author had enumerated this exact failure, named the instrument
+that cannot see it, and kept a control for it. It did not help, because **the
+warning lived in the test I broke rather than at the code I edited**, and I never
+had reason to open it: `gate.sh quick` does not run the test-threads tier.
+
+The same header states the design: the lock is *"emitted at the call site in
+ir_codegen.inc"*. My edit moved it away from the call site. **A test header can
+be the only written record of an invariant** — when you move machinery, grep the
+tests that name it, not just its callers.
+
+### A CONSERVATIVE GUARD TURNS A MISSING PRECONDITION INTO A SILENT NO-OP
+
+`if found >= 0 then <do the thing>` reads as defensive. At the call site it is
+indistinguishable from *"this never runs"*, and it produces no diagnostic in
+either case. Every instrument that lies, lies by being correct about something
+else; this one is correct about "I did not find it" and silent about "so nothing
+was wrapped".
+
+**The repair is not a louder guard — it is a lookup whose answer cannot be
+absent.** Resolve against the object you already hold:
+
+```pascal
+if ThreadSafeMode and (TargetArch = TARGET_X86_64) and
+   (HeapLockedCallProcIdx1 = 0) and
+   (Procs[procIdx].Name = 'PXXClassFinalizeManaged') then
+  HeapLockedCallProcIdx1 := procIdx + 1;
+```
+
+A name lookup can answer -1 about a table not yet populated. A comparison against
+the callee you are emitting a call **to** cannot. The failure mode is
+structurally unavailable rather than guarded against.
+
+The population to check is every `FindProc` in a prologue-time emitter. Where
+the looked-up thing is *required*, either make the absence loud or move the
+lookup to where absence is impossible.
+
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
