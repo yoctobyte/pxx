@@ -103,7 +103,49 @@ at once — reproducible numbers, and a population chosen deliberately rather th
 `Board()` enumerates first. Raising the floor fixes neither: the outlier moves out of the
 slice on its own and the check goes quiet without anything being repaired.
 
-## The inference is still flagged, and now for a MEASURED reason
+## CLOSED — measured at the sha the RED report was produced from
+
+The inference ("the `#00` job on seven reds for this reason too") is now a measurement, and
+the way it closed is worth more than the answer.
+
+**It did NOT close by reading the report.** `tstate/` **is** in this checkout, at
+`devdocs/progress/tstate/reports/` — frankZ's `find -maxdepth 4` had answered about a
+shallower tree and we both read "no rows" as "no archive". Reading it settled nothing:
+
+```
+- tools-devtest#00
+  - `tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/twatch_toolchain_devtest.py | tools-devtest: tools/twatch_verify_request_devtest.p`
+```
+
+> **The `near:` field is a fixed-width TAIL OF THE JOB'S CAPTURED OUTPUT, not a failure
+> list.** For this job it caught three of the Makefile's per-file PROGRESS lines — printed
+> before each devtest runs, for files that may well have passed — and names no failure at
+> all. It is also cut mid-word. So absence from that row is uninformative in both directions,
+> and **a reader who takes it as "the failing devtests" gets a confident wrong answer**, which
+> is the more dangerous half. `progress_near_devtest` sorts before `twatch_*` in the glob, so
+> it could never appear in a tail regardless of whether it failed.
+
+**It closed by measuring the failing condition at the tested tree instead.** The report
+`20260906T031318Z-92ba89e-seven.md` is `verdict: RED` at
+`92ba89e82a4aa2dc98b68f97f22e4aba7855d0f7`. Scoring this ticket's own subject from the board
+**as of that sha**:
+
+```
+at the TESTED sha 92ba89e: 292 summary-tokens, score 0.089   (floor 0.10)
+```
+
+So the guard fails at the exact tree seven tested, and `make tools-devtest` globs
+`tools/*devtest*.py`. **This is one of the reasons `tools-devtest#00` was red on that run** —
+not the only one, since the `#00` census already names four others.
+
+**The method, which generalises:** when the report cannot say WHICH check failed, do not
+argue about the report — **reproduce the failing condition at the sha the report names.** That
+converts an unanswerable question about an instrument into an ordinary measurement about a
+tree.
+
+## The earlier state of this flag, kept because the reasoning is the reusable part
+
+
 
 frankZ looked in the archive — which **is** in this checkout, at
 `devdocs/progress/tstate/reports/`, contrary to what both of us believed. `progress_near_devtest`
