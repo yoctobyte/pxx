@@ -107,7 +107,39 @@ is why the message reads as nonsense.
 compatible this compiles and binds the wrong type with no diagnostic at all. The
 refusal is the lucky outcome.
 
-**AND THE SILENT CASE IS UNSIZED.** This ranked at 65 as "test-fpjson does not
+**AND THE SILENT CASE IS NOW SIZED, AND IT IS EMPTY IN EVERYTHING WE SHIP.
+The paragraph below said the opposite for about an hour; it is kept because the
+correction is the point.**
+
+Counted 2026-09-06 over `lib/rtl/**`, `compiler/builtin/*.pas` and `lib/pcl/**`
+— 151 files, 135 class/interface/object declarations, 43 bare `X = Y;` aliases:
+
+| alias name declared more than once | sites | reaches the alias table? |
+| --- | --- | --- |
+| `IUnknown` | builtinheap, classes — both `= IInterface` | **YES** — the one that failed, loudly |
+| `HResult` | builtinheap, classes — both `= LongInt` | no |
+| `cint` | baseunix, sockets — both `= LongInt` | no |
+| `HModule` | dynlibs `= TLibHandle`, sysutils `= PtrInt` | no — and `TLibHandle = PtrInt`, so same type |
+| ~~`TComponent`~~ | census FALSE POSITIVE: `TComponent = class;` is a forward declaration, not an alias | — |
+
+`RegisterUClassAlias` is gated on `IsClassType` (`pasparser_decl.inc:9015`), so a
+SCALAR alias never enters the table and this defect cannot reach it. That leaves
+exactly **one** affected name in everything this repo ships, and it is the one
+that announced itself.
+
+**So the "silent half is larger" claim was wrong, and it was mine.** It is the
+obvious inference from "the refusal is the lucky outcome" and it cost one
+census to check. What survives is narrower and still true: the failure MODE is
+silent where the two targets are compatible; the realised population inside this
+repo is zero.
+
+**Genuinely unmeasured, and this is the release sentence:** third-party Pascal
+that declares a class or interface alias re-using a name `builtinheap.pas`
+declares. That is unbounded and we cannot count it. Before v406 such an alias
+bound to builtinheap's row — silently where the types were compatible, and with
+an unreadable `(record)` overload refusal where they were not.
+
+**Superseded paragraph, kept as the record of the wrong inference:** This ranked at 65 as "test-fpjson does not
 build", i.e. on the face that ANNOUNCES itself. Nobody has counted the programs
 that compiled against a wrong alias binding and said nothing, and this fix
 changes their behaviour too -- silently, in the other direction. A defect whose
