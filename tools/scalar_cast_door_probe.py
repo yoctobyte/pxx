@@ -32,10 +32,18 @@ if not os.path.exists(PXX):
 print("probe: PXX=%s" % PXX)
 print("probe: rows land in %s" % OUT)
 
+# THE NAME SET IS THE UNION OF WHAT THE DOORS RECOGNISE, not a list of the ones
+# I thought of. BuiltinScalarTypeKind's own table is the widest and is read out
+# of the source (symtab.inc); a name that one door knows and another does not is
+# precisely the defect this family produces, so a sweep drawn from the
+# intersection would be green by construction.
 NAMES = ["Byte", "ShortInt", "SmallInt", "Word", "Integer", "LongInt",
          "Cardinal", "LongWord", "DWord", "Int64", "QWord", "UInt64",
          "NativeInt", "PtrInt", "Int8", "UInt8", "Int16", "UInt16",
-         "Int32", "UInt32", "Boolean", "Char", "AnsiChar", "WideChar"]
+         "Int32", "UInt32", "Boolean", "Char", "AnsiChar", "WideChar",
+         # ...and the tail of BuiltinScalarTypeKind's table that no earlier
+         # sweep in this family covered:
+         "SizeInt", "SizeUInt", "NativeUInt", "PtrUInt", "TSystemCodePage"]
 VALUES = ["258", "-1", "4294967298"]
 
 def src(name, viaAlias):
