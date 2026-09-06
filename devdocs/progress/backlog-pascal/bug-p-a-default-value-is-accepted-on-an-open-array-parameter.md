@@ -3,8 +3,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-summary: "`procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both."
-status: new
+summary: "CLOSED PENDING-COMMIT. THE 2026-09-05 EXCULPATION WAS MEASURED ON ONE OF FOUR PARAMETER PARSERS AND THE WRONG VALUE WAS STILL LIVE IN THE OTHER THREE. The refusal that landed 2026-09-01 lived in ParseSubroutine, which parses the free-routine list and a method's IMPLEMENTATION header -- so `array of string = 'x'` written in BOTH places was caught, and written in the CLASS BODY alone was not. Measured 2026-09-06: `TC.M(const a: array of string = 'x')` declared in a class body and implemented without the default compiled clean, printed High(a) = 1073741823, and segfaulted on the next call; an INTERFACE method has no implementation header at all and was never asked. So the remaining value was never diagnostic quality only. FIXED by moving the refusal into ParseParamDefaultValue -- the one function all four parsers already call -- which also puts it AHEAD of the shape checks, so `= ['x']` stops being refused as `a string parameter's default must be a string literal`, a diagnostic naming the rule it was not breaking and demanding the literal it was about to reject. The caller passes the half only it knows: ParseSubroutine's isArr is true for open / named-FIXED / named-DYNAMIC alike so it asks `isArr and (paramDynDepth <= 0)`, keeping `a: TArr = nil` legal as fpc has it; the three method parsers set their flag only on the literal `array of` spelling, so there the flag alone is the answer. Five test rows: one must-not-compile per parser, each asserting the OPEN-ARRAY reason rather than any refusal, plus a positive control across all four parsers that a named dynamic array still takes nil."
+status: done
 owner: ""
 ---
 
@@ -115,3 +115,76 @@ summary**, which is the half a reader will otherwise re-measure. Whoever takes
 it: the fix is one predicate, and the wrong-value observable it used to guard is
 already gone, so the remaining value is diagnostic quality only — rank
 accordingly.
+
+## Closed 2026-09-06 (frankB) — and the exculpation above was a claim about ONE PARSER
+
+Read the 2026-09-05 section again before trusting its last line. *"The
+wrong-value observable it used to guard is already gone, so the remaining value
+is diagnostic quality only"* was measured with the free-routine spelling, which
+is the one the 2026-09-01 guard covered. **There are four parameter parsers.**
+The guard lived in `ParseSubroutine`, so it covered the free-routine list and a
+method's IMPLEMENTATION header; the class-body, record-body and interface-body
+parameter parsers had never been asked.
+
+Measured 2026-09-06, at `d754eeef1`:
+
+```pascal
+type TC = class
+  procedure M(const a: array of string = 'x');   { declaration only }
+end;
+procedure TC.M(const a: array of string);        { implementation, no default }
+...
+o.M;
+```
+```
+ok: oaw.pxx
+M len=1073741824 high=1073741823
+N len=<segfault>
+```
+
+Compiles clean, prints a length read out of a frozen literal's prefix, and
+segfaults on the next call. fpc refuses at the `=`. **Writing the default in
+both places was caught and writing it in the declaration alone was not** — which
+is exactly why the shape survived a fix aimed at it, and why a probe that writes
+the declaration the way you would write it for a working program never reaches
+the hole. An interface method is worse: it has no implementation header, so
+nothing downstream ever asks.
+
+### The fix, and why it is smaller than the ticket asked for
+
+The ticket proposed testing `IsArray` alongside `TypeKind` at the default-value
+check. That is right about the predicate and wrong about the number of places.
+All four parsers already call **one** function, `ParseParamDefaultValue`, so the
+refusal moved into it and out of `ParseSubroutine` — one site, four callers, one
+case deleted rather than three added.
+
+Moving it also fixed claim 2 for free, because inside that function the refusal
+runs **before** the shape checks. `array of string = ['x']` had been refused as
+*"a string parameter's default must be a string literal"*: an open-array
+parameter records its ELEMENT kind, the stringy check saw a string parameter,
+and it demanded the literal the array check was about to reject. **A refusal
+that tells you to write the thing it is about to refuse is a wrong diagnostic,
+not a differing one.**
+
+`paramTakesNoDefault` is the CALLER's question and deliberately not computed
+inside, because only the caller can tell an open array from a named dynamic
+array. `ParseSubroutine`'s `isArr` is true for open, named-FIXED and
+named-DYNAMIC alike, so it asks `isArr and (paramDynDepth <= 0)` and `a: TArr =
+nil` stays legal, as fpc has it. The three method parsers set their flag only on
+the literal `array of` spelling, so for them the flag alone is the answer.
+
+### Found on the way, filed separately, NOT fixed here
+
+Two live crashes on **interface dispatch**, both compiling clean, both correct
+under fpc 3.2.2, neither involving this refusal — and the second is why this
+ticket's own positive control declares an interface method but dispatches
+through the class:
+
+- [[bug-p-an-interface-dispatched-call-that-omits-a-defaulted-argument-segfaults]]
+- [[bug-p-an-interface-dispatched-call-passing-a-named-dynamic-array-segfaults]]
+
+and one wrong refusal:
+
+- [[bug-p-a-named-dynamic-array-default-declared-in-a-class-body-is-lost-if-the-implementation-omits-it]]
+
+I did not establish a shared cause for any of the three and have not claimed one.

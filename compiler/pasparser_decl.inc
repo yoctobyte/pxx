@@ -3229,11 +3229,55 @@ begin
 end;
 
 procedure ParseParamDefaultValue(paramTk: TTypeKind; paramPtrElemTk: Integer;
+                                 paramTakesNoDefault: Boolean;
                                  var val: Int64;
                                  var isStr, isFloat, isSet: Boolean;
                                  var soff, slen: Integer);
 begin
   val := 0; isStr := False; isFloat := False; isSet := False; soff := 0; slen := 0;
+
+  { A DEFAULT VALUE ON AN OPEN-ARRAY PARAMETER CANNOT MEAN ANYTHING, and this
+    refusal used to live in ParseSubroutine, AFTER the default had been parsed
+    and stored -- so it guarded the FREE-ROUTINE parameter list and nothing
+    else. There are four parameter parsers and they all call THIS function, so
+    this is the one place that sees every parameter list; the caller passes the
+    half only it knows (whether the type it just parsed can hold a default at
+    all) and the refusal is asked once.
+
+    MEASURED 2026-09-06, and the three unguarded parsers were not a cosmetic
+    gap: `TC.M(const a: array of string = 'x')` declared in a CLASS BODY and
+    implemented without the default compiled clean, printed High(a) =
+    1073741823, and the next call segfaulted. fpc refuses at the `=`. The
+    implementation header goes through ParseSubroutine, so it refused -- which
+    is why the shape survived: writing the default in BOTH places is caught and
+    writing it in the declaration alone is not. An INTERFACE method has no
+    implementation header at all and was never asked.
+
+    IT ALSO HAD TO MOVE BEFORE THE SHAPE CHECKS BELOW, not merely into a shared
+    home: `array of string = ['x']` was already refused, but as `a string
+    parameter's default must be a string literal` -- an open-array parameter
+    records its ELEMENT kind in paramTk, so the stringy check saw a string
+    parameter and asked for the literal that the array check would then have
+    rejected. A refusal that tells you to write the thing it is about to refuse
+    is a wrong diagnostic, not a differing one.
+
+    `paramTakesNoDefault` is the CALLER's question because only the caller can
+    tell an open array from a named DYNAMIC array type: `TArr = array of
+    Integer; a: TArr = nil` is a handle, nil is meaningful, and fpc compiles it.
+    ParseSubroutine's `isArr` is true for all three of open / named-fixed /
+    named-dynamic, so it asks `isArr and (paramDynDepth <= 0)`; the three method
+    parsers set their flag only on the literal `array of` spelling, so for them
+    the flag alone is the answer.
+    bug-p-a-default-value-is-accepted-on-an-open-array-parameter }
+  if paramTakesNoDefault then
+    Error('a parameter of an open-array or fixed-array type cannot have a '
+          + 'default value: there is no array literal to write there, so '
+          + 'the value would be a scalar whose bytes the callee reads as a '
+          + 'length header. A named DYNAMIC array type takes a default '
+          + '(`a: TArr = nil`) because it is a handle '
+          + '(bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-'
+          + 'times-and-guarded-nowhere)');
+
   if CurTok.Kind = tkString then
   begin
     soff := Tokens[TokPos-1].SOffset;
@@ -4662,7 +4706,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(curTk, Ord(LastTypePointerElemTk), rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
+        ParseParamDefaultValue(curTk, Ord(LastTypePointerElemTk), rmIsArr, rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
                                rmDefSOff, rmDefSLen);
         for k := startIdx to nP - 1 do
         begin
@@ -6751,7 +6795,7 @@ begin
               if CurTok.Kind = tkEq then
               begin
                 Next;
-                ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                        mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                 mHasDefault := True;
               end;
@@ -7438,7 +7482,7 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                    ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                            mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                     mHasDefault := True;
                   end;

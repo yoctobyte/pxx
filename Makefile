@@ -10271,6 +10271,48 @@ test-core: $(COMPILER)
 	  || { echo "imt-arity: the RESOLUTION CLAUSE spelling compiled where the plain one refused -- the two paths have diverged"; exit 1; }
 	grep -q 'no matching implementation for interface method "M" found (the class method is "MyM")' $(TESTTMP)/imtarity_clause.log \
 	  || { echo "imt-arity: the clause refusal must name the INTERFACE method and then the class method:"; cat $(TESTTMP)/imtarity_clause.log; exit 1; }
+	@# bug-p-a-default-value-is-accepted-on-an-open-array-parameter -- FOUR
+	@# PARAMETER PARSERS, ONE REFUSAL. A default on an open-array parameter cannot
+	@# mean anything: there is no array-literal syntax for it, so the value parsed
+	@# is a scalar and the callee reads its length header out of those bytes. The
+	@# guard existed since 2026-09-01 and lived in ParseSubroutine, i.e. it covered
+	@# the FREE-ROUTINE list and the implementation header of a method -- so
+	@# writing the default in both places was caught and writing it in the class
+	@# body alone was not. That spelling compiled, printed High(a) = 1073741823 and
+	@# segfaulted. An interface method has no implementation header at all.
+	@# The refusal now lives in ParseParamDefaultValue, which all four call, and
+	@# therefore also runs AHEAD of the shape checks -- which is the free-routine
+	@# row below: `array of string = ['x']` used to be refused as `a string
+	@# parameter's default must be a string literal`, a diagnostic naming the rule
+	@# it was not breaking and demanding the literal it was about to reject.
+	@# the ARRAY reason, not the string one -- this row IS the ordering claim
+	! ./$(COMPILER) test/test_an_open_array_parameter_takes_no_default_in_a_free_routine_fail.pas $(TESTTMP)/test_oadef_freeroutine26 > $(TESTTMP)/oadef_freeroutine.log 2>&1 \
+	  || { echo "open-array-default: free routine COMPILED"; exit 1; }
+	grep -q 'a parameter of an open-array or fixed-array type cannot have a default value' $(TESTTMP)/oadef_freeroutine.log \
+	  || { echo "open-array-default: refused, but not by the open-array rule:"; cat $(TESTTMP)/oadef_freeroutine.log; exit 1; }
+	@# declared in a class body, implemented without it: compiled, High=1073741823, segfaulted
+	! ./$(COMPILER) test/test_an_open_array_parameter_takes_no_default_in_a_class_method_fail.pas $(TESTTMP)/test_oadef_aclassmethod26 > $(TESTTMP)/oadef_aclassmethod.log 2>&1 \
+	  || { echo "open-array-default: a class method COMPILED"; exit 1; }
+	grep -q 'a parameter of an open-array or fixed-array type cannot have a default value' $(TESTTMP)/oadef_aclassmethod.log \
+	  || { echo "open-array-default: refused, but not by the open-array rule:"; cat $(TESTTMP)/oadef_aclassmethod.log; exit 1; }
+	@# the third parser
+	! ./$(COMPILER) test/test_an_open_array_parameter_takes_no_default_in_a_record_method_fail.pas $(TESTTMP)/test_oadef_arecordmethod26 > $(TESTTMP)/oadef_arecordmethod.log 2>&1 \
+	  || { echo "open-array-default: a record method COMPILED"; exit 1; }
+	grep -q 'a parameter of an open-array or fixed-array type cannot have a default value' $(TESTTMP)/oadef_arecordmethod.log \
+	  || { echo "open-array-default: refused, but not by the open-array rule:"; cat $(TESTTMP)/oadef_arecordmethod.log; exit 1; }
+	@# the fourth, and the only one with no implementation header to fall back on
+	! ./$(COMPILER) test/test_an_open_array_parameter_takes_no_default_in_an_interface_method_fail.pas $(TESTTMP)/test_oadef_aninterfacemethod26 > $(TESTTMP)/oadef_aninterfacemethod.log 2>&1 \
+	  || { echo "open-array-default: an interface method COMPILED"; exit 1; }
+	grep -q 'a parameter of an open-array or fixed-array type cannot have a default value' $(TESTTMP)/oadef_aninterfacemethod.log \
+	  || { echo "open-array-default: refused, but not by the open-array rule:"; cat $(TESTTMP)/oadef_aninterfacemethod.log; exit 1; }
+	@# ...and the POSITIVE CONTROL for the refusal, drawn from the population it
+	@# is about: a named DYNAMIC array is a handle, `nil` is meaningful for it, and
+	@# fpc compiles it. The first version of the free-routine guard asked `isArr`
+	@# alone and rejected exactly this -- isArr is true for open / named-fixed /
+	@# named-dynamic alike. All four parsers are represented, because a flag passed
+	@# wrongly at one call site would reject only there.
+	./$(COMPILER) test/test_a_named_dynamic_array_parameter_still_takes_nil_as_a_default.pas $(TESTTMP)/test_dynarraydefault26
+	tools/expect_same.sh test_dynarraydefault26 "$$($(TESTTMP)/test_dynarraydefault26 | tail -n 2)" "$$(printf 'fails=0\nDYNARRAYDEFAULT OK')"
 	@# bug-p-a-class-constructor-is-accepted-and-never-runs -- THE WARNING, which
 	@# is an INTERIM and not the fix. `class constructor` is not in the class
 	@# body's hand-maintained `class X` list, so it falls to the member-loop
