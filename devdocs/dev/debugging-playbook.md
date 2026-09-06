@@ -17819,3 +17819,56 @@ above wrote correctly — **two spellings of one construct, one silently wrong**
 caught only because the test carried both. The sibling-spelling rule paying for
 itself *inside* the fix rather than after it, and another entry in the family
 where an absence has more than one cause and the code branches as if it had one.
+
+## RUNNING ONE `test-core` ROW IS CHEAP, AND THE WHOLE FLEET BELIEVED IT WAS NOT
+
+```
+tools/testmgr.py --tier native --job src:test/<file>.pas
+```
+
+**A wildcard-free `--job` is allowed at ANY tier** — that is the documented
+aperture, not a loophole. `.claude/hooks/no-full-suite.sh` says so in its own
+comments (*"A TIER NAME IS NOT A DURATION, and `--job` is where the two come
+apart"*), and the aperture is wildcard-free **on purpose**: `--job '*'` is the
+full sweep with an exemption attached, `--job 'test-core#*'` is a whole target,
+and only a value with no `*` gets through.
+
+**The cost, measured here 2026-09-06 — and the headline figure is the one number
+that will mislead you:**
+
+| run | testmgr's own report | wall clock |
+| --- | --- | --- |
+| the case itself | `0.5s` | — |
+| first invocation after `compiler/**` moved | `1.0s wall` | **1m26s** |
+| every invocation after that | `1.0s wall` | **6.4s** |
+
+**testmgr's `wall` line times the CASE, not the invocation.** The first run pays
+for the compiler snapshot at the current sha; after that it is ~6 seconds, which
+is the number to plan around. A seat told "0.5s" who sees 86 seconds concludes
+the recipe is wrong and goes back to not running the row at all.
+
+**Why this is in the playbook rather than only in a ticket** (frankB, who found
+it and landed the recipe at `95dd46ce8`): the belief that no cheap path existed
+was built out of **two true facts with a gap between them** — `gate.sh quick`
+genuinely does not run `test-core`, and `make test*` is genuinely denied. Two
+true facts standing next to each other read as an argument, so the conclusion
+felt DERIVED rather than assumed and was never checked. It cost a shipped
+regression: `d51037cf2`, whose reproducer already existed as
+`test_a_named_dynamic_array_parameter_still_takes_nil_as_a_default.pas` with all
+four parsers represented. **It was not unreachable, it was unrun.**
+
+> **A GUARD THAT EXPLAINS ITS OWN EXCEPTION STILL GETS READ AS A GUARD, BECAUSE
+> YOU STOP AT THE WORD REFUSED.** frankB's framing, and it is the transferable
+> half. That refusal paragraph does two jobs — declining the wide run AND naming
+> the narrow one — and the first is loud enough to end the read. Compare the
+> shadow-verdict finding: *a verdict nobody may act on gets read as authority
+> anyway, so the fix is the wording, not the reader.* This is the mirror image —
+> an exception nobody notices — and its fix would be **placement**, not wording:
+> a door should not sit in the last third of a paragraph that opens with
+> REFUSED. **The hook is the owner's file and nobody else edits it**, so the
+> remedy available to the rest of us is this section: put the recipe where
+> people look for a recipe, not only where the refusal is.
+
+**Use it as a habit, not a rescue:** run the affected rows by literal path before
+any commit that touches a parser, which is what a per-fix loop that cannot see
+`test-core` otherwise leaves to Track T's ~8-commit sampling window.
