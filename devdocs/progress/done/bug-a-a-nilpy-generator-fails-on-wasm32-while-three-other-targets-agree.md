@@ -123,7 +123,7 @@ differs is how a NilPy parameter is REPRESENTED.
 `bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate` looks
 like the same bug and is not. `WasmEmitManagedLocals` genuinely does not consult
 `SymSkipScopeExitRelease` (zero occurrences), and its own comment in
-`ir_codegen.inc:13757` says that path is UNCHECKED — so it reads like a
+`ir_codegen.inc` (the UNCHECKED note, at 13969 as of 2026-09-06; this ticket said 13757 and that line is `AstDumpTree` today) says that path is UNCHECKED — so it reads like a
 confirmed cause. I added the guard, exactly as the other six arms have it:
 
 ```pascal
@@ -299,3 +299,35 @@ agrees on both targets.
 
 ## Log
 - 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8089fe128.
+
+
+## 2026-09-06 — BOTH EXPLANATIONS OF THE REGRESSION ARE DEAD, and the residual is open
+
+Recorded because a relay was about to hand `bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate`
+to another session with this written off as understood. It is not.
+
+Two candidate explanations for why adding the guard regressed
+`def g(): yield 1; yield 2` from `1,2` to `1`:
+
+1. **WRONG PREDICATE** — that the patch used `SymSkipScopeExitRelease` where
+   the stackless skip is `StacklessPersistentSlotSym`. **DEAD.**
+   `symtab.inc:13950` is `SymSkipScopeExitRelease := StacklessPersistentSlotSym(i) or ...`
+   — the first CONSULTS the second, as reason (1) of two. Reason (2) is the
+   NilPy `except C as e` binder during unwind-pad emission (`4edf60ff9`). The
+   two are merged into one predicate deliberately. This was my error, caught by
+   frank-coordinator.
+2. **BLANKET vs PER SYMBOL** — that the patch skipped the whole loop where the
+   register arms test per symbol, which is the failure `f891bbe8e` fixed on
+   those arms (a blanket exit also discards the step function's hidden temps,
+   which are not live state and DO need releasing). **DEAD.** The diff recorded
+   above is per symbol: `for i := ... do if (not SymSkipScopeExitRelease(i)) and ...`,
+   the same shape the other six arms use.
+
+**So: the CORRECT predicate, applied at the CORRECT granularity, in the same
+shape as the six arms that are right — and two passing rows regressed.** That
+is the finding. Whatever `WasmEmitManagedLocals` is doing for a generator on
+wasm32, the no-parameter cases currently DEPEND on the release it performs, and
+neither of the two obvious models explains why.
+
+Positive control for whoever takes it, verified at `cc18bc028` on both targets
+rather than measured once: `def g(): yield 1; yield 2` must print `1 2`.
