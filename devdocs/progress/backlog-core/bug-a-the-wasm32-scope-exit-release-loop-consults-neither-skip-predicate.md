@@ -1,10 +1,10 @@
 ---
 track: A
-prio: 30
+prio: 70
 type: bug
 blocked-by: []
 status: backlog
-summary: "wasm32's WasmEmitManagedLocals is the SEVENTH copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease -- so the `except V as e` binder skip that fixes a use-after-free on the other six is absent there. TWO PREMISES OF THIS TICKET ARE NOW STALE and are corrected below: (1) it is REACHABLE -- a .npy program compiles AND RUNS on wasm32 today, measured 2026-09-06 under wasmtime; (2) `this is one gap and not two` was wrong -- the same loop also had NO tyClass arm at all, an unconditional object-local leak, fixed in d58828d8c and guarded by test/wasm/check_nilpy_objlocal.sh. The skip-predicate half remains open and the naive patch for it is KNOWN to regress two generator rows for a reason nobody has explained."
+summary: "SILENT WRONG VALUE on wasm32, measured 2026-09-06 and no longer just an inconsistency. WasmEmitManagedLocals is the seventh copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease, so a managed local a generator holds ACROSS A YIELD is released at the yield and the generator resumes holding garbage: a six-line NilPy program prints 4 5 on x86-64 and 4 2 on wasm32, and the predicate patch makes it 4 5. Does not crash, does not warn, prints a plausible number. DO NOT LAND THE OBVIOUS PATCH BLIND -- frankwasm measured a regression with the same change (unreproducible in four shapes here), so the open question is what breaks when the loop is made consistent and whether that is a second bug this one was masking. The `yield 1; yield 2` control in circulation is INERT for this: byte-identical module, correct output either way."
 ---
 
 # wasm32's release loop consults neither skip predicate
