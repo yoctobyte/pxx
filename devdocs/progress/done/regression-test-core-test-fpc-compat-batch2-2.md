@@ -182,4 +182,4 @@ a program-declared class as type argument named by a cast (`fgl.pp:892`
 reproduce with the fix disabled.
 
 Re-laned P, which the auto-file's own fallback note asked for.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 35ce57f47.
