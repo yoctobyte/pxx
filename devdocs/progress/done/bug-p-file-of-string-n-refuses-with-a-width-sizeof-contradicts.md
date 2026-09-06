@@ -3,7 +3,7 @@ slug: bug-p-file-of-string-n-refuses-with-a-width-sizeof-contradicts
 track: P
 type: bug
 prio: 40
-status: working
+status: done
 found: 2026-09-05
 found-by: frankD
 owner: frankB
@@ -142,3 +142,6 @@ is not moved). `pasparser_stmt.inc`, `FileIOArgSize`.
   refused — and now says 256 rather than 264, so the same wrong field had been
   making the diagnostic wrong as well as the decision.
 - `make compiler/pascal26`: `converged after 1 round(s)`.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
