@@ -266,3 +266,48 @@ can be verified from a seat that cannot run the daemon:
 lands.** That is the intended direction (a known unknown over a confident wrong
 answer, the same rule the INFRA/INVALID branch above already applies), but it is
 a live behaviour change and not a silent one.
+
+## The premise is measured now, not reasoned — nine pins, unanimous
+
+frankH's challenge on landing the refusal was right: *"verify that
+`clone.checkout(<pinned tree>)` really does bring back v(N-1) — your reasoning
+is sound, and it is also exactly the kind of premise that turns out to be right
+for a different reason or wrong in one case."* Measured directly out of git,
+`git show <tree>:stable_linux_amd64/default/VERSION` for every pin from v399:
+
+| pin | pinned tree | VERSION at that tree |
+| --- | --- | --- |
+| v399 | `86c71828cd1e` | 398 |
+| v400 | `67ae9a62d567` | 399 |
+| v401 | `07d196aa45ea` | 400 |
+| v402 | `2a216b280f33` | 401 |
+| v403 | `214500da237a` | 402 |
+| v404 | `5b5fdb0b32d3` | 403 |
+| v405 | `36eb642d6240` | 404 |
+| v406 | `1b903c1ddaf2` | 405 |
+| v407 | `04559b9d6c5a` | 406 |
+
+**Nine of nine, exactly N-1.** The mechanism is structural and there is no case
+where it happens not to bite. So the refusal now in place will fire on every
+pin verify until the artefacts are corrected, which is the intended behaviour
+and is why it was landed as a loud refusal rather than a silent skip.
+
+## The blocker on option 1 is removable (frankH), and option 2 should not be taken
+
+frankH's answer to the worktree hazard: the dirt is *ours* and *known* — the
+verify put exactly `stable_linux_amd64/**` there — so clean it explicitly at the
+end of the verify rather than making `clone_head_back` tolerant:
+
+```
+git checkout HEAD -- stable_linux_amd64
+```
+
+`HEAD --`, not `--`: the latter restores from the INDEX and would re-apply
+staged content. Keeping `clone_head_back` strict matters, because a forceful
+one would discard state from *any* cause, and the whole reason option 1 was
+parked is that wedging the instrument beats a wrong verdict.
+
+And option 2 is now argued down rather than merely ranked second: re-keying the
+archive row to the pin COMMIT breaks `trackt.read_pin_log`'s join on the tree,
+which is a query that stays correct-looking, exhaustive and false — one word to
+write and a wrong answer nobody sees. **Option 1 is the route.**

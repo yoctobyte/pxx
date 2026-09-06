@@ -47,6 +47,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import twatch                                            # noqa: E402
+
 WATCHED = "tools/twatch.py"
 
 
@@ -64,6 +67,35 @@ def fp_at(repo, commit):
     if r.returncode != 0:
         return None
     return hashlib.sha256(r.stdout).hexdigest()[:12]
+
+
+def archive_dir(repo, override):
+    """Where to read runs-<host>.ndjson from, and a label saying which.
+
+    THE WORKTREE IS A POINT-IN-TIME SNAPSHOT AND THIS TOOL IS MOST USEFUL IN THE
+    ONE CHECKOUT WHERE THAT BITES. The watcher clone spends its life detached at
+    whatever sha it is testing, so `devdocs/progress/tstate/runs-seven.ndjson`
+    on disk there is that sha's archive -- and a stale archive yields a stale
+    code_fp, which this tool would then resolve confidently to the wrong commit
+    and report as CURRENT. That is the failure this whole tool exists to catch,
+    reproduced one level up in the tool itself.
+
+    So the default reads the tstate subtree out of the git REF via
+    twatch.materialize_tstate(), the shared helper whose docstring records four
+    bugs in one day from reading the worktree -- the fourth reproducing the
+    second hours after it was fixed. Knowing the rule was not enough for them
+    and it was not enough for me: the first version of this file read by path.
+
+    Falls back to the worktree only when the ref carries no tstate (a fresh
+    clone, a repo without the remote), deliberately and out loud, so a fallback
+    is never mistaken for the normal path.
+    """
+    if override:
+        return os.path.abspath(override), "explicit --archive"
+    d = twatch.materialize_tstate(repo)
+    if d:
+        return d, "git ref %s" % twatch.origin_ref()
+    return repo, "WORKTREE FALLBACK (the ref carries no tstate)"
 
 
 def running_fp(archive, host):
@@ -101,14 +133,14 @@ def main():
     ap.add_argument("--repo", default=".",
                     help="git checkout whose twatch.py history is searched")
     ap.add_argument("--archive", default=None,
-                    help="checkout holding devdocs/progress/tstate (default: --repo). "
-                         "Separate from --repo so the published archive and the "
-                         "history it is resolved against can be different trees.")
+                    help="read the archive from this directory instead of from "
+                         "the git ref. For tests and for offline inspection; "
+                         "the default goes through materialize_tstate() because "
+                         "a worktree is a point-in-time snapshot.")
     ap.add_argument("--limit", type=int, default=60,
                     help="how far back through twatch.py's history to look")
     a = ap.parse_args()
     repo = os.path.abspath(a.repo)
-    archive = os.path.abspath(a.archive) if a.archive else repo
 
     # A git question asked of a non-git directory answers with git's own
     # discovery error, which reads like a tool failure rather than a usage one.
@@ -118,12 +150,13 @@ def main():
               "--archive if the published rows live elsewhere)." % repo)
         return 2
 
+    archive, how = archive_dir(repo, a.archive)
     fp, when, err = running_fp(archive, a.host)
     if err:
         print("twatch-live: %s" % err)
         return 2
-    print("twatch-live: host %s publishes code_fp %s (newest row %s)"
-          % (a.host, fp, when))
+    print("twatch-live: host %s publishes code_fp %s (newest row %s, read from %s)"
+          % (a.host, fp, when, how))
 
     hist = sh(["git", "log", "--format=%H %h %ci %s", "-%d" % a.limit,
                "--", WATCHED], repo).splitlines()

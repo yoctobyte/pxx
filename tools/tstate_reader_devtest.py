@@ -101,6 +101,22 @@ ALLOWED = {
         "the query is tested against. It never opens the repo's own tstate — "
         "which matters here more than usual, since the whole subject of the "
         "test is a query returning the wrong answer from the right file",
+    # NOT a fixture case, and the distinction is the point: this one reads the
+    # REAL archive, for another BOX, and is allowed because it goes through
+    # materialize_tstate() first and joins onto the directory THAT creates.
+    # Its first version joined onto the worktree and this guard caught it --
+    # which matters, because the tool's whole job is to notice a stale image,
+    # and the watcher clone (where it is most useful) lives detached at the sha
+    # under test. Reading the worktree there yields that sha's archive, a stale
+    # code_fp, and a confident resolution to the wrong commit reported as
+    # CURRENT: the exact failure the tool exists to catch, one level up in the
+    # tool itself. The --archive override joins onto a caller-supplied dir and
+    # is for tests and offline inspection.
+    "twatch_live_code.py":
+        "joins TSTATE_REL onto the directory materialize_tstate() just "
+        "created, or onto an explicit --archive override — never onto the "
+        "worktree, which it deliberately falls back to only when the ref "
+        "carries no tstate, and says so when it does",
     "devtest_pin_shadow.py":
         "joins TSTATE_REL onto the throwaway root it makes at line 46",
     "devtest_pin_verify.py":
