@@ -271,4 +271,4 @@ pairs and is indistinguishable here from a clean one. A duplicate in one of thos
 would now be a hard error the first time something imports it.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7b2b6e31b.
