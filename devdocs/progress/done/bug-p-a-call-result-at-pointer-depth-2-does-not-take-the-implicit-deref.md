@@ -2,10 +2,10 @@
 track: P
 prio: 45
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frankD
-summary: "`GetPP^.a` where `GetPP: PPRec` and `PPRec = ^PRec = ^^TRec` is now REFUSED (`this value is still a POINTER here -- it needs another ^`) on a program fpc 3.2.2 compiles and runs, printing 11 and 22. That refusal arrived with frankB's f9476d579, which is right about the two-short chain and wrong about this one-short chain, and it fires HERE and nowhere else because this is the one opener where the depth is lost -- so the refusal and this bug are one defect seen from two sides. The field chain used to print 4306192 / 0 instead; the METHOD and PROPERTY chains (`GetPP^.GetA`, `GetPP^.PA`) still do. Controls, all measured at 85c81be85 / faa41e4b920f: `GetPP^^.a` written out in full is CORRECT; the pointer-VARIABLE twins `pp^.a` and `ppp^^.a` still print 11, so the refusal is opener-specific; and the two-short `GetPPP^.a` is refused by pxx AND by fpc (Illegal qualifier), which is frankB's arm doing its job. WHERE the depth is lost is NOT established: PXXDBG a.symptr shows the Result symbol carrying `depth=2 baseRec=23`, and seeding recId from ProcRetPtrBaseRec in the dot arm changed nothing -- but that probe cannot discriminate, because if the depth IS recorded then recId was already correct and the probe is a no-op. Pre-existing: the wrong VALUE is identical on pin v404; the refusal is not, it is new."
+summary: "RESOLVED 2026-09-06. The census's last red cell, and the cause was in the arm I wrote for the PREVIOUS two: ResolveNodeRec walks a deref chain to whatever it bottoms out on and gates on the DECLARED depth, and it enumerated exactly two node kinds -- AN_IDENT (SymPtrDepth/SymPtrBaseRec) and AN_PTR_CAST (AliasPtrDepth/AliasPtrBaseRec). A call result bottoms out on AN_CALL, matched neither, so ResolveNodeRec answered REC_NONE and the shared walker's implicit-deref arm declined a well-formed chain. Fixed by the third row of that table, ProcRetPtrDepth/ProcRetPtrBaseRec, indexed by the proc index AN_CALL carries in IVal. THE SYMPTOM HAD MOVED BEFORE I GOT HERE and the ticket now says so: frankB's f9476d579 turned the old silent 4306192/0 into a FALSE REFUSAL (`this value is still a POINTER here`) on a program fpc 3.2.2 compiles and runs -- right about the two-short chain, wrong about this one-short one, and it fired only on this opener because this is the one where the depth was lost. The METHOD and PROPERTY chains were also repaired, which a fields-only fix would not have done: it passes the field row and still calls the method with a pointer as Self while every number prints correctly. Verified against the fpc 3.2.2 oracle byte for byte at binary 6cd631730cf4; the depth-3 ladder AGREES with fpc on all three rungs (3 carets and 2 carets resolve, 1 caret refuses), so the gate discriminates rather than merely refusing. Two tests wired: test_a_call_result_takes_the_implicit_deref_at_pointer_depth_2 (8 rows, field/method/property/late-field/depth-3) and test_a_half_dereferenced_call_result_is_refused -- the third builder's must-refuse half, without which the positive file passes just as well with the gate widened to `> 0`."
 ---
 
 # The last red cell of the opener × chain census
@@ -97,3 +97,34 @@ property member kinds, where no refusal arm stands in front of them.
 Whoever takes this inherits frankB's control as a required row: after the fix,
 `GetPPP^.a` must still refuse. It does today, and it must not become a number.
 
+
+## 2026-09-06 (frankD) — resolved: the third opener
+
+The two branches I wrote for the previous two tickets were a hand-maintained
+enumeration, and its own comment said "the chain can bottom out on a CAST as
+well as a variable" as though that closed the set.
+
+    variable  AN_IDENT     SymPtrDepth      SymPtrBaseRec
+    cast      AN_PTR_CAST  AliasPtrDepth    AliasPtrBaseRec
+    call      AN_CALL      ProcRetPtrDepth  ProcRetPtrBaseRec   <- was missing
+
+Three tables spelling one distinction, and in all three the ULTIMATE base is
+correct and the IMMEDIATE pointee silently does nothing. That is the third time
+this exact wrong-half choice has been available in this function.
+
+**What the ticket asked for is NOT what settled it.** It proposed a new `PXXDBG`
+topic for `ProcRet*[procIdx]` at the call site, on the grounds that
+`a.symptr` answers about SYMBOLS. That instrument was never built and was not
+needed: the question was not whether the proc table carries the depth (it does)
+but which node kinds `ResolveNodeRec` enumerates, which is a reading of three
+branches. The earlier probe that "changed nothing" — seeding `recId` from
+`ProcRetPtrBaseRec` in the dot arm — was correctly withdrawn as
+non-discriminating, and it was also aimed one layer too high: by then the arm
+had already declined.
+
+**The refusal and the wrong value were one defect seen from two sides**, which
+is why the ticket's own "pre-existing: identical on pin v404" was true of the
+VALUE and false of the REFUSAL.
+
+## Log
+- 2026-09-06 — resolved; the third row of the depth table.

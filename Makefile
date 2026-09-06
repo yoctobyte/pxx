@@ -6777,6 +6777,26 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_a_half_dereferenced_chain_is_refused_cast.pas $(TESTTMP)/test_halfderefcast26 2>&1 \
 	  | grep -q 'this value is still a POINTER here' \
 	  || { echo 'test_a_half_dereferenced_chain_is_refused_cast: FAIL - the CAST spelling of a short chain compiled; the two spellings reach different builders'; exit 1; }
+	@# ...AND THE THIRD OPENER, which is a call RESULT. ResolveNodeRec walks a
+	@# deref chain to whatever it bottoms out on and gates on the DECLARED depth;
+	@# it enumerated AN_IDENT and AN_PTR_CAST, and a call bottoms out on AN_CALL,
+	@# so it answered REC_NONE and the implicit-deref arm declined. That turned
+	@# into a FALSE REFUSAL once the half-dereferenced guard above landed -- pxx
+	@# rejecting a program fpc 3.2.2 compiles and runs, which is worse than the
+	@# wrong value it replaced because the wrong value was at least a bug report.
+	@# Rows D and E are a METHOD and a PROPERTY: a fields-only fix passes C and
+	@# still calls the method with a pointer as Self while every number prints.
+	./$(COMPILER) test/test_a_call_result_takes_the_implicit_deref_at_pointer_depth_2.pas $(TESTTMP)/test_callresderef26
+	@$(TESTTMP)/test_callresderef26 | diff -u test/test_a_call_result_takes_the_implicit_deref_at_pointer_depth_2.expected - \
+	  || { echo 'test_a_call_result_takes_the_implicit_deref_at_pointer_depth_2: FAIL - a . on a pointer-valued call result lost (or doubled) its implicit dereference'; exit 1; }
+	@# ...and its must-refuse half, the THIRD builder's copy of the same gate.
+	@# Two dereferences short: fpc 3.2.2 says `Illegal qualifier`. Without this
+	@# row the positive file above passes just as well when the depth gate has
+	@# been widened to `> 0`, which resolves a half-dereferenced chain to the
+	@# ultimate record and answers a plausible wrong number in silence.
+	@./$(COMPILER) test/test_a_half_dereferenced_call_result_is_refused.pas $(TESTTMP)/test_halfderefcall26 2>&1 \
+	  | grep -q 'this value is still a POINTER here' \
+	  || { echo 'test_a_half_dereferenced_call_result_is_refused: FAIL - a two-short chain through a call result compiled, or refused for another reason'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

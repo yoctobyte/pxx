@@ -16261,6 +16261,43 @@ begin
           paired with the ULTIMATE record: they are only the same field when
           depth = 1. }
         Result := SymPtrBaseRec[Integer(ASTIVal[innerNode])]
+      else if (ASTKind[innerNode] = AN_CALL) and
+         (Integer(ASTIVal[innerNode]) >= 0) and
+         (Integer(ASTIVal[innerNode]) < ProcCount) and
+         (ProcRetPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
+        { ...AND A CALL RESULT IS THE THIRD OPENER, which is the whole lesson of
+          this arm rather than an afterthought to it. The two branches above are
+          a hand-maintained enumeration -- variable, cast -- and the comment on
+          the cast branch says "the chain can bottom out on a CAST as well as a
+          variable" as though that closed the set. It did not: `GetPP^.a`, where
+          GetPP returns a PPRec, bottoms out on AN_CALL and matched neither, so
+          ResolveNodeRec answered REC_NONE and the shared walker's implicit-deref
+          arm declined a chain that was perfectly well-formed. fpc 3.2.2 prints
+          11; we REFUSED it ("this value is still a POINTER here"), which is a
+          false refusal on a program that compiles -- worse than the wrong value
+          it replaced, because the wrong value was at least a bug report.
+
+          The proc table is the third spelling of the same two facts the other
+          two branches read under their own names, and it is indexed by the
+          proc index the call node carries in IVal (AN_CALL = 8, defs.inc:490):
+
+            variable  SymPtrDepth      SymPtrBaseRec
+            cast      AliasPtrDepth    AliasPtrBaseRec
+            call      ProcRetPtrDepth  ProcRetPtrBaseRec
+
+          ULTIMATE base again, not ProcRetPtrElemRec -- the immediate pointee,
+          which is REC_NONE for a pointer-to-pointer for the same reason the
+          other two branches say so. Three tables, one distinction, and the
+          wrong half of it silently does nothing in all three.
+
+          An enumerated predicate makes the arms you HAVE visible and says
+          nothing about the ranges nobody has tested, so state the closure
+          rather than the list: these are the three node kinds a pointer chain
+          can bottom out on that carry a DECLARED depth. A fourth opener wants a
+          fourth row in that table, and if one appears the fix is to give the
+          three tables one accessor rather than to add a fifth branch here.
+          bug-p-a-call-result-at-pointer-depth-2-does-not-take-the-implicit-deref }
+        Result := ProcRetPtrBaseRec[Integer(ASTIVal[innerNode])]
       else
         Result := REC_NONE;
     end
