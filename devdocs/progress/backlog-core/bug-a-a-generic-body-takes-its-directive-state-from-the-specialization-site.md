@@ -61,6 +61,26 @@ tokens keep their template index (the state is about the source POSITION, which
 survives substitution); only genuinely synthesized tokens take -1 and fall back
 to `ShiftTokParallel`'s lexical answer, which is correct for them.
 
+### Sequencing, and a trap that decides it (frankH, relayed 2026-09-06)
+
+`MAX_TEMPLATE_TOKENS` is the *small* end of the conversion problem, not the
+`MAX_IR` end: six arrays in two parallel trios, two cap sites, ten refs of which
+eight are declarations. So converting it is one `Ensure` growing six arrays —
+**and these ten columns then become ten `SetLength`s inside it rather than ten
+more fixed tables to keep in lockstep by discipline.** Land this AFTER that
+conversion, not before.
+
+**The trap, and it is why "after" is not merely tidier:** the `Specialize` trio
+has NO cap site of its own. It is bounded *implicitly* through the Template
+pool's — `SpecializeToBuffer` runs `while i < count` with `subCount` advancing at
+most once per iteration, so `subCount <= count <= MAX_TEMPLATE_TOKENS` with no
+guard anywhere. Converting the Template trio ALONE therefore silently un-bounds
+the Specialize trio: `count` can exceed 65536, six arrays get written at
+`subCount`, nothing fails, and the symptom surfaces somewhere else entirely.
+All six move together, with an explicit Spec guard added in the same change.
+Anyone adding columns here inherits that constraint. See
+[[feature-dynamic-compiler-tables]].
+
 Ten new columns, and that is the reason this is ranked rather than landed:
 `MAX_TEMPLATE_TOKENS` pools are still fixed `array[0..N-1]` tables, and
 [[feature-dynamic-compiler-tables]] (frankH) is actively removing fixed tables
