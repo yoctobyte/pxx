@@ -11991,3 +11991,110 @@ IN`): **the restore is a build step, not an editing step.** Print `sha256sum
 compiler/pascal26` after every restore, exactly as you would after every revert — the
 binary sha moving is the only thing that distinguishes "restored" from "restored and
 rebuilt".
+
+## A FALSE PREMISE IN A TICKET DOES NOT MERELY MISINFORM — IT AIMS YOU AT THE WRONG FUNCTION, AND EVERYTHING YOU READ THERE CONFIRMS YOU ARE IN THE RIGHT PLACE
+
+Measured 2026-09-06 (frankB), closing the type-alias identity group. The ticket said a
+`var` parameter of the base type accepts a distinct value *"which FPC refuses"*.
+
+**FPC does not refuse it.** Measured three ways, all single-candidate: `V(var v: byte)`
+given a `TMyB` prints 6; `V(var v: TMyB)` given a `byte` prints 1; the by-value form
+prints 3. **fpc compiles and runs every one.** So distinctness is an overload
+**PREFERENCE**, not a compatibility rule.
+
+Following the ticket put the first implementation in `MatchArgRecMismatch` **as a hard
+refusal**, where it **refused all three**. *Rejecting working code is strictly worse than
+the bug it fixes.* The correct site is `MatchParamExact`, **whose own header already
+states the rule for the identical mistake one type family over**: *"Blocking it outright
+would refuse working code; ranking it below exact is the rule."*
+
+> **The precedent was in the file, four lines from where the typing was happening, and the
+> ticket's sentence is what stopped it being read.**
+
+That is the cost that makes this its own section rather than an instance of "check the
+premise". A false premise **routes** you, and a wrong function is not a neutral place to
+stand: everything in it is real, coherent and relevant to *something*, so it reads as
+confirmation. **The tell is never inside the function you were aimed at.** Before
+implementing from a ticket's stated rule, spend one probe measuring the rule itself — here
+three `fpc` runs of ten lines each, which is cheaper than the implementation they would
+have prevented.
+
+The repair discipline matters too: the ticket's own false sentence was **rewritten in
+place**, not merely appended to. *A reader who stops at the repro must not be aimed wrong*
+— and appending a correction below is exactly the shape a reader who stops early never
+sees. See `## A SLUG IS FROZEN AT FILING AND THE TICKET KEEPS BEING WORKED`.
+
+### The same night, the same session, the arrow reversed
+
+A survey written 2026-09-05 concluded that carrying the argument's identity needed *a
+signature change or a new AST channel*, because `MatchParamCompatible` takes a bare
+`TTypeKind`. **True about the signature and false as a conclusion:**
+`FillMatchArgChannelsAt` already existed, takes the NODE, and fills seven channels for
+precisely that reason — **and had been extracted the same day the survey was written.**
+
+Pair it with `## ASK WHICH REGISTRAR RAN, NOT WHICH COLUMNS LOOK LIKE THEY WOULD HOLD THE
+ANSWER`: there, the columns were inspected and not which registrar ran; here, the parameter
+list was inspected and not whether a channel existed beside it. **Both times the artefact
+inspected was real and answered a question that had not been asked.** A signature is
+evidence about one function's interface and none at all about what the caller already
+computed.
+
+## A WIDER NEGATIVE TEST IS NOT A WIDER FIX — IT IS A WIDER BLAST RADIUS WEARING THE SAME GREEN
+
+The obvious spelling of a cast-lowering guard is **"if the operand is not already a string,
+reinterpret"**. Written that way it passes **every** pointer row — the whole population the
+ticket was about — and **silently breaks `Pos(tbtstring(' '), s)`**: a one-character
+literal arrives tagged `tyChar`, "not a string" sweeps it into the reinterpret, and `Pos`
+answers nothing. **A char operand is a CONVERSION, not a reinterpretation.**
+
+The boundary table in the ticket had measured **exactly one** failing operand kind, so the
+test is `= tyPointer`. The negative form (`<> tyString`) and the positive form
+(`= tyPointer`) are identical on every row anyone would think to run, and differ only on
+the rows nobody enumerated — which is the definition of a guard whose blast radius exceeds
+its evidence.
+
+> **Prefer the POSITIVE form of a guard: name the case you measured, not the complement of
+> it.** The complement silently recruits every case you have not thought of, and it passes
+> the same tests.
+
+This is a **positive control that exists only because it failed** — the `Pos` row was not
+in the ticket's population and is in the suite. Keep such a row when you find one; it is
+the only thing standing between the negative spelling and the next person who writes it.
+
+### And the shape underneath that row: correct for a VARIABLE source, wrong for a LITERAL
+
+The same ticket asserted the store was *already correct*. **It is — for a string VARIABLE
+source, which is what had been measured.** `t(p) := s` writes the live payload pointer, so
+`p = Pointer(s)` and every read works. For a **literal**, `t(q) := 'abc'` then `Length`
+answered **1073741824**. **Nothing at the call site distinguishes the two.** A "this part
+works" claim scopes to the operand class that was tried, and operand class is exactly the
+axis a call site hides.
+
+The fix turned out to be **a ROUTE rather than an invention**: `AnsiString(p)` and
+`String(p)` over the same `Pointer` slot have **always** been correct. **Measuring the
+built-in spelling before writing anything is what made that visible.** And the earlier
+reverted attempt (retype-in-place) was a *correct diagnosis with the wrong conclusion drawn
+from it* — "the tag does not help" was true; `ASTTk` is not what the lowering reads, the
+cast NODE is.
+
+## THE FPC SEED CANARY, THE LIVE CASE, WITH THE IDENTIFIER AND THE LINE
+
+CLAUDE.md says to gate BEFORE committing because `gate.sh quick`'s FPC seed canary only
+arms while `compiler/**` has **uncommitted** changes. Here is that rule being paid for,
+2026-09-06 (frankB):
+
+```
+self-host:   converged after 1 round(s)      <- clean
+quick tier:  green                            <- clean
+FPC seed:    symtab.inc(9343) Error: Identifier not found "AliasIdentityMismatch"
+```
+
+The body sits **~900 lines below its first caller**. **pxx prescans and resolves across the
+unit; FPC is single-pass and resolves in source order.** Both compilers are behaving
+correctly and only one of them is telling you the file is wrong.
+
+> **A clean tree would have printed `SKIP` and it would have been pushed.**
+
+Nothing else in the loop can see this class — not the fixedpoint, not `--tier quick` — and
+the canary sees it only while the change is uncommitted. That is the entire argument for
+gating dirty, in one measured line.
