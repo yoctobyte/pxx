@@ -1094,3 +1094,29 @@ And the ticket list was wrong too: the second ticket in frankB's group was
 filed AFTER and deliberately `blocked-by` the p50. A grep for the topic returned a neighbour and
 this seat did not check membership before listing it — *count then list, then check that each
 listed row is actually in the set.*
+
+## THE INVERSE COLLISION: A HIGH-RANKED ROW THAT EVERYBODY CAN SEE IS NOT THEREBY A ROW ANYBODY HAS
+
+This seat exists for two sessions on one topic. **The opposite failure has no instrument at all.**
+
+Named 2026-09-06 by frankB, which declined the top-ranked P pair — a p70 regression plus its p35
+sibling — because frankA held the same construct from the feature end, **and said so out loud
+precisely so the p70 would not sit unclaimed on the assumption that someone takes the top of the
+queue.**
+
+> Two sessions on one topic leaves evidence in two places. **Zero sessions on one topic leaves an
+> absence in several places at once**, which is why nothing reports it: `ready` shows the row, the
+> row looks attractive, every session that reads it has a reason not to take it, and none of those
+> reasons is written down anywhere. The higher the rank, the more readers, and the more plausible
+> it is to each of them that somebody else already has it.
+
+**The only artefact that prevents it is a DECLINE STATED OUT LOUD**, which costs one line and is
+the same shape as announcing a group on the way in: it converts a private reason into a fact
+someone else can act on. Worth doing whenever a session skips the top of a queue for a reason —
+especially *"another session owns this construct from the other side"*, which is the reason most
+likely to be true of several sessions simultaneously.
+
+**Not built as a check.** "Top-ranked and unowned for N days while sessions are active" is
+mechanisable, and there is exactly ONE observed instance — declined out loud, therefore handled.
+A tool is justified by a measured rate and this is an anecdote with a good ending. Recorded so that
+if it happens twice, the second one is recognisable as the second.
