@@ -201,3 +201,52 @@ dropped: when
 lands, the swap becomes reachable and this question re-opens. The note in
 `pxx.skip` says so, so the next reader inherits the caveat and not just the
 verdict.
+
+## 2026-09-06 (frankS) — THE TRIPWIRE FIRED, and the verdict SURVIVES it
+
+This ticket's skip-list tripwire says: *"when the one-parameter limit is lifted
+the swap becomes reachable and this question re-opens."* It is lifted —
+[[bug-p-a-generic-routine-supports-exactly-one-type-parameter]] is fixed — so
+the swap is reachable and I measured it rather than leaving the tripwire to be
+found later. Compiler `aad689a392e0`.
+
+**There are two swaps and only one of them was ever the worry.**
+
+```pascal
+{ HARMLESS — the names swap and the POSITIONS still mean the same thing }
+interface       generic procedure Show<T, S>(a: T; b: S);
+implementation  generic procedure Show<S, T>(a: S; b: T);
+```
+pxx accepts, prints `a=7 b=hi` for `specialize Show<Integer, string>(7, 'hi')`.
+fpc refuses (`Generic type parameter "S" does not match with the one in the
+declaration`). Us accepting what FPC rejects is not a defect, and this one
+**cannot** mislead: the impl's first position is the call's first argument
+whatever it is spelled, exactly as the RENAME case argued.
+
+```pascal
+{ DANGEROUS — the type-parameter list swaps and the parameter list does NOT,
+  so `T` now denotes position 1 }
+interface       generic procedure Show<T, S>(a: T; b: S);
+implementation  generic procedure Show<S, T>(a: T; b: S);
+```
+**pxx REFUSES this, at the call:**
+```
+Show_Integer_string(AnsiString, Integer)
+```
+It bound `T` to position 1 and `S` to position 0 consistently, so the routine's
+signature really is `(AnsiString, Integer)` and the call `(7, 'hi')` does not
+match it. Loud, at the use, naming both types.
+
+**So `gap: accepts-invalid` does not materialise and the KNOWN DIVERGENCE
+verdict stands** — now for a measured reason rather than an unreachable one.
+Positional binding is not merely *a* rule that happens to work: it is what makes
+the harmless swap harmless AND the dangerous swap catchable, because any
+spelling that would change what a parameter MEANS also changes the signature,
+and a changed signature is checked at every call.
+
+The residual question this ticket was holding open is therefore closed. Nothing
+re-opens it short of pxx binding type parameters by NAME across the two
+sections, which it does not do anywhere.
+
+**`tgenfunc17`/`tgenfunc18` keep their `wontfix: dialect-pass` skip**, and the
+tripwire wording can go — it has now fired once and been answered.
