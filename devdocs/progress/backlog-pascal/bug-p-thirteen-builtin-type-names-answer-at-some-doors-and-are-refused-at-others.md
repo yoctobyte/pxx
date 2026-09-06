@@ -2,7 +2,7 @@
 track: P
 prio: 35
 type: bug
-blocked-by: []
+blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 summary: "THREE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High` and `Low` of ByteBool, LongBool and WordBool. They map to tyUInt8/tyInteger/tyUInt16 ON PURPOSE, to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE -- they need a kind carrying a width AND boolean bounds, which no current table can express, and that is why they are the remainder rather than the next one-liner. The other ten were fixed on 2026-09-06 (26742a0ca, 86f935479, b6815e5b8); the count is the probe's own clean re-run at b6815e5b8, 51 names, 327 cells agreeing and 10 differing. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
 status: new
 owner: ""
@@ -31,6 +31,17 @@ Measured at `1df943481` over all 51 names in the union of `OrdinalNameToTk` and
 | `ByteBool` `LongBool` `WordBool` | `High` `Low` | `TRUE` / `FALSE` |
 | ~~`AnsiString` `RawByteString` `UnicodeString` `UTF8String` `WideString`~~ | ~~`Low`~~ | **FIXED** — see below |
 | ~~`Variant` `OleVariant`~~ | ~~the cast~~ | **FIXED** — and it was a SEGFAULT, not a refusal |
+
+**EDGE ADDED 2026-09-06 (frankA), and it is the whole remainder.** This was
+`blocked-by: []` while its own summary said the three surviving rows need a kind
+the current tables cannot express — which is the fork
+`decide-how-a-type-carries-an-identity-its-kind-cannot-hold` exists to settle.
+The prose said it and the frontmatter did not, so the ranker could not see it and
+`ready --track P` would have handed the row to someone who then hit the fork with
+ten of the thirteen already done. Membership stated in prose and absent from
+frontmatter is the one place the ranker cannot look. Its sibling consumer,
+`feature-p-the-booleannn-family-of-explicit-width-boolean-type-names`, was wired
+to the same fork this morning for the same reason.
 
 **The sized booleans are the interesting one and they are NOT a one-liner.**
 They map to `tyUInt8` / `tyInteger` / `tyUInt16` on purpose, to keep their C-ABI
