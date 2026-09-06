@@ -72,6 +72,19 @@ if [ "$t_ptr" = "$n_ptr" ]; then
     exit 1
 fi
 
+# MUST-DIFFER CONTROL 1b: and the NATIVE side must be the WIDER one.
+# Controls 1 and 2 only require the two runs to disagree, and the delta check
+# below is SIGN-SYMMETRIC -- `want` and `got` both negate when the arguments are
+# swapped, so they cancel and a reversed pair passes silently. That makes the
+# argument order load-bearing while nothing asserts it, which is the same
+# can't-fail shape this script exists to refuse. Verified 2026-09-06: with the
+# target and native files exchanged, every check above passed and the script
+# exited 0.
+if [ "$n_ptr" -le "$t_ptr" ]; then
+    echo "$label: DIRECTION CONTROL FAILED. native reports SizeOf(Pointer)=$n_ptr and target reports $t_ptr, so the file passed as the 32-bit target is the wider build. Arguments are <label> <target.raw> <native.raw> <nptrslots>; these two are swapped, or the 'native' oracle was not built natively." >&2
+    exit 1
+fi
+
 # MUST-DIFFER CONTROL 2: a class holding pointers must not be the same size.
 if [ "$t_size" = "$n_size" ]; then
     echo "$label: MUST-DIFFER CONTROL FAILED. InstanceSize is $t_size on both, but the class holds $nptr pointer-width slots and the widths differ ($t_ptr vs $n_ptr)." >&2
