@@ -50,10 +50,10 @@ is measured and not predicted). Zig pulled **no** unit at all before this.
 
 Residual, none of it fixed here:
 
-1. **`eparser.inc` pulls nothing** and prints integers, so it has the same hole.
-   Not fixed because Erlang is broken cross-target for a separate reason
-   (`bug-a-the-erlang-skeleton-computes-a-wrong-value-and-faults-on-every-non-x86-64-target`)
-   and one defect at a time.
+1. **`eparser.inc` pulls nothing** — FIXED, along with the two defects in front
+   of it; Erlang now matches its native output on all four cross targets.
+   **But the census that closed it found SIX MORE DRIVERS in the same state**,
+   see below.
 2. **The predicate is a hand-maintained union.** A third mechanism, or a new
    backend that lowers a construct onto a library routine, will not announce
    itself here. What would retire this ticket is the backend DECLARING its
@@ -69,3 +69,46 @@ expected text anywhere in the row. Positive control taken and RED — with the
 Rust unit pull reverted, four rows report `does not COMPILE` and name the right
 targets. **A compile failure is a failing row and not a skip in that recipe, on
 purpose**: a skip would have recorded this defect as "not applicable".
+
+
+## 2026-09-07 (frankA) — THE CENSUS: six more drivers, and one of them already crosses
+
+Ran the adoption matrix the eparser finding implied — every frontend driver
+against every shared per-target emitter — and then widened it to the frontends
+nobody names. `compiler/` holds nine skeleton drivers, not three:
+
+| driver | language | refuses non-x86-64 | hand-written x86-64 | pulls units |
+| --- | --- | --- | --- | --- |
+| `rparser` | Rust | narrowed to 5 | none left | yes |
+| `zparser` | Zig | narrowed to 5 | none left | yes |
+| `eparser` | Erlang | narrowed to 5 | none left | yes |
+| `aparser` | Ada | **x86-64 only** | **none** | **no** |
+| `fparser` | Fortran | **x86-64 only** | **none** | **no** |
+| `gparser` | Algol | **x86-64 only** | **none** | **no** |
+| `lparser` | LOLCODE | **x86-64 only** | **none** | **no** |
+| `wparser` | Whitespace | **x86-64 only** | **none** | **no** |
+| `bparser` | BASIC | **NO REFUSAL AT ALL** | **none** | **no** |
+
+**BASIC is the control and it cost nothing to read**, because it has no refusal:
+`test_basic_comprehensive.bas` is already IDENTICAL to its native output on
+i386, aarch64 and arm32, and fails on riscv32 with
+`the soft-float kernel __pxx_l2d is not linked` — this ticket's defect, exactly.
+
+So two things follow, and the second is the one worth acting on:
+
+1. **BASIC has crossed to three targets for some time and nothing measures it.**
+   Not a defect; an unrecorded capability, which is how a capability gets lost.
+2. **The five remaining refusals are probably stale.** None of those drivers
+   hand-writes a byte of machine code — which was the whole reason the Rust,
+   Zig and Erlang refusals were load-bearing — and their sibling with no refusal
+   works. Probably, not certainly: unmeasured until each is run, and that is the
+   ordering this group has already been burned by once.
+
+**AND THE PULL BLOCK IS NOW ON ITS THIRD COPY, heading for its ninth.** Three
+drivers carry the same six lines (softfloat, then builtinheap, then builtin,
+guarded by `TargetCodegenCallsHeapRuntime`), and six more need it. Two is a
+smell and three is a design flaw, so the next commit folds it into one shared
+routine beside `EmitProgramPrologue` — which all nine already call — rather than
+adding a fourth copy. **A minimal fix to a duplication bug adds a copy**, and
+this ticket exists because a mechanism nobody could see from a frontend was
+spelled out per frontend.

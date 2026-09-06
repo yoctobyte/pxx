@@ -27530,11 +27530,28 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	@# that as "not applicable" and the defect would have stayed invisible for
 	@# exactly the same reason the refusal hid the last one.
 	@# bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it
+	@#
+	@# THE ROW-COUNT FLOOR IS THE CURRENT COUNT, NOT A ROUND NUMBER BELOW IT.
+	@# A refused cell `continue`s rather than failing -- which is right, a
+	@# deliberate refusal is not a defect -- so that floor is the ONLY thing
+	@# standing between a re-widened refusal and a silent pass. It was set to 44
+	@# first and its own positive control showed it could not fail: re-widening
+	@# ONE frontend to x86-64-only dropped 48 to 44 and the row still printed
+	@# GREEN. Slack in the floor is slack in the guard. Raise it when a program
+	@# is added; if it fails, ask which frontend stopped being measured before
+	@# lowering it.
+	@#
+	@# The `@#` form is only legal BEFORE the shell block below -- these lines
+	@# are one command joined by backslashes, and a `@#` inside it reaches
+	@# /bin/sh as a command name. Measured, by breaking it.
 	@overall=0; ran=0; \
 	for src in test/test_rust_else_if.rs test/test_rust_advanced.rs \
 	           test/test_rust_option.rs test/test_rust_result.rs \
 	           test/test_zig_skeleton.zig test/test_zig_structs.zig \
-	           test/test_erlang_skeleton.erl; do \
+	           test/test_erlang_skeleton.erl test/test_ada_skeleton.adb \
+	           test/test_ws_skeleton.ws test/test_lolcode_skeleton.lol \
+	           test/test_fortran_skeleton.f90 test/test_algol_skeleton.alg \
+	           test/test_basic_comprehensive.bas; do \
 	  nm=$$(basename $$src); \
 	  ./$(COMPILER) $$src $(TESTTMP)/xtnat26 >/dev/null 2>&1 \
 	    || { echo "test-skeleton-frontends-cross-target: NATIVE compile failed for $$nm"; overall=1; continue; }; \
@@ -27546,12 +27563,22 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	      riscv32) run="qemu-riscv32" ;; \
 	      *)       run="" ;; \
 	    esac; \
+	    case "$$nm:$$t" in \
+	      test_basic_comprehensive.bas:riscv32) \
+	        echo "test-skeleton-frontends-cross-target: $$nm:$$t is a KNOWN GAP -- bug-a-the-basic-frontend-cannot-build-for-riscv32-the-only-driver-with-no-unit-pull"; \
+	        continue ;; \
+	    esac; \
 	    if [ -n "$$run" ] && ! command -v $$run >/dev/null 2>&1; then \
 	      echo "test-skeleton-frontends-cross-target: $$t SKIPPED ($$run absent) -- $$nm NOT verified"; \
 	      continue; \
 	    fi; \
-	    if ! ./$(COMPILER) --target=$$t $$src $(TESTTMP)/xtcross26 >/dev/null 2>&1; then \
+	    if ! ./$(COMPILER) --target=$$t $$src $(TESTTMP)/xtcross26 >$(TESTTMP)/xtcross.log 2>&1; then \
+	      if grep -q "has not been measured\|the skeleton supports" $(TESTTMP)/xtcross.log; then \
+	        echo "test-skeleton-frontends-cross-target: $$nm REFUSED for $$t by the frontend, on purpose"; \
+	        continue; \
+	      fi; \
 	      echo "test-skeleton-frontends-cross-target: $$nm does not COMPILE for $$t"; \
+	      sed -n 1p $(TESTTMP)/xtcross.log; \
 	      overall=1; continue; \
 	    fi; \
 	    got="$$(timeout 60 $$run $(TESTTMP)/xtcross26 2>&1; echo rc=$$?)"; \
@@ -27559,7 +27586,7 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	    tools/expect_same.sh "xtarget-$$nm-$$t" "$$got" "$$nat" || overall=1; \
 	  done; \
 	done; \
-	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 20 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
+	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 48 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
 	if [ $$overall -ne 0 ]; then echo "test-skeleton-frontends-cross-target: RED"; exit 1; fi; \
 	echo "test-skeleton-frontends-cross-target: GREEN -- $$ran (program,target) pairs matched their native run"
 

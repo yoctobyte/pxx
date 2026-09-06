@@ -2056,24 +2056,11 @@ begin
     builtin's own bodies use the allocator. wantAnsiRuntime stays False -- this
     reason does not claim the program uses managed strings.
     bug-a-a-frontend-cannot-see-that-riscv32-writes-integers-through-a-library-routine }
-  if TargetCodegenCallsHeapRuntime then
-  begin
-    { SOFTFLOAT FIRST, and this is not optional once builtinheap is in: those
-      unit bodies contain float code, and riscv32 has no FPU, so pulling them
-      without the kernels turns `PXXWriteDecW not found` into `the soft-float
-      kernel __pxx_l2d is not linked` -- a second internal-fault-shaped
-      diagnostic naming a `uses softfloat` clause this frontend has no syntax
-      for. Same rule and same order as the C driver's hosted branch
-      (cparser.inc, the `(riscv32 or xtensa) and not EspBareBoot` arm), which
-      is where this was already written down for exactly one frontend.
-      MEASURED, not predicted: pulling the two units alone moved the error
-      rather than clearing it. }
-    if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
-       (not EspBareBoot) then
-      ParseUsesUnitAmbient('softfloat');
-    ParseUsesUnitAmbient('builtinheap');
-    ParseUsesUnitAmbient('builtin');
-  end;
+  { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
+    (frontend_prologue.inc), which now holds the softfloat-then-builtinheap
+    rule and the reason for the ordering. This driver pulled NO unit at all
+    before 2026-09-06, which is right on five targets and fatal on the sixth. }
+  PullTargetRuntimeUnits;
 
   while CurTok.Kind <> tkEOF do
   begin

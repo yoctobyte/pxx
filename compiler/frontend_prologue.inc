@@ -116,6 +116,44 @@ begin
   EmitProgramRuntimeStubsForTarget;
 end;
 
+procedure PullTargetRuntimeUnits;
+{ Pull the units this TARGET's codegen calls into, for a driver whose language
+  has no `uses` clause to say so.
+
+  Some backends lower ordinary constructs onto routines that live in
+  builtinheap -- riscv32 routes every ordinal write through PXXWriteDecW, and
+  the aggregate-result epilogue lowers onto PXXMemMove on aarch64, arm32 and
+  riscv32 -- and a frontend cannot see any of it. See
+  TargetCodegenCallsHeapRuntime (emit.inc) for the two mechanisms and their
+  measured target sets. A driver that skips this produces a working binary on
+  the targets whose codegen happens to be inline and an internal-fault-shaped
+  `compiler error: <routine> not found` on the rest.
+
+  SOFTFLOAT FIRST, and it is not optional once builtinheap is in: those unit
+  bodies contain float code and riscv32 has no FPU, so pulling the two units
+  alone turns `PXXWriteDecW not found` into `the soft-float kernel __pxx_l2d is
+  not linked` -- measured, not predicted. Same rule and order as cparser.inc's
+  hosted branch, which is where it was already written down for one frontend.
+
+  CALL IT AFTER THE PROGRAM'S EXIT, never before: the unit bodies must sit past
+  the entry stub's exit_group so they are reached only by call and never fallen
+  into. Every driver that calls this also calls EmitProgramPrologue, and this is
+  deliberately NOT folded into that routine for exactly that reason -- the
+  prologue runs before the entry stub and this must run after it.
+
+  It exists because the block reached three identical copies and there are nine
+  skeleton drivers. A minimal fix to a duplication bug adds a copy; this is the
+  version that does not.
+  bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+begin
+  if not TargetCodegenCallsHeapRuntime then Exit;
+  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+     (not EspBareBoot) then
+    ParseUsesUnitAmbient('softfloat');
+  ParseUsesUnitAmbient('builtinheap');
+  ParseUsesUnitAmbient('builtin');
+end;
+
 procedure EmitProgramEpilogue;
 { Everything a program owes after its last statement is lowered.
 

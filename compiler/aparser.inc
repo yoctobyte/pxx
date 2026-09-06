@@ -354,8 +354,19 @@ var
   initNode: Integer;
   jmpPatch: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('Ada frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-ada)');
+  { NARROWED from x86-64-only, on the same terms as the Rust, Zig and Erlang
+    drivers: every target named here was compiled and RUN, and its output
+    compared WHOLE against the native run.
+    All five measured and IDENTICAL to the native run. Nothing in this driver
+    was ever target-specific -- it emits no machine code of its own -- so the
+    refusal was inherited from the skeleton template rather than earned.
+
+    xtensa and wasm32 stay refused as UNMEASURED, which is a different fact
+    from broken and is said here rather than left to be inferred from a list.
+    bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+  if not (TargetArch in [TARGET_X86_64, TARGET_I386, TARGET_AARCH64,
+                       TARGET_ARM32, TARGET_RISCV32]) then
+    Error('Ada frontend: the skeleton supports x86-64, i386, aarch64, arm32 and riscv32; this target has not been measured (feature-esoteric-ada)');
 
   { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
     its patchable jump, the div-by-zero stub, the signal runtime, the
@@ -365,6 +376,17 @@ begin
     managed-string operations of its own.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   EmitProgramPrologue(False, False, True, jmpPatch);
+  { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
+    (frontend_prologue.inc).
+
+    POSITION IS LOAD-BEARING AND IT IS NOT THE SAME AS IN THE CALL-STUB DRIVERS.
+    This driver compiles the program BODY between the prologue and the exit, so a
+    pull placed after the exit runs after codegen has already asked FindProc and
+    failed -- measured: `PXXWriteNL not found` on riscv32 with the pull one
+    statement too late. It goes BEFORE PatchProgramEntryJump, so the unit bodies
+    land between the ELF entry and the patch point and the entry jump, which aims
+    at CodeLen at the moment it is patched, clears them. }
+  PullTargetRuntimeUnits;
   PatchProgramEntryJump(jmpPatch);
 
   Expect(tkProcedure, 'PROCEDURE');

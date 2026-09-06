@@ -366,8 +366,19 @@ procedure ParseGProgram;
 var stmtList, stmt, jmpPatch: Integer;
     vtype: TTypeKind;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('Algol frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-algol)');
+  { NARROWED from x86-64-only, on the same terms as the Rust, Zig and Erlang
+    drivers: every target named here was compiled and RUN, and its output
+    compared WHOLE against the native run.
+    Same single exclusion as the Fortran driver and the same open defect --
+    two frontends, one missing helper, and neither of them is where it lives.
+    bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real
+
+    xtensa and wasm32 stay refused as UNMEASURED, which is a different fact
+    from broken and is said here rather than left to be inferred from a list.
+    bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+  if not (TargetArch in [TARGET_X86_64, TARGET_AARCH64, TARGET_ARM32,
+                       TARGET_RISCV32]) then
+    Error('Algol frontend: the skeleton supports x86-64, aarch64, arm32 and riscv32; i386 cannot write a float (compiler error: float writer helper not found) (feature-esoteric-algol)');
 
   { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
     its patchable jump, the div-by-zero stub, the signal runtime, the
@@ -378,6 +389,17 @@ begin
     gained after this file was written.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   EmitProgramPrologue(False, False, True, jmpPatch);
+  { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
+    (frontend_prologue.inc).
+
+    POSITION IS LOAD-BEARING AND IT IS NOT THE SAME AS IN THE CALL-STUB DRIVERS.
+    This driver compiles the program BODY between the prologue and the exit, so a
+    pull placed after the exit runs after codegen has already asked FindProc and
+    failed -- measured: `PXXWriteNL not found` on riscv32 with the pull one
+    statement too late. It goes BEFORE PatchProgramEntryJump, so the unit bodies
+    land between the ELF entry and the patch point and the entry jump, which aims
+    at CodeLen at the moment it is patched, clears them. }
+  PullTargetRuntimeUnits;
   PatchProgramEntryJump(jmpPatch);
 
   Expect(tkBegin, 'begin');

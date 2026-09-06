@@ -577,14 +577,7 @@ begin
     code and riscv32 has no FPU), then builtinheap, then builtin, all after the
     exit above so the bodies are reached only by call.
     bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
-  if TargetCodegenCallsHeapRuntime then
-  begin
-    if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
-       (not EspBareBoot) then
-      ParseUsesUnitAmbient('softfloat');
-    ParseUsesUnitAmbient('builtinheap');
-    ParseUsesUnitAmbient('builtin');
-  end;
+  PullTargetRuntimeUnits;
 
   while CurTok.Kind <> tkEOF do
   begin

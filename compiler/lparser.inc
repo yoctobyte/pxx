@@ -298,8 +298,21 @@ end;
 procedure ParseLProgram;
 var stmtList, stmt, jmpPatch: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('LOLCODE frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-lolcode)');
+  { NARROWED from x86-64-only, on the same terms as the Rust, Zig and Erlang
+    drivers: every target named here was compiled and RUN, and its output
+    compared WHOLE against the native run.
+    RISCV32 IS EXCLUDED ON A REAL AND HONEST GAP, not on absence: the backend
+    says `target riscv32: frozen tyString concat unsupported; only literal+literal
+    folds`. That is a named refusal with a workaround in its own message, which is
+    the good failure mode -- unlike the internal-fault-shaped `<routine> not found`
+    that this driver used to give and that the unit pull below fixed.
+
+    xtensa and wasm32 stay refused as UNMEASURED, which is a different fact
+    from broken and is said here rather than left to be inferred from a list.
+    bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+  if not (TargetArch in [TARGET_X86_64, TARGET_I386, TARGET_AARCH64,
+                       TARGET_ARM32]) then
+    Error('LOLCODE frontend: the skeleton supports x86-64, i386, aarch64 and arm32; riscv32 needs frozen-string concat, which that backend refuses by name (feature-esoteric-lolcode)');
 
   { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
     its patchable jump, the div-by-zero stub, the signal runtime, the
@@ -310,6 +323,17 @@ begin
     gained after this file was written.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   EmitProgramPrologue(False, False, True, jmpPatch);
+  { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
+    (frontend_prologue.inc).
+
+    POSITION IS LOAD-BEARING AND IT IS NOT THE SAME AS IN THE CALL-STUB DRIVERS.
+    This driver compiles the program BODY between the prologue and the exit, so a
+    pull placed after the exit runs after codegen has already asked FindProc and
+    failed -- measured: `PXXWriteNL not found` on riscv32 with the pull one
+    statement too late. It goes BEFORE PatchProgramEntryJump, so the unit bodies
+    land between the ELF entry and the patch point and the entry jump, which aims
+    at CodeLen at the moment it is patched, clears them. }
+  PullTargetRuntimeUnits;
   PatchProgramEntryJump(jmpPatch);
 
   LEatSep;
