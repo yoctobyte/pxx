@@ -17095,12 +17095,22 @@ range check as nothing, four times over: `ffefbeeb3` (`lib/rtl/sysutils.pas`), `
 (`lib/rtl/classes.pas`), `dbe03f106` (`compiler/defs.inc`, `symtab.inc`, `rparser.inc`,
 `zparser.inc`), `667934bc5` (`compiler/cparser.inc`).
 
-**Reproduced here on this seat's own history**, because a mechanism claim should not travel on
-one seat's word. `7dbfe49de..origin/master -- compiler/ lib/` lists five commits — and
+**Reproduced on a second seat's history**, because a mechanism claim should not travel on one
+seat's word. `7dbfe49de..origin/master -- compiler/ lib/` lists five commits — and
 `3034ac606`, `eb2447470`, `f69801049`, `c8e64339a`, `46c933fb6` all touch `compiler/` or
 `lib/`, are **ancestors** of `7dbfe49de`, and appear in **neither** the range nor any check
 built on it. Had that seat run the range check right after its push, it would have been empty
 for exactly the commits its own pull had just brought in.
+
+> **THE TWO DEMONSTRATIONS ARE NOT THE SAME STRENGTH, and neither is a prediction.** frankS's
+> is a **post-hoc reconstruction**: surprised by a sha, then reasoning back to the cause. The
+> second is an **independent reproduction** — the same query run against a different history
+> that had not been examined for this purpose, which rules out the reconstruction fitting its
+> own case and nothing else. It is **not** a pre-registered prediction; the commits were read
+> off the query, not named in advance, and the section said so only after frankS offered the
+> stronger reading and it was declined. **Recorded because a generous upgrade from the other
+> party is the easiest wrong claim to accept** — the flattering reading arrives with a
+> co-signature, which is exactly what makes it feel checked.
 
 **THE TELL WAS NOT THE CHECK.** It was `make` printing `converged after 1 round(s)` where a
 `verified` was expected, and a **different binary sha from sources believed unchanged** — which
@@ -17148,6 +17158,17 @@ no-op. **Both are diagnosed by the same question — what would have to be true 
 to do nothing? — and only one of the two answers is "the change was wrong."** Before rewriting
 a fix that appears inert, grep the call site's immediate neighbourhood for a second copy of
 the callee's own precondition.
+
+**AND THE TELL THAT NARROWS IT TO ONE LINE, which frankS got for free and nearly ignored: the
+fix worked at THREE OF FOUR call sites.**
+
+> **A change that is inert UNIFORMLY is usually wrong. A change that is inert at a SUBSET is
+> usually being INTERCEPTED — and the subset names where to look.**
+
+That single distinction sorts the two halves of this pair before you spend anything: uniform
+inertness sends you back to the fix (the premise-check case), partial inertness sends you to
+the sites that did not move. **So the first question about an apparently inert change is not
+"is it right" — it is "is it inert everywhere?"**, and that is a count, not an analysis.
 
 ## THE MISSING ENTRY WAS ALREADY MAINTAINED AND ALREADY NAMED — when a lookup is scoped to a range, ask whether the thing it scopes to has a SECOND range
 
@@ -17222,8 +17243,26 @@ comment that **denies** an existing capability is never contradicted by anything
 nobody tries. It **sends the next reader to implement what is already there** — and the second
 implementation will be the one that diverges.
 
-**The check, and it is the same one in all three cases: before writing or trusting "X is not
-supported / not enforced / rejected", spend one command establishing it.** Grep the option
+### FOURTH INSTANCE, AND IT EXTENDS THE FAMILY: A MISDESCRIBED WALL HAS THE SAME IMMUNITY
+
+frankS, an hour after the three above were banked. `tgeneric95`'s skip reason says
+*"specialize inside a generic routine SIGNATURE (`expected name` at line 16)"*. Measured:
+**the routine is not generic, there is no specialization in any signature, and the construct
+is a specialization inside a routine-LOCAL type section.** Three clauses, three wrong.
+
+**It overstates nothing and denies nothing about a capability — it MISDESCRIBES A WALL**, and
+that has the same immunity for a different reason: **the row stays skipped, so nobody reaches
+the construct to be contradicted by it.** So the family is not "text asserting an absence"; it
+is **text about something nobody will execute**, and absence-assertions are one surface of it.
+
+**And it now has a measured rate rather than a vibe.** Two stale skip reasons personally hit
+(`tgenfunc19`, `tgeneric95`) out of *"maybe a dozen rows I have actually compiled"* — from the
+seat doing the compiling, not from a census. Whatever the exact denominator, **it is not the
+rate anyone assumes when they read one**, and it is the number that justifies *measure the
+wall, do not read it*.
+
+**The check, and it is the same one in all four cases: before writing or trusting "X is not
+supported / not enforced / rejected / fails at line N", spend one command establishing it.** Grep the option
 table, grep for the symbol, or compile the two-line program. CLAUDE.md's *comment vs code:
 if they disagree, one is wrong and you do not know which* — and this is the direction where
 matching the code to the comment would have deleted a working feature.

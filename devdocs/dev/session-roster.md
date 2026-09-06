@@ -2451,3 +2451,51 @@ failed three separate ways, each silently** — it scanned only `*h.inc` headers
 name declared in `sysstr.inc`. A discarded instrument reported rather than quietly dropped is
 the same discipline as frankH's *"100% false positives on its one hit"*, and it is the third
 time today a seat has published a negative about its own tool.
+
+## THE RULES/PLAYBOOK BOUNDARY, ARTICULATED BETTER BY THE SEAT THAT FOUND THE THING
+
+2026-09-06. I declined to carry frankS's range-check trap up as a CLAUDE.md ask and said why;
+frankS agreed and gave a reason sharper than mine, which is the one to keep:
+
+> *"What I found is not a missing rule, it is a specific WRONG INSTRUMENT that argues against
+> an existing rule, and the file cannot enumerate those; 'do not trust check X' is unbounded
+> and goes stale the moment someone invents check Y. The rule's job is to say rebuild; the
+> playbook's job is to say why a diligent reader talks themselves out of it."*
+
+**That is the test to apply to every future CLAUDE.md ask from this seat.** A rule states an
+obligation; a playbook section states why an obligation gets skipped. **A defence against one
+named instrument is a playbook entry by construction, because the set of wrong instruments is
+open and the set of obligations is not.** Related: [[a-claude-md-amendment-does-not-reach-a-running-session]]
+and the earlier ask that frankuser held unchanged on the same reasoning.
+
+**Second thing worth having on the record: I asked, and the answer changed nothing but was
+still worth the message.** The question was cheap, it was addressed to the one person with the
+evidence, and it produced a better articulation than the decision itself. *"I decided X, do you
+disagree"* is not the expensive path — it is the cheap one, when the alternative is spending
+the owner's attention.
+
+## A TWO-MEMBER FAMILY WITH ONE FIX, NAMED BEFORE ANYONE ASKS FOR IT
+
+2026-09-06, frankS, Track P. **Splice POSITION**, two members filed the same day and explicitly
+not attempted on the way past:
+
+1. an **imported generic routine**'s specialized body splices at the end of the `uses` clause,
+   ahead of the program's own type section, so a type argument the PROGRAM declares is not in
+   scope where the body lands;
+2. a **specialization in a routine-LOCAL type section** desyncs the parse — three-way control
+   measured: a routine-local type section with a plain record compiles, a global `specialize`
+   used inside a routine compiles, **only the combination fails.**
+
+`ParseSpecialization`'s own comment states the assumption both break — that streamed
+declarations *"land after the whole type block and are parsed as ordinary top-level
+subroutines"* — **true at file scope, false inside a routine.** Both want the same answer: hoist
+a specialized declaration to a position where the surrounding grammar is a declaration list.
+Both carry the same "four call paths" objection to doing it on the way past.
+
+Recorded here because **two tickets sharing one fix is exactly what CLAUDE.md's work-in-groups
+rule wants found, and it is invisible from the ranker** — they are separate rows with separate
+slugs and neither `blocked-by`s the other. Whoever takes one should take both; the second is
+cheap once the hoist exists and pointless before it.
+
+(Also noted: frankS declined to edit `pxx.skip` while the conformance harness was reading it —
+the instrument rule applied to a DATA file, which is the version nobody writes down.)
