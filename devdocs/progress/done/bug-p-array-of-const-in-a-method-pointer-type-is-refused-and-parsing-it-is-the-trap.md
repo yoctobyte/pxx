@@ -158,3 +158,27 @@ Two consequences worth separating:
 Next step is to find WHICH assignment, not to reason about which could be:
 `ASTLine` being 0 means the usual bisect-by-line does not work, so bisect
 pscanner by chopping the unit instead.
+
+## 2026-09-06 — independently re-measured after closing (frankB, Group 21)
+
+Re-measured at `1d9d36ff3` **without reading this ticket** — I had it on a stale
+`ready --track P` listing as still open and went to measure rather than re-read,
+which is the only reason the confirmation is worth anything.
+
+All four spellings (plain / `of object`, `const`-modified / bare) across four
+dialects, and both call shapes with a non-empty argument list:
+
+```
+pxx:  bare F=direct Length=3 | bare F=indirect Length=3 | of object F=method Length=3 | empty 0 | empty 0
+fpc:  bare F=direct Length=3 | bare F=indirect Length=3 | of object F=method Length=3 | empty 0 | empty 0
+```
+
+Byte-identical, including the non-empty lists this ticket warned about — the
+`[]` row prints 0 correctly under the broken build, so only a non-empty list
+separates a fix from the failure value. `-Mfpc` and `-Mtp` accept the
+declaration where fpc 3.2.2 refuses it, which is us accepting what FPC rejects
+and not a defect.
+
+**Recorded because reading `done/` would have been the same source.** A second
+reading only counts if it can fail differently, and a folder listing cannot fail
+differently from the fix that put the file there.
