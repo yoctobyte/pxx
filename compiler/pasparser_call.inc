@@ -2394,7 +2394,7 @@ end;
 { True when some argument in the call's parenthesised list STARTS with a
   NilPy unpack -- `*xs` or `**kw` at bracket depth 0 (`**` lexes as two tkStar,
   so one test covers both). Purely token-level, and a
-  sibling of ArgListHasBracketElem above for the same reason: a star is not an
+  sibling of ArgListBracketElemMask above for the same reason: a star is not an
   expression, so the speculative probe below hands it to ParseArgExpr, which
   reports "expected expression" -- and Error HALTS, so the probe's own
   "unsupported arg shape" escape (nArgs <> nExplicitArgs) is never reached and
@@ -2407,7 +2407,7 @@ end;
   and is really "did the probe get to run".
 
   Answered BEFORE the probe, exactly as the `**` dict-keyword case is answered
-  in PyDictKwOverloadAhead and the `[` case in ArgListHasBracketElem: a shape
+  in PyDictKwOverloadAhead and the `[` case in ArgListBracketElemMask: a shape
   the probe cannot parse has to be settled before it, not after. Selection then
   falls back to arity, which is what these calls had before the probe existed --
   and arity is all that is knowable anyway, since an unpacked list's LENGTH is

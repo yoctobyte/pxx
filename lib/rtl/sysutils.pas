@@ -830,6 +830,14 @@ function AnsiPos(const substr, s: AnsiString): Integer;
 function TrimLeft(const s: AnsiString): AnsiString;
 function TrimRight(const s: AnsiString): AnsiString;
 
+{ Is Ident a legal Pascal identifier? With AllowDots, a dotted name
+  (`Unit.Thing`) is legal too; StrictDots additionally forbids a trailing dot
+  and requires each segment to start a fresh identifier. FPC's own signature
+  (rtl/objpas/sysutils/sysstrh.inc:114) -- both flags default False, so the
+  one-argument spelling fcl-passrc's pscanner.pp uses gets the plain rule. }
+function IsValidIdent(const Ident: AnsiString; AllowDots: Boolean = False;
+                      StrictDots: Boolean = False): Boolean;
+
 { The leftmost / rightmost Count characters of S. THESE LIVE IN SysUtils IN FPC
   (rtl/objpas/sysutils/sysstrh.inc, under "extra functions"), not only in
   StrUtils -- which is easy to disbelieve, because StrUtils is where the rest of
@@ -880,6 +888,11 @@ function ExtractFileExt(const path: AnsiString): AnsiString;    { last '.ext' in
 function ChangeFileExt(const path, ext: AnsiString): AnsiString;
 function IncludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
 function ExcludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
+{ Rewrite every accepted separator to the native one. On POSIX that is '/', so
+  a '\' written by a DOS/Windows-minded caller is normalised rather than left
+  to be read as part of a filename. FPC spells the in-place half
+  DoDirSeparators; only the functional half has callers here. }
+function SetDirSeparators(const path: AnsiString): AnsiString;
 
 { List directory entries, excluding "." and "..". Size and modification time are
   filled when the active PAL backend supports metadata, otherwise Size is -1. }
@@ -3721,6 +3734,40 @@ begin
   Result := Copy(s, 1, i);
 end;
 
+function IsValidIdent(const Ident: AnsiString; AllowDots: Boolean = False;
+                      StrictDots: Boolean = False): Boolean;
+var i, n: Integer; first: Boolean; c: Char;
+begin
+  n := Length(Ident);
+  Result := n >= 1;
+  if not Result then Exit;
+  first := True;
+  for i := 1 to n do
+  begin
+    c := Ident[i];
+    if first then
+    begin
+      Result := ((c >= 'A') and (c <= 'Z')) or ((c >= 'a') and (c <= 'z')) or (c = '_');
+      first := False;
+    end
+    else if AllowDots and (c = '.') then
+    begin
+      { A non-strict dot is simply tolerated and does NOT restart the segment --
+        FPC's own loop leaves `first` alone here, so `A..1` is valid without
+        StrictDots. Matching the rule rather than the reading of it. }
+      if StrictDots then
+      begin
+        Result := i < n;
+        first := True;
+      end;
+    end
+    else
+      Result := ((c >= 'A') and (c <= 'Z')) or ((c >= 'a') and (c <= 'z')) or
+                (c = '_') or ((c >= '0') and (c <= '9'));
+    if not Result then Break;
+  end;
+end;
+
 { THE BODIES LIVE HERE AND StrUtils DELEGATES, rather than the reverse or a
   second copy: `strutils` already `uses sysutils`, and a unit that uses StrUtils
   in FPC gets SysUtils' pair anyway. Written as explicit clamps rather than
@@ -3903,6 +3950,14 @@ begin
     Result := Copy(path, 1, Length(path) - 1)
   else
     Result := path;
+end;
+
+function SetDirSeparators(const path: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := path;
+  for i := 1 to Length(Result) do
+    if IsPathSep(Result[i]) then Result[i] := '/';
 end;
 
 function FmtPCharStr(p: Pointer): AnsiString;

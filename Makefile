@@ -6947,6 +6947,17 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_sizeof_of_a_bare_field_inside_a_method \
 	  "$$($(TESTTMP)/test_sofield26)" \
 	  "$$(cat test/test_sizeof_of_a_bare_field_inside_a_method.expected)"
+	@# TWO SYSUTILS FUNCTIONS fcl-passrc CALLS AND lib/rtl DID NOT HAVE. Rows
+	@# separate the correct rule from the plausible one: IsValidIdent's
+	@# NON-strict dot is tolerated and does NOT restart the segment (so `A.` is
+	@# valid with AllowDots and invalid with StrictDots, and `A.9` is invalid
+	@# under StrictDots) -- reading the docs rather than fpc's loop gives the
+	@# opposite answer on the first of those. SetDirSeparators rewrites EVERY
+	@# separator and leaves the empty string empty.
+	@./$(COMPILER) test/test_setdirseparators_and_isvalidident.pas $(TESTTMP)/test_dirsep26
+	@tools/expect_same.sh test_setdirseparators_and_isvalidident \
+	  "$$($(TESTTMP)/test_dirsep26)" \
+	  "$$(cat test/test_setdirseparators_and_isvalidident.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
