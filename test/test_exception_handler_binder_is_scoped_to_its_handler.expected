@@ -1,0 +1,14 @@
+-- read the outer var AFTER the handler --
+  binder: one
+  outer e is still: TObject
+-- same, inside a routine --
+  routine binder: boom
+  routine outer after: routine-outer
+-- nested handlers, then read the outer --
+  inner binder: innerraise
+  outer binder still: outerraise
+  outer e is still: TObject
+-- controls --
+  non-colliding binder: two
+  outer string untouched: program-outer
+-- done --

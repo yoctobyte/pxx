@@ -8801,6 +8801,15 @@ test-core: $(COMPILER)
 	# VMT relocates). The pinned binary aborts on the unhandled exception.
 	./$(COMPILER) test/test_class_inherits_from_tobject.pas $(TESTTMP)/test_inhtobj26
 	tools/expect_same.sh test_inhtobj26 "$$($(TESTTMP)/test_inhtobj26 | tail -1)" "total ok 24 / 24"
+	# `on E: TClass do` leaked its binder into the enclosing scope and never
+	# unhashed it. Reading a same-name outer variable AFTER the handler then
+	# resolved to the binder -- which holds the destroyed exception object -- and
+	# segfaulted. The row above has that exact shape three times and is GREEN,
+	# because it never reads the outer `e` after a handler; that is why the suite
+	# could not see this and a corpus census could. Compares whole output, not a
+	# tail line: the crash was on a middle row.
+	./$(COMPILER) test/test_exception_handler_binder_is_scoped_to_its_handler.pas $(TESTTMP)/test_excbinder26
+	tools/expect_same.sh test_excbinder26 "$$($(TESTTMP)/test_excbinder26)" "$$(cat test/test_exception_handler_binder_is_scoped_to_its_handler.expected)"
 	# A COM interface passed BY VALUE leaked one reference per call. The caller's
 	# argument temp is ONE stack slot reused by every execution of the call site,
 	# and it was filled with a raw copy_rec + retain -- so each call overwrote the

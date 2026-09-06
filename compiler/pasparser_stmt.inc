@@ -4341,6 +4341,7 @@ function ParseTryStatementAST: Integer;
 var
   trySeq, tryLast, actionSeq, stmtNode, node: Integer;
   handlerHead, lastHandler, handlerNode, handlerVar, ci, recId: Integer;
+  handlerSymMark, hk: Integer;
   handlerName, className: AnsiString;
 begin
   { yield inside try/except/finally is rejected in v1 — track nesting so a yield
@@ -4402,12 +4403,35 @@ begin
         if ci < 0 then Error('on: unknown exception class');
         recId := REC_UCLASS_BASE + ci;
         Expect(tkDo, 'do');
+        { The binder is scoped to THIS handler, so mark before allocating it and
+          unhash everything the handler declared once its body is parsed.
+
+          It used to stay visible for the rest of the enclosing scope, and that
+          was a use-after-free reachable through a name: `var e: TObject` beside
+          `on E: TObject do` meant a later plain `e` resolved to the binder,
+          which holds the exception object the handler has already destroyed.
+          fpc prints the outer variable; we segfaulted. The leak is old and was
+          MASKED until 99c416b54 made a nearer declaration outrank an exact-case
+          one -- before that, `e` found the exact-case `e` and the binder was
+          merely invisible rather than harmful. So a bisect lands on that commit
+          and it is not the bug: it removed the mask.
+
+          SymCount is deliberately NOT lowered, for SymRollbackTo's typed-const
+          reason: ASTSOffset[handlerNode] below keeps handlerVar's INDEX, and
+          the -O2 inliner reads it long after this parse. Only visibility ends
+          here. Walking down is what makes each slot its bucket's head, the same
+          invariant SymRollbackTo relies on, and SymHashBkt is read rather than
+          recomputed from the name for the same reason it gives. }
+        handlerSymMark := SymCount;
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;
         SymSyncTypeRef(handlerVar);
         Inc(ExceptionHandlerParseDepth);
         actionSeq := ParseStatementAST;
         Dec(ExceptionHandlerParseDepth);
+        for hk := SymCount - 1 downto handlerSymMark do
+          if SymHashBkt[hk] >= 0 then
+            SymHashHead[SymHashBkt[hk]] := SymHashPrev[hk];
         Eat(tkSemicolon);
         handlerNode := AllocNode(AN_EXC_HANDLER);
         ASTIVal[handlerNode] := recId;
