@@ -28,6 +28,7 @@ right.
 | parameter default-value check | `TypeKind` alone | saw a string parameter for `array of string`, demanded a string literal, and accepted `= 'x'` — the callee then read a frozen literal's prefix as a length |
 | bracket-argument arms (2 of them) | `IsArray` alone | sent every `[...]` to the TVarRec builder, so `array of Integer` got the wrong stride |
 | overload signature identity | both, but not `ProcParamDynDepth` | `array of LongInt` and `TLongIntArray` are one signature; the later body wins and fpc binds two |
+| `ParamIsConstVariant` | `TypeKind = tyVariant` alone | answers True for `const a: array of Variant` — the ELEMENT kind read as the parameter's own. **Accidentally right**, and left alone (below) |
 
 The first two are closed. The third is
 [[bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature]]
@@ -35,6 +36,28 @@ The first two are closed. The third is
 `FindProcOverloadRec` to consult `ProcParamDynDepth`, which already records the
 difference. This ticket makes that class of misread impossible to write; it does
 not decide any particular caller's semantics.
+
+### The fourth instance is the interesting one, because nothing broke
+
+`ParamIsConstVariant` (`pasparser_call.inc`) asks
+`Procs[pi].Params[slot].TypeKind = tyVariant` with no `IsArray` test, so it
+answers True for `const a: array of Variant`. Found 2026-09-06 while adding
+`ParamBindsAnExpression` beside it
+([[bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand]]).
+
+**It produces the right answer for the wrong reason.** The predicate's one caller
+asks "may an expression bind to this parameter", and an `array of Variant`
+parameter is not a var-binding target either — so True is what the caller wanted,
+by accident. It has therefore never failed and would never have been found by a
+bug report. Deliberately NOT corrected: the correction changes behaviour in
+`pyparser.inc`, which calls the same predicate from five sites, for no measured
+reason.
+
+This is the case the accessor is actually for. The three defects above announced
+themselves; this one is a coin that has been landing heads. A `ParamOwnKind` that
+refuses would have made it a compile error the day it was written, and the author
+would have discovered that the question they meant was about binding and not
+about `Variant` at all.
 
 ## The remedy, and why it is an accessor rather than a predicate
 
