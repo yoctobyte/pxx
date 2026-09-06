@@ -6521,6 +6521,47 @@ build fails silently in the worst possible way: as an absence of measurements,
 which reads exactly like an absence of anything to measure.** Build it before
 you trust a number attributed to it.
 
+## READING WHAT PXX ACTUALLY EMITTED: plain `objdump -d` PRINTS NOTHING AND EXITS 0
+
+The pxx ELF writer emits **no section headers**. `objdump -d <pxx binary>` therefore
+produces an empty disassembly, prints no warning, and **exits 0**
+(measured 2026-09-06: exit 0, stderr empty, three lines of stdout and not one
+instruction, where the same objdump gives 10032 lines for a gcc binary). `objdump -h`
+prints a `Sections:` header with zero rows under it.
+
+An empty disassembly reads as *"nothing was emitted"* or *"I disassembled the
+wrong file"*, and nothing pushes back on either reading. It is the house failure
+mode exactly: an instrument that does not error, and answers about something else
+(the section table) than what you asked (the code).
+
+**The invocation that works** — drive it off the program headers instead:
+
+```sh
+readelf -l a.out                       # find the R E LOAD segment's vaddr
+objdump -D -b binary -m i386:x86-64 --adjust-vma=0x400000 a.out
+```
+
+`-D` not `-d` (there are no sections to select), `-b binary` to stop it looking
+for a section table, and `--adjust-vma` set to the executable LOAD segment's
+vaddr so the addresses match what a debugger and the call targets show. Without
+`--adjust-vma` the disassembly is correct and every address in it is wrong,
+which is the same trap one level down.
+
+There are no symbols either, so find a function by its shape rather than its
+name: the most-repeated `call` target is usually the runtime helper you want,
+and walking back from a known instruction to the nearest `push %rbp` gives you
+the enclosing prologue.
+
+Measured 2026-09-06 while decomposing the managed-local cleanup cost: the
+prologue nil-init store, one `movq $0x0,disp32(%rbp)` per managed local, was
+invisible to two sessions reasoning about the release path, because every
+candidate either of us would reach for lives on the far side of the call. It was
+14% of the number, and it scaled with the same N as the release -- so it sat
+inside a "per local per call" figure by construction and no amount of reasoning
+about the epilogue could find it. **Reading the emitted bytes found in one
+command what neither of us could argue our way to.**
+
+
 ## Only binaries timed inside ONE interleaved run are comparable — and a pass changed to fix a measurement is as sound as the measurement
 
 The `-O3` residency slice (2026-08-28) measured mandelbrot at **1.10 s** before
