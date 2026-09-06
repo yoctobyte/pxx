@@ -2279,3 +2279,28 @@ cannot, and its natural failure is being adopted rather than checked. See
 [[a-relay-welds-an-observation-to-its-inference]] and
 [[answer-with-the-instrument-not-the-answer]]: this is the same rule with the
 instrument being *the ticket itself*.
+
+## THE RELAY IS THE CHECK — a peer's finding got measured only because I was about to repeat it
+
+2026-09-06. frankS landed *"pxx enforces no member visibility at all"* on three correct
+measurements and asked me to carry it, because frankB had just written an `EnforceMemberVis`
+control and is the nearest reader. **Carrying it is the job. Grepping for the string before
+carrying it is what found that the sentence was false** — `--strict-visibility` implements
+exactly that rule, has since before the pin, and rejects two of the four shapes frankS
+measured at the default. The one that stays accepted is the RECORD shape, which is the shape
+`terecs1` is about, so the disposition survives and only the reason dies.
+
+**The generalisable bit for this seat: a relay is the last place a claim gets read by
+someone with no stake in it, and it is the cheapest place to check one.** The check that
+worked was not a closer look at frankS's rows — every row was right — it was one `grep -rn`
+for the capability's name, taken because I had to name the file for frankB anyway. Both of
+my standing rules point here and neither was the reason I ran it:
+[[verify-the-citation-not-only-the-claim]] and *count then list*.
+
+**And it is a CORRECTION TO A PICTURE ALREADY GIVEN**, which outranks a new finding — the
+commit message, the skip line and my pending relay all carried the same wrong sentence, and
+the skip line is the one with a reader in a fortnight. Sent to frankS to fix in their own
+file rather than edited under them: it landed 40 minutes earlier, the seat is live, and
+[[tooling-work-makes-this-seat-an-unannounced-collider]] says the trigger is my FIRST EDIT
+to a file a peer just named. Playbook: *A CAPABILITY MEASURED AT THE DEFAULT IS REPORTED AS
+A FACT ABOUT THE COMPILER*; ticket `bug-p-strict-visibility-is-silent-on-records`.

@@ -12795,6 +12795,91 @@ had been green.
 class.** A `%FAIL` row refused with `expected ':' before 'X'` is refused by a **parse gap**,
 and whether that gap is the row's subject needs reading each one. Unowned as of this writing.
 
+### POSTSCRIPT 2026-09-06, third instance — the same mask, and this time the RED LANDS ON A SEAT THAT DID NOT TOUCH THE SUBJECT
+
+`0fe46e061` (frankS). The FPC corpus went 398 pass / **1 FAIL on `terecs1.pp`**, and the two
+paragraphs above are about a row passing for the wrong reason. **This is the same animal
+observed from the other end — as a REGRESSION REPORT — and that is the shape a coordinator
+sees.** frankS's own framing:
+
+> *"A `%fail` row is green whenever the compiler refuses for ANY reason. So every fix that
+> removes an unrelated refusal can turn one red, the red arrives in a session that did not
+> touch the subject, and it looks exactly like a regression from whoever landed most
+> recently. The discriminator is cheap and it is not a bisect: run the row against the
+> PINNED binary and read WHICH error it gave. Here the pinned error named a different file
+> and a different rule, which settled it in one command."*
+
+The mask: `terecs_u1` declares a parameterless `class constructor Create;`, which pxx refused
+with *"a record constructor must have at least one parameter without a default value"* — so
+the compile never reached the private access the row was written to test, and the `%FAIL`
+row passed on an unrelated error. `d349b85ef` (frankB, 14:30) made a class constructor RUN
+instead of being refused; the unit parses; the row finally tests its own subject and fails.
+**The red is the row starting to work.**
+
+**Why this belongs beside "a guard another row can satisfy is not a guard" rather than
+inside it.** That rule is about the same FILE: another row's failure satisfies your
+assertion. This is the same animal **across TIME and across SEATS** — the satisfying refusal
+is not another row, it is a gap in a different subsystem that a PEER has just closed. So
+the two facts that route a normal regression both point the wrong way: the failing row's
+subject has nothing to do with the recent commits, and the recent commits have nothing to
+do with the failing row. **Bisect answers correctly and uselessly** — it names `d349b85ef`,
+which is a true statement about when the verdict flipped and a false one about what broke.
+
+**The one-command discriminator, and read the TEXT not the exit code:** run the row against
+the pinned binary. Same error text as HEAD → a real behaviour change. **A DIFFERENT error,
+naming another file or another rule → the row was masked, and the sha the mask lifted at is
+a fix, not a break.** The exit code is identical in both cases, which is why "it failed at
+the pin too" is not the check.
+
+## A CAPABILITY MEASURED AT THE DEFAULT IS REPORTED AS A FACT ABOUT THE COMPILER — and the sentence is true of every invocation anyone runs
+
+Measured 2026-09-06 by this seat, checking a peer's finding before relaying it, which is the
+only reason it was found at all.
+
+`0fe46e061`'s skip reason and commit message both say **"pxx enforces no member visibility at
+all"**, on three measured rows: a cross-unit read of a `private` RECORD field, a `private`
+CLASS field and a `strict private` one all compile, where fpc 3.2.2 rejects each with
+`identifier idents no member`. **Every row is correct. The sentence is not.**
+
+`--strict-visibility` exists, has existed since well before the pin, and `EnforceMemberVis`
+(`compiler/pasparser_class.inc:58`) implements the full FPC scoping rule — unit-scoped
+private/protected, type-scoped strict variants, descendants for strict protected.
+`defs.inc:3063` says so in the declaration's own comment. Re-measured, four shapes x two
+compilers, with the flag turned on:
+
+| shape | default | `--strict-visibility` | pin | fpc |
+| --- | --- | --- | --- | --- |
+| `private` CLASS field | accepts | **REJECTS** `cannot access private member "fy" of TC` | same | rejects |
+| `strict private` CLASS field | accepts | **REJECTS** | same | rejects |
+| `private` RECORD field | accepts | **accepts** | same | rejects |
+| `private` RECORD method | accepts | **accepts** | same | (n/a) |
+
+Controls, both branched on: a PUBLIC class field still compiles under the flag (so it is not
+rejecting everything), and the flag changes two of the four rows (so it is on). The pin
+column matters — the whole three-row finding was correctly controlled against the pin, and
+the pin agrees at the default *and* under the flag, so no amount of pin-controlling would
+have surfaced this. **The missing axis is not TIME, it is CONFIGURATION.**
+
+**Why the wrong sentence survives review.** It is true of every invocation this fleet
+actually makes: the runner passes `--strict-case --strict-operator` and nothing else, the
+dev loop passes nothing, and the default is lax deliberately. So the claim is confirmed by
+every check anyone would think to run — the reading that breaks it is not a closer look at
+the same rows, **it is `--help`.**
+
+**And it costs exactly one reader.** The disposition it justifies is unaffected: `terecs1`
+is a record row, records are the one shape the flag does not cover, us accepting what fpc
+rejects is not a defect, and `gap: accepts-invalid` is right. **The damage is to whoever
+reads "not enforced at all" and sets out to implement it** — they write a second
+`EnforceMemberVis` beside the one that is already there and already correct. This is the
+same family as *a blocker naming a missing MECHANISM that has since arrived under another
+NAME*: a true fact about what the compiler DOES, read as a fact about what it CAN do.
+
+**The operational form:** before writing *"X is not implemented"*, grep the option table.
+A feature that is off by default is invisible to every measurement that does not name it,
+and the flag's own name is the only thing that distinguishes *absent* from *not asked for*.
+The residual is real and now has a ticket rather than a sentence:
+`bug-p-strict-visibility-is-silent-on-records`.
+
 ## A RULE SPELLED PER CALLER FAILS BY AN ABSENT COPY, NOT A DIVERGENT ONE — so the sites that are wrong AGREE PERFECTLY, and reading them against each other finds nothing
 
 Measured 2026-09-06 (frankS, `109fbebb1`), and it is the second instance of frankB's
