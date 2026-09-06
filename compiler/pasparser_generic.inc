@@ -4312,8 +4312,31 @@ begin
           j := j + 2
         else
         begin
+          { The trailing `(` is required for the BARE surface and must not be
+            for the keyword one, and this predicate applied it to both. A
+            parameterless generic routine is CALLED WITHOUT PARENTHESES in
+            Pascal -- `specialize DoTest<TTest> <> 2` (tgenfunc19.pp:28) is a
+            call, not a comparison -- so requiring `(` refused the one spelling
+            the language has for that call.
+            The `(` was never the point: it is a proxy for "this is not a
+            comparison chain", and the KEYWORD already settles that question
+            outright. `specialize` cannot appear in `a < b > (c)`; the arity
+            diagnostic thirty lines down says so in its own words ("without it
+            the same tokens are a legal comparison chain, which is why the bare
+            surface stays quiet"). Two surfaces, one predicate, and the weaker
+            surface's guard was being charged to the stronger one.
+            The bare Delphi form keeps needing `(` -- there it is genuinely
+            ambiguous and nothing in the token stream can tell the two apart.
+            That asymmetry is the reason the objfpc spelling exists.
+            SYMPTOM WORTH RECOGNISING: declining here leaves the run in the
+            stream to be read as an expression, and the reader is told
+            `undefined variable (specialize)` -- the exact diagnostic the
+            arity-mismatch note below was written to eliminate, reached by the
+            other route it did not cover.
+            bug-p-a-parameterless-generic-routine-cannot-be-called-because-the-
+            call-site-predicate-requires-parentheses }
           matched := (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkGt) and
-                     (Tokens[j + 2].Kind = tkLParen);
+                     ((Tokens[j + 2].Kind = tkLParen) or hasKw);
           j := j + 1;   { j now indexes the `>` }
           Break;
         end;
