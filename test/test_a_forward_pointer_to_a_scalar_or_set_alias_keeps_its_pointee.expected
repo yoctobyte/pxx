@@ -1,0 +1,9 @@
+dbl  size 8 8 | 8 8
+i64  size 8 8 | 8 8
+set  size 32 32 | 32 32
+rec  size 24 24
+dbl  val 1234567.5 | 7654321.5
+i64  val 8589934592 | 4294967297
+set  in  TRUE TRUE FALSE | TRUE TRUE FALSE
+str  clamp [abcd] 4 | [klmn] 4
+rec  val 11.5 22.5 33.5

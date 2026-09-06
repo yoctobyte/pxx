@@ -16754,8 +16754,7 @@ begin
               bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read }
             AliasPtrElemAlias[i] := targetAlias;
           end
-          else if (targetAlias >= 0) and (AliasTk[targetAlias] <> Ord(tyPointer)) and
-                  (AliasElemRec[targetAlias] <> REC_NONE) then
+          else if (targetAlias >= 0) and (AliasTk[targetAlias] <> Ord(tyPointer)) then
           begin
             { Forward pointee resolved to a plain (non-pointer) type alias — e.g. a
               cross-unit record alias `TRec3 = urec.TRec;`. The classic self-
@@ -16766,9 +16765,44 @@ begin
               TRec3 existed), so every later `PRec3`-typed param/var is bound to the
               wrong record — self-consistent through that pointer, but disagreeing
               with the correctly-resolved TRec3 alias used by direct field access.
-              bug-pascal-transitive-unit-crashes-at-startup-unless-named-first. }
+              bug-pascal-transitive-unit-crashes-at-startup-unless-named-first.
+
+              THE `AliasElemRec <> REC_NONE` GUARD THIS ARM USED TO CARRY MADE IT A
+              RECORD-ONLY ARM, and the name it was reached by ("a plain non-pointer
+              type alias") described the whole population. A pointee that is an alias
+              to a SET, a Double, an Int64 or a `string[N]` has no record of its own,
+              so it failed the guard, took no arm at all, and kept the tyInteger the
+              PtrElemDepth hatch stands in for an unresolved name. Measured 2026-09-06
+              against fpc 3.2.2, `PT = ^TT` written ABOVE `TT = ...`:
+
+                TT = set of <72-member enum>   SizeOf(p^) = 4, fpc 32
+                TT = string[10]                SizeOf(p^) = 4, fpc 11
+                TT = Double                    SizeOf(p^) = 4, fpc 8
+                TT = Int64                     SizeOf(p^) = 4, fpc 8
+
+              and the same declarations in the OTHER ORDER are all correct — a
+              declaration order changing whether a program is right, which is the tell
+              this procedure's own comments name twice already. With a small set it is
+              not a wrong number but a SEGFAULT: `cGreen in p^` over `PSet = ^TSet`
+              above `TSet = set of TCol` dies, and prints 1 when the two lines are
+              swapped.
+
+              4 IS ALSO sizeof(Integer) AND THE STORAGE SIZE OF AN ENUM, which is why
+              the gap survived: a `^TEnum` probe answers 4 and is CORRECT, and so does
+              a `^TMyInt`. Only a pointee whose true size is not 4 separates the blank
+              from the answer, which is why every row above is 8 or wider.
+
+              The frozen capacity and the managed-string element width travel with the
+              kind, because a `string[N]` pointee that arrives without its N is the
+              same defect one column over: the two AliasPtr* slots below are what an
+              IN-ORDER `PStr = ^string[8]` fills at registration, and a forward one
+              reached this pass with both at 0. }
             AliasElemTk[i] := AliasTk[targetAlias];
             AliasElemRec[i] := AliasElemRec[targetAlias];
+            if AliasStrCap[targetAlias] > 0 then
+              AliasPtrStrCap[i] := AliasStrCap[targetAlias];
+            if AliasStrElemTk[targetAlias] <> 0 then
+              AliasPtrStrElemTk[i] := AliasStrElemTk[targetAlias];
             if AliasPtrDepth[i] = 1 then
             begin
               AliasPtrBaseTk[i] := AliasElemTk[i];

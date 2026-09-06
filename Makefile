@@ -7169,6 +7169,23 @@ test-core: $(COMPILER)
 	@# a class field the same shape did not refuse at all, it read 0 for 42.
 	@$(TESTTMP)/test_fpta26 | diff -u test/test_forward_pointer_to_array_type.expected - \
 	  || { echo 'test_forward_pointer_to_array_type: FAIL - a forward pointer to an array type lost its element'; exit 1; }
+	./$(COMPILER) test/test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee.pas $(TESTTMP)/test_fpsca26
+	@# .expected is fpc 3.2.2's own output. ResolvePendingPointerAliases' "plain
+	@# non-pointer type alias" arm was guarded on AliasElemRec <> REC_NONE -- a
+	@# RECORD-only condition wearing a general name -- so a pointee that is an alias
+	@# to a set, a Double, an Int64 or a string[N] took NO arm and kept the
+	@# tyInteger the PtrElemDepth hatch stands in for an unresolved name. SizeOf
+	@# answered 4 for pointees of 8 and 32 bytes, `c40 in p^` over a forward ^TSet
+	@# SEGFAULTED, and a store through a forward ^string[4] wrote TEN characters.
+	@# NO ROW'S CORRECT ANSWER IS 4: that is what the defect produces and it is also
+	@# sizeof(Integer) and the storage size of an enum, so a ^TMyInt row passes
+	@# while the machinery does nothing. Hence Int64 over 2^32, a 72-member enum,
+	@# and a set member at index 40. Every forward row has an IN-ORDER twin --
+	@# declaration order changing whether a program is right is the tell this whole
+	@# defect class announces itself with, and two earlier arms of the same
+	@# procedure were found by it.
+	@$(TESTTMP)/test_fpsca26 | diff -u test/test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee.expected - \
+	  || { echo 'test_a_forward_pointer_to_a_scalar_or_set_alias_keeps_its_pointee: FAIL - a forward pointer lost its scalar or set pointee'; exit 1; }
 	./$(COMPILER) test/test_forward_pointer_targets_that_resolve_late.pas $(TESTTMP)/test_fptrl26
 	@# .expected is fpc 3.2.2's own output. The ACCEPT side of the drain added
 	@# 2026-09-06 for a `^T` whose T is never declared. Six legal forward
