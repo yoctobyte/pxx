@@ -16201,6 +16201,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	./$(COMPILER) test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26
 	tools/expect_same.sh test_recstaticinst26 "$$($(TESTTMP)/test_recstaticinst26)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
+	./$(COMPILER) test/test_a_class_const_is_a_constant_when_named_through_its_type.pas $(TESTTMP)/test_qualclsconst26
+	tools/expect_same.sh test_qualclsconst26 "$$($(TESTTMP)/test_qualclsconst26)" "$$(cat test/test_a_class_const_is_a_constant_when_named_through_its_type.expected)"
+	! ./$(COMPILER) test/test_a_class_name_is_not_an_integer_constant_fail.pas $(TESTTMP)/test_clsnameint26 > $(TESTTMP)/test_clsnameint.log 2>&1
+	grep -q "not a constant" $(TESTTMP)/test_clsnameint.log
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

@@ -4077,12 +4077,36 @@ begin
           SymSyncTypeRef(cIdx);
         end;
         Expect(tkEq, '=');
-        if (cTk <> tyRecord) and (CurTok.Kind = tkIdent) and
-           IsClassType(CurTok.SVal) and (FindSym(CurTok.SVal) < 0) then
+        if (cTk = tyPointer) and (CurTok.Kind = tkIdent) and
+           IsClassType(CurTok.SVal) and (FindSym(CurTok.SVal) < 0) and
+           ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
         begin
           { Metaclass typed const initialized with a class NAME —
             `SSLImplementation: TSSLClass = TSSLNone;` (blcksock). Init kind 5:
-            the emitter builds an AN_CLASSREF (VMT address) assignment. }
+            the emitter builds an AN_CLASSREF (VMT address) assignment.
+
+            TWO GUARDS, BOTH ABOUT WHAT THIS ARM IS FOR, and the arm used to
+            have neither.
+
+            THE DESTINATION. `cTk <> tyRecord` accepted every non-record slot,
+            so `const V2: Integer = TA;` took this arm and stored the VMT
+            ADDRESS in an Integer -- pxx printed 4261440 where fpc 3.2.2
+            refuses with `Illegal expression`. A metaclass const reaches here as
+            tyPointer (the `class of` branch a dozen lines up is the one that
+            calls SetSymPointerType), which is the type this arm can actually
+            initialise; `<> tyRecord` was a test for the ONE destination that
+            had its own arm, not a test for this one's.
+
+            THE DOT. A class name followed by `.` is not a class REFERENCE, it
+            is a qualified member: `V2: Integer = TObj.Val` names a class const.
+            This arm ate the type name and returned, leaving the `.` to the
+            class member loop, which reported `this token is not a class member`
+            -- a diagnostic about the CLASS BODY for a defect in the const
+            VALUE, and the reason tclass13d.pp's wall looked like a missing
+            `const` section rather than a missing lookahead. A record body did
+            NOT show it (IsClassType is False for a record), so the identical
+            declaration compiled in one type body and not the other.
+            bug-p-a-class-const-is-not-a-constant-when-named-through-its-type }
           cCi := FindUClass(CurTok.SVal);
           if cCi < 0 then Error('unknown class in constant initializer');
           Next;

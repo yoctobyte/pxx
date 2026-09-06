@@ -11558,6 +11558,27 @@ begin
     CEEnumId := FindEnumType(CurTok.SVal);   { CurTok is still the type name }
     Next; Next; Next;   { TEnum, '.', member }
   end
+  else if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+          (FindQualifiedClassConstSym(CurTok.SVal, GetTokenStr(TokPos+1)) >= 0) then
+  begin
+    { `TFoo.K` -- a class or record CONST named through its owning type, the
+      sibling of the TEnum.member arm above and the same shape: a type name, a
+      dot, a member that folds to an ordinal. The three class-const arms further
+      down are all BARE names and none of them can see this spelling; see
+      FindQualifiedClassConstSym (pasparser_class.inc) for what that cost.
+      The kind rules are the named-const ones from the tkIdent arm below --
+      Boolean, Char and unsigned-64 keep their kind through the fold. }
+    idx := FindQualifiedClassConstSym(CurTok.SVal, GetTokenStr(TokPos+1));
+    r := Syms[idx].ConstVal;
+    if (Syms[idx].TypeKind = tyBoolean) or (Syms[idx].TypeKind = tyChar) or
+       TkIsUnsigned64(Syms[idx].TypeKind) then
+      CEOrdTk := Syms[idx].TypeKind
+    else
+      CEOrdTk := tyInteger;
+    CEEnumId := SymSemId[idx];
+    Next; Next; Next;   { TFoo, '.', K }
+  end
   else if (CurTok.Kind = tkIdent) and
           (CaseEqual(CurTok.SVal, 'high') or CaseEqual(CurTok.SVal, 'low')) and
           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then

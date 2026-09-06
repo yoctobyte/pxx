@@ -388,6 +388,37 @@ begin
   Result := FindSym(ClassConstMangle(ClassConstCi[reg], nm));
 end;
 
+function FindQualifiedClassConstSym(const tname, cname: AnsiString): Integer;
+{ `TFoo.K` in a CONSTANT expression: the backing symbol of an UNTYPED class or
+  record const named through its owning type, or -1.
+
+  The const-expression folder knew three ways to reach a class const and all
+  three were BARE names (a sibling in the same const section, one used inside a
+  method, one used as a field's array bound). The qualified spelling -- the one
+  Delphi documents and the only one available from OUTSIDE the type -- reached
+  none of them: `const G = TObj.Val + 10;` and `var a: array[0..TObj.Val] of
+  Integer;` both answered `not a constant`, pointing at the expression for a
+  defect in the LOOKUP, and inside a class body the parser desynced on the `.`
+  and reported `this token is not a class member` instead. tclass13d.pp is the
+  corpus row (`V2: Integer = TObj.Val`).
+
+  UNTYPED only, and that is the language rather than a shortcut: a TYPED class
+  const has storage (FindClassConstSym is the accessor for that) and is not a
+  constant expression in FPC either, so the Kind test below is what keeps
+  `V1: Integer = 1; V3: Integer = TObj.V1` refused exactly as fpc refuses it.
+  Records reach this too -- FindUClass answers for them, and a record's `const`
+  section is the same registry. }
+var reg, ci: Integer;
+begin
+  Result := -1;
+  ci := FindUClass(tname);
+  if ci < 0 then Exit;
+  reg := FindClassConst(ci, cname);
+  if reg < 0 then Exit;
+  Result := FindSym(ClassConstMangle(ClassConstCi[reg], cname));
+  if (Result >= 0) and (Syms[Result].Kind <> skConst) then Result := -1;
+end;
+
 function EmitClassConstNode(const key: AnsiString; var outTk: TTypeKind): Integer;
 { Build a literal AST node for a resolved class-const backing entry (its mangled
   key). Scalar -> AN_INT_LIT/AN_FLOAT_LIT (carrying any enum identity), string ->
