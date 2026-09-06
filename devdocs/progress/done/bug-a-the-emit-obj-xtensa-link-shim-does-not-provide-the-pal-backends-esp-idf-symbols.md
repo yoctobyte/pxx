@@ -129,4 +129,4 @@ the row under repair is the target itself and quick does not run it.
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d058a3dae.
