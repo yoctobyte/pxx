@@ -11828,3 +11828,75 @@ was a plausible reading of four rows and it is wrong. The split is by which fgl 
 driver uses, and therefore by which of the two faces that class's body contains. Four rows
 is enough data to support a wrong partition and not enough to refute one; the two failure
 SITES settled it in one look.
+
+## "IT COMPILED" IS NOT A POSITIVE CONTROL FOR "IT WAS CALLED" — and the two spellings of one defect can disagree about which of them is broken
+
+Measured 2026-09-06 (frank-optimize), and it cost an hour plus a wrong ticket name.
+
+A class method reached through a class-REFERENCE field is parsed as a **field read**:
+instrumented at the failure site, the expression parser hands back `AN_FIELD` (kind 11)
+with the argument list's `(` still unconsumed. That produces two observables which point
+in opposite directions:
+
+```
+statement position   error: statement is neither a call nor an assignment
+EXPRESSION position  compiles -- and the method is never called
+
+  r := PPVMT(ppv)^.__ClassRef.Val(3);
+    fpc 3.2.2          SIDE called n=3   r=42
+    pin v404           SIDE called n=3   r=42
+    HEAD 4dcd25f1bc40  r=-86205216       SIDE never printed
+```
+
+**The diagnostic is correct and the parse is wrong.** The spelling that reports nothing is
+the one that ships a value into real library code — `generics.defaults.pas:1865` and
+fifteen sibling lines.
+
+The expression spelling was probed FIRST, seen to **compile**, and written down as *the
+working arm*. That single reading is what made this look like a statement-parser gap, and
+it is why the ticket carried a false name (`...-is-not-a-statement`) until the slug had to
+be changed. **A compile is an assertion about the parser accepting the text. Nothing in it
+observes that the callee ran, and for a defect whose whole signature is a call that
+silently does not happen, it is a guard that cannot fail.**
+
+> **The discriminating probe is a method with a `WriteLn` SIDE EFFECT *and* a distinctive
+> RETURN VALUE — so that silence and a garbage number both show.**
+
+Either half alone is blind in one direction: the return value alone can collide with
+whatever junk the slot held, and the side effect alone says nothing about what the caller
+received. Same family as `## AND CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE
+DEFAULT` and `## MATCH THE ASSERTION CLASS TO THE DEFECT CLASS`, with the observation that
+**"the error message names the lucky half"**: a defect with a loud spelling and a quiet
+spelling gets named, ranked and searched by the loud one, and the quiet one is where it
+ships. This ticket moved **prio 60 -> 80** on exactly that re-reading.
+
+### The unifying line, and it is the author's own
+
+> **Twice in one session the SAMPLE FRAME was the problem rather than the instrument:
+> first a census over three Pascal corpora for a change every frontend reaches, then a
+> probe that observed COMPILATION for a defect that lives in EXECUTION. Both times the
+> guard was sound and pointed slightly to one side of the thing.**
+
+See `## A SHARED-MACHINERY CHANGE NEEDS A CORPUS PER FRONTEND` — a discrimination control
+certifies the instrument, never the sample frame, and *what population* and *what
+observable* are the same question asked on two axes.
+
+## A BISECT ACROSS A WINDOW CONTAINING A MASKING DEFECT MUST CARRY THE MASK'S FIX — and assert it is EFFECTIVE at every step
+
+Same session, same night. The window `5b5fdb0b3..de4bf2245` is GOOD at `60666ec36`, so the
+defect is at or after `c01eb17a8` — **the same commit as a nested-alias bug fixed in
+`170e7aee1`, and that bug MASKS this one across the rest of the window.** So every step of
+the bisect must be built with `170e7aee1` carried, and a plain `git apply` does not reach
+that far back because `symtab.inc` has drifted.
+
+**The instrument's correct behaviour is to report `UNMEASURABLE`, not `GOOD`.** A step that
+could not build the patched compiler has measured the masking bug, and a masking bug
+produces exactly the same observation as an absent defect — so "no failure at this step"
+is the safe-looking wrong answer, and it is wrong in the direction that moves the bisect
+past the cause. The harness here refused rather than building an unpatched compiler and
+calling the step good, and the precondition is written into the ticket: **assert the
+masking fix is effective IN THE BUILT BINARY before trusting a GOOD.**
+
+This is the truncation family's structural bias (`## The one instrument that identifies
+the ENDING`) in a bisect: *a step that never ran the test and a step that ran it clean are
+the same silence*, and every member of that family fails toward the reassuring answer.
