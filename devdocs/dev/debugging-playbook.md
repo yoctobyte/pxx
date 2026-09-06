@@ -14301,3 +14301,54 @@ you want. **The caveat carries the 81 and must travel with it: the corpus source
 Point the tool at a tree that changes and an edit above the failure moves every line below it —
 the measurement does not transfer, and the honest move is to re-measure rather than to inherit
 the number. *A normalisation is a claim about noise; it needs a rate, not a plausible story.*
+
+## THE DEGENERATE CASE IS THE ONE A CAREFUL AUTHOR REACHES FOR FIRST, AND IT IS THE ONE THAT CANNOT FAIL — an empty open array's length is 0, and so is a lost one
+
+**A new member of the collision-with-a-legal-value family, and the most dangerous one so far
+because of WHERE the collision sits.** The family already collects `sizeof(int)` colliding with
+`TypeStorageSize(tyUnknown)`, a BSS size of 0 colliding with a class that genuinely has no data,
+and an accessor's zero standing in for its own null. Those are traps you walk into. This one is a
+trap you are *led* into, because the colliding case is the first case anybody writes.
+
+Measured 2026-09-06 (frankD, corpus rung 7 / `fcl-passrc`,
+`bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap`). `array of
+const` in a method-pointer type is refused at declaration. The parse fix is three lines mirroring
+two existing copies of the same arm, it compiles, and **frankD wrote it, measured it, and reverted
+it**:
+
+```
+ev := @L.Emit;  ev('direct', [1, 2, 3]);   fpc: direct n=3   pxx: direct n=4025888
+                ev('empty',  []);          fpc: empty  n=0   pxx: empty  n=0
+```
+
+The declaration now parses and the indirect CALL mismarshals — **a clean refusal traded for a
+silent wrong number**, which is strictly worse and is why the fix is quoted in the ticket rather
+than landed. But the row that matters here is the second one. **`Length([])` is 0 under a correct
+build and 0 under a build that has lost the length entirely.** A probe written with only an empty
+argument list — which is the smallest, cleanest, most obvious first probe for an open array —
+**passes, and ships the bug.**
+
+**The generalisation, and it is about the ORDER you write probes in.** For any quantity with a
+degenerate value — an empty collection, a zero count, a nil pointer, a one-element case, a
+default-constructed record — that degenerate value is very often *also* what the machinery
+produces when it does nothing at all. And the degenerate case is where a careful author starts,
+because it is the one they can reason about completely. So the discipline is not only *"choose a
+probe whose right answer differs from the default"* (CLAUDE.md) — it is:
+
+> **Write the NON-degenerate probe FIRST, and treat a green on the empty/zero/nil case as
+> carrying no information until it has one beside it.**
+
+`n=3` is the assertion. `n=0` is decoration, and on its own it is an instrument reporting that it
+was never connected.
+
+### The second half: a refusal is a RESULT, and trading it away is a regression
+
+The other reason frankD reverted is worth carrying separately. **A diagnostic that refuses is a
+working part of the compiler.** Replacing it with something that accepts and then produces a wrong
+value is not partial progress toward the feature — it is the deletion of the only thing standing
+between a user and a silent wrong answer. This repo already says a comment and code that disagree
+mean one is wrong and you do not know which; the same holds for a refusal and a feature.
+**Land the parse arm and the marshalling in one change, or land neither** — and if the parse arm
+is genuinely the smaller half, that is an argument for filing it with the measurement attached,
+not for landing it alone. Three copies of one arm is also the ordinary `normalise-dont-special-case`
+signal: the third copy is where you notice the concept was never given a single home.
