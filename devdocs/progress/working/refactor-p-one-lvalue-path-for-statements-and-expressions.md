@@ -642,3 +642,60 @@ Not a differential over every target shape — that is run, and the receiver-sid
 answer is clean. It needs **one decision**: how a delegated walk reports "I
 consumed the assignment". Once that exists, the statement path's remaining
 duplicated walk can be deleted rather than converged arm by arm.
+
+## 2026-09-06 (frankA) — the blocker is GONE, and it was the opposite of the one recorded
+
+`4238fe9c7`. The convention this ticket needed exists and the three refusals it
+was measured on are fixed.
+
+**What the hand-off actually needed** was not a way to suppress a call. It was a
+way to say *the walk already performed the store* — because
+`ParseClassRecordSelectors` asks `PropAccessIsWrite` for itself, emits the
+setter, and consumes the `:=` and the value with it. Both cast arms then ran
+`Expect(tkAssign)` on a token that was gone.
+
+The convention is the one `pasparser_stmt.inc` already used for the non-cast
+spellings — **a call node in target position IS the statement** — plus one
+conjunct that makes it sound: **the `:=` must be gone.** Three cases, separated
+by that conjunct alone:
+
+| shape | node | `:=` | outcome |
+|---|---|---|---|
+| `PTC(raw)^.P := 21` | call | consumed | the statement |
+| `PTC(raw)^.Bump;` | call | absent | the statement (was refused) |
+| `PTC(raw)^.GetV := 5` | call | still there | error, as before |
+
+Reading the token stream is not a weaker signal than an out-parameter here — it
+is the same fact, taken from the one place that cannot disagree with itself.
+
+**A comment I wrote before measuring was wrong and is corrected in the same
+commit.** I claimed case three fell through to *"cannot assign to the result of
+a function call"*. It did not: it answered `IR_UNSUPPORTED ... could not lower
+AST node (kind 8)` — an internal message for an ordinary user mistake, on the
+pin too — because the single-exit guard tests the RETURNED node for being a
+call and the cast branches hand back an `AN_ASSIGN` whose LEFT is the call.
+Extended at that guard rather than in the branch, which is what its own comment
+argues for.
+
+### What is left of this ticket
+
+The blocker is discharged, so the remaining work is the merge itself: parse the
+target with the expression lvalue parser, take whatever comes back, and delete
+`ParseCastTargetSuffix` and the arms around it. Everything this ticket listed as
+unknown is now measured:
+
+- the assignment-target flag — **exists, and is a lookahead, not a flag**
+- whether the shared walker over-calls a trailing `.name` — **it does not; nine
+  receiver-side shapes are byte-identical to fpc including accessor identity
+  and order**
+- whether it mis-consumes `[` — **it does not; it dispatches the default
+  property correctly in both faces**
+- what happens when it completes the store — **the convention above**
+
+**The one thing still unmeasured is the deletion itself**, and it should be done
+as a differential over target shapes before and after, not as a reading. The
+harness for it is the accessor-trace program used here: give every accessor a
+side effect that names itself, so a store that reaches the setter and a store
+that goes somewhere else are distinguishable even when the resulting VALUE is
+the same. `arr[3]` is written both by the setter and by a raw subscript, so a
+value diff cannot see the difference; the trace can.
