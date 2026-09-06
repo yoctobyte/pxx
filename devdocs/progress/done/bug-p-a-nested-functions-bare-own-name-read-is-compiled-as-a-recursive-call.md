@@ -108,3 +108,5 @@ is kept in the fixture for exactly that reason.
   controls; `.expected` is fpc 3.2.2's own output.
 - `test/test_nested_fn_bare_own_name_delphi.pas` + `.expected` — the mode arm.
 - `Makefile` — two `test-core` rows (`test_nestown26`, `test_nestowndel26`).
+- All of the above landed together, commit fa7f75bec. `gate.sh quick` GREEN at that
+  tree; `make compiler/pascal26` `converged after 1 round(s)`.
