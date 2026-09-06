@@ -553,7 +553,7 @@
  ],
  "host": "seven",
  "idle_yield": {
-  "aborts": 1,
+  "aborts": 2,
   "phase": "pin-verify",
   "target": "1b903c1ddaf29931876cca6ff1d559dff174ed6f"
  },
