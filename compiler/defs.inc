@@ -209,7 +209,12 @@ const
   MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
   MAX_CPREP_MACROS = 32768;
   CPREP_MACRO_HASH_SIZE = 16384;   { power of two; ~half-full at MAX macros }
-  MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
+  MAX_DECL_NAMES = 1024;  { comma-separated names in one var declaration line.
+    Pascal has no such limit; this bound exists only because the two parsers
+    collect the group into fixed-size local arrays. 256 was reachable by real
+    code -- ParseFactorCore in this very tree has 532 managed locals, and a
+    generated fixture declaring 532 on one line was rejected (2026-09-06).
+    Cost of the bump: 12KB of parser stack per declaration group, not per name. }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   { how many RECOVERED diagnostics are printed before the compiler gives up. A
     file whose first error cascades produces noise, not information, past a
