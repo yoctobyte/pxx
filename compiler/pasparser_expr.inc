@@ -10609,6 +10609,27 @@ begin
   Result := True;
 end;
 
+function ConstCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
+{ THE ONE ENTRY POINT for "is `nm` a type name a CONST expression may cast
+  through, and how wide is it". It exists to own the ORDER, because the order is
+  load-bearing and it was wrong when it lived at the call site: a source
+  declaration outranks a builtin (symtab.inc:6215 documents that inverting that
+  breaks the compiler outright), and this door asked the builtin table first.
+
+    type LongInt = Int64;
+    const A = LongInt(4294967296 + 5);   ->  5             (builtin, 4 bytes)
+    var b: LongInt; b := LongInt(...);   ->  4294967301    (alias, 8 bytes)
+
+  Fixed at the call site in 4be17cb8f; here so that a future caller cannot get
+  it wrong again by asking the two halves in the order that reads naturally.
+  A rule spelled once is not a rule spelled at every caller.
+  refactor-p-five-dispatch-sites-for-one-named-type-cast }
+begin
+  Result := ConstAliasCastWidth(nm, bytes, signed);
+  if not Result then
+    Result := ConstIntCastWidth(nm, bytes, signed);
+end;
+
 function ConstApplyCast(r: Int64; bytes: Integer; signed: Boolean): Int64;
 { Reinterpret r to the cast width, matching the runtime wrap behaviour. Sign
   extension uses subtraction (Result - 2^width) rather than `not`, and decimal
@@ -10685,30 +10706,11 @@ begin
   hasConstCast := False;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
-    { ORDER IS LOAD-BEARING AND IT WAS INVERTED: a source declaration outranks a
-      builtin (symtab.inc:6215 documents that the whole compiler breaks if the
-      other way round), so the ALIAS door is asked first -- exactly as the
-      runtime cast chain in ParseFactorCore already asks it. Asking the builtin
-      first made the two doors answer differently about the SAME cast in the
-      SAME program:
-
-        type LongInt = Int64;
-        const A = LongInt(4294967296 + 5);   ->  5             (builtin, 4 bytes)
-        var b: LongInt; b := LongInt(...);   ->  4294967301    (alias, 8 bytes)
-
-      Self-inconsistent, so it needs no oracle to be wrong; fpc 3.2.2 answers
-      4294967301 at both. The realistic spelling is a portability shim --
-      `type PtrInt = LongInt;` or `type SizeInt = Int64;` -- which is why this
-      is a bug and not a curiosity about shadowing.
-
-      The behaviour change is confined to names that are BOTH a builtin scalar
-      and a live user alias: for every other name exactly one door ever
-      answered, so which is asked first cannot matter. The only such names in
-      the tree are lib/rtl's `TDateTime` and `Currency`, and both doors decline
-      them (not integer-family, not ordinal). }
-    hasConstCast := ConstAliasCastWidth(CurTok.SVal, castBytes, castSigned);
-    if not hasConstCast then
-      hasConstCast := ConstIntCastWidth(CurTok.SVal, castBytes, castSigned);
+    { ONE door, and it owns the alias-before-builtin ORDER internally rather
+      than leaving it to be spelled here -- see ConstCastWidth for the cast this
+      site used to fold to 5 while the runtime cast of the same expression in
+      the same program answered 4294967301. }
+    hasConstCast := ConstCastWidth(CurTok.SVal, castBytes, castSigned);
   end;
   if hasConstCast then
   begin

@@ -17,6 +17,23 @@ four since the `OrdinalNameToTk` door was deleted. Note also that FIVE counts
 RECOGNITION rules, not constructions — the file has fourteen
 `AllocNode(AN_PTR_CAST)` sites, and the two counts are not in conflict.)*
 
+**STATE, 2026-09-06: the CONSTRUCTION half is done and the RECOGNITION half is
+not.** Every scalar door now builds its node in one body — `TryScalarNamedCast`
+(`297dbd125`) for the runtime doors, `ConstCastWidth` for the const-fold door —
+and the seven defects listed at the bottom of this ticket were all found by
+measuring the doors on the way there. What is left is the merge this ticket was
+filed for: one `name -> (castKind, enumId, aliasIdx)` resolver replacing
+`FindTypeAlias` and `BuiltinScalarTypeKind` being asked separately. That edit is
+the same edit as `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor`
+seen from the other side, and the ticket stays `working` with `owner: frankA` as
+attribution, not a claim — it is free for the taking.
+
+**And the census was short by one: there is a SIXTH door**, in `ConstEvalPrimary`
+(~`:10546`), 4000 lines below `ParseFactorCore` and therefore invisible to every
+count taken by reading that function. It is now one entry point, `ConstCastWidth`,
+which owns the alias-before-builtin order internally rather than leaving it to be
+respelled at each call site.
+
 `ParseFactorCore` (`compiler/pasparser_expr.inc`) resolves a named-type cast in
 **five** places. Four of them build the identical node — `AN_PTR_CAST` with
 `ASTIVal = -1` — and differ only in *which names they recognise*:
@@ -49,7 +66,12 @@ Four rounds, each closed correctly, none of which could see the next.
 
 One resolver — `name -> (castKind, enumId, aliasIdx)` — consulted once, with a
 single arm building the node. The five sites' *recognition* rules merge; their
-*construction* is already one thing. Non-scalar targets (record, string,
+*construction* **is one thing as of `297dbd125` — it was not when this was
+written.** That sentence was the ticket's own load-bearing assumption and it was
+wrong: four doors each carried their own copy of the variant/Explicit/ordinal/
+float arms, which is exactly why fixing one left the next shut seven times in a
+day. Read the original claim as the thing to CHECK first on any unification
+ticket, not as a fact about this one. Non-scalar targets (record, string,
 method-pointer, pointer) keep their own arms, because those genuinely build
 different nodes; this is about the scalar path only.
 
