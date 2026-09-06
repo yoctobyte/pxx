@@ -176,4 +176,4 @@ green including the pinned-RTL canary and the FPC seed canary.
 `$(PXX_STABLE)` consumer gets it on the next compile with no pin needed.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 677e75495.
