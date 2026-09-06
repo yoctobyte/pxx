@@ -228,11 +228,14 @@ def main(argv=None):
                if r["tier"] == tier and r["verdict"] == "RED" and r["sha"][:12] in rep_shas)
     cgrn = sum(1 for r in rows
                if r["tier"] == tier and r["verdict"] == "GREEN" and r["sha"][:12] in rep_shas)
-    print(f"== reports/*.md, {a.host} {tier} tier -- the source that is biased ==")
+    print(f"== the write-ups, {a.host} {tier} tier -- the source that is biased ==")
     print(f"  REDs   with a report file: {cred} of {nred}")
     print(f"  GREENs with a report file: {cgrn} of {ngrn}")
-    print("  (compared against THIS host's log only: reports/ holds every host, and")
-    print("   a ratio across two populations is not a completeness check)")
+    print(f"  proportion OF: host {a.host}, tier {tier}, {len(rows)} log rows as of")
+    print(f"     {rows[-1]['date']} -- an APPEND-ONLY log read at one instant, not a")
+    print("     terminated producer. Both numerator and denominator still move.")
+    print("  (compared against THIS host's log only: the write-up directory holds every")
+    print("   host, and a ratio across two populations is not a completeness check)")
     if rgreen is None:
         print("  reports/ has no bounding GREEN at all for this window")
     elif rgreen["sha"][:9] != green["sha"][:9]:

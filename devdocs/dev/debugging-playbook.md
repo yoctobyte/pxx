@@ -5567,6 +5567,74 @@ of the search that produced it; a POSITIVE one inherits the population of the ta
 it came from. Neither aperture nor population survives a summary unless somebody
 types it.
 
+### The third face, found the same day: TWO counts from DIFFERENT populations, compared as if they were one
+
+The two above are a single count losing its scope. This is two counts keeping
+theirs and being **put side by side anyway** — and it is worse, because the
+comparison is doing the work of a completeness check while measuring nothing.
+**The mixing always makes the incomplete side look OVER-complete**, so the check
+certifies the gap it was built to catch. Three instances on 2026-09-06:
+
+| the comparison | why it read as reassurance | the truth |
+| --- | --- | --- |
+| **1954** files under `tstate/reports/` vs **1255** rows in `runs-seven.ndjson` | more files than rows, so the directory looked complete | `reports/` is FOUR hosts, the ndjson is one. Seven's coverage was 869 of 1256, and 43 of 340 on the GREENs that mattered |
+| a census over `test/*.pas` vs one over `find test lib/rtl lib/pcl -name '*.pas'`, 7x apart at the same file index | same subject, same tool, same-looking name | the glob is non-recursive. 1062 of the fires by file 400 come from `test/` SUBDIRECTORIES the first could not see, each pulling PCL units full of classes |
+| **`grep -c <new value>`** after an unanchored `sed -i` | the count came back as expected | it cannot distinguish *changed one* from *changed three*. `git diff` can; it was not read |
+
+frankB's sentence for the middle row is the general one: **the glob IS the
+population, and a non-recursive `dir/*.pas` beside a recursive `find dir` are two
+different corpora wearing the same name.** CLAUDE.md already records the same
+animal from the other end — `ls devdocs/progress/` with a wildcard counting
+`done/` as open — and files it under hedging, which is where it was noticed but
+not where it lives.
+
+Two rules fall out, and the second is the one people resist:
+
+1. **Before comparing two counts, say what each one ranged over, in the same
+   sentence.** If the two phrases are not identical, the comparison is not a
+   check. This costs one clause and it is the whole guard.
+2. **Two numbers you cannot make agree, where one can no longer be re-run, is not
+   a discrepancy to be resolved by argument** (frankD, dropping a lost 323-file
+   census rather than reconciling it to a live 2276-file one). Reconciling by
+   reasoning invents a mechanism to bridge them, and the invented mechanism
+   outlives both numbers. **Drop the unrepeatable one and say what stayed
+   unexplained** — in that case, top-level `test/` running ~6.7 fires/file against
+   the old ~1.5, which population shape does not explain and nobody can chase.
+   An honest unresolved residual is worth more than a reconciled pair.
+
+### And a fourth, which is the same rule applied to TIME rather than to a set
+
+**A DISTRIBUTION OVER A PARTIAL SWEEP IS NOT A SMALL VERSION OF THE DISTRIBUTION
+OVER THE WHOLE ONE** (frankB, 2026-09-06, correcting a number they had relayed an
+hour earlier). A running census reported *"2174 fires, 100% one kind"*. The
+finished sweep over the same 2276 files says 6287 fires in one arm — 6283 of that
+kind and **4 of another, none of which appear before roughly fire 4000**.
+
+The trap is not "a running instrument was quoted"; the relayer knew it was
+running. It is that **a COUNT degrades gracefully as a sweep truncates and a
+SHAPE does not.** The rare kinds are precisely what a partial sweep is missing, so
+**purity is what partial looks like** — and *"100% of N so far"* is a weaker claim
+than *"N so far"* while reading as a much stronger one. A homogeneous
+distribution should raise the question of whether the producer had terminated,
+not settle it.
+
+The aperture note in the census's own ticket had said a non-semicolon kind found
+later would ADD an arm rather than invalidate the result. That is exactly what
+happened, to the person who wrote the note, and it is why the correction cost a
+line rather than a day. **Write the aperture down before the sweep finishes, so
+the finding it eventually contradicts is already scoped.**
+
+**So any tool that reports a proportion must say what it is a proportion OF and
+whether the producer had terminated.** Two entries in an allow-list because the
+sweep finished; one entry an hour earlier, wrong, and no test would have caught
+it — the missing kind was a `var` section reopening a field list after a nested
+`type` section: rare, real, and present in our own test tree.
+
+**The verification instrument gets this too, which is the trap in row three.**
+Confirming an edit by grepping for the value you just wrote asks *"is the new
+value present"*, and the answer is yes whether you changed one line or three.
+Read the diff — it is the only instrument whose population is exactly the change.
+
 ## N CAUSES AND N SYMPTOMS IS A COINCIDENCE OF ARITY — the COUNTING supplies a correspondence that neither instrument measured
 
 Measured 2026-09-06, by this file's coordinator, on itself. **The composition
