@@ -153,4 +153,4 @@ landed. The elimination is now corroborated by an intervention — upgrade the
 emulator, the row goes green — which is stronger than the original elimination
 but still not the mechanism. It costs one search for anyone with network
 access, and it is no longer urgent.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ce8567b28.
