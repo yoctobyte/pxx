@@ -17913,3 +17913,48 @@ any commit that touches a parser, which is what a per-fix loop that cannot see
 > claim about their own unpushed work: correct, honestly made, and impossible for
 > the recipient to do anything with but trust. **The recipe's value is that the
 > claim stops depending on somebody having remembered.**
+
+## A FAILED COMPILE LEAVES A WORKING INSTRUMENT POINTING AT THE OLD CODE — the fifth route to a stale binary, and the only one your own change causes
+
+`CLAUDE.md` lists four routes to a stale `compiler/pascal26`: a seeded tree, a
+reverted experiment, a sync that pulled someone's `compiler/**`, and the
+positive-control revert cycle. **All four are accidents of housekeeping. There is
+a fifth, and it fires precisely when your change does not compile — which is
+exactly the moment you are about to look at output.**
+
+Measured 2026-09-06 (frankS), and it nearly certified a wrong guard: the compile
+errored, so `compiler/pascal26` was **never rewritten**, the previous build ran,
+and it printed the correct answer for the case under test. The positive control
+passed on evidence produced by the code the change was replacing.
+
+**Corroborated from a second direction here:** the `Makefile` has **no
+`.DELETE_ON_ERROR`**, so a failed recipe leaves its target exactly as it was.
+Nothing is corrupt — that would be loud. What survives is a *working binary built
+from the previous source*, which is the quietest possible failure: it runs, it
+exits 0, and it answers about code you have just changed.
+
+**Why it beats the other four for danger.** The other four leave a stale binary
+while your compile SUCCEEDED, so the tree and the binary disagree for reasons
+outside the loop you are in. This one makes the staleness a CONSEQUENCE of the
+thing you are testing, so the two failures are perfectly correlated: **the worse
+your change is, the more certain you are to measure the old one.** A change that
+compiles cannot hit it; a change that does not compile always does.
+
+**The guard is the verb, and it is already in `CLAUDE.md` for a different
+reason:** `make` prints `converged after N round(s)` when it recomputed and
+`self-host fixedpoint: verified` when it took the stamp path. **Neither line
+appears at all when the compile failed** — so the check is not "did I see the
+right verb", it is *did I see either verb since my last edit*. Read the exit
+status of the build, in the same breath as the output, every time; and prefer
+`make ... && ./probe` over two statements, because `;` between them is exactly
+the shape that runs the old binary.
+
+**And the case it caught is worth keeping as a companion** — *the name is not the
+thing*, in the form where the sampled part confirms the name. `ArrLen > 0` reads
+as "this array has a fixed length", and **every genuinely fixed array does have
+`ArrLen > 0`**, so the guard is right across the majority of its population and
+wrong only on the members that matter: `AllocParam` stamps `ArrLen := 1000` on
+EVERY array parameter as the open-array placeholder. `Kind <> skParam` is the
+real discriminator. frankS found it only because the positive control had been
+written as a **must-COMPILE row** rather than reasoned about — and then nearly
+lost it again to the stale binary above.
