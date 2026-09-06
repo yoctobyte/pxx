@@ -1,18 +1,51 @@
 ---
 prio: 65
-blocked-by: [feature-b-getfpcheapstatus-needs-always-on-heap-accounting, feature-b-erroraddr-is-missing-from-system]
+blocked-by: []
 track: P
-status: working
+status: unfinished
 summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **377 pass, 0 fail, 123 skip, 50 auto-gated of 550** at `e929e720f` / compiler `d1d15deee084` (frankS, `63350e13c`), superseding 368 at `36d7e5fd4`. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
 
+## 2026-09-06 (frank-coordinator) — the two `blocked-by:` edges are CUT, and the reason is measured
+
+**This row was in `working/` with an empty `owner:` AND gated by two edges its own summary
+calls stale. Both states hid it, in opposite directions, from the instrument the Track P
+campaign is counted with.** `working/` kept it out of `ready`; the edges would have kept it
+out even after parking. **At p65, with four sessions contributing to it tonight, it appeared
+in no count of remaining Track P work.**
+
+**Parked** (nobody holds it — the section below says so in as many words: *"frontmatter
+`owner:` deliberately left unset rather than assigned by a passing seat"*), **and the two
+edges removed.**
+
+**The edges are cut on a measurement, not on impatience.** frankD verified both Track B
+features at `f38359248`: `ErrorAddr := nil` compiles and runs, and `GetFPCHeapStatus` is live
+and always-on in an ordinary build — **`0 -> 1048576` across a 1 MB `GetMem`**, against fpc's
+`0 -> 1048608`, measured as a **delta** rather than by a single call that could not tell a
+stub from an empty heap. `erroru.pp` — the suite helper whose absence gated `tobject1
+tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles.
+
+**The two B tickets stay OPEN and that is correct**: their own completion criterion is a march
+over `cclasses` / `comphook` / `finput` / `cfileutl`, the **FPC compiler-source** corpus, a
+*different candidate* from `fpc-testsuite` and not fetched. **Feature implemented, four
+consumers unverified.** But that residual is theirs and it does not gate this row, which
+needed the features to WORK and not to be signed off.
+
+**Consequence worth stating rather than leaving to be discovered:** those two B rows no longer
+inherit this row's p65 through `effective_prio`, so they will rank lower. That is the correct
+answer — a ticket whose feature is implemented should not be carrying the urgency of a row it
+no longer blocks.
+
+**Reversible, and here is the trigger to reverse it:** if a `fpc-testsuite` burn hits a wall
+that traces to `ErrorAddr` or `GetFPCHeapStatus`, re-add the edge and say which row failed.
+
 - **Type:** feature (frontend conformance corpus)
 - **Track:** P (Pascal frontend)
-- **Status:** working
+- **Status:** unfinished
   [[feature-pascal-corpus-expansion]].
-- **Owner:** frankA
+- **Owner:** 
 
 ## Idea
 FPC ships `tests/test/**` — thousands of small `.pp` programs, each exercising
@@ -621,3 +654,9 @@ diff <(awk -F'\t' '!/^#/{print $2"\t"$1}' census-e929e720f.tsv | sort) \
 **Not one of the 550 rows changed status.** That is a clean corpus-wide
 statement about those two changes, and it is the delta-by-diff this ticket's
 previous entry said the TSV would make possible — first use of it.
+
+## Parked 2026-09-06
+
+Nobody holds it: the body says in as many words 'Not claimed -- frontmatter owner: deliberately left unset rather than assigned by a passing seat.' That was the right instinct and it produced the wrong board state, because working/ + empty owner is out of ready AND attributed to nobody, so a p65 row four sessions contributed to tonight was invisible to the campaign count. Parked so it ranks again; RESUME by re-claiming. Live and current: census 377 pass / 0 fail / 123 skip / 50 auto-gated of 550 at b19b2f3b9, identical PER ROW across the lvalue refactor; both blocked-by edges measured stale (the B features are implemented, their own criterion is the unfetched FPC compiler-source corpus).
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.

@@ -13137,3 +13137,41 @@ the failure mode there is a missing copy at one of N sites, and the structural r
 make N equal 1. A grow that moved one array and not the others is **the identical defect to
 the compaction that did**, which this tree carried silently until `a8bfcb695`. `bss` 86425036
 → 83672548, **2752488 bytes**, all three columns in one commit.
+
+### POSTSCRIPT — "MAKE N EQUAL 1" IS A PROPERTY YOU INHERIT, NOT A TECHNIQUE YOU APPLY, and the cap-site count tells you which before you start
+
+frankH, 2026-09-06, on why the lockstep landmine had a structural answer here and often will
+not.
+
+The three fixup arrays could all grow inside one `FixupEnsure` **because the old code had
+exactly one cap check** — `if FixCount >= MAX_FIXUPS then Error` sat once, so the conversion
+had exactly one place to put the three `SetLength`s.
+
+> **`Data` had 23 overflow checks.** Converting that family would have wanted an `Ensure` call
+> at each, and the lockstep property would have been **discipline again rather than
+> structure.**
+
+So the good answer was **available**, not **chosen**:
+
+> **Count the cap SITES before deciding how to convert a family, not after.** One site means
+> the invariant can be made structural. N sites means you are choosing between N copies of a
+> rule — `## A RULE SPELLED PER CALLER FAILS BY AN ABSENT COPY` — and the conversion should be
+> designed around funnelling them first, or not attempted as one commit.
+
+**The fixed-size version was structurally honest in a way the conversion could have
+destroyed.** A single overflow check is a single point of truth about the table's bound; the
+naive conversion replaces one check with N grows and loses it silently, because every
+individual grow looks correct.
+
+### And a bucket that is only printed when it is LARGE cannot establish anything
+
+Same session, on the corpus comparison following the i386 sweep's `not-built=1911`. The native
+run's `not-built` is expected to be small — **and it is still worth printing, precisely
+because the same counter produced 1911 on a different population.**
+
+> **The 1911 was not a property of the harness; it was a property of asking Pascal programs to
+> be object files. Same loop, same counter, different population — and the counter is what
+> lets you tell those apart afterwards.**
+
+A number reported only when it is alarming is **not an instrument, it is an alarm**, and it
+cannot be used to characterise the run that did not trip it. Print the bucket at zero.
