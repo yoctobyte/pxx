@@ -4335,8 +4335,36 @@ begin
             other route it did not cover.
             bug-p-a-parameterless-generic-routine-cannot-be-called-because-the-
             call-site-predicate-requires-parentheses }
+          { ...BUT `as` AFTER THE `>` IS A DECLARATION, NOT A CALL, and dropping
+            the `(` requirement is what exposed it. `specialize Max<Integer> as
+            MaxIntF;` is the specialization-ALIAS form (ParseSpecialize's
+            "Optional 'as Name'" arm, ~900 lines below); the call-site sweep now
+            matched it, rewrote the run to `Max_Integer` and ate the keyword,
+            leaving `Max_Integer as MaxIntF;` where a declaration had been. The
+            reader then reported `expected 'begin' before 'Max_Integer'` -- a
+            diagnostic about the declaration section ENDING, for a rewrite that
+            happened three phases earlier.
+
+            THE `(` WAS ACCIDENTAL COVER FOR A SECOND, UNRELATED CONSTRUCT. It
+            was introduced to keep `a < b > (c)` from being eaten, and the alias
+            declaration was protected only because it happens to have `as` where
+            a call has `(`. Nothing said so, no test named it, and the guard's
+            own comment described the comparison chain alone -- so removing it
+            for a good reason took the undocumented second job with it. The
+            isDecl check above covers the OTHER declaration shape (a
+            `function`/`procedure` header) and had the same character.
+
+            Excluding `as` restores the pre-eb2447470 behaviour for this shape
+            exactly: it required `(` then too, so a genuine `specialize F<T> as
+            TFoo` cast of a parameterless call did not work before this and does
+            not work now -- it is unchanged, not newly refused, and if anyone
+            wants it the alias declaration is what has to be told apart first.
+            regression-test-core-test-generic-func,
+            regression-test-core-test-inline-generic-specialization }
           matched := (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkGt) and
-                     ((Tokens[j + 2].Kind = tkLParen) or hasKw);
+                     ((Tokens[j + 2].Kind = tkLParen) or
+                      (hasKw and not ((Tokens[j + 2].Kind = tkIdent) and
+                                      CaseEqual(GetTokenStr(j + 2), 'as'))));
           j := j + 1;   { j now indexes the `>` }
           Break;
         end;
