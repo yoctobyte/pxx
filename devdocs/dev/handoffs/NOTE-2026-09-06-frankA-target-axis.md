@@ -107,3 +107,75 @@ moot. Recording it so nobody reads the park as "blocked":
 
 Nothing is half-landed. The N-D partial-index fixture is IN (`8c57bf274`) —
 frankC's message suggesting it is still a judgement call predates that push.
+
+## Later the same evening — where this actually got to
+
+Three things landed or are held, in order.
+
+**Landed and pushed: `PXXDBG=a.reclayout` (`bcbede594`).** One probe in
+`compiler.pas` that walks the UClass/UFld tables and prints every aggregate a
+compile laid out — name, size, align, then per field `off`, `tk`, `slot`,
+`falign` (member) and `salign` (storage). It answers for ALL FIVE frontends
+because every one of them records its decision in the same tables, so the walk
+is closed-world. Behind `PxxDbgEnabled`; changes no emitted byte.
+
+**Held (local `f15295bdf`, NOT pushed): the NilPy layout fix + its test.** Five
+`TypeAlign` -> `TypeFieldAlign` in `pyparser.inc`, plus
+`test-record-layout-cross-frontend`, three fixtures and
+`tools/reclayout_delta.sh`. Positive control taken and passing: reverted to
+`f0afb7c23`'s `pyparser.inc`, rebuilt, the row goes RED on both records on i386
+only and names NilPy; restored and rebuilt back to `4198e30b6193`.
+
+**Held (local `f0afb7c23`, devdocs-only): the x86-64 program tail ticket.**
+
+## The thing I would otherwise re-derive, again
+
+**The obstacle in `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-
+on-i386` was FALSE and had been for a while.** It said no pxx-only test can go
+red or green because each frontend's i386 layout is self-consistent, and that
+the prerequisite is an export spelling. That is true about a MIXED LINK and was
+never true about the LAYOUT: what settled the Pascal half was ONE COMPILER
+DISAGREEING WITH ITSELF, and the link only pinned that reading afterwards. The
+missing piece was not an oracle, it was *a way to ask the frontend what it
+decided* — and that is one probe, not three export spellings.
+
+**The shape that discriminates is 1 BYTE THEN 8, not 4 then 8.** Every NilPy
+integer is a 64-bit type, so `{int a; double y}` lands the double at 16 under
+both rules and the row passes while measuring nothing. All four shapes in
+`test/record_abi_mixed_link_pxx.c` are of that kind. The bug would have passed
+its own test.
+
+**Rust and Zig are LATENT, not live, and the refusal is load-bearing.** Both
+refuse every non-x86-64 target (`rparser.inc:5774`, `zparser.inc:1983`) and
+`TypeFieldAlign` differs from `TypeAlign` only on i386, so neither can reach the
+defect. I measured what happens if the refusal goes: both compile CLEAN for
+i386/aarch64/arm32 and every binary dies before its first syscall, on a literal
+x86-64 `call main; xor edi,edi; mov eax,231; syscall` tail that
+`rparser.inc:5799`, `zparser.inc:2019` and `eparser.inc:543` emit
+unconditionally. `cparser.inc:12080/12095` has the same four inside a
+`case TargetArch of`, which is why C crosses. Filed; do NOT lift the refusal
+before that lands.
+
+## Two mistakes worth not repeating
+
+**I placed the probe after the ELF writer dispatch and every field name came
+back garbage** — `elfwriter.inc`'s `MapAppendLine` reuses `TokChars` as a bounce
+buffer for the `.map` file. Nothing errored, every OFFSET on the line stayed
+correct, and it read as a naming bug in the frontends. Any probe rendering a
+`TokChars` slice must run before the writers.
+
+**I rebuilt the compiler twice in the middle of a `make test-nilpy` run** to take
+the positive control, which is the instrument hazard with a different hat on: the
+suite runs `./compiler/pascal26` and I swapped the binary under it. Killed and
+re-ran against a settled tree. The rule I was applying ("do not sync mid-sweep")
+did not fire because a REBUILD does not feel like touching the instrument either.
+
+## What is next, in order
+
+1. Push `f0afb7c23` (devdocs-only) — needs a rebase, so it waits for the running
+   suite; re-check the union with
+   `git log --format= --name-only origin/master..HEAD | sort -u` AFTER the
+   rebase, not before.
+2. Push `f15295bdf` when the testable-push hold lifts.
+3. Then the Rust/Zig program tail, which is what unblocks their half of the
+   layout ticket.
