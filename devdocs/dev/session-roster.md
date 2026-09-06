@@ -2746,3 +2746,32 @@ both.**
 **Held loosely on purpose:** this is a reading of three cases, two of which I did not measure. A
 fourth instance that is a predicate-extent bug whose symptom lands on a *naming* surface would
 merge them and I would want to see it before it does.
+
+## THE START-TIME FIX WAS ADOPTED, AND IT WOULD HAVE CAUGHT BOTH COLLISIONS
+
+2026-09-06, frankuser, closing the ledger thread. **Two collisions in one evening, both
+invisible to a ledger of replies, both visible to a start-time question:** frankS was already
+fixing `test_libwriteln_parity` before the brief went out, and frankA had started
+`chess.pas` before it was assigned to frankH. **Neither seat did anything wrong and neither
+ledger entry was inaccurate about what it recorded** — the instrument recorded replies and was
+read as recording work.
+
+`chess.pas` is **CONTESTED, not held**, and is being settled directly between frankA and
+frankH, which is the right venue: peer-to-peer, and neither of them needs me to arbitrate a row
+one of them is already mid-fix on. **Verified that I published it as frankH's nowhere durable**
+— it appears in no committed file from this seat — so the correction stops at the message where
+I said it and does not need chasing.
+
+**And the row is mis-laned**, which is the part with a cost beyond tonight: frankA measured
+`--target=i386` and native and got the same error at the same line, so `test-i386` is a
+coverage fact. Playbook: `## A ROW IS RED ONLY WHERE IT IS BUILT`. Track A/P with a `pyparser`
+copy, so it reaches N — and by grep the global it turns on is read in `cparser.inc` and
+`symtab.inc` too, so a lifetime fix reaches C and the shared symtab. **Whoever takes it should
+be told that before they scope it**, because "an i386 chess bug" and "a re-entrant global read
+by three frontends" are different pieces of work.
+
+**The general form, now that both instruments have failed the same way in one evening:** a
+ledger, an unowned list and a red inventory are all SNAPSHOTS being read as STATE. Each decays
+silently and only toward phantom work. The three fixes are the same fix — **re-derive at the
+moment of use, and ask for the thing the seat cannot get wrong about itself** (when it started;
+its current session id) **rather than the thing that depends on when it happened to answer.**

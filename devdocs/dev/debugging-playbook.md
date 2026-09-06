@@ -17270,6 +17270,89 @@ advisable:
 Both warnings arrive at the END of the run, so an unfenced run costs its full wall-clock to
 learn that it measured a moving target.
 
+## A ROW IS RED ONLY WHERE IT IS BUILT — coverage asymmetry reads as target-specificity, and the job label is honest
+
+Measured 2026-09-06 (frankA, via frankuser). `test-i386#examples/chess/chess.pas` was RED and
+was flagged — correctly and usefully — as a row worth reading with CLAUDE.md's 32-bit
+blind-spot rule in hand. **It is not a 32-bit defect.** frankA measured `--target=i386` and
+native and got **the same error at the same line**: `pascal26:147: too many subscripts for
+array`. It is red under `test-i386` **only because that is the one target the matrix builds
+chess for.**
+
+**The job label is not lying, and that is what makes this different from the `#src:` case.**
+There the identifier's left component was assigned by build order and said nothing about the
+subject. Here `test-i386` is a true statement about where the row ran. **The artifact is in the
+COVERAGE, not the name** — one target builds this program, so every defect that program has
+can only ever surface under that target's label, whatever its actual cause.
+
+**It is the exact inverse of CLAUDE.md's "nothing observably differs is a claim about one
+target".** That rule warns about an ABSENCE measured on one target and read as universal. This
+is a PRESENCE measured on one target and read as specific. Same asymmetry, and the second
+direction is the one with a plausible story attached, because a red under `test-i386` invites a
+32-bit hypothesis that costs real work before it dies.
+
+**The check is one command and it is the first one: build the same source for the host.** If
+the error is identical, the target in the label is a coverage fact and nothing else. Ask *"how
+many targets build this source?"* before ranking a row by the target it failed under.
+
+**The defect itself is worth its own line**, and it is a shape none of the families here
+covered: **`ParseNDSubscriptTail` sets the GLOBAL `NDInfoNDims` from the outer array, and a
+nested subscript RE-ENTERS `NodeArrNDInfo` and overwrites it with the inner array's rank** — so
+the check compares one array's index count against another array's dimension count. Rank >= 3,
+non-first non-last subscript only. **A predicate whose operands are the right KIND and the
+wrong INSTANCE**, produced by re-entrancy through a global. The diagnostic question is neither
+*what set does this admit* nor *which surface is this about*, but **who else writes this global
+between the set and the read**.
+
+Blast radius, measured by grep and stated as such: `NDInfoNDims` is read in `cparser.inc`
+(five sites, including the subscript walk at `:4791`/`:4802` and the stride loop at `:4834`)
+and in `symtab.inc` (`:16419`, `:16561`), besides the `pyparser.inc` copy already named. Those
+are consumers of the global, not confirmed copies of the check — but a fix touching its
+LIFETIME reaches Track C and the shared symbol table, not only N.
+
+## WHEN DOES A FAMILY EARN A MERGE — the members must share a FIRST QUESTION, not a description
+
+2026-09-06, and this is the criterion, arrived at by declining a merge that was offered in good
+faith and was plausible.
+
+I had said a fourth instance — *a predicate-extent bug whose symptom lands on a naming
+surface* — would merge the predicate-extent family with the `#src:` observer error. The chess
+row above was offered as exactly that: one row carrying both a predicate defect and a
+mis-triage from a label. **It does not merge them, and the reason is the useful part.**
+
+**Co-location on one row is not kinship.** Two defects on one row is precisely the shape that
+produces a false merge — the counts match, the story is tidy, and nothing was measured that
+connects them. And on inspection neither half is what it looked like: the code defect is
+**re-entrancy** (right kind, wrong instance) rather than **extent** (wrong set), and the triage
+defect is **coverage asymmetry** (honest label, one builder) rather than **identifier
+semantics** (label assigned by build order).
+
+**The steelman, and why it fails upward.** Broaden "extent" to *"the predicate's operands are
+sourced wrongly"* and all three merge — wrong set, wrong surface, wrong instance. **But at that
+altitude they are just instances of this repo's founding rule:** *every instrument that lies,
+lies by being correct about something else.* The merge is TRUE and it costs you everything that
+made each case actionable.
+
+> **A family is worth having when its members share a FIRST QUESTION, not when they share a
+> description.** The three ask different ones and that is the whole test:
+>
+> | family | the first question |
+> | --- | --- |
+> | extent | what exact set does this predicate admit, and who consumes the answer? |
+> | re-entrancy | who else writes this global between the set and the read? |
+> | coverage | is this red only where it is built? |
+
+Three different opening moves, three families. **A taxonomy that merges until everything is one
+entry has re-derived the umbrella and thrown away the index**, which is the failure mode of
+this document specifically: it is long, and its value is that `grep '^## '` lands you on the
+question you should ask next.
+
+**Recorded also as the counterweight to declining a merge for the wrong reason** — defending a
+taxonomy you wrote is a real hazard and the steelman above is there so the next reader can
+overturn this. The merge condition stands, restated more sharply: **a fourth instance that
+shares a FIRST QUESTION with an existing family joins it; one that merely resembles it in
+description does not.**
+
 ## AN UNOWNED LIST IS RE-DERIVED, NEVER MAINTAINED — it decays in exactly one direction
 
 2026-09-06, twice in one evening, which is what makes it a rule rather than an anecdote.
