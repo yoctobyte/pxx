@@ -12833,3 +12833,125 @@ both of that week's sentinel defects had. **It went and found a collision:** `'a
 > compares fully — it is an INPUT that would expose it if it did not.** Construct the
 > discriminating case; the reading of the code is what you were already doing when you formed
 > the belief.
+
+## A FILE IS NOT A SCOPE — "this file has the arm" read as "this function has the arm", 2100 lines apart, by someone who had read both
+
+Measured 2026-09-06 (frankB), on the implicit-dereference group. **This is the sharpest
+member of `## The name is not the thing` yet, because the identifier was never wrong — the
+CONTAINER was.**
+
+`ParseLValueAST` has had the implicit-deref arm for as long as `p.a` has worked, at
+`pasparser_lval.inc:2561`. `ParseClassRecordSelectors` — **the shared walker** — is at 4683 in
+the same file, and **never had it**; its builder makes `AN_FIELD` and nothing else.
+
+**Both routines walk selectors. Both live in the file named for lvalues. frankB read both in
+one session and did not notice they were not the same routine.** The diagnostic sequence is
+worth copying exactly:
+
+1. Widened the C4 loop's delegation guard so a pointer-valued `.` would delegate. Rebuilt.
+   **Nothing moved.**
+2. Probed the delegation — **taken.**
+3. Probed the shared walker's implicit-deref arm — **never reached.**
+4. The arm being delegated *to* was **in a different function, 2100 lines away.**
+
+> **"The file has this arm" and "this function has this arm" are different claims, and
+> proximity in one file is what makes them feel like one.** A file groups by SUBJECT; a
+> scope groups by REACHABILITY, and nothing in an editor distinguishes them. Ask which
+> ROUTINE, and confirm it by a probe inside that routine, not by having read the file.
+
+Step 1 is CLAUDE.md's *my change measured as NO CHANGE → data about your MODEL*, used
+correctly and immediately: the null result was treated as an instrument reading rather than
+as a failed attempt, and it took two probes to localise.
+
+## NORMALISING ONTO A SHARED PATH PROPAGATES THE SHARED PATH'S HOLES TO EVERY CALLER YOU NORMALISE — and each earlier fix CONFIRMS the delegation, because it fixed its own symptom
+
+Same finding, and it is the counterweight `devdocs/dev/normalise-dont-special-case.md` needs
+beside it.
+
+The three postfix cast loops were made to delegate to `ParseClassRecordSelectors`
+**precisely so they would stop having private notions of what a `^` yields.** That is the
+right design and it is why this defect is subtle:
+
+> **Every caller that did the correct thing and delegated got a field applied to a POINTER
+> VALUE.** The delegation was the fix for **four earlier tickets in this same file**, and it
+> **carried this hole into each of them.**
+
+**Consolidation is only as correct as the consolidated implementation** — which is obvious
+stated flatly, and invisible in practice, because **each of those four fixes verified itself
+against its own symptom and passed.** Four green confirmations of a delegation that was
+importing a hole. Nothing in *"the second path is the one that stays broken"* warns you that
+the FIRST path may be missing an arm the second one had.
+
+**The operational form:** when you normalise B onto A, **enumerate what A does that B did,
+and what B did that A does not** — the second list is the one nobody makes, and it is where
+the regressions live. `## "IT COMPILED" IS NOT A POSITIVE CONTROL FOR "IT WAS CALLED"` is the
+same family: delegation being *taken* was true and told you nothing about what it arrived at.
+
+### The partition rule, tested in both directions inside one group, in one day
+
+`## A CAUTION AGAINST OVER-UNIFYING IS NOT PROTECTION AGAINST MIS-PARTITIONING` was banked
+this morning from this session's over-partition. **The same session then found the inverse
+before the day was out.**
+
+- **Under-partitioned:** `PRec(x).b` (p50, frankD) answering 0, and `PPRec(pp)^.b` (p70,
+  frank-optimize) answering 0 beside a low half-address — **two tickets, two prios, two
+  reporters, filed a day apart, each explicitly saying it was NOT the other.** They are the
+  **depth-1 and depth-2 faces of one absent step.**
+- **Genuinely split:** the three-deep case, because **the repair is a DIAGNOSTIC and not an
+  address computation.** Different kind of fix, therefore a different ticket.
+
+> **A reporter's explicit "this is not that other ticket" is not evidence — it is a claim
+> made by someone who had exactly ONE of the two observables.** Two independent reporters
+> agreeing on the split is *especially* unpersuasive: neither could see the other's symptom,
+> so their agreement is about the symptoms differing, which was never in question.
+
+**And the split that is real was decided on the SHAPE OF THE REPAIR, not on the shape of the
+symptom.** That is the usable criterion: *would the same edit fix both?*
+
+## A DIAGNOSTIC THAT EXISTS AND IS UNREACHABLE — writing PART of a chain silences the guard that catches writing NONE of it
+
+Same group, and it is the reason frankB filed rather than folded.
+
+```
+pp.a           no caret     -> refuses cleanly
+PPRec(pp).a    no caret     -> refuses cleanly
+ppp^.a         ONE caret, three needed  -> compiles, prints 4310376
+PPPRec(ppp)^.a ONE caret, three needed  -> compiles, prints 0
+```
+
+FPC refuses both of the last two with `Illegal qualifier`. Pre-existing on pin v404, unchanged
+by the fix.
+
+> **The guard is there and it is correct. Writing SOME of the dereference chain moves the
+> expression out of the guard's reach without moving it into the correct case.** Partial
+> compliance defeats it — which is the worst shape a diagnostic can have, because the user who
+> writes nothing is helped and the user who *tried* is not.
+
+**And the disposition is a CLAUDE.md reading worth recording, because the easy answer is
+wrong.** *Us accepting what FPC rejects is not a defect*, and a program with one caret where
+it needs three is a presumed programmer error — so `rejected/` looks correct. It is not:
+**the standing rule for a presumed mistake is to leave the mistake VISIBLE, and printing
+4310376 is not that.** Accepting is fine; **accepting silently, with a number, is the defect.**
+The ticket is about the *silence*, not the *acceptance*.
+
+### Two smaller ones from the same run
+
+**A ticket's stated discriminator can be retired by someone else's landing while the ticket
+still reads as current.** Row H of frankB's matrix — `pp^.a`, **no cast** — was RED at the
+start of the hour and GREEN an hour later, because frankA's `b7b9e309e` landed underneath.
+That row is what killed the ticket's own premise (*"only the CAST spelling is short a
+level"*): at the moment of measuring, the variable spelling was short a level too and the
+cast was irrelevant. **frankB would have written the wrong fix from the ticket's premise.**
+The two-hit matrix — `{cast, no cast} × {carets written}` — is what made a premise falsifiable
+that reading the ticket could not.
+
+**And a fix that corrects every value can still leave the CALLEE wrong.** Row B of the test is
+a method call and is not decoration: **the walker reaches its method arm only once the
+receiver has become a record**, so a fields-only fix **prints every number correctly and calls
+`Sum` with a pointer as `Self`.** `## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO` from the
+other side — there the callee axis hid a defect from a probe; here it hides an incomplete fix
+behind a fully green value table.
+
+The controls that matter are rows **E..H — every row where a dereference is already WRITTEN
+OUT** — because the change **INSERTS** a dereference and what it can break is inserting a
+**second** one. Written before the fix.
