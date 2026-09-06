@@ -1,15 +1,20 @@
+# The type-identity side channel — the argument, the costings, the precedents
+
+**Reference doc. Nobody needs to read this to do the work.** The decision it
+supports was taken by the owner on 2026-09-06 (arm B, the side channel) and the
+one-screen ticket is `decide-how-a-type-carries-an-identity-its-kind-cannot-hold`
+in `backlog-core/`. This file exists because the ticket had grown to 673 lines
+with a 2299-character `summary:` — four sessions' argument appended in front of
+itself, which is the shape CLAUDE.md says to move into a reference doc with a
+pointer.
+
+Everything below is the ticket's body as it stood when the decision was taken.
+It is history: the two costings that disagreed, the measurement that settled the
+multiplier premise, the four in-tree precedents, and the obligation frankB found
+on the channel. Read a section when you need the *why*; do not read the file.
+
 ---
-slug: decide-how-a-type-carries-an-identity-its-kind-cannot-hold
-title: "How a type carries an identity its TTypeKind cannot hold: a new kind trio, or the enum's side-channel pattern generalised"
-track: U
-prio: 55
-type: decide
-blocked-by: []
-status: open
-owner: ""
-created: 2026-09-05
-summary: "Two open bug families have ONE cause: a type whose LAYOUT is an existing kind but whose SEMANTICS are not. ByteBool/WordBool/LongBool are tyUInt8/tyUInt16/tyInteger so their C-ABI width is right, and nothing downstream can tell them from integers -- so `if a` and `if not a` BOTH fire (p55), WriteLn prints 1 for TRUE, and Ord answers 1 where fpc answers -1. Separately an alias to an enum, and a set's char element, drop their identity the same way (p40). The fork: (A) give the sized booleans distinct TTypeKinds, which touches defs.inc's kind numbering -- the ONE thing CLAUDE.md says to coordinate by message rather than edit; or (B) generalise the pattern an enum already uses (tyInteger PLUS an id) into a side channel carried through symbols, fields, params and the alias table, which closes BOTH families in one move. Recommendation: B. A costing of the Pascal-frontend arm is appended (frankB, 2026-09-05, compiler 47618f77c240) and DISPUTES the multiplier premise: the two families are independent, arm A has three in-tree precedents (tyBool8/tyUCS4Char/tyWideChar) that landed for +77..+144 and ~22 sites rather than the 565 feared, and tyWideChar is this same decision on a storable type taken the OTHER way because a node-level marker could not serve WriteLn. Then MEASURED against arm A: frankB narrowing an enum off tyInteger (324641046) detached the enum identity at seven sites guarded by `kind = tyInteger` and NOTHING failed, and frankB's `set of TCol` case shows a bare "is there an identity" channel would hand a bitset its element's member names, so B's channel must answer WHOSE identity it is. frankB then corrected the cost: the set case is NOT a freshness bug -- the channel is valid, current and about the wrong subject -- so arm B needs an IDENTITY obligation on every channel, not the window discipline the existing LastType* channels already have, and "one more of the same" underprices it. A third construct of the same shape has since landed (8a3a62258, {$H-}: BareStringKind returned tyShortString at every site while SizeOf answered 8, because a ShortString's CAPACITY has no carrier in the kind) -- fixed, so a precedent rather than a fourth family, and it makes this a PATTERN in the type system rather than two coincidences. Choice still open with U."
----
+
 
 # Decide: how does a type carry an identity its kind cannot hold?
 
