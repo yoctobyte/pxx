@@ -2369,9 +2369,27 @@ begin
       slot := UMthVirSlot[mmi];
       AddMethodFix(UClsVMTOffset[methOwnerCi] + slot * 8, procIdx);
 
+      { PROPAGATE INTO SUBCLASSES THAT INHERIT THIS SLOT -- AND ONLY THOSE.
+        A subclass with no override of its own must get this body in its slot,
+        which is what this loop is for. A subclass that DOES override must not,
+        and the unconditional form overwrote it: the fixups are applied in the
+        order they are recorded, so whichever body is parsed LAST wins the slot.
+        With the base implemented after the override -- an ordering nothing in
+        Pascal forbids and fpc compiles correctly -- the parent's body landed on
+        top of the child's and the override became unreachable, including
+        through a direct `TDer(o).Say`. Silent: no diagnostic, and the program
+        runs and prints the base's answer.
+
+        The question is not "is otherCi below methOwnerCi" but "is methOwnerCi
+        the class otherCi actually INHERITS this slot from", which differs the
+        moment anything sits in between: for A -> B -> C with B overriding, C
+        takes B's body and not A's, so IsSubclassOf(C, A) is true and the
+        propagation is still wrong.
+        bug-p-an-override-implemented-before-its-base-loses-its-vmt-slot }
       for otherCi := 0 to UClsCount-1 do
       begin
-        if IsSubclassOf(otherCi, methOwnerCi) then
+        if IsSubclassOf(otherCi, methOwnerCi) and
+           (DeclaringClassForSlot(otherCi, slot) = methOwnerCi) then
         begin
           AddMethodFix(UClsVMTOffset[otherCi] + slot * 8, procIdx);
         end;

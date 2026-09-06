@@ -1833,6 +1833,36 @@ begin
   end;
 end;
 
+function DeclaringClassForSlot(ci, slot: Integer): Integer;
+{ WHICH CLASS owns virtual slot `slot` for an instance of ci: ci itself when it
+  declares its own row for the slot (an override), else the nearest ancestor
+  that declares one. -1 if nothing does.
+
+  The sibling of ResolveVMTSlotProc above, asking WHO rather than WHICH PROC,
+  and it cannot be expressed in terms of it: at method-BODY parse time the
+  winning override's proc is still -1 whenever its body has not been reached
+  yet, so the proc-valued question answers "nobody" for exactly the case this
+  exists to detect. The DECLARATION is always in by then -- pass 1 finishes
+  every class body before any implementation -- so the row is the reliable
+  witness and the proc is not.
+  bug-p-an-override-implemented-before-its-base-loses-its-vmt-slot }
+var curr, i, base, cnt: Integer;
+begin
+  Result := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr]; cnt := UClsMCount[curr];
+    for i := 0 to cnt - 1 do
+      if UMthVirSlot[base + i] = slot then
+      begin
+        Result := curr;
+        Exit;
+      end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function FindUProp(ci: Integer; const name: AnsiString): Integer;
 var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin

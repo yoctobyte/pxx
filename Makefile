@@ -6343,6 +6343,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_runtime_set_member_b294.pas $(TESTTMP)/test_runtime_set_member_b29426
 	tools/expect_same.sh test_runtime_set_member_b29426 "$$($(TESTTMP)/test_runtime_set_member_b29426)" "$$(printf '1: a\n2: b\n3: quote\n4: c\n5: d\nconst set: TRUE FALSE')"
 	# VIRTUAL CLASS METHODS dispatch on the RUNTIME class (fpjson JSONType)
+	./$(COMPILER) test/test_virtual_override_implemented_before_its_base.pas $(TESTTMP)/test_vob26
+	tools/expect_same.sh test_vob26 "$$($(TESTTMP)/test_vob26)" "ABBA EFF B"
 	./$(COMPILER) test/test_virtual_class_method_b290.pas $(TESTTMP)/test_virtual_class_method_b29026
 	tools/expect_same.sh test_virtual_class_method_b29026 "$$($(TESTTMP)/test_virtual_class_method_b29026)" "$$(printf 'base inst : 0 base\nmid  inst : 1 mid\nleaf inst : 2 mid  (Name inherited from TMid)\nnamed     : 0 1 2')"
 	# a method's RETURN-TYPE class id must be recorded at its DECLARATION
