@@ -45,11 +45,38 @@ an instrument: only MOVED is a claim about a reason being stale, and a sweep
 that added rows would otherwise read as a pile of staleness.
 
 A DIAGNOSTIC IS NOT NORMALISED BEYOND THE PATHS THE RUNNER ALREADY STRIPS.
-Line numbers are deliberately KEPT. Stripping them would remove a real signal
-(a diagnostic moving within a file) to reduce noise nobody has measured, and a
-normalisation that discards signal on a guess is how an instrument stops being
-able to fire. If line-number churn turns out to be real, strip it then and say
-which run measured it.
+Line numbers are deliberately KEPT -- and that is now MEASURED, not reasoned.
+frankS diffed two full retry sweeps, 2026-09-06, 86 shared rows:
+
+    81 of 86 identical, line number included
+     5 differed
+     0 pure line-number churn -- every single difference was a MESSAGE change
+
+So the noise this normalisation would have removed does not exist, and it would
+have cost the one thing worth having. tgenfunc8 is the case that settles it:
+SAME line 26, DIFFERENT message. A tool keying on the line -- or on any
+positional key -- misses that row entirely, which is the second argument for
+comparing the full string. tarray3 is the other end, 13 -> 129: a diagnostic
+that moved 116 lines within a fixed file, which is a mechanism change and
+exactly the signal wanted.
+
+CAVEAT, AND IT IS DOING THE WORK IN THAT 81. The corpus sources are FIXED, so a
+line number only moves when the compiler starts failing at a different POINT in
+the same file. Point this tool at a source tree that CHANGES and the
+measurement does not transfer: there, an edit above the failure moves every
+line number below it and the churn is real. Re-measure before trusting the
+count in that setting.
+
+TWO VALUES IN A MAP ARE NOT DIAGNOSTICS AND THEY ARE HANDLED SEPARATELY.
+The runner writes `<compile failed with no error: line> ...` and `<exit 0 but
+no 'ok:' line ...>` when the compile produced neither a diagnostic nor an `ok:`
+line. Those are facts about the RUN, not about the row -- frankS lost a sweep
+to exactly this when the fpc side wrote its binaries elsewhere and every row
+came back rc=127, which read as a measurement. A move into one of them is still
+reported (a row that started CRASHING instead of diagnosing is a real finding),
+but it is MARKED, and if every moved row moved into one, this says so: that is
+the shape of a broken run, and reading it as 86 changed mechanisms is the
+failure mode this whole tool exists to avoid.
 
 Usage:
     tools/skip_diag_diff.py OLD.map NEW.map [--quiet-if-clean]
@@ -60,6 +87,17 @@ re-read a reason, never a build failure.
 import argparse
 import pathlib
 import sys
+
+
+# The runner's two non-diagnostic sentinels. Kept as prefixes because each
+# carries the run's own first output line after it.
+UNMEASURED_PREFIXES = ("<compile failed with no error: line>",
+                       "<exit 0 but no 'ok:' line")
+
+
+def _unmeasured(diag: str) -> bool:
+    """True for a value that records a RUN failure rather than a diagnostic."""
+    return diag.startswith(UNMEASURED_PREFIXES)
 
 
 def load(path: pathlib.Path) -> dict[str, str]:
@@ -126,15 +164,29 @@ def main() -> int:
     gone = sorted(n for n in old if n not in new)
     added = sorted(n for n in new if n not in old)
 
+    # A RUN-LEVEL FAILURE WEARS THE SHAPE OF A FLEET OF MOVED ROWS. No
+    # threshold, because no threshold has been measured -- the tell is the
+    # SHAPE: every row that moved, moved into a value that means "not
+    # measured".
+    into_unmeasured = [m for m in moved if _unmeasured(m[2])]
+    run_is_suspect = bool(moved) and len(into_unmeasured) == len(moved) and len(moved) > 1
+
     if moved:
         print(f"MOVED: {len(moved)} skip row(s) still fail but now fail "
               f"DIFFERENTLY. Their reason lines were written against the old "
               f"diagnostic and are now suspect -- re-read each before quoting "
               f"it, and before routing anyone off it.")
         for name, o, n in moved:
-            print(f"  {name}")
+            mark = "  <-- NOT A DIAGNOSTIC" if _unmeasured(n) else ""
+            print(f"  {name}{mark}")
             print(f"      was: {o}")
             print(f"      now: {n}")
+        if run_is_suspect:
+            print(f"  !! EVERY one of those {len(moved)} rows moved into a value "
+                  f"that means the compile produced no diagnostic at all. That "
+                  f"is the shape of a BROKEN RUN, not of {len(moved)} changed "
+                  f"mechanisms -- check the compiler and the paths the sweep "
+                  f"used, and re-run before re-reading a single reason line.")
     elif not a.quiet_if_clean:
         shared = set(old) & set(new)
         print(f"MOVED: none of {len(shared)} shared row(s) changed diagnostic.")

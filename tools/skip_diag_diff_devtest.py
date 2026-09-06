@@ -29,6 +29,9 @@ TOOL = ROOT / "tools" / "skip_diag_diff.py"
 # helper that applies them over N elements.
 WAS = "pascal26:12: error: undefined variable (InitializeArray)"
 NOW = "pascal26:12: error: undefined variable (FinalizeArray)"
+# What the runner writes when the compile produced no diagnostic at all --
+# a fact about the RUN, never about the row.
+NOTFOUND = "<compile failed with no error: line> sh: 1: pascal26: not found"
 
 
 def _map(rows):
@@ -99,6 +102,63 @@ def case_an_EMPTY_map_says_NOTHING_WAS_MEASURED_not_nothing_changed():
     return "an empty map is reported as unmeasured, not as clean"
 
 
+def case_the_tgenfunc8_shape_SAME_line_different_message_is_caught():
+    # THE ROW THAT SETTLES THE NORMALISATION QUESTION. frankS measured 86 shared
+    # rows across two sweeps: 81 identical, 5 differed, ZERO pure line-number
+    # churn. tgenfunc8 differed at the SAME line 26 with a different message --
+    # so a tool that keyed on the line number, or on any positional key, would
+    # call this row unchanged. It is here as a devtest so that a future
+    # "normalise away the line numbers" change has to break a named test.
+    out, _ = _run(
+        _map([("tgenfunc8", "pascal26:26: error: undefined variable (SpecHelper)")]),
+        _map([("tgenfunc8", "pascal26:26: error: generic function has no body")]))
+    assert "MOVED: 1" in out, "keyed on the line and missed a message change:\n" + out
+    return "a message change at an unchanged line number is still a move"
+
+
+def case_a_LINE_MOVE_within_a_fixed_file_is_a_move():
+    # The other end of the same measurement: tarray3 went 13 -> 129. Corpus
+    # sources are FIXED, so a line only moves when the compiler starts failing
+    # at a different POINT -- a mechanism change, and the signal wanted.
+    out, _ = _run(_map([("tarray3", "pascal26:13: error: type mismatch")]),
+                  _map([("tarray3", "pascal26:129: error: type mismatch")]))
+    assert "MOVED: 1" in out, "stripped the line number and went blind:\n" + out
+    return "the same message at a different line is a move (fixed sources)"
+
+
+def case_a_move_into_a_RUN_FAILURE_value_is_marked_not_silently_a_diagnostic():
+    out, _ = _run(_map([("tmoperator9", WAS)]),
+                  _map([("tmoperator9", NOTFOUND)]))
+    assert "MOVED: 1" in out, out
+    assert "NOT A DIAGNOSTIC" in out, (
+        "an environment failure entered the report as a mechanism change:\n" + out)
+    return "a row that stopped producing a diagnostic is reported but marked"
+
+
+def case_EVERY_row_moving_into_a_run_failure_is_called_a_broken_run():
+    # frankS's rc=127 sweep, in miniature: the fpc side wrote its binaries
+    # elsewhere and every row came back with no diagnostic. Read row-by-row that
+    # is "all your mechanisms changed"; read as a shape it is one broken run.
+    out, _ = _run(_map([("tmoperator9", WAS), ("tgeneric78", WAS), ("tarray3", WAS)]),
+                  _map([("tmoperator9", NOTFOUND), ("tgeneric78", NOTFOUND),
+                        ("tarray3", NOTFOUND)]))
+    assert "BROKEN RUN" in out, "read a broken run as three changed mechanisms:\n" + out
+    return "all-rows-unmeasured is reported as a broken run, not as staleness"
+
+
+def case_CONTROL_a_MIXED_run_is_not_called_broken():
+    # THE CONTROL THAT KEEPS THE ABOVE HONEST. One row genuinely moved and one
+    # went unmeasured: the run produced real diagnostics, so the "broken run"
+    # sentence would be false and would train a reader to ignore it.
+    out, _ = _run(_map([("tmoperator9", WAS), ("tgeneric78", WAS)]),
+                  _map([("tmoperator9", NOW), ("tgeneric78", NOTFOUND)]))
+    assert "MOVED: 2" in out, out
+    assert "BROKEN RUN" not in out, (
+        "called a run broken while it was still producing diagnostics:\n" + out)
+    assert "NOT A DIAGNOSTIC" in out, "lost the per-row mark:\n" + out
+    return "a run that still diagnoses is not called broken"
+
+
 def case_a_malformed_row_is_counted_rather_than_guessed_at():
     p = pathlib.Path(tempfile.mkdtemp()) / "bad.map"
     p.write_text("# h\ntmoperator9\tx\nthis-row-has-no-tab\n")
@@ -113,6 +173,11 @@ CASES = [case_a_MOVED_diagnostic_is_reported_with_both_sides,
          case_CONTROL_a_NEW_row_is_not_reported_as_MOVED,
          case_CONTROL_a_GONE_row_is_not_reported_as_MOVED,
          case_a_COMPILES_CLEAN_transition_is_a_move_like_any_other,
+         case_the_tgenfunc8_shape_SAME_line_different_message_is_caught,
+         case_a_LINE_MOVE_within_a_fixed_file_is_a_move,
+         case_a_move_into_a_RUN_FAILURE_value_is_marked_not_silently_a_diagnostic,
+         case_EVERY_row_moving_into_a_run_failure_is_called_a_broken_run,
+         case_CONTROL_a_MIXED_run_is_not_called_broken,
          case_an_EMPTY_map_says_NOTHING_WAS_MEASURED_not_nothing_changed,
          case_a_malformed_row_is_counted_rather_than_guessed_at]
 

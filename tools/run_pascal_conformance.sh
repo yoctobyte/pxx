@@ -344,17 +344,40 @@ EOF
   # or not its verdict changed. This captures; tools/skip_diag_diff.py compares.
   if [ -n "$DIAGMAP" ] && [ "${retrying:-0}" = "1" ]; then
     if [ "$compile_ok" != "0" ]; then
-      # First non-blank line of the compiler's output. The WORK directory carries
-      # the PID and so differs on every run -- left in, every row would read as
-      # MOVED every time and the tool would be ignored within a day.
-      _diag="$(sed -n '/[^ \t]/{p;q;}' "$WORK/cc.log" \
+      # THE FIRST `error:` LINE, NOT THE FIRST LINE. Later diagnostics are
+      # cascade and churn freely; a banner or a warning ahead of the real one
+      # would be captured as the mechanism and would move for reasons that are
+      # not the mechanism.
+      #
+      # AND A FAILED COMPILE WITH NO `error:` LINE IS ITS OWN FACT, kept apart
+      # from a real diagnostic. frankS had this harness lie exactly here earlier
+      # tonight: the fpc side wrote its binaries elsewhere and EVERY row came
+      # back rc=127, which read as a measurement. An environment failure and a
+      # compiler diagnostic must not share a value, or a broken run diffs as 86
+      # moved mechanisms.
+      _diag="$(grep -m1 'error:' "$WORK/cc.log" 2>/dev/null \
                | sed -e "s|$WORK/||g" -e "s|$WORK|<work>|g" -e "s|$SUITE/||g" \
                | tr '\t' ' ')"
-      [ -n "$_diag" ] || _diag="<no diagnostic on a failed compile>"
-    else
+      if [ -z "$_diag" ]; then
+        _first="$(sed -n '/[^ \t]/{p;q;}' "$WORK/cc.log" 2>/dev/null \
+                  | sed -e "s|$WORK/||g" -e "s|$WORK|<work>|g" -e "s|$SUITE/||g" \
+                  | tr '\t' ' ')"
+        _diag="<compile failed with no error: line> ${_first:-<and no output>}"
+      fi
+    elif grep -q '^ok:' "$WORK/cc.log" 2>/dev/null; then
       # A VALUE, never an absence. An empty field would be indistinguishable
       # from "row not attempted", and those are different facts.
+      #
+      # AND THE SUCCESS TEST IS THE `ok:` LINE ON STDOUT, NOT THE EXIT CODE
+      # (frankS's decision, adopted here because pascal26 prints `ok: <out>
+      # [code=... data=... bss=... procs=...]` on every successful compile --
+      # compiler.pas writes it on both the normal and the -S path). An exit 0
+      # from something that did not compile anything reads as a clean compile
+      # and would enter the map as one, which is the same lie the rc=127 run
+      # told from the other direction.
       _diag="<compiles clean>"
+    else
+      _diag="<exit 0 but no 'ok:' line -- this row was not compiled>"
     fi
     printf '%s\t%s\n' "$name" "$_diag" >> "$DIAGMAP"
   fi
