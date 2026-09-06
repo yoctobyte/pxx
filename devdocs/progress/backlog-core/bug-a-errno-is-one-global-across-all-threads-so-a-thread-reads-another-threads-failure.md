@@ -9,7 +9,7 @@ created: 2026-09-04
 found-by: franks-ab
 owner: ""
 blocked-by: []
-summary: "MEASURED, reproduced independently by two sessions: a threaded pxx C program shares ONE errno across all threads, where C requires it thread-local. Two threads provoking different errors and reading errno on the very next line see each other's codes 4-84 times per 200000 iterations, varying per run as a race should; the gcc/glibc oracle is 0 every time. --threadsafe does NOT fix it -- that flag selects a real thread PAL and threads genuinely run, so the one flag a reader would expect to cover this is the one that silently does not. Root: lib/crtl/include/errno.h:5 declares `extern int errno;` (an ordinary int) where glibc has `#define errno (*__errno_location())`; the tentative definition becomes a WEAK non-TLS .bss object in every pxx object file. The visible symptom is a static-link refusal (ld: TLS vs non-TLS mismatch against libc.a), but that is the LUCKY case -- it stops and names the symbol. The dynamic link tolerates the mismatch and nothing errors anywhere. Fix needs TLS symbol emission in the object writer, so it is Track A rather than lib/crtl alone."
+summary: "MEASURED, reproduced independently by two sessions: a threaded pxx C program shares ONE errno across all threads, where C requires it thread-local. Two threads provoking different errors and reading errno on the very next line see each other's codes 4-84 times per 200000 iterations, varying per run as a race should; the gcc/glibc oracle is 0 every time. --threadsafe does NOT fix it -- that flag selects a real thread PAL and threads genuinely run, so the one flag a reader would expect to cover this is the one that silently does not. Root: lib/crtl/include/errno.h:5 declares `extern int errno;` (an ordinary int) where glibc has `#define errno (*__errno_location())`; the tentative definition becomes a WEAK non-TLS .bss object in every pxx object file. The visible symptom is a static-link refusal (ld: TLS vs non-TLS mismatch against libc.a), but that is the LUCKY case -- it stops and names the symbol. The dynamic link tolerates the mismatch and nothing errors anywhere. CORRECTED 2026-09-06 -- TLS SYMBOL EMISSION ALONE CANNOT FIX IT: pxx programs run with FS BASE ZERO in every thread (arch_prctl(ARCH_GET_FS) rc=0 value=0 in the main thread AND in a pthread_create'd one, against distinct non-zero values under glibc, sentinel-controlled so a failed syscall is not read as a zero base), so an fs-relative access resolves every thread to the same place and a .tbss section would only make it LOOK repaired. A per-thread TCB has to come first. There is also a cheaper path that skips ELF TLS entirely -- glibc's own header is `#define errno (*__errno_location())` and crtl's pthread.c already keeps a tid-keyed registry -- whose open question is how to find the slot without TLS (__pxx_pthread_self is not linked without --threadsafe; gettid(2) per access puts a syscall on every error path). That path closes THIS ticket and not [[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]], the general form: __thread is in cparser.inc's tolerate-by-skipping set, so thread-local storage is silently shared for every variable, not just errno. Reproduced a third time at 1b903c1dd with a third probe: 33 and 4."
 ---
 
 # errno is one global, not one per thread
@@ -140,3 +140,67 @@ axis. The kiosk finding *"pascal26 and everything it emits are statically
 linked"* is true of pxx's own ELF writer output and does NOT extend to anything
 the separate-compilation path produces, because that path ends in
 `gcc -o out obj/*.o`, which links dynamically by default.
+
+## 2026-09-06 (frankA) — a third independent reading, and a CONSTRAINT that changes "What the fix needs"
+
+### Reproduced, separately written probe
+
+At `1b903c1dd`, compiler `26b8b0adf442`, `--threadsafe`, 200000 iterations each:
+
+    A saw a foreign errno 33 times
+    B saw a foreign errno  4 times
+    gcc/glibc oracle:      0 and 0
+
+Third reading, third probe, third session (franks-ab, frankD, frankA). Still
+live at HEAD.
+
+### THE FIX SHAPE STATED ABOVE IS NECESSARY AND NOT SUFFICIENT
+
+*"Fix needs TLS symbol emission in the object writer"* — measured, and there is
+a step in front of it: **pxx programs run with FS base ZERO, in every thread.**
+
+    arch_prctl(ARCH_GET_FS, &v)     rc    value
+    gcc/glibc, main thread           0    7a45fdb9c740
+    gcc/glibc, pthread child         0    7a45fd7ff6c0     <- distinct
+    pxx --threadsafe, main thread    0    0
+    pxx --threadsafe, pthread child  0    0                <- same, and zero
+
+Positive control on the instrument, because "the FS base is 0" and "arch_prctl
+did not run" print the same 0: the output variable is preloaded with
+`0xdeadbeef` and the syscall's return value is read. `rc=0`, sentinel
+overwritten — it ran, and it reports zero.
+
+**Emitting `errno` as a TLS symbol into a process with no FS base does not give
+it one copy per thread.** Every fs-relative access either faults or resolves to
+the same address in every thread — the bug as it stands, with a `.tbss` section
+to make it look repaired. The per-thread TCB has to come first, in the thread
+PAL's child entry and at startup for the main thread, per target.
+
+### And a cheaper path for THIS ticket specifically
+
+`errno` does not need ELF TLS. glibc's own header is
+`#define errno (*__errno_location())`, and the same shape fits here:
+`lib/crtl/include/errno.h`'s `extern int errno;` becomes that macro, and the
+definition at `lib/crtl/src/stdio.c:66` becomes a per-thread slot.
+`lib/crtl/src/pthread.c` already keeps a 64-slot registry keyed by tid.
+
+**The unresolved part is how to find the slot without TLS**, and it has a real
+cost either way: `__pxx_pthread_self` is a PAL symbol a non-`--threadsafe` build
+does not link, and `gettid(2)` per access puts a syscall on every error path.
+Written down rather than chosen, because the choice is a cost trade-off and not
+a correctness one.
+
+That path would close the measured race here and would NOT close
+[[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]],
+which is the general form: `_Thread_local` and `__thread` are in
+`cparser.inc`'s tolerate-by-skipping set, so `__thread int tv = 7;` compiles,
+runs, prints 7, and emits an ordinary `.bss` object. This ticket is one instance
+of a mechanism that does not exist. Worth knowing which one a fix closes before
+starting it.
+
+### Not taken
+
+Diagnosed and parked rather than microfixed. The acceptance above already asks
+for a row per target, the fix has a live cost fork, and the general form has
+just been filed beside it — none of that is work to start at the end of an
+evening. The measurements are banked so the next session does not repeat them.
