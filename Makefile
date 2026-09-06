@@ -17949,6 +17949,12 @@ test-core: $(COMPILER)
 	# what pxx prints (bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate).
 	./$(COMPILER) test/test_pascal_type_alias_cast.pas $(TESTTMP)/test_pascal_type_alias_cast26
 	tools/expect_same.sh test_pascal_type_alias_cast26 "$$($(TESTTMP)/test_pascal_type_alias_cast26)" "$$(cat test/test_pascal_type_alias_cast.expected)"
+	# ... and the CONST fold of the same cast asks the same two doors in the same
+	# ORDER. The rows vary the SELECTOR -- which door recognises the name -- so
+	# only the two "both" rows can tell the orders apart; the alias-only and
+	# builtin-only rows are controls that must not move. .expected is FPC 3.2.2's.
+	./$(COMPILER) test/test_a_named_cast_asks_the_alias_before_the_builtin.pas $(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26
+	tools/expect_same.sh test_a_named_cast_asks_the_alias_before_the_builtin26 "$$($(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26)" "$$(cat test/test_a_named_cast_asks_the_alias_before_the_builtin.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"

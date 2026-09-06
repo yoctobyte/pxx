@@ -10565,9 +10565,30 @@ begin
   hasConstCast := False;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
-    hasConstCast := ConstIntCastWidth(CurTok.SVal, castBytes, castSigned);
+    { ORDER IS LOAD-BEARING AND IT WAS INVERTED: a source declaration outranks a
+      builtin (symtab.inc:6215 documents that the whole compiler breaks if the
+      other way round), so the ALIAS door is asked first -- exactly as the
+      runtime cast chain in ParseFactorCore already asks it. Asking the builtin
+      first made the two doors answer differently about the SAME cast in the
+      SAME program:
+
+        type LongInt = Int64;
+        const A = LongInt(4294967296 + 5);   ->  5             (builtin, 4 bytes)
+        var b: LongInt; b := LongInt(...);   ->  4294967301    (alias, 8 bytes)
+
+      Self-inconsistent, so it needs no oracle to be wrong; fpc 3.2.2 answers
+      4294967301 at both. The realistic spelling is a portability shim --
+      `type PtrInt = LongInt;` or `type SizeInt = Int64;` -- which is why this
+      is a bug and not a curiosity about shadowing.
+
+      The behaviour change is confined to names that are BOTH a builtin scalar
+      and a live user alias: for every other name exactly one door ever
+      answered, so which is asked first cannot matter. The only such names in
+      the tree are lib/rtl's `TDateTime` and `Currency`, and both doors decline
+      them (not integer-family, not ordinal). }
+    hasConstCast := ConstAliasCastWidth(CurTok.SVal, castBytes, castSigned);
     if not hasConstCast then
-      hasConstCast := ConstAliasCastWidth(CurTok.SVal, castBytes, castSigned);
+      hasConstCast := ConstIntCastWidth(CurTok.SVal, castBytes, castSigned);
   end;
   if hasConstCast then
   begin

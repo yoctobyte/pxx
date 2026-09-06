@@ -1,0 +1,5 @@
+alias-only   4294967301 4294967301
+both-wide    4294967301 4294967301
+both-narrow  -56 -56
+builtin-only 4294967301 4294967301
+builtin-narr 5 5
