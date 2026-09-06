@@ -2757,14 +2757,28 @@ second cause is closed and the `.Name` lookup on a dynamic array's record
 element is gone, so the bogus `CompareText` arity report it poisoned into is
 gone with it.
 
-**The cause was the ticket's own prediction and it held**:
+**The cause** was
 `bug-a-a-dynamic-array-of-class-loses-its-element-type-when-it-is-a-parameter`,
 fixed at `86852f93a`. `TPasUsesClause = array of TPasUsesUnit` arriving as a
 parameter lost its element's class identity, because the parameter
 classification chain had an arm for `array of RECORD` and none for `array of
 CLASS`, so the class case fell into the SCALAR arm and its element rec id went
-to `RecName` instead of `ElemRecName`. That prediction is worth noting as a
-prediction: it was written from the shape before anything was fixed.
+to `RecName` instead of `ElemRecName`.
+
+**CORRECTED, at frankD's insistence and against my own first wording here.** I
+wrote that this file had PREDICTED that cause and that the prediction held. It
+had not, and frankD said so rather than accept the credit. What this file
+recorded — and what DID hold — is the CASCADE reading: that the `.Name` failure
+and the bogus `CompareText` arity report were ONE cause counted twice, and that
+it sat at a `.Name` lookup on a dynamic array's element. The mechanism (element
+is a class AND the array is a parameter; `parr and tyRecord` present, `parr and
+tyClass` missing) is nowhere in what was written here.
+
+Their reason for correcting it is the one that matters on this rung:
+**cascade-versus-two-defects is cheap to read off an error list; a missing arm
+is not**, and this rung has already had one wrong subject travel for a day
+because a `near:` window from the wrong file read as content. A track record
+that rounds up is how that happens twice.
 
 **The survivor is `:2670` and its report is partly a lie.** Filed as
 [[bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently]]:
