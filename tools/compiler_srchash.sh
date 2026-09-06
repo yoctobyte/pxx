@@ -29,4 +29,45 @@ if [ "${1:-}" = "--list" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "--diagnose" ]; then
+  # Explain a srchash mismatch. Takes the stamp's srccount ("" for a legacy
+  # stamp that predates the field) and says WHICH WAY the sets differ, because
+  # the two causes have two different repairs and the bare pair of 64-char
+  # hashes above cannot tell them apart.
+  #
+  # THIS LIVES IN THE SCRIPT AND NOT IN THE RECIPE, for the reason at the top of
+  # this file: `make -n` echoes recipes verbatim into the dry-run output that
+  # testmgr's make_dry_run() parses. The first cut of this diagnostic put ~17
+  # lines and a recursive $(MAKE) into the $(COMPILER) recipe and turned
+  # `testmgr --tier quick` RED with a shell syntax error -- the same trap this
+  # header was written about, one target down.
+  stampn="${2:-}"
+  liven=$("$0" --list | wc -l | tr -d ' ')
+  if [ -n "$stampn" ] && [ "$stampn" != "$liven" ]; then
+    echo "  THE FILE SET CHANGED, not just its contents: stamp $stampn files, tree $liven."
+    echo "  A file was ADDED TO or REMOVED FROM the hashed set. The set is five"
+    echo "  globs -- compiler/compiler.pas, compiler/*.inc, compiler/builtin/*.pas,"
+    echo "  lib/rtl/*.pas, lib/asmcore/*.pas -- so an untracked stray dropped into"
+    echo "  any of them counts as a source."
+  elif [ -n "$stampn" ]; then
+    echo "  Same $liven files on both sides, so a hashed file's CONTENTS changed."
+  else
+    echo "  Stamp predates the srccount field, so set-vs-contents cannot be told apart."
+    echo "  It will be after the next rebuild."
+  fi
+  dirty=$(git status --porcelain --untracked-files=all -- \
+            compiler lib/rtl lib/asmcore 2>/dev/null | grep -E '\.(inc|pas)$' || true)
+  if [ -n "$dirty" ]; then
+    echo "  Untracked or modified files in the hashed set, the likely cause:"
+    printf '%s\n' "$dirty" | sed 's/^/    /' | head -20
+  else
+    # An EMPTY list is the informative case, so it is stated. A bare "suspects:"
+    # header with nothing under it reads as a broken diagnostic.
+    echo "  Nothing untracked or modified locally, so no stray file explains it:"
+    echo "  this stamp was written for a DIFFERENT TREE. Usual cause is a pull"
+    echo "  -- or a sync, which pulls -- with no rebuild after it."
+  fi
+  exit 0
+fi
+
 "$0" --list | tr '\n' '\0' | xargs -0 sha256sum | sort | sha256sum | cut -d' ' -f1

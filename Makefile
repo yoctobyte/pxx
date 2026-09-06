@@ -338,9 +338,10 @@ $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
 	    echo "converged after $$r round(s)"; \
 	    mv "$$a" $(COMPILER); \
 	    rm -f "$$b"; \
-	    printf 'rounds %s\nsha256 %s\nsrchash %s\n' "$$r" \
+	    printf 'rounds %s\nsha256 %s\nsrchash %s\nsrccount %s\n' "$$r" \
 	      "$$(sha256sum $(COMPILER) | cut -d' ' -f1)" \
 	      "$$($(COMPILER_SRCHASH))" \
+	      "$$($(COMPILER_SRCHASH) --list | wc -l)" \
 	      > $(COMPILER_STAMP); \
 	    exit 0; \
 	  fi; \
@@ -380,6 +381,7 @@ $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
 	     echo "  stamp sources: $$stampsrc"; \
 	   fi; \
 	   echo "  tree sources:  $$livesrc"; \
+	   $(COMPILER_SRCHASH) --diagnose "$$(sed -n 's/^srccount //p' $(COMPILER_STAMP))"; \
 	   echo "A stamp NEWER than sources it does not describe is how this step"; \
 	   echo "printed 'verified' three times in one day without building anything."; \
 	   echo "Recover with:  rm -f $(COMPILER_STAMP) && make $(COMPILER)"; \

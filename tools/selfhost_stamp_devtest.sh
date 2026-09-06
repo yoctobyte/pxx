@@ -119,6 +119,67 @@ if [ -f "$STAMP" ]; then
   check "...and is not refused" "$r" "no"
 fi
 
+# --- 5cc. the mismatch says WHICH WAY it differs, and both arms must fire ----
+# A srchash mismatch has two causes with two different repairs, and the message
+# used to print the same two opaque hashes for both. `srccount` separates them:
+# a different FILE COUNT means the set changed (a stray .inc/.pas dropped into
+# one of the five globs counts as a source), an equal count means a hashed
+# file's CONTENTS changed. Both arms are asserted because a diagnostic that
+# always picks one branch is the same animal as a guard that cannot fail.
+#
+# The legacy arm matters too: a stamp with no srccount line -- which is what
+# every checkout has until its next rebuild -- must fall through to the plain
+# message and say NEITHER, rather than claiming a set change from an empty
+# count. That is 5b above, which plants exactly that shape.
+restore
+if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
+  cp "$STAMP" "$BAK.src5cc"
+  live_n=$(tools/compiler_srchash.sh --list | wc -l | tr -d ' ')
+  bin_sha=$(sha256sum compiler/pascal26 | cut -d' ' -f1)
+
+  printf 'rounds 1\nsha256 %s\nsrchash deadbeef\nsrccount %s\n' "$bin_sha" "$((live_n - 1))" > "$STAMP"
+  touch compiler/pascal26 "$STAMP"
+  out=$(make compiler/pascal26 2>&1)
+  case "$out" in *"THE FILE SET CHANGED"*) r=yes;; *) r=no;; esac
+  check "a DIFFERENT file count is reported as a set change" "$r" "yes"
+
+  printf 'rounds 1\nsha256 %s\nsrchash deadbeef\nsrccount %s\n' "$bin_sha" "$live_n" > "$STAMP"
+  touch compiler/pascal26 "$STAMP"
+  out=$(make compiler/pascal26 2>&1)
+  case "$out" in *"CONTENTS changed"*) r=yes;; *) r=no;; esac
+  check "an EQUAL file count is reported as a contents change" "$r" "yes"
+  case "$out" in *"THE FILE SET CHANGED"*) r=yes;; *) r=no;; esac
+  check "...and does NOT also claim the set changed" "$r" "no"
+
+  printf 'rounds 1\nsha256 %s\nsrchash deadbeef\n' "$bin_sha" > "$STAMP"
+  touch compiler/pascal26 "$STAMP"
+  out=$(make compiler/pascal26 2>&1)
+  case "$out" in *"predates the srccount field"*) r=yes;; *) r=no;; esac
+  check "a legacy stamp says it cannot tell set from contents" "$r" "yes"
+
+  cp "$BAK.src5cc" "$STAMP"; rm -f "$BAK.src5cc"
+else
+  echo "  SKIP srccount arm -- need both a stamp and a binary"
+fi
+
+# --- 5ce. the $(COMPILER) recipe stays SHORT, because make -n is parsed -------
+# tools/compiler_srchash.sh's header says why the file set is a script and not a
+# make expression: `make -n` echoes recipes verbatim into the dry-run output
+# that testmgr's make_dry_run() parses. That applies to ANY growth of this
+# recipe, not only to inlining the file list -- measured 2026-09-06, when a
+# 17-line diagnostic plus a recursive $(MAKE) in this recipe took the dry run
+# from 24 lines to 75 and turned `testmgr --tier quick` RED with a shell syntax
+# error. The repair was to move the logic into the script, where it costs the
+# dry run one line. This row is the tripwire that was missing.
+restore
+dryn=$(make -n compiler/pascal26 2>/dev/null | wc -l | tr -d ' ')
+if [ "$dryn" -le 40 ]; then r=yes; else r=no; fi
+check "the compiler recipe's dry run stays small (${dryn} lines, cap 40)" "$r" "yes"
+case "$(make -n compiler/pascal26 2>/dev/null)" in
+  *'$(MAKE)'*|*"make --no-print-directory"*) r=yes;; *) r=no;;
+esac
+check "...and invokes no recursive make, which -n executes for real" "$r" "no"
+
 # --- 5d. the two statements of the source set agree, in both directions -----
 # tools/compiler_srchash.sh names the file set a second time, because inlining
 # make's own $(COMPILER_SRC) $(COMPILER_INC) into a recipe put ~45KB of file

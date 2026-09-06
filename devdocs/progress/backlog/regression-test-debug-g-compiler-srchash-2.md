@@ -43,3 +43,89 @@ takes it from the repro line.*
 ## Log
 - 2026-09-06 — the seven watcher saw `test-debug-g#src:tools/compiler_srchash.sh` GREEN at 9046a2fdd628 (tier native) and did NOT close this: this is a repeat stub (`regression-test-debug-g-compiler-srchash-2`, not `regression-test-debug-g-compiler-srchash`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-06 — the seven watcher saw `test-debug-g#src:tools/compiler_srchash.sh` GREEN at 65dca57177b7 (tier native) and did NOT close this: this is a repeat stub (`regression-test-debug-g-compiler-srchash-2`, not `regression-test-debug-g-compiler-srchash`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-09-06 (frankH) — the guard is CORRECT; this is the stale-tree class, and it is now self-diagnosing
+
+**Not a compiler regression.** The check this job runs is the fixedpoint stamp's
+source-hash guard, and at current HEAD on plexus it passes. It is doing exactly
+what it was built to do.
+
+### What I measured
+
+It reproduced here first, which was the useful part: `livesrc` and `stampsrc`
+differed on my box immediately after a `git pull`. Then it went away after
+`make compiler/pascal26`. **That is the guard working** — I had pulled 12
+commits touching `compiler/**` and `lib/rtl/**` and not rebuilt, which is the
+precise condition it exists to catch, and the one CLAUDE.md names as
+*PUSH -> LET THE PULL SETTLE -> REBUILD -> MEASURE, with REBUILD dropped.*
+
+So a job failing at the `$(COMPILER)` dependency across several unrelated tiers
+(`test-emit-obj`, `test-zlib`, `test-lua`, `test-lua-cross`) is one tree-state
+fact reported once per job, not N defects. The lua framing is a red herring, as
+this ticket's own header predicted for the `test-debug-g` framing.
+
+### The mechanism I could not distinguish, and why it mattered
+
+The hashed set is five GLOBS (`compiler/compiler.pas`, `compiler/*.inc`,
+`compiler/builtin/*.pas`, `lib/rtl/*.pas`, `lib/asmcore/*.pas`), so **an
+untracked stray file dropped into any of them counts as a source**. Verified:
+one `compiler/zz_stray_probe.inc` moves the hash and the count 214 -> 215.
+
+But a stray alone is self-healing — it is also a make prerequisite, so the next
+`make` rebuilds and re-stamps *including* it. Persistence therefore requires
+either a stray created DURING a run, or a stamp from a genuinely different tree.
+**Those two have different repairs and the message could not tell them apart:**
+it printed two opaque 64-char hashes and one generic recovery line.
+
+### What changed
+
+The stamp now records `srccount N` beside `srchash`, and the failure branch
+reports which way the difference goes:
+
+- different count -> **the file SET changed**, plus the untracked/modified
+  `.inc`/`.pas` in those directories, named
+- equal count -> a hashed file's **CONTENTS** changed
+- nothing dirty locally -> says so explicitly, because an empty suspect list is
+  the informative case: it means the stamp came from a different tree
+
+A stamp with no `srccount` (every checkout until its next rebuild) falls through
+to the original message and claims neither.
+
+Asserted in `tools/selfhost_stamp_devtest.sh`: both directions, the legacy
+shape, and two tripwires below — a diagnostic that always picks one branch is
+the same animal as a guard that cannot fail. Every new row was positive-controlled
+by planting the violation and watching it go red.
+
+### The first version of this fix turned `testmgr --tier quick` RED, and that is the second finding
+
+I wrote the diagnostic as ~17 extra lines in the `$(COMPILER)` recipe plus a
+recursive `$(MAKE)` to a helper target. `gate.sh quick` went RED with
+`sh: 45: Syntax error: "(" unexpected` — and the recipe was fine in isolation
+(`dash -n` clean), which is what made it confusing.
+
+**`tools/compiler_srchash.sh`'s own header had already written the reason down**,
+one target away from where I was typing:
+
+> WHY A SCRIPT AND NOT A MAKE EXPRESSION ... a recipe that inlines
+> `$(COMPILER_SRC) $(COMPILER_INC)` is echoed verbatim by `make -n` ... into the
+> dry-run output that testmgr's `make_dry_run()` parses
+
+I read that header, took it as being about the *file list* specifically, and
+grew the same recipe anyway. It applies to **any** growth: the dry run went
+24 -> 75 lines. And `make -n` **executes** `$(MAKE)` lines for real rather than
+printing them, so a recursive sub-make in a recipe is worse than long.
+
+The repair is the pattern the header prescribes — the logic moved into
+`compiler_srchash.sh --diagnose`, costing the dry run one line (26 total).
+
+Two tripwires now exist, because this trap had none: the recipe's dry run must
+stay under 40 lines, and it must contain no recursive make. Both were confirmed
+falsifiable by planting a violation (57 lines / a planted `$(MAKE)` both go red).
+
+### Residual, and who owns it
+
+I could not inspect seven, so **I did not establish which sub-cause fired there**
+and I am not claiming it. That question belongs with Track T (harness build
+ordering), not Track A — the compiler is not implicated either way. The next
+occurrence answers it without anyone bisecting: the message now says whether the
+set or the contents moved, and names the files if they are local.
