@@ -16811,3 +16811,92 @@ now, and the gap it used to cover is visibly still covered by something.
 in that family before reaching for `git rm`.** There is almost always a
 neighbouring case the same fixture can assert, and the version that survives the
 fix is worth more than the one that was deleted by it.
+
+## A WHOLE-BASE SLICE IS INDISTINGUISHABLE FROM ITS BASE — so a bounds test written on the whole range cannot test bounds
+
+frankS, 2026-09-06, with the `%FAIL` lesson from two hours earlier already in
+hand and walking into its mirror image. They built `a[lo..hi]` for an open-array
+parameter; **fpc-testsuite tarray7 exited 0**, and it is not an exit-code row —
+eleven `halt()` checks, genuine value assertions. They nearly burned it.
+
+**What stopped them was writing their own test with `f[2..5]` where the corpus
+writes `f[1..10]`.** The string rows were reaching the callee with
+`Length=6989586621679009792`. **tarray7 slices the WHOLE string**, so the write
+went to the wrong place and was read back from the wrong place, self-consistently.
+
+**A slice from the first element to the last is the one slice whose bounds cannot
+be wrong** — it is its base, spelled differently. A row built on it asserts real
+values, passes honestly, and is green in two different worlds: the slice
+machinery works, or the slice machinery is bypassed entirely. **This is the
+`%FAIL`-fixture finding with the polarity reversed** — there a negative row was
+green because the feature did not exist; here a POSITIVE row is green because the
+feature was not reached.
+
+**The guards, both in the test rather than in prose, and both cheap:**
+- **No row slices from the first element to the last**, and every slice row is
+  paired with its whole-array sibling so the two answers must differ.
+- **Choose data whose sub-range sum differs from the whole-range sum.** frankS
+  caught themselves here too: negative-low-bound rows using `(i)*10` over `-2..2`
+  sum to **0** for the whole array AND for the sub-slice — and 0 is also what a
+  slice returning nothing prints. Changed to `(i+5)*10`. That is the colliding
+  expected value arriving inside the fixture written to avoid the other collision.
+
+**The general shape: an operation has a degenerate argument on which it is the
+identity.** A slice over the whole range, a copy of length `Length(s)`, a
+substring from 1, a cast to the type you already have, a merge of one list. Every
+one of them tests that the call compiles and nothing else. **Ask of any fixture:
+is this argument the one where the operation and its absence agree?**
+
+## `@s[i]` ON A STRING ASSIGNED A LITERAL ANSWERS THE LITERAL'S ADDRESS — a defect whose every READ is correct
+
+frankS, 2026-09-06, filed as `bug-a-the-address-of-a-string-element-is-the-literals-address`
+(A p60) and left platonic with a named refusal rather than worked around.
+
+Measured with no slice in the program at all: `f, h: string` and `g: AnsiString`
+all assigned `'abcd'` report `@x[1]` = **4265208 for all three**, where fpc
+reports three distinct addresses. **The VALUES are independently correct** —
+`f[1] := 'Z'` leaves `g` and `h` alone — so the storage really is separate and
+only the address is wrong. Taking the address of a string element does not
+uniquify the string.
+
+**Why it has survived, and this is the part worth carrying:** every READER through
+that address gets the right characters, because the literal holds exactly what the
+variable holds until something writes. **The defect becomes observable only on a
+write, and then not at the write site** — it shows up in some *other* variable
+that happens to hold the same literal, arbitrarily far away in the program.
+
+**So the assertion that would catch it is one nobody writes by accident.** An
+assertion on the string itself cannot: that string reads back through the same
+wrong pointer, so it is self-consistent. **Only a second variable holding the
+same literal separates them**, and nobody writes that fixture unless they already
+suspect the bug. A test suite can be thorough about strings, thorough about
+`@`, and structurally unable to see this.
+
+**The tell for the class: a wrong pointer that is shared rather than invalid.**
+An invalid pointer crashes and has a location. A pointer that aliases something
+with identical CONTENTS is correct on every read and wrong only under mutation,
+which is a different and much later event. When a value and an identity are
+supposed to travel together, assert the IDENTITY — two variables, same initial
+value, write one, read the other.
+
+## A FALL-THROUGH IS NOT A DIAGNOSTIC; IT IS A DIAGNOSTIC'S ABSENCE WEARING ONE
+
+frankS, 2026-09-06, and it cost twenty minutes on top of the above. When the
+string slice merely **declined to resolve**, the argument fell through both
+open-array blocks into the generic path: it compiled, it ran, it **exited 0**,
+and it silently dropped the write-back.
+
+**That is strictly worse than the garbage length it replaced**, and the reason is
+worth stating plainly: **a wrong length is visible and a missing write-back is
+not.** The failure mode improved in appearance and got worse in fact.
+
+An arm that does not fire looks, from the outside, exactly like an arm that fired
+and approved. **A refusal has to be STATED, not implied by the absence of a
+match** — frankS moved it to the top of the function rather than leaving it as
+the case no arm handled. If a function has arms for the shapes it supports, the
+shapes it does not support need a row too, and that row's body is an error.
+
+**Ask of any dispatcher: what happens to an input that matches nothing?** If the
+answer is "it goes on to the general case", the general case is now silently
+claiming to handle everything the specific arms declined — which is the exact
+population that most needs a diagnostic.
