@@ -101,3 +101,6 @@ argument CLAUDE.md already makes for marshalling changes, generalised to any cal
 change.
 
 The fix is on origin; this ticket still wants its `resolve`.
+
+## Log
+- 2026-09-06 — the seven watcher saw `test-core#src:test/test_nilpy_star_methods_and_targets.npy` GREEN at 0967a3ce9d05 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-nilpy-star-methods-and-targets-2`, not `regression-test-core-test-nilpy-star-methods-and-targets`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
