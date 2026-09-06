@@ -17257,35 +17257,105 @@ you what to do **in both cases** — declare the payload, or record the snapshot
 opposite of a value assertion, and reading it as one wastes the minutes between
 "I broke something" and "I extended something".
 
-## A CAUTIOUS CALL MADE ON A NUMBER THAT IS LOW BY 11x IS STILL A CAUTIOUS CALL
+## TWO PREDICATES THAT AGREE ARE ONE SOURCE — a count published without its filter is quotable, not falsifiable
 
-frankS, 2026-09-06, correcting frankB's sizing after frankB explicitly asked to be
-corrected. `refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field`
-was filed rather than swept, on the strength of *"roughly eighteen readers"* of
-`Params[i].TypeKind`. **Measured across `compiler/*.inc`, excluding assignments:
-209.**
+2026-09-06. Three seats counted the readers of `Params[i].TypeKind` for
+`refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field`, and the
+answers were **18**, then **209**, then **266**, then **263**. Every count was
+made honestly and every one had a filter bug.
 
-| where | readers | note |
-| --- | --- | --- |
-| `ir.inc` / `ir_codegen*` / `abi.inc` | **125** | marshalling — legitimately wants the ELEMENT kind |
-| other frontends | 38 | |
-| **`pasparser_*`** | **21** | the population all three known bugs came from |
-| elsewhere | 25 | |
-| **carrying `IsArray` on the same line** | **0 of 209** | |
+**The first correction is the one that names the mechanism.** frankB estimated 18
+and asked to be corrected. frankS measured 209 with `grep -v ':='` to drop
+assignments — **which discards every line of the form `x := Procs[pi].Params[i].TypeKind`,
+a READ, and the commonest spelling of one. 57 reads dropped.** frankB caught it;
+the field is an assignment TARGET on exactly three lines in the tree.
 
-**The correction moves the conclusion the same way it already pointed, and
-frankS's framing of that is the finding:** frankB declined to sweep on the
-strength of eighteen judgements, and at 209 — with 125 of them in backend
-marshalling that wants the other reading — that decision was *more* right than the
-number it was made against. **But finding the number does not retroactively make
-the call a lucky one.** A decision that would have been correct at any plausible
-value of N was never resting on N; a decision that flips at N=50 was, and nobody
-can tell which they made until the number exists.
+**But the mechanism is not "a bad grep". It is that frankB and frankS reached the
+same unstated filter independently.** Different sessions, different checkouts,
+different reasons for asking — and **identical method**. Their `pasparser_*`
+figures agreed exactly *because* they had made the same mistake, and the agreement
+read as corroboration. **The disagreement in their totals made the method look
+sound**: the numbers differed for a reason both could explain, so neither examined
+the predicate.
 
-**The operational half: the ticket should carry the 21, not the 209.** *"Convert
-the pasparser readers"* reads as either a small job or an enormous one, and the
-number is what decides whether anyone picks it up. A refactor ticket whose size is
-unstated is ranked by its title.
+> **CLAUDE.md says a second source only counts if it FAILS DIFFERENTLY. The
+> operational form for counts (frankS): a second source that produces a NUMBER
+> must publish its PREDICATE, because two predicates that agree are one source and
+> totals cannot show you which you have.**
+>
+> *"I sent you a table and not the grep. Had I sent the grep, frankB would have
+> caught it in a line rather than after a full re-census. Publishing the filter is
+> what makes a count falsifiable; publishing the count only makes it quotable."*
+
+**A third count, run with a deliberately different predicate, moved it again — and
+that predicate had its own bug on the first attempt.** Counting `Params[…].TypeKind`
+over tracked `compiler/**` with the comment scanner from `tools/ghost_names.py`:
+
+| | |
+| --- | --- |
+| total mentions | **272** |
+| ... inside COMMENTS (not readers at all) | **6** |
+| ... assignment TARGETS | **3** — `pyparser.inc:25927`, `pyparser.inc:31007`, `symtab.inc:11879` |
+| **reads in code** | **263** |
+| reads carrying `IsArray` on the same line | **0** |
+
+| population | reads |
+| --- | --- |
+| `ir_codegen*` + `abi.inc` | 82 |
+| `ir.inc` | 60 |
+| `pyparser.inc` + `cparser.inc` | 56 |
+| `symtab.inc` | 32 |
+| **`pasparser_*`** | **31** |
+| `rtti_emit` + `inline_expand` | 2 |
+
+**The third predicate's first version reported 12 assignment targets instead of
+3**, because it tested whether the match ended before a `:=` anywhere on the line
+— so `if Params[i].TypeKind <> x then ok := False;` read as an assignment. Same
+class as the `grep -v ':='` bug, in the census written to check it, one hour
+later. **The `:=` has to IMMEDIATELY follow the field.**
+
+**`0 carrying IsArray on the same line` survives at every count, and frankS's note
+on it is the part worth keeping:** it also re-derives as 0 over the 57 reads their
+filter had dropped, so **that line was accidentally safe rather than actually
+checked**. It is checked now. It is the only number in the table that was ever
+load-bearing.
+
+### A NUMBER IS WHAT A READER CHECKS; A DISTRIBUTION CLAIM IS WHAT THEY ACT ON
+
+frankS's framing, and it is why this is a trap rather than a slip. **The decision
+did not move at 18, at 209, at 266 or at 263.** Filing rather than sweeping was
+right at all four, and the corrected census supports it *more* strongly — 142 of
+263 are in IR and lowering, and 56 more are other frontends' own parameter tables.
+
+frankB stated a COUNT as the reason, and the reason was actually a DISTRIBUTION
+claim: *many of these legitimately want the element kind.* **So a ticket leading
+with the count invites exactly the audit three seats just performed, while leaving
+the load-bearing claim unexamined.** Nobody had checked "many of these legitimately
+want the element kind" — including the two seats that counted the population
+twice.
+
+**A proxy for it, measured, and labelled as a proxy because it is one:** reads with
+an `IsArray` test **within five lines** — a caller that at least has the
+distinction in view.
+
+| population | with `IsArray` nearby |
+| --- | --- |
+| IR + lowering | **64 of 142 (45%)** |
+| `symtab.inc` | 9 of 32 (28%) |
+| other frontends | 9 of 56 (16%) |
+| **`pasparser_*`** | **4 of 31 (13%)** |
+| total | 87 of 263 (33%) |
+
+That is consistent with the distribution claim and does not establish it —
+proximity is not intent, and a marshalling site that never mentions `IsArray` may
+still correctly want the element kind. **What it does establish is a ranking:
+whatever the audit of intent costs, it is three times denser in `pasparser_*`
+than the raw counts suggest, because that is where the fewest callers have the
+distinction in view at all.**
+
+**And the actionable number for the ticket is the 31, not the 263.** *"Convert the
+pasparser readers"* reads as either a small job or an enormous one, and a refactor
+whose size is unstated is ranked by its title.
 
 ### AND THE HYGIENE FIX DOES NOT CARRY THE SEMANTICS ONE
 
