@@ -1,0 +1,26 @@
+# A managed local held ACROSS A YIELD.
+#
+# `t` is built before the first yield and READ AFTER IT, to build `u`. That is
+# the whole test: a yield is a return from the stackless step function, so the
+# scope-exit release loop runs at the yield, and a copy of that loop which
+# cannot tell a persistent slot from a dead temp releases `t` on the way out.
+# The generator then resumes holding a dead handle and `len(u)` comes back
+# wrong -- 2 rather than 5 -- with no crash and no diagnostic.
+#
+# `s` exists so `t` is a COMPUTED string rather than a literal. A literal can be
+# immortal, which would make the row pass for the wrong reason.
+#
+# NOT `yield 1; yield 2`. That program holds nothing but integers, so this loop
+# has no symbol to iterate, and adding or removing the skip predicate emits a
+# byte-identical module. It is a guard that cannot fail for this defect and it
+# was circulating as the control for exactly this change.
+
+def g(n):
+    s = "a" * n
+    t = s + "b"
+    yield len(t)
+    u = t + "c"
+    yield len(u)
+
+for x in g(3):
+    print(x)

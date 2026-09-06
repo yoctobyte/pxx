@@ -6780,7 +6780,19 @@ begin
       it has to be added here; the arms are in the same order so the diff lines
       up. bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps }
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      if (Syms[i].Kind = skLocal) and not Syms[i].IsRef and (i <> retSym) then
+      { The skip predicate, per symbol, in the shape the six other copies of this
+        loop use. Without it a managed local a generator holds ACROSS A YIELD is
+        released at the yield -- the yield IS a return from the step function, so
+        this loop runs -- and the generator resumes holding a dead handle. Six
+        lines of NilPy printed 4 5 on x86-64 and 4 2 here.
+
+        PER SYMBOL and not as a blanket exit above: f891bbe8e was the blanket
+        version on the register arms and it threw out the step function's hidden
+        temps, which are not live state and DO need releasing. The predicate is
+        the thing that tells the two apart, using what AssignStacklessSlots
+        already computed. }
+      if (not SymSkipScopeExitRelease(i)) and
+         (Syms[i].Kind = skLocal) and not Syms[i].IsRef and (i <> retSym) then
       begin
         if SymIsComInterface(i) then
         begin
