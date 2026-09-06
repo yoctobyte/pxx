@@ -12729,3 +12729,107 @@ coincidence built to be misattributed. frankS checked rather than assumed — th
 and the header carried its own coverage caveat (1 of 6 skipped jobs did not run and is scored
 passlike, so the RED speaks only for the jobs that ran). **A red that arrives with your pull
 is not a red your pull caused, and the report usually says so in a line nobody reads.**
+
+## IN A SELF-HOSTING COMPILER THE NEGATIVE CONTROL CANNOT BE BUILT BY THE NORMAL BUILD — a break worth controlling for is usually a break that kills the bootstrap, and then `make` leaves the GOOD binary in place
+
+Measured 2026-09-06 (frankH, `a8bfcb695`), building a positive control for `InternStr`'s new
+hash index.
+
+The control is the right one: **remove the full length-then-characters comparison, trust the
+bucket, and the test must fail.** It does — the broken build prints `aar aar aar aar` and
+fails its first row. **Building it is where the trap is.**
+
+> **The broken compiler could not self-host at all.** It died on `EmitAsmX64: unknown
+> 0-operand mnemonic`, because merged literals corrupt the **mnemonic table** before anything
+> else gets a chance. So `make` could not produce the broken compiler — and `make` failing
+> does not remove `compiler/pascal26`. **The GOOD binary stays on disk.**
+
+**The first run of the control was therefore against the unchanged good binary, and it
+printed exactly what a correct implementation prints.** A control that cannot fail, produced
+by the ordinary act of building it. frankH caught it only because **the build had errored
+above the test output** — which is luck dressed as diligence, since a backgrounded or piped
+build would have hidden that line (see `## "GREP THE LOG FOR THE VERDICT"`).
+
+**The mechanism generalises past this compiler:** any system that builds itself has the
+property that **a deliberate defect severe enough to be worth a control is often severe
+enough to break the toolchain that would apply it.** The more convincing the break, the more
+likely it never got built.
+
+**The build that works: compile the broken sources ONCE with the GOOD binary** — a plain
+compile, not the fixedpoint — and run *that* artefact. And then the assertion this whole
+family turns on, already in this file as the exculpation control:
+
+> **Assert the BINARY SHA MOVED.** `sha256sum` before and after. A control whose binary is
+> byte-identical to the baseline is not a control, whatever its output says, and this is the
+> one check that fails differently from every reason the build might not have run.
+
+Beside it: CLAUDE.md's *`make` has TWO success verbs* and the four routes to a stale binary.
+This is a **fifth** route and the nastiest, because it is created *deliberately, by you, in
+the act of being careful* — and unlike the other four it leaves a **failed** build behind, so
+"the build did not print success" is available and easy to scroll past.
+
+## WHEN A SWEEP REPORTS A `not-built` BUCKET, THE `not-built` COUNT IS THE RESULT — and a harness that silently skips is the truncation shape with better manners
+
+Same session, same day, on the i386 `DATAREF_DROP` sweep:
+
+```
+identical=606   DIFFERING=0   not-built=1911          606 + 1911 = 2517 = the whole corpus
+```
+
+**The zero is not the finding. The 1911 is.** Almost no Pascal program in that corpus can be
+built as an object, and `__rttireg` / `__resources` are **Pascal-only intrinsics** — so the
+run covered C translation units and **never reached the arm under test at all.** `DIFFERING=0`
+is true, and it is a statement about a population the question is not about.
+
+This is the **fourth** instance in one week of one thing: `## A SHARED-MACHINERY CHANGE NEEDS
+A CORPUS PER FRONTEND`, `## A FILE-INTERSECTION OVER A COMMIT RANGE`, the 44-row differential
+that could not see a pointer-field deref, and now this. **Every time the instrument was sound
+and the frame was chosen by the person holding the hypothesis.** The framing to carry:
+**all-identical is consistent with "the arm does not fire here" and is NOT evidence the fix is
+unnecessary.**
+
+**And the instrument-design rule frankH pulled out of it, which is the transferable half:**
+
+> **A corpus harness that reports `not-built` as its own bucket is doing real work. One that
+> `continue`s past an unbuildable input without a counter is the TRUNCATION shape with better
+> manners** — it produces a denominator that silently equals only what happened to compile,
+> and the resulting rate is correct about a population nobody chose.
+
+frankH nearly wrote it the second way: *"I nearly wrote the loop with `continue` and no
+counter."* **The counter is the difference between a sweep and a sample**, and it costs one
+variable. Make the buckets sum to the corpus and print the sum — if they do not, the harness
+tells you which ones you lost.
+
+## THE RHETORICAL FORM OF A DESIGN JUSTIFICATION IS INDISTINGUISHABLE FROM THAT OF A FINDING — why a comment's adjective is the hardest false instrument to catch
+
+frankH's addition to `## A COMMENT'S ADJECTIVE IS NOT A MEASUREMENT`, and it is the part that
+explains why the rule is needed at all rather than merely true.
+
+> **`common`, `hot`, `cheap`, `rare` are written to justify a DECISION.** So they read as the
+> author having considered the alternative and rejected it — **which is exactly the tone of
+> someone who measured.** The sentence is doing rhetorical work that looks like evidential
+> work.
+
+**And the asymmetry that makes it worse than a stale identifier:** *an identifier at least has
+a definition somewhere to check against; an adjective has nothing behind it and never did.*
+`## The name is not the thing` in CLAUDE.md assumes a referent exists and has drifted. **Here
+there is no referent.** There is nothing to grep, nothing to diff, and no state in which the
+word was ever true or false — so every technique in this file for catching a stale name is
+inapplicable by construction.
+
+**The only move is to treat the adjective as a question and go measure it**, which is what
+frankH did to its own earlier claim, retracting *"common"* on the `DATAREF_DROP` precondition
+and finding the evidence ran the other way.
+
+### And the same session's cleanest instance of doing this right
+
+Asked whether a hash used as a lookup key can distinguish the things it looks up, frankH did
+not answer from the code — *"almost certainly you have it"* being the confidence level that
+both of that week's sentinel defects had. **It went and found a collision:** `'aar'` and
+`'ac0'` both hash to **8936569** under djb2 masked to 24 bits, now a wired test with its
+`.expected`.
+
+> **The refutation of "this is almost certainly fine" is not an argument that the code
+> compares fully — it is an INPUT that would expose it if it did not.** Construct the
+> discriminating case; the reading of the code is what you were already doing when you formed
+> the belief.
