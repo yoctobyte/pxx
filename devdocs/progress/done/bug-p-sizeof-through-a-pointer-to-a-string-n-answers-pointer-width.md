@@ -3,7 +3,7 @@ slug: bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width
 track: P
 prio: 45
 type: bug
-status: working
+status: done
 owner: frankB
 created: 2026-09-06
 found-by: frankS
@@ -99,3 +99,6 @@ FPC-comparable. They are not: **fpc refuses `^string[N]` in a type block
 outright** — `Parameters or result types cannot contain local type definitions`
 — so the direct spelling is ours alone and has no oracle. Noted because the
 ticket's evidence is otherwise stated against fpc.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
