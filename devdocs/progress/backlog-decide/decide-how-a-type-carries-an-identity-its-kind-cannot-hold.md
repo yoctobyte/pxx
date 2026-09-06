@@ -531,3 +531,45 @@ because a revert is the kind of evidence a design fork rarely gets, and because
 the next person to hit the procedural case will otherwise write the same
 pointer-general rule I did.
 
+
+## 2026-09-06 — A FOURTH PRECEDENT, AND IT IS ARM B, ALREADY SHIPPED
+
+Raised by the owner from memory, not from this ticket: *"i assume it's related to
+retyping, like `type something = type byte` would leave something as a different
+type, and not an alias of byte."*
+
+**That construct is not in this ticket and it should be, because it is the same
+decision — already taken, and taken as arm B.** `2f0ea073a` made
+`T = type Base` genuinely distinct, and the mechanism is a side channel beside
+the kind, not a new kind: `AliasIsDistinct` is stamped by `AliasCommit`, saved
+and restored by `ParseTypeKind` around the RHS, and read at **two overload
+decision points**. Measured against fpc 3.2.2: `P(b: byte)` / `P(m: TMyB)` bind
+two bodies and print `base` then `distinct`, where before the fix pxx warned
+*"duplicate definition of 'P' with the same parameter types"* and bound one.
+
+**A distinct type is the purest possible case of "layout is the kind, identity is
+not"** — layout-identical to the base by definition, different for overload
+resolution, var-parameter matching and RTTI. If any construct were going to
+force arm A, it is this one, and it did not.
+
+So the precedent count is not three-for-A-and-one-pattern. It is:
+
+| construct | arm taken | why |
+| --- | --- | --- |
+| `tyBool8`, `tyUCS4Char`, `tyWideChar` | A (own kind) | a storable type whose WIDTH differs; `tyWideChar` explicitly because a node-level marker could not serve `WriteLn` |
+| enum (`SymEnumId`) | B (side channel) | layout is an integer, identity is not |
+| `{$H-}` ShortString capacity (`8a3a62258`) | B | capacity has no carrier in the kind |
+| **`T = type Base` (`2f0ea073a`)** | **B** | **layout IS the base by definition; only identity differs** |
+
+**The discriminator that falls out of the table is cleaner than "which arm is
+cheaper": if the WIDTH differs, it needs a kind; if only the MEANING differs, it
+needs a channel.** Sized booleans are the awkward case precisely because they
+differ in both — which is why they were mapped to integers for width and then
+lost their booleanness. Under this rule they are a channel case that already has
+its width right, not a kind case.
+
+This does not settle the ticket; the identity-obligation requirement frankB
+measured (a bare "is there an identity" channel hands a bitset its element's
+member names) still applies, and applies to `AliasIsDistinct` too. But arm B is
+now in the tree four times, including on the one construct that is nothing but
+identity.
