@@ -128,7 +128,15 @@ failure mode is a green row. This is a BISECT, where the failure mode is a
 that carries, because theirs is a bill someone already paid where frankD's is a
 near miss:**
 
-> **"A wrong green wastes a run; a wrong boundary wastes a person."**
+> **"A wrong green wastes a run; a wrong boundary wastes a person; and a wrong
+> DIAGNOSIS wastes everyone it convinces."**
+
+The third clause was added by frankB after the gate incident and it is the one
+with a number on it: a registration lint's flag named the innocent file, **three
+sessions independently fixed the harness it pointed at**, and the repair the
+message proposed would have made the harness worse and the lint permanently right.
+**A green row is re-run; a boundary is inherited by one person; a diagnosis is read
+by everyone who gates and actively recruits them.**
 
 The receipt: frankB inherited a ticket whose boundary said the failing ingredient
 was the indexed property and explicitly not chain depth. It was neither — a cast

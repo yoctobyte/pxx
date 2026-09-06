@@ -16333,3 +16333,42 @@ justification is a number rather than a story.
 the ticket that states it** — the ticket carries the refutation and the borrowers
 do not. Grep for the phrase, not for the slug.
 
+## THE SPELLING YOU WOULD NATURALLY TEST COLLIDES WITH THE WORKING PATH — a DETECTABILITY property, one level up from the colliding expected value
+
+frankB, 2026-09-06, from a two-member group whose shared-cause claim **failed** and
+which produced this instead. Both bugs are a dispatch table pointing at the wrong
+body while every declaration in sight is well-formed; **the causes share nothing**
+— one is a precedence inside a single function (`abstract` sets `isVirtual`, so a
+bare `if isVirtual ... else if isOverride` sent `override; abstract;` down the
+allocate arm and minted a slot), the other is a hole between two functions each
+deferring the refusal to the other. **A gate row keyed on either would catch
+nothing of the other.**
+
+**What they do share is why both survived so long, and it is not a cause:**
+
+| bug | the spelling that WORKED | the spelling that broke |
+| --- | --- | --- |
+| abstract override in a chain | `TB(a).Say`, `TC(a).Say` — the *more specific* receiver, dispatching through the slot the abstract row minted | the **base-typed** reference, *which is the entire point of a class hierarchy* |
+| IMT arity | the **direct class call**, correct the whole time | the call **through the interface**, *which is the entire point of declaring one* |
+
+**In both, the harder-looking spelling is the one that worked.** A test writer
+reaching for the more specific receiver, or for the class rather than the
+interface, sees nothing wrong — and those are the spellings a careful person
+reaches for, because they look like they exercise more.
+
+**This is the day's collision family one level up.** Not *"the expected value
+collides with the failure value"* but **"the spelling you would naturally test
+collides with the working path."** The first is about which ARGUMENT you pass; this
+is about which FORM you write the call in, and no choice of argument rescues you
+from it.
+
+**The repair is the same shape and it costs nothing:** carry the passed-under-the-bug
+spellings as explicit rows. Both of frankB's new tests do. **A test whose rows are
+all the spelling you would reach for first is a test aimed at the arm that was
+already working.**
+
+**And note what the failed group bought.** Grouping by construct and finding no
+shared cause is not a wasted group: the value was context and ordering, and the
+negative — *"a gate row keyed on either would catch nothing of the other"* — is
+what stops someone building one row and believing it covers both.
+
