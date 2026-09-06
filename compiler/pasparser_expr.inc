@@ -537,7 +537,10 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
-    rcDelegated: Boolean;   { the record-name cast handed its chain to the shared walker }
+    { rcDelegated LEFT THIS BLOCK with the record-name cast's own suffix loop:
+      ParseCastPostfixSuffix carries the equivalent bit (pcMovedOff) as its own
+      local, because it is state of the WALK and never of the factor parser.
+      refactor-p-three-hand-rolled-postfix-loops }
     pcMovedOff: Boolean;    { the pointer-alias cast walk has left the CAST -- see its loop }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
@@ -6790,138 +6793,26 @@ begin
           node := indexNode;
           tk := tyRecord;
         end;
-        rcDelegated := False;
-        while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
-        begin
-          if CurTok.Kind = tkCaret then
-          begin
-            Next;
-            indexNode := AllocNode(AN_DEREF);
-            ASTLeft[indexNode] := node;
-            { Once the chain has been handed to ParseClassRecordSelectors, the
-              value in hand is a FIELD, and its pointee is nothing to do with
-              the record this expression was cast to. `TA(b).pi^` where
-              `pi: ^Integer` was refused outright -- "expected ')' before '^'"
-              in argument position, "a statement cannot start with '^'" in an
-              assignment -- because the `^` was never consumed at all: the dot
-              arm below Break'd out of this loop after delegating, and the
-              shared walker's own loop is [tkDot, tkLBrack] with no tkCaret in
-              it. So the token was simply left in the stream.
+        { The suffix chain -- `^`, `.field`, `[i]` -- through the ONE walker the
+          pointer-alias spelling above also uses. This site had its own 132-line
+          copy until refactor-p-three-hand-rolled-postfix-loops; every arm of it
+          was a weaker version of the same arm over there, and each gap had been
+          filed separately as a silent wrong value on this spelling only --
+          `TLongWordRec(l).b[0]` read a Byte at the RECORD's width, `TA(b).pi^`
+          was refused outright because the delegating arm never re-entered for
+          the trailing `^`, `TRec(raw)^[1,1]` could not take a comma subscript,
+          and an array field indexed through the chain lost its element type.
+          One walker means a fix here cannot reach one spelling and miss the
+          other, which is the whole of normalise-dont-special-case.
 
-              Three other openers spell the same chain and all three were right
-              throughout, on the pinned compiler too: `b.pi^`, `vpa^.pi^` and
-              `PA(q)^.pi^`. One opener of four -- which is what says this is
-              the cast arm and not the shape.
-
-              Stamping baseRec here would be the same defect one step on: that
-              is the CAST's record, and after delegation the deref's pointee is
-              the field's. Ask the shared resolver, exactly as the pointer-alias
-              loop below does, rather than carrying a private notion of what a
-              `^` yields (devdocs/dev/normalise-dont-special-case.md).
-              Found by the escape census in
-              refactor-p-three-hand-rolled-postfix-loops: this loop was one of
-              the two reaching ParseClassRecordSelectors but not
-              ResolveDerefShape. }
-            if rcDelegated then
-            begin
-              StampDerefFromShape(indexNode, node, tk, recName);
-              Continue;
-            end;
-            { Carry the pointee record id on the deref node so ResolveNodeRec
-              (AN_DEREF, ASTIVal>0 path) resolves trailing .field offsets. }
-            ASTIVal[indexNode] := baseRec;
-            tk := tyRecord; recName := baseRec;
-            ASTTk[indexNode] := Ord(tyRecord);
-            node := indexNode;
-          end
-          else if CurTok.Kind = tkLBrack then
-          begin
-            Next;
-            indexNode := AllocNode(AN_INDEX);
-            ASTLeft[indexNode] := node;
-            ParseExpr;
-            ASTRight[indexNode] := CurASTNode;
-            Expect(tkRBrack, ']');
-            tk := tyRecord; recName := baseRec;
-            ASTTk[indexNode] := Ord(tyRecord);
-            node := indexNode;
-          end
-          else { tkDot }
-          begin
-            { A METHOD or a property is not a field, and the builder below can
-              only make fields -- RecFieldType's miss returns the tyInteger
-              default, so `PRec(q)^.o.F(2)` built an AN_FIELD on the object and
-              evaluated to the OBJECT POINTER: it compiled, ran, and printed a
-              number instead of calling F. Nothing crashed.
-              (bug-pascal-record-cast-chain-drops-method-call.) Methods,
-              properties and default properties on a record/class value are what
-              ParseClassRecordSelectors resolves, so once the name is not a
-              field, the rest of the chain is its job -- one resolver, not a
-              second partial copy (devdocs/dev/normalise-dont-special-case.md). }
-            { …and since 2026-08-27 that is EVERY name, not only the ones that
-              are not fields. The guard used to send non-fields to the shared
-              walker and keep plain fields on the hand-rolled builder below —
-              and the builder is followed by this loop's own `[` arm, which
-              hard-codes `tk := tyRecord` and `ASTTk := Ord(tyRecord)` for the
-              indexed value. So `TLongWordRec(l).b[0]` read the Byte element at
-              the RECORD's width: FPC prints 4, pxx printed 18486690310128388.
-              Silent, wrong, and worse than the parse error on the lvalue twin
-              that led here — while `x.b[0]` on a variable and `p^.b[0]` through
-              a pointer were both right all along, because both go through the
-              shared walker. One resolver, not a partial copy plus a crude
-              subscript arm.
-              bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed }
-            if recName >= REC_UCLASS_BASE then
-            begin
-              node := ParseClassRecordSelectors(node, recName, tk);
-              recName := REC_NONE;
-              { The shared walker consumes every `.` and `[` it can, so the only
-                suffix token that can still be here is `^` -- and Break'ing
-                unconditionally is what orphaned it. See the caret arm above. }
-              if CurTok.Kind <> tkCaret then Break;
-              rcDelegated := True;
-              Continue;
-            end;
-            { ...and a metaclass-typed field is a RECEIVER, not something to walk
-              into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A
-              `class of T` field records REC_NONE (the class lives in
-              UFldPtrElemRec), so RecFieldRecId answers REC_NONE, the not-a-field
-              guard above cannot fire, and the builder below made an AN_FIELD of
-              the METHOD name -- `PRec(q)^.cr.Get(3)` evaluated to the class
-              reference. Same silent wrong value, one spelling further out.
-              NodeMetaclassCi is the shared five-spelling predicate;
-              ParseMetaclassMemberTail is the shared member parser. }
-            mcCi := NodeMetaclassCi(node);
-            if mcCi >= 0 then
-            begin
-              Next;
-              if CurTok.Kind <> tkIdent then Error('expected member name after .');
-              fieldName := GetTokenStr(TokPos - 1);
-              fieldNode := ParseMetaclassMemberTail(node, mcCi, tk, recName, mcFin);
-              if fieldNode < 0 then
-                Error('unknown member on a class reference: ' + fieldName);
-              node := fieldNode;
-              if mcFin then Break;
-              Continue;
-            end;
-            Next;
-            if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
-              Error('expected field name after .');
-            prevTok := TokPos - 1;
-            fieldName := '';
-            for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
-              AppendChar(fieldName, TokChars[i]);
-            fieldNode := AllocNode(AN_FIELD);
-            ASTLeft[fieldNode] := node;
-            ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
-            ASTSLen[fieldNode]   := Tokens[prevTok].SLen;
-            tk      := RecFieldType(recName, fieldName);
-            recName := RecFieldRecId(recName, fieldName);
-            ASTTk[fieldNode] := Ord(tk);
-            Next;
-            node := fieldNode;
-          end;
-        end;
+          aliasIdx is -1: THIS SPELLING HAS NO ALIAS ROW. `TRec(raw)` is
+          `PRec(raw)` with no declared PRec, so there is nothing for
+          ResolveDerefShape to read, and the cast node's ASTIVal is 0 for "plain
+          reinterpret" -- a value the resolver would take as alias row ZERO. The
+          seed below is the exact and complete answer instead: a record-name cast
+          is a pointer to that record, at depth one, and nothing else.
+          test_record_name_cast_strides_by_its_record }
+        ParseCastPostfixSuffix(node, tk, recName, -1, tyRecord, baseRec);
         CurASTNode := node;
         LastExprTk := tk;
         Exit;

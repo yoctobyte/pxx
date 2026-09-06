@@ -8530,10 +8530,13 @@ begin
         `^Integer` field, so it overwrote a correct answer with the
         cast's record. Refused on the pin too, in both faces, while
         `vpa^.pi^` off a plain variable is right throughout.
-        ParseCastTargetSuffix already gates its copy of this restore on
-        the same bit (`not delegated`); this loop had the bit only for
-        the delegating path, which is the one arm where `.name` is NOT
-        a field. refactor-p-one-lvalue-path-for-statements-and-expressions }
+        The statement side's ParseCastTargetSuffix gated its copy of this
+        restore on the same bit (`not delegated`) and this loop had the bit
+        only for the delegating path, which is the one arm where `.name` is
+        NOT a field. That routine is GONE -- 7927fe685 deleted it with the two
+        statement-side cast-target arms, once the expression parser answered
+        for both faces -- so the bit lives here now and nowhere else.
+        refactor-p-one-lvalue-path-for-statements-and-expressions }
       pcMovedOff := True;
       { Not a field -> not this loop's job. See the twin note in the
         record-name cast above: the hand-rolled builder here can only
