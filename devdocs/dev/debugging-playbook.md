@@ -13757,3 +13757,90 @@ is missing is the sentence saying *"no manifest was consulted, because the sourc
 without a directory"* — which turns an hour of bisecting your own diff into one line of
 output. **Where two readings of one symptom differ only in the invocation, the repair belongs
 to the tool's VOICE, not to its behaviour.**
+
+## AN EXCULPATION IS THE VERDICT CLASS THAT NEVER GETS REVISITED, SO RETRACTING ONE IS THE RAREST USEFUL ACT
+
+frankZ, 2026-09-06, withdrawing its own *"not reproducible"* on
+`test-xtensa#src:test/test_cross_record.pas@3` and root-causing the real red (`0a96caf54`).
+
+**A green nobody re-checks and a "cannot reproduce" nobody re-runs are the same object: a
+verdict that STOPS WORK.** `## A WRONG REASON UNDER A RIGHT VERDICT` covers the case where
+the conclusion is right and the justification has rotted. This is the harder one — **right
+reason, wrong SUBJECT, and the verdict wrong too** — and nothing in the tree would ever have
+re-opened it, because an exculpation removes the row from every list.
+
+### The tell was PRINTED and unread, two commits after the same session wrote up that property
+
+The report's log showed `code=491372B / 446316B / 122648B`. **Every program frankZ built came
+out `196460B`.** Three sizes that match nothing, sitting in the output the whole time.
+
+> **The discriminator being PRESENT is not the discriminator being CONSULTED.** And a session
+> reading its own report is the **least** likely reader to notice a size column, because the
+> size is not what it came for. `## A WRITTEN ANSWER, PRESENT AND UNCONSULTED` with the
+> answer inside the very artefact being read.
+
+### And the key indexed JOBS, not occurrences — a second, independent reason `@N` cannot name its subject
+
+Three xtensa jobs share `test_cross_record.pas` as their first source — **#84 (3 lines,
+Call0), #138 (6 lines, windowed), #147 (115 lines)**. The report's `+4` is **#147**. frankZ
+measured **#138** and cleared **#147**.
+
+`## A KEY MUST BE ABLE TO DISTINGUISH THE THINGS IT IS USED TO LOOK UP`, and this instance is
+worse than the brittle-backward one the same session filed an hour earlier: **the ambiguity
+is across a dimension nobody documented at all**, so there is no reading of the key under
+which the wrong job is a mistake you could have caught by being careful with it.
+
+### `find -maxdepth 4` ANSWERED ABOUT A SHALLOWER TREE, and "no rows" was read as "no archive"
+
+`tstate/` **is** in the checkout, at `devdocs/progress/tstate/reports/` — **depth 5**. The
+search did not error; it answered a different question, and the answer was used to decline a
+lookup that was available the whole time. **A reason for not measuring is itself a claim, and
+it rots exactly like a measurement.**
+
+### And a TRUNCATED LIST answers "not present" for everything past the cut
+
+The current report's `tools-devtest#00` row ends mid-word — `twatch_verify_request_devtest.p`
+— so it **cannot enumerate which devtest failed**, and absence from it is uninformative in
+**both** directions. The lookup ran, the instrument did not error, and the result is still
+not evidence. **Read every list for its cut before reading it for its contents.**
+
+## A ROW THAT ASSERTS A REFUSAL GOES RED WHEN SOMEBODY FIXES THE THING — and its own comment will name the wrong cause
+
+Same investigation, and it is the actual root cause of the red above.
+
+`f49c0e11f` (2026-09-05 19:48) fixed the epilogue forward call by reserving the long form for
+`FiniRunnerProc` unconditionally, added a test for what it fixed, and **correctly wrote "NOT A
+COMPLETE FIX"**. What it could not know is that `xt_bigcall`, further down the same file,
+**asserted the refusal it had just made unreachable**: that row generates 5000 straight-line
+adds, and **the only over-512 KiB forward call a program of that shape makes IS the epilogue
+call.** Red from 19:48 onward, and nothing in the fix's own review could have seen it.
+
+> **A test whose expected outcome is a REFUSAL is a test that fails on success.** It reads as
+> coverage and behaves as a tripwire pointed the wrong way. Grep for rows asserting the
+> diagnostic you are about to remove — the fix's author is the one person guaranteed not to
+> be reading them.
+
+**And the row's own comment guessed the OPPOSITE cause.** It predicted that building clean
+would mean the program no longer crossed the bound. **The generator was never the limit:** at
+40000 statements it emits **3.9 MB, 7.4x the bound**, builds with no flag and runs correctly
+on both ABIs. The program still crosses; **the compiler no longer has the wall there.** A
+comment explaining why a row might one day pass, written by someone who never saw it pass,
+is a hypothesis with the grammar of a fact.
+
+**The repair is the part to copy: the row was rebuilt into its INVERSE** — build with no flag,
+run, compare against the native build — so it now guards `f49c0e11f` against regression, which
+the refusal-asserting version could not do. Controls named: `expect_same` rejects a mismatch,
+the expected value is `s=5000 / exit=0` rather than a blank that could collide with a build
+producing nothing, and the surviving `Error` in `XtensaCallReaches` is still present.
+
+### The residual is a coverage claim that was FALSE BEFORE THE FIX REMOVED IT
+
+A forward call between two ordinary procs >512 KiB apart still refuses, and **no row reaches
+it — but the old row never reached it either.** It was hitting the epilogue call all along
+and being read as the general case.
+
+> **So the gap is not dated to the fix.** `f49c0e11f` did not narrow the coverage; it
+> revealed that the coverage had always been the narrow case. Whoever reads the ticket next
+> will date it to yesterday unless the ticket says otherwise — **when a fix exposes a false
+> coverage claim, say explicitly that the claim was already false, or the fix inherits the
+> blame for a gap it only made visible.**
