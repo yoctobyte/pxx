@@ -253,4 +253,4 @@ out, because an unnamed fall-through and a considered no-op are indistinguishabl
 from the outside and only one of them is a decision.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 58ad1dee6.
