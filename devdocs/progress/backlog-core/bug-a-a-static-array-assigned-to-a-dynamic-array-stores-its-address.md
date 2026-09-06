@@ -1,9 +1,9 @@
 ---
 track: A
-prio: 60
+prio: 30
 type: bug
 blocked-by: []
-summary: "`d := s` for `d: array of LongInt` and `s: array[0..2] of LongInt` stored the STATIC array's ADDRESS into the dynamic array's handle slot, so Length read the words in front of `s` as a managed-block header — measured `Length(d) = 4310328` and a SEGFAULT walking it, where fpc prints `len=3: 2 4 6`. Silent garbage then a crash, from four lines of ordinary Pascal. The kind check cannot see it: an array symbol's TypeKind is its ELEMENT's kind, so both sides are tyInteger and AssignKindsIncompatible sees a matching pair. NOW REFUSED by name (cb250faf6052) so the crash is a diagnostic; the COPY fpc performs is still missing, and the route is already in the tree."
+summary: "`d := s` for `d: array of LongInt` and `s: array[0..2] of LongInt` stored the STATIC array's ADDRESS into the dynamic array's handle slot, so Length read the words in front of `s` as a managed-block header — measured `Length(d) = 4310328` and a SEGFAULT walking it, where fpc prints `len=3: 2 4 6`. The kind check cannot see it: an array symbol's TypeKind is its ELEMENT's kind, so both sides are tyInteger and AssignKindsIncompatible CERTIFIES the pair rather than merely missing it. FIXED: the source is materialised through the array constructor `d := [1, 2, 3]` already uses, so the elements go through the normal element-assign path with coercion and managed-element ARC. Every lo=0 row diffed against fpc 3.2.2. Also closes tarray12 (its eleventh check, `Insert(t3, t, 2)` with a static source, through the same call). RESIDUAL, refused rather than silently wrong: a multidim source, a dyn-array element, and a fixed-ROW destination — fpc accepts the last one, so that is a compat gap and it is why this stays open at a lower prio."
 status: backlog
 owner: unassigned
 ---
@@ -62,3 +62,53 @@ crash.
 tested exactly that and refused the open-array row. Its positive control,
 `test_an_open_array_parameter_still_assigns_to_a_dynamic_array`, is a file that
 must COMPILE, and it caught it.
+
+## FIXED 2026-09-06 (frankS) — materialised, not refused
+
+Measured at compiler `e9bace5da179`. `compiler/ir.inc`'s `FixedArrayAsArrayCtor`
+builds `s[lo] .. s[hi]` as the AN_ARG chain of an `AN_ARRAY_CTOR`, and the
+existing ctor lowering does the rest: allocate a dyn temp, SetLength it, store
+each element through the NORMAL element-assign path. **That last part is the
+reason it is not a block copy** — a byte copy of an `array[0..1] of AnsiString`
+would duplicate the handles without retaining them, silently, and no value
+assertion would see it.
+
+**The low bound is read from `Syms[].ConstVal`**, which is where `AllocArray`
+parks it. `array[1..3]` and `array[0..2]` are both three elements and only the
+second is what a zero-assuming index literal would produce.
+
+**fpc refuses a non-zero low bound outright** — `Incompatible types: got
+"Array[1..3] Of LongInt" expected "{Dynamic} Array Of LongInt"` — and accepts
+`array[0..2]`. We accept both. Us accepting what fpc rejects is not a defect
+(CLAUDE.md), and the source plainly means "copy the three elements".
+
+**One call, two doors.** `Insert(t3, t, 2)` with a static source was the same
+missing materialisation seen from the parser: it spliced ONE slot holding the
+array's address, `4: 1 2 4415304 3` against fpc's `5: 1 2 8 9 3`. The Insert arm
+in `pasparser_stmt.inc` now calls the same function rather than growing a second
+answer, which needed a FOURTH forward on the parser-into-`ir.inc` seam — every
+one of today's four caught by `gate.sh quick`'s FPC seed canary and by nothing
+else. **tarray12 is burned** (`Ok`, rc 0, its own eleven CheckArray rows).
+
+### What is left, and why it keeps the ticket open
+
+The element list cannot express three shapes, all now REFUSED by name rather
+than left to the bare store:
+
+| shape | fpc | pxx |
+| --- | --- | --- |
+| multidim source `array[0..1, 0..1]` | (untested) | refused |
+| element is itself a dyn array | (untested) | refused |
+| destination element is a fixed ROW | **accepts** | refused |
+
+The third is a real compat gap and the only reason this is still open. It is the
+same limit `tarray15` records: a row is bytes inside the outer block, not a
+handle, so the constructor has nothing to build for it. Dropped to prio 30
+because a refusal with a name is not the defect this ticket was filed for.
+
+### The expansion is O(N) nodes
+
+Deliberate, and the same expansion `d := [e0, e1, ...]` already pays. A loop
+form would be O(1) code and needs an induction variable synthesised in the IR
+lowering. **If a real program assigns a large fixed table this way, that is the
+reason to reopen — it is not a correctness question.**

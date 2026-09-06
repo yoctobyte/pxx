@@ -3730,6 +3730,77 @@ begin
   else ASTSOffset[node] := 0;
 end;
 
+{ `d := s` where d is a DYNAMIC array and s a FIXED-length array VARIABLE. The
+  handle slot wants a heap block carrying [len:8][data]; a fixed array is bare
+  bytes in the frame or in BSS with no such header, so the bare store put its
+  ADDRESS in the slot and Length read the words in FRONT of it -- measured
+  Length = 4310328 then a SEGFAULT walking it, where fpc prints the elements.
+
+  MATERIALISED THROUGH THE ARRAY CONSTRUCTOR RATHER THAN A NEW ABI, for the
+  reason the retag above gives about the set literal: AN_ARRAY_CTOR's lowering
+  already does exactly the three things this needs -- allocate a dyn temp,
+  SetLength it, and store each element through the NORMAL element-assign path,
+  which is what carries type coercion and managed-element ARC. A bespoke
+  block-copy would have to re-derive all three and would get the ARC wrong for
+  an `array[0..2] of AnsiString`, silently, because a raw byte copy duplicates
+  handles without retaining them.
+
+  The elements are spelled `s[lo] .. s[hi]` and the low bound is read from
+  Syms[].ConstVal, which is where AllocArray parks it -- `array[1..3]` and
+  `array[0..2]` are both three elements and only the second one is what the
+  index literal would be if this assumed zero.
+
+  THE EXPANSION IS O(N) NODES AND THAT IS THE KNOWN COST. It is the same
+  expansion `d := [e0, e1, ...]` already pays, which is why no new mechanism is
+  introduced to avoid it; a loop form would be O(1) code and needs an induction
+  variable synthesised in the IR lowering, which is a bigger change than the bug
+  warrants today. If a real program assigns a large fixed table this way, that
+  is the ticket to reopen -- not a correctness question.
+
+  Caller owns the guards. In particular a PARAMETER is never handed here:
+  AllocParam stamps ArrLen := 1000 on every array parameter as the open-array
+  placeholder, so a param's recorded length is not a length. }
+function FixedArrayAsArrayCtor(srcNode: Integer): Integer;
+var srcSym, faLo, faN, i, faHead, faTail, faArg, faIdx, faLit, faBase: Integer;
+begin
+  srcSym := ASTIVal[srcNode];
+  faLo := Syms[srcSym].ConstVal;
+  faN  := Syms[srcSym].ArrLen;
+  faHead := -1; faTail := -1;
+  for i := 0 to faN - 1 do
+  begin
+    { A fresh base ident per element, COPIED from the source node rather than
+      rebuilt from the symbol: whatever the parser recorded on it (kind ord,
+      and any later retag) is what the index path expects to read. }
+    faBase := AllocNode(AN_IDENT);
+    ASTIVal[faBase] := ASTIVal[srcNode];
+    ASTTk[faBase]   := ASTTk[srcNode];
+    faLit := AllocNode(AN_INT_LIT);
+    ASTIVal[faLit] := faLo + i;
+    ASTTk[faLit]   := Ord(tyInteger);
+    faIdx := AllocNode(AN_INDEX);
+    ASTLeft[faIdx]  := faBase;
+    ASTRight[faIdx] := faLit;
+    ASTTk[faIdx]    := Ord(Syms[srcSym].TypeKind);
+    faArg := AllocNode(AN_ARG);
+    ASTLeft[faArg]  := faIdx;
+    ASTRight[faArg] := -1;
+    ASTTk[faArg]    := Ord(Syms[srcSym].TypeKind);
+    if faHead < 0 then faHead := faArg else ASTRight[faTail] := faArg;
+    faTail := faArg;
+  end;
+  Result := AllocNode(AN_ARRAY_CTOR);
+  ASTLeft[Result]    := faHead;
+  { Right is NOT written: AllocNode already sets both child slots to -1, and
+    AN_ARRAY_CTOR has no Right. A redundant store would be the first write to
+    that kind/slot pair in the whole tree, so tools/ast_slot_overloads.py would
+    carry it forever as a reviewed overload for a no-op. }
+  ASTIVal[Result]    := Ord(Syms[srcSym].TypeKind);
+  ASTTk[Result]      := Ord(Syms[srcSym].TypeKind);
+  ASTSLen[Result]    := 0;
+  ASTSOffset[Result] := 0;
+end;
+
 { `d` is a dynamic array whose ELEMENT is a fixed ROW (`array of array[0..2] of
   T`, either spelling). The row is bytes inside the outer block, not a handle,
   so an element list cannot be built for it the way the open-array constructor
@@ -12424,11 +12495,32 @@ begin
          (Syms[ASTIVal[ASTRight[node]]].ArrLen > 0) and
          (SymDynDepth[ASTIVal[ASTRight[node]]] = 0) and
          (Syms[ASTIVal[ASTRight[node]]].Kind <> skParam) then
-        ErrorAtRecover(ASTLine[node],
-          'cannot assign a fixed-length array to a dynamic array: the handle slot '
-        + 'would take its ADDRESS and Length would read whatever sits in front of it '
-        + '-- use SetLength and copy the elements '
-        + '(bug-a-a-static-array-assigned-to-a-dynamic-array-stores-its-address)');
+      begin
+        { COPIED, which is what fpc does and what the source means. The three
+          exclusions below are shapes the element-list materialisation cannot
+          express, and each is REFUSED rather than left to the bare store,
+          because the bare store is the address bug:
+            - a MULTIDIMENSIONAL source: its elements are rows, and `s[i]` on a
+              2-D fixed array is a row, not a value.
+            - a source whose ELEMENT is itself a dynamic array: the ctor would
+              have to build a temp one level deeper per element.
+            - a DESTINATION whose element is a fixed ROW: the ctor's slots are
+              scalars or handles and a row is neither. This is the same shape
+              the set-literal retag above refuses, in its own words.
+          A single arm and a single diagnostic for all three: what the
+          programmer needs to know is that the copy did not happen, and the
+          remedy (SetLength + element loop) is the same in every case. }
+        if (SymArrNDims[ASTIVal[ASTRight[node]]] > 1) or
+           (SymElemDynDepth[ASTIVal[ASTRight[node]]] > 0) or
+           (NodeDynElemRowLen(ASTLeft[node]) > 0) then
+          ErrorAtRecover(ASTLine[node],
+            'cannot assign this fixed-length array to a dynamic array: only a '
+          + 'single-dimensional array of plain elements is copied element by '
+          + 'element -- use SetLength and copy the rows '
+          + '(bug-a-a-static-array-assigned-to-a-dynamic-array-stores-its-address)')
+        else
+          ASTRight[node] := FixedArrayAsArrayCtor(ASTRight[node]);
+      end;
 
       { ...AND THE ONE PAIR THE KIND CANNOT EXPRESS AT ALL, which is why it is
         its own check and not another arm of the one above: a bare routine NAME

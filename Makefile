@@ -6320,11 +6320,23 @@ test-core: $(COMPILER)
 	# STATIC array's ADDRESS in the handle slot: Length(d) = 4310328 and a SEGFAULT
 	# walking it, where fpc prints len=3: 2 4 6. The kind check cannot see it --
 	# an array symbol's TypeKind is its ELEMENT's kind, so both sides are
-	# tyInteger. NEGATIVE half: must not compile, and the message must name the
-	# address.
+	# tyInteger, so the funnel CERTIFIES the pair rather than merely missing it.
+	# Now COPIED, through the array constructor `d := [1, 2, 3]` already uses, so
+	# the elements carry coercion and managed-element ARC. Every lo=0 row was
+	# diffed against fpc 3.2.2; the lo=1 rows fpc REFUSES and their values are
+	# ours, which is not a defect.
+	./$(COMPILER) test/test_a_static_array_is_copied_into_a_dynamic_array.pas $(TESTTMP)/test_statcp26
+	tools/expect_same.sh test_a_static_array_is_copied_into_a_dynamic_array \
+	  "$$($(TESTTMP)/test_statcp26)" \
+	  "$$(cat test/test_a_static_array_is_copied_into_a_dynamic_array.expected)"
+	# NEGATIVE half, and it is the RESIDUAL rather than the bug: an element list
+	# cannot express a MULTIDIMENSIONAL source (s[i] is a row, not a value), a
+	# dyn-array element, or a fixed-ROW destination. Refused rather than left to
+	# the bare store, because the bare store is the address bug. This row is also
+	# the only thing that notices if the rewrite stops being reached.
 	@./$(COMPILER) test/test_a_static_array_is_not_a_dynamic_array_fail.pas $(TESTTMP)/test_statdyn26 2>&1 \
-	  | grep -q 'cannot assign a fixed-length array to a dynamic array' \
-	  || { echo 'test_a_static_array_is_not_a_dynamic_array_fail: FAIL - expected the fixed-length-to-dynamic refusal'; exit 1; }
+	  | grep -q 'cannot assign this fixed-length array to a dynamic array' \
+	  || { echo 'test_a_static_array_is_not_a_dynamic_array_fail: FAIL - expected the multidim-source refusal'; exit 1; }
 	# POSITIVE CONTROL, drawn from the population the guard is about and NOT
 	# hypothetical: the first version tested `ArrLen > 0` and refused this file,
 	# because AllocParam stamps ArrLen := 1000 on EVERY array parameter as the

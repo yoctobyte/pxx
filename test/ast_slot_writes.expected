@@ -155,6 +155,7 @@ AN_ARG Left endLit
 AN_ARG Left excArgsTup
 AN_ARG Left excFoldStr
 AN_ARG Left exprNode
+AN_ARG Left faIdx
 AN_ARG Left fieldNode
 AN_ARG Left flNotNode
 AN_ARG Left fmtNode
@@ -276,6 +277,7 @@ AN_ARG Right unpIdx
 AN_ARG Right valArg
 AN_ARG Right vtArg2
 AN_ARRAY_CTOR Left -1
+AN_ARRAY_CTOR Left faHead
 AN_ASM Left asmStart
 AN_ASM Left startOff
 AN_ASM Right asmLen
@@ -901,6 +903,7 @@ AN_INDEX Left RMakeIdent(arrSym)
 AN_INDEX Left RMakeIdent(symIdx)
 AN_INDEX Left baseFld
 AN_INDEX Left baseNode
+AN_INDEX Left faBase
 AN_INDEX Left fieldNode
 AN_INDEX Left identNode
 AN_INDEX Left idn
@@ -913,6 +916,7 @@ AN_INDEX Right BuildFlatNDIndex(nIdx)
 AN_INDEX Right CurASTNode
 AN_INDEX Right GenMakeIdent(kSym, tyInteger)
 AN_INDEX Right argNode
+AN_INDEX Right faLit
 AN_INDEX Right fieldNode
 AN_INDEX Right flatNode
 AN_INDEX Right idxExpr

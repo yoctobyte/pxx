@@ -7112,6 +7112,32 @@ begin
              SetLitElemsArePlain(exprNode) and (NodeDynElemRowLen(valNode) = 0) then
             RetagSetLitAsArrayCtor(exprNode, NodeDynBaseTk(valNode),
                                    NodeDynDepth(valNode));
+          { A FIXED-length source array is materialised into the same element
+            list, so it reaches the splice through the AN_ARRAY_CTOR arm below
+            rather than being mistaken for a single ELEMENT. Untreated it was:
+            `Insert(t3, t, 2)` with `t3: array[0..1] of LongInt` spliced ONE
+            slot holding the static array's address -- measured `4: 1 2 4415304
+            3` against fpc's `5: 1 2 8 9 3`. This is tarray12's eleventh check
+            and it is the SAME missing materialisation as the assignment arm's,
+            which is why it is the same call and not a second answer.
+
+            The exclusions match that arm's exactly (multidim source, dyn-array
+            element, fixed-ROW destination, and a PARAMETER, whose ArrLen is the
+            open-array placeholder 1000 rather than a length) -- and here they
+            fall THROUGH rather than erroring, because the shapes they name are
+            already the existing element/nesting diagnostics' business below and
+            a second message for the same call would be worse than one. }
+          if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+             (ASTIVal[exprNode] < SymCount) and
+             Syms[ASTIVal[exprNode]].IsArray and
+             (Syms[ASTIVal[exprNode]].ArrLen > 0) and
+             (SymDynDepth[ASTIVal[exprNode]] = 0) and
+             (Syms[ASTIVal[exprNode]].Kind <> skParam) and
+             (SymArrNDims[ASTIVal[exprNode]] <= 1) and
+             (SymElemDynDepth[ASTIVal[exprNode]] = 0) and
+             (NodeDynElemRowLen(valNode) = 0) and
+             (NodeDynDepth(valNode) = 1) then
+            exprNode := FixedArrayAsArrayCtor(exprNode);
           insSrcSym := -1;
           insSplice := False;
           if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
