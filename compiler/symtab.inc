@@ -16384,128 +16384,201 @@ procedure ResolvePendingPointerAliases;
 var
   i, ci, targetAlias, a: Integer;
   targetName: AnsiString;
+  pass, bBase, bBaseTk, bDepth, bElemAlias, bElemTk, bElemRec: Integer;
+  changed: Boolean;
 begin
-  for i := 0 to AliasCount - 1 do
+  { ONE FORWARD PASS CANNOT REPAIR A ROW THAT DEPENDS ON A LATER ROW, and the
+    pointer-to-pointer arm below is exactly such a row. `PPRec = ^PRec` written
+    ABOVE `PRec = ^TRec` -- rtl-generics' own spelling -- gives PPRec the LOWER
+    alias index, so the loop reached it while PRec was still unrepaired and
+    copied PRec's REC_NONE base. The loop then repaired PRec and never came
+    back. Writing the two pointer rows in the other order (`PRec` first) made
+    the identical program correct, which is what says the defect is the pass and
+    not the arm: `pp^^.b` READ BACK `pp^^.a` -- 11 where fpc prints 22 -- and
+    `pp^^.a` was right, so a one-field probe could not see it.
+
+    Iterated to a fixedpoint instead of ordered, because the dependency is on
+    NAMES resolved inside the arms and a topological order would have to
+    re-derive it. Bounded by AliasCount+1 passes so a cyclic pair
+    (`PA = ^PB; PB = ^PA`) terminates rather than spinning, and `changed` is
+    measured by COMPARING the slots written, not by whether an arm fired -- the
+    pointer-to-pointer arm leaves AliasElemRec at REC_NONE deliberately, so it
+    re-enters on every pass and an arm-fired flag would never converge.
+    bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read }
+  pass := 0;
+  changed := True;
+  while changed and (pass <= AliasCount + 1) do
   begin
-    if (AliasTk[i] = Ord(tyPointer)) and (AliasElemRec[i] = REC_NONE) and (AliasTargetNLen[i] > 0) then
+    changed := False;
+    Inc(pass);
+    for i := 0 to AliasCount - 1 do
     begin
-      targetName := GetSliceName(AliasTargetNOff[i], AliasTargetNLen[i]);
-      { A deferred `^T` declared INSIDE a class or record body means that
-        body's T. `PCell = ^TCell` written above `TCell` is ordinary Pascal --
-        it is how every linked node is spelled -- and the PtrElemDepth guard
-        tolerates the unknown name precisely so this pass can finish the job.
-        It finished it with FindUClass(bare name), GLOBALLY: when two class
-        bodies each declare a TCell, AddClassLikeType correctly qualifies the
-        second as `TB.TCell` and leaves the bare name with the first, so every
-        deferred pointee in the program got the FIRST class's record.
-
-        A SECOND site, not the alias-name one. This code never reads the alias
-        name at all, so the owning-class column on its own does not reach it:
-        with only that fix, two nested aliases with DIFFERENT names still
-        collide whenever the pointee is written below them, and nothing fails.
-        The discriminator is one line moved -- pointee above the alias compiles,
-        pointee below it is refused.
-        bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
-      ci := -1;
-      if AliasOwnerCi[i] >= 0 then ci := FindNestedType(AliasOwnerCi[i], targetName);
-      if ci < 0 then ci := FindUClass(targetName);
-      if ci >= 0 then
+      if (AliasTk[i] = Ord(tyPointer)) and (AliasElemRec[i] = REC_NONE) and (AliasTargetNLen[i] > 0) then
       begin
-        if UClsIsRecord[ci] then
-          AliasElemTk[i] := Ord(tyRecord)
-        else
-          AliasElemTk[i] := Ord(tyClass);
-        AliasElemRec[i] := REC_UCLASS_BASE + ci;
-        if AliasPtrDepth[i] = 1 then
-        begin
-          AliasPtrBaseTk[i] := AliasElemTk[i];
-          AliasPtrBaseRec[i] := AliasElemRec[i];
-        end;
-      end
-      else if FindArrayType(targetName) >= 0 then
-      begin
-        { The pointee is a named FIXED-ARRAY type declared BELOW this row --
-          `PHashItemList = ^THashItemList;` written above
-          `THashItemList = array[0..N] of THashItem`, which is how FPC's own
-          cclasses.pas spells it and is ordinary Pascal.
+        { Every arm below is change-detected the SAME way: capture the slots, run
+          the arm, compare. Per-arm `changed := True` was wrong for the array arm
+          -- `PArr = ^TArr` where TArr is an `array of Integer` leaves
+          AliasElemRec at REC_NONE, so the row re-enters on every pass and an
+          unconditional flag would burn the full pass bound on EVERY compile,
+          making the cycle guard load-bearing instead of a safety net. }
+        bDepth := AliasPtrDepth[i];
+        bBaseTk := AliasPtrBaseTk[i];
+        bBase := AliasPtrBaseRec[i];
+        bElemAlias := AliasPtrElemAlias[i];
+        bElemTk := AliasElemTk[i];
+        bElemRec := AliasElemRec[i];
+        targetName := GetSliceName(AliasTargetNOff[i], AliasTargetNLen[i]);
+        { A deferred `^T` declared INSIDE a class or record body means that
+          body's T. `PCell = ^TCell` written above `TCell` is ordinary Pascal --
+          it is how every linked node is spelled -- and the PtrElemDepth guard
+          tolerates the unknown name precisely so this pass can finish the job.
+          It finished it with FindUClass(bare name), GLOBALLY: when two class
+          bodies each declare a TCell, AddClassLikeType correctly qualifies the
+          second as `TB.TCell` and leaves the bare name with the first, so every
+          deferred pointee in the program got the FIRST class's record.
 
-          ParseTypeKind's `^T` arm asks FindArrayType and takes the element
-          shape from the ArrType entry, and its own comment records that a
-          forward spelling "is not covered -- the entry does not exist yet --
-          and falls back to the old default". This is that fix, in the pass that
-          exists to run after the type section, where the entry now does exist.
-
-          It is not merely a stride fallback. With the element record lost,
-          `p^[i].f` is REFUSED (`a value of this type has no members`) and
-          `with p^[i] do f` is refused differently (`Integer has no members`),
-          while the identical declarations in the OTHER ORDER compile and run --
-          a declaration order changing whether a program parses, which the
-          pointer-to-pointer arm below already names as the tell. Through a
-          CLASS FIELD the same shape does not refuse at all: it reads 0.
-          bug-p-a-forward-pointer-to-a-named-array-type-loses-its-element }
-        a := FindArrayType(targetName);
-        AliasPtrElemArrAi[i] := a;
-        AliasElemTk[i] := ArrTypeElemTk[a];
-        AliasElemRec[i] := ArrTypeElemRec[a];
-        if AliasPtrDepth[i] = 1 then
+          A SECOND site, not the alias-name one. This code never reads the alias
+          name at all, so the owning-class column on its own does not reach it:
+          with only that fix, two nested aliases with DIFFERENT names still
+          collide whenever the pointee is written below them, and nothing fails.
+          The discriminator is one line moved -- pointee above the alias compiles,
+          pointee below it is refused.
+          bug-p-a-pointer-to-a-generic-nested-type-is-shared-across-specializations }
+        ci := -1;
+        if AliasOwnerCi[i] >= 0 then ci := FindNestedType(AliasOwnerCi[i], targetName);
+        if ci < 0 then ci := FindUClass(targetName);
+        if ci >= 0 then
         begin
-          AliasPtrBaseTk[i] := AliasElemTk[i];
-          AliasPtrBaseRec[i] := AliasElemRec[i];
-        end;
-      end
-      else
-      begin
-        targetAlias := FindTypeAlias(targetName);
-        if (targetAlias >= 0) and (AliasTk[targetAlias] = Ord(tyPointer)) and
-           (AliasPtrDepth[targetAlias] > 0) then
-        begin
-          { The pointee is itself a POINTER alias — `PPNode = ^PNode`, and in a
-            forward section (`PPVmt = ^PVmt;` written ABOVE `PVmt = ^TVmt;`,
-            which is how rtl-generics spells it) PVmt did not exist when this
-            row was built. ParseTypeKind's forward escape hatch answers
-            tyInteger for a name it cannot see yet, so the row kept elem
-            tyInteger and DEPTH 1 — and depth 1 means "one `^` and you are at
-            the base", so the SECOND `^` was refused outright with
-            `dereferenced value is not a pointer`, while the identical
-            declarations in the other ORDER compiled and ran. A declaration
-            order changing whether a program parses is the tell.
-
-            This arm used to require the element to ALREADY be tyPointer, which
-            a forward reference can never satisfy — so it only ever repaired
-            the base of a row that was already right, and never the row that
-            needed it. It now takes the whole triple from the target: element
-            kind, depth (one more level than the pointee's), and the ultimate
-            base. AliasElemRec stays REC_NONE on purpose — the IMMEDIATE
-            pointee is a pointer, which has no record of its own; the record
-            that matters lives in AliasPtrBaseRec, where every reader of a
-            multi-level pointer looks for it.
-            bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level }
-          AliasElemTk[i] := Ord(tyPointer);
-          AliasPtrDepth[i] := AliasPtrDepth[targetAlias] + 1;
-          AliasPtrBaseTk[i] := AliasPtrBaseTk[targetAlias];
-          AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
-        end
-        else if (targetAlias >= 0) and (AliasTk[targetAlias] <> Ord(tyPointer)) and
-                (AliasElemRec[targetAlias] <> REC_NONE) then
-        begin
-          { Forward pointee resolved to a plain (non-pointer) type alias — e.g. a
-            cross-unit record alias `TRec3 = urec.TRec;`. The classic self-
-            referential-record patch above (FindUClass) only covers a pointee that
-            is itself a fresh `record`/`class` declaration; it misses a pointee
-            that is an ALIAS to one. Left unpatched, AliasPtrBaseTk/BaseRec[i] keep
-            the placeholder stashed when `PRec3 = ^TRec3;` was first parsed (before
-            TRec3 existed), so every later `PRec3`-typed param/var is bound to the
-            wrong record — self-consistent through that pointer, but disagreeing
-            with the correctly-resolved TRec3 alias used by direct field access.
-            bug-pascal-transitive-unit-crashes-at-startup-unless-named-first. }
-          AliasElemTk[i] := AliasTk[targetAlias];
-          AliasElemRec[i] := AliasElemRec[targetAlias];
+          if UClsIsRecord[ci] then
+            AliasElemTk[i] := Ord(tyRecord)
+          else
+            AliasElemTk[i] := Ord(tyClass);
+          AliasElemRec[i] := REC_UCLASS_BASE + ci;
           if AliasPtrDepth[i] = 1 then
           begin
             AliasPtrBaseTk[i] := AliasElemTk[i];
             AliasPtrBaseRec[i] := AliasElemRec[i];
           end;
+        end
+        else if FindArrayType(targetName) >= 0 then
+        begin
+          { The pointee is a named FIXED-ARRAY type declared BELOW this row --
+            `PHashItemList = ^THashItemList;` written above
+            `THashItemList = array[0..N] of THashItem`, which is how FPC's own
+            cclasses.pas spells it and is ordinary Pascal.
+
+            ParseTypeKind's `^T` arm asks FindArrayType and takes the element
+            shape from the ArrType entry, and its own comment records that a
+            forward spelling "is not covered -- the entry does not exist yet --
+            and falls back to the old default". This is that fix, in the pass that
+            exists to run after the type section, where the entry now does exist.
+
+            It is not merely a stride fallback. With the element record lost,
+            `p^[i].f` is REFUSED (`a value of this type has no members`) and
+            `with p^[i] do f` is refused differently (`Integer has no members`),
+            while the identical declarations in the OTHER ORDER compile and run --
+            a declaration order changing whether a program parses, which the
+            pointer-to-pointer arm below already names as the tell. Through a
+            CLASS FIELD the same shape does not refuse at all: it reads 0.
+            bug-p-a-forward-pointer-to-a-named-array-type-loses-its-element }
+          a := FindArrayType(targetName);
+          AliasPtrElemArrAi[i] := a;
+          AliasElemTk[i] := ArrTypeElemTk[a];
+          AliasElemRec[i] := ArrTypeElemRec[a];
+          if AliasPtrDepth[i] = 1 then
+          begin
+            AliasPtrBaseTk[i] := AliasElemTk[i];
+            AliasPtrBaseRec[i] := AliasElemRec[i];
+          end;
+        end
+        else
+        begin
+          targetAlias := FindTypeAlias(targetName);
+          if (targetAlias >= 0) and (AliasTk[targetAlias] = Ord(tyPointer)) and
+             (AliasPtrDepth[targetAlias] > 0) then
+          begin
+            { The pointee is itself a POINTER alias — `PPNode = ^PNode`, and in a
+              forward section (`PPVmt = ^PVmt;` written ABOVE `PVmt = ^TVmt;`,
+              which is how rtl-generics spells it) PVmt did not exist when this
+              row was built. ParseTypeKind's forward escape hatch answers
+              tyInteger for a name it cannot see yet, so the row kept elem
+              tyInteger and DEPTH 1 — and depth 1 means "one `^` and you are at
+              the base", so the SECOND `^` was refused outright with
+              `dereferenced value is not a pointer`, while the identical
+              declarations in the other ORDER compiled and ran. A declaration
+              order changing whether a program parses is the tell.
+
+              This arm used to require the element to ALREADY be tyPointer, which
+              a forward reference can never satisfy — so it only ever repaired
+              the base of a row that was already right, and never the row that
+              needed it. It now takes the whole triple from the target: element
+              kind, depth (one more level than the pointee's), and the ultimate
+              base. AliasElemRec stays REC_NONE on purpose — the IMMEDIATE
+              pointee is a pointer, which has no record of its own; the record
+              that matters lives in AliasPtrBaseRec, where every reader of a
+              multi-level pointer looks for it.
+              bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level }
+            AliasElemTk[i] := Ord(tyPointer);
+            AliasPtrDepth[i] := AliasPtrDepth[targetAlias] + 1;
+            AliasPtrBaseTk[i] := AliasPtrBaseTk[targetAlias];
+            AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
+            { ...and WHICH alias the pointee is, which is the one member of the
+              triple this arm never repaired. The declaration-time writer
+              (ParseTypeAliasSection, `AliasPtrElemAlias[AliasCount-1] :=
+              LastTypePointerElemAlias`) reads LastTypePointerAlias, and for a
+              FORWARD pointee ParseTypeKind never resolved one -- so the row kept
+              -1 for the life of the program while every sibling slot above got
+              repaired here.
+
+              NOT LOAD-BEARING FOR ANY ROW I COULD BUILD, and that is measured,
+              not assumed: with this one line removed and the fixedpoint below
+              kept, every repro -- `pp^^.b`, the three-level `ppp^^^.b`, the
+              class-ref chain -- is byte-identical. It was in fact my FIRST fix,
+              landed alone, and it changed NOTHING; that negative is what sent me
+              up a level to the pass, so it is worth more as a record than as code.
+
+              Kept anyway, and the reason is this arm's own history: it repairs
+              three members of a four-member triple and leaving the fourth stale is
+              precisely the shape of the bug its comment above describes -- it
+              "used to require the element to ALREADY be tyPointer, so it only ever
+              repaired the base of a row that was already right". NodePtrAlias
+              reads this slot to walk `pp^^` one caret at a time; nothing reaches
+              it with a forward row today, and a partial repair here has bitten
+              before. Delete it the day someone shows the slot is unreachable, not
+              because no current test needs it.
+
+              Named POSITIVELY (the pointee alias we just found) rather than as
+              "whatever is still -1": the two forms agree on every row anyone would
+              think to run and differ only on the rows nobody enumerated.
+              bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read }
+            AliasPtrElemAlias[i] := targetAlias;
+          end
+          else if (targetAlias >= 0) and (AliasTk[targetAlias] <> Ord(tyPointer)) and
+                  (AliasElemRec[targetAlias] <> REC_NONE) then
+          begin
+            { Forward pointee resolved to a plain (non-pointer) type alias — e.g. a
+              cross-unit record alias `TRec3 = urec.TRec;`. The classic self-
+              referential-record patch above (FindUClass) only covers a pointee that
+              is itself a fresh `record`/`class` declaration; it misses a pointee
+              that is an ALIAS to one. Left unpatched, AliasPtrBaseTk/BaseRec[i] keep
+              the placeholder stashed when `PRec3 = ^TRec3;` was first parsed (before
+              TRec3 existed), so every later `PRec3`-typed param/var is bound to the
+              wrong record — self-consistent through that pointer, but disagreeing
+              with the correctly-resolved TRec3 alias used by direct field access.
+              bug-pascal-transitive-unit-crashes-at-startup-unless-named-first. }
+            AliasElemTk[i] := AliasTk[targetAlias];
+            AliasElemRec[i] := AliasElemRec[targetAlias];
+            if AliasPtrDepth[i] = 1 then
+            begin
+              AliasPtrBaseTk[i] := AliasElemTk[i];
+              AliasPtrBaseRec[i] := AliasElemRec[i];
+            end;
+          end;
         end;
+        if (AliasPtrDepth[i] <> bDepth) or (AliasPtrBaseTk[i] <> bBaseTk) or
+           (AliasPtrBaseRec[i] <> bBase) or (AliasPtrElemAlias[i] <> bElemAlias) or
+           (AliasElemTk[i] <> bElemTk) or (AliasElemRec[i] <> bElemRec) then
+          changed := True;
       end;
     end;
   end;

@@ -5,7 +5,7 @@ type: bug
 status: working
 blocked-by: []
 owner: frankO
-summary: "A class method called through a class-REFERENCE field is parsed as a FIELD READ, not a call: measured, the expression parser returns AN_FIELD (kind 11) with the argument list's `(` unconsumed. In STATEMENT position that surfaces as `statement is neither a call nor an assignment`; in EXPRESSION position it COMPILES AND SILENTLY YIELDS GARBAGE -- `r := PP(p)^.__ClassRef.Val(3)` printed r=-86205216 with the method never entered, where fpc 3.2.2 and pin v404 both print `SIDE called n=3` and r=42. It is a CONJUNCTION: a NESTED pointer alias AND two levels of pointer (the second deref implicit) -- nested-with-single-pointer and unit-level-with-double-pointer both call correctly. A REGRESSION in 5b5fdb0b3..de4bf2245; good at 60666ec36, so it is at or after c01eb17a8 where the nested-alias bug masks it. Blocks corpus rung 6a at generics.defaults:1865. The loud half is the lucky half."
+summary: "FIXED. The cause is NOT what this ticket said. It is not nesting, not the class-ref, not the selector parse, and not a regression: `ResolvePendingPointerAliases` repaired forward pointee aliases in ONE FORWARD PASS, so `PP = ^P` written ABOVE `P = ^T` (rtl-generics' own spelling) gave PP the lower alias index, and the loop reached PP while P was still unrepaired, copied P's REC_NONE base, and never came back. Proven by ORDER ALONE: swapping just the two pointer rows makes the identical program correct. Now iterated to a bounded fixedpoint. The ticket's `nested AND double pointer` conjunction was an artefact of a probe that could not fail -- its `works` rows called a CLASS function, which is resolved off the static class type and never touches the pointer chain, so `r=42` arrived through a path the bug cannot reach. Reading two different INTEGER fields separated them and exposed a far more reachable form with no class anywhere: `pp^^.b` READ BACK `pp^^.a` (11 where fpc prints 22). Same on pin v404, so long-standing, which also retires the `c01eb17a8` provenance and the whole bisect-with-`170e7aee1`-carried apparatus. One row remains and is NOT this bug -- `PP(x)^.field` needs an implicit second deref, is wrong in BOTH declaration orders, and is split to its own ticket."
 ---
 
 # A class method through a class-ref field is parsed as a field read
@@ -240,3 +240,115 @@ different defect: `PP(x)^.field` drops the implicit second deref, is wrong in **
 declaration orders, and is present on the pin. Filed separately as
 `bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref` (P, p70), **unowned
 and explicitly not claimed**, so it is available to any P session.
+
+---
+
+## RESOLVED 2026-09-06 (frankO) — and the diagnosis above was wrong in every part except the symptom
+
+`ResolvePendingPointerAliases` (`compiler/symtab.inc`) walked the alias table
+**once, forward**. Its pointer-to-pointer arm repairs a row by copying the
+*pointee alias's* already-repaired facts:
+
+```pascal
+AliasPtrDepth[i]   := AliasPtrDepth[targetAlias] + 1;
+AliasPtrBaseTk[i]  := AliasPtrBaseTk[targetAlias];
+AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
+```
+
+That is only correct if `targetAlias` was repaired **first**. Written top-down —
+
+```pascal
+PPRec = ^PRec;    { lower index, repaired FIRST }
+PRec  = ^TRec;    { still REC_NONE at that moment }
+TRec  = record a, b: Integer; end;
+```
+
+— `PPRec` copies a base that is still `REC_NONE`, the loop then repairs `PRec`,
+and nothing revisits `PPRec`. The deref node is stamped from that base
+(`ASTIVal[sub] := ptrBaseRec` in the postfix walk), so the field selector
+resolved at **offset 0**.
+
+**The proof is order and nothing else.** Same program, only the two pointer rows
+swapped:
+
+| declaration order | `pp^^.a` / `pp^^.b` | |
+| --- | --- | --- |
+| `PPRec` then `PRec` (forward) | 11 / **11** | wrong |
+| `PRec` then `PPRec` | 11 / 22 | right |
+| fpc 3.2.2, both | 11 / 22 | |
+
+### The fix
+
+The loop is now a **bounded fixedpoint** — `while changed and (pass <= AliasCount + 1)`.
+Two details that are not incidental:
+
+- `changed` is measured by **comparing the slots written**, not by whether an arm
+  fired. The pointer-to-pointer arm leaves `AliasElemRec` at `REC_NONE`
+  deliberately (its own comment says so), so it re-enters on every pass and an
+  arm-fired flag would never converge.
+- The pass bound makes a cyclic pair (`PA = ^PB; PB = ^PA`) terminate.
+
+Also repaired in that arm: **`AliasPtrElemAlias`**, the one member of the triple
+it never wrote. It was not sufficient on its own — measured, no behaviour change
+— but it is the slot `NodePtrAlias` walks `pp^^` through, and leaving it -1 while
+repairing its three siblings is the same hole one field over.
+
+### Why this ticket had the wrong cause for a day, which is the reusable part
+
+Every "works" row in the boundary table above called **`Val`, a CLASS function**.
+A class function is resolved off the static class type; it never dereferences the
+class-reference value. So `SIDE called n=3` / `r=42` is the correct answer
+**arriving through a path the defect cannot reach** — the probe's right answer
+was also its failure answer. That is the `sizeof(int)` trap on the callee axis:
+*if the machinery did nothing at all, would this row still pass?* Here, yes.
+
+Swapping to two plain `Integer` fields on a plain record — **no class, no
+metaclass, no cast** — dissolved the "conjunction" immediately:
+
+```pascal
+type PPRec = ^PRec; PRec = ^TRec; TRec = record a, b: Integer; end;
+```
+
+and `.a` was *still* right, because `.a` is at offset 0. **Only `.b` failed.**
+A one-field probe passes while broken, which is why the test asserts both.
+
+### Not a regression
+
+| | `pp^^.a` / `.b` (forward order) |
+| --- | --- |
+| pin v404 | 11 / 11 |
+| HEAD before fix | 11 / 11 |
+| HEAD after fix | 11 / 22 |
+| fpc 3.2.2 | 11 / 22 |
+
+Identical on the pin, so the `5b5fdb0b3..de4bf2245` window, the `c01eb17a8`
+attribution and the instruction to carry `170e7aee1` through a bisect are all
+**retired** — there was nothing to bisect.
+
+### Test
+
+`test/test_forward_double_pointer_alias_order.pas` -> `FWDPTRORDER OK`, wired
+into `test-core`. Asserts **both orders** (only a pair discriminates), **both
+fields** (offset 0 hides it), and a **three-level** chain — which pin v404
+refuses outright with `dereferenced value is not a pointer`, the symptom the
+existing arm's own comment describes.
+
+### What is left, and it is a different bug
+
+`PP(x)^.field` — an explicit cast-deref followed by a selector needing the
+**implicit second deref** — is wrong in *both* declaration orders and is
+untouched by this fix:
+
+```
+PPRec(pp)^.a / .b     pxx 4310376 / 0      fpc 11 / 22
+```
+
+Split to `bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref`.
+It is order-independent, present on the pin, and needs the address computation,
+not the alias table.
+
+### Corpus
+
+`generics.defaults.pas:1865` and its fifteen siblings go through
+`PPExtendedEqualityComparerVMT(Self)^.__ClassRef` — the **cast** spelling, so
+rung 6a needs the split ticket too, not this one alone.

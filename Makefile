@@ -5129,6 +5129,15 @@ test-threads: $(COMPILER)
 	# Row 3 is DEPTH 2 and is what distinguishes a chain walk from a fifth arm.
 	./$(COMPILER) test/test_nested_alias_visible_through_enclosing_chain.pas $(TESTTMP)/test_nested_alias_chain_26
 	tools/expect_same.sh test_nested_alias_chain_26 "$$($(TESTTMP)/test_nested_alias_chain_26 | tail -1)" "NESTEDCHAIN OK"
+	# `PP = ^P` written ABOVE `P = ^T`. The pass that repairs forward pointee
+	# aliases ran ONCE, forward, so PP (the lower index) copied P's still
+	# unrepaired REC_NONE base and was never revisited -- the same program with
+	# the two pointer rows SWAPPED was already correct. Both fields are read
+	# because the lost base resolved the selector at offset 0, so `.a` stayed
+	# right and only `.b` read back `.a`; the 3-level row is REFUSED by pin v404
+	# with `dereferenced value is not a pointer`.
+	./$(COMPILER) test/test_forward_double_pointer_alias_order.pas $(TESTTMP)/test_fwd_ptr_order_26
+	tools/expect_same.sh test_fwd_ptr_order_26 "$$($(TESTTMP)/test_fwd_ptr_order_26 | tail -1)" "FWDPTRORDER OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"
