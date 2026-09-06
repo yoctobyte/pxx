@@ -197,8 +197,8 @@ begin
   if ASTRightIsChild(node) then Result := ASTRight[node] else Result := -1;
 end;
 
-{ Deep-copy an AST subtree. Copies the full per-node field set AllocNode
-  initialises (the only AST-indexed arrays) and recurses on both children, so
+{ Deep-copy an AST subtree. Copies every per-node field AllocNode initialises
+  and recurses on both children, so
   the clone is an independent tree. Used where a value node must appear in two
   places (e.g. a for-in container reused for both the Length bound and the
   element access) without the two occurrences aliasing one node. }
@@ -221,6 +221,31 @@ begin
   ASTPyUser[Result]   := ASTPyUser[node];
   ASTStrElemTk[Result] := ASTStrElemTk[node];
   ASTNDRowSubs[Result] := ASTNDRowSubs[node];
+  { ...and the SEMANTIC IDENTITY, which was MISSING from this list. It is
+    AST-indexed and AllocNode initialises it two lines below the ones copied
+    above, so a clone got SEM_NONE where the original had an identity.
+    While the slot held only an enum id the cost was a lost DIAGNOSTIC and
+    nobody managed to build a repro (frankA, 2026-09-06, ~20 call sites tried).
+    Now that it carries "integer kind, boolean semantics" the cost is the p70
+    control-flow bug reappearing IN CLONED SUBTREES ONLY -- `not` complementing
+    an integer inside a for-in, a SetLength desugar or an inline expansion, and
+    nowhere else, which would be intermittent by construct shape and would look
+    like nothing to do with the identity work.
+    The header above still says this list is "the full per-node field set
+    AllocNode initialises". That sentence was describing an intention, and it
+    is what kept the omission invisible: the comment told every reader the set
+    was complete. Verified against AllocNode when this line was added.
+    decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+  ASTSemId[Result]    := ASTSemId[node];
+  { ...and the SIBLING omission, found by grepping AllocNode for what else it
+    initialises that this list does not name. ASTCLongRank is AST-indexed, is
+    set to 0 by AllocNode, and was not copied either -- so a cloned C
+    expression lost its `long` rank. Same class, same cause (a list maintained
+    by hand against a docstring that claims it is complete), and copying the
+    original's value is strictly more correct than inheriting a fresh 0.
+    normalise-dont-special-case.md: fix one arm of a double case, grep for the
+    sibling before closing. }
+  ASTCLongRank[Result] := ASTCLongRank[node];
   { PAYLOAD SLOTS ARE COPIED, NOT CLONED -- see the overload table above. }
   if ASTLeftIsChild(node) then ASTLeft[Result] := CloneAST(ASTLeft[node])
   else ASTLeft[Result] := ASTLeft[node];

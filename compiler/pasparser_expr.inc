@@ -20,6 +20,93 @@
 
 procedure ParseFactor; forward;
 
+{ A SIZED BOOLEAN, normalised to an ordinary Boolean: `n <> 0`, typed
+  tyBoolean -- or `n` untouched when it is not one.
+
+  NORMALISE RATHER THAN GROW A SECOND PATH. ByteBool/WordBool/LongBool are
+  integers of their own width carrying their booleanness in the SemId channel
+  beside the kind, so anything that dispatches on the kind alone answers
+  correctly about what it was handed and gets a sized boolean wrong. There are
+  at least five such places -- stdout write, the Text-file writer, Str,
+  `array of const` boxing, and the LOGICAL `not` lowering -- and the third was
+  found only because someone fixed the first two and looked one type over.
+
+  A per-site `or SemIsBool(...)` arm is the shape that keeps missing one, and
+  it would ALSO have to teach each site how to marshal an Int16 into a
+  one-byte Boolean parameter. So the value is converted ONCE, here, into
+  something every one of them already handles, and none of them learns
+  anything.
+
+  `<> 0` AND NOT A TRUNCATION, which is the whole reason this is a conversion
+  rather than a re-tag: a C-ABI boolean is true for ANY nonzero value, and 1 is
+  not privileged. Logical `not` lowers to `xor 1`, correct for a canonical 0/1
+  Boolean and wrong for `ByteBool(200)` -- $C8 xor 1 is $C9, still nonzero,
+  still true. Measured 2026-09-06 by this file's own test, which caught it
+  because it carries a nonzero-but-not-one row.
+
+  Placed at the top of the expression parser rather than beside its first
+  caller: pasparser_stmt.inc's four renderer sites use it too and that file is
+  included later. NodeSemIdOf's body is far below and reached through the
+  forward in pasparser_name.inc.
+  bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time
+  bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln }
+function SemBoolAsBoolean(n: Integer): Integer;
+var sbZero: Integer;
+begin
+  Result := n;
+  if n < 0 then Exit;
+  if not SemIsBool(NodeSemIdOf(n)) then Exit;
+  sbZero := AllocNode(AN_INT_LIT);
+  ASTIVal[sbZero] := 0;
+  ASTTk[sbZero] := ASTTk[n];
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(tkNeq);
+  ASTLeft[Result] := n;
+  ASTRight[Result] := sbZero;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
+{ Does this node produce a value whose MEANING is a truth value -- a plain
+  Boolean, a tyBool8, or a sized boolean carrying its booleanness in the SemId
+  channel? Asked of BOTH operands before either is normalised, so that
+  `a and 3` (a type error someone made) is left alone to be diagnosed rather
+  than quietly rewritten into something that compiles. }
+function NodeIsBooleanMeaning(n: Integer): Boolean;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  Result := (IntToTypeKind(ASTTk[n]) = tyBoolean) or
+            (IntToTypeKind(ASTTk[n]) = tyBool8) or
+            SemIsBool(NodeSemIdOf(n));
+end;
+
+{ Both operands of a BOOLEAN operator, normalised together when at least one of
+  them is a sized boolean.
+
+  `and`, `or` and `xor` between two truth values are LOGICAL in FPC, and a
+  sized boolean reaching them as a bare integer makes them BITWISE: measured
+  2026-09-06 against fpc 3.2.2 with `a := ByteBool(200); b := ByteBool(1)`,
+  `a and b` answered 0 where FPC answers TRUE, and `a or b` answered -55. Both
+  operands are true and their conjunction was false -- the same class of defect
+  as `not`, one operator over, and invisible to any probe using only 0 and 1.
+
+  The comparisons go the same way: `a = b` compared the raw ordinals 200 and 1
+  and said FALSE where FPC compares truth values and says TRUE. That is why the
+  p70 ticket's line "comparisons are unaffected" is true of the values it was
+  measured with and not of the type.
+
+  BOTH SIDES, and only when at least one is sized: normalising a pair that is
+  already two plain Booleans would wrap nodes for nothing, and normalising a
+  pair where the other side is an integer would paper over a type error.
+  bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time }
+procedure SemBoolNormalisePair(var l, r: Integer);
+begin
+  if not (SemIsBool(NodeSemIdOf(l)) or SemIsBool(NodeSemIdOf(r))) then Exit;
+  if not (NodeIsBooleanMeaning(l) and NodeIsBooleanMeaning(r)) then Exit;
+  l := SemBoolAsBoolean(l);
+  r := SemBoolAsBoolean(r);
+end;
+
 { A UNARY operator overload on an aggregate operand, built as an ORDINARY CALL.
 
   `-a`, `not a` and `+a` where the operand is a record/class that declares
@@ -536,7 +623,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
     ptrCastElemTk: TTypeKind;   { element of a PChar/PWideChar cast — what `p^` and `p[i]` yield }
-    castEtid: Integer;   { enum type index of a `TEnum(x)` cast, else -1 — see the cast arm }
+    castSem: Integer;    { the SEMANTIC IDENTITY a named-type cast confers — an enum's type index for `TEnum(x)`, a sized boolean's for `ByteBool(x)`, else SEM_NONE. See the cast arm }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -1687,27 +1774,34 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[unOvl]);
         Exit;
       end;
-      node := AllocNode(AN_NOT); ASTLeft[node] := left;
-      bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
-      { …UNLESS the operand's kind is carrying a MEANING it cannot express. A
-        sized boolean is an integer of its own width by design -- that is the
-        C ABI and the width is right -- so the tag says tyInt8 and the whitelist
-        note above says to trust the tag. The tag is not wrong here; it is
-        INCOMPLETE, and the identity beside it is the rest of the answer.
+      { A SIZED BOOLEAN is an integer of its own width carrying a MEANING its
+        kind cannot express -- that is the C ABI, and the width is right. The
+        tag says tyInt8 and the note above says to trust the tag. The tag is not
+        wrong here; it is INCOMPLETE, and the identity beside it is the rest of
+        the answer.
 
-        This is NOT the node-kind arm the note forbids. That whitelist asked
-        "is this SHAPE one whose type I believe"; this asks the type system what
-        the value MEANS, through the one resolver that knows which of the five
-        identity channels applies to which node shape. A new shape is right here
-        for free; a new shape was wrong under the whitelist by default.
+        NORMALISED rather than given an arm: the operand becomes an ordinary
+        `x <> 0` Boolean and everything below this line -- the bitwise/logical
+        split, the literal fold, the codegen -- runs unchanged and unaware. A
+        `bitNot := False` here would have been the smaller edit and WRONG, since
+        the logical path lowers to `xor 1`, which is correct for a canonical 0/1
+        Boolean and not for `ByteBool(200)`.
+
+        This is also NOT the node-kind whitelist that arm forbids. That asked
+        "is this SHAPE one whose type I believe"; this asks what the value
+        MEANS, through the one resolver that knows which of the five identity
+        channels applies to which node shape, so a new node shape is right here
+        for free rather than wrong by default.
 
         Without it `var a: ByteBool; a := True` made `if a` and `if not a` BOTH
         fire, silently, with no diagnostic: `not 1` is 254 as a byte and -2 as a
-        LongBool, and both are nonzero and therefore true. It was correct for
-        False by accident (`not 0` is nonzero, which is the wanted answer), so a
-        probe that only sets False cannot see it.
+        LongBool, both nonzero, both true. Right for False only by accident
+        (`not 0` is nonzero, which is the wanted answer), so a probe that only
+        sets False cannot see it.
         bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time }
-      if bitNot and SemIsBool(NodeSemIdOf(left)) then bitNot := False;
+      left := SemBoolAsBoolean(left);
+      node := AllocNode(AN_NOT); ASTLeft[node] := left;
+      bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
       if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
@@ -6911,7 +7005,7 @@ begin
             enum->ordinal direction already worked via the Integer(...) case.
             See bug-integer-to-enum-typecast-undefined-variable.
 
-            castEtid is captured HERE rather than re-derived below, because the
+            castSem is captured HERE rather than re-derived below, because the
             identity guard used to read `castTk = tyInteger` -- which was a
             correct test only while every enum WAS tyInteger. Narrowing the kind
             without moving that guard would have made `TSmall(i)` under
@@ -6919,11 +7013,16 @@ begin
             nothing failing: the same shape as NodeSemIdOf naming one of five
             call kinds. Two lines that must change together, so they hold one
             value between them instead of agreeing by coincidence. }
-          castEtid := -1;
+          { …and a BUILTIN name may confer one too: `ByteBool(x)` is a
+            reinterpret at one byte that also says the value is a truth value.
+            Asked from the same shadow table the DECLARATION path asks, so a
+            cast and a declaration of the same name cannot disagree -- the
+            drift BuiltinScalarTypeKind's own header exists to end. }
+          castSem := BuiltinScalarSemId(name);
           if castTk = tyUnknown then
           begin
-            castEtid := FindEnumType(name);
-            if castEtid >= 0 then castTk := EnumStorageTypeKind(castEtid);
+            castSem := SemEnum(FindEnumType(name));
+            if castSem >= 0 then castTk := EnumStorageTypeKind(castSem);
           end;
 
           if castTk <> tyUnknown then
@@ -6938,7 +7037,7 @@ begin
               enum identity captured above) and a float conversion, and DECLINES
               tyPointer and the string kinds, whose continuations below are
               genuinely this door's own. }
-            if TryScalarNamedCast(castTk, castEtid) then Exit;
+            if TryScalarNamedCast(castTk, castSem) then Exit;
             { ...and on a promotable int, `Pointer(n)` IS `@n`, so make it one.
               Punning the operand worked for a LOCAL, whose rvalue already is
               its slot address, and CRASHED for a by-ref PARAMETER, whose cell
@@ -6976,11 +7075,11 @@ begin
             ASTTk[node]   := Ord(castTk);
             { `TEnum(i)` — the cast target IS the value's enum type, and the
               reinterpret to its storage kind is the only trace left of it. Keep
-              the identity or WriteLn prints the ordinal. castEtid is -1 for
+              the identity or WriteLn prints the ordinal. castSem is SEM_NONE for
               `Integer(x)` and every other builtin spelling, and is set only by
               the enum arm above -- it does not ask what kind the cast became,
               which is what let {$PACKENUM} narrow the kind safely. }
-            if castEtid >= 0 then ASTSemId[node] := castEtid;
+            if castSem <> SEM_NONE then ASTSemId[node] := castSem;
             { `Pointer(expr)^` — FPC's untyped deref, legal where only the
               ADDRESS matters (an untyped var/const argument: synautil's
               `Move(Pointer(Value)^, ...)` is the driving consumer). There is
@@ -8689,7 +8788,7 @@ begin
   VariantCastToTemp := vcNd;
 end;
 
-function TryScalarNamedCast(castTk: TTypeKind; enumId: Integer): Boolean;
+function TryScalarNamedCast(castTk: TTypeKind; semId: Integer): Boolean;
 { THE SHARED CONSTRUCTION HALF OF A NAMED-TYPE SCALAR CAST — the arms that must
   mean the same thing however the type NAME was recognised.
 
@@ -8777,12 +8876,17 @@ begin
     ASTLeft[scNode] := CurASTNode;
     ASTIVal[scNode] := -1;   { the width-truncating value cast }
     ASTTk[scNode]   := Ord(castTk);
-    { the enum identity comes in as a PARAMETER, from whichever table the caller
-      asked -- FindEnumType at the builtin door, the alias table's AliasEnumId
-      column at the alias door -- and is never re-derived from the kind here. A
-      guard on the layout kind is a bet the layout kind never narrows, and
-      {$PACKENUM 1} is that bet losing. }
-    if enumId >= 0 then ASTSemId[scNode] := enumId;
+    { the SEMANTIC IDENTITY comes in as a PARAMETER, from whichever table the
+      caller asked -- FindEnumType or BuiltinScalarSemId at the builtin door,
+      the alias table's AliasEnumId column at the alias door -- and is never
+      re-derived from the kind here. A guard on the layout kind is a bet the
+      layout kind never narrows, and {$PACKENUM 1} is that bet losing.
+      It was `enumId` and tested `>= 0`; that is now one FAMILY of identity
+      rather than the whole domain, so the test is against SEM_NONE. Without
+      this, `LongBool(True)` produced a bare tyInteger and `l and LongBool(x)`
+      went bitwise -- the cast is exactly where a sized boolean's meaning is
+      spelled out loud and it was the one place that dropped it. }
+    if semId <> SEM_NONE then ASTSemId[scNode] := semId;
     CurASTNode := scNode;
     LastExprTk := castTk;
     TryScalarNamedCast := True;
@@ -9064,6 +9168,9 @@ begin
     left := CurASTNode;
     ParseFactor;
     right := CurASTNode;
+    { `and` between two truth values is LOGICAL, and a sized boolean reaching
+      it as a bare integer makes it bitwise -- see SemBoolNormalisePair. }
+    if op = tkAnd then SemBoolNormalisePair(left, right);
     { A CONSTANT LEFT OPERAND OF `and`, folded HERE because it is LOWERING and
       not an optimisation. Pascal `and`/`or` short-circuit -- this compiler has
       no {$BOOLEVAL} and measured 0 calls for `False and Bump` -- so dropping
@@ -9465,6 +9572,17 @@ begin
     left := CurASTNode;
     ParseTerm;
     right := CurASTNode;
+    { the `or` half of the same rule -- see ParseTerm's `and` note.
+
+      NOT `xor`, and that is MEASURED rather than an oversight. fpc 3.2.2 makes
+      `and`/`or` on sized booleans LOGICAL and leaves `xor` BITWISE, which is
+      visible only with a nonzero-not-one operand: with a = ByteBool(200) and
+      b = ByteBool(1), FPC answers `Ord(a and b)` = 1 and `Ord(a or b)` = 1 --
+      canonical truth values -- while `Ord(a xor b)` is -55, i.e. 200 xor 1 =
+      201 reinterpreted signed. Bit patterns are meaningful in the type family
+      that exists for the C ABI, so this is FPC being deliberate rather than
+      inconsistent, and we match it. Do not "fix" the asymmetry. }
+    if op = tkOr then SemBoolNormalisePair(left, right);
     { WideChar concatenation is STRING building, not integer addition (FPC:
       WideChar+WideChar is a two-unit UTF-16 string). Both sides widechar ->
       the surrogate-aware pair helper, so `WideChar(u1)+WideChar(u2)` of a
@@ -9569,6 +9687,16 @@ begin
       continue;
     end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
+    { `a xor b` over two sized booleans stays BITWISE (see the SemBoolNormalisePair
+      call above) and its RESULT is still a sized boolean of that width, so it
+      renders TRUE/FALSE rather than the bit pattern. fpc 3.2.2 prints TRUE for
+      ByteBool(200) xor ByteBool(1) while `Ord` of the same expression is -55 --
+      one value, a boolean TYPE and an integer PATTERN, which is precisely the
+      pair a kind alone cannot hold. Both operands, and the same width: mixing
+      widths is not a shape FPC gives a sized-boolean result to. }
+    if (op = tkXor) and (NodeSemIdOf(left) = NodeSemIdOf(right)) and
+       SemIsBool(NodeSemIdOf(left)) then
+      ASTSemId[node] := NodeSemIdOf(left);
     { {$Q+} region: + and - are overflow-checked (feature-pascal-overflow-checks-q-plus) }
     if ((op = tkPlus) or (op = tkMinus)) and TokQChecks[TokPos - 1] then
       ASTQChk[node] := True;
@@ -10035,6 +10163,11 @@ begin
     left := CurASTNode;
     ParseSimpleExpr;
     right := CurASTNode;
+    { …and comparing two truth values compares their TRUTH, not their raw
+      ordinals. Ahead of the enum diagnostics below, which ask
+      `NodeSemIdOf(x) >= 0` and are therefore about the enum family only -- a
+      sized boolean's identity is negative and cannot reach them. }
+    SemBoolNormalisePair(left, right);
     { FPC-parity: an ENUM operand cannot compare against a pointer — there is
       no implicit conversion between them (toperatorerror). Detection is
       ident-level (SymSemId is tagged at var decls), so complex expressions

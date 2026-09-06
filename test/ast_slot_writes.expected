@@ -608,6 +608,7 @@ AN_BINOP Right r
 AN_BINOP Right rhs
 AN_BINOP Right right
 AN_BINOP Right rngStep
+AN_BINOP Right sbZero
 AN_BINOP Right smGuardCall
 AN_BINOP Right spanLit
 AN_BINOP Right stepConstNode

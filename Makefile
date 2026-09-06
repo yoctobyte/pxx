@@ -18246,6 +18246,22 @@ test-core: $(COMPILER)
 	# builtin-only rows are controls that must not move. .expected is FPC 3.2.2's.
 	./$(COMPILER) test/test_a_named_cast_asks_the_alias_before_the_builtin.pas $(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26
 	tools/expect_same.sh test_a_named_cast_asks_the_alias_before_the_builtin26 "$$($(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26)" "$$(cat test/test_a_named_cast_asks_the_alias_before_the_builtin.expected)"
+	# a SIZED BOOLEAN is a boolean: `if a` and `if not a` both fired, silently,
+	# because `not` on ByteBool/WordBool/LongBool was an integer complement.
+	# The True rows are the assertion and the False rows CANNOT fail -- `not 0`
+	# is nonzero, which is also the wanted answer -- so a probe that only sets
+	# False certifies nothing. Carries a nonzero-but-not-one row (ByteBool(200))
+	# for the same reason: a fix that merely canonicalised True to 1 passes
+	# every 0/1 row. .expected is FPC 3.2.2's own output, byte for byte.
+	./$(COMPILER) test/test_a_sized_boolean_is_not_true_and_not_true_at_once.pas $(TESTTMP)/test_a_sized_boolean_is_not_true_and_not_true_at_once26
+	tools/expect_same.sh test_a_sized_boolean_is_not_true_and_not_true_at_once26 "$$($(TESTTMP)/test_a_sized_boolean_is_not_true_and_not_true_at_once26)" "$$(cat test/test_a_sized_boolean_is_not_true_and_not_true_at_once.expected)"
+	# ...and it renders as one at ALL FOUR renderers -- stdout write, the
+	# Text-file writer, Str, and `array of const` boxing, where the assertion is
+	# the VType tag and no rendering code is involved at all. Four rows and not
+	# one because the third was found only after someone fixed the first two.
+	# .expected is FPC 3.2.2's own output, byte for byte.
+	./$(COMPILER) test/test_a_sized_boolean_is_a_boolean_at_every_renderer.pas $(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26
+	tools/expect_same.sh test_a_sized_boolean_is_a_boolean_at_every_renderer26 "$$($(TESTTMP)/test_a_sized_boolean_is_a_boolean_at_every_renderer26)" "$$(cat test/test_a_sized_boolean_is_a_boolean_at_every_renderer.expected)"
 	# a cast to a FLOAT type converts at every door that recognises the name.
 	# fpc refuses the program (Illegal type conversion), so each row asserts a
 	# RELATION between two of our own spellings rather than an oracle value; the

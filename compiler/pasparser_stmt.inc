@@ -829,6 +829,7 @@ begin
   ASTTk[Result] := Ord(tk);
 end;
 
+
 { Length(symIdx) as an AST call node, matching what tkLength parsing builds: the
   argument is the container lvalue (by-ref). Works for ansistring/dynarray/open-
   array; the IR Length lowering reads the right header per the base symbol. }
@@ -3585,7 +3586,7 @@ begin
   headSeq := -1; tailSeq := -1; lastCall := -1;
   while Eat(tkComma) do
   begin
-    ParseExpr; exprNode := CurASTNode;
+    ParseExpr; exprNode := SemBoolAsBoolean(CurASTNode);   { a sized boolean renders as TRUE/FALSE }
     { :width[:decimals] — ordinary integer expressions (FPC-legal), -1 = absent }
     width := -1; decw := -1;
     if CurTok.Kind = tkColon then
@@ -3999,6 +4000,9 @@ begin
     end;
     repeat
       ParseExpr; exprNode := CurASTNode;
+      { a sized boolean prints TRUE/FALSE, not its ordinal -- normalised here
+        rather than taught to the renderer, see SemBoolAsBoolean }
+      exprNode := SemBoolAsBoolean(exprNode);
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := exprNode;
       { Parse optional :width[:decimals] format specifiers. Literal (or
@@ -7222,7 +7226,7 @@ begin
           branch previously always committed to the Str(..) parse shape
           unconditionally. }
         Next; Expect(tkLParen, '(');
-        ParseExpr; exprNode := CurASTNode;        { value }
+        ParseExpr; exprNode := SemBoolAsBoolean(CurASTNode);   { value; a sized boolean renders as TRUE/FALSE }
         stepsNode := -1;                           { width expr node; -1 = default (0) }
         decNode := -1;                             { decimals expr node; -1 = none (natural for float) }
         if CurTok.Kind = tkColon then
@@ -7340,7 +7344,7 @@ begin
           branch previously always committed to the Str(..) parse shape
           unconditionally. }
         Next; Expect(tkLParen, '(');
-        ParseExpr; exprNode := CurASTNode;        { value }
+        ParseExpr; exprNode := SemBoolAsBoolean(CurASTNode);   { value; a sized boolean renders as TRUE/FALSE }
         stepsNode := -1;                           { width expr node; -1 = default (0) }
         decNode := -1;                             { decimals expr node; -1 = none (natural for float) }
         if CurTok.Kind = tkColon then

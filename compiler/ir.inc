@@ -8344,8 +8344,23 @@ begin
         vrElemTk := IntToTypeKind(ASTTk[ASTLeft[item]]);
         if (vrElemTk = tyString) or (vrElemTk = tyAnsiString) then
           vrTag := 11             { vtAnsiString }
-        else if vrElemTk = tyBoolean then
-          vrTag := 1              { vtBoolean }
+        else if (vrElemTk = tyBoolean) or SemIsBool(NodeSemIdOf(ASTLeft[item])) then
+          vrTag := 1              { vtBoolean — and a SIZED boolean is one too.
+                                    ByteBool/WordBool/LongBool are integers of
+                                    their own width carrying the booleanness in
+                                    the SemId channel, so the kind alone boxed
+                                    them as vtInteger (tag 0) and every VType
+                                    consumer — sysutils.Format, a user Log,
+                                    phase 3 of feature-writeln-as-library —
+                                    inherited the wrong answer with no rendering
+                                    code involved. The THIRD renderer to lose
+                                    this, which is what made it a class rather
+                                    than two spellings.
+                                    Only the TAG moves: the value slot is
+                                    pointer-sized and a consumer reads its low
+                                    byte, which is nonzero for every true value
+                                    whether it is stored as 1 or as all-bits-set.
+                                    bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln }
         else if vrElemTk = tyChar then
           vrTag := 2              { vtChar }
         else if IsNodePChar(ASTLeft[item]) then
