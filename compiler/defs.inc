@@ -6299,6 +6299,15 @@ var
   ArrTypePtrDepth   : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypePtrBaseTk  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypePtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer;
+  { WHICH ALIAS the pointer element was declared through (`TArr = array[..] of
+    TIter`), else -1. The array-type mirror of UFldPtrAlias, and there for the
+    one reason that column exists: the alias may still be an unresolved FORWARD
+    when the element type is parsed, so the pointee snapshotted into
+    ArrTypePtrElemRec is REC_NONE and ResolvePendingPointerAliases needs a
+    handle back to the row that will know. One integer rather than a re-read of
+    the pointee's fields, per ArrTypeAliasOf's own argument.
+    bug-p-an-alias-of-a-forward-pointer-alias-never-gets-its-pointee }
+  ArrTypePtrAlias   : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;

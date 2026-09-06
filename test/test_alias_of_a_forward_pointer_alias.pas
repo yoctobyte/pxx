@@ -30,9 +30,13 @@ type
   TNode = record v: Integer; nxt: ^TNode; end;
   PNode = ^TNode;
   TNodeIter = PNode;          { D: no forward — TNode was complete first }
+type
+  TFix = array[0..1] of TIter;   { F: named array type, pointer element }
+  TDyn = array of TIter;         { G: same, dynamic }
 var
   a, b: PItem; it: TIter; late: TLate;
   n1, n2: PNode; ni: TNodeIter;
+  fix: TFix; dyn: TDyn;
 begin
   New(a); a^.data := 10; a^.next := nil;
   New(b); b^.data := 11; b^.next := a;
@@ -48,5 +52,16 @@ begin
   { and one STEP through the alias — this shape compiled even when broken and
     segfaulted on the next deref, so it fails differently from the rows above. }
   it := it^.next;
-  write(' E'); writeln(it^.data);
+  write(' E'); write(it^.data);
+  { THE SAME SNAPSHOT, IN THE OTHER TWO STORAGE LOCATIONS. One concept — "a
+    pointee copied out of an alias that was not resolved yet" — is stored three
+    times: on the alias row, on a record FIELD, and on a named ARRAY TYPE's
+    element. The repair pass had loops for the first two, so fixing the alias
+    row left `array[..] of TIter` still blank while `record cur: TIter end` was
+    already right. Both array flavours, because dynamic and fixed take different
+    element paths. }
+  SetLength(dyn, 2); dyn[0] := b;
+  fix[0] := b;
+  write(' F'); write(fix[0]^.next^.data);
+  write(' G'); writeln(dyn[0]^.next^.data);
 end.

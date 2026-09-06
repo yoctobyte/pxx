@@ -5847,6 +5847,10 @@ begin
   ArrTypePtrBaseTk[row]    := LastTypePointerBaseTk;
   ArrTypePtrBaseRec[row]   := LastTypePointerBaseRec;
   ArrTypePtrElemArrAi[row] := LastTypePointerElemArrAi;
+  { ...and WHICH alias answered, so an element whose pointee is still an
+    unresolved forward can be repaired by the pass. Nothing else records it, and
+    without it the row keeps REC_NONE for good. }
+  ArrTypePtrAlias[row]     := LastTypePointerAlias;
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
@@ -16776,6 +16780,30 @@ begin
       UFldPtrDepth[i] := AliasPtrDepth[a];
       UFldPtrBaseTk[i] := AliasPtrBaseTk[a];
       UFldPtrBaseRec[i] := AliasPtrBaseRec[a];
+    end;
+  end;
+  { THE THIRD STORAGE LOCATION, and it is the same backfill twice over: a named
+    ARRAY TYPE whose ELEMENT is a pointer snapshotted its pointee at
+    alias-definition time exactly as a field does, and for a forward alias that
+    snapshot is REC_NONE. The two loops above repaired the alias row and the
+    record field and left this one, so `TArr = array[0..1] of TIter` kept the
+    blank while `THolder = record cur: TIter end` was fixed -- one concept, three
+    stores, and the third stayed broken.
+
+    Same offset-0 tell as the field loop above: `arr[0]^.data` is right because
+    data is at offset 0, and only `arr[0]^.next^` shows it. }
+  for i := 0 to ArrTypeCount - 1 do
+  begin
+    a := ArrTypePtrAlias[i];
+    if (ArrTypePtrElemRec[i] = REC_NONE) and
+       (a >= 0) and (a < AliasCount) and (AliasElemRec[a] <> REC_NONE) then
+    begin
+      ArrTypePtrElemTk[i]    := AliasElemTk[a];
+      ArrTypePtrElemStrTk[i] := AliasPtrStrElemTk[a];
+      ArrTypePtrElemRec[i]   := AliasElemRec[a];
+      ArrTypePtrDepth[i]     := AliasPtrDepth[a];
+      ArrTypePtrBaseTk[i]    := AliasPtrBaseTk[a];
+      ArrTypePtrBaseRec[i]   := AliasPtrBaseRec[a];
     end;
   end;
 end;
