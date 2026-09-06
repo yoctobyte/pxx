@@ -11587,3 +11587,123 @@ and on wasm32 and diffing them produced nothing but symbol and proc
 renumbering. Identical IR with divergent behaviour says the frontend is not
 the defect, and that single measurement moved the hunt into the backend after a
 day of narrowing in the wrong file.
+
+## A SHARED-MACHINERY CHANGE NEEDS A CORPUS PER FRONTEND, NOT PER TEST COUNT — and a discrimination control certifies the INSTRUMENT, never the SAMPLE FRAME
+
+Measured 2026-09-06. `a79ea9af6` made the single-candidate method gate
+argument-check, and it was accepted on three corpora with a rigour most
+zero-change claims never reach:
+
+```
+Pascal corpus     1581/286, a 0-ROW DIFF -- not equal totals, the same rows
+conformance       381/2, with an IDENTICAL failure list
+fgl               7/7
+discrimination    the same census differs from the PIN on 56 rows
+```
+
+That last line is the control that separates "nothing changed" from "the
+instrument was asleep", and it fired. The zero was real.
+
+**NilPy was in none of those three populations.** `test_nilpy_star_methods_and_targets`,
+`test_nilpy_star_args_ctor` and the `test-core` copy of the first went red together:
+the gate ran BEFORE `PyPackStarArgs`, so `def take(self, a, *rest, **kw)` called as
+`b.take(1, 2, 3)` presented three Integers against a declared slot list of `a`, a LIST
+and a DICT -- the shape the callee sees AFTER packing. **The pairing was wrong, not
+the types. Both sides were right about their own list and nobody was comparing the
+same one.** Fixed as `0967a3ce9`, narrowly, by skipping procs that carry
+`ProcPyStarIdx`/`ProcPyKwIdx`: the pre-pack argument list and the post-pack parameter
+list are *different shapes, not a shifted version of one shape*, so no index mapping
+exists for that loop to use, and checking after packing is the wide fix and belongs
+where the packing is.
+
+**The rule** (frankA):
+
+> **A shared-machinery change needs a corpus per FRONTEND, not per test count.**
+
+All three swept corpora were Pascal, and the change was to the callee machinery every
+frontend funnels through. `compiler/pasparser_call.inc`, `compiler/symtab.inc` and the
+AST/IR are reached by C, NilPy, Rust and Zig as well as Pascal.
+
+**Why a careful person still misses it** (frank-optimize, who landed it, verbatim):
+
+> **Ask which frontends reach the code you changed, not which corpus you have. A file
+> named for one language is not scoped to it -- `pasparser_call.inc` is on every
+> frontend's path -- and a change you have classified as belonging to one lane will not
+> match the trigger word on the rule that would have caught it.**
+
+CLAUDE.md already prescribes the exact probe: *"for a MARSHALLING change, carry one
+from each frontend your quick tier does not cover; `x = "a" * 3` costs under a second
+and would have caught a shipped ABI mismatch."* **The guard was present, correct, read,
+and routed around by classification** -- the change was filed as an overload-matching
+change, so the rule's trigger word did not match the label its own author had given the
+work. The two probes that would have caught it, run afterwards, took under a second
+each: `x = "a" * 3` -> `aaa`, and `b.take(1, 2, 3)` with `*rest, **kw` -> `3`.
+
+**AND THE PART THAT GENERALISES BEYOND FRONTENDS.** It is tempting to summarise this
+as "the rigour was not enough". That is wrong, and the author's own correction is
+sharper:
+
+> **A discrimination control certifies the INSTRUMENT, not the SAMPLE FRAME.**
+
+The 56-row pin control proved the census could *see* a difference in the population it
+swept. **It would have looked exactly the same if NilPy had been broken from the start,
+because no NilPy program was in the census at all.** So a control answers "can this
+measurement detect a change" and never "is this the population the change can appear
+in". A good guard over an incomplete population passes for the same reason a good guard
+over a complete one does, and nothing in the output distinguishes them. Pair every
+discrimination control with a one-line statement of the SAMPLE FRAME -- *what is in the
+population, and what is reached by the code but not in it.*
+
+Sibling sections: `## A PROBE CAN BE DRAWN FROM A POPULATION WHERE THE MACHINERY NEVER
+RUNS`, `## A CORRECTED COUNT CAN STILL BE A COUNT OF THE WRONG POPULATION`, and
+`## Derive a POPULATION from the build's own manifest, never from artefacts on disk` --
+this is that family arriving through the FRONTEND axis rather than the producer axis.
+
+## A FILE-INTERSECTION OVER A COMMIT RANGE CANNOT SEE THE SHARED MACHINERY UNDERNEATH — and running it a second time is one reading, not two readings agreeing
+
+The routing instrument for an auto-filed regression is: take the range between last-good
+and bad, list the commits touching buildable files, and intersect with the file the
+failing test belongs to. It is cheap, it is usually right, and **its failure mode is
+one-directional and invisible.**
+
+Measured 2026-09-06, this seat, on `test_nilpy_star_methods_and_targets`. Exactly one
+commit in range touched `compiler/pyparser.inc`, so that commit was named as the first
+place to look. **It was not the cause.** `a79ea9af6` was, in `pasparser_call.inc` --
+a file the same triage had listed BY NAME in its own caveat, under *"a shared-symtab
+change reaches the NilPy frontend too"*.
+
+**So the hedge was on the correct half and the narrow arm still got searched first.**
+That is the reportable part: *a named single candidate reads as a lead, and a named file
+list reads as boilerplate.* Hedging the premise is necessary and it is not sufficient --
+when the caveat and the candidate point in different directions, say which one to search
+FIRST, or the caveat is decoration.
+
+**The structural statement:** *"exactly one commit touches X"* locates the only change
+to the component **you were already looking at**. The defect class it cannot see is a
+change to the machinery that component sits on, and that is precisely the class where
+the failing test's own filename is the misleading part.
+
+**AND IT DOES NOT CORROBORATE ITSELF.** Two auto-filed reds narrowed to the same commit
+by this method the same night. That reads as two independent findings agreeing and it is
+**one reading repeated** -- same instrument, same blind spot, same direction. See
+`## A COMPLETENESS GUARD MUST NOT SHARE THE INSTRUMENT IT IS GUARDING`; this is that rule
+applied to a routing narrowing rather than to a completeness check.
+
+**THE DISCRIMINATOR IS A CONTROL, AND IT HAS A MIDDLE STEP PEOPLE DROP** (frankA):
+
+```
+revert the suspect hunk ALONE
+rebuild
+CONFIRM THE BINARY SHA MOVED     <- 896c2938958d -> 6f0b6a730035
+reproduce
+```
+
+Without the third line a failed reproduction is indistinguishable from a build that
+no-opped, which is the stale-binary animal wearing an exculpation's clothes. With it,
+one rebuild settles what no amount of file-narrowing can: the hunk was reverted, the
+failure was unchanged, the commit is exculpated. **Roughly twenty minutes, including
+the control.**
+
+The corollary for whoever routes: send the narrowing AND the reason not to trust it,
+and say plainly that a second narrowing from the same instrument is not a second
+opinion.
