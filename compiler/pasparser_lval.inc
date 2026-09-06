@@ -7231,8 +7231,19 @@ end;
 
 function WrapCharArrayToStringExpr(node: Integer): Integer;
 { `a` in a string context -> __pxxCharArrayToStr(@a, cap). The helper stops at
-  the first #0 within cap, which is FPC's rule and not a plain memcpy: an
-  array[0..7] holding 'ABC'#0'EFGH' is the 3-character 'ABC'. }
+  the first #0 within cap: an array[0..7] holding 'ABC'#0'EFGH' is the
+  3-character 'ABC'.
+
+  THIS IS NOT FPC'S RULE, and this comment said it was until 2026-09-06.
+  Measured against fpc 3.2.2 at compiler 1268b32df468: for
+  `a: array[1..4] of Char = 'pq'` -- bytes 112 113 0 0 on BOTH compilers, so the
+  padding is identical -- fpc's `Writeln(a)` emits all four bytes and
+  `Length(string(a))` is 4, where pxx emits two and answers 2. The BEHAVIOUR
+  here is deliberate and load-bearing for C-interop buffers, where the bytes
+  after the NUL are garbage rather than data; only the attribution was wrong,
+  and a false attribution in the one place a reader would check is what stops
+  them looking. Which behaviour real Pascal code wants has not been asked:
+  bug-a-a-char-array-in-a-string-context-stops-at-the-first-nul-and-fpc-does-not }
 var procIdx, cap, addrNode, a0, a1, capNode, callNode: Integer;
 begin
   Result := node;

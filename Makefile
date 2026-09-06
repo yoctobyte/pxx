@@ -6335,6 +6335,17 @@ test-core: $(COMPILER)
 	# dyn ARGUMENT away from the open parameter and was correct on every row of
 	# the ticket's own repro, while the reversed pair still answered 2 for the
 	# element lists. One source order cannot tell a rule from declaration order.
+	# `for s in c` over `array[1..3, 1..3] of Char` printed a/d/g -- the FIRST
+	# CHARACTER of each row -- where fpc prints abc/def/ghi. The stride was never
+	# wrong (a, d, g are elements 0, 3, 6); the row ASSIGNMENT was, because
+	# AN_ASSIGN's char-array arm read a tyChar-kinded row node as a single Char
+	# and took the string desugar. The cause is a MISSING ASTNDRowSubs STAMP on
+	# the AN_INDEX the for-in builder synthesises, not a Char rule -- the int-row
+	# control in the same file was correct throughout.
+	./$(COMPILER) test/test_for_in_over_an_array_of_char_rows_yields_the_row.pas $(TESTTMP)/test_forinrow26
+	tools/expect_same.sh test_for_in_over_an_array_of_char_rows_yields_the_row \
+	  "$$($(TESTTMP)/test_forinrow26)" \
+	  "$$(cat test/test_for_in_over_an_array_of_char_rows_yields_the_row.expected)"
 	./$(COMPILER) test/test_an_open_array_and_a_named_dynamic_array_are_two_overloads.pas $(TESTTMP)/test_oadyn26
 	tools/expect_same.sh test_an_open_array_and_a_named_dynamic_array_are_two_overloads \
 	  "$$($(TESTTMP)/test_oadyn26)" \

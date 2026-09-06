@@ -1317,6 +1317,25 @@ begin
     idxNode := GenMakeIdent(idxSym, tyInteger);
   ASTRight[elemAccess] := idxNode;
   ASTTk[elemAccess] := elemTk;
+  { STAMP THE ROW-NESS, because `idxScale > 1` says it and nothing downstream
+    could read it. ASTNDRowSubs is the column that means "a single leading
+    subscript on an N-D array names a ROW rather than an element", and
+    BuildPartialNDIndex sets it beside the arithmetic in one routine precisely
+    so the two cannot separate. This builder synthesises its own AN_INDEX and
+    was therefore the one place where the arithmetic existed without the stamp.
+
+    What that cost, and it is silent: a row of CHAR. `for s in c` over
+    `array[1..3, 1..3] of Char` advanced correctly by 3 and then assigned ONE
+    character, printing `a d g` where fpc prints `abc def ghi`. The stride was
+    never wrong. The ASSIGNMENT was -- AN_ASSIGN's char-array arm sees a
+    destination that is an `array of Char` and a right-hand side whose kind is
+    tyChar (an array node carries its ELEMENT's kind), reads that as "a Char
+    into a Char array", and takes the string desugar, which stores one
+    character and zero-fills. An INT row was unaffected because there is no
+    such arm for LongInt, which is why this looked like a Char-specific bug
+    and is really a missing stamp.
+    bug-p-for-in-over-an-array-of-char-rows-yields-one-character }
+  if idxScale > 1 then ASTNDRowSubs[elemAccess] := 1;
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
 
   incNode := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
