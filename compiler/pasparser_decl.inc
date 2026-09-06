@@ -9115,8 +9115,36 @@ begin
           end;
         end
         else if (sidx < 0) and (ci >= 0) and
-                ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0)) then
+                ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0) or
+                 (FindUProp(ci, nm) >= 0) or (FindClassVar(ci, nm) >= 0)) then
         begin
+          { FIVE member kinds, and it recognised TWO. A bare name in a method
+            body reaches its class through implicit Self whatever KIND of
+            member it is, but this scan asked only about fields and methods,
+            so a nested routine reading a PROPERTY or a CLASS VAR of its
+            enclosing class got `undefined variable` -- while the field one
+            line above it worked. fcl-passrc pscanner.pp's HandleMode.SetMode
+            reads AllowedModeSwitches, OnModeChanged, CurrentModeSwitches,
+            ReadOnlyModeSwitches, CurrentBoolSwitches and AllowedBoolSwitches,
+            all properties, and every one was a wall.
+
+            Enumerated from the CONCEPT rather than from the failing report:
+            the question is "what can a bare identifier in a method body bind
+            to on its own class". Probed as one program rather than read off
+            the class parser, because the two kinds that WERE present agreed
+            with each other perfectly and nothing in a diff pointed at the
+            three that were absent.
+            [[a-caller-census-cannot-find-an-absent-copy]]
+
+            THE FIFTH KIND, a class CONST, is deliberately not in this list and
+            its absence is measured rather than overlooked. The desugar here is
+            a `__nestself.` prefix, and `<instance>.K` for a class const is
+            refused across the member-dispatch paths generally -- `TC.K` works
+            and `c.K` does not, with no nested routine anywhere in sight. Adding
+            it here would turn `undefined variable (K)` into `"K": no such
+            member`, which is a different wrong answer, not a fix.
+            bug-p-a-class-const-is-unreachable-through-an-instance-receiver
+            bug-p-a-nested-routine-sees-only-two-of-its-classs-five-member-kinds }
           needSelf := True;
           if fieldCnt < MAX_NEST_REFS then begin fieldPos[fieldCnt] := i; Inc(fieldCnt); end;
         end;

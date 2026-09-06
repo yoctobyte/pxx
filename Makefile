@@ -6982,6 +6982,17 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_relational_operator_can_follow_in_is_and_a_comparison \
 	  "$$($(TESTTMP)/test_relchain26)" \
 	  "$$(cat test/test_a_relational_operator_can_follow_in_is_and_a_comparison.expected)"
+	@# A LIFTED NESTED ROUTINE SAW TWO OF ITS CLASS'S FIVE MEMBER KINDS. The
+	@# free-variable scan asked "is this a field" and "is this a method" and
+	@# nothing else, so a PROPERTY or CLASS VAR read from a nested routine was
+	@# `undefined variable` with a working field reference one line above.
+	@# Rows are the member kinds; each asserts a VALUE only the right receiver
+	@# can produce (the getter multiplies by ten, the write goes via a setter),
+	@# so wrong storage prints a different number rather than failing to build.
+	@./$(COMPILER) test/test_a_nested_routine_reaches_all_its_classs_member_kinds.pas $(TESTTMP)/test_nestmem26
+	@tools/expect_same.sh test_a_nested_routine_reaches_all_its_classs_member_kinds \
+	  "$$($(TESTTMP)/test_nestmem26)" \
+	  "$$(cat test/test_a_nested_routine_reaches_all_its_classs_member_kinds.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
