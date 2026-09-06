@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 55
+prio: 70
 type: bug
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
 summary: "`var a: ByteBool; a := True;` makes BOTH `if a` and `if not a` fire -- a program takes both branches, silently, no diagnostic. `not` on a sized boolean is an INTEGER complement: not 1 = 254, nonzero, true. It is right for False only by accident (not 0 = 255, also true, which is the wanted answer). WordBool and LongBool identical; plain Boolean is correct. Cause: ByteBool/WordBool/LongBool are mapped to tyUInt8/tyUInt16/tyInteger to keep their C-ABI WIDTH -- deliberate and documented -- so nothing downstream can tell them from integers. Same cause drops their display (WriteLn prints 1, fpc prints TRUE) and their Ord (1 here, -1 in fpc, all-bits-set being the C convention). QWordBool does not exist at all. Pre-existing on pin v403. Fixing it needs a way to say \"integer kind, boolean semantics\", which is a defs.inc design fork, not a local patch."
@@ -104,6 +104,21 @@ Independently reproduced, still live. I filed a duplicate of this ticket before
 finding it and retracted it in the same commit; everything in it except the
 `BooleanNN` names was already here, and this ticket's diagnosis was better —
 it names the defs.inc fork, mine only named the mapping.
+
+**But the NUMBER is not a duplicate — it is a second instrument, and the pair
+is the finding** (frank-coordinator's catch). This ticket measured `ByteBool`
+and got `not 1` = **254**: unsigned, one byte, via `tyUInt8`. I measured
+`LongBool` and got `not lb` = **-2**: signed, four bytes, via `tyInteger`.
+**Same defect, and the two land nonzero for different arithmetic reasons.**
+Neither reading could have gone wrong the way the other did, which is what
+makes them corroboration rather than repetition — and it is what shows the
+defect is the MAPPING and not one type's arithmetic. Keep both numbers.
+
+Re-ranked 55 -> 70 on this justification: it is a silent control-flow
+inversion in the one type family that exists specifically for C and Win32
+interop — i.e. exactly where real source writes `if not SomeApiCall(...) then`.
+The prio predated the `if not lb then / else` spelling, which states the harm
+more plainly than "both branches fire".
 
 The `else` arm makes the same defect read as a plain inversion rather than as
 a double fire, which may be the more recognisable spelling for whoever fixes it:

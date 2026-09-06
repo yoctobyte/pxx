@@ -76,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
+- `[p 70] [U]` decide-how-a-type-carries-an-identity-its-kind-cannot-hold (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-6758c7ce7dbd
@@ -94,6 +95,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
-- `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 
 _370 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
