@@ -133,3 +133,6 @@ none by bisection. The first run reported ZERO for two of them because they need
 body: a delta instrument is still conditioned on the input reaching the site.
 `a.casebind` now prints a `TOTAL seen=/fold=/moved=` denominator so that silence
 says which kind of silence it is.
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `cascade@0dd59f05cc3a` passes at b2a41d5f4fb9 (tier full); it was red at 0dd59f05cc3a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
