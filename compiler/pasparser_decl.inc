@@ -6119,6 +6119,8 @@ var
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
   implIntf: array[0..15] of Integer; implCnt, tmpCi, ii, imSlot, imProc: Integer;
+  imSig: Integer;   { the INTERFACE method's proc row — arity check below }
+  imIface: AnsiString;   { the interface's OWN name for the slot, before a resolution clause rewrites it }
   parentIntfCi, ancCur, ij, implOrig: Integer; alreadyImpl: Boolean;
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
@@ -7711,10 +7713,51 @@ begin
               if (MethResolCls[mrK] = ci) and (MethResolIntf[mrK] = tmpCi) and
                  CaseEqual(GetSliceName(MethResolMNOff[mrK], MethResolMNLen[mrK]), imName) then
                 mrResolved := mrK;
+            imIface := imName;   { kept for the diagnostic: a clause rewrites
+                                   imName to the TARGET, and a refusal that
+                                   names the target tells the reader about the
+                                   method they wrote rather than the obligation
+                                   they failed to meet. }
             if mrResolved >= 0 then
               imName := GetSliceName(MethResolINOff[mrResolved], MethResolINLen[mrResolved]);
-            mmi := FindUMethForSig(ci, imName, UMthProc_[UClsMBase[tmpCi] + imSlot]);
+            imSig := UMthProc_[UClsMBase[tmpCi] + imSlot];
+            mmi := FindUMethForSig(ci, imName, imSig);
             if mmi < 0 then Error('class does not implement interface method: ' + imName);
+
+            { ARITY IS THE HALF OF THE SIGNATURE THE FALLBACK MUST NOT FORGIVE.
+              FindUMethForSig prefers an exact signature and falls back to the
+              first NAME match, deliberately, so an implementation differing
+              only cosmetically keeps binding. Its comment hands the refusal to
+              "the IMT builder's diagnostic" -- and that diagnostic is the
+              `mmi < 0` line above, which only fires when NO method of the name
+              exists. So an arity mismatch was refused by NOBODY: each half is
+              defensible alone and the pair had a hole. `IFoo.M(a: LongInt)`
+              implemented by a class `M` taking no argument compiled clean, and
+              `f.M(1)` through the interface called the 0-argument body.
+
+              CHECKED HERE, AT THE SHARED LINE, WHICH IS THE POINT. A method
+              resolution clause rewrites imName a few lines above and then
+              reaches this same lookup, so a check inside that branch would make
+              `procedure IThing.Pick = MyPick` stricter than the plain
+              same-named spelling it desugars to -- a second divergence wearing
+              the shape of a fix. This one line governs both.
+
+              ARITY AND NOT THE WHOLE SIGNATURE, because the fallback's tolerance
+              is load-bearing: a parameter whose type kind differs only
+              cosmetically (an alias, an unrecorded record id) must still bind,
+              which is why FindUMethForSig has a fallback at all. A count cannot
+              be cosmetic -- a body taking a different number of arguments cannot
+              implement the method under any reading -- so this refuses exactly
+              what fpc refuses and leaves the tolerance intact.
+              bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes }
+            if (UMthProc_[mmi] >= 0) and (imSig >= 0) and
+               (Procs[UMthProc_[mmi]].ParamCount <> Procs[imSig].ParamCount) then
+              Error('no matching implementation for interface method "' + imIface
+                    + '" found (the class method is "' + imName
+                    + '"): the interface declares it with '
+                    + AIntToStr(Procs[imSig].ParamCount - 1)
+                    + ' parameter(s) and the class method takes '
+                    + AIntToStr(Procs[UMthProc_[mmi]].ParamCount - 1));
             imProc := UMthProc_[mmi];
             AddMethodFix(DataLen, imProc);
             for i := 0 to 7 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;

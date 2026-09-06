@@ -10166,6 +10166,31 @@ test-core: $(COMPILER)
 	@# dispatch through the slot the abstract row minted), so a test using a
 	@# derived-typed receiver sees nothing. E/F are slot numbering: a sibling
 	@# virtual beside the abstract override must keep its own slot.
+	@# bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes
+	@# An interface method implemented with the WRONG ARITY compiled clean and
+	@# the call through the interface ran the wrong-shaped body. A HANDOFF
+	@# BETWEEN TWO CORRECT-LOOKING PIECES: FindUMethForSig falls back to the
+	@# first NAME match and hands the refusal to "the IMT builder's diagnostic",
+	@# which only fires when NO method of the name exists. Refused by nobody.
+	@# Rows B/C/D are why the check is on ARITY and not the whole signature --
+	@# the fallback's tolerance is load-bearing for a cosmetically-different
+	@# parameter type, for an overloaded interface method reaching the slot of
+	@# its own arity, and for an inherited implementation.
+	./$(COMPILER) test/test_an_interface_method_needs_an_implementation_of_the_right_arity.pas $(TESTTMP)/test_imtarity26
+	tools/expect_same.sh test_imtarity26 "$$($(TESTTMP)/test_imtarity26 | tail -n 2)" "$$(printf 'fails=0\nIMTARITY OK')"
+	@# ...and the two refusals, which a program cannot assert from inside itself.
+	@# THE PAIR IS THE POINT: the resolution clause rewrites the name and reaches
+	@# the same lookup, so a check written inside the clause branch would make
+	@# `function IFoo.M = MyM` stricter than the plain spelling it desugars to.
+	@# Both must refuse, and both must name the INTERFACE method.
+	! ./$(COMPILER) test/test_an_interface_arity_mismatch_is_refused_fail.pas $(TESTTMP)/test_imtarity_plain26 > $(TESTTMP)/imtarity_plain.log 2>&1 \
+	  || { echo "imt-arity: the plain wrong-arity spelling COMPILED"; exit 1; }
+	grep -q 'no matching implementation for interface method "M" found' $(TESTTMP)/imtarity_plain.log \
+	  || { echo "imt-arity: refused, but not with the interface-method diagnostic:"; cat $(TESTTMP)/imtarity_plain.log; exit 1; }
+	! ./$(COMPILER) test/test_an_interface_clause_arity_mismatch_is_refused_fail.pas $(TESTTMP)/test_imtarity_clause26 > $(TESTTMP)/imtarity_clause.log 2>&1 \
+	  || { echo "imt-arity: the RESOLUTION CLAUSE spelling compiled where the plain one refused -- the two paths have diverged"; exit 1; }
+	grep -q 'no matching implementation for interface method "M" found (the class method is "MyM")' $(TESTTMP)/imtarity_clause.log \
+	  || { echo "imt-arity: the clause refusal must name the INTERFACE method and then the class method:"; cat $(TESTTMP)/imtarity_clause.log; exit 1; }
 	./$(COMPILER) test/test_an_abstract_override_keeps_its_parents_vmt_slot.pas $(TESTTMP)/test_absoverride26
 	tools/expect_same.sh test_absoverride26 "$$($(TESTTMP)/test_absoverride26 | tail -n 2)" "$$(printf 'fails=0\nABSTRACTOVERRIDE OK')"
 	./$(COMPILER) test/test_a_procedural_member_is_callable_through_a_selector_chain.pas $(TESTTMP)/test_chaincall26
