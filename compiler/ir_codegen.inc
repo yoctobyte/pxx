@@ -10778,7 +10778,19 @@ begin
               EmitStoreStrLenAt(IRFrozenKindOfAddr(val1Node));
             end
             else
-              Error('SetLength expects a string variable in IR codegen');
+              { NAMES THE SHAPE IT REFUSED, because the bare sentence did not.
+                Three different candidate fixes for
+                bug-p-setlength-over-a-string-cast-of-a-pointer-slot-has-no-lowering
+                produced this message byte for byte, so it discriminated nothing
+                and each attempt had to be reasoned about instead of read. With
+                the shape in it the answer was immediate: `load_sym, tk=17` --
+                the pointer's VALUE, correctly lowered, carrying no evidence
+                that it addressed a string. A refusal that names the position
+                and never the reason is the same defect this session met in the
+                parser's `class method not found`. }
+              Error('SetLength expects a string variable in IR codegen'
+                    + ' (target node is ' + IROpName(IRKind[val1Node])
+                    + ', tk=' + AIntToStr(IRTk[val1Node]) + ')');
           end
           else if specialId = 102 then
           begin

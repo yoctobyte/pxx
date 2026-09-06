@@ -1040,6 +1040,7 @@ AN_PARFOR Left callNode
 AN_PTR_CAST Left CurASTNode
 AN_PTR_CAST Left node
 AN_PTR_CAST Left operand
+AN_PTR_CAST Left valNode
 AN_PTR_CAST Left wIdentNode
 AN_PTR_CAST Right -1
 AN_PTR_CAST Right castProcSig

@@ -1295,11 +1295,26 @@ begin
           Result := (RecFieldType(rec, GetASTIdentName(node)) = tyAnsiString) and
                     (RecFieldDynDepth(rec, GetASTIdentName(node)) = 0);
       end;
-    AN_INDEX, AN_DEREF:
+    AN_INDEX, AN_DEREF, AN_PTR_CAST:
       { An indexed element / pointer deref of a managed string tags tyAnsiString,
         but indexing a multidimensional array (`s[i]` where s is `array of array
         of AnsiString`) yields a SUB-ARRAY that also tags tyAnsiString (its base
-        element type). Require dyn depth 0 so only a true scalar string matches. }
+        element type). Require dyn depth 0 so only a true scalar string matches.
+
+        AN_PTR_CAST IS THE SAME QUESTION AND IT IS THE ONE SHAPE WHOSE SLOT IS
+        NOT ITS OWN. `AnsiString(p) := 'abc'` over a `var p: Pointer` puts a
+        managed handle in p, and `SetLength(AnsiString(p), 2)` must resize the
+        string whose handle lives in p's slot -- so the target is a managed
+        string lvalue, and IRLowerAddress of the cast yields the OPERAND's slot,
+        which is exactly the address IR_SETLEN_STR wants. Without this arm the
+        node fell to the symbol path, where the symbol is a Pointer and neither
+        an array nor a string, and codegen answered `SetLength expects an ARRAY
+        variable` -- a diagnostic about a different concept, which is the same
+        complaint the pointer-deref arm beside it was added for.
+
+        The tyAnsiString test is doing the work: only an explicit cast to a
+        MANAGED string reaches it, so a `PInteger(p)` or a frozen `TS(p)` cast
+        is untouched. bug-p-setlength-over-a-string-cast-of-a-pointer-slot-has-no-lowering }
       Result := (IntToTypeKind(ASTTk[node]) = tyAnsiString) and
                 (NodeDynDepth(node) = 0);
   end;

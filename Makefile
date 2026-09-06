@@ -6726,6 +6726,18 @@ test-core: $(COMPILER)
 	@# that row could carry no oracle.
 	@$(TESTTMP)/test_distincttype26 | diff -u test/test_a_distinct_type_is_a_different_type_for_overloads.expected - \
 	  || { echo 'test_a_distinct_type_is_a_different_type_for_overloads: FAIL - `T = type Base` is not a distinct type, or an ordinary alias stopped matching its base'; exit 1; }
+	./$(COMPILER) test/test_setlength_through_a_string_cast_of_a_pointer_slot.pas $(TESTTMP)/test_setlenptrcast26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROWS C, D AND E ARE CONTROLS AND WERE GREEN BEFORE THE FIX: the cast-DROP
+	@# path over a string VARIABLE, a FROZEN cast, and no cast at all. Dropping
+	@# the cast is correct for those and throws the only evidence away for a
+	@# pointer slot, so both halves have to be asserted in one file.
+	@# ROW F IS THE ONE THAT DISCRIMINATES A GROW. Growing a managed string
+	@# reallocates, so the new handle must be written back into the slot -- and
+	@# `Length` answering 5 is what says it was, because through a stale handle
+	@# it answers 2. A shrink-only file passes either way.
+	@$(TESTTMP)/test_setlenptrcast26 | diff -u test/test_setlength_through_a_string_cast_of_a_pointer_slot.expected - \
+	  || { echo 'test_setlength_through_a_string_cast_of_a_pointer_slot: FAIL - SetLength through a string cast of a Pointer slot, or one of the shapes it must not move'; exit 1; }
 	./$(COMPILER) test/test_fpc_heap_status.pas $(TESTTMP)/test_fpcheapstatus26
 	@# .expected is fpc 3.2.2's own output, byte for byte. Every row asserts a
 	@# RELATION, never a byte count: the absolute numbers are allocator- and

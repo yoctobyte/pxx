@@ -6894,6 +6894,36 @@ begin
         identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         if slCastDrop then Expect(tkRParen, ')');   { the string cast's own ')' }
+        { ...UNLESS THE TARGET IS A POINTER SLOT, WHERE THE CAST IS THE ONLY
+          EVIDENCE THERE IS AND DROPPING IT THROWS THE ANSWER AWAY.
+          `var p: Pointer; AnsiString(p) := 'abc'; SetLength(AnsiString(p), 2)`
+          is ordinary Delphi-lineage code -- uPSCompiler.pas stores every string
+          this way -- and fpc 3.2.2 prints `ab`. Dropped, the target is a bare
+          Pointer symbol: not an array, not a string, so the classifier below
+          called it a frozen string and codegen answered `SetLength expects a
+          string variable in IR codegen`.
+
+          KEPT AS A NODE RATHER THAN A RETAG, and that is measured rather than
+          preferred. Retagging `ASTTk[valNode]` in place changes nothing: the
+          target still lowered to `load_sym, tk=17` -- the same lesson the
+          rvalue twin of this cast taught an hour earlier, that ASTTk is not
+          what the lowering reads and the cast NODE is. It was visible only
+          because the refusal was made to name the shape it refused; before
+          that, three different fixes produced one identical message.
+
+          SCOPED TO A MANAGED-STRING CAST. A frozen `TS(p)` or an ordinal
+          `TI(p)` keeps today's behaviour exactly, because the address-based
+          resize this unlocks is IR_SETLEN_STR, which is the managed path.
+          bug-p-setlength-over-a-string-cast-of-a-pointer-slot-has-no-lowering }
+        if slCastDrop and (slCastTk = tyAnsiString) and
+           (ASTTk[valNode] = Ord(tyPointer)) then
+        begin
+          i := AllocNode(AN_PTR_CAST);
+          ASTLeft[i] := valNode;
+          ASTIVal[i] := -1;              { built-in cast, as the ident path does }
+          ASTTk[i] := Ord(slCastTk);
+          valNode := i;
+        end;
         { The symbol the lvalue actually DENOTES, which is not always the one the
           name lookup above found. A QUALIFIED class var (`TC.V`) arrives with
           idx = -1 -- the lookup saw the CLASS name, not the member -- and the
@@ -7013,6 +7043,17 @@ begin
             Error('SetLength: not a dynamic array (declare the parameter as a named dynamic-array type to resize it)');
           slIsArrTarget := (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or
                            (Syms[idx].TypeKind = tyAnsiString);
+          { ...and the managed-string cast over a POINTER slot, whose symbol is
+            neither an array nor a string and which must still take the -102
+            arm, because that is where IR_SETLEN_STR lives. The node built above
+            is what makes the arm reachable; this is what routes it there.
+            Both are needed and neither is sufficient: with only the node the
+            target went to the frozen -101 arm, and with only this it went to
+            -102's symbol path and answered `SetLength expects an ARRAY
+            variable` -- two different refusals for one missing pair.
+            bug-p-setlength-over-a-string-cast-of-a-pointer-slot-has-no-lowering }
+          if slCastDrop and (slCastTk = tyAnsiString) and
+             (Syms[idx].TypeKind = tyPointer) then slIsArrTarget := True;
         end;
         { Multidim sugar requires a genuine dynamic array (not a managed string,
           which slIsArrTarget also covers): each extra dim sizes the sub-arrays. }
