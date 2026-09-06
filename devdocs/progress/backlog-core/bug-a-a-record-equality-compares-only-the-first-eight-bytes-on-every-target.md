@@ -8,7 +8,7 @@ created: 2026-09-06
 found-by: frankA
 tags: [records, equality, cross-target, silent-wrong, rust]
 blocked-by: []
-summary: "`a = b` on a plain record compares ONLY THE FIRST 8 BYTES on x86-64, aarch64, arm32 and riscv32, and answers FALSE unconditionally on i386. Two records with the same first field and a different last field compare EQUAL -- a wrong TRUE, silently, on four targets; on i386 a record is never equal to a byte-identical copy of itself. Measured 2026-09-06 with a 12-line Pascal program, confirmed through an `if` as well as a WriteLn argument. `ir.inc`'s BINOP lowering leaves `=`/`<>` on records to fall through to the scalar IR_BINOP DELIBERATELY -- its comment says method-pointer compares are legitimate record `=` -- so no general record comparison was ever emitted and the fallthrough compares one machine word. FPC REFUSES the construct (`Operator is not overloaded: \"TR\" = \"TR\"`), so the Pascal side is us accepting more than FPC AND answering wrong, which is a defect regardless. THE RUST FRONTEND DEPENDS ON THIS PATH: `#[derive(PartialEq)]` is documented in rparser.inc as lowering onto the shared record comparison, so this is a live wrong-answer path for Rust and not a Pascal edge case."
+summary: "`a = b` on a plain record compares ONLY THE FIRST 8 BYTES on x86-64, aarch64, arm32 and riscv32, and answers FALSE unconditionally on i386. Two records with the same first field and a different last field compare EQUAL -- a wrong TRUE, silently, on four targets; on i386 a record is never equal to a byte-identical copy of itself. Measured 2026-09-06 with a 12-line Pascal program, confirmed through an `if` as well as a WriteLn argument. `ir.inc`'s BINOP lowering leaves `=`/`<>` on records to fall through to the scalar IR_BINOP DELIBERATELY -- its comment says method-pointer compares are legitimate record `=` -- so no general record comparison was ever emitted and the fallthrough compares one machine word. FPC REFUSES the construct (`Operator is not overloaded: \"TR\" = \"TR\"`), so the Pascal side is us accepting more than FPC AND answering wrong, which is a defect regardless. THE RUST FRONTEND DEPENDS ON THIS PATH: `#[derive(PartialEq)]` is documented in rparser.inc as lowering onto the shared record comparison, so this is a live wrong-answer path for Rust and not a Pascal edge case. 2026-09-07: the fix SHAPE is now measured, not open -- a byte-wise/memcmp compare is WRONG because pxx leaves record padding undefined (field-equal records differ in exactly their padding bytes on all five targets, 7 of 16 and 3 of 12, with a zeroed control at 0), so the compare must be FIELD-WISE. That also removes the stated reason this was a ticket rather than a fix: a field-wise expansion during IR lowering is one site and zero backends."
 ---
 
 # Record equality compares one machine word
@@ -60,6 +60,62 @@ comparison"* already does it**, and `test/test_rust_derive.rs` asserts
 `a == b`. Both of that test's rows pass on x86-64 for the wrong reason — its
 unequal pair differs in the FIRST field, so a first-word compare gets it right.
 **The test cannot see the bug it is nearest to.**
+
+## A BYTE-WISE COMPARE IS NOT A CORRECT IMPLEMENTATION — measured 2026-09-07
+
+One of the two options below is now ruled out on evidence. **Record padding is
+not defined in pxx**, so a `memcmp`-shaped compare answers NOT EQUAL for two
+records whose every field is equal.
+
+`type TR = record b: Byte; y: Int64; end;` — `a` and `c` are LOCALS in a frame a
+previous call filled with a pattern; both get `b := 1; y := 2` by field
+assignment, then the bytes are compared through a `^Byte` walk:
+
+| target | SizeOf | padding bytes | dirty frame | zeroed control |
+| --- | --- | --- | --- | --- |
+| x86-64 | 16 | 7 | **7 differ** | 0 differ |
+| i386 | 12 | 3 | **3 differ** | 0 differ |
+| aarch64 | 16 | 7 | **7 differ** | 0 differ |
+| arm32 | 16 | 7 | **7 differ** | 0 differ |
+| riscv32 | 16 | 7 | **7 differ** | 0 differ |
+
+**The differing count equals the padding size EXACTLY on every target**, and no
+field byte ever differs — so the walk is reading padding and nothing else. The
+`zeroed` column is the control: the same records, byte-zeroed through the
+pointer before the field assignments, report 0 on every target. A loop that
+always answered nonzero would have failed that column.
+
+**My first version of this probe could not have found it.** It put `a` and `c`
+in the program's own `var` block, so both live in `.bss`, both padding regions
+are zero by construction, and it printed `bytes differing=0` on all four targets
+I ran — the expected value and the do-nothing value were the same number. The
+frame has to be dirtied by a routine that has already returned for the question
+to have two possible answers.
+
+Note the asymmetry that makes this easy to miss: `c := a` goes through
+`IR_COPY_REC`, which copies `RecSize` bytes INCLUDING padding, so a
+copy-constructed record IS byte-identical to its source. A byte compare is
+therefore correct for exactly the case everyone writes first, and wrong for two
+records built the same way independently.
+
+**So the implementation must be FIELD-WISE**, or byte-wise only for records the
+layout tables show have no padding at all (which is a second mechanism serving
+one concept, and the layout tables would have to answer recursively).
+
+### And this narrows the fork's cost, which was the reason it was a ticket
+
+"It is six backends" was the stated reason not to just do it. A field-wise
+compare is **one site and zero backends**: expanded during IR lowering into
+per-field scalar comparisons AND-ed together, it emits only `IR_LOAD_MEM` /
+`IR_BINOP` nodes that every backend already handles, and it routes a managed
+field (`AnsiString`) to the string compare for free. `IR_COPY_REC` exists with
+no `IR_CMP_REC` mirror — but the mirror does not need to be an IR op.
+
+Open questions the implementation still has to answer, none of them per-backend:
+nested records and static arrays (recurse), variant records (`case` parts
+overlap, so a field-wise walk compares bytes twice under different names), and
+operands that are not lvalues (a function returning a record — `IRLowerAddress`
+must have somewhere to point).
 
 ## The fork, which is why this is a ticket and not a fix
 
