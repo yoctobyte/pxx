@@ -573,3 +573,101 @@ measured (a bare "is there an identity" channel hands a bitset its element's
 member names) still applies, and applies to `AliasIsDistinct` too. But arm B is
 now in the tree four times, including on the one construct that is nothing but
 identity.
+
+## 2026-09-06 (frankA) — a fifth consumer, and it is the first one that BLOCKS rather than misbehaves
+
+frankB asked me to write this in as the fifth consumer because I built the
+separate carrier first-hand. Two things to add: a witness, and a change in what
+kind of argument this fork is.
+
+### THE WITNESS: `VariantBoxToTemp`, and the remedy was a separate CARRIER, not a different field
+
+`Variant(x)` had to be a BOXING conversion and also had to be an expression with
+a TYPE. Both facts wanted the same slot — the node's `ASTTk`:
+
+- `SizeOf` reads `ASTTk` (`szExprTk := IntToTypeKind(ASTTk[szExprNode])`), so
+  leaving the operand's own kind there made `SizeOf(Variant(x))` answer 8
+  against `SizeOf(vov)`'s 16 for `vov: OleVariant`.
+- `IRLowerBoxOperand` takes the box's SOURCE kind **from that same field**, so
+  stamping `tyVariant` on the operand node made the store copy 16 bytes out of a
+  4-byte integer.
+
+Neither value is wrong; the slot is being asked two questions. **Every
+assignment to it is correct for one consumer and a pun for the other**, and no
+amount of choosing better between the two available answers helps — that is the
+diagnostic for this whole class, and it is the same sentence as *"a `LongBool`
+carries boolean-ness AND four bytes, and the kind slot holds one"*.
+
+The fix was neither answer: **a hidden temp of the target type**. The
+assignment's RHS keeps the operand's own kind, so the box is the store `v := x`
+already performs; the expression handed back is a READ of a `tyVariant` temp, so
+every consumer asking "what IS this expression" gets the right answer. A second
+carrier, in the AST, at the point of use (`b531be20a`, `5d29f9cd7`).
+
+**What it costs to read as a precedent, honestly:** an expression node is not a
+type. A temp is available to me because a cast has a point of use; a `LongBool`
+FIELD in a record has no such point, and a declaration boundary is exactly where
+today's identity dies. So this is evidence for the SHAPE of arm B — a second
+carrier beside the layout kind — and it is **not** evidence that the carrier can
+be cheap, because mine was cheap for a reason that does not generalise.
+
+I also record the one thing I got wrong there, since it bears on B's obligation:
+I first wrote the lost static type off as CLAUDE.md's implementation latitude,
+and it was not — the failing row asserts that OUR `OleVariant` and OUR
+`Variant(x)` agree with EACH OTHER, and no parity clause reaches a relation
+between two of our own answers. **A carrier that is merely "usually right" will
+be defended with a latitude argument the first time it is caught**, which is a
+reason to state B's identity obligation as a rule rather than as a convention.
+
+### THE CHANGE IN THE ARGUMENT: `BooleanNN` cannot be written correctly today
+
+frankB measured, before writing a line, what a `Boolean16` row would have to
+contain — and `defs.inc` has exactly two boolean kinds, `tyBoolean` and
+`tyBool8`, **both one byte**. So the row has two available spellings and both
+are defects:
+
+| spelling | width | `Ord(True)` | `not` | `WriteLn` |
+| --- | --- | --- | --- | --- |
+| `tyUInt16` | 2 ✓ | 1 ✓ | arithmetic complement ✗ | prints a number ✗ |
+| `tyBoolean` | **1 ✗** | 1 ✓ | ✓ | ✓ |
+
+The second is the failure the mapping's own comment exists to forbid. The first
+is the p55 bug, reproduced in four fresh names.
+
+**That converts this fork from an argument into a schedule.** The other four
+consumers are wrong behaviours in code that already exists — real, ranked, and
+survivable. `feature-p-the-booleannn-family-of-explicit-width-boolean-type-names`
+is code that **cannot be written correctly until this fork moves**, and
+`uthlp.pp` plus twelve `tthlp*` corpus files are behind it. A fork with four
+defects behind it can be deferred; a fork that blocks a feature outright has a
+date.
+
+And frankB's ordering hazard is the sharpest thing on either ticket, so it
+belongs here too: **a missing name produces an error message and a wrong branch
+does not.** Land the four names alone and the corpus wall moves, the pass count
+improves, and the improvement comes from the half that mattered least while
+`not` stays inverted on the whole family.
+
+### RECOMMENDATION
+
+Unchanged: **B**, with the identity obligation frankB derived from the
+`set of TCol` case stated as a rule — a channel must answer *whose* identity it
+carries, not merely *that* there is one. My contribution to the recommendation
+is only the negative: do not price B from the Variant precedent. That carrier
+was cheap because a cast has a point of use, and the declaration boundary — the
+place this fork actually has to survive — is the one place my fix never had to
+work.
+
+### A THIRD FACE OF THE BOOLEAN FAMILY, from an unrelated instrument
+
+My door-selector sweep on
+`refactor-p-five-dispatch-sites-for-one-named-type-cast` carried LongBool and
+ByteBool rows as filler and both came back differing from fpc:
+
+    WriteLn(LongBool(LongInt(2)))   ->  pxx 2   fpc TRUE
+    WriteLn(ByteBool(LongInt(258))) ->  pxx 2   fpc TRUE
+
+No `not`, no `{$if sizeof}`, no corpus. So the family is wrong in three
+positions — `not`, `WriteLn`, and the Ord/ABI face — reached by three unrelated
+routes. Recorded because **three faces from one cause is the shape that stops
+the next reader filing a fourth.**
