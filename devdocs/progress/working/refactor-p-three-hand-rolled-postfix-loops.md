@@ -793,3 +793,53 @@ it — and it is not being deleted on a null result. **Only `field-dbl`, `method
 and `prop` moved under the `recName` poison**: the discriminating rows are the
 ones whose answer depends on a TYPE or a dispatch, never on an offset.
 
+
+## 2026-09-06 (frankA) — the last merge is a RECONCILIATION, not a deletion, and the gap list is already two silent wrong values
+
+frankB is out of `ApplyCallResultPtrSuffix` (`1aee0f035`, `f919f0cb1`), so the
+two remaining Pascal loops are free. Both re-derived at HEAD rather than read
+off this ticket's table, which is stale:
+
+| loop | lines | arms | terminator set |
+| --- | --- | --- | --- |
+| `ApplyCallResultPtrSuffix` `pasparser_lval.inc:5688` | 231 | `tkCaret` `tkLBrack` | `[tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen]` |
+| `ParseCastPostfixSuffix` `pasparser_lval.inc:8577` | 320 | `tkCaret` `tkLBrack` | the same five |
+
+**Identical shells. Not an identical body, and this is where it differs from the
+last merge.** `27e656541` deleted a weaker twin because the record-name loop was
+a strict SUBSET of the alias one, arm for arm. This pair is not: a helper census
+over the two bodies gives **11 helpers only the cast loop calls** and **2 only
+the call-result loop calls** (`DerefPtrArrayElemPtr`, `RequireRecMember`). So
+this one is a reconciliation and has to be planned as one.
+
+**THE GAP LIST IS A BUG LIST, and it predicted two live ones before any code was
+read.** Each helper the call-result loop never calls is a capability the call
+route may not have, so each got a row in
+`tools/call_result_suffix_probe.py` — one chain written twice, once off a CALL
+RESULT and once off a pointer VARIABLE holding the same address, against fpc:
+
+```
+defprop      pxx call=111481838526725  var=131   fpc 131 | 131   <- FindDefaultProp
+frozen-str   pxx call=<220 bytes of heap>  var=b  fpc b | b      <- TypeIsFrozenString
+```
+
+`FB^[1]` through a class's DEFAULT PROPERTY answers a heap address where the
+variable spelling answers 131, and `FS^[2]` on a `^ShortString` prints a screen
+of garbage where the variable spelling prints `b`. Five other rows agree on both
+routes and with fpc, and the must-differ control fires in both compilers.
+
+**The variable route is the control and it cannot be wrong for a reason the call
+route is also wrong for** — same address, same chain, different loop. That is
+the whole design: an fpc differential alone would flag the row without saying
+which of the two loops owns it.
+
+**Shape for the merge.** The last one worked because the caller computes a SEED
+and passes it: `ParseCastPostfixSuffix(node, tk, recName, aliasIdx, seedTk,
+seedRec)`. The call-result site can do the same from its `ProcRet*` columns, and
+then the 231-line loop is deleted rather than reconciled line by line. What has
+to be answered first is the two helpers that exist only on the call side —
+`DerefPtrArrayElemPtr` and `RequireRecMember` — since a seed cannot carry those.
+
+**Not attempted in this pass.** Banked with the instrument rather than
+half-merged: the probe is committed and red on exactly two rows, so the merge
+has an acceptance criterion that is not "the tests still pass".
