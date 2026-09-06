@@ -2,6 +2,8 @@
 prio: 65
 blocked-by: [feature-b-getfpcheapstatus-needs-always-on-heap-accounting, feature-b-erroraddr-is-missing-from-system]
 track: P
+status: working
+summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census 368 pass at `36d7e5fd4` / compiler `e6af001d6c0e`. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
@@ -506,3 +508,66 @@ neither was diffed against fpc here, so neither was burned.
 **Numbers carry their tree:** everything above is at `36d7e5fd4` with compiler
 `e6af001d6c0e3bf2`, taken after frankB's `{$PACKENUM}`, `{$H-}` and named-set
 work landed. A row measured before those is measuring a different compiler.
+
+## 2026-09-06 (frankD, Track P) — THE `erroru` WALL IS DOWN, and this row's two blockers are stale as blockers
+
+Measured at `855356445cd7`, ordinary build. frank-coordinator flagged that the two
+`blocked-by:` rows looked implemented-and-unresolved from a declaration grep and
+declined to close on that; this is the behavioural half.
+
+All three symbols the previous section named as the single cause behind five
+differently-labelled skip rows now resolve from user code:
+
+```
+ErrorAddr := nil                                   compiles, runs
+GetFPCHeapStatus                                   compiles, counters LIVE
+  s1 := GetFPCHeapStatus; GetMem(p,1MB); s2 := ...
+  pxx  CurrHeapUsed 0 -> 1048576   |  fpc  0 -> 1048608
+program eu; uses erroru; begin ... end.            compiles, runs
+```
+
+**The always-on heap accounting that the blocking ticket called "the whole
+ticket" exists.** It was built by someone and never written back to the ticket —
+so this row has read as gated on unbuilt work for an unknown period.
+
+**A single `GetFPCHeapStatus` call cannot establish that** and nearly cost this
+measurement: one call answers 0, and 0 is equally "nothing allocated yet" and
+"not implemented". Only the delta around a known allocation separates them.
+
+### The five rows, re-run
+
+| row | result |
+| --- | --- |
+| `tstring2` | compiles, runs, exit 0 |
+| `tstring4` | compiles, runs, exit 0 |
+| `tstring5` | compiles, runs, exit 0 |
+| `texception3` | compiles, runs, **exit 1** — a runtime failure, not a frontend gap |
+| `tobject1` | **REFUSED**, and not on `erroru`: `an object type cannot have a constructor` → `bug-p-object-value-types-standard-meaning` |
+
+Two different shapes behind one old label, and only one of them is a frontend
+gap. Neither is burned here — `texception3` needs its output diffed against fpc
+before anyone calls it anything.
+
+### One disposition question for whoever owns this row
+
+`tstring4` prints `[HEAP] Size: 262144 Kb, Used: 128 bytes` where fpc 3.2.2
+prints `0 bytes / 0 bytes` on the same line. **pxx is reporting real accounting
+where fpc reports none.** Under CLAUDE.md's own rule — the test is the value in
+its declared type, and a truthful instrument returning an unexpected answer is
+not a defect — pxx is arguably the better of the two, and this is
+`known-incompat`-shaped rather than `rejected/`. It is a feature landing and
+turning a comparison row into a divergence. Not ruled on here.
+
+### Corpus availability, which was the reason nobody re-ran this
+
+This checkout had **zero** corpus files until tonight; the fetch took under a
+minute for 1447. Across the box it was **13 of 17 checkouts with no corpus, now
+12** — and a missing corpus does not fail, it **passes by absence**: the
+conformance target's presence check succeeds on the parent directory while the
+suite is missing. That is filed as
+`bug-t-the-conformance-runner-reports-an-empty-corpus-as-a-normal-green`.
+
+**Not claimed.** The body above records `Owner: frankA` and the four most recent
+sections are frankA's; frontmatter `owner:` deliberately left unset rather than
+assigned by a passing seat.
+
