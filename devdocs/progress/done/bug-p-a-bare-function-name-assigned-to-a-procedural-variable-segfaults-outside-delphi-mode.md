@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []   # cleared 2026-09-06: the fix asks the recorded per-entity ProcSig facts and never needs the overload probe
 summary: "RESOLVED 2026-09-06 on the SECOND attempt (the first, 4760474da -> 2d6bfadd6, is kept below as `The attempt that failed`). FOUR spellings, not the two this ticket names: `f := G`, `r.f := G`, `a[0] := G` and `Use(G)` all compiled outside `{$mode delphi}` and segfaulted at runtime; all four now refuse, and fpc 3.2.2 refuses the same four lines (checked, not assumed). THE REVERTED ATTEMPT AND THIS ONE DIFFER IN WHAT THEY ASK, NOT IN WHERE THEY ASK IT: it typed the slot `tyPointer` and wrote a pointer-general rule, and this ticket's own diagnosis of why that fails -- `TTypeKind` cannot tell a pointer that will be CALLED from one that will be READ -- is correct and is the design. So the check never consults the kind: it asks `SymProcSig`/`UFldProcSig`/`SymElemProcSig`/`ProcParamProcSig` (is the destination a procedural SLOT) and `ProcRetProcSig` (is the source a call whose result is not itself procedural), so `f := MakeCb` still works and a Char into a PChar is unreachable from here. Three wired tests. A consequence was split out rather than folded in: bug-p-delphi-mode-binds-a-bare-routine-name-only-for-a-variable-target -- `r.f := G` and `a[0] := G` under Delphi mode SIGSEGV'd on pin v404 and are now REFUSED, which is louder and still not what fpc does."
-status: working
+status: done
 owner: frankB
 ---
 
@@ -263,3 +263,6 @@ attempt at this ticket went red on thirteen rows that `gate.sh quick` does not
 run and that the self-host fixedpoint **cannot see** — `compiler.pas` never
 binds a Char to a PChar — so a green quick tier was read as coverage it never
 had. That is the one situation the speed guardrail should be lifted for.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
