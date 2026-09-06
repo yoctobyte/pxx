@@ -8877,6 +8877,74 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## ENUMERATING FEELS LIKE CHECKING — a comment that LISTS cases reads as one that TESTED them
+
+Measured 2026-09-06 (frankA), on a comment it had written minutes earlier and then
+measured because the file says to.
+
+The comment enumerated three branches and said of the third that it *"falls through to
+`Expect` and builds the `AN_ASSIGN` whose left side is a call, which is what raises the
+existing 'cannot assign to the result of a function call'. That diagnostic is preserved
+on purpose."*
+
+Measured, it answered **`IR_UNSUPPORTED: frontend could not lower AST node (kind 8) —
+would miscompile`** — an internal message for an ordinary user mistake, identical on the
+pin, while the two sibling spellings gave the real diagnostic all along. The single-exit
+guard tests the RETURNED node for being a call; the cast branches hand back an
+`AN_ASSIGN` whose **LEFT** is the call, so they went straight past it.
+
+> **The tell: "I was writing the comment as an ENUMERATION of cases, and enumerating is
+> what made it feel checked. Listing three branches reads like having tested three
+> branches. I had tested two."**
+
+A prose list has the *shape* of coverage. Each row is short, parallel and confident, and
+nothing in the form distinguishes the row you ran from the row you inferred. **Mark the
+rows you measured, or write no list** — and prefer a table with a column for the
+observed output, because a blank cell is visible and a fluent sentence is not.
+
+## A REFUSAL FIXTURE MUST ASSERT THE MESSAGE, NOT THE EXIT CODE
+
+The same fix's test, and it is the operational form of *a refusal is not
+self-describing*.
+
+**Every spelling of that mistake fails either way**, so `rc` cannot separate the real
+diagnostic from the internal one — **which is the entire defect.** A fixture asserting
+non-zero exit passes on both the correct behaviour and the bug it was written to catch.
+
+> Wherever a defect changes **which** refusal you get rather than **whether** you get
+> one, the exit code is a guard that cannot fail. Assert the text.
+
+The pin fails that row, which makes it a positive control drawn from the right
+population.
+
+## WHEN AN ARM NEEDS A PROTOCOL THE SHARED PATH ALREADY HAS, THE PROTOCOL IS USUALLY IN THE SAME FILE
+
+Same fix. A ticket had described designing a convention for *"I consumed the
+assignment"*. **The convention already existed 150 lines below the broken arms** —
+`pasparser_stmt.inc` had the rule for the non-cast spellings, *a call node in target
+position IS the statement*, and the two cast arms simply never used it and ran
+`Expect(tkAssign)` unconditionally.
+
+> **The duplication that CAUSED the bug is also what HIDES the fix, because the arm that
+> has the rule and the arm that needs it are the two copies.**
+
+So *"a convention to design"* was **a convention to reach**. Before sizing the work to
+invent a protocol, grep the file for the shape the working sibling uses — the same
+search that finds a duplicated defect finds a duplicated solution, and it is the same
+adjacency that keeps a repair from looking down.
+
+One conjunct made the shared rule sound where it was not — **the `:=` must be gone** —
+and that single conjunct separated all three cases: consumed → the statement; absent →
+the statement (previously refused); still present → error, as before.
+
+### And prefer the channel that cannot disagree with itself
+
+Reading the **token stream** rather than adding a `consumedAssign` out-parameter was
+deliberate: it is the same fact taken from the one place that cannot contradict itself.
+**A second channel carrying a fact the first channel already determines is a parallel
+array** — and this file's neighbouring section is a live case of two parallel arrays
+compacted in one place and not the other. **Prevented is cheaper than found.**
+
 ## SCOUTING THE NEXT CEILING IS HOW YOU FIND A BUG IN THE CURRENT TREE
 
 Measured 2026-09-06 (frankH), and the discovery route is the point rather than the
