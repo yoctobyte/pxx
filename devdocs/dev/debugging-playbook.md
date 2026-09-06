@@ -15705,3 +15705,49 @@ the fact you keep is the one your bug was about.*
 about width and say nothing about `not`, and nothing in the code records the fact
 that was dropped. See also *"merging two half-sizers widens the doorway"* — the
 repair is a carrier that holds the pair, not a second slot beside the first.
+
+### The second defect, stacked on the first: `grep -v grep` IS BLIND TO ANY PROCESS WHOSE JOB IS TO GREP
+
+The waiter deadlock above was found, reported, and then **denied by the seat that
+had three of them**, on a measurement that was honestly taken:
+
+```sh
+ps -eo pid,lstart,args= | grep -E 'gate\.sh' | grep -v grep      # -> 0
+```
+
+The three processes were alive. `ps -eo args=` prints a multi-line argv across
+real output lines, and the line carrying `gate.sh` in those processes is
+
+```sh
+until ! pgrep -f 'bash tools/gate.sh quick' >/dev/null; do sleep 5; done
+```
+
+**`pgrep` contains `grep`.** So `grep -v grep` — the idiom whose entire purpose is
+to remove the self-match — deleted **exactly the line being looked for**.
+
+**Two instruments, one animal, stacked in a single measurement:** the LOOP could
+not exit because its predicate matched its own argv; the CHECK could not see the
+loop because its filter matched the predicate. Both are *the instrument sitting
+inside the population it is asking about*, and neither errored.
+
+**THE RULE, and it is a rule because `grep -v grep` is in everyone's fingers:**
+
+- **Exclude by PID, never by pattern.** `$$` is exact; `-v grep` is a guess about
+  text that is wrong for every process whose job is to grep — waiters, monitors,
+  log tailers, anything built out of `pgrep`/`grep`/`pkill`.
+- **Anchor the positive test at argv position zero.** A real gate's argv starts
+  with `bash tools/gate.sh`; a waiter's starts with `/bin/bash -c source ...`.
+- The `/proc` walk in the section above does both and is the replacement idiom.
+
+**And the residual is left open on purpose.** The coordinator's differently-shaped
+pipeline returned **3** where this one returned **0**, and by the time the cause
+was found the processes had been killed — **so the disagreement is now
+unrepeatable and is not going to be settled by argument.** The rule above is
+supported by either reading; the 3-versus-0 is dropped, stated, and not
+reconciled. See *"two numbers you cannot make agree, where one cannot be re-run"*.
+
+**The self-report is the third lesson**, in the reporting seat's own words:
+*"my claim should have been 'no line survived a filter I did not audit', not 'no
+waiters'."* A verification claim scopes to exactly what the instrument could
+physically see, and publishing it without naming that scope is how a correct
+measurement becomes a wrong answer.
