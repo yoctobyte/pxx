@@ -4644,23 +4644,49 @@ procedure ParseRecordPropertyDecl(ci: Integer);
   typshrdh.inc's TSize and TRect are records with properties — so nothing that includes them
   parses without it.
 
-  Only the FIELD-BACKED form is supported, which is what those declarations are: read/write
-  name an existing field, and the property is registered so `r.Height` resolves through the
-  ordinary property path. A method-backed accessor on a record would need the record's own
-  method table wired into the accessor lookup; it is rejected loudly rather than
-  half-supported. }
+  BOTH accessor forms are supported: read/write may name a FIELD or a METHOD, and which one
+  it is is decided by looking the name up, so one syntax serves both (typshrdh.inc's TSize is
+  field-backed and TRect method-backed). This comment used to say the opposite -- "only the
+  FIELD-BACKED form is supported ... a method-backed accessor is rejected loudly" -- while the
+  code twenty lines below it already captured rMOff/rMLen and the inner comment already said
+  both were in use. COMMENT AND CODE DISAGREED AND THE CODE WAS RIGHT: measured 2026-09-06, a
+  record with `property Y: Integer read GetY write SetY` reads AND writes correctly through
+  both accessors. The stale half was not harmless -- it told the next reader that a feature
+  which exists is rejected, which is the direction that costs someone an implementation.
+
+  INDEXED properties are supported too, and by the same registry the class path uses:
+  UPropIsIndexed / UPropIsDefault are shared columns, and every lowering site already keys on
+  them without caring whether the owner is a class or a record. Only the DECLARATION was
+  class-only, so `property Test[Index: Integer]: Integer read GetTest; default;` failed at
+  `expected ':' before '['` -- a parse error standing in for a feature that was otherwise
+  complete. The index clause is parsed and DISCARDED, exactly as ParsePropertyDecl discards
+  it: the index parameter's name and type come from the accessor's own signature, and the
+  only thing the property row needs to remember is that a subscript must be passed on.
+  bug-p-a-record-property-cannot-be-indexed-or-default }
 var
   pnOff, pnLen, pri: Integer;
   rFOff, rFLen, wFOff, wFLen: Integer;
   rMOff, rMLen, wMOff, wMLen: Integer;
   pTk: TTypeKind;
   pRec: Integer;
+  rPropIsIndexed, rPropIsDefault: Boolean;
 begin
   Next;  { consume `property` }
   if not IsMemberNameTok then Error('expected record property name');
   pnOff := Tokens[TokPos-1].SOffset;
   pnLen := Tokens[TokPos-1].SLen;
   Next;
+
+  { The index clause, mirrored from ParsePropertyDecl including its discard. }
+  rPropIsIndexed := False;
+  rPropIsDefault := False;
+  if CurTok.Kind = tkLBrack then
+  begin
+    rPropIsIndexed := True;
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
 
   Expect(tkColon, ':');
   pTk := ParseTypeKind;
@@ -4719,11 +4745,26 @@ begin
   end;
   Eat(tkSemicolon);
 
+  { `default;` after the semicolon -- the marker that makes `r[i]` lower through
+    this property. Only the bare `default;` spelling sets it; `default <expr>`
+    on a record property is a VALUE and is not accepted here, the same way the
+    class path separates the two. }
+  if CurTok.Kind = tkDefault then
+  begin
+    Next;
+    if CurTok.Kind <> tkSemicolon then
+      Error('a record property''s `default` takes no value -- write `default;`');
+    rPropIsDefault := True;
+    Eat(tkSemicolon);
+  end;
+
   pri := AddUProperty(ci, pnOff, pnLen, Ord(pTk), pRec);
   UPropReadFOff[pri] := rFOff;  UPropReadFLen[pri] := rFLen;
   UPropReadMOff[pri] := rMOff;  UPropReadMLen[pri] := rMLen;
   UPropWriteFOff[pri] := wFOff; UPropWriteFLen[pri] := wFLen;
   UPropWriteMOff[pri] := wMOff; UPropWriteMLen[pri] := wMLen;
+  UPropIsIndexed[pri] := rPropIsIndexed;
+  UPropIsDefault[pri] := rPropIsDefault;
   UPropPub[pri] := 0;
 end;
 

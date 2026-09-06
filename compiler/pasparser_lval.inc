@@ -1875,8 +1875,9 @@ begin
     end
     else if CurTok.Kind = tkLBrack then
     begin
-      { Default indexed property: `obj[i]` → obj.<default>[i] getter/setter. }
-      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) then
+      { Default indexed property: `obj[i]` → obj.<default>[i] getter/setter.
+        tyRecord as well as tyClass -- see the note at the chained-suffix site. }
+      if ((tk = tyClass) or (tk = tyRecord)) and (recName >= REC_UCLASS_BASE) then
       begin
         mci := recName - REC_UCLASS_BASE;
         pri := FindDefaultProp(mci);
@@ -5868,7 +5869,21 @@ begin
         "IR_UNSUPPORTED: could not lower AST node". ParseLValueAST's suffix loop has always
         dispatched this; the chained loop never did. }
       dfCi := -1;
-      if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
+      { ...and a RECORD reaches this too. The three sites that dispatch `x[i]`
+        through a default property were each gated on `tk = tyClass`, so a record
+        with `property Item[i: Integer]: Integer read GetIt; default;` silently
+        fell past them into a raw AN_INDEX and answered 0 without calling the
+        getter -- a wrong VALUE, not a refusal. The NAMED spelling `r.Item[i]`
+        already worked and still does, which is the tell: one property, two
+        spellings, and only the shorthand was class-only.
+        Nothing else needed widening -- records live in the same UCls rows, carry
+        their properties in the same UProp columns, and FindDefaultProp walks
+        UClsParent, which is -1 for a record. The refusal below reads correctly
+        for a record as well (it names the type and says it cannot be
+        subscripted), which is what makes this a gate widening rather than a new
+        arm. bug-p-a-record-property-cannot-be-indexed-or-default }
+      if ((tk = tyClass) or (tk = tyRecord)) and (recId >= REC_UCLASS_BASE) then
+        dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
       if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
       { The class-with-no-default-property refusal, second spelling. `TC(t)[0]`
@@ -9264,7 +9279,7 @@ begin
         asks of each hand-built arm not whether it is reached but
         whether it is the right arm at all; this is the answer for this
         one. }
-      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if ((tk = tyClass) or (tk = tyRecord)) and (recName >= REC_UCLASS_BASE) and
          (FindDefaultProp(recName - REC_UCLASS_BASE) >= 0) then
       begin
         node := ParseClassRecordSelectors(node, recName, tk);
