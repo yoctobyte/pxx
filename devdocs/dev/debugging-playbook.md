@@ -17077,6 +17077,157 @@ of the spellings, and partitions are cheap to produce and impossible to argue wi
 about the wrong subject, look one level up for a list"* was used to FIND this, not to
 recognise it afterwards. That is the promotion the family was filed for.
 
+## `git log <my-commit>..origin/master -- compiler/ lib/` IS EMPTY EXACTLY WHEN THE PULL MOVED YOUR BUILD INPUTS — because a rebase replays the arrivals UNDERNEATH you
+
+Measured 2026-09-06 (frankS, by tripping it), and it is the mechanism behind a rule CLAUDE.md
+already states: *the sequence is PUSH -> LET THE PULL SETTLE -> REBUILD -> MEASURE, and the
+REBUILD is the step that gets dropped.* **This is WHY a careful seat drops it — it runs a
+check first, and the check says the rebuild is unnecessary.**
+
+The range `<my-commit>..origin/master` answers *"did anything arrive AFTER my commit"*. That
+is not the question. **`tools/sync.sh` REBASES**, so everything that came down in the same
+pull is replayed **underneath** yours and becomes your commit's **ANCESTOR** — excluded from
+the range by construction. The check therefore reads clean **in precisely the case you are
+checking for**.
+
+frankS's four, all `git merge-base --is-ancestor <c> <their-commit>` = YES, all reported by the
+range check as nothing, four times over: `ffefbeeb3` (`lib/rtl/sysutils.pas`), `3034ac606`
+(`lib/rtl/classes.pas`), `dbe03f106` (`compiler/defs.inc`, `symtab.inc`, `rparser.inc`,
+`zparser.inc`), `667934bc5` (`compiler/cparser.inc`).
+
+**Reproduced here on this seat's own history**, because a mechanism claim should not travel on
+one seat's word. `7dbfe49de..origin/master -- compiler/ lib/` lists five commits — and
+`3034ac606`, `eb2447470`, `f69801049`, `c8e64339a`, `46c933fb6` all touch `compiler/` or
+`lib/`, are **ancestors** of `7dbfe49de`, and appear in **neither** the range nor any check
+built on it. Had that seat run the range check right after its push, it would have been empty
+for exactly the commits its own pull had just brought in.
+
+**THE TELL WAS NOT THE CHECK.** It was `make` printing `converged after 1 round(s)` where a
+`verified` was expected, and a **different binary sha from sources believed unchanged** — which
+for a moment looked like nondeterminism and was the rule working correctly. Compare the
+already-banked *two valid fixedpoints, not a miscompile*: same instrument, same startling
+reading, correct both times.
+
+**The check that fails differently is against the BUILD, not against the commit.** Keep the
+sha from your last `make` and diff the tree against the commit you built at — or, cheaper and
+what the rule already says, **always rebuild after a sync and read the VERB.** `converged`
+recomputed; `verified` did not. **The verb is the honest instrument here and the range is
+not.**
+
+Residual worth copying: frankS re-ran all five fixtures landed that day on the settled binary
+(`10797249be20` at `66101734c`) — all green — *"the part I would have skipped if the range
+check had not misfired."* **A green taken on a pre-pull binary is a correct answer about a
+tree you no longer have.**
+
+## TWO CORRECT DECISIONS THAT BETWEEN THEM REFUSE A PROGRAM — and then a pre-guard that duplicates its callee's acceptance test makes your fix look INERT
+
+Measured 2026-09-06 (frankS, `43934cce2`). A new shape, distinct from the absent-entry family:
+**nothing here is a defect and the pair is.**
+
+A **one-character** named constant is routed to a CHAR const **deliberately**, so that `Ord()`
+gives the ordinal rather than an address. **Multi-character** ones go to a span table. The
+string-initialiser helper reads the span table. Each decision is correct on its own, and
+between them **the LENGTH of the literal silently picks which storage class an initialiser can
+reach.** No site is wrong; the composition refuses a program.
+
+**The tell for the class:** when a construct fails only for one size, one arity or one length,
+stop looking for the broken branch — **look for two branches that are each right and that
+route to different downstream capabilities.** A census of either decision alone certifies it.
+
+**AND THE TAIL, WHICH IS THE MORE REUSABLE HALF.** After fixing the helper, the scalar case was
+**still refused** — which reads exactly like a second defect and sends you back to re-derive a
+fix you have just made correctly. It was a **PRE-GUARD two lines above the call, restating the
+helper's own acceptance test.**
+
+> **A guard that duplicates the acceptance test of the thing it guards has no failure mode
+> except DRIFT — and the drift presents as YOUR OWN FIX APPEARING INERT.**
+
+That is the exact inverse of `## A PREMISE CHECK IS NOT A CHECK THAT THE PROPOSED FIX DOES
+ANYTHING`: there the fix is a no-op and looks live; here the fix is live and looks like a
+no-op. **Both are diagnosed by the same question — what would have to be true for this change
+to do nothing? — and only one of the two answers is "the change was wrong."** Before rewriting
+a fix that appears inert, grep the call site's immediate neighbourhood for a second copy of
+the callee's own precondition.
+
+## THE MISSING ENTRY WAS ALREADY MAINTAINED AND ALREADY NAMED — when a lookup is scoped to a range, ask whether the thing it scopes to has a SECOND range
+
+Measured 2026-09-06 (frankS, `b9668d0ab`), fourth entry in a three-entry chain and the sharpest
+version of the absent-copy family so far. **The missing entry was not merely absent — the
+global it needed was already declared, already maintained, and already named for exactly this
+purpose.**
+
+`defs.inc` declares `MethImplOwnerCi` for **the second of a class's two source ranges** and
+says so in its own comment. `FindNestedType` consults the pair. Alias visibility consults the
+pair. **The class-const fold consulted one.** So a class const was not a constant in an
+out-of-line method header, and the fix was to consult a global that had been sitting there,
+correct, for as long as the bug had.
+
+**The rule: when a lookup is scoped to a range, ask whether the thing it scopes to has a
+SECOND range** — a class body and its out-of-line implementations, an interface and an
+implementation section, a generic's declaration and its specialisation site.
+
+**And the stronger half, which turns a hunch into a specification: IF TWO OTHER CONSUMERS
+ALREADY PAIR THE GLOBALS, THAT PAIRING *IS* THE SPEC.** You do not need to reason about
+whether the second range should be consulted — two independent sites have already answered,
+in code, and the odd one out is the defect. This is `a rule spelled per caller fails by an
+ABSENT COPY` with the search made cheap: **find the majority pairing, then find who does not
+do it.**
+
+## WHEN A PARSE ERROR GUARDS A FEATURE, THE CODE BEHIND IT HAS NEVER RUN — so the loud half hides the silent one
+
+Measured 2026-09-06 (frankS, `6e80c3042`), and this is the one to reach for whenever a fix
+starts by making a syntax reachable.
+
+Two halves of one gap, failing differently. **Loud:** the parser refused the `[...]` clause on
+a record property. **Silent, behind it:** the three sites dispatching `x[i]` through a default
+property were each gated on `tk = tyClass`, so a record fell through to a **raw index** and
+`r[i]` **answered 0 without ever calling the getter.** Fixing the parse alone would have
+shipped a wrong value in place of a diagnostic.
+
+**The generalisation: a parse wall means the code behind it has never executed, so the moment
+you make the syntax reachable, treat the entire lowering as UNPROVEN.** It has no test
+coverage, by construction — nothing could have reached it — and it will typically be gated on
+whichever type the feature was first built for.
+
+**The only reason this did not ship: `terecs10` ASSERTS rather than merely compiling.** So the
+operational line is not about the fix, it is about the row you burn with it: **prefer an
+asserting corpus row over a compiling one**, always, and especially when the fix removed a
+refusal. A compiling row and an asserting row are the same green until the lowering is wrong.
+
+Same family as `## A FALSE REJECT CAN BE LOAD-BEARING`, from the other direction: there a
+refusal made a bad arm unreachable, so removing the refusal exposed it; here a refusal made a
+whole lowering unreachable, so removing it exposes untested code. **Both say: the refusal was
+holding something up, and you have just taken the prop out.**
+
+## TEXT THAT ASSERTS THE ABSENCE OF SOMETHING THAT IS PRESENT — three instances in one day, and the cost is always a DUPLICATE IMPLEMENTATION
+
+2026-09-06. Collected here because no single seat saw more than one of them, and the shared
+cost is not confusion — it is a second copy of a mechanism that already exists and is correct.
+
+| the text | what it asserted | what was there |
+| --- | --- | --- |
+| `terecs1`'s skip reason | *"member visibility is not enforced at all"* | `--strict-visibility` / `EnforceMemberVis`, predating the pin, rejecting two of the three probed shapes |
+| the generic call-site guard | that a trailing `(` is needed to disambiguate | an arity note thirty lines below, and `IsGenericRoutineHeaderAhead` already accepting `:` and `;` — the argument was in the file, twice |
+| a record-property routine's header comment | *"method-backed accessors are rejected loudly"* | method-backed record properties read and write correctly; the code below captured method offsets |
+
+**All three were written by careful authors and all three were true of something** — of the
+default configuration, of one of two surfaces, of an older tree. **None of them errors, and
+none of them is discoverable by re-reading the text**, which is what makes the family worth
+naming: the correcting instrument is always *outside* the sentence. A `--help`. A grep for the
+capability. Compiling the construct the comment says is rejected.
+
+**The asymmetry that makes this direction the expensive one:** a comment or note that
+**overstates** a capability gets corrected the first time someone relies on it and it fails. A
+comment that **denies** an existing capability is never contradicted by anything, because
+nobody tries. It **sends the next reader to implement what is already there** — and the second
+implementation will be the one that diverges.
+
+**The check, and it is the same one in all three cases: before writing or trusting "X is not
+supported / not enforced / rejected", spend one command establishing it.** Grep the option
+table, grep for the symbol, or compile the two-line program. CLAUDE.md's *comment vs code:
+if they disagree, one is wrong and you do not know which* — and this is the direction where
+matching the code to the comment would have deleted a working feature.
+
 ## TWO SURFACES SHARING ONE PREDICATE, WHERE THE WEAKER SURFACE'S GUARD IS CHARGED TO THE STRONGER ONE
 
 Measured 2026-09-06 (frankS, `eb2447470`), third instance in one day of a shape that had been

@@ -2426,3 +2426,28 @@ object types, `tarray6`/`ParseVarSection` (frankD), management operators (frankA
 signatures/Group 28 (frankB). Recorded as the seat's own statement of what it is avoiding —
 which is evidence about frankS's lane and only [[a-peers-belief-about-another-peer-is-my-subject-matter]]
 about the other three.
+
+## A CAUTION WRITTEN INTO A TICKET WAS READ AND ACTED ON BY A DIFFERENT SEAT
+
+2026-09-06, recorded because it is the only evidence that the *"marked as never measured end
+to end"* discipline does anything, and neither party can see it.
+
+frankD filed `feature-b-sysutils-charinset` and explicitly marked it never measured end to
+end, with the reason: **a one-line body is exactly what gets closed on a build rather than on
+a run.** Ninety minutes later a different seat landed it (`ffefbeeb3`), and the commit says:
+*"THE CLOSED TICKET'S OWN CAUTION WAS RIGHT AND WAS FOLLOWED. It said a one-line body is
+exactly what gets closed on a build rather than a run, so both are DRIVEN"* — twelve rows
+against fpc 3.2.2, which caught behaviour reading FPC's source would have got wrong
+(`AnsiDequotedStr('ab''cd')` returns the string whole, because a non-leading quote makes
+`AnsiExtractQuotedStr` bail).
+
+**The caution did the work, not the ticket.** A `feature:` row with an obvious body is the
+shape most likely to be closed on a compile; saying so *in the ticket* is what converted a
+one-line landing into twelve driven rows. Worth repeating whenever this seat files a residual
+that looks trivial: **name the failure mode the ticket's own shape invites.**
+
+Also from that commit, unprompted and worth having: a census the author **discarded after it
+failed three separate ways, each silently** — it scanned only `*h.inc` headers and so missed a
+name declared in `sysstr.inc`. A discarded instrument reported rather than quietly dropped is
+the same discipline as frankH's *"100% false positives on its one hit"*, and it is the third
+time today a seat has published a negative about its own tool.
