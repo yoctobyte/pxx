@@ -5162,9 +5162,27 @@ begin
         same pin. NilPyUserCode is the predicate that asks what was actually
         meant ("code the NilPy user wrote", PyExprMode telling a .py module
         body from a Pascal unit). bug-a-the-import-escape-hatch-fails-on-classes-pas }
+      { A METHOD was the only member kind this asked about, and the rule is not
+        about methods -- it is that a class's OWN MEMBER hides a routine from an
+        outer scope. A FIELD, PROPERTY or CLASS VAR of the same name lost to the
+        routine and the name stopped being an lvalue: fcl-passrc pastree.pp:2397
+        is `ReleaseAndNil(TPasElement(ExceptObject))` on a FIELD named
+        ExceptObject, and lib/rtl/sysutils.pas declares `function ExceptObject:
+        TObject`, so the field resolved to the FUNCTION and the call was refused
+        with `by-reference argument must be a variable` -- a diagnostic about
+        the argument's form for a defect in name resolution.
+        The same four-kind list the nested-routine free-variable scan carries,
+        and CLASS CONST is out of it there for the same reason: `<instance>.K`
+        is refused generally (bug-p-a-class-const-is-unreachable-through-an-
+        instance-receiver), so admitting it here would trade one wrong answer
+        for a different one.
+        bug-p-a-class-field-loses-its-name-to-a-same-named-unit-routine }
       if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and (not NilPyUserCode) and
          (CurSelfClass >= REC_UCLASS_BASE) and
-         (FindUMeth(SelfMemberCi(name), name) >= 0) then
+         ((FindUMeth(SelfMemberCi(name), name) >= 0) or
+          (FindUField(SelfMemberCi(name), name) >= 0) or
+          (FindUProp(SelfMemberCi(name), name) >= 0) or
+          (FindClassVar(SelfMemberCi(name), name) >= 0)) then
         procIdx := -1;
 
       { `Eof` (standard input), no args -> Boolean. The textfile RTL declares

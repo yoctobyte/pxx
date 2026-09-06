@@ -3623,10 +3623,29 @@ end;
 
 function IsVarArgLvalueCast(n: Integer): Boolean;
 { FPC "variable typecast" as a var/out argument: `Cardinal(FTokenLength)` —
-  an AN_PTR_CAST over a plain lvalue. The address is the operand's
-  (IRLowerAddress peels the cast). Pascal Script's ParseToken call. }
+  a cast over a plain lvalue. The address is the operand's (IRLowerAddress peels
+  the cast, for BOTH kinds, and has since the interface-cast arm went in).
+  Pascal Script's ParseToken call.
+
+  A CLASS/INTERFACE cast counts and used to not. `ReleaseAndNil(TPasElement(
+  InterfaceName))` — fcl-passrc pastree.pp:2101, and the destructor does it three
+  times — was refused with `by-reference argument must be a variable`, while the
+  identical shape spelled with a pointer cast compiled. Class references are all
+  pointer-sized, so this is a same-size variable typecast by FPC's own rule, and
+  the callee nilling `e` must nil the caller's variable: the whole point of
+  ReleaseAndNil. An ENUMERATED PREDICATE one member short — the list was written
+  when only the pointer spelling had a caller.
+
+  `as` is deliberately NOT here, and it is the discriminator rather than an
+  omission: `d as TBase` performs a checked conversion and yields a VALUE, and
+  fpc refuses it in this position too — `Can't take the address of constant
+  expressions` (measured, fpc 3.2.2). A hard cast reinterprets an lvalue; a
+  checked cast produces one.
+  bug-p-a-class-typecast-is-refused-as-a-by-reference-argument }
 begin
-  Result := (n >= 0) and (ASTKind[n] = AN_PTR_CAST) and (ASTLeft[n] >= 0) and
+  Result := (n >= 0) and
+            ((ASTKind[n] = AN_PTR_CAST) or (ASTKind[n] = AN_CLASS_CAST)) and
+            (ASTLeft[n] >= 0) and
             ((ASTKind[ASTLeft[n]] = AN_IDENT) or (ASTKind[ASTLeft[n]] = AN_FIELD) or
              (ASTKind[ASTLeft[n]] = AN_INDEX) or (ASTKind[ASTLeft[n]] = AN_DEREF));
 end;

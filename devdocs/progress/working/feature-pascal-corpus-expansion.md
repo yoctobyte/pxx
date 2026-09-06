@@ -2387,4 +2387,41 @@ Plus `181576cdc` (frankB, the decl-path bracket instance) and `475528dae`
 (frankH, removing the sysutils declarations at the source).
 
 **The next unit on this rung is not pscanner.** `pastree.pp` and `pparser.pp`
-are the remaining bulk, and neither has been attempted.
+are the remaining bulk.
+
+## 2026-09-06 — `pastree.pp` (5947 lines) attempted: four walls, two down
+
+The first pass reported two, and clearing them revealed two more — the same
+"invisible until the one before it lands" shape this rung has produced twice
+already, so **four is a lower bound, not the count.**
+
+| # | line | shape | state |
+| --- | --- | --- | --- |
+| 1 | 2101 | `ReleaseAndNil(TPasElement(InterfaceName))` — a class typecast as a `var` argument | **FIXED** |
+| 2 | 2397 | a field named `ExceptObject` vs sysutils' `function ExceptObject` | **FIXED** |
+| 3 | 2979 | a receiver-less `Free;` inside a method | open, Track P |
+| 4 | 4940 | `NameParts.Assign(Parts)` — no `TFPList.Assign` | open, **Track B (RTL gap)** |
+
+Walls 1 and 2 were both **enumerated predicates** — a hand-maintained list that
+must grow per new member and gives no diagnostic when it does not — and that is
+now the third and fourth instance found on this rung. `IsVarArgLvalueCast`
+named `AN_PTR_CAST` while the backend had peeled `AN_CLASS_CAST` for months;
+the member-shadow rule named `FindUMeth` while fields, properties and class
+vars are equally members.
+
+**WALL 2 IS THE ONE WORTH CARRYING, AND NOT FOR THE FIX.** The rule lives in
+**two copies** — `pasparser_expr.inc:5167` for the read, `pasparser_stmt.inc:7858`
+for the write — and the statement copy's own comment already said *"the two
+MUST move together"*. They had drifted anyway. The two copies emit
+`by-reference argument must be a variable` and `cannot assign to the result of
+a function call` respectively: **two diagnostics, neither naming resolution,
+one cause.** The corpus only ever shows you the arm it happens to use — pastree
+reads the field into a `var` argument, so the read arm was the whole visible
+defect, and the write arm surfaced only because the fixture asserted an
+assignment. Landing the read fix alone would have left a shadowed field
+readable and unwritable: a state worse than the one it replaced, and one the
+corpus unit would have scored as progress.
+
+Wall 3 is the receiver-less sibling of today's `.Free` work (`a5588f5c6`
+materialised a computed receiver; a bare `Free;` in a method never gets as far
+as a receiver). Wall 4 is not ours.

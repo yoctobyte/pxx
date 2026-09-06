@@ -7120,6 +7120,42 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_text_file_reached_through_a_field \
 	  "$$(TESTTMP=$(TESTTMP) $(TESTTMP)/test_textfield26)" \
 	  "$$(cat test/test_a_text_file_reached_through_a_field.expected)"
+	@# A VARIABLE TYPECAST IS AN LVALUE, and the door listed one spelling. FPC's
+	@# hard cast over an lvalue may be passed to a `var` parameter and the
+	@# callee's write reaches the caller's variable; `IsVarArgLvalueCast` named
+	@# `AN_PTR_CAST` only, so the CLASS spelling answered `by-reference argument
+	@# must be a variable`. IRLowerAddress has peeled both kinds since the
+	@# interface-cast arm went in -- the capability was there, the recogniser was
+	@# short a member. `d as TBase` stays REFUSED on purpose (it yields a value;
+	@# fpc 3.2.2 refuses it here too), so it cannot be a row here -- named in the
+	@# file header so nobody "completes" the list. Every row asserts the callee's
+	@# nil ARRIVED, not that the call compiled: a cast materialising a temp would
+	@# compile every row and change no output but this one. Arr[0] is created so
+	@# the neighbour column cannot read nil-because-never-made as success.
+	@./$(COMPILER) test/test_a_class_typecast_is_a_by_reference_argument.pas $(TESTTMP)/test_castvararg26
+	@tools/expect_same.sh test_a_class_typecast_is_a_by_reference_argument \
+	  "$$($(TESTTMP)/test_castvararg26)" \
+	  "$$(cat test/test_a_class_typecast_is_a_by_reference_argument.expected)"
+	@# A CLASS'S OWN MEMBER HIDES AN OUTER ROUTINE -- for METHODS only, until
+	@# now. A field, property or class var sharing a name with a routine in a
+	@# used unit lost the name to the routine and stopped being a variable. The
+	@# rule lived in TWO copies, expression side and statement side, and the
+	@# statement copy's own comment says they must move together -- so the two
+	@# diagnostics were `by-reference argument must be a variable` for the READ
+	@# and `cannot assign to the result of a function call` for the WRITE,
+	@# neither naming resolution. Fixing one side alone is worse than fixing
+	@# neither: a shadowed field would read fine and refuse to be written.
+	@# Rows are the member KINDS and each asserts a value only the member can
+	@# produce -- a read of a shadowed property whose getter has the routine's
+	@# return type compiles either way and prints the wrong source's answer.
+	@# Class const is deliberately NOT a row (see the file header). The last row
+	@# is the control: a name this class does NOT declare must still reach
+	@# sysutils from inside a method, or the fix is "no unit routine is callable
+	@# in a method".
+	@./$(COMPILER) test/test_a_class_member_hides_a_same_named_unit_routine.pas $(TESTTMP)/test_membershadow26
+	@tools/expect_same.sh test_a_class_member_hides_a_same_named_unit_routine \
+	  "$$($(TESTTMP)/test_membershadow26)" \
+	  "$$(cat test/test_a_class_member_hides_a_same_named_unit_routine.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

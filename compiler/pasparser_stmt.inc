@@ -7890,10 +7890,23 @@ begin
           select_image()` — a method delegating to the module function it
           shadows — and the shadow-clear turned it into a call of ITSELF. }
         { the statement-side twin — see the expression site for why this is
-          NilPyUserCode and not isNilPy; the two MUST move together }
+          NilPyUserCode and not isNilPy; the two MUST move together, and the
+          four-kind member list is the half that had NOT moved. It asked about
+          METHODS only, so a FIELD, PROPERTY or CLASS VAR sharing a name with a
+          used unit's routine lost the name here too — and this is the ASSIGNMENT
+          side, so the message was `cannot assign to the result of a function
+          call`. The expression side answered `by-reference argument must be a
+          variable` for the same field. Two diagnostics, neither naming
+          resolution, for one cause; fixing only the expression side left the
+          READ of a shadowed field working and its WRITE refused, which is worse
+          than either.
+          bug-p-a-class-field-loses-its-name-to-a-same-named-unit-routine }
         if (procIdx >= 0) and (qUnit = -1) and (si < 0) and (not NilPyUserCode) and
            (CurSelfClass >= REC_UCLASS_BASE) and
-           (FindUMeth(SelfMemberCi(name), name) >= 0) then
+           ((FindUMeth(SelfMemberCi(name), name) >= 0) or
+            (FindUField(SelfMemberCi(name), name) >= 0) or
+            (FindUProp(SelfMemberCi(name), name) >= 0) or
+            (FindClassVar(SelfMemberCi(name), name) >= 0)) then
           procIdx := -1;
 
       { Bare call to a sibling CLASS (static) method, from inside a class method.
