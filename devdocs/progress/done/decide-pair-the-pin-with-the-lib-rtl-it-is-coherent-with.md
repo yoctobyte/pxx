@@ -3,12 +3,12 @@ slug: decide-pair-the-pin-with-the-lib-rtl-it-is-coherent-with
 track: U
 type: decide
 prio: 55
-status: new
+status: decided
 owner: user
 found: 2026-09-05
 found-by: frankZ, filed by frank-coordinator
 blocked-by: []
-summary: "USABLE ROLLBACK DEPTH IS ZERO. Measured across nine pins against the current tree's 54 `lib/rtl` root units: HEAD 0 failures, v404 2, v375..v403 all 14, v365 and v354 both 54. Every historical pin is STRICTLY WORSE than the current one, and `trackt pinstatus` names v354 as the recovery target -- so following the advice it prints moves you from 2 broken roots to 54. The cause is that `make revert` is `git checkout $SRC -- $(STABLE_DEFAULT_DIR)` and nothing else: the pin moves back and `lib/rtl` does not. NO ARGUMENT TO THAT COMMAND PRODUCES A COHERENT PAIR, because the pair is only coherent within one era -- each new builtin mints a cliff, roughly one a fortnight (`0f6a04644` __pxxblockmove 08-21, `31f8b11bf` System.TMethod 09-04). THIS IS NOT A REASON TO GATE A PIN and must never be read as one; if anything it argues for pinning MORE promptly, since the current pin is the best rollback target in existence. What it falsifies is a PREMISE, not a practice."
+summary: "DECIDED 2026-09-06 BY THE OWNER: RTL coherence is a PRIMARY PURPOSE of pinning, pin on regular intervals EVEN WITH REDS, and PINS ARE NOT RELEASES. Landed in CLAUDE.md. The measurement behind it: USABLE ROLLBACK DEPTH IS ZERO. Measured across nine pins against the current tree's 54 `lib/rtl` root units: HEAD 0 failures, v404 2, v375..v403 all 14, v365 and v354 both 54. Every historical pin is STRICTLY WORSE than the current one, and `trackt pinstatus` names v354 as the recovery target -- so following the advice it prints moves you from 2 broken roots to 54. The cause is that `make revert` is `git checkout $SRC -- $(STABLE_DEFAULT_DIR)` and nothing else: the pin moves back and `lib/rtl` does not. NO ARGUMENT TO THAT COMMAND PRODUCES A COHERENT PAIR, because the pair is only coherent within one era -- each new builtin mints a cliff, roughly one a fortnight (`0f6a04644` __pxxblockmove 08-21, `31f8b11bf` System.TMethod 09-04). THIS IS NOT A REASON TO GATE A PIN and must never be read as one; if anything it argues for pinning MORE promptly, since the current pin is the best rollback target in existence. What it falsifies is a PREMISE, not a practice."
 ---
 
 ## 2026-09-06 (frank-coordinator, at frankuser's request) — TWO DATED CASUALTIES IN 48 HOURS, and the window is not diligence
@@ -121,3 +121,41 @@ and is **not** part of this decision, so it can land without waiting on the desi
 call: `pinstatus` has the canary's logic to hand and should either run it or mark
 the line unvalidated. **A tool naming a target nobody validated is worse than a
 tool naming none.**
+
+## 2026-09-06 — DECIDED BY THE OWNER
+
+Owner, verbatim, asked directly with this ticket in front of him:
+
+> *"yes staying in sync with the rtl is a primary purpose of pinning. this is
+> also why we have to pin on regular intervals, even if there are reds. pins are
+> not releases."*
+
+**Three things settled, and the third is the one that explains the other two.**
+
+1. **RTL coherence is a PURPOSE of pinning, not a side effect.** The pin and
+   `lib/rtl` are one artefact. This ticket's measurement — usable rollback depth
+   zero, every historical pin strictly worse than the current one — is not a
+   defect to be repaired by making `make revert` smarter. It is what pairing
+   looks like from the other end: the pair is only coherent within one era, so
+   the way to have a coherent pair is to MINT ONE OFTEN.
+
+2. **Pin on regular intervals, EVEN IF THERE ARE REDS.** This ratifies the
+   existing graded-not-gated rule rather than adding to it, and it closes the
+   reading that keeps coming back — that a red is a reason to wait. It is not.
+   The pin in place is red too, and a policy of refusing on reds is an argument
+   for never leaving a red pin, which is how v354 stayed the last green one for
+   19 days.
+
+3. **PINS ARE NOT RELEASES.** This is the frame the whole argument was missing.
+   Every instinct that says "do not pin while something is red" is release
+   instinct — the fear of shipping a defect to someone who cannot roll back. A
+   pin ships to the fleet's own inner loop, is replaced within hours, and its
+   only irreplaceable property is that the compiler reproduces itself. Applying
+   release standards to it produces exactly the outcome release standards exist
+   to prevent: in the 49-hour gap, no pin at all, which the owner had already
+   called *"a worse outcome"* on 2026-09-01.
+
+**What this does NOT authorise:** running `make pin`. That is still the owner's
+alone and a relayed authorisation is not verifiable by the seat receiving it —
+see the 2026-09-06 refusal, which was correct. This ticket settles the POLICY;
+the act still needs him.

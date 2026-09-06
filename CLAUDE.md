@@ -190,6 +190,26 @@ one-line logbook pointer.
   `stabilize`.** A pin blocks every other lane and the human while it runs.
   `stabilize` alone does NOT move B's ground; only `make pin` does, then commit
   `stable_linux_amd64/**`.
+- **PINS ARE NOT RELEASES, AND STAYING IN SYNC WITH `lib/rtl` IS A PRIMARY
+  PURPOSE OF PINNING** (owner, 2026-09-06): *"yes staying in sync with the rtl is
+  a primary purpose of pinning. this is also why we have to pin on regular
+  intervals, even if there are reds. pins are not releases."* **Pin on a regular
+  cadence, reds included.** The pin and `lib/rtl` are ONE artefact and the pair
+  is only coherent within one era — each new builtin mints a cliff, roughly one
+  a fortnight — so the way to have a coherent pair is to mint one OFTEN, not to
+  make `make revert` cleverer. Measured 2026-09-05: usable rollback depth is
+  ZERO; every historical pin is strictly worse against the current tree than the
+  one in place. **Every instinct that says "do not pin while something is red" is
+  RELEASE instinct** — the fear of shipping to someone who cannot roll back. A
+  pin ships to this fleet's own inner loop and is replaced within hours. Applying
+  release standards to it produces the outcome those standards exist to prevent:
+  no pin at all, which is *"a worse outcome"* (owner, 2026-09-01).
+  **The cost of not pinning is not hypothetical: a fix is INERT UNTIL PINNED.**
+  Two dated casualties in 48h — `IEnumerator<T>.Current` inert for a MONTH with
+  its parser fix closed in `done/`, and `8374118ec` landing three hours after
+  pin v404, which put a RED into every session's `gate.sh quick`, not merely
+  into a sampled tier. **Before closing a compiler fix that a `lib/**` file
+  depends on, check whether a pin carries it and say so in the resolution.**
 - **A VALID PIN IS THE SELF-HOST FIXEDPOINT. NOTHING ELSE MAY BLOCK ONE** (owner,
   2026-09-01). Not a red tier, not a red count, not a shadow verdict. A pin is
   GRADED, never gated: `green` (a full tier at that tree, no RED) or
