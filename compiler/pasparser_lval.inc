@@ -7746,7 +7746,33 @@ begin
   else if CaseEqual(nm, 'qword') or CaseEqual(nm, 'uint64') then Result := tyUInt64
   else if CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint')
        or CaseEqual(nm, 'sizeint') then Result := tyNativeInt
-  else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then Result := tyNativeUInt
+  { `sizeuint` was in BuiltinScalarTypeKind's nativeuint line and NOT in this
+    one -- the exact drift BuiltinScalarTypeKind's own comment warns about
+    ("sizeint/sizeuint were in one and not the other"), half repaired. SizeInt
+    had since been added here; SizeUInt had not, and nothing failed loudly
+    because the two tables serve DIFFERENT DOORS: the cast path and SizeOf ask
+    BuiltinScalarTypeKind, so `SizeUInt(v)` and `SizeOf(SizeUInt)` were both
+    correct, while High/Low and TypeInfo ask this one and answered
+    `undefined variable (SizeUInt)` -- against fpc 3.2.2's
+    18446744073709551615. One name, three doors, two right.
+
+    Found by DIFFING THE TWO TABLES rather than by a failing program: this is a
+    strict subset of BuiltinScalarTypeKind (30 names of 51) with no name
+    disagreeing, so the only defect a diff could expose is a MISSING one, and
+    there was exactly one ordinal missing.
+
+    NOT delegating this function to BuiltinScalarTypeKind, which is what the
+    subset relation invites. Measured against fpc first: of the 21 names only
+    that table has, fpc accepts `High` for four -- SizeUInt and the three sized
+    booleans -- and it answers TRUE for ByteBool/LongBool/WordBool. Those are
+    deliberately mapped to tyUInt8/tyInteger/tyUInt16 there to keep their C-ABI
+    WIDTH, so a delegation would answer High(LongBool) = 2147483647 and be
+    wrong on three names to fix one. The general-looking fix is the one that
+    adds cases. The sized booleans need a kind that carries width AND boolean
+    High/Low, which this table cannot express, and that is not this row's job.
+    refactor-p-five-dispatch-sites-for-one-named-type-cast }
+  else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint')
+       or CaseEqual(nm, 'sizeuint') then Result := tyNativeUInt
   else if CaseEqual(nm, 'boolean') then Result := tyBoolean
   else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
   { WideChar — a UTF-16 code UNIT, 2 bytes. Its own kind (storage is tyUInt16's)

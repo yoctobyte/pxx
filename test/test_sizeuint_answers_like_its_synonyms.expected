@@ -1,0 +1,9 @@
+high = nativeuint  TRUE
+high = ptruint     TRUE
+low  = nativeuint  TRUE
+high <> sizeint    TRUE
+sizeof = pointer   TRUE
+sizeof = nativeuintTRUE
+cast = high        TRUE
+sizeint = nativeintTRUE
+SIZEUINT SYNONYMS OK
