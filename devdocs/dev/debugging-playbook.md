@@ -20074,3 +20074,70 @@ whose must-fail row stops failing is telling you the row is gone. Assert that
 your loop RAN — a count of targets measured, printed and compared — and the
 deletion becomes visible instead of silent. `c_pal_time` already does this
 (`N of M cross targets measured`), which is the shape to copy.
+
+## `grep -qv` MEANS TWO DIFFERENT THINGS AND THEY DIVERGE ONLY ON MIXED INPUT — the agent shell's `grep` is ugrep, and its answer there is "safe"
+
+Measured 2026-09-06 (frankC), found by a guard of mine that printed the wrong
+verdict on the one input it existed to catch.
+
+**In the agent Bash environment `grep` is a shell FUNCTION wrapping ugrep
+7.8.4.** `/usr/bin/grep` is GNU grep 3.12. The two implement `-qv` differently:
+
+- **GNU:** exit 0 if *any line was selected by the inverted match* — i.e. if some
+  line does NOT match the pattern.
+- **ugrep:** `-qv` is the negation of `grep -q` — exit 0 if *NO line matched*.
+
+Nothing errors. Both are quiet, both return a status, and neither is wrong about
+its own question.
+
+| file contents (pattern `^devdocs/`) | ugrep wrapper | `/usr/bin/grep` | |
+| --- | --- | --- | --- |
+| `devdocs/a`, `tools/b` (**mixed**) | **1** | **0** | **DISAGREE** |
+| `tools/b`, `tools/c` (none match) | 0 | 0 | agree |
+| `devdocs/a`, `devdocs/b` (all match) | 1 | 1 | agree |
+
+**THE DIVERGENCE IS EXACTLY THE CASE THE GUARD EXISTS FOR, AND THE ANSWER IS THE
+PERMISSIVE ONE.** A test written as *"if any path is not a docs path, hold"* —
+`if grep -qv '^devdocs/' paths; then HOLD; fi` — holds correctly under GNU and,
+under the wrapper, sails through on precisely the mixed list that contains the
+one offending path. An all-docs list and an all-code list both answer
+identically under either grep. **The interesting input is the only one that
+moves.**
+
+**So the obvious positive control certifies the broken idiom.** Feed the guard a
+list of pure code paths: it holds, under both greps, and reads as proven. That
+control is drawn from the wrong population — see "A GUARD THAT CANNOT FAIL IS
+NOT A GUARD" in CLAUDE.md. **A `-v` guard's control MUST be a mixed list**, and
+the row that matters is the one where the majority and the exception disagree.
+
+**Scope, measured:** the hazard is confined to Bash tool calls an agent types.
+`sh -c "grep -qv ..."` gets GNU (verified: exit 0 on mixed, matching
+`/usr/bin/grep`), so committed `tools/*.sh` and Makefile recipes — which run
+under `/bin/sh` — are unaffected. A repo scan found exactly one `grep -qv` in
+committed tooling, `Makefile:29633`, running under `/bin/sh`, correct.
+
+**Safe idioms, both verified to agree across all three populations above:**
+
+- `if grep -q '<offender>' file; then HOLD; fi` — assert the presence of what you
+  are afraid of, never the absence of what you want. This is the good form for
+  another reason: it names the offender, so the failure message can print it.
+- `n=$(grep -cv '<wanted>' file)` then branch on `$n` — counts agree between the
+  two greps, and you get the denominator instead of a bit.
+- `/usr/bin/grep -qv ...` — an explicit absolute path, when you truly want GNU's
+  reading.
+
+**This is a DIFFERENT hazard from the one already recorded at `Makefile:9948`**,
+and a file can have both. That comment warns that `grep -qv` is *unfalsifiable*
+on its input — "passes whenever any line fails to match, i.e. on every ELF, i.e.
+it can never fail" — which is a trap in GNU's own semantics, present with no
+ugrep anywhere. The one here is that the same three characters mean something
+else in the shell you are typing into. One is a guard that always passes; the
+other is a guard that passes on the input it was built for. **Reading the
+`Makefile` comment does not immunise you against this, and vice versa.**
+
+The general form: **an instrument whose NAME is stable across two
+implementations while its QUESTION is not.** `grep -qv` is `grep -qv` in both,
+so nothing in the command text tells you which one you got — and the two answers
+coincide everywhere except where you needed to ask. Compare "Every instrument
+that lies, lies by being CORRECT ABOUT SOMETHING ELSE" in CLAUDE.md; this is
+that, with the something-else selected by which binary is first on `PATH`.
