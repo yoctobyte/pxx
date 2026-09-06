@@ -105,35 +105,44 @@ for t in $TARGETS; do
     printf '  %-9s builds   %s\n' "$t" "$got"
     built=$((built + 1))
   else
-    # THE EXPECTED REFUSAL MOVED, AND THE CHECK FOLLOWS IT RATHER THAN LOOSENING.
+    # THE EXPECTED REFUSAL MOVED TWICE IN ONE DAY, AND THE CHECK FOLLOWS IT
+    # RATHER THAN LOOSENING. Both moves were caught by this branch failing,
+    # which is the branch working.
     #
     # Until 2026-09-06 the only admissible refusal was "C program entry stub not
     # implemented", which is what put wasm32 outside this check by construction.
     # That stub now exists (WasmEmitCEntry): a freestanding C program builds and
     # runs on wasm32. This subject is not freestanding -- it needs <stdio.h> to
-    # print -- so it now stops one wall EARLIER than va_arg, at the environment:
-    # the crtl that stdio pulls declares `environ`, and wasm32 has no initial
-    # stack to derive it from.
+    # print -- so it moved one wall EARLIER than va_arg, to the environment.
     #
-    # Both spellings stay admissible and NEITHER is a wildcard. The point of
-    # this branch is that a refusal for any OTHER reason means the check quietly
-    # stopped covering the target, and that is still exactly what it detects --
-    # the set of accepted reasons grew by one NAMED wall, each tied to a ticket:
+    # Then the environ wall was removed too (WasmEmitEnvironFetch), and wasm32
+    # landed on va_arg ITSELF. That is the best refusal this script can get from
+    # a target and it is worth saying why: the subject of the check is now the
+    # thing the target names. A target that says "variadic C functions are not
+    # yet supported" is NOT the danger this script exists for -- the danger is a
+    # C-capable target absent from cparser.inc's four sets, which falls into the
+    # `TargetArch <> TARGET_X86_64` arm, silently takes aarch64's 8-byte
+    # two-bank layout, and prints WRONG VALUES from the second argument on. A
+    # named refusal is the safe direction; a silent wrong value is not.
     #
-    #   C program entry stub  ->  bug-c-no-c-program-entry-stub-for-wasm32-...
-    #   environ               ->  the environ_get gap named in that ticket's
-    #                             wall list; upstream of va_arg, so va_arg
-    #                             remains unreachable here either way.
+    # THE ENVIRON SPELLING IS GONE FROM THIS LIST RATHER THAN KEPT "just in
+    # case". No target can produce it any more, so leaving it would be an
+    # admissible reason that cannot occur -- dead tolerance that reads as
+    # coverage, and one more thing for a future reader to believe is load
+    # bearing. The list is what CAN happen, not what once did.
+    #
+    #   C program entry stub  ->  a target with no stub yet
+    #   va_arg not supported  ->  the target names the subject itself
     #
     # DO NOT collapse these to `grep -q error:`. The whole value of this branch
     # is that it names which wall, and a check that accepts any error is a check
     # that cannot fail.
     if grep -q 'C program entry stub' "$WORK/build_$t.log"; then
       why='no C entry stub yet'
-    elif grep -q 'environ' "$WORK/build_$t.log"; then
-      why='no environ on wasm32 (upstream of va_arg)'
+    elif grep -q 'variadic C functions (va_arg) are not yet supported' "$WORK/build_$t.log"; then
+      why='va_arg refused by name -- the honest wall, not a silent wrong layout'
     else
-      fail "$t refused for a reason that is NEITHER the C entry stub NOR the environ wall, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
+      fail "$t refused for a reason that is NEITHER the C entry stub NOR a va_arg refusal by name, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
     fi
     printf '  %-9s refuses  %s -- outside this check by construction, and the trigger\n' "$t" "$why"
     refused=$((refused + 1))
