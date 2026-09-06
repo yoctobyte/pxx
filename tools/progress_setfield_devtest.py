@@ -35,6 +35,27 @@ CASES = {
         "# title\n\nplain body, no frontmatter at all\n",
         lambda out: out.startswith("---\nowner: claude@xeon\n---\n"),
     ),
+    "EMPTY-bullet-is-filled-in-place-not-below-the-blank-line": (
+        # THE NEWLINE BUG, BOTH SIDES. `park` writes an EMPTY bullet by design.
+        # With `\\s*` spanning newlines, set_field then matched
+        # `- **Owner:** \\n\\n` and wrote the value AFTER the blank line -- a bare
+        # word floating in the prose with the bullet still empty -- and
+        # first_bullet_value read that stray line back, so the round trip was
+        # self-consistent and produced a corrupt file. Measured live 2026-09-06
+        # on feature-pascal-corpus-fpc-testsuite: a `claim` after a `park` put
+        # `frankS` on its own line two lines below an empty Owner bullet.
+        "---\ntrack: P\n---\n\n# title\n\n- **Owner:** \n\nBody prose starts here.\n",
+        lambda out: ("- **Owner:** claude@xeon" in out
+                     and "\n\nclaude@xeon\n" not in out
+                     and "Body prose starts here." in out),
+    ),
+    "an-EMPTY-bullet-reads-as-EMPTY-not-as-the-next-paragraph": (
+        # The read side on its own. Nothing is written here that matters; the
+        # assertion is about what first_bullet_value says of the INPUT shape.
+        "---\ntrack: P\n---\n\n# title\n\n- **Track:** \n\nfrankS\n",
+        lambda out: progress.first_bullet_value(
+            "---\ntrack: P\n---\n\n# t\n\n- **Track:** \n\nfrankS\n", "Track") == "",
+    ),
     "prose-decoy": (
         # a `owner:`-looking line in PROSE must not be mistaken for the field
         "---\ntrack: T\n---\n\n# title\n\nThe log said `owner: someone-else` in prose.\n",

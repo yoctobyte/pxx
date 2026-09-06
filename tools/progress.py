@@ -380,8 +380,20 @@ def _tag_onto(lane: str, tag: str) -> str:
 
 
 def first_bullet_value(text: str, marker: str) -> str:
+    """Read `- **Marker:** value`, ON ONE LINE.
+
+    `\\s` MATCHES NEWLINES AND THAT MADE AN EMPTY BULLET READ AS THE NEXT
+    PARAGRAPH. Measured 2026-09-06: `- **Owner:** ` with nothing after it
+    returned `frankS` -- a bare word two lines below -- because `\\s*` after
+    the `**` walked over the blank line and `(.*)` then matched real prose. The
+    regex did not error and the value looked plausible, so `Ticket.owner`
+    reported a parked ticket as held by whatever word followed it.
+
+    Horizontal whitespace only, on both sides of the value. A bullet's value is
+    on the bullet's line; a continuation line is prose and is not this field.
+    """
     pat = re.compile(
-        rf"^\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*(.*)$",
+        rf"^[^\S\n]*-?[^\S\n]*\*\*{re.escape(marker)}:\*\*[^\S\n]*(.*)$",
         re.IGNORECASE | re.MULTILINE,
     )
     m = pat.search(text)
@@ -2255,8 +2267,17 @@ pre code{background:none;padding:0}
         # ONE finding, not one per row. A twelve-line explanation repeated four
         # times is the shape that earns the habit of being scrolled past, and
         # the explanation is identical every time -- what differs is the list.
+        # USE `t.owner`, NOT `t.fm["owner"]`. The accessor already exists and
+        # already does the thing this check got wrong on its first outing: it
+        # falls back to the `- **Owner:**` BULLET, and treats an em-dash as
+        # empty. `set_field` PREFERS the bullet whenever a ticket has one, so
+        # `claim` writes the owner where the frontmatter key never appears --
+        # and a frontmatter-only read reports two correctly-claimed tickets as
+        # unowned. Shipped that way for one hour on 2026-09-06: 3 findings, 1
+        # real. A check that is right about one row in three earns the habit of
+        # being scrolled past, which is the failure this file already names.
         orphan_work = [t for t in self.by_status.get("working", [])
-                       if not str(t.fm.get("owner", "")).strip().strip('"\'')]
+                       if not str(t.owner).strip().strip('"\'')]
         if orphan_work:
             warning_count += 1
             rows_txt = ", ".join(f"{t.slug} [{t.track} p{t.prio}]"
@@ -2962,7 +2983,18 @@ def set_field(path: Path, marker: str, value: str) -> None:
     key = marker.lower()
     fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
     has_fm_key = bool(fm and re.search(rf"(?mi)^{re.escape(key)}:.*$", fm.group(1)))
-    pat = re.compile(rf"^(\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*).*$", re.I | re.M)
+    # AND THE SAME NEWLINE BUG ON THE WRITE SIDE, WHICH CORRUPTS RATHER THAN
+    # MISREADS. With `\s*` spanning newlines this matched
+    # `- **Owner:** \n\n` on an EMPTY bullet and wrote the value AFTER the
+    # blank line -- a bare word floating in the prose, bullet still empty,
+    # and `.*` ate whatever line was already there. `park` writes an empty
+    # bullet by design, so every `claim` following a `park` did this. It
+    # round-tripped cleanly because the reader had the same bug, which is
+    # why nothing noticed. Horizontal whitespace only: a bullet field is on
+    # the bullet's line, and the next line is prose.
+    pat = re.compile(
+        rf"^([^\S\n]*-?[^\S\n]*\*\*{re.escape(marker)}:\*\*[^\S\n]*).*$",
+        re.I | re.M)
     if has_fm_key:
         # frontmatter first (authoritative), then the bullet if the body has one,
         # so the two forms cannot drift apart.
@@ -3349,8 +3381,16 @@ def _warn_claim_is_local(slug: str, owner: str) -> None:
                   "another row.", file=sys.stderr)
             break
     if held.returncode == 0:
-        m = re.search(r"^owner:\s*(.+)$", held.stdout, re.I | re.M)
+        # BOTH FORMS. `set_field` prefers the `- **Owner:**` bullet when the
+        # ticket has one, so a frontmatter-only match misses every claim on a
+        # ticket written in the older style -- silently, in the direction that
+        # says "nobody holds it".
+        m = (re.search(r"^owner:\s*(.+)$", held.stdout, re.I | re.M)
+             or re.search(r"^\s*-?\s*\*\*Owner:\*\*\s*(.+)$",
+                          held.stdout, re.I | re.M))
         other = (m.group(1).strip().strip('"\'') if m else "")
+        if other == "\u2014":
+            other = ""
         if other and other != owner:
             print(f"\nclaim: HEADS UP — origin/{branch} already has this ticket in "
                   f"working/ under {other}.", file=sys.stderr)

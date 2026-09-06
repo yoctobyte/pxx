@@ -45,9 +45,8 @@ that traces to `ErrorAddr` or `GetFPCHeapStatus`, re-add the edge and say which 
 - **Track:** P (Pascal frontend)
 - **Status:** working
   [[feature-pascal-corpus-expansion]].
-- **Owner:** 
+- **Owner:** frankS
 
-frankS
 FPC ships `tests/test/**` — thousands of small `.pp` programs, each exercising
 one language feature (`tbs*`, `tobject*`, `tgeneric*`, `terror*` for expected
 failures, etc.). It is the **c-testsuite analog for Pascal**, but authoritative
