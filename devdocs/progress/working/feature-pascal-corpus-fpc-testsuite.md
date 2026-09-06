@@ -571,3 +571,30 @@ suite is missing. That is filed as
 sections are frankA's; frontmatter `owner:` deliberately left unset rather than
 assigned by a passing seat.
 
+
+## 2026-09-06 (frankS) — new census, and the RUNNER MOVED under it
+
+**`377 pass, 0 fail, 123 skip, 50 auto-gated (of 550)`** at `e929e720f`,
+compiler `d1d15deee084`.
+
+**Read the pass count against a changed instrument, not against 368.**
+`109fbebb1` added a **unit-source auto-gate**: pxx cannot compile a unit
+standalone, so it answers "this file is a unit, not a program" for every one —
+a REFUSAL, which under the `%FAIL` contract meant **every unit-source `%FAIL`
+row passed vacuously, whatever it contained**. Those rows are now auto-gated
+instead of counted. **17 rows are gated as `unit-source` in this census**, and
+some fraction of them were previously in the 368.
+
+So the two numbers are not directly comparable in either direction, and I am
+NOT claiming a decomposition I did not measure — running the old runner at the
+old commit is what that would take. What is safe to say:
+
+- **it went UP, not down.** frank-coordinator flagged the opposite risk (a
+  smaller number after a runner change reads as a regression); the generic-method
+  work landed more rows than the gate removed.
+- **`0 fail` across all 550.** `tgeneric4` and `tgenfunc13` were the last two and
+  both are dispositioned with measured values.
+
+If you re-run this and want a clean delta, the runner change is `109fbebb1` and
+`--report` writes a per-row TSV; diffing two reports separates "newly gated"
+from "newly passing" without re-deriving anything.
