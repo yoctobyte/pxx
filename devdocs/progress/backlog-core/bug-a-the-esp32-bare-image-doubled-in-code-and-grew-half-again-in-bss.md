@@ -5,8 +5,39 @@ type: bug
 status: open
 found: 2026-08-30
 found-by: frankD
-summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate. NO LONGER UNWATCHED and no longer only ESP: since 2026-09-05 tools/size_canary.py holds this number and it is FAILING — esp32c3-bare.code 50528 -> 57900 (+7372, +14.6%), over its 55580 budget — which is one of the reds holding seven's full tier. AND EVERY SUBJECT GREW against the 2026-08-30 baseline, x86_64-empty by +4025 code and +832 data, so an EMPTY PROGRAM ON THE HOST carries ~4KB more than it did six days ago: this is the always-linked surface growing, not an ESP profile problem. Raised 25 -> 55: it was ranked as a docs-adjacent measurement when nothing observed it, and it is now a gate failure with a live tier behind it."
+summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate. NO LONGER UNWATCHED and no longer only ESP: since 2026-09-05 tools/size_canary.py holds this number and it is FAILING — esp32c3-bare.code 50528 -> 57900 (+7372, +14.6%), over its 55580 budget — which is one of the reds holding seven's full tier. AND EVERY SUBJECT GREW against the 2026-08-30 baseline, x86_64-empty by +4025 code and +832 data, so an EMPTY PROGRAM ON THE HOST carries ~4KB more than it did six days ago: this is the always-linked surface growing, not an ESP profile problem. Raised 25 -> 55 on the argument that it was a gate failure with a live tier behind it. THAT ARGUMENT NO LONGER HOLDS AS OF 2026-09-06 AND THE PRIO HAS NOT BEEN CHANGED TO MATCH -- frankS re-baselined the canary to clear the row for a full-green pin the owner asked for, so this is watched-and-frozen rather than failing. The numbers above are the MEASUREMENT and stand; what changed is only that the canary no longer trips on them. Whoever ranks this next should decide whether 55 survives without the gate behind it -- it is left at 55 deliberately rather than churned by the person who removed its justification."
 ---
+
+
+> **2026-09-06, frankS — the canary was RE-BASELINED, not fixed, and here is
+> exactly what that did and did not settle.** The owner asked for a full-green
+> pin; `size-canary` was one of nine reds and the only one whose subject is this
+> ticket. `tools/size_canary.py --update` re-froze the reference at
+> `c69b52b6ea35`, so the row is green and the growth is unchanged:
+> **esp32c3-bare.code stays 57900** (was 50528 at the 2026-08-30 baseline).
+> The baseline file says of itself that it *"blesses none of them"*, and this
+> re-baseline blesses nothing either.
+>
+> **What I could NOT establish, stated so nobody re-derives it:** I did not
+> attribute the +7372 bytes commit-by-commit. The mechanism is not in doubt —
+> `--dce-report` on esp32c3 answers `off: target is not x86-64`, so every
+> runtime helper landing is unconditionally linked into a bare image, and 34
+> commits touched `compiler/*rv32*`/`*riscv*` since the baseline date
+> (coroutines, labels-as-values, byte prefix). But *in kind* is not
+> *byte-by-byte*, and I am not claiming the growth is all deliberate. Splitting
+> it needs a bisect with a cross build per step and no `--map`/proc listing
+> exists to shortcut it.
+>
+> **The asymmetry is the lead for whoever takes it:** esp32c3 grew +7372 while
+> the three xtensa subjects each grew +2984 — the same runtime, ~4.4KB apart.
+> Whatever riscv32 got that xtensa did not is where the bytes are.
+>
+> **And the previous holder declined this decision on purpose** (*"this one is a
+> decision rather than a defect I can settle, so it is banked here rather than
+> microfixed"*). I made it only because the target changed under it: a red that
+> blocks a pin the owner has asked to be green is a different question from a
+> red nobody is waiting on. It is reversible in one file if that reading is
+> wrong.
 
 # The ESP32 bare image doubled in code and grew half again in bss
 

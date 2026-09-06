@@ -139,21 +139,40 @@ def load_baseline():
 
 
 def head_id():
-    """(sha12, commit date) of HEAD — the provenance a baseline needs.
+    """(sha12, commit date, commit SUBJECT) of HEAD — provenance that survives.
 
     The COMMIT date, not the wall clock: a baseline file must say which tree it
     was measured against, and a timestamp that moves when you re-run the same
     measurement says nothing.
+
+    AND THE SUBJECT, because THE SHA IS A GHOST ~100% OF THE TIME. This is a
+    LOCAL `git log -1`, so it reads HEAD before tools/sync.sh rebases and
+    pushes, and this repo rebases nearly every sync -- so the sha written here
+    names a commit that does not survive to origin/master. Measured 2026-09-06:
+    the baseline recorded `4039216a7f25`, which is on no remote ref at all, and
+    the failure is SILENT in the worst way -- `git log 4039216a7f25..origin/master`
+    exits 0 and prints NOTHING, so "which commits landed since the baseline"
+    answers "none" rather than erroring. That reads as "nothing changed", which
+    is the exact opposite of the truth the canary had just reported.
+
+    Reading it off origin/master instead is not available here: --update runs
+    BEFORE the commit exists, which is why this cannot simply be fixed by
+    quoting a pushed sha. The subject is the documented recovery path (CLAUDE.md,
+    "Recover a ghost by matching the commit SUBJECT on origin/master"), it
+    survives a rebase because a rebase preserves messages, and it costs one
+    field. The sha stays as a hint, not as an identifier.
     """
     try:
-        r = subprocess.run(["git", "log", "-1", "--format=%H %cI"], cwd=ROOT,
-                           capture_output=True, text=True)
+        r = subprocess.run(["git", "log", "-1", "--format=%H%x1f%cI%x1f%s"],
+                           cwd=ROOT, capture_output=True, text=True)
         if r.returncode != 0:
-            return "", ""
-        parts = r.stdout.split()
-        return parts[0][:12], (parts[1] if len(parts) > 1 else "")
+            return "", "", ""
+        parts = r.stdout.rstrip("\n").split("\x1f")
+        while len(parts) < 3:
+            parts.append("")
+        return parts[0][:12], parts[1], parts[2]
     except OSError:
-        return "", ""
+        return "", "", ""
 
 
 def compare(measured, baseline):
@@ -195,8 +214,11 @@ def compare(measured, baseline):
 def render(rows, baseline):
     out = []
     at = (baseline or {}).get("measured_at") or {}
-    out.append("size-canary: baseline %s (%s)"
-               % (at.get("sha", "unknown"), at.get("date", "undated")))
+    # The sha is a pre-rebase HEAD and usually a ghost -- see head_id -- so the
+    # SUBJECT is printed beside it, and it is the half a reader can act on.
+    out.append("size-canary: baseline %s (%s)%s"
+               % (at.get("sha", "unknown"), at.get("date", "undated"),
+                  ("  %s" % at["subject"]) if at.get("subject") else ""))
     out.append("  %-14s %10s %10s   %10s %10s   %10s %10s"
                % ("subject", "code", "d(code)", "data", "d(data)", "bss", "d(bss)"))
     for subject, got, want, err in rows:
@@ -262,7 +284,7 @@ def main():
                            "them. See "
                            "bug-a-the-esp32-bare-image-doubled-in-code-and-grew-"
                            "half-again-in-bss.",
-               "measured_at": dict(zip(("sha", "date"), head_id())),
+               "measured_at": dict(zip(("sha", "date", "subject"), head_id())),
                "subjects": {s: measured[s] for s, _ in SUBJECTS}}
         with open(BASELINE, "w") as fh:
             json.dump(doc, fh, indent=2, sort_keys=True)
