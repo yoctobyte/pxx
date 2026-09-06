@@ -1,5 +1,5 @@
 ---
-summary: "CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test"
+summary: "CORPUS_RE captures punctuation out of recipe PROSE and invents a corpus tree that cannot exist, silently skipping the job — twice: 'stb)' 2026-07-31, and 'zlib.' 2026-09-06 after the first fix removed ')' and kept '.'"
 type: bug
 track: T
 prio: 55
@@ -91,3 +91,75 @@ a drive-by — but items 1 and 2 are self-contained.
 - 2026-08-03 — resolved, commit c7400944e.
   Items 1 and 2 only; item 3 (skip published as pass) is split out as
   [[bug-t-tstate-launders-skip-into-pass]] — it changes the tstate schema.
+
+
+---
+
+## REOPENED 2026-09-06 — the same defect, one character narrower
+
+The 2026-07-31 fix tightened the class to `[A-Za-z0-9_.+-]+`, which removed `)`
+and **kept `.`**. A sentence-ending full stop after a corpus path is therefore
+still swallowed. `test-zlib`'s recipe carries a shell-comment line
+
+```
+	: '  other zlib header still resolves out of $(ZLIB_SRC).'; \
+```
+
+which `make -n` hands the detector as `... out of library_candidates/zlib.`.
+The capture is `zlib.`, `library_candidates/zlib.` is not a directory, and the
+job self-skips on every host as `corpus absent: library_candidates/zlib.`
+— fetched or not.
+
+### It cost seventeen minutes of coverage on the release box, not eight days
+
+Measured from seven's own reports in `devdocs/progress/tstate/reports/`:
+
+| when | sha | tier | skips / holes | test-zlib |
+| --- | --- | --- | --- | --- |
+| 18:02:17Z | `c69b52b` | full | 6 / 1 | RAN (present as a red job) |
+| 18:20:46Z | `2523453c4` | — | — | the comment line lands |
+| 18:37:24Z | `6d04b14` | full | 7 / 2 | SKIPPED, "corpus absent" |
+
+`2523453c4` is *"fix(T): test-zlib's unity runner was invalid C — the compiler
+was right"* — a commit whose entire purpose was to make this row measurable.
+**The fix hid the row it fixed**, and the very next tier recorded the skip. The
+corpus itself had been present on that box since 2026-08-29 and never moved, so
+every reading that starts from "the corpus is missing" is chasing a fact that
+was never true.
+
+### Why the devtest could not catch it — two independent reasons
+
+`tools/testmgr_corpus_skip_devtest.py`'s `case_real_makefile_yields_only_real_trees`
+was written for exactly this and passed throughout.
+
+1. **Wrong population.** It scans the Makefile SOURCE, where the line still
+   reads `$(ZLIB_SRC).`; the string `library_candidates/zlib.` exists only in
+   `make -n` OUTPUT, which is what the detector actually reads. A control drawn
+   from the wrong population passes and certifies the broken instrument.
+2. **Wrong alphabet.** Its phantom filter tests for `()[]{};"'` `` ` `` `$`. A
+   full stop is in none of them — it could not have failed on this shape even
+   with the right input.
+
+### The fix
+
+`CORPUS_RE` may no longer capture a name ENDING in a dot. An interior dot is
+left alone: no corpus has one today, and forbidding it would be the opposite
+defect the day someone fetches `lua5.4`. Repaired at the INSTRUMENT rather than
+at the comment, because the comment is one writer away from coming back and the
+next prose sentence to end in a corpus path lands somewhere with no repro.
+
+Three devtest cases added, labelled by what each can actually observe: the
+trailing-dot case is the regression control and was verified to FAIL under the
+pre-fix regex; the interior-dot case passes under the pre-fix regex too and its
+docstring says so, so nobody counts it as a control it cannot be.
+
+### The residual, NOT fixed here, and it has no owner yet
+
+A recipe's own SKIP line can never be counted as a skip HOLE. `_self_skipped`
+returns the whole matched line, which always begins `<target>: SKIP`, while
+`SKIP_HOLE_PREFIXES` matches at position 0. So every self-skipping recipe arm —
+`test-zlib`'s own `gcc oracle not found`, and the five gtk skips on the
+18:37:24Z report — is counted in `skips` and never in `skip_holes`. Five of
+seven skips there were invisible to the coverage number. Flagged to frankB, who
+holds the neighbouring absence-detector defect; it is a design question about
+hole accounting, not a typo.

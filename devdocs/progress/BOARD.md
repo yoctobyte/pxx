@@ -786,7 +786,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
+| bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE captures punctuation out of recipe PROSE and invents a corpus tree that cannot exist, silently skipping the job — twice: 'stb)' 2026-07-31, and 'zlib.' 2026-09-06 after the first fix removed ')' and kept '.' | — |
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 

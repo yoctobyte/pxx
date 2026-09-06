@@ -1414,7 +1414,29 @@ COMPILE_RE = re.compile(
 # self-skipped permanently on every host, fetched or not, and the remedy the
 # warning printed (`install_lib_candidates.sh stb)`) was itself invalid.
 # bug-t-corpus-regex-invents-phantom-tree.
-CORPUS_RE = re.compile(r"library_candidates/([A-Za-z0-9_.+-]+)")
+#
+# ...AND THE SAME DEFECT CAME BACK ONE CHARACTER NARROWER. Tightening the class
+# removed `)` and kept `.`, so a SENTENCE-ENDING FULL STOP is still swallowed:
+# the test-zlib recipe carries the shell-comment line
+#
+#     : '  other zlib header still resolves out of $(ZLIB_SRC).'; \
+#
+# which `make -n` hands over as `... out of library_candidates/zlib.`, and the
+# capture is `zlib.`. `library_candidates/zlib.` is not a directory, so the job
+# self-skipped as `corpus absent: library_candidates/zlib.` on a box where the
+# corpus had been sitting since 2026-08-29. Measured on seven: full tier at
+# 18:02Z RAN test-zlib (skips 6, holes 1); the tier at 18:37Z skipped it (skips
+# 7, holes 2), and the comment line landed at 18:20Z in 2523453c4 -- the commit
+# whose whole purpose was to make this row measurable. Seventeen minutes.
+#
+# So the capture may not END with a dot. A dot inside a name is left alone (no
+# corpus has one today, and the class has always allowed it); a trailing one
+# cannot be part of any directory name and is always prose. Fixing the regex
+# rather than the comment because the comment is one writer away from coming
+# back, and the next prose sentence to end in a corpus path would land
+# somewhere with no repro at all.
+CORPUS_RE = re.compile(
+    r"library_candidates/([A-Za-z0-9_+-](?:[A-Za-z0-9_.+-]*[A-Za-z0-9_+-])?)")
 # Corpus trees are gitignored scratch under more than one root. `lib-test`
 # reaches external/synapse, which no Makefile guard protects — so before this
 # table existed, enrolling lib-test made the full tier permanently RED on any
