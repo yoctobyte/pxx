@@ -545,6 +545,72 @@ notification that belongs to another run is indistinguishable from yours by
 inspection — so the answer is not "look harder at the notification", it is
 "go read an artifact that could only have come from the run you started".
 
+### The INVERSE, measured 2026-09-06: the notification that never arrives
+
+Same defect from the other end, and it is the nastier half. Five completion
+notices arrived in frankZ's session — *"Wait for the gate verdict"*, *"Block
+until the gate verdict lands"*, three more — every one of them `killed ...
+system is running low on memory`, and **none of them frankZ's**. Their commands
+named frankB's scratchpad and grepped frankB's `gate5.log`. So frankZ got
+frankB's notices, and frankB got none.
+
+**frankB was waiting to be woken by a watcher that had already died.** Its
+suite run was alive the whole time — the log grew 4442 -> 7381 lines with 895
+`ok:` rows and no error — and the only thing that had stopped was the thing
+whose job was to say so.
+
+> **A notification that never arrives is indistinguishable from a run that has
+> not finished.** No error, no output, just silence that looks exactly like
+> patience.
+
+That is why this half is worse than the entry above. A notice about someone
+else's run at least *arrives* and can be interrogated. A missing one presents as
+the normal appearance of waiting, so there is no moment at which anything
+prompts you to check — and the longer the real run legitimately takes, the more
+convincing the silence gets.
+
+It also joins the family CLAUDE.md already names in the coordinator section:
+**blocked and finished are the same silence.** Add a third member — *waiting on
+a dead watcher* — which is silent for a third reason and looks identical to both.
+
+**The remedy is the one above, and this is a second independent argument for
+it:** read an artifact you named, on your own schedule. Point 2 of that list
+already says the artifact route "survives the notification being dropped,
+delayed, or belonging to somebody else" — this is the measured instance of
+*dropped*, and it cost nothing only because a second session happened to receive
+the misrouted notices and said so. **Do not build a wait around being told.**
+Poll the log you named, or make the completion write a sentinel line you can
+grep; the notification is a convenience, never the mechanism.
+
+Corollary for the co-tenancy case: these were killed under memory pressure with
+three sessions building at once, so **the condition that kills your watcher is
+positively correlated with the condition that makes your run slow** — the
+silence lengthens exactly when it is most likely to be false.
+
+### And a REPORT is an artifact with a timestamp, which is not the same as current
+
+Measured the same night, by the session that wrote the entry above, an hour
+later. frankZ read "the newest tstate report" for seven, found a native-tier
+`test-core` red, bisected it to a commit and messaged the author — who had
+**already fixed it 1h43m before the message was written**.
+
+Nothing was wrong with the measurement. The bisect was correct, the attribution
+was correct, and the mechanism guess was correct. **The report was 4.7 hours
+old**, and `ls | tail -1` answers "newest available", never "current". Between
+that report and the reading, the watcher had not published — so the freshest
+artifact in the tree described a tree that no longer existed.
+
+**`ls | tail -1` on an artifact directory has the same failure mode as reading a
+sha's timestamp:** it is a true statement about what exists, read as a statement
+about what is true now. The tell is free and was not taken — **print the report's
+own age**, not just its contents, and treat anything older than the interval the
+publisher normally keeps as a historical record rather than a verdict.
+
+This is the cheap direction of the error (a message costing a peer one check,
+against a red left unexplained), so raising it was still right. But the same
+staleness pointed the other way — reading an old GREEN as current — licenses a
+claim that nothing is broken, and that one is not cheap at all.
+
 ## `make`'s error bracket names the TARGET'S RULE, not the failing line — and there is no check that tells you which you are holding
 
 Measured 2026-09-05, frankC and frankB, reconciling two reports of one red row.
