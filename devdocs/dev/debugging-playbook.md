@@ -17194,6 +17194,74 @@ in code, and the odd one out is the defect. This is `a rule spelled per caller f
 ABSENT COPY` with the search made cheap: **find the majority pairing, then find who does not
 do it.**
 
+## A TEST ID OF THE FORM `job#row` INVITES GROUPING BY JOB — and for a step that runs in EVERY job, the job is the wrong key
+
+Measured 2026-09-06 during the fleet sync. An inventory of ten reds showed **three in
+`test-emit-obj`**, which reads as a subsystem in trouble and sends a seat looking for the
+common cause. There is none: **`tools/compiler_srchash.sh` is a SHARED STEP that runs in about
+forty jobs** (36 of 40 passing at the time), so `test-emit-obj#tools/compiler_srchash.sh` is
+not an emit-obj row at all — **the prefix names the job it ran in, not its subject.**
+
+**The correct key for a row that runs everywhere is the ROW, ACROSS JOBS.** The seat holding it
+had already grouped that way — taking `test-emit-obj#compiler_srchash.sh` and
+`test-zlib#compiler_srchash.sh` together — which is two claims and one cause, and would have
+looked like scattered effort to anyone grouping by job.
+
+**Generalises to every composite identifier: `file:line`, `suite/case`, `host#job#row`.** The
+part on the left is where the thing RAN; only sometimes is it what the thing is ABOUT. A
+frequency count over the left-hand component measures the harness's layout, not the defect
+distribution — and it produces a cluster with a plausible name, which is worse than noise
+because it comes with a hypothesis attached.
+
+**The cheap check: how many other rows share this row's RIGHT-hand component?** One `grep` of
+the job table. If the answer is "most of them", the left-hand grouping is an artifact.
+
+### AND THE SAME DATA GIVES AN AFFIRMATIVE ANSWER, NOT JUST A NEGATIVE ONE
+
+The known cause for a red `compiler_srchash.sh` is documented in `testmgr.py` itself: **the
+source tree MOVED during the run** — the script reads the live tree against a stamp written
+before job one, so `git pull --rebase` mid-run fails every srchash job. Measured 2026-09-01:
+**seven job groups RED, none of it real**, and the comment records why it fooled people —
+*"the failure text names a hash script rather than anything the author had changed, so it reads
+as a regression in whatever they just landed."*
+
+**That cause fails ALL of them, identically, because it is the same dependency and the same
+stamp in each.** So **4 of 40 is a shape the known cause CANNOT produce** — which converts
+*"probably not the tree move"* into positive evidence for a per-job cause. **A failure
+signature that is all-or-nothing is worth knowing precisely because a PARTIAL result then
+refutes it**, and that is a stronger instrument than any amount of reasoning about whether a
+pull happened.
+
+**Operational, and it is a scheduling fact rather than a debugging one: do not run a
+verification tier while seats are still pushing.** The srchash rows read the live tree, nothing
+snapshots it (the BINARY is snapshotted, which is exactly what makes the asymmetry invisible —
+*"a reader who knows the run owns the bytes it tested assumes it owns the sources too"*), and
+the warning arrives at the END of the run. During a fleet sync that is forty minutes spent to
+learn the tree moved. **Land everything, let the tree settle, then run.**
+
+## AN UNOWNED LIST IS RE-DERIVED, NEVER MAINTAINED — it decays in exactly one direction
+
+2026-09-06, twice in one evening, which is what makes it a rule rather than an anecdote.
+
+1. A red inventory from a full tier **19 commits stale** was the basis for claims, while three
+   landings since had already cleared two of its rows and fixed a crash not on it at all.
+2. `test-lua` and `test-lua-cross` were carried on an unowned list **all evening** by two seats
+   and had already gone green.
+
+**Rows leave such a list SILENTLY and nothing announces the departure.** So the decay is
+one-directional — always toward **phantom work** — and a stale entry is indistinguishable from
+a live one at the point of reading. **A seat that claims a finished row spends a full turn and
+produces nothing to notice it by**, which is the same invisibility as a blocked session.
+
+**The fix is not a better ledger, it is a fresher source.** Regenerate the list from the newest
+tier at the moment it is USED, and if that is unaffordable, send one instruction — *re-check
+your row against HEAD before you start* — which costs once instead of being discovered N times.
+Same family as `## THE NAME IS NOT THE THING`: a list is an identifier for a state of the
+world, sampled once and trusted after.
+
+**And a timeout is not a red.** `tools-devtest#00` timed out; that is an UNKNOWN, and putting
+it in a red column invites triage of a failure nobody has observed.
+
 ## A BISECT ONTO A MASK-REMOVING COMMIT IS CORRECT AND USELESS — AND THE REVERT RE-HIDES THE DEFECT
 
 Measured 2026-09-06 (frankA, `3b018b014`), and this is the third member of a family banked
