@@ -812,6 +812,19 @@ function AnsiPos(const substr, s: AnsiString): Integer;
 function TrimLeft(const s: AnsiString): AnsiString;
 function TrimRight(const s: AnsiString): AnsiString;
 
+{ The leftmost / rightmost Count characters of S. THESE LIVE IN SysUtils IN FPC
+  (rtl/objpas/sysutils/sysstrh.inc, under "extra functions"), not only in
+  StrUtils -- which is easy to disbelieve, because StrUtils is where the rest of
+  the family is and where Delphi puts them. fcl-passrc's pscanner.pp calls them
+  with `uses SysUtils, Classes` and nothing else, so a unit that never mentions
+  StrUtils is entitled to them. Found by frankD running fcl-passrc against the
+  compiler; the two lines were `undefined variable (LeftStr)`.
+  Count is clamped, so a Count outside 0..Length(S) yields '' or the whole
+  string rather than an error -- FPC's own behaviour, which reaches the same
+  answers through Copy's clamping rather than by testing. }
+function LeftStr(const S: AnsiString; Count: Integer): AnsiString;
+function RightStr(const S: AnsiString; Count: Integer): AnsiString;
+
 { Parse a decimal integer; True + value on success, False (value untouched) on
   any malformed input. }
 function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
@@ -3688,6 +3701,28 @@ begin
   i := Length(s);
   while (i >= 1) and (s[i] <= ' ') do Dec(i);
   Result := Copy(s, 1, i);
+end;
+
+{ THE BODIES LIVE HERE AND StrUtils DELEGATES, rather than the reverse or a
+  second copy: `strutils` already `uses sysutils`, and a unit that uses StrUtils
+  in FPC gets SysUtils' pair anyway. Written as explicit clamps rather than
+  leaning on Copy's, because the two functions clamp DIFFERENTLY in FPC --
+  LeftStr does not test Count at all and RightStr tests only the upper end --
+  and both reach these answers. Asserting the answers keeps them from drifting
+  if Copy's edge behaviour is ever tightened.
+  feature-pascal-corpus-passrc }
+function LeftStr(const S: AnsiString; Count: Integer): AnsiString;
+begin
+  if Count < 0 then Count := 0;
+  if Count > Length(S) then Count := Length(S);
+  Result := Copy(S, 1, Count);
+end;
+
+function RightStr(const S: AnsiString; Count: Integer): AnsiString;
+begin
+  if Count < 0 then Count := 0;
+  if Count > Length(S) then Count := Length(S);
+  Result := Copy(S, Length(S) - Count + 1, Count);
 end;
 
 { Same parser as StrToIntDef, so the two cannot answer differently -- this one

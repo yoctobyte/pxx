@@ -95,18 +95,19 @@ function SplitString(const S, Delimiters: AnsiString): TStringArray;
 
 implementation
 
+{ Delegated: the bodies moved to sysutils, where FPC also declares them
+  (sysstrh.inc, "extra functions"). StrUtils keeps its own declarations because
+  a consumer that uses only StrUtils must still see them, and because FPC has
+  the pair in both units. Unit-qualified so this is a call and not recursion --
+  the unqualified name resolves to THIS unit's. }
 function LeftStr(const S: AnsiString; Count: Integer): AnsiString;
 begin
-  if Count < 0 then Count := 0;
-  if Count > Length(S) then Count := Length(S);
-  Result := Copy(S, 1, Count);
+  Result := sysutils.LeftStr(S, Count);
 end;
 
 function RightStr(const S: AnsiString; Count: Integer): AnsiString;
 begin
-  if Count < 0 then Count := 0;
-  if Count > Length(S) then Count := Length(S);
-  Result := Copy(S, Length(S) - Count + 1, Count);
+  Result := sysutils.RightStr(S, Count);
 end;
 
 function MidStr(const S: AnsiString; Start, Count: Integer): AnsiString;

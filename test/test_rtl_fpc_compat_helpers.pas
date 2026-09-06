@@ -112,5 +112,23 @@ begin
   Check('varcmp-raises', (Rel('abc', 2) = 'raise') and (Rel(2, 'abc') = 'raise'));
   Check('varcmp-i64', Rel(Int64(5000000000), Int64(4999999999)) = 'gt');
 
+  { LeftStr / RightStr, and THE UNITS CLAUSE OF THIS FILE IS THE ASSERTION.
+    FPC declares both in SysUtils (rtl/objpas/sysutils/sysstrh.inc, "extra
+    functions") as well as in StrUtils; this RTL had them only in StrUtils, so
+    fcl-passrc's pscanner.pp -- whose uses clause is `SysUtils, Classes` -- got
+    `undefined variable (LeftStr)` on two lines. This file does not use StrUtils
+    either, so these four rows fail to COMPILE rather than fail to match if the
+    pair ever moves back. Answers checked against FPC 3.2.2 byte for byte,
+    including the clamps: FPC's two bodies clamp DIFFERENTLY (LeftStr does not
+    test Count at all, RightStr tests only the upper end) and both reach these. }
+  Check('leftstr', (LeftStr('abcdef', 3) = 'abc') and (LeftStr('', 3) = ''));
+  Check('rightstr', RightStr('abcdef', 3) = 'def');
+  Check('leftright-over', (LeftStr('abcdef', 99) = 'abcdef') and
+                          (RightStr('abcdef', 99) = 'abcdef'));
+  Check('leftright-neg', (LeftStr('abcdef', -1) = '') and
+                         (RightStr('abcdef', -1) = '') and
+                         (LeftStr('abcdef', 0) = '') and
+                         (RightStr('abcdef', 0) = ''));
+
   writeln('total ok ', okc, ' / ', total);
 end.

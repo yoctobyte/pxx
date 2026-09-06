@@ -9565,7 +9565,7 @@ test-core: $(COMPILER)
 	# along; the expectation could not be.
 	tools/expect_same.sh fpcv26 "$$($(TESTTMP)/fpcv26)" "$$(printf 'int of \04742\047  = 42\nint of \047abc\047 EXC: EVariantError\ndbl of \0472.5\047 = 2.50\nbool of \047\047    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
-	tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 23 / 23"
+	tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 27 / 27"
 	# WriteLn of a WideChar prints the CHARACTER, not its ordinal. WideChar used
 	# to collapse to tyUInt16, and every string context but writeln could work
 	# around that ("a Word here can only mean a widechar"); writeln cannot,
