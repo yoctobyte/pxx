@@ -38,4 +38,4 @@ fpc oracle where a leak is not.
 
 ## Log
 
-- 2026-09-06 — fixed, commit PENDING-COMMIT.
+- 2026-09-06 — fixed, commit 3034ac606.
