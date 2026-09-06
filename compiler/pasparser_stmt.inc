@@ -5550,6 +5550,40 @@ end;
 function FinishCastAsLValueStore(valNode: Integer; castTk: TTypeKind): Integer;
 var node, castPrevTok: Integer;
 begin
+  { AN INDEXED STRING CAST IS A DIFFERENT TARGET: `AnsiString(r)[3] := 'Z'`,
+    which did not parse at all (`expected ')' before '['`) while its alias twin
+    `t(r)[2] := 'X'` stored nowhere in silence.
+
+    The normalisation below is for a WHOLE-VALUE target: it turns the operand
+    into a deref and retags it, which is what `AnsiString(r) := 'abc'` needs and
+    the exact opposite of what an element store needs. Here the cast NODE is the
+    string, the subscript indexes its data, and the shared selector walk already
+    answers tyChar for `[i]` over a string base -- so this adds a caller to that
+    walk rather than a hand-rolled subscript arm, which is the choice this file
+    makes everywhere a cast grows a suffix.
+
+    ALIAS-SPELLED TARGETS NO LONGER ARRIVE HERE: refactor-p-one-lvalue-path-for-
+    statements-and-expressions deleted the C4 statement arm that used to call
+    in, and a cast-headed target now goes through ParseExpr, where the same
+    subscript is built by the C4 arm's own rvalue twin. This head therefore
+    serves the BUILT-IN name path only -- and stays, because that path still
+    parses its own `( expr )` before it knows what follows.
+    bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
+  if TypeIsAnyString(castTk) and (CurTok.Kind = tkLBrack) then
+  begin
+    node := AllocNode(AN_PTR_CAST);
+    ASTLeft[node] := valNode;
+    ASTIVal[node] := -1;              { built-in cast, as the ident path does }
+    ASTTk[node]   := Ord(castTk);
+    valNode := ParseClassRecordSelectors(node, REC_NONE, castTk);
+    Expect(tkAssign, ':=');
+    ParseExpr;
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node]  := valNode;
+    ASTRight[node] := CurASTNode;
+    FinishCastAsLValueStore := node;
+    Exit;
+  end;
   if ASTKind[valNode] <> AN_DEREF then
   begin
     { `Integer(v) := x` over a plain LVALUE, not a pointer deref: ordinary

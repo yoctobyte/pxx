@@ -6715,6 +6715,30 @@ test-core: $(COMPILER)
 	@# live payload pointer, so p = Pointer(s)) and not for `t(p) := 'abc'`.
 	@$(TESTTMP)/test_straliasptrslot26 | diff -u test/test_a_string_alias_cast_over_a_pointer_slot.expected - \
 	  || { echo 'test_a_string_alias_cast_over_a_pointer_slot: FAIL - a string-alias cast over a Pointer slot is not a reinterpret, or the no-op over a string operand was lost'; exit 1; }
+	./$(COMPILER) test/test_indexing_a_string_cast_of_a_pointer_slot.pas $(TESTTMP)/test_stridxptrslot26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROW I IS THE POSITIVE CONTROL FOR THE DISCRIMINATOR AND IS THE ONLY ROW
+	@# THAT CAN CATCH THE FIX BEING WIDENED. A string cast and the PChar ADAPTER
+	@# both carry ival -1 on the cast node, and the adapter's rule is 0-BASED --
+	@# which is exactly how a string cast was being indexed. The tk on the cast
+	@# node is the only thing that separates them, so if this row ever answers
+	@# the second character the separation has been lost.
+	@# ROWS F..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX: a string operand
+	@# through the same alias (where the cast is a no-op), a frozen-string alias
+	@# (whose index origin is the length prefix, not the handle), PChar, and the
+	@# UNindexed cast in both its shapes.
+	@# BOTH POSITIONS ARE ASSERTED ON PURPOSE. Rows A/C read and B/D/G store, so
+	@# the arms are exercised as rvalues and as assignment TARGETS -- the two
+	@# reach the same nodes by different parser routes, and a widened statement
+	@# delegation changes which route a target takes without changing either
+	@# answer.
+	@# THREE OBSERVABLES WERE WEAKER EVIDENCE OF ONE CAUSE THAN ONE WOULD HAVE
+	@# BEEN, not stronger: a blank read, a silent no-op store and a parse error
+	@# give three chances to find a story that fits. Each was measured to its own
+	@# boundary first; they did turn out to be one missing discriminator plus two
+	@# untaught spellings, which is not what the ticket predicted.
+	@$(TESTTMP)/test_stridxptrslot26 | diff -u test/test_indexing_a_string_cast_of_a_pointer_slot.expected - \
+	  || { echo 'test_indexing_a_string_cast_of_a_pointer_slot: FAIL - an indexed string cast reads/stores by the PChar adapter rule, or a spelling lost its subscript'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

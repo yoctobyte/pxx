@@ -2285,6 +2285,28 @@ begin
     if ASTKind[baseNode] = AN_PTR_CAST then
     begin
       indexNode := IRLowerAST(ASTRight[node]);
+      { A cast to a STRING type is not a typed-pointer cast: the value is the
+        string itself, so index it as string DATA -- 1-based off the handle for
+        a managed string, off the length prefix for a frozen one -- exactly as
+        `s[i]` over a string VARIABLE does further down. Without this arm the
+        string cast fell through to the alias branch below, which found no
+        alias entry (a string cast carries ASTIVal -1, the built-in-cast
+        marker) and therefore took the PChar ADAPTER's rule: char element, byte
+        stride, 0-BASED. So `t(r)[1]` answered the second character and
+        `t(r)[2] := 'X'` wrote one slot early -- a plausible wrong value, never
+        a diagnostic. The three -1 spellings (PChar adapter, built-in cast,
+        string cast) are only told apart by the cast's own tk, which is why
+        this asks the tk and not the alias index.
+        bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
+      if TypeIsAnyString(IntToTypeKind(ASTTk[baseNode])) then
+      begin
+        tk := IntToTypeKind(ASTTk[baseNode]);
+        if TypeIsFrozenString(tk) then lo := -(FrozenStrPrefixSize(tk) - 1)
+        else lo := 1;
+        baseAddr := IRLowerAST(baseNode);
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, 1, Ord(tyChar));
+        Exit;
+      end;
       aliasIdx := ASTIVal[baseNode];
       if aliasIdx < 0 then
       begin

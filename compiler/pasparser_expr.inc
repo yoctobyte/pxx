@@ -1950,6 +1950,21 @@ begin
             ASTTk[node] := Ord(tyString);
           CurASTNode := node;
           LastExprTk := IntToTypeKind(ASTTk[node]);
+          { `String(r)[4]` -- the KEYWORD spelling of the indexed string cast.
+            The branch above is the reinterpret; the subscript after it was left
+            standing and the enclosing expression reported `expected ')' before
+            '['`. Same walk, same call, as the identifier spelling
+            `AnsiString(r)[4]` and the alias spelling `t(r)[4]` -- this arm
+            exists precisely because `String` is a keyword token and never
+            reaches the identifier path, which is the structural reason this
+            file keeps fixing one concept three times.
+            bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
+          if CurTok.Kind = tkLBrack then
+          begin
+            castTk := IntToTypeKind(ASTTk[node]);
+            CurASTNode := ParseClassRecordSelectors(node, REC_NONE, castTk);
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          end;
         end;
       end;
     end;
@@ -7217,6 +7232,32 @@ begin
               bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index }
             node := CurASTNode;
             tk   := IntToTypeKind(ASTTk[CurASTNode]);
+            { ...but "the base IS the operand" holds only for a STRING operand.
+              A POINTER slot (`type t = AnsiString; var r: Pointer; t(r)[2]`)
+              has nothing string-shaped on the node at all: it is tyPointer, so
+              the retag below moved only the TK while the walk kept indexing a
+              raw pointer, and the read answered a blank. The operand class is
+              exactly what a `TAlias(x)` call site hides -- the arm above was
+              measured on a string variable and "this part works" scoped to
+              that, one operand class over.
+
+              A REINTERPRET needs a node, not a tag: the same AN_PTR_CAST the
+              whole-value store already builds through FinishCastAsLValueStore,
+              carrying the alias's string kind, so the IR lowering can tell a
+              string cast from the PChar adapter. ival -1 is the built-in-cast
+              marker the ident path uses, deliberately NOT the alias index --
+              this is a non-pointer alias and every reader of that slot expects
+              a POINTER alias row there.
+              bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
+            if tk = tyPointer then
+            begin
+              node := AllocNode(AN_PTR_CAST);
+              ASTLeft[node] := CurASTNode;
+              ASTIVal[node] := -1;
+              ASTTk[node]   := AliasTk[aliasIdx];
+              CurASTNode    := node;
+              tk            := IntToTypeKind(ASTTk[node]);
+            end;
             if not (TypeIsFrozenString(tk) or (tk = tyString) or
                     (tk = tyAnsiString)) then
               tk := IntToTypeKind(AliasTk[aliasIdx]);
@@ -7828,6 +7869,26 @@ begin
               ASTTk[indexNode] := Ord(tyUInt8);
               CurASTNode := indexNode;
               LastExprTk := tyUInt8;
+              Exit;
+            end;
+            { `AnsiString(r)[2]` -- the BUILT-IN spelling of the indexed string
+              cast, which did not parse at all: this arm exits with the cast
+              node and the subscript still standing, so the enclosing expression
+              met it and reported `expected ')' before '['`. Its alias twin
+              `t(r)[2]` reaches the shared selector walk a few hundred lines up
+              and has done since
+              bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index --
+              one concept, two spellings, one of them taught, which is the third
+              time this exact seam has been fixed in this file.
+
+              Hand the walk the cast NODE, not the operand: over a Pointer slot
+              the operand is a pointer and only the node carries the string
+              kind. The walk already answers tyChar for `[i]` on a string base.
+              bug-p-indexing-a-string-cast-of-a-pointer-slot-reads-blank-and-stores-nowhere }
+            if TypeIsAnyString(castTk) and (CurTok.Kind = tkLBrack) then
+            begin
+              CurASTNode := ParseClassRecordSelectors(node, REC_NONE, castTk);
+              LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
               Exit;
             end;
             CurASTNode    := node;
