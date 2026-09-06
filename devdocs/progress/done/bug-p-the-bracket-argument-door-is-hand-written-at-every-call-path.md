@@ -3,12 +3,12 @@ slug: bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path
 track: P
 prio: 45
 type: bug
-status: working
+status: done
 owner: frankB
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
-summary: "CLOSED PENDING-COMMIT. Every Pascal call path now reaches TryParseBracketArgForSlot; the by-hand census greps in the body return NOTHING. THE NINTH VARIANT WAS A NINTH DEFECT AND THIS TICKET SAID IT WAS NOT: `TC.Create([10, 20, 30])` against `constructor Create(const A: array of Integer)` summed to 10 where fpc sums 60, while `o.M([10, 20, 30])` on the identical signature in the same file was correct. The earlier not-diverging measurement was taken on a METHOD call, which never reaches the constructor arm -- taken after this ticket's own line numbers had drifted, which is the failure the ticket warns about, committed by the person who wrote the warning. TWO DEFECTS FIXED, both from a guard that answered WHETHER instead of WHICH. (1) The constructor door's predicate was a Boolean, so every `[...]` became a TVarRec vector the callee read with the wrong stride; ClassCtorArraySigAt now returns the ctor's Procs[] row and the caller reaches the shared door. (2) ParamIsOpenArrayScalar excluded tyVariant from the feature's first commit (6d285d57a, 2026-06-23), whose subject and comment both say scalar/string and neither mentions Variant -- scope, not a constraint. `array of Variant` therefore got a set descriptor read as a length on the method doors and a TVarRec vector with the right COUNT and empty CONTENTS on the constructor one; removing the exclusion yields fpc's values. THE COUNT IS WHY IT SURVIVED: Length(A) is the same number for a correct open array and a TVarRec vector of the same arity, so a length assertion passes on empty elements. Fifteen rows, every one asserting a VALUE, all four shapes and both spellings in one file, green under fpc 3.2.2 and pxx. ClassCtorWantsVarRecAt is kept for pyparser.inc only -- NilPy is a separate frontend and duplicating the parser across languages is the deliberate pattern."
+summary: "CLOSED 1c8a6cfd5. Every Pascal call path now reaches TryParseBracketArgForSlot; the by-hand census greps in the body return NOTHING. THE NINTH VARIANT WAS A NINTH DEFECT AND THIS TICKET SAID IT WAS NOT: `TC.Create([10, 20, 30])` against `constructor Create(const A: array of Integer)` summed to 10 where fpc sums 60, while `o.M([10, 20, 30])` on the identical signature in the same file was correct. The earlier not-diverging measurement was taken on a METHOD call, which never reaches the constructor arm -- taken after this ticket's own line numbers had drifted, which is the failure the ticket warns about, committed by the person who wrote the warning. TWO DEFECTS FIXED, both from a guard that answered WHETHER instead of WHICH. (1) The constructor door's predicate was a Boolean, so every `[...]` became a TVarRec vector the callee read with the wrong stride; ClassCtorArraySigAt now returns the ctor's Procs[] row and the caller reaches the shared door. (2) ParamIsOpenArrayScalar excluded tyVariant from the feature's first commit (6d285d57a, 2026-06-23), whose subject and comment both say scalar/string and neither mentions Variant -- scope, not a constraint. `array of Variant` therefore got a set descriptor read as a length on the method doors and a TVarRec vector with the right COUNT and empty CONTENTS on the constructor one; removing the exclusion yields fpc's values. THE COUNT IS WHY IT SURVIVED: Length(A) is the same number for a correct open array and a TVarRec vector of the same arity, so a length assertion passes on empty elements. Fifteen rows, every one asserting a VALUE, all four shapes and both spellings in one file, green under fpc 3.2.2 and pxx. ClassCtorWantsVarRecAt is kept for pyparser.inc only -- NilPy is a separate frontend and duplicating the parser across languages is the deliberate pattern."
 ---
 
 # Eight call paths, eight copies of one question
@@ -214,3 +214,13 @@ Positive control run rather than reasoned: with the `tyVariant` line restored an
 everything else kept, exactly the two Variant rows fail (`got 0 want 66`) and the
 other thirteen pass. The constructor row was measured failing (`sum=10`) on the
 pre-fix binary.
+
+## Log
+- 2026-09-06 — resolved by `1c8a6cfd5`. The ticket carried `status: working` and
+  a summary reading `CLOSED` for a day: the fix landed, the resolve did not, so
+  the board advertised it as in-flight and the placeholder was never filled.
+  Filed under its own heading rather than fixed silently — see
+  [[bug-t-a-resolve-that-never-wrote-a-placeholder-is-uncited-and-nothing-says-so]],
+  which is the adjacent shape (no citation at all); this one is the third:
+  a citation that exists, a summary that says CLOSED, and a status that says
+  otherwise, with nothing comparing the two.

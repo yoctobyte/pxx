@@ -9,7 +9,7 @@ found-by: frankB
 owner: ""
 blocked-by: []
 title: "`class constructor` compiles, never runs, and cannot be called — class-level state stays at zero with no diagnostic"
-summary: "MEASURED 2026-09-06 at 40c0d6491, compiler b85745ae61a3, against fpc 3.2.2 -Mobjfpc. `class constructor TC.Init` that sets `class var N := 5` compiles here and NEVER RUNS: pxx prints N=0 before and after `TC.Create`, fpc prints `class ctor ran` and N=5 both times. WARNED SINCE PENDING-COMMIT, still not run -- both member-loop termini now say so by name; before that there was no diagnostic at any point. The declaration is accepted, the body compiles, and the routine is unreachable: an explicit `TC.Init;` is refused with `expected ':=' before ';'`, so it is dead code the programmer cannot even call by hand. `class destructor` is the same shape. CAUSE IS THE CLASS-BODY LOOKAHEAD ENUMERATION: the `class X` arm tests tkProcedure and tkFunction only, so `class constructor` falls past all four arms to the member-loop terminus, which steps over the `class` and lets the ORDINARY constructor arm take it -- the class-ness is discarded and the resulting ctor is never wired to anything. Sibling of bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list and the concrete cost of it: THAT ticket's measurement said the accident produced no wrong answer, which was measured over generic methods only and is false here. A program that initialises class state in a class constructor runs with it uninitialised."
+summary: "MEASURED 2026-09-06 at 40c0d6491, compiler b85745ae61a3, against fpc 3.2.2 -Mobjfpc. `class constructor TC.Init` that sets `class var N := 5` compiles here and NEVER RUNS: pxx prints N=0 before and after `TC.Create`, fpc prints `class ctor ran` and N=5 both times. WARNED SINCE d754eeef1, still not run -- both member-loop termini now say so by name; before that there was no diagnostic at any point. The declaration is accepted, the body compiles, and the routine is unreachable: an explicit `TC.Init;` is refused with `expected ':=' before ';'`, so it is dead code the programmer cannot even call by hand. `class destructor` is the same shape. CAUSE IS THE CLASS-BODY LOOKAHEAD ENUMERATION: the `class X` arm tests tkProcedure and tkFunction only, so `class constructor` falls past all four arms to the member-loop terminus, which steps over the `class` and lets the ORDINARY constructor arm take it -- the class-ness is discarded and the resulting ctor is never wired to anything. Sibling of bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list and the concrete cost of it: THAT ticket's measurement said the accident produced no wrong answer, which was measured over generic methods only and is false here. A program that initialises class state in a class constructor runs with it uninitialised."
 ---
 
 # `class constructor` is accepted and never runs
@@ -73,7 +73,7 @@ revert restores today's behaviour — and CLAUDE.md's test is reversibility, not
 importance. The reason it was not taken here is evidence, not permission: see
 the interim below.
 
-## The interim that neither arm is: WARN (landed PENDING-COMMIT)
+## The interim that neither arm is: WARN (landed d754eeef1)
 
 Both member-loop termini in `pasparser_decl.inc` — the class body and the
 record body — now emit
