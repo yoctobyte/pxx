@@ -530,10 +530,25 @@ which cannot rot, plus `FindTypeAlias` itself as the symbol.
 **twice in a `done/` ticket**. Each copy reads as independently sourced, and none
 of them is: they are one lookup made once. **A stale citation does not merely rot;
 it PROPAGATES**, and the copies are what a later reader finds when they check.
-The `done/` pair is deliberately left alone — CLAUDE.md says resolved write-ups are
-historical records and are not to be maintained — which means **the propagation
-source stays live and the only defence is that the working copies no longer carry a
-number.**
+The `done/` pair is deliberately left alone — CLAUDE.md says resolved write-ups
+are historical records and are not to be maintained, *"not instructions, not
+maintained"*, and that rule exists precisely because **the tempting edits are the
+ones that look harmless.**
+
+> **CORRECTION TO THE SENTENCE THAT FIRST STOOD HERE, frankuser's, and the
+> residual is narrower than I wrote it.** I said *"the propagation source stays
+> live"*. It does not, in the direction that matters: **a `done/` write-up is only
+> a propagation source if someone copies FORWARD out of it, and that path is
+> already cut** — the working copies carry a search string, so a reader who goes to
+> check finds the durable form first and has no number to lift. What remains is a
+> reader who lands in `done/` directly and quotes it, **which is a reader ignoring
+> the folder's own status.** A bounded residual, not a live hazard, and it does
+> not justify an exception.
+>
+> **And the one thing that costs nothing and is not maintenance:** if either
+> `done/` ticket is ever **reopened**, the citation is repaired *then*, as part of
+> the reopening. Reopening makes it a live claim again, and live claims are ours to
+> keep true.
 
 **And I relayed it to two seats without opening it**, on the same day I wrote a
 playbook section about census citations drifting within hours of being filed. I

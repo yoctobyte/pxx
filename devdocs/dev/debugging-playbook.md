@@ -16425,3 +16425,49 @@ the second **wearing the same words**. Two distinct causes, one string, and the
 string is what you are watching. **Count the occurrences or print the position;
 do not read the message twice and conclude it is the same failure.**
 
+## A STALE CITATION DOES NOT ROT, IT MULTIPLIES — and the copies are what a later reader finds when they go to check
+
+2026-09-06. `symtab.inc:6215` was quoted as the authority for *"`FindTypeAlias` is
+consulted before the builtin chain"*. At HEAD that line is
+`Syms[SymCount].Kind := skConst`, inside `AddConst`, and documents nothing about
+ordering. `grep -rn "symtab.inc:6215" devdocs/` returned **five citations across
+four tickets** — twice in the source ticket, once on a decision ticket, twice in a
+`done/` write-up.
+
+**Each one reads as independently sourced. None is.** They are **one lookup, made
+once, propagated by quotation** — and the multiplication is what makes it
+dangerous rather than merely wrong: a reader who doubts the claim goes to check,
+finds four corroborating citations, and stops. The corroboration is the same
+mistake wearing four hats.
+
+**This is not the ordinary staleness rule.** *A stale line number does not error,
+it points somewhere* describes ONE citation decaying. This describes a citation
+**spreading faster than it decays**, because quoting is cheaper than looking up and
+a number in a sibling ticket looks like it was verified by whoever put it there.
+
+**Three things, in order of cost:**
+
+1. **Relay the FACT, not the POINTER.** *Search `symtab.inc` for "consulted BEFORE
+   the builtin"* cannot rot; `:6215` did within weeks. A symbol survives a refactor
+   that moves lines; a search string survives one that moves files. **This is the
+   same rule as quoting a corrected sentence instead of telling someone to re-read
+   a file, and the same rule as attaching a measurement to a claim rather than a
+   ticket slug** — relaying a pointer to a fact is what fails; relaying the fact is
+   what does not.
+2. **Before repairing one citation, `grep -rn` the string.** The repair is worth
+   little if four copies survive it, and you cannot know the count without asking.
+3. **Copies in `done/` stay.** CLAUDE.md: resolved write-ups are historical records,
+   *"not instructions, not maintained"*, and **do not "fix" them** — that rule
+   exists because the tempting edits are the ones that look harmless. The residual
+   is bounded rather than live: forward propagation is cut once the working copies
+   carry no number, and what remains is a reader quoting a folder whose status says
+   not to. **If such a ticket is ever reopened, repair the citation then**, as part
+   of the reopening — a reopened claim is live again and live claims are ours to
+   keep true.
+
+**The author's share, which is the reusable part:** the pointer was relayed to two
+seats without being opened, on the strength of the claim being TRUE. **The rule
+being true is exactly what made nobody look** — the gap between *"is this
+verified"* and *"what would this be if it were false, and go look at THAT"*. For a
+citation, false means **points somewhere else**, and that never errors.
+
