@@ -556,3 +556,61 @@ verified the CLAIM — the ordering rule is true, and I said so from the ticket'
 strength — and never checked whether the pointer resolved. That is the exact gap
 between *"is this true"* and *"what would this be if it were false"*: the rule
 being true is what made me not look.
+
+## 2026-09-06 (frankA) — frankH landed; the merge is unheld, and the strongest argument for it turned up while reading the doors
+
+frankH's four commits are in (`ef518700b`, `71b5bac58`, `e06cfdeeb`,
+`1e4852261`) and the alias table is free. Two constraints came with them and
+both are adopted:
+
+- The resolver returns `(castKind, **semId**, aliasIdx)`. The identity is one
+  Integer and the enum id is now one family of it.
+- **Test `= SEM_NONE`, never a sign.** `SEM_NONE` is -1 and the boolean family
+  lives BELOW `SEM_BOOL_BASE` = -16, so `>= 0` means "is an enum" and not "has
+  an identity". `NodeSemIdOf` discarded a negative identity through exactly that
+  test and two carry sites were stamped correctly and still printed ordinals.
+  Swept the cast path for survivors: the only `castSem >= 0` left (line ~7108)
+  is the enum arm asking specifically whether the name is an enum, which is the
+  correct reading of that test. No others.
+
+`BuiltinScalarSemId` stays a SECOND function rather than an out-parameter on
+`BuiltinScalarTypeKind`, and that is a constraint on the merge rather than a
+detail: the kind lookup has speculative callers that ask it `<> tyUnknown`
+merely to test whether a token names a type, and a lookup that also wrote a
+parser-wide channel would poison the window for whatever type is parsed next.
+A resolver that collapses them "because it is the same table" reintroduces that.
+
+**Re-ran `tools/type_name_every_door_probe.py` at HEAD before touching
+anything**, because the seven-defect count was taken on a tree those four
+commits have since moved under. 51 names, 327 cells agree, 10 differ — the
+sized-boolean `High`/`Low` asymmetry and `comp`'s alias-only `High`/`Low`, both
+already filed. Nothing new, and a count nobody re-took reads exactly like one
+that survived re-measurement.
+
+### The argument this ticket was still missing
+
+Reading the four KEYWORD cast arms for the merge turned up a defect that is not
+a cast defect at all, and it is the clearest statement of why the doors should
+share a resolver:
+
+**`type Integer = Int64;` does not compile.** `expected 'begin' before
+'Integer'`. fpc accepts it and honours it at every door. Measured over the
+population derived from `paslexer.inc`: ten names lex as type keywords, nine are
+refused by pxx and accepted by fpc, and `string` is refused by both — while
+`longint`, `cardinal`, `word` and `uint8`, builtin type names that do NOT lex as
+keywords, are redeclared happily by both. `longint` is the sharp one: a SYNONYM
+of `integer`, same width, same meaning, opposite answer. Only the lexer
+separates them.
+
+Filed as [[compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all]], and
+it belongs to whoever takes this refactor. The reason is the interesting part:
+**the declaration half must not be fixed alone.** Accepting the declaration is
+two lines, and every USE of the name would still take a keyword arm that never
+consults `FindTypeAlias` — so the type would be declared, recorded, and silently
+not applied. That is the declared-invariant-that-never-runs shape, and it is
+what makes "one resolver, consulted in one order, by the keyword arms too" the
+only correct fix rather than the tidy one.
+
+So the ordering rule this ticket has carried since it was filed — a source
+declaration outranks a builtin — has a population where it cannot be expressed
+at all, and that population is nine of the commonest type names in the language.
