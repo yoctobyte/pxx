@@ -1,0 +1,4 @@
+bare      freed=1
+self      freed=2
+user      freed=2 marked=1
+alive     freed=2 n=1

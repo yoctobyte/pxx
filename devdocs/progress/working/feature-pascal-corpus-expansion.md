@@ -2399,8 +2399,9 @@ already, so **four is a lower bound, not the count.**
 | --- | --- | --- | --- |
 | 1 | 2101 | `ReleaseAndNil(TPasElement(InterfaceName))` — a class typecast as a `var` argument | **FIXED** |
 | 2 | 2397 | a field named `ExceptObject` vs sysutils' `function ExceptObject` | **FIXED** |
-| 3 | 2979 | a receiver-less `Free;` inside a method | open, Track P |
-| 4 | 4940 | `NameParts.Assign(Parts)` — no `TFPList.Assign` | open, **Track B (RTL gap)** |
+| 3 | 2979 | a receiver-less `Free;` inside a method | **FIXED** |
+| 4 | 4940 | `NameParts.Assign(Parts)` — no `TFPList.Assign` | **FIXED** (lib/rtl) |
+| 5 | — | `incompatible types: cannot assign Pointer to record` | open, Track A |
 
 Walls 1 and 2 were both **enumerated predicates** — a hand-maintained list that
 must grow per new member and gives no diagnostic when it does not — and that is
@@ -2424,4 +2425,23 @@ corpus unit would have scored as progress.
 
 Wall 3 is the receiver-less sibling of today's `.Free` work (`a5588f5c6`
 materialised a computed receiver; a bare `Free;` in a method never gets as far
-as a receiver). Wall 4 is not ours.
+as a receiver) — and with it, **five recognisers now serve one concept**, four
+of them keyed on the shape of a RECEIVER, which is why the spelling with no
+receiver matched none of them. Wall 4 was an outright RTL absence: our `TFPList`
+is an empty descendant of `TList` and `Assign` was on neither.
+
+**WALL 5 IS DIFFERENT IN KIND AND IT IS WHY THIS UNIT IS NOW STUCK RATHER THAN
+SLOW.** It prints
+
+```
+pascal26:0: error: incompatible types: cannot assign Pointer to record
+```
+
+and that is the whole of it — no `in: <file>`, no `near:` window, because
+`ErrorPrintAt` drives all three off the line number and the synthesised
+`AN_ASSIGN` carries zero. **Every wall on this rung so far came with a
+coordinate that was at least a starting point, including the ones this file
+warns are untrustworthy; this one has none at all.** Filed as
+[[bug-a-a-desugared-assignment-reports-a-type-error-with-no-location-at-all]] —
+the diagnostic has to be able to point somewhere before the defect behind it
+can be reduced, so the tooling fix comes first and it is not optional here.

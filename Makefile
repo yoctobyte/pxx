@@ -7175,6 +7175,21 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_class_member_hides_a_same_named_unit_routine \
 	  "$$($(TESTTMP)/test_membershadow26)" \
 	  "$$(cat test/test_a_class_member_hides_a_same_named_unit_routine.expected)"
+	@# `Free;` WITH NO RECEIVER -- the fifth spelling of one concept. The four
+	@# recognisers around it each key on a RECEIVER (bare symbol, implicit-Self
+	@# field, cast, general designator); a receiver-less `Free;` inside a method
+	@# has none, fell past every door, and came out as `undefined variable
+	@# (Free)` -- a message about a VARIABLE, for a call. fcl-passrc
+	@# pastree.pp:2979 (TPasElement.Release) is the live case.
+	@# WHICH ROW ASSERTS WHAT WAS MEASURED BY DISABLING THE ARM, not inferred:
+	@# `bare` does not compile without it; `self` (Self.Free) ALREADY worked and
+	@# is here as the sibling spelling, a no-regression control; `user` is
+	@# decided by an earlier arm, so it does not prove this arm's user-Free
+	@# guard; `alive` is the untaken branch, which must leave the object usable.
+	@./$(COMPILER) test/test_a_receiverless_free_inside_a_method.pas $(TESTTMP)/test_bareselffree26
+	@tools/expect_same.sh test_a_receiverless_free_inside_a_method \
+	  "$$($(TESTTMP)/test_bareselffree26)" \
+	  "$$(cat test/test_a_receiverless_free_inside_a_method.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

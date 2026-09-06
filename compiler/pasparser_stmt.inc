@@ -8496,6 +8496,42 @@ begin
                 idx := AllocVar(name, tyAuto);
                 WarnImplicitVar(CurTok.Line, name);
               end;
+              { `Free;` WITH NO RECEIVER AT ALL, inside a method — Self.Free,
+                and the FIFTH spelling of one concept. The four arms around it
+                each recognise a RECEIVER (a bare symbol, an implicit-Self
+                field, a TObject cast, a general designator); this one has none
+                to recognise, so it fell past every door and out the far side
+                as `undefined variable (Free)` — a message about a VARIABLE for
+                a call, which is why it reads as unrelated to the other four.
+                fcl-passrc pastree.pp:2979 is the live case, inside
+                TPasElement.Release.
+
+                Routed through GenMakeFreeObjectExpr and NOT GenMakeFreeObject,
+                which is the one substantive difference from the bare-symbol
+                arm: GenMakeFreeObject also emits `obj := nil`, and the operand
+                here is the hidden Self PARAMETER. That store is not observable
+                in valid code — anything reading Self after Free is a
+                use-after-free already — but it is a write to a by-value copy
+                that the source never asked for and that the Expr form does not
+                need. `Self` is a pure designator, so the Expr form materialises
+                no temp and the two desugarings are otherwise identical.
+
+                The plain-form restriction and the user-`Free`-wins rule are the
+                same as every sibling arm.
+                bug-p-a-receiverless-free-inside-a-method-is-an-undefined-variable }
+              if (idx < 0) and (qUnit < 0) and (CurProc >= 0) and
+                 (CurSelfClass >= REC_UCLASS_BASE) and
+                 CaseEqual(name, 'Free') and
+                 (not UClsIsRecord[CurSelfClass - REC_UCLASS_BASE]) and
+                 (Tokens[TokPos].Kind in [tkSemicolon, tkEnd, tkElse]) and
+                 (FindUMeth(CurSelfClass - REC_UCLASS_BASE, 'Free') < 0) then
+              begin
+                smci := CurSelfClass - REC_UCLASS_BASE;
+                smSelfIdx := Procs[CurProc].Params[0].SymIdx;
+                Next;   { consume 'Free' }
+                node := GenMakeFreeObjectExpr(GenMakeIdent(smSelfIdx, tyClass), smci);
+                Result := node; Exit;
+              end;
               { Built-in `obj.Free;` on a class instance with no user `Free` method
                 (built-in TObject has none): desugar to nil-guarded Destroy/FreeMem.
                 Restricted to the plain `obj.Free;`/`obj.Free end` form so a user

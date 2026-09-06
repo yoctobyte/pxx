@@ -68,4 +68,4 @@ fcl-passrc `pastree.pp` (5947 lines) clears its first two walls. Two remain:
 `TFPList.Assign` (an RTL gap, Track B).
 
 ## Log
-- 2026-09-06 — fixed and resolved; see the commit carrying this file.
+- 2026-09-06 — fixed and resolved, commit 72c937239 (the fix and the close are the same commit).

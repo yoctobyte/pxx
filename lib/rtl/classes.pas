@@ -339,6 +339,21 @@ type
     descendant rather than an alias, so it is a distinct class for `is`/`as` and for
     a parameter typed TFPList. }
   TFPList = class(TList)
+  public
+    { FPC's TFPList.Assign — replace this list's contents with another's.
+      Pointers only: the list does not own what it holds, so this copies the
+      pointer array and nothing else, which is what makes it different from
+      TPersistent.Assign a few classes down. fcl-passrc's pastree.pp:4940
+      (`NameParts.Assign(Parts)`) is the caller that wanted it.
+
+      TWO EARLY EXITS THAT FPC DOES NOT HAVE, both for arguments only a
+      mistake produces. FPC's body is `Clear` followed by a loop over
+      `Obj.Count`, so `L.Assign(L)` copies from the list it has just emptied
+      and leaves L empty, and `L.Assign(nil)` dereferences nil. Neither is a
+      behaviour anything can want; the no-op leaves the list intact in both
+      cases, which is the version that keeps a caller's bug from becoming
+      silent data loss or a crash inside the RTL. }
+    procedure Assign(Obj: TFPList);
   end;
 
   { ---- TStrings: abstract string-list base ---- }
@@ -803,6 +818,15 @@ function TList.Remove(Item: Pointer): Integer;
 begin
   Result := IndexOf(Item);
   if Result >= 0 then Self.Delete(Result);   { Self. — Delete is also a builtin }
+end;
+
+procedure TFPList.Assign(Obj: TFPList);
+var i: Integer;
+begin
+  if (Obj = nil) or (Obj = Self) then Exit;
+  Clear;
+  for i := 0 to Obj.Count - 1 do
+    Add(Obj[i]);
 end;
 
 { ============================ TPersistent ============================ }

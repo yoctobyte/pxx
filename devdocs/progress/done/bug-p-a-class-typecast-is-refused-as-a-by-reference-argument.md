@@ -64,4 +64,4 @@ except this file's. `Arr[0]` is created deliberately: an un-created slot is
 would have been a control whose expected value collided with its failure value.
 
 ## Log
-- 2026-09-06 — fixed and resolved; see the commit carrying this file.
+- 2026-09-06 — fixed and resolved, commit 72c937239 (the fix and the close are the same commit).
