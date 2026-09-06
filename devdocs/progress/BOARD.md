@@ -73,12 +73,13 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (17)
+## backlog (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | regression-cascade-6758c7ce7dbd | T | 70 | regression | regression CASCADE: 23 jobs newly red in b8e3b3010..6758c7ce7 (105 commits) — auto-filed by twatch | — |
 | regression-cascade-b8e3b3010249 | T | 70 | regression | regression CASCADE: 42 jobs newly red in 9d5a4e270..b8e3b3010 (16 commits) — auto-filed by twatch | — |
+| regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
 | regression-test-core-test-interface-containers | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@2 at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_interface_containers_ts26 "$(/tmp/test_interface_containers_ts26)" "$(printf 'strarr: ok\nsta…` (auto-filed by twatch) | — |
@@ -92,8 +93,6 @@ _none_
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
-| regression-test-threads-test-threadsafe-class-finalize-kinds | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_class_finalize_kinds.pas at 918842a5fd43 in step 2/2, `tools/expect_same.sh test_tscfk26 "$(/tmp/test_tscfk26)" "$(printf 'errors=0\nKINDS OK')"` (auto-filed by twatch) | — |
-| regression-test-threads-test-threadsafe-class-finalize-race-2 | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_class_finalize_race.pas at e678b743d3bb in step 2/2, `tools/expect_same.sh test_tscfr26 "$(/tmp/test_tscfr26)" "$(printf 'errors=0\nRACE OK')"` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -938,9 +937,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3466)
+## done (3468)
 
-3466 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3468 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1055,8 +1054,6 @@ _none_
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
-- [p 70] [T] regression-test-threads-test-threadsafe-class-finalize-kinds
-- [p 70] [T] regression-test-threads-test-threadsafe-class-finalize-race-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A+S] bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
@@ -1262,6 +1259,7 @@ _none_
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
+- [p 40] [A] regression-fpc-bootstrap-compiler-4 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 40] [A] regression-size-canary-size-canary-2
 - [p 40] [A] task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line

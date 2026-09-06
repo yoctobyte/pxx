@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: A
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_tscfr26 "$(/tmp/test_tscfr26)" "$(printf 'errors=0\nRACE OK')"`. The job's own `src` (`test/test_threadsafe_class_finalize_race.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -44,3 +45,35 @@ expect_same: MISMATCH [test_tscfr26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved 2026-09-06 (frankH) — mine, and re-laned A: this was never Track T's
+
+Caused by `3bb71fd79` (feature-a-make-the-heap-lock-reentrant, step 2), fixed by
+`35328fd10`. The auto-file's `track: T` is the documented FALLBACK and the
+defect is Track A — compiler codegen.
+
+The stamp that wraps `PXXClassFinalizeManaged` in the heap lock
+(`HeapLockedCallProcIdx1`) was moved into `EmitHeapLockStubs`, which runs from
+the PROLOGUE, before `builtinheap.pas` is parsed. `FindProc` therefore answered
+**-1** (printed), the `if >= 0` guard silently did nothing, and the managed-field
+walk emitted with **no lock**. The single call site in `PXXClassFinalize` was a
+bare `call <CFM>; leave; ret` in the binary.
+
+Resolution moved to the call site, comparing `Procs[procIdx].Name` against the
+callee being emitted — a name lookup can answer -1 about an unpopulated table; a
+comparison against the proc you are emitting a call TO cannot.
+
+**Rate on this box: 0/30 before, 30/30 after** (both rows). Deterministic here,
+intermittent on seven — which is what put the same sha `918842a5` red in native
+at 12:52 and green in full at 13:02 with no tree change between. That is
+nondeterminism, not a repair, and it is the expected signature of a data race.
+
+### A note for whoever tunes the bisect
+
+`regression-...-race-2`'s Range names `918842a5` as last-good. It was not — it
+was NEW-RED in the native tier at that same sha, and the green that installed it
+as a bound came from the full tier ten minutes later. A bisect driven from that
+range searches a window that excludes the actual cause entirely. The real
+untested window was `12af8ef6..918842a5`. frankuser raised the guard-hole with
+Track T; recorded here so the range in this ticket is not read as sound.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
