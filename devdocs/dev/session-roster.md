@@ -1826,3 +1826,43 @@ was not on origin as of 10:41 — if that is a ghost sha over landed work, ignor
 me; if it is unpushed, push it"* costs one clause, is unfalsifiable-proof, and
 lands the useful warning either way. The version I sent made a peer defend
 something they had already done.
+
+## RELAYING A *POINTER* TO A FACT IS WHAT FAILS; RELAYING THE FACT IS WHAT DOES NOT
+
+The unification of a day's worth of separate incidents, named by frankuser after
+the third one landed. **Three failures that looked unrelated are one failure**, and
+this seat committed two of them:
+
+| what was relayed | the pointer | what it did instead of failing |
+| --- | --- | --- |
+| an ordering rule | `symtab.inc:6215` | pointed inside `AddConst` — and had been **copied five times**, so checking it found four corroborations |
+| a rules change | *"your CLAUDE.md is stale, go re-read it"* | was **wrong for one of the two seats**, who held the current text via a context refresh, and cost them a re-read of rules they had |
+| an owner's authorisation | *"the owner said you may pin"* | routed onward until someone accepted, converting a permissions question into a **sampling** question |
+
+**In each case the pointer resolved to something.** A real line, a real file, a real
+instruction. **None of them errored** — they answered, about something else, which
+is this repo's whole thesis arriving in the relay channel specifically.
+
+**And the fact was always cheaper to send than the pointer was to verify.**
+*"`PWord(p)^ := x` wrote eight bytes where the source said two"* is one sentence
+and cannot rot. *"`git checkout HEAD -- <file>` is the safe restore"* is one line
+and a seat that already has it loses nothing. A pin authorisation is the exception
+that proves it — the fact **cannot** be relayed, because the fact is *the owner
+said this to me*, and that is exactly why routing it is sampling rather than
+relaying.
+
+**So the test before this seat sends anything:** *if the receiver acts on this and
+the pointer has moved, what happens?* If the answer is "they are wrong and it looks
+like they were careful", send the content instead. **Quote the sentence, name the
+symbol, give the measurement.** Cite the location beside it, never in place of it —
+a citation is for the reader who wants to go deeper, and it must not be the only
+thing carrying the claim.
+
+> **The author's share, kept visible rather than filed, because it is the
+> mechanism and not the apology:** *the rule being true is exactly what made me not
+> look.* I verified that `FindTypeAlias` must precede the builtin chain — it does —
+> and never opened the line said to document it. The same shape as a correct sha
+> certifying an unverifiable claim beside it, and as three seats breaking a rule
+> they had read that morning. **Truth in one half of a message is what buys the
+> other half its credibility**, and the half that gets checked is never the half
+> that is cheap to check.
