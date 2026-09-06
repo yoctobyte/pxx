@@ -144,4 +144,4 @@ is not moved). `pasparser_stmt.inc`, `FileIOArgSize`.
 - `make compiler/pascal26`: `converged after 1 round(s)`.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 25ebe3679.
