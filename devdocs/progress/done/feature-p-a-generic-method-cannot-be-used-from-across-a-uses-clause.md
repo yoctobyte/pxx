@@ -5,7 +5,7 @@ track: P
 prio: 30
 type: feature
 blocked-by: []
-status: working
+status: done
 owner: frankS
 created: 2026-09-05
 summary: "TWO Exits in ExpandGenericMethod produced one identical parse error, and only one is left. ZERO USES is FIXED (this ticket, below): a unit or program that merely DECLARED a generic method it never called could not compile at all, because emitting nothing also left the raw header in the stream -- the zero-specialization path now erases both halves. WHAT REMAINS is the named row: a use sitting BELOW the declaration, which is what a program calling a used unit's generic method looks like. The sweep DOES find that use, so it exits at the SCOPE guard instead, and moving it needs TokPos and DeclItem-span bookkeeping the free routine never needed. tgenfunc7 and tgenfunc9."
@@ -189,3 +189,78 @@ That is what re-running the expansion at the end of the uses clause requires,
 the way `SpecializeImportedGenericFuncUses` does for the free routine. The free
 routine did not need it because a free routine is not a class member. So the
 precedent covers the SWEEP-LATER shape and stops exactly where the member does.
+
+## 2026-09-06 (frankS) — the named row is DONE, and its stated prerequisite was not one
+
+`1364d9542`. A generic method declared in a unit and called from the importing
+program now compiles and runs, on both surfaces.
+
+### The prerequisite this ticket names does not exist
+
+> *What to measure first: Whether a class can gain a method after
+> `ParseTypeSection` has closed its body.*
+
+It never has to. **The sweep scans the whole token stream, so when the unit's
+class body is parsed the program's uses are already visible** — measured, and it
+is what the earlier entry recorded without drawing the conclusion: this shape
+reached the SCOPE guard with `nSpec >= 1`, not the zero-uses path. So the
+specialization set is known at declaration time, the members are emitted there,
+and every one of those edits is above the class body where they were always
+safe.
+
+**The only thing behind `TokPos` is the CALL.** So the only thing deferred is
+renaming it, and the answer is the free routine's own answer, at the same site:
+`SpecializeImportedGenericMethodUses` beside `SpecializeImportedGenericFuncUses`
+at the end of the uses clause. It rewrites and emits nothing.
+
+That is why the estimate in this ticket was too big. The precedent covered more
+than "the sweep-later shape" — it covered the whole problem, because the part
+that looked method-specific (a class member) turned out not to be on the
+deferred path at all.
+
+### AHEAD OF TokPos ONLY — the bound is the fix, not a tidy-up
+
+The sweep fires at the end of *every* uses clause, including one **inside an
+imported unit**, and there the importing program's body is at LOWER indices.
+Sweeping the whole stream removed tokens behind `TokPos` and shifted `TokPos`
+itself: `expected ':' before ';'` inside a `var` section three lines away, a
+diagnostic with nothing to do with generics. Nothing is lost by stopping —
+a use behind this point is ahead of the importing file's own clause, and the
+program's body is ahead of the program's own, which runs last.
+
+### And `class generic function` had never worked at all
+
+Found while widening, not looked for. FPC writes `class` before `generic`;
+`GenericKwAt` walked back over `generic` only, so the expansion re-read the
+member from `function` and emitted an ORDINARY method:
+
+    TZ.specialize Twice<Integer>(21)
+    -> cannot call non-static method on class type directly
+
+**in one file, at the pin.** Fixed by walking back over both keywords and
+capturing the header from the same token the removal starts at — three bounded
+steps and deliberately not a loop, because a loop eats the class declaration's
+own `class` when a generic method is the first member and deletes the type.
+
+### Rows
+
+`test/test_generic_method_across_a_uses_clause.pas` + `generic_xunit_method_units/`,
+wired as `test_gen_xmeth26`: objfpc `specialize` across a uses clause; two
+different type arguments for one method; the bare `t.Add<Integer>` spelling; a
+class generic method across the clause and in-file; the Delphi surface; and a
+UNIT calling another unit's generic method with the program never naming it.
+
+One hypothesis measured false: that the next member absorbs a leftover `class`
+keyword. A method reading an instance FIELD returns 77, so it does not.
+
+### Not claimed
+
+`tgenfunc7` and `tgenfunc9` are still `pxx.skip` rows. They live in
+`library_candidates/fpc-testsuite`, which this checkout does not have — and per
+frank-coordinator that is UNFETCHED rather than scarce
+(`tools/install_lib_candidates.sh fpc-testsuite`, present in four trees on this
+box). Their skip lines should be re-measured by whoever next fetches it; the
+mechanism they were skipped for is fixed.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

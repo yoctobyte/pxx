@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:24 unfinished:21 blocked:7 backlog:9 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:39 backlog-pascal:27 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3383 rejected:78`
+`working:21 unfinished:21 blocked:7 backlog:9 backlog-umbrella:7 backlog-core:135 backlog-nilpy:98 backlog-tools:39 backlog-pascal:27 backlog-decide:46 backlog-libs:19 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3386 rejected:78`
 
 ## Held now (working/ — do not touch these files)
 
@@ -20,7 +20,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-dynamic-compiler-tables` [A] — owner: frankH
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
-- `feature-p-a-generic-method-cannot-be-used-from-across-a-uses-clause` [P] — owner: frankS
 - `feature-pascal-corpus-expansion` [P] — owner: frankO
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -31,8 +30,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 - `refactor-p-one-lvalue-path-for-statements-and-expressions` [P] — owner: frankA
 - `refactor-p-three-hand-rolled-postfix-loops` [P] — owner: frankA
-- `regression-test-core-test-fpc-compat-batch2-2` [P] — owner: frankS
-- `regression-test-fgl-compiler-srchash` [P] — owner: frankS
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 

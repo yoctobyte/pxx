@@ -1,7 +1,7 @@
 ---
 prio: 70
 track: P
-status: working
+status: done
 owner: frankS
 ---
 
@@ -132,3 +132,54 @@ and an INTERFACE type argument.
 
 **Claimed for frankS**, who holds the fix and the group. This row and its sibling are ONE
 group — same commit, same cause, one control settled both. Resolve them together.
+
+## 2026-09-06 (frankS) — fixed at `05ae03c3d`, confirmed 7/7
+
+One cause with the sibling row, established by control rather than by
+narrowing: reverted the suspect hunk of `a0780b56d` ALONE, rebuilt, **confirmed
+the binary sha moved (`509821fe8a97 -> b134a22c70e9`)** so a no-op build could
+not read as an exculpation, and the failure vanished; restored it and it came
+back.
+
+**Mechanism.** `a0780b56d` made a template's method body parse as the unit that
+DECLARED the template — correct, and the reason a private helper beside the
+template now wins over a same-named routine in the program. But a
+specialization's SYNTHESIZED rows are minted where the specialization is
+WRITTEN: the class minted for a nested `TEnumSpec = specialize TEnum<T>`, and
+the substituted type argument itself. Both are the importing program's rows, and
+`ClassRowVisibleHere` vetoes exactly those —
+
+    if (CurrentUnitIdx >= 0) and (UClsUnitIdx[ci] < 0) then hidden
+
+— which is right on its own terms and cannot be dropped, because ignoring it
+SEGFAULTED (a NilPy `class Text` capturing the RTL's file record). Two correct
+rules colliding: becoming the declaring unit reclassified the template's own
+materialised members as "the program's declarations".
+
+The four failing drivers are two faces of that one table, not two mechanisms:
+`list_int`/`list_str` fail on the nested specialization, `objectlist`/`ifclist`
+on the type argument.
+
+**Fix.** Remember the scope the specialization was written in
+(`SpecBodyHostUnitIdx`; sentinel `-2`, because `-1` is a real scope and is
+exactly the one it must tell apart from unset) and let that veto reach it. The
+shadowing half is untouched: `FindUClass` tries `CurrentUnitIdx` rows first and
+returns on a hit, so a same-named class in the declaring unit still wins — and
+`a0780b56d`'s own six rows, including the two that exist to catch a fix that
+merely hides the program's copy, are unchanged.
+
+**Verification.** `test-fgl` at `2ff441dce`: **7 pass, 0 fail, 0 skip of 7**,
+exit 0, run by frankA with `05ae03c3d` confirmed an ancestor by
+`merge-base --is-ancestor` rather than by timestamp. All four previously-failing
+drivers pass. Two independently-built corpus-free reductions (frankA's and mine,
+from different models) also pass, one per face.
+
+Guarded corpus-free as `test_gen_nestedspec26`, because the arm that caught this
+skips on any checkout without the FPC RTL source: four shapes — nested
+specialization in the body, a SECOND class whose nested type has the same name,
+a program-declared class as type argument named by a cast (`fgl.pp:892`
+`T(FList.Items[FPosition]^)`), and an interface type argument. All four
+reproduce with the fix disabled.
+
+Re-laned P, which the auto-file's own fallback note asked for.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
