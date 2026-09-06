@@ -5510,6 +5510,8 @@ var
   clsSealed, clsAbstract: Boolean;
   savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
   gmKw: Integer;       { first token of a generic METHOD header — see ExpandGenericMethod }
+  mrIntfCi, mrMOff, mrMLen, mrIOff, mrILen, mrK: Integer;  { method resolution clause — see MethResolCls }
+  mrResolved: Integer;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -6460,6 +6462,51 @@ begin
             mnLen := Tokens[TokPos-1].SLen;
             Next;
 
+            { A METHOD RESOLUTION CLAUSE, not a method: what was just read as
+              the member name is an INTERFACE name and the `.` proves it --
+
+                function IFoo.SomeMethod = IFoo_SomeMethod;
+
+              It declares nothing. It redirects one interface SLOT to a
+              differently-named method of this class, which is the only way to
+              spell a class implementing two interfaces that both declare
+              `Execute`. Recorded by NAME and resolved at the IMT build: the
+              implementing method is allowed to appear BELOW the clause, so
+              there is nothing to bind to yet at this point.
+
+              Placed before the generic-method arm because that arm keys on a
+              `<` and this shape has a `.`, so neither can shadow the other;
+              placed after the name read because the interface name arrives
+              through exactly the same IsMethodNameTok path a member name does.
+              feature-p-interface-method-resolution-clauses }
+            if CurTok.Kind = tkDot then
+            begin
+              mrIntfCi := FindUClass(mname);
+              if mrIntfCi < 0 then
+                Error('method resolution clause names an unknown interface: ' + mname);
+              if not UClsIsInterface[mrIntfCi] then
+                Error('method resolution clause needs an INTERFACE before the dot, got: ' + mname);
+              Next;
+              if not IsMethodNameTok then Error('expected interface method name after ''.''');
+              mrMOff := Tokens[TokPos-1].SOffset; mrMLen := Tokens[TokPos-1].SLen;
+              Next;
+              Expect(tkEq, '=');
+              if not IsMethodNameTok then Error('expected implementing method name after ''=''');
+              mrIOff := Tokens[TokPos-1].SOffset; mrILen := Tokens[TokPos-1].SLen;
+              Next;
+              if CurTok.Kind = tkSemicolon then Next;
+              if MethResolCount >= MAX_METHRESOL then
+                Error('too many method resolution clauses');
+              MethResolCls[MethResolCount]   := ci;
+              MethResolIntf[MethResolCount]  := mrIntfCi;
+              MethResolMNOff[MethResolCount] := mrMOff;
+              MethResolMNLen[MethResolCount] := mrMLen;
+              MethResolINOff[MethResolCount] := mrIOff;
+              MethResolINLen[MethResolCount] := mrILen;
+              Inc(MethResolCount);
+              continue;
+            end;
+
             { `Add<T>` -- a generic METHOD. Rewrite the declaration, its
               definition and every use into one ordinary method per concrete
               type argument, then re-read this member from the first token
@@ -6967,6 +7014,30 @@ begin
               argument was read as garbage. Silent, and only through the
               interface: the direct class call resolved correctly all along
               (bug-p-interface-method-overload-picks-the-first-slot). }
+            { A resolution clause for THIS (class, interface, method) renames the
+              method the slot looks for, and NOTHING ELSE about the search.
+              Searched by name because that is what the clause carries -- see
+              MethResolCls for why it cannot carry an index.
+
+              THE SIGNATURE IS A PREFERENCE HERE, NOT A REQUIREMENT, and that is
+              inherited rather than introduced: FindUMethForSig deliberately
+              falls back to the first NAME match when no signature matches, and
+              its own comment hands the refusal to "the IMT builder's
+              diagnostic" -- which only fires when no method of the name exists
+              at all. So a clause naming a method of the wrong shape binds
+              exactly as a wrong-shaped SAME-named method already does, with no
+              diagnostic from either party. Measured both ways: with the clause
+              and without it, an arity mismatch compiles here and is refused by
+              fpc. Filed as bug-p-the-imt-signature-fallback-hands-off-a-refusal-nobody-makes;
+              do not "fix" it by adding a check on this path alone, which would
+              make the clause stricter than the plain spelling it desugars to. }
+            mrResolved := -1;
+            for mrK := 0 to MethResolCount - 1 do
+              if (MethResolCls[mrK] = ci) and (MethResolIntf[mrK] = tmpCi) and
+                 CaseEqual(GetSliceName(MethResolMNOff[mrK], MethResolMNLen[mrK]), imName) then
+                mrResolved := mrK;
+            if mrResolved >= 0 then
+              imName := GetSliceName(MethResolINOff[mrResolved], MethResolINLen[mrResolved]);
             mmi := FindUMethForSig(ci, imName, UMthProc_[UClsMBase[tmpCi] + imSlot]);
             if mmi < 0 then Error('class does not implement interface method: ' + imName);
             imProc := UMthProc_[mmi];

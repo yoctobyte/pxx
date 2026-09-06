@@ -386,6 +386,7 @@ const
   MAX_UFIELD      = 262144; { field slots across all user classes/records }
   MAX_UMETH       = 8192;  { method slots across all user classes }
   MAX_IMT         = 512;   { per-(class,interface) interface method tables }
+  MAX_METHRESOL   = 256;   { `function IFoo.M = Impl;` method resolution clauses, program-wide }
   MAX_UPROP       = 4096;
   MAX_ENUMTYPE = 512;
   MAX_ENUMVAL  = 4096;
@@ -5972,6 +5973,27 @@ var
   IMTIntf  : array[0..MAX_IMT-1] of Integer;  { interface ci }
   IMTOff   : array[0..MAX_IMT-1] of Integer;  { Data[] offset of the IMT }
   IMTCount : Integer;
+
+  { METHOD RESOLUTION CLAUSES: `function IFoo.SomeMethod = MyImpl;` in a class
+    body, which says that interface IFoo's SomeMethod slot is served by the
+    class's MyImpl rather than by the same-named method the IMT build would
+    find. It exists because a class implementing two interfaces that both
+    declare `Execute` needs two different bodies, and there is no other way to
+    spell that.
+
+    Names rather than resolved method indices, and TokChars slices rather than
+    strings, for the reason the UMth* columns are: the clause is parsed inside
+    the class body, where the implementing method may not have been declared
+    yet -- it legally appears after the clause -- so nothing can be bound here.
+    The IMT build resolves them, which is the point at which every member is in.
+    feature-p-interface-method-resolution-clauses }
+  MethResolCls    : array[0..MAX_METHRESOL-1] of Integer;  { implementing class ci }
+  MethResolIntf   : array[0..MAX_METHRESOL-1] of Integer;  { interface ci }
+  MethResolMNOff  : array[0..MAX_METHRESOL-1] of Integer;  { interface METHOD name }
+  MethResolMNLen  : array[0..MAX_METHRESOL-1] of Integer;
+  MethResolINOff  : array[0..MAX_METHRESOL-1] of Integer;  { IMPLEMENTING method name }
+  MethResolINLen  : array[0..MAX_METHRESOL-1] of Integer;
+  MethResolCount  : Integer;
 
   UFldNOff   : array of Integer;
   UFldNLen   : array of Integer;
