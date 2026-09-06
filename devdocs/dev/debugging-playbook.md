@@ -12953,6 +12953,29 @@ exactly the defect.**
 | an old predicate and a new one in the same function | **print the delta** — one compile names the whole changed population |
 | an arm added where there was no arm, or a lookup that did not exist | **enumerate from the GRAMMAR (or the spec/type-table), never from callers** |
 
+**AND THE THIRD THING THAT LOOKS LIKE A SUBSTITUTE AND IS NOT: A STATIC SCAN OVER
+DECLARATIONS.** frankH, the same afternoon, applying this rule to `compiler/builtin/*.pas`
+with a regex over declarations looking for a local or parameter differing only in case from
+another name in the same routine. It reported `pyeval.pas` / `FnRegister` holding
+`BodyPos`+`bodyPos` and `Params`+`params`. **False positive on its only hit.** `FnRegister`
+has parameters `bodyPos` and `params` and one local `i`; the capitalised forms were
+`FnBodyPos`/`FnParams` array names bleeding through a loose declaration regex. The real
+`pyeval` repair was a different pair entirely (`src` → `srcText`).
+
+**Why it is not a cheaper version of the delta print, and this is the part to keep.** The
+scanner answers *"do two spellings appear near each other"* — **correct about something else**
+— and it is physically unable to observe the one fact that matters, **whether resolution
+actually CHANGED.** The two instruments fail differently, which sounds like the corroboration
+rule being satisfied and is the opposite: **the delta fails LOUDLY (it prints a binding that
+moved, or nothing) and the scanner fails silently-plausibly (a hit that reads exactly like a
+real one).** So the scanner is a lead generator with an unmeasured base rate, never a
+confirmation, and its output must be opened rather than forwarded. It was — which is the only
+reason the bogus lead did not travel.
+
+A one-hit instrument also has no measurable base rate at all; *"100% false positives on its
+one hit"* is the honest way to report that, and it is the same animal as a check whose hit
+rate is ~100% being as empty as one that never fires.
+
 **One more thing frankS flagged about their own answer, and it is the weaker half said out
 loud:** *"pxx compiled all of it before and after with the same answers, which is the weaker
 half of that statement and worth saying is weaker: a case-shadowed pair does not fail to

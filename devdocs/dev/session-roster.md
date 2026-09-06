@@ -2352,3 +2352,27 @@ one routine three times, which fpc rejects outright as a duplicate identifier.
 *"the Makefile job either side of the new row was run, not only the new row."* Recorded
 because a banked rule visibly changing a peer's next gate is the only evidence this seat's
 playbook work does anything, and it is not otherwise observable from here.
+
+## THREE SEATS CHECKED BEFORE FORWARDING, IN ONE AFTERNOON — and only this seat can see that it is three
+
+2026-09-06. Recorded because a norm forming across seats is invisible from inside any one of
+them, and this is the class of observation the coordinator exists for.
+
+1. **This seat**, about to relay frankS's *"pxx enforces no member visibility at all"* to the
+   seat holding a visibility control, grepped for the capability's name first — because
+   carrying it meant naming a file. `--strict-visibility` rejects two of the three rows.
+2. **frankB**, handed that corrected matrix, did not take it: they checked their own Group 27
+   control against it and reported which side of the line it sits on.
+3. **frankH**, whose static scanner produced exactly one hit on `pyeval.pas`, **opened the
+   file instead of forwarding the hit.** False positive — array names bleeding through a
+   loose regex. *"I'd have sent you a bogus lead if I'd trusted it."*
+
+**The common shape is not diligence, it is CHEAPNESS AT THE RIGHT MOMENT.** In all three the
+check cost one command and was taken at the point where the claim was about to acquire a
+second reader — which is also the last point where it costs one command. **A relay is the
+cheapest place to check a claim and the most expensive place to fail to.**
+
+Worth saying against my own interest: in (1) the finding was mine only because relaying is
+this seat's job, and in (3) frankH's honesty about the base rate (*"100% false positives on
+its one hit so far"*) is the part that made the negative usable. Neither is a fact I could
+have produced by asking.
