@@ -17194,50 +17194,81 @@ in code, and the odd one out is the defect. This is `a rule spelled per caller f
 ABSENT COPY` with the search made cheap: **find the majority pairing, then find who does not
 do it.**
 
-## A TEST ID OF THE FORM `job#row` INVITES GROUPING BY JOB — and for a step that runs in EVERY job, the job is the wrong key
+## A JOB IS NAMED AFTER ITS FIRST SOURCE, SO THE NAME REPORTS THE DEPENDENCY ORDER AND NOT THE SUBJECT
 
-Measured 2026-09-06 during the fleet sync. An inventory of ten reds showed **three in
-`test-emit-obj`**, which reads as a subsystem in trouble and sends a seat looking for the
-common cause. There is none: **`tools/compiler_srchash.sh` is a SHARED STEP that runs in about
-forty jobs** (36 of 40 passing at the time), so `test-emit-obj#tools/compiler_srchash.sh` is
-not an emit-obj row at all — **the prefix names the job it ran in, not its subject.**
+Measured 2026-09-06 during the fleet sync, and **the first version of this section got the
+mechanism wrong while reaching the right conclusion — the correction is the more useful half
+and it is below.**
 
-**The correct key for a row that runs everywhere is the ROW, ACROSS JOBS.** The seat holding it
-had already grouped that way — taking `test-emit-obj#compiler_srchash.sh` and
-`test-zlib#compiler_srchash.sh` together — which is two claims and one cause, and would have
-looked like scattered effort to anyone grouping by job.
+An inventory of ten reds showed **three rows named `…#src:tools/compiler_srchash.sh`**, which
+reads as one subsystem in trouble. It is not a subsystem at all. `tools/testmgr.py:2538`:
 
-**Generalises to every composite identifier: `file:line`, `suite/case`, `host#job#row`.** The
-part on the left is where the thing RAN; only sometimes is it what the thing is ABOUT. A
-frequency count over the left-hand component measures the harness's layout, not the defect
-distribution — and it produces a cluster with a plausible name, which is worse than noise
-because it comes with a hypothesis attached.
+```python
+return "%s#src:%s" % (job.target, srcs[0])
+```
 
-**The cheap check: how many other rows share this row's RIGHT-hand component?** One `grep` of
-the job table. If the answer is "most of them", the left-hand grouping is an artifact.
+**A job is named after its FIRST source**, and every `$(COMPILER)`-dependent job inherits that
+target's prerequisites at the head of its source list — so `compiler_srchash.sh` leads the list
+for a large family of unrelated jobs. `seven.json` carries **151 mentions of the name.** The
+identifier is a fact about **prerequisite ordering in the build graph**; it says nothing about
+what the job tests, and in these two rows **the srchash check never failed at all** —
+`test-zlib`'s own text says the guard PASSED (*"sources match it"*) and the job died later
+compiling the zlib runner, while the `test-emit-obj` row has no srchash text whatsoever.
 
-### AND THE SAME DATA GIVES AN AFFIRMATIVE ANSWER, NOT JUST A NEGATIVE ONE
+The two rows were **a pxx compile error in the zlib runner** and **i386 file-scope initialisers
+under a `gcc -m32` main** — different causes, different lanes, and neither one Track T despite
+the tooling-shaped name.
 
-The known cause for a red `compiler_srchash.sh` is documented in `testmgr.py` itself: **the
-source tree MOVED during the run** — the script reads the live tree against a stamp written
-before job one, so `git pull --rebase` mid-run fails every srchash job. Measured 2026-09-01:
-**seven job groups RED, none of it real**, and the comment records why it fooled people —
-*"the failure text names a hash script rather than anything the author had changed, so it reads
-as a regression in whatever they just landed."*
+> ### THE CORRECTION, WHICH IS WORTH MORE THAN THE SECTION
+>
+> The first version said `compiler_srchash.sh` is *"a SHARED STEP that runs in about forty
+> jobs, 36 of them passing"*, and argued that **4-of-40 is a shape the known cause (a mid-run
+> tree move, which fails all of them identically) cannot produce** — therefore positive
+> evidence of a per-job cause.
+>
+> **The conclusion was right and the mechanism was invented.** It is a shared NAME, not a
+> shared STEP. And the number was worse than the mechanism: **36-of-40 counted JOBS GREEN
+> OVERALL, and it was read as SRCHASH CHECKS PASSING.** Those are different quantities and
+> nothing in the figure said which one it was — the author's own banked rule, *a number is not
+> a measurement until the quantity is named*, committed while presenting the number as
+> evidence.
+>
+> **And the aggravating half: the argument was explicitly UPGRADED** from *"absence of evidence
+> for the shared cause"* to *"positive evidence for a per-job one"* — the exact flattering-label
+> move that the same author had refused from a peer an hour earlier. **The check that exists on
+> the receiving side of a compliment does not exist on the inside of your own inference.**
+> A conclusion that is correct is the strongest possible anaesthetic against checking how you
+> got there, because every downstream consumer confirms it.
 
-**That cause fails ALL of them, identically, because it is the same dependency and the same
-stamp in each.** So **4 of 40 is a shape the known cause CANNOT produce** — which converts
-*"probably not the tree move"* into positive evidence for a per-job cause. **A failure
-signature that is all-or-nothing is worth knowing precisely because a PARTIAL result then
-refutes it**, and that is a stronger instrument than any amount of reasoning about whether a
-pull happened.
+**What survives, and it is the durable part:** for any composite identifier — `job#src:path`,
+`file:line`, `suite/case`, `host#job#row` — **ask what PRODUCES the name before grouping on
+it.** Here the answer was one line of Python. A frequency count over a component whose value is
+assigned by build order measures the build graph, and it returns a cluster with a plausible
+name, which is worse than noise because it arrives with a hypothesis attached.
 
-**Operational, and it is a scheduling fact rather than a debugging one: do not run a
-verification tier while seats are still pushing.** The srchash rows read the live tree, nothing
-snapshots it (the BINARY is snapshotted, which is exactly what makes the asymmetry invisible —
-*"a reader who knows the run owns the bytes it tested assumes it owns the sources too"*), and
-the warning arrives at the END of the run. During a fleet sync that is forty minutes spent to
-learn the tree moved. **Land everything, let the tree settle, then run.**
+**The cheap check is the grep that names the generator**, not a count: `grep -n '#src:'` finds
+the format string in one command and settles what the left and right halves mean. **Counting
+first and explaining afterwards is what produced the wrong mechanism.**
+
+### THE SCHEDULING FACT IS UNAFFECTED, AND IT HAS A SECOND MOVER
+
+Independent of the above and verified in the source: `tools/compiler_srchash.sh` reads the
+**live tree** against a stamp written before job one, so a `git pull --rebase` mid-run fails
+every srchash job (`testmgr.py:6148-6151`, warning at `:6409`). Measured 2026-09-01: **seven job
+groups RED, none of it real** — *"the failure text names a hash script rather than anything the
+author had changed, so it reads as a regression in whatever they just landed."* The BINARY is
+snapshotted and the tree is not, which is exactly what makes the asymmetry invisible: *"a reader
+who knows the run owns the bytes it tested assumes it owns the sources too."*
+
+**And there is a SECOND mover in the same function** (`:6416`, `:6442`): **a pin landing mid-run
+splits the pin-built jobs across two stables**, printed as `PIN MOVED MID-RUN`. So a
+verification run must be fenced against **two** movers, which makes the order strict rather than
+advisable:
+
+> **land everything → let the tree settle → run the tier → THEN pin.**
+
+Both warnings arrive at the END of the run, so an unfenced run costs its full wall-clock to
+learn that it measured a moving target.
 
 ## AN UNOWNED LIST IS RE-DERIVED, NEVER MAINTAINED — it decays in exactly one direction
 
