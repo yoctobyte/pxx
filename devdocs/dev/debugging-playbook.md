@@ -13688,3 +13688,72 @@ four lines apart and only one of them could be right.
 must stay wrong, because the ticket is a durable record whose history is the evidence. A
 label in a *message* has no history to protect and one reader — so **correct it immediately
 and say what does not change**, which is what frankB did in two sentences.
+
+## AN EMPTY STUB IS A MEASUREMENT; A SHIM IS NOT — and it is the probe whose right answer differs from the default
+
+frankH, 2026-09-06, splitting `feature-embed-dwscript-rtti` (`3e1483c6a`, `b5c203cc3`).
+
+The ticket's recorded wall was `lclintf`, banked in a `done/` ticket as *"DWScript's FPC
+branch WANTS LAZARUS"* — a claim that scopes the whole embed to a widgetset port.
+
+**frankH dropped an EMPTY `lclintf.pas` into `Source/` and the compile walked straight past
+it.** LCLIntf's own surface is used **zero** times; there is no qualified `LCLIntf.` call
+anywhere in `dwsXPlatform`. It was load-bearing only for a **transitive re-export**:
+`System.SyncObjs` is imported in the non-FPC arm (line 71) while `TdwsCriticalSection`
+derives from `TCriticalSection` unconditionally (line 99), and our `syncobjs` has a real one.
+The wall then moves to `TLightweightMREW`/`TFileName` — **ordinary RTL gaps, not a Lazarus
+port.**
+
+> **A SHIM would have compiled either way and proved nothing.** An empty unit satisfies the
+> `uses` clause and supplies nothing, so **if the dependency were real it names itself**, in
+> a list of unknown identifiers. The right answer and the failure answer are different
+> strings. `## CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT` with the default
+> being *"it compiles"* — and a shim is exactly the probe whose expected value collides with
+> the failure value.
+
+**And it converted a backlog-shape judgement into a measurement.** "One ticket re-scoped
+versus two tickets" reads as tidiness until you can say **the halves differ in STARTABILITY**
+— one is blocked on a widgetset that does not exist and one is two RTL types away. One row
+cannot represent both, and nothing but the probe could tell you which row you had.
+
+### The companion, from the same investigation: A CITATION THAT READS AS A RECEIPT
+
+The `done/` ticket said the Lazarus problem was *"Recorded on
+[[feature-embed-dwscript-rtti]]"*. **It never was** — that file contained no mention of LCL,
+Lazarus or Posix before today.
+
+> **The sentence was written in the same breath as the intent and never became the write.**
+> It is not a stale citation; it is a citation to a write that never happened, and it reads
+> to every later reader as a receipt for a filing.
+
+This is `## A RESIDUAL NAMED IN A COMMIT MESSAGE HAS NO READER` one step worse: there the
+residual is named where nobody looks, here it is named as **already handled**. The check is
+the cheap one and nobody runs it — **open the ticket you just claimed to have recorded it
+on**, in the same commit, before the sentence hardens into a fact.
+
+## THE ONLY THING THAT SEPARATED "THE FEATURE IS BROKEN" FROM "THE PROBE IS MIS-INVOKED" WAS THE FEATURE'S OWN POSITIVE CONTROL — and you have to already suspect the invocation to run it
+
+frankH, 2026-09-06, filing
+`bug-p-a-manifest-is-skipped-in-silence-when-the-source-is-compiled-from-its-own-directory`
+after an hour spent believing a landed feature was broken.
+
+`cd Source && pxx p.pas` resolves **no** unitalias rows. `pxx -FuSource p.pas` from the
+parent resolves **all 11**. Same tree, same flags, different answer — the manifest walk stops
+before the cwd (deliberate and well argued in `defs.inc`, **not** the defect) and a bare
+filename has no directory part to walk from.
+
+> **The symptom is the ordinary "unit source not found" that a genuinely missing unit gives.**
+> There is no second observable. So the reading *"the feature I just landed is broken"* and
+> the reading *"I invoked it from the wrong directory"* produce identical evidence, and the
+> first is the one a session reaches for, because it has just changed that code.
+
+**What settled it was running the feature's OWN committed positive control**
+(`test/libmanifest`), which passed — **and that is only reachable if you already suspect the
+invocation.** A control you run because you doubt yourself is not a control the workflow
+supplies; it is a control your suspicion supplies.
+
+**Hence the suggested fix is a DIAGNOSTIC, not a behaviour change.** The walk is right. What
+is missing is the sentence saying *"no manifest was consulted, because the source was named
+without a directory"* — which turns an hour of bisecting your own diff into one line of
+output. **Where two readings of one symptom differ only in the invocation, the repair belongs
+to the tool's VOICE, not to its behaviour.**
