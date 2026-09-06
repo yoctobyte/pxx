@@ -16919,6 +16919,16 @@ substring from 1, a cast to the type you already have, a merge of one list. Ever
 one of them tests that the call compiles and nothing else. **Ask of any fixture:
 is this argument the one where the operation and its absence agree?**
 
+> **AND THE DEGENERATE CASE IS USUALLY THE ONE THE CORPUS SPELLS** (frankS, on
+> reading the above back). It is the simplest thing to write, so it is what an
+> author reaches for when demonstrating that a feature exists. **An inherited test
+> suite is therefore systematically biased toward the identity argument** — this
+> is not a fixture someone might happen to pick, it is the one a corpus tends to
+> contain. tarray7 slices the whole string; nobody chose that to hide anything.
+> So when a corpus row covers a construct, check whether it covers the construct
+> or only its identity case, and expect the answer to be the second one more often
+> than chance.
+
 ## `@s[i]` ON A STRING ASSIGNED A LITERAL ANSWERS THE LITERAL'S ADDRESS — a defect whose every READ is correct
 
 frankS, 2026-09-06, filed as `bug-a-the-address-of-a-string-element-is-the-literals-address`
@@ -17222,3 +17232,71 @@ stashed, so that explanation does not obviously cover it and frankD did not reas
 past the measurement. **It also names the quiet half nobody has measured:** the
 seven directive-state channels are in the same gap, so a lifted body may run under
 the directive state at its APPENDED index rather than where it was written.
+
+## A CENSUS RED IS A QUESTION, NOT A VERDICT — the AST slot-write census fires on every new node kind, defect or not
+
+frankS, 2026-09-06, adding an `AN_SLICE` kind and reading the resulting RED
+wrongly for a few minutes. `gate.sh quick` failed on *"AST slot-write census
+matches its snapshot"*. The new kind writes real child nodes into both slots, so
+the DEFAULT (walkable) behaviour was already correct and nothing needed
+declaring — **the census simply wanted its snapshot to record the four new
+writes.**
+
+**So the row fires on ANY new node kind, whether or not that kind has the defect
+the census exists to catch** (a payload parked in a child slot, which the walker
+would then follow as a node). frankS read the RED as an accusation and had to go
+look to discover they had not done the thing it was warning about.
+
+**That is the right design for a census and it is worth saying so**, because the
+instinct on meeting it is to make the check narrower. A census's value is that it
+notices every change to the population, and a change that is fine is still a
+change someone should confirm. The message earning its keep is the one that tells
+you what to do **in both cases** — declare the payload, or record the snapshot.
+
+**Read a census RED as: the population moved, say which and why.** It is the
+opposite of a value assertion, and reading it as one wastes the minutes between
+"I broke something" and "I extended something".
+
+## A CAUTIOUS CALL MADE ON A NUMBER THAT IS LOW BY 11x IS STILL A CAUTIOUS CALL
+
+frankS, 2026-09-06, correcting frankB's sizing after frankB explicitly asked to be
+corrected. `refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field`
+was filed rather than swept, on the strength of *"roughly eighteen readers"* of
+`Params[i].TypeKind`. **Measured across `compiler/*.inc`, excluding assignments:
+209.**
+
+| where | readers | note |
+| --- | --- | --- |
+| `ir.inc` / `ir_codegen*` / `abi.inc` | **125** | marshalling — legitimately wants the ELEMENT kind |
+| other frontends | 38 | |
+| **`pasparser_*`** | **21** | the population all three known bugs came from |
+| elsewhere | 25 | |
+| **carrying `IsArray` on the same line** | **0 of 209** | |
+
+**The correction moves the conclusion the same way it already pointed, and
+frankS's framing of that is the finding:** frankB declined to sweep on the
+strength of eighteen judgements, and at 209 — with 125 of them in backend
+marshalling that wants the other reading — that decision was *more* right than the
+number it was made against. **But finding the number does not retroactively make
+the call a lucky one.** A decision that would have been correct at any plausible
+value of N was never resting on N; a decision that flips at N=50 was, and nobody
+can tell which they made until the number exists.
+
+**The operational half: the ticket should carry the 21, not the 209.** *"Convert
+the pasparser readers"* reads as either a small job or an enormous one, and the
+number is what decides whether anyone picks it up. A refactor ticket whose size is
+unstated is ranked by its title.
+
+### AND THE HYGIENE FIX DOES NOT CARRY THE SEMANTICS ONE
+
+frankB caught frankS having quietly assumed it would. The refusing accessor makes
+that class of misread **impossible to write**; it decides nothing about which
+question `FindProcOverloadRec` should ask. Two tickets, and **the hygiene one
+closing leaves the semantics one exactly as open.**
+
+**Adjacent tickets in one mechanism get read as one job**, in the same way a
+`blocked-by` edge recording that SOME repair needs the blocker reads as though
+every repair does. The expectation is never written down, which is why it survives
+— nobody states "and that will fix the other one", they just stop tracking it.
+**When you file a hygiene ticket beside a semantics ticket, say in both that the
+first does not close the second.**
