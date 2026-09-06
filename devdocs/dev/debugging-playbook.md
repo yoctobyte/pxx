@@ -17661,6 +17661,62 @@ refusal made a bad arm unreachable, so removing the refusal exposed it; here a r
 whole lowering unreachable, so removing it exposes untested code. **Both say: the refusal was
 holding something up, and you have just taken the prop out.**
 
+### THE SECOND INSTANCE INVERTS THE USUAL PIN WORRY: THE LOUD RED WAS THE SAFE ONE
+
+2026-09-06, frankH's result relayed by frankuser (`chess.pas`, ND array indexing). **Not
+measured by this seat, and the two halves have different provenance** — the MECHANISM is
+corroborated by frankH's own LOGBOOK entry at HEAD (three faces from one root: a spurious *"too
+many subscripts for array"* at `chess.pas:147`, a wrong ELEMENT of the right array, and a wrong
+ROW address from `BuildPartialNDIndex` reading the spans after the loop); **which faces the PIN
+carries is frankuser's relay of frankH and is not in the logbook.** Read the second as
+attributed, not as checked.
+
+`chess.pas` refuses to compile at HEAD, and that refusal is the visible red on the ledger. Pin
+v405 compiles it fine, so the refusal is a **post-pin regression that never reached a
+`$(PXX_STABLE)` consumer**. Behind it, the same root has **two wrong-VALUE faces that are OLDER
+and DO reach the pin.**
+
+**So the answer to "did the pin ship this?" was no and yes, about different things.** The loud
+half is the one that could not hurt anybody: it stops a build. The silent halves are in every
+`$(PXX_STABLE)` consumer's ground and nothing was looking for them, because the loud one had
+everyone's attention and a name.
+
+**How this differs from the parse wall above, and the difference is the operational part.**
+There, the refusal guarded the WHOLE feature, so the lowering behind it had never executed and
+the check was "treat it all as unproven". Here the refusal guarded **ONE SHAPE** of the
+feature. The neighbouring shapes were never refused — they ran, they ran wrong, and they have
+been running wrong for longer than the red has existed.
+
+> **When a refusal is fixed, do not ask only what becomes reachable. Ask which neighbouring
+> shapes were NEVER refused.** Those are the ones already in the pin, already in someone's
+> build, and silent. A refusal is a coarse signal sitting on top of finer ones, and clearing it
+> is when the fine ones become findable — not when they begin.
+
+### AND THE PROBE THAT CLEARED IT WAS BUILT ON THE ONE SHAPE THE MECHANISM DECLINES
+
+Same case, and it is an honest measurement that lied. frankA measured the address path as
+unaffected and passed that on as reassuring. **The probe used a nested array of rank 1 — and
+`NodeArrNDInfo` refuses rank 1 and clears**, so the clobber cannot occur on that shape at all.
+The artefact was read correctly. The **population** was wrong.
+
+This is CLAUDE.md's *"CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT"* with the
+collision moved one step: there the expected value collided with the **unknown default**
+(`sizeof(int)` = 4 = `TypeStorageSize(tyUnknown)`, so the `int` spelling cannot tell a correct
+answer from a blank one); here the expected value collides with the **disabled path**. Same
+guard-that-cannot-fail, different collision — and the second one is harder to see, because
+nothing in the probe is a suspicious constant. It is a shape.
+
+**It is NOT a member of the artefact-vs-rendering family**, and that is worth recording because
+it arrived as a candidate for it and was declined **by the person offering it**, on the
+criterion in `## WHEN DOES A FAMILY EARN A MERGE`: the first question here is *"could this
+probe have failed?"*, not *"am I looking at the artefact, or at a rendering of it?"* — and a
+family whose members open with different questions is an umbrella, not an index.
+
+**Third application of that test, and the first by someone other than its author, applied to
+their own candidate.** The test was written so a reader could check the author; it turns out to
+be more useful on the giving side, where declining costs one sentence and nothing has
+propagated yet.
+
 ## TEXT THAT ASSERTS THE ABSENCE OF SOMETHING THAT IS PRESENT — three instances in one day, and the cost is always a DUPLICATE IMPLEMENTATION
 
 2026-09-06. Collected here because no single seat saw more than one of them, and the shared

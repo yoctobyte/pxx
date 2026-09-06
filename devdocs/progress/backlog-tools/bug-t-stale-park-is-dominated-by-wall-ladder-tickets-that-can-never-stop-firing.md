@@ -55,6 +55,28 @@ Recommendation, held weakly: the last one first, because it is the only one that
 coverage, and measure whether the lane's output is legible before spending anything on the
 others.
 
+## Measured after filing: the OTHER rows are real, which sharpens this ticket
+
+2026-09-06, frankS, board-wide on the STALE-PARK output after `a39d93e7e`. **Of the 14 flagged
+citations locatable as `[[wiki-links]]`, ZERO have resolution prose inside the check's own +/-2
+window.** 6 of the 20 flagged citations have no wiki-link form, so the zero covers 14 of 20; the
+run came after a Track P marking cleanup, so 22 markings were inside the sampled population
+(two files against a board-wide run).
+
+**Two consequences for this ticket, and they point the same way.**
+
+1. The non-ladder rows are **live park conditions**, not stale ones — the check is accurate
+   where it is not drowned. So the noise here has exactly one source, the ladders, and there is
+   no second population to chase.
+2. It **kills the other repair I might have reached for**: a companion sweep stamping
+   already-fixed parks from before the convention existed. That cohort was predicted, measured,
+   and is one instance repo-wide. Not a class. See `debugging-playbook.md`,
+   `## A CHECKER KEYED TO A MARKER STRING`, corrected at `7ee2ed22d`.
+
+This raises confidence in the weakly-held recommendation above: if the surviving rows are all
+true positives, then per-ticket reporting is not merely the cheapest option — it is the only
+problem left, because legibility is the whole defect.
+
 ## Not this ticket
 
 The HELD branch's guidance (it told the reader "DO NOT CLAIM IT — tell the holder", which

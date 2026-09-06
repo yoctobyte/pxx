@@ -2846,3 +2846,81 @@ with `ListAgents` as the check and this incident as the worked example.
 **The shape to watch for elsewhere: a tool that instructs an action requiring a party who may
 not exist creates a permanent flag nobody may act on.** Any "ask X before proceeding" needs an
 answer for *X is gone*, or it is a deadlock with a friendly voice.
+
+## I BANKED A POPULATION CLAIM THAT ARRIVED WITH NO NUMBER, AND THE COUNT WAS ONE PROBE
+
+2026-09-06. frankD sent me the marker-cohort finding: `progress.sh check`'s STALE-PARK query is
+keyed to the string `PARK CONDITION SUPERSEDED`, so **everything fixed before that convention
+existed stays flagged forever**, and *"that is a sweep worth running per lane the day a marker
+convention lands."* One confirmed instance, `feature-pascal-corpus-generics`. I put it in the
+playbook at `383f03641` — including the prior *"the answer is almost never 'empty'"*.
+
+**frankS measured it the same evening: of the 14 flagged citations locatable as `[[wiki-links]]`
+across the whole board, ZERO have resolution prose inside the check's +/-2 window.** Not a low
+rate. Zero. frankD corrected it in place at `7ee2ed22d`, kept the instance and the mechanism,
+and replaced the population claim with the question plus the honest prior in the other
+direction — *a convention minted in response to a live case tends to be minted BY someone
+already fixing that case, so the backlog it implies may never have existed.* Two limits stated
+rather than buried: the run came after frankD's own Track P cleanup, so those 22 markings were
+in the sampled population, and 6 of the 20 flagged citations have no wiki-link form.
+
+**The part that is mine, and it is not that I believed a peer.** frankD said it in a message,
+where it carried provenance and a visible author. I wrote it into `debugging-playbook.md`, in
+the doc's own voice, as a finding, with a prior attached. **Relaying a claim raises its
+credibility by one level; banking it in a reference doc raises it by two** — the next reader
+gets no author, no date on the inference, and no way to tell the instance from the
+generalisation. That is the same move as the `#src:` invented mechanism: I supplied confidence
+the source had not. [[two-verified-counts-can-make-one-unverified-inference]]
+
+**And it is a genuine hole in `## THE CHECK ON A FLATTERING READING EXISTS ONLY ON THE RECEIVING
+SIDE`, four sections above.** That heuristic fires on claims that flatter someone. **This one
+flattered nobody** — a disinterested generalisation about tooling, no beneficiary, nothing to
+be pleased about — so neither end was primed, and it went straight through. A motivational
+trigger cannot catch a disinterested claim.
+
+> **The replacement trigger is structural: does this sentence assert a POPULATION? Then it
+> needs a number before it is banked, from whoever says it or from whoever writes it down.**
+> frankD has taken the giving-side half unprompted (*"I will treat a population claim in my
+> messages to you as needing a number attached"*). The receiving-side half is mine: **do not put
+> an uncounted population into a reference doc.** Cost of the check here: one probe.
+
+CLAUDE.md already says *"HEDGE THE PREMISE, NOT JUST THE INFERENCE"* and *"count open tickets by
+FOLDER, never by a glob"*. Both are about counting your OWN numbers. This is the relay case:
+**a population claim that is not yours is still a number, and it is still uncounted.**
+
+## THE OTHER COLLISION RESOLVED THE OPPOSITE WAY, AND THE START-TIME FIX SURVIVES BOTH
+
+2026-09-06, frankuser, closing the one thing I left open on the ledger: **no duplication on
+chess.** frankA stood down with a clean tree, handed frankH the entire diagnosis — mechanism,
+boundary, reduced repro — and then sent a **second** message correcting its own proposed fix
+shape before frankH could ship it. frankH's words: *two sessions on one topic produced a better
+fix than one would have.*
+
+**So the two collisions of the night resolved differently.** frankS's was a genuinely duplicated
+hour. frankA's was a handover that improved the result. **That is a caveat on the start-time
+fix, not a point against it** — the fix does not prevent overlap, it makes overlap **visible
+early enough to choose**, which is exactly the thing neither seat could do here. Both seats
+found out they were on one topic by accident, and one of the two accidents happened to be
+lucky. [[a-narrow-framing-does-not-partition-work]]
+
+**The concrete vindication is the fix shape.** Both seats independently reached for *"take a
+local copy of the rank"* — which passes the first two fixture rows and **still computes a wrong
+row address**, because `BuildPartialNDIndex` derives `trailing` from the spans after the loop.
+It took the second pair of eyes to catch that before it landed. frankuser: *a row is in the
+fixture for exactly that reason.*
+
+**Two independent seats converging on the same wrong fix is not corroboration** — it is the
+same reading of the same ticket, twice, which CLAUDE.md already names for measurements (*"two
+readings that can go wrong the same way are one reading"*) and which turns out to hold for fix
+SHAPES too. The agreement of the two proposals carried no information; only the fixture did.
+
+**frankH's LOGBOOK line at HEAD corroborates the mechanism independently of the relay** —
+three faces from one root, the local-copy-of-rank trap, and the rank-1 probe — which is worth
+saying because it is the check I owed after banking frankD's uncounted claim above, in the same
+hour. What the logbook does NOT say is which faces the pin carries; that half stays attributed
+to frankuser. [[verify-the-citation-not-only-the-claim]]
+
+The two mechanism findings from frankH's result are in the playbook, under
+`## WHEN A PARSE ERROR GUARDS A FEATURE` — the pin carries the two silent wrong-VALUE faces and
+not the loud refusal, and the rank-1 probe that cleared the address path was built on the one
+shape `NodeArrNDInfo` declines.
