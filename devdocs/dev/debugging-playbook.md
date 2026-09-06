@@ -15660,3 +15660,48 @@ shape that never looks wrong from a single use. Make it branch-aware, or
 hand-check every hit **before it reaches a ticket**: a false positive that has
 been written up costs the next reader an afternoon disproving it, and a disproof
 is much more expensive than a check.
+
+## A MISSING NAME ANNOUNCES ITSELF AND A WRONG BRANCH DOES NOT — so the member of a family that gets fixed is the loud one
+
+frankB, 2026-09-06, said before writing any code and it is the most reusable
+thing to come out of the day:
+
+> *"If I had taken the `Boolean16` wall as a ticket instead of measuring the
+> family, I would have added four names to a table and left the inversion in
+> place, and the corpus files would have gone one wall further **and looked like
+> progress**."*
+
+The sized-boolean family had four defects at once. Ranked by damage to running
+code: `not <*Bool>` **inverts a branch** (silent, wrong-value, control-flow);
+`WriteLn` prints `1` where fpc prints `TRUE`; `Ord(True)` is 1 against fpc's -1;
+and `Boolean16/32/64`/`QWordBool` do not exist. **Only the last one produces an
+error message**, and it is therefore the only one a wall-driven workflow ever
+reaches.
+
+**A corpus sweep is driven by refusals, so it enumerates a family in order of
+LOUDNESS, never of harm.** Adding the missing names clears the wall, the files
+advance, the count improves, and the inversion ships — with the improved count as
+evidence that things got better. **The metric moves in the right direction
+because of the fix that mattered least.**
+
+**The discriminator is cheap and it is the whole technique: when a wall names ONE
+member of a family, measure the WHOLE family against the oracle before fixing the
+member.** Eight names and three operators here, one table against fpc 3.2.2.
+frankB found the inversion only because the previous fix moved the wall and they
+walked one step past it instead of filing what the wall said.
+
+**And the cause was Group 19's shape recurring four hours later in an unrelated
+construct.** `BuiltinScalarTypeKind` maps `longbool -> tyInteger`, `wordbool ->
+tyUInt16`, `bytebool -> tyUInt8`, with a comment that is **entirely correct about
+its own case**: these are C-ABI booleans and must keep their WIDTH, so mapping
+them to `tyBoolean` would silently resize any struct crossing to C. **A `LongBool`
+needs two facts — it is a boolean AND it is four bytes — and the slot holds one
+kind.** The author had a width bug in front of them, kept the fact that fixed it,
+and the other fact was discarded silently. That is `SizeOfSlot(tk, cap)` with the
+parameters renamed: *a type carrying two facts, a carrier with room for one, and
+the fact you keep is the one your bug was about.*
+
+**A true comment is not a defence.** Both this comment and the mapping are right
+about width and say nothing about `not`, and nothing in the code records the fact
+that was dropped. See also *"merging two half-sizers widens the doorway"* — the
+repair is a carrier that holds the pair, not a second slot beside the first.
