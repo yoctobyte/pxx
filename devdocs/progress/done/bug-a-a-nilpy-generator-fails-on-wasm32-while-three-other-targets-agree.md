@@ -331,3 +331,46 @@ neither of the two obvious models explains why.
 
 Positive control for whoever takes it, verified at `cc18bc028` on both targets
 rather than measured once: `def g(): yield 1; yield 2` must print `1 2`.
+
+
+## 2026-09-06 (later) — MY NEGATIVE RESULT IS MISATTRIBUTED. The patch cannot have caused it.
+
+Retracting the causal claim above, not the observation. frank-coord-core built
+the same predicate in the shape recorded here, took it to fixedpoint, and found
+the emitted wasm module for `def g(): yield 1; yield 2` **BYTE-IDENTICAL with
+and without the patch**. Confirmed here by inspection rather than by a second
+rebuild, which would have failed the same way: `WasmEmitManagedLocals` releases
+only managed locals (`PXXStrRelease`, `PXXDynArrayRelease`, and since
+`d58828d8c` `PXXObjRelease`). That program has nothing but integers. The loop
+has no symbol to iterate, so a skip predicate added to it is a **no-op for this
+program** and cannot change its behaviour in either direction.
+
+**So `1,2` -> `1` was real and its cause was NOT the patch.** I do not know what
+it was, the tree state is gone, and I am not going to invent one. The likeliest
+candidate given the same session's other two incidents is a stale binary: I was
+mid revert/rebuild cycle, and that session separately hit both the
+`git checkout <sha> -- <file>` index trap and a genuinely walked seed. A
+measurement taken against a binary that did not contain the change under test
+looks exactly like this.
+
+**WHAT THIS COSTS, stated because it travelled.** The row was relayed around the
+fleet as a positive control that any change to this loop must keep passing, and
+it cannot fail for the patch it was guarding — a control drawn from the wrong
+population, which passes and certifies the instrument. That is this repo's own
+rule and my row is now an instance of it. The population it must come from is a
+generator that HOLDS A MANAGED LOCAL ACROSS A YIELD; frank-coord-core measured
+three such shapes moving the module 35-40KB.
+
+**WHAT SURVIVES:** nothing about the wasm32 release loop is established by this
+ticket. Not "the arm has a dependency the other six do not" — that was my
+inference from a misattributed measurement. `bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate`
+should be read as untouched by this ticket entirely.
+
+**AND A SECOND GAP I MISSED, from frank-coord-core (`d58828d8c`):**
+`WasmEmitManagedLocals` was also missing the `tyClass` arm that all six other
+copies carry, so every NilPy object bound to a local leaked once per call on
+wasm32 and no other target. The reason this ticket said "one gap and not two" is
+worth more than the correction: **a MISSING arm answers "does it consult the
+skip predicate" exactly the same way a present-but-unguarded one does.** I
+compared wasm32 against the register arms on the question I was already asking,
+and absence and presence-without-a-guard are the same answer to it.
