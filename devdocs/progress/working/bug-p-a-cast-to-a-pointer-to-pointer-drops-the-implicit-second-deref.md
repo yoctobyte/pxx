@@ -2,9 +2,9 @@
 track: P
 prio: 70
 type: bug
-status: open
+status: working
 blocked-by: []
-owner: 
+owner: frankB
 summary: "`PP(x)^.field` where PP is a pointer-to-POINTER alias applies the field offset one indirection too early: the explicit `^` is emitted and the IMPLICIT second deref the selector requires is not, so `.a` reads the intermediate pointer VALUE as if it were the record. Measured against fpc 3.2.2: `PPRec(pp)^.a` / `.b` give 4310376 / 0 where fpc gives 11 / 22. A SILENT WRONG VALUE on a program both compilers accept. Order-INDEPENDENT (both declaration orders, unlike its former sibling) and identical on pin v404, so long-standing. The explicit spelling `pp^^.a` is CORRECT, which is the discriminator: the record identity is resolved fine and only the address computation is short a level. Split out of bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read, which turned out to be a different cause (a one-pass alias repair) and is fixed; this is the half that blocks corpus rung 6a, because generics.defaults spells it as a CAST."
 ---
 
