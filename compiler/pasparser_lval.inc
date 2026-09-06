@@ -504,6 +504,7 @@ var
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
+  hostCi, helperRec: Integer;   { class-helper metaclass redirect: the class the call was SPELLED on, and the rec it redirected to }
   methName: AnsiString;
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
@@ -523,6 +524,7 @@ var
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
 begin
+  hostCi := -1; helperRec := -1;   { no class-helper metaclass redirect yet }
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is here
     rather than at the ~50 call sites so that every caller stays untouched. }
   if PyExprMode then
@@ -1380,6 +1382,36 @@ begin
           if mmi < 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
           if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 
+          { A CLASS HELPER'S class method, reached through the extended class's
+            NAME: `TA.Other` where `TH = class helper for TA` declares
+            `class function Other`. ClassHelperRecFor is the one resolver the two
+            INSTANCE member-lookup loops ask -- its own note says it exists so a
+            redirect cannot drift between them -- and this METACLASS path was the
+            third loop that never asked it, so `TA.Other` answered `class method
+            not found`. Third copy of one question, which is the shape
+            normalise-dont-special-case names.
+
+            hostCi KEEPS THE CLASS THE CALL WAS SPELLED ON, and that is not
+            bookkeeping -- it is the answer to what `Self` is. In Delphi a class
+            helper's class method receives the class reference the call was made
+            through, so `TA.Other` passes TA and a descendant's spelling passes
+            the descendant. The helper row itself has UClsIsRecord set and no
+            VMT, so the arm below would otherwise hand it the by-value dummy that
+            a record/type helper correctly gets, and the body would read nil.
+            bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
+          if mmi < 0 then
+          begin
+            helperRec := ClassHelperRecFor(REC_UCLASS_BASE + ci, fieldName);
+            if helperRec <> REC_UCLASS_BASE + ci then
+            begin
+              hostCi := ci;
+              ci := helperRec - REC_UCLASS_BASE;
+              mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+              if mmi < 0 then mmi := FindUMeth(ci, fieldName);
+              if mmi < 0 then begin ci := hostCi; hostCi := -1; end;
+            end;
+          end;
+
           { NilPy `Base.__init__(self, n)` — the pre-super() spelling of a
             base-class constructor call, and still ordinary Python. The ctor is
             registered under PyMethodName's 'create', so the raw name above
@@ -1661,7 +1693,17 @@ begin
             argument (`TJSONData.DoError(msg, ['Nil', x])`, fpjson) is recognised here too.
             This block used to hand-roll its own arg loop, which parsed the '[' as a SET and
             died on "set item must be one character". }
-          if UClsIsRecord[ci] then
+          if (hostCi >= 0) and (UClsHelperTk[ci] = Ord(tyClass)) then
+          begin
+            { a CLASS helper's class method: Self is the metaclass of the class
+              the call was SPELLED ON, which is what Delphi passes and what the
+              body needs. hostCi, not ci — ci is the helper row, which has no
+              VMT of its own. See the redirect above. }
+            mselfArg := AllocNode(AN_CLASSREF);
+            ASTIVal[mselfArg] := hostCi;
+            ASTTk[mselfArg] := Ord(tyPointer);
+          end
+          else if UClsIsRecord[ci] then
           begin
             { a record/type HELPER's static reached through the TYPE name
               (TU32Helper.GetSignMask): no metaclass exists — Self is a

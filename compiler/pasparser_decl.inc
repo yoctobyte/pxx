@@ -4360,7 +4360,26 @@ begin
     reference to the TARGET type instead (s.ToLower reads Self as the string). }
   nP := 1;
   pn[0] := 'Self';
-  if UClsHelperTk[ci] >= 0 then
+  if RecordMethodClassPrefix and (UClsHelperTk[ci] = Ord(tyClass)) then
+  begin
+    { A CLASS HELPER'S `class function`: Self is the METACLASS, exactly as it is
+      for an ordinary class method (pasparser_proc.inc's `class method: Self is
+      the metaclass -- a class reference` arm), and NOT the target instance.
+      That distinction is the whole of "layer 3" in this ticket: with Self typed
+      as a TA instance, the call site's class reference is read as an object and
+      `Self.ClassName` fetches the VMT word from inside the RTTI blob. It did
+      not error -- it segfaulted, which is the same failure the ticket recorded
+      as Runtime error 216 and the reason it was parked as a design question.
+      It is not one: Delphi passes the class reference the call was spelled on,
+      and both sides of this compiler already know how to carry that.
+      The impl side forks identically -- they must agree or the impl never
+      binds, which is the b321 lesson this file already records twice.
+      bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
+    pt[0] := tyPointer;
+    ptRec[0] := REC_NONE;
+    pRef[0] := False;
+  end
+  else if UClsHelperTk[ci] >= 0 then
   begin
     pt[0] := IntToTypeKind(UClsHelperTk[ci]);
     ptRec[0] := UClsHelperRec[ci];
@@ -4514,7 +4533,19 @@ begin
     non-static class method dispatches on the runtime metaclass, and a record has none —
     no VMT, no class reference. FPC rejects it; pxx used to consume `class` and treat the
     method as an ordinary one, so the declaration compiled and meant something else. }
-  if RecordMethodClassPrefix and not rmSawStatic then
+  { …and the rule is about the TARGET, not about which parser is running. A
+    `class helper for TA` is parsed by ParseRecordMethodDecl too -- helpers live
+    in the UCls tables with UClsIsRecord set -- and its target IS a class, which
+    HAS a metaclass, so a non-static `class function` in one is legal and fpc
+    compiles it. Refusing it here told the reader their class helper was a
+    record, and the workaround (adding `static`) makes it compile, which is how
+    the wrong message survives: it looks like advice.
+    UClsHelperTk[ci] carries the extended type's kind and is set before this
+    runs, so `record helper` and `type helper for LongInt` stay refused exactly
+    as terecs5 requires -- neither of those targets has a metaclass either.
+    bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
+  if RecordMethodClassPrefix and not rmSawStatic and
+     (UClsHelperTk[ci] <> Ord(tyClass)) then
     Error('a class method of a record must be declared static');
 
   { A record CONSTRUCTOR needs at least one MANDATORY parameter (terecs17 / terecs17a).

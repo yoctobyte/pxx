@@ -7018,6 +7018,47 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_a_class_property_cannot_be_streamed.pas $(TESTTMP)/test_clsprop26
 	@$(TESTTMP)/test_clsprop26 > /dev/null \
 	  || { echo 'test_a_class_property_cannot_be_streamed: FAIL - a plain class property stopped working'; exit 1; }
+	@# A CLASS HELPER'S TARGET HAS A METACLASS. `class helper for T` is parsed by
+	@# the advanced-record member machinery -- a helper lives in the UCls tables
+	@# with UClsIsRecord set -- so terecs5's rule (a RECORD's class method must be
+	@# static, having no VMT and no class reference) refused a class method on a
+	@# helper whose target is a class and DOES have one. The message told the
+	@# reader their class helper was a record, and `static` makes it compile, so
+	@# the wrong diagnostic reads as advice.
+	@# ROWS E AND F ARE THE EXPENSIVE HALF. With the declaration accepted and the
+	@# member resolved, the call reached the body and SEGFAULTED (the ticket
+	@# recorded Runtime error 216 and parked the rest as a design question: what
+	@# is Self for a class helper's class method?). It is not a design question --
+	@# Delphi passes the class reference the call was SPELLED on -- and the fix is
+	@# to type Self as the metaclass on BOTH the decl and impl sides, which must
+	@# agree or the impl never binds.
+	@# ROWS C AND D SEPARATE "COMPILES" FROM "DISPATCHES", and E/F are what make
+	@# them fail: `Other` returns a literal, so a fix that hard-wired the helper's
+	@# target would print 3 twice and pass. E/F print TA and TD.
+	@# ROWS B AND G ARE THE INSTANCE PATH, base and descendant -- already correct,
+	@# and the thing a change to Self's type would most easily break.
+	@# .expected is `fpc -Mobjfpc` 3.2.2's own output, byte for byte.
+	./$(COMPILER) test/test_a_class_helper_can_declare_a_class_method.pas $(TESTTMP)/test_clshelpermeth26
+	@$(TESTTMP)/test_clshelpermeth26 | diff -u test/test_a_class_helper_can_declare_a_class_method.expected - \
+	  || { echo 'test_a_class_helper_can_declare_a_class_method: FAIL - a class helper lost its class method, or Self stopped being the spelled class'; exit 1; }
+	@# ...and the POSITIVE CONTROL for the narrowing, which did not exist before:
+	@# the terecs5 rule was asserted NOWHERE in the suite, so narrowing it -- or
+	@# deleting it -- was invisible. Three targets that genuinely have no
+	@# metaclass must still refuse a non-static class method: a plain record, a
+	@# `record helper`, and a `type helper for LongInt`.
+	@# ONE ROW PER COMPILE (-dROW_A/B/C) because Error() halts, so three rows in
+	@# one file would report only the first and leave two assertions unable to
+	@# fail.
+	@for r in ROW_A ROW_B ROW_C; do \
+	  ./$(COMPILER) -d$$r test/test_a_class_method_still_needs_static_where_there_is_no_metaclass.pas $(TESTTMP)/test_nometa26 > $(TESTTMP)/test_nometa_$$r.log 2>&1; \
+	  grep -q 'a class method of a record must be declared static' $(TESTTMP)/test_nometa_$$r.log \
+	  || { echo "test_a_class_method_still_needs_static_where_there_is_no_metaclass: FAIL - $$r compiled, or refused for another reason"; exit 1; }; \
+	done
+	@# ...and with no row selected the file must COMPILE AND RUN, or the three
+	@# greps above could be reading an unrelated error in a file that never
+	@# reached the rule.
+	./$(COMPILER) test/test_a_class_method_still_needs_static_where_there_is_no_metaclass.pas $(TESTTMP)/test_nometa26
+	tools/expect_same.sh test_nometa26 "$$($(TESTTMP)/test_nometa26)" "plain record still compiles 5"
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

@@ -1625,7 +1625,20 @@ begin
     pconst[0] := False;   { Self is never a `const` parameter }
     pout[0] := False;     { ...nor an `out` one }
     puntyped[0] := False; { ...nor an untyped one: Self always has a type }
-    if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
+    if isStaticMethod and (methOwnerCi >= 0) and
+       (UClsHelperTk[methOwnerCi] = Ord(tyClass)) then
+    begin
+      { a CLASS HELPER's `class function`: Self = the METACLASS, the same as an
+        ordinary class method one arm below. Forked here to agree with the decl
+        side (pasparser_decl.inc's Self-at-param-0 block); the two must match or
+        the impl never binds — the b321 lesson. A TYPE or RECORD helper keeps
+        the by-value target dummy, because neither target has a metaclass.
+        bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
+      ptypes[0] := tyPointer;
+      ptypesRec[0] := REC_NONE;
+      pbyref[0] := False;
+    end
+    else if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
     begin
       { a HELPER's `class function ...; static;`: Self = the target BY VALUE
         (dummy; static bodies may not use Self) — must agree with the decl }

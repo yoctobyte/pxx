@@ -51,3 +51,98 @@ exists.)
 curated 550 — do not compare that number to a curated one. Whether all nine
 share this cause beyond the diagnostic is NOT established; only tgenfunc19.pp
 was read.
+
+## Resolution — all three layers, and layer 3 was not a design question
+
+frankS's three-layer analysis is what made this tractable, and layers 1 and 2
+landed exactly as written. **Layer 3 was misdiagnosed, and the correction is the
+transferable part.**
+
+**Layer 1 — the declaration.** `pasparser_decl.inc`'s terecs5 guard now reads
+`RecordMethodClassPrefix and not rmSawStatic and (UClsHelperTk[ci] <>
+Ord(tyClass))`. The rule is about the TARGET, not about which parser is running:
+`class helper for T` is parsed by the advanced-record member machinery because a
+helper lives in the UCls tables with `UClsIsRecord` set, and its target is a
+class, which HAS a metaclass. `record helper` and `type helper for LongInt` stay
+refused, since neither of those targets has one either.
+
+**Layer 2 — the metaclass lookup.** The `TA.Other` path in `pasparser_lval.inc`
+was the THIRD member-lookup loop and the only one that never asked
+`ClassHelperRecFor` — whose own note says it exists so a redirect cannot drift
+between the two that do. It asks now, and keeps `hostCi`, the class the call was
+spelled on.
+
+### Layer 3: what `Self` is, and why the ticket could not see it
+
+The ticket parked here, calling it a design question — *"which metaclass a class
+helper's class method receives, and where it comes from at the call site"*. It
+is not a fork. **Delphi's answer is that `Self` is the class reference the call
+was SPELLED on**, and both halves of this compiler already knew how to carry
+that:
+
+- the metaclass receiver is already an `AN_CLASSREF` over a class index (the
+  class-property arm, same file);
+- an ordinary class method already types `Self` as `tyPointer` / `REC_NONE`
+  (`pasparser_proc.inc`: *"class method: Self is the metaclass -- a class
+  reference"*).
+
+**The real defect is one level below where the ticket looked.** With layers 1
+and 2 in, the call reached the body and crashed — the `Runtime error 216` the
+ticket records, a segfault here. The cause is that a class helper's `Self` was
+typed as a TARGET INSTANCE on both the decl and impl sides, so the class
+reference passed at the call site is read as an object and `Self.ClassName`
+fetches a VMT word from inside the RTTI blob. Forking both sides to the
+metaclass when `UClsHelperTk = Ord(tyClass)` fixes it; they must be forked
+TOGETHER or the impl never binds, which is the b321 lesson this file already
+records twice.
+
+frankS's own reading of the mislabel, which is better than mine: **"this needs a
+decision" is a comfortable place to stop, and it is indistinguishable from "I
+have not found the cause yet" right up until someone finds it.**
+
+## Measured
+
+`fpc -Mobjfpc` 3.2.2's own output, byte for byte:
+
+```
+A 1   the class's own method             E TA   Self is the SPELLED class
+B 2   the helper's INSTANCE method       F TD   ...and TD here, not TA
+C 3   the helper's CLASS method          G 2    instance path on the descendant
+D 3   ...through a descendant's name
+```
+
+**ROWS E AND F ARE THE TEST AND C/D COULD NOT HAVE FOUND IT.** `Other` returns a
+literal, so a fix that hard-wired the helper's target prints `3` for both C and D
+and passes — an expected value colliding with what doing nothing produces, in a
+file named for the feature. `ClassName` is the cheapest probe whose answer
+differs per receiver.
+
+## The rule was asserted nowhere, and that is a finding of its own
+
+`a class method of a record must be declared static` appeared in no Makefile
+assertion and no test — grepped both. **Narrowing it, or deleting it outright,
+would have been invisible.** frankS's note: *a rule with no assertion is not a
+rule; it is a comment that happens to be executable.*
+
+`test_a_class_method_still_needs_static_where_there_is_no_metaclass` asserts it
+for the three targets that genuinely have no metaclass — a plain record, a
+`record helper`, a `type helper for LongInt` — one row per compile via
+`-dROW_A/B/C` because `Error()` halts, plus a no-row build that must compile AND
+run so the three greps cannot be reading an unrelated error.
+
+Every existing helper test still passes: `test_class_helper_for_a_class`,
+`test_type_helper_{const_array,for_spelling,on_a_value,property,typename_receiver}`,
+`test_record_helper_for_string_b331`, `lib_string_helpers`.
+
+## Not inherited: the 9 corpus rows
+
+The ticket's `--all` census found 9 rows sharing this diagnostic and says
+explicitly that whether they share the CAUSE is not established — only
+`tgenfunc19.pp` was read. That number is not claimed here and this ticket closes
+on its own construct.
+
+**Gate:** `tools/gate.sh quick` with the tree DIRTY (16 PASS incl. the FPC seed
+canary; the only RED is `pinned builds live lib/rtl`, frankZ's `8374118ec`
+waiting on an owner-only pin) AND `PXX_ALLOW_FULL_SUITE=1 make test` — the
+change alters how `Self` is typed for a whole method class, and the quick tier
+has no class helper in it.
