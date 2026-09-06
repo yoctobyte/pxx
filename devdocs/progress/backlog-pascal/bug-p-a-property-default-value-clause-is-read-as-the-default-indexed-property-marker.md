@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
-summary: "`property Depth: Integer read FDepth write FDepth default 16;` sets propIsDefault -- the flag that means THE DEFAULT INDEXED PROPERTY -- because pasparser_decl.inc:5711 handles the two unrelated `default` clauses with one arm. Declared BEFORE a genuine `property Items[i]: ...; default;` it STEALS the slot: `t[2]` is refused with `default property is write-only` where fpc 3.2.2 prints 100. Reverse the declaration order and both print 100, so this is ORDER-DEPENDENT and a probe that happens to declare the indexed property first sees nothing. Separately and in the same clause, only a LITERAL is accepted: `default DefaultDepth`, `default DefaultDepth + 1` and `nodefault` are all refused outright (fpc compiles all three), which is wall 3 of corpus rung 7 -- FPC's pscanner.pp:893 uses the named-constant form. `default 16` alone runs correctly, so the literal is consumed somewhere; WHERE is not established and the stray token does not reach the class-body loop. Three defects, one arm: the two `default` concepts are conflated, the value is not a constant expression, and `nodefault` is absent."
+summary: "`property Depth: Integer read FDepth write FDepth default 16;` sets propIsDefault -- the flag that means THE DEFAULT INDEXED PROPERTY -- because pasparser_decl.inc:5711 handles the two unrelated `default` clauses with one arm. Declared BEFORE a genuine `property Items[i]: ...; default;` it STEALS the slot: `t[2]` is refused with `default property is write-only` where fpc 3.2.2 prints 100. Reverse the declaration order and both print 100, so this is ORDER-DEPENDENT and a probe that happens to declare the indexed property first sees nothing. Separately and in the same clause, only a LITERAL is accepted: `default DefaultDepth`, `default DefaultDepth + 1` and `nodefault` are all refused outright (fpc compiles all three), which is wall 3 of corpus rung 7 -- FPC's pscanner.pp:893 uses the named-constant form. `default 16` alone compiles, but NOT because the literal is consumed correctly -- measured 2026-09-06 by instrumenting the class-body catch-all, the value falls straight through to `pasparser_decl.inc:7230` and is DISCARDED there (frankB's `default 16 77 88 99;` fires it four times, kind=tkInteger, the legitimate 16 included), so the clause has never had any effect; see bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise, which must land AFTER this one. Three defects, one arm: the two `default` concepts are conflated, the value is not a constant expression, and `nodefault` is absent."
 ---
 
 # `default <value>` and `default;` are different clauses sharing one arm
@@ -82,3 +82,31 @@ the bug is the flag and the refusal, not the semantics of the default value.
 Reached from [[feature-pascal-corpus-expansion]] rung 7. Wall 1 was
 `c4036925a`; wall 2 is
 [[bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap]].
+
+## 2026-09-06 (frankD) — where the literal goes, measured
+
+The summary previously said the literal *"is consumed somewhere; WHERE is not
+established and the stray token does not reach the class-body loop."* Both
+halves were wrong, and the correction changes what the fix has to do.
+
+Instrumenting the class-body catch-all (`pasparser_decl.inc:7230`) and compiling
+this ticket's own probe at `86f935479`:
+
+```
+property Depth: Integer read FX write FX default 16 77 88 99;
+   -> 4 x CATCHALL cls kind=2 (tkInteger)
+```
+
+Four fires, one per number. The `default` arm at 5711 does `Next` then
+`Eat(tkSemicolon)`; `Eat` finds a number, does nothing, and returns. Every
+literal is then discarded one at a time by the class-body member loop.
+
+So **`default 16` does not work today** — it compiles because the value is
+thrown away, which is exactly what a working-but-ineffective clause looks like
+from outside. The fix must PARSE a constant expression here, not merely stop
+setting `propIsDefault`; stopping the flag alone leaves the value falling
+through the same hole.
+
+Landing order runs the other way from what you might expect: the catch-all
+narrowing is blocked-by THIS ticket, because erroring on the stray token before
+`default <value>` is parsed would turn legal FPC into a hard error.
