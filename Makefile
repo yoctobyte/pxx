@@ -17967,6 +17967,17 @@ test-core: $(COMPILER)
 	# builtin-only rows are controls that must not move. .expected is FPC 3.2.2's.
 	./$(COMPILER) test/test_a_named_cast_asks_the_alias_before_the_builtin.pas $(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26
 	tools/expect_same.sh test_a_named_cast_asks_the_alias_before_the_builtin26 "$$($(TESTTMP)/test_a_named_cast_asks_the_alias_before_the_builtin26)" "$$(cat test/test_a_named_cast_asks_the_alias_before_the_builtin.expected)"
+	# a cast to a FLOAT type converts at every door that recognises the name.
+	# fpc refuses the program (Illegal type conversion), so each row asserts a
+	# RELATION between two of our own spellings rather than an oracle value; the
+	# keyword-spelled rows are the controls, on the varied axis.
+	./$(COMPILER) test/test_a_float_cast_converts_at_both_doors.pas $(TESTTMP)/test_a_float_cast_converts_at_both_doors26
+	tools/expect_same.sh test_a_float_cast_converts_at_both_doors26 "$$($(TESTTMP)/test_a_float_cast_converts_at_both_doors26)" "$$(cat test/test_a_float_cast_converts_at_both_doors.expected)"
+	# the user-alias cast door answers like the builtin-name one: an enum alias
+	# keeps its identity, a variant alias BOXES. .expected is FPC 3.2.2's own
+	# output; the ordinal and string rows are controls on the varied axis.
+	./$(COMPILER) test/test_the_alias_cast_door_answers_like_the_builtin_one.pas $(TESTTMP)/test_the_alias_cast_door_answers_like_the_builtin_one26
+	tools/expect_same.sh test_the_alias_cast_door_answers_like_the_builtin_one26 "$$($(TESTTMP)/test_the_alias_cast_door_answers_like_the_builtin_one26)" "$$(cat test/test_the_alias_cast_door_answers_like_the_builtin_one.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"

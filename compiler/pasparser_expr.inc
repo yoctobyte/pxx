@@ -6531,6 +6531,26 @@ begin
             mechanism. tyPointer is excluded explicitly because TypeIsOrdinal
             INCLUDES it (the trap IRLowerCallArg's promo arms document), and a
             pointer alias must keep the reinterpret below. }
+          { A VARIANT-typed alias BOXES, exactly as the builtin `Variant(x)`
+            spelling does -- and it must be asked BEFORE the ordinal arm below,
+            because TypeIsOrdinal answers True for tyVariant and that arm then
+            called VariantCastToTemp with tyVariant as its TARGET. Measured:
+            `type TV = Variant; v := 41; w := TV(v)` printed 1 -- the variant
+            record's TAG word -- while `w := Variant(v)` on the line above it
+            printed 41. That is the same defect the builtin door fixed in
+            bug-p-a-cast-to-variant-segfaults-instead-of-boxing, whose own
+            write-up records that exempting an ALREADY-variant operand
+            "preserved exactly the one shape that had no reason to be
+            preserved"; here the alias door was never taught the rule at all.
+            An unconditional box is what that fix landed on and is what this
+            mirrors. }
+          if IntToTypeKind(AliasTk[aliasIdx]) = tyVariant then
+          begin
+            vcNode := VariantBoxToTemp(CurASTNode);
+            if vcNode >= 0 then CurASTNode := vcNode;
+            LastExprTk := tyVariant;
+            Exit;
+          end;
           if TypeIsOrdinal(IntToTypeKind(AliasTk[aliasIdx])) and
              (IntToTypeKind(AliasTk[aliasIdx]) <> tyPointer) then
           begin
@@ -6547,9 +6567,24 @@ begin
             ASTIVal[node] := -1;
             ASTTk[node]   := AliasTk[aliasIdx];
             { an alias OF AN ENUM keeps the enum identity, or WriteLn prints the
-              ordinal — the same line the builtin-cast arm carries. }
+              ordinal — the same line the builtin-cast arm carries.
+
+              THE ALIAS TABLE'S OWN COLUMN IS THE ANSWER, not a name lookup.
+              `FindEnumType(name)` asks whether the ALIAS NAME is itself an enum
+              type, which it is not: `type TE = TMyEnum; TE(1)` printed 1 where
+              `TMyEnum(1)` printed eB. AliasEnumId is the column that exists for
+              exactly this (stored +1 so an unwritten row reads as NONE), and
+              the two High/Low resolvers in pasparser_lval.inc already read it
+              this way -- their comment says the two spellings must not drift,
+              and the cast door was the third spelling that had.
+              bug-p-a-type-alias-drops-the-enum-identity-and-a-set-drops-its-char-element-kind }
             if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
-              ASTEnumId[node] := FindEnumType(name);
+            begin
+              if AliasEnumId[aliasIdx] <> 0 then
+                ASTEnumId[node] := AliasEnumId[aliasIdx] - 1
+              else
+                ASTEnumId[node] := FindEnumType(name);
+            end;
             CurASTNode := node;
             LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
             Exit;
@@ -6576,19 +6611,7 @@ begin
           if TypeIsFloat(IntToTypeKind(AliasTk[aliasIdx])) then
           begin
             castTk := IntToTypeKind(AliasTk[aliasIdx]);
-            op := AllocVar('', castTk);
-            node := AllocNode(AN_STR_FROM_CHAR);
-            argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
-            ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
-            left := AllocNode(AN_ASSIGN);
-            ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
-            ASTTk[left] := Ord(Syms[op].TypeKind);
-            ASTLeft[node] := left;
-            identNode := AllocNode(AN_IDENT);          { yielded value = the temp }
-            ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-            ASTRight[node] := identNode;
-            ASTTk[node] := Ord(Syms[op].TypeKind);
-            CurASTNode := node;
+            CurASTNode := FloatCastToTemp(CurASTNode, castTk);
             LastExprTk := castTk;
             Exit;
           end;
@@ -6991,6 +7014,20 @@ begin
                 LastExprTk := castTk;
                 Exit;
               end;
+            end;
+            { ...and a FLOAT target converts rather than reinterpreting, the
+              same as the alias door and the `Double(x)` keyword arm. Asked
+              AFTER the Explicit overload, which is a more specific answer for
+              a record or class operand, and after VariantCastToTemp, which
+              owns the variant operand. See FloatCastToTemp: without this,
+              `Currency(i)` for `i: LongInt = 7` handed a Double consumer
+              3.4584595208887258E-323 -- the integer's bits -- while its own
+              alias spelling `TCur(i)` answered 7. }
+            if TypeIsFloat(castTk) then
+            begin
+              CurASTNode := FloatCastToTemp(CurASTNode, castTk);
+              LastExprTk := castTk;
+              Exit;
             end;
             node := AllocNode(AN_PTR_CAST);
             ASTLeft[node] := CurASTNode;
@@ -8709,6 +8746,44 @@ begin
   ASTRight[vcNd] := vcRd;
   ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
   VariantCastToTemp := vcNd;
+end;
+
+function FloatCastToTemp(n: Integer; castTk: TTypeKind): Integer;
+{ A cast to a FLOAT type is a real CONVERSION -- int->float, or double->single
+  narrowing -- and never a reinterpret of the operand's bits. Model it exactly
+  as the `Double(x)` KEYWORD arm already does: a hidden temp of the CAST's type,
+  the ordinary store into it (which coerces), and the temp read back as the
+  value.
+
+  SHARED BECAUSE IT WAS WRITTEN ONCE AND THE SIBLING DOOR NEVER GOT IT. The
+  user-alias door grew this arm when `type TaD = double; TaD(3.75)` was found
+  answering 4615626668101337088; the BUILTIN-NAME door three hundred lines below
+  kept falling through to the AN_PTR_CAST reinterpret, so `Currency(i)`,
+  `TDateTime(i)` and `ValReal(i)` handed on the integer's bit pattern as a
+  double while `type TCur = Currency; TCur(i)` converted. Those three are the
+  whole reachable set: every other float spelling (`Double`, `Single`,
+  `Extended`, `Real`) is a LEXER KEYWORD and is answered by the keyword arm,
+  which has always converted. The names that reach the builtin-NAME door are
+  precisely the ones FPC's System unit spells as identifiers.
+
+  refactor-p-five-dispatch-sites-for-one-named-type-cast }
+var fcTmp, fcAsg, fcLhs, fcRd, fcNd: Integer;
+begin
+  FloatCastToTemp := -1;
+  if n < 0 then Exit;
+  fcTmp := AllocVar('', castTk);
+  fcNd  := AllocNode(AN_STR_FROM_CHAR);
+  fcLhs := AllocNode(AN_IDENT);                { store LHS = the temp }
+  ASTIVal[fcLhs] := fcTmp; ASTTk[fcLhs] := Ord(Syms[fcTmp].TypeKind);
+  fcAsg := AllocNode(AN_ASSIGN);
+  ASTLeft[fcAsg] := fcLhs; ASTRight[fcAsg] := n;
+  ASTTk[fcAsg] := Ord(Syms[fcTmp].TypeKind);
+  ASTLeft[fcNd] := fcAsg;
+  fcRd := AllocNode(AN_IDENT);                 { yielded value = the temp }
+  ASTIVal[fcRd] := fcTmp; ASTTk[fcRd] := Ord(Syms[fcTmp].TypeKind);
+  ASTRight[fcNd] := fcRd;
+  ASTTk[fcNd] := Ord(Syms[fcTmp].TypeKind);
+  FloatCastToTemp := fcNd;
 end;
 
 function VariantBoxToTemp(n: Integer): Integer;

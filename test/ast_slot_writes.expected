@@ -354,6 +354,7 @@ AN_ASSIGN Left destNode
 AN_ASSIGN Left dfltIdent
 AN_ASSIGN Left elemNode
 AN_ASSIGN Left elvisRd
+AN_ASSIGN Left fcLhs
 AN_ASSIGN Left fieldNode
 AN_ASSIGN Left fldNode
 AN_ASSIGN Left frIdn

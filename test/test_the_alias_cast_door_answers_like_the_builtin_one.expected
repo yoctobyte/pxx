@@ -1,0 +1,9 @@
+enum builtin eB
+enum alias   eB
+vbox builtin 41
+vbox alias   41
+ord  builtin 44
+ord  alias   44
+str  builtin hi
+str  alias   hi
+vbox alias-int 233
