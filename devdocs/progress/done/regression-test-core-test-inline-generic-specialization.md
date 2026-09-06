@@ -80,4 +80,4 @@ Verified: both rows GREEN under `testmgr --tier native`; eb2447470's own fixture
 still GREEN; `tgenfunc12.pp`, the corpus row it un-skipped, still compiles and
 runs exit 0; `tgenfunc19.pp` still stops at :32 with `undefined variable
 (TTest2)`, the wall its corrected skip reason names — unchanged.
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8d37fac6b.
