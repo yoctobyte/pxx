@@ -6380,6 +6380,17 @@ test-core: $(COMPILER)
 	# and took the string desugar. The cause is a MISSING ASTNDRowSubs STAMP on
 	# the AN_INDEX the for-in builder synthesises, not a Char rule -- the int-row
 	# control in the same file was correct throughout.
+	# A DECIMAL literal between High(Int64) and High(QWord) is a QWord. Inline it
+	# did not COMPILE (routed to the promotable-int path: "runtime helper
+	# PXXPromoFromStr not found"); as a const it compiled and printed the wrapped
+	# SIGNED reading, so the FNV-1a offset basis came out negative. The HEX row is
+	# the control that must NOT move -- fpc types a hex literal by bit width and
+	# calls $8000000000000063 negative too -- and the small rows are the second.
+	# Every row diffed byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_a_decimal_literal_above_high_int64_is_a_qword.pas $(TESTTMP)/test_qwlit26
+	tools/expect_same.sh test_a_decimal_literal_above_high_int64_is_a_qword \
+	  "$$($(TESTTMP)/test_qwlit26)" \
+	  "$$(cat test/test_a_decimal_literal_above_high_int64_is_a_qword.expected)"
 	./$(COMPILER) test/test_for_in_over_an_array_of_char_rows_yields_the_row.pas $(TESTTMP)/test_forinrow26
 	tools/expect_same.sh test_for_in_over_an_array_of_char_rows_yields_the_row \
 	  "$$($(TESTTMP)/test_forinrow26)" \

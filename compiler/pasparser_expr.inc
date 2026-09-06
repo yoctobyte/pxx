@@ -19,6 +19,9 @@
   devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md }
 
 procedure ParseFactor; forward;
+procedure NormalizeWideUnsignedLiteral(lit: Integer); forward;   { body sits with the
+  other wide-literal normalisers, ~9500; ParseFactor is the CREATION site and calls it
+  so one routine owns the "a decimal literal above High(Int64) is a QWord" rule. }
 
 { A SIZED BOOLEAN, normalised to an ordinary Boolean: `n <> 0`, typed
   tyBoolean -- or `n` untouched when it is not one.
@@ -880,6 +883,24 @@ begin
           to 0 and would otherwise be typed tyInteger, which is both wrong and
           indistinguishable from a char literal's char-pool span. }
         ASTTk[node] := Ord(tyInt64);
+        { BETWEEN High(Int64) AND High(QWord) THE LITERAL IS A QWord, AND THE RULE
+          ALREADY EXISTED -- at the OPERAND sites, not here. NormalizeWideUnsignedLiteral
+          was written for `q div 18446744073709551615`
+          (bug-p-qword-div-by-a-literal-above-2-63-is-signed) and applied by the
+          few binops that noticed; a literal reaching any other context kept
+          tyInt64. Inline, `Writeln(9223372036854775907)` then did not COMPILE at
+          all -- it took the promotable-int path and asked for a runtime helper no
+          Pascal program loads -- and through the const evaluator it printed the
+          wrapped SIGNED reading. Normalising at the CREATION site makes the rule
+          unconditional; the operand-site calls stay and become no-ops, because
+          IsWideIntLit is False once the tag is tyUInt64.
+          Above High(QWord) nothing 64-bit-wide holds the value, so the span stays
+          the only correct reading and the type stays tyInt64 -- that case belongs
+          to feature-a-promoint-wide-literals and the normaliser leaves it alone.
+          A HEX literal deliberately does NOT reach here: the lexer records the
+          digit span for DECIMAL only, and fpc agrees -- $8000000000000063 is
+          negative in both compilers. }
+        NormalizeWideUnsignedLiteral(node);
       end;
       CurASTNode := node; Next;
     end;
@@ -11438,7 +11459,27 @@ begin
     else CEOrdTk := tyInteger;
     CEEnumId := -1;
   end
-  else if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkInteger then
+  begin
+    r := CurTok.IVal;
+    { THE SAME QWord LITERAL RULE THE AST PATH APPLIES, AND THE CONST PATH IS
+      WHERE IT ACTUALLY BITES. `Writeln(14695981039346656037)` goes through
+      ParseFactor; `const FNV = 14695981039346656037` goes through here, and
+      ConstEval collapses every ordinal to an Int64, so without this the const
+      is declared tyInteger/tyInt64 and prints -3750763034362895579 -- the write
+      path picks signed or unsigned formatting from the DECLARED type and
+      nothing else, which is the same mechanism
+      feature-p-const-evaluator-carries-unsigned-64-bit already fixed for
+      High(QWord). The wrapped Int64 cannot be tested for this (2^64-1 looks
+      like -1); only the digit TEXT can, and the lexer records it for DECIMAL
+      literals only -- a hex $8000000000000063 stays signed in fpc too. }
+    if (Tokens[TokPos - 1].SLen > 0) and
+       (not DecDigitsExceed(GetTokenStrFromRaw(Tokens[TokPos - 1].SOffset,
+                                               Tokens[TokPos - 1].SLen),
+                            '18446744073709551615')) then
+      CEOrdTk := tyUInt64;
+    Next;
+  end
   else if CurTok.Kind = tkTrue  then begin r := 1; CEOrdTk := tyBoolean; Next; end
   else if CurTok.Kind = tkFalse then begin r := 0; CEOrdTk := tyBoolean; Next; end
   else if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
