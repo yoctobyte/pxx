@@ -1,0 +1,8 @@
+buf=16
+rec=8
+int=4
+str=10
+inh=32
+shadow=100 100
+qual=16 100
+outside=16 4

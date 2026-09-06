@@ -6935,6 +6935,18 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_nested_routine_keeps_its_default_parameters \
 	  "$$($(TESTTMP)/test_nestdef26)" \
 	  "$$(cat test/test_a_nested_routine_keeps_its_default_parameters.expected)"
+	@# SIZEOF WAS THE ONE NAME-TAKING INTRINSIC THAT NEVER LEARNED IMPLICIT
+	@# SELF. Length/Low/High/Ord/Assigned/Inc/FillChar all resolve a bare field
+	@# inside a method against Self; SizeOf said "unknown type or variable",
+	@# and where an outer var shared the field's name it silently sized the
+	@# OUTER one (shadow=4 instead of 100 -- a number, not a refusal). Rows are
+	@# chosen so a wrong answer is a different NUMBER: an array field (a naive
+	@# fix via RecFieldType reports the element size, 1 not 16), a record, a
+	@# scalar, a frozen string, an inherited field, and the shadowing pair.
+	@./$(COMPILER) test/test_sizeof_of_a_bare_field_inside_a_method.pas $(TESTTMP)/test_sofield26
+	@tools/expect_same.sh test_sizeof_of_a_bare_field_inside_a_method \
+	  "$$($(TESTTMP)/test_sofield26)" \
+	  "$$(cat test/test_sizeof_of_a_bare_field_inside_a_method.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body

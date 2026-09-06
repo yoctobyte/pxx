@@ -3593,6 +3593,22 @@ begin
                   scalar type size (TypeSlotSize returns pointer width for class/
                   pointer references). }
                 sci := FindVarSym(name);   { a bare class var is a variable here too }
+                { ...but a FIELD of the enclosing class shadows an outer variable
+                  of the same name, and FindVarSym does not know that. Measured:
+                  a global `G: array[0..99] of Byte` beside a field `G:
+                  array[0..15] of Byte` made SizeOf(G) answer 100 inside the
+                  method while Length(G) on the same name answered 16 -- fpc
+                  says 16 for both. Two intrinsics, one name, two receivers,
+                  no diagnostic.
+
+                  A method LOCAL of a field's name loses here too. That spelling
+                  is a Duplicate identifier under fpc, so no compiling program
+                  can tell the difference, and matching the precedence every
+                  other intrinsic already applies is worth more than preserving
+                  our own answer for a program fpc refuses. }
+                if (CurMethClass >= REC_UCLASS_BASE) and
+                   (FindUField(CurMethClass - REC_UCLASS_BASE, name) >= 0) then
+                  sci := -1;
                 if sci >= 0 then
                 begin
                   if (Tokens[TokPos].Kind = tkDot) and (Syms[sci].RecName >= 0) and
@@ -3754,7 +3770,27 @@ begin
                     become a rejection. Without this, restoring user-declaration
                     precedence silently un-fixed SizeOf(ShortString).
                     bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts }
-                  if (CurTok.Kind = tkIdent) and BuiltinTypeNameNeedsDecl(name) then
+                  { A BARE FIELD OF THE ENCLOSING CLASS. Every other intrinsic
+                    that takes a name -- Length, Low, High, Ord, Assigned, Inc,
+                    FillChar -- already resolves `FBuf` inside a method against
+                    an implicit Self; SizeOf never learned it, so
+                    `SizeOf(FBuffer)` said "unknown type or variable" while
+                    `SizeOf(Self.FBuffer)` on the same field answered correctly.
+                    fcl-passrc pscanner.pp:2338 is that call.
+
+                    Asked here rather than beside FindVarSym above so a LOCAL of
+                    the same name keeps winning, which is the ordinary shadowing
+                    rule and is what FindVarSym already gives us by having
+                    answered first. RecFieldByteSize, not TypeSlotSize over
+                    RecFieldType, for the reason the selector-chain arm above
+                    states: RecFieldType answers an ARRAY field's element kind.
+                    FindUField walks the parent chain, so an inherited field
+                    resolves too.
+                    bug-p-sizeof-of-a-bare-field-is-the-one-intrinsic-that-never-learned-implicit-self }
+                  if (CurMethClass >= REC_UCLASS_BASE) and
+                     (FindUField(CurMethClass - REC_UCLASS_BASE, name) >= 0) then
+                    prevTok := RecFieldByteSize(CurMethClass, name)
+                  else if (CurTok.Kind = tkIdent) and BuiltinTypeNameNeedsDecl(name) then
                   begin
                     { A BUILTIN NAME THE KIND TABLE CANNOT SIZE -- resolve it
                       the way a DECLARATION does, and size whatever comes back.
