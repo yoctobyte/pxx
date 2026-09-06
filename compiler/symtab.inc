@@ -4780,19 +4780,31 @@ end;
   ticket: a refusal is a NARROWING and nobody has enumerated the population.
   Report first, decide error-or-warning from the count.
 
-  `samescope=1` is the ticket's population -- a parameter and a local, or two
-  locals, of ONE routine, which fpc refuses outright as a duplicate identifier
-  and we silently keep as two variables. `samescope=0` is ordinary shadowing of
-  an outer name and is CORRECT; it is printed anyway because the two are one
-  question at the declaration and separating them is the reader's job, not the
-  instrument's.
+  `samescope=1` is the ticket's population -- two declarations fpc refuses
+  outright as a duplicate identifier, whether that is a parameter and a local of
+  one routine or a const and a var at program scope. `samescope=0` is a nearer
+  declaration shadowing an outer one, which the LANGUAGE allows and pxx now
+  resolves correctly -- but read it as "legal", never as "harmless": four of our
+  own fixtures were silently wrong on a samescope=0 pair, because they were
+  written against a lookup order that ranked case-exactness above scope depth.
+  Both numbers are a reason to look.
+
+  THE FLAG IS DERIVED AND THE INPUTS ARE PRINTED BESIDE IT, deliberately.
+  `proc=`/`vsunit=`/`unit=` are what it is computed from, so a reader who
+  distrusts the derivation can redo it -- and the first version of this flag
+  needed exactly that: it asked only `j >= Procs[CurProc].ScopeBase`, and at
+  PROGRAM scope CurProc is -1 and there is no ScopeBase, so a global const
+  colliding with a global var -- one scope, and the case fpc refuses -- could
+  never report 1. It reported 0 for four of the five fixtures the cascade was
+  made of. A derived boolean that cannot separate the two populations the reader
+  cares about is worse than no flag, because it answers.
 
   It fires whatever the case mode is, which is the point: under
   {$CASESENSITIVE ON} -- and compiler.pas itself is compiled that way -- the two
   names never collide in FindSym at all, so a.casebind is structurally blind to
   exactly the file that needs this most. Two instruments, two questions. }
 procedure DbgCaseDupMaybe(idx: Integer);
-var j, base: Integer;
+var j, base: Integer; same: Boolean;
 begin
   if DbgCaseDupMode = 0 then
   begin
@@ -4808,10 +4820,18 @@ begin
     if CaseEqual(Syms[j].Name, Syms[idx].Name) and
        (not StrEqual(Syms[j].Name, Syms[idx].Name)) then
     begin
+      { INSIDE A ROUTINE the scope is the routine, and ScopeBase names it. AT
+        PROGRAM OR UNIT SCOPE there is no ScopeBase and CurProc is -1 -- but
+        SymRollbackTo has already unhashed every routine's symbols by then, so
+        the chain holds only globals and the scope is the declaring UNIT. }
+      if CurProc >= 0 then same := j >= base
+                      else same := SymUnitIdx[j] = CurrentUnitIdx;
       WriteLn('PXXDBG a.casedup ', Syms[idx].Name, ' idx=', idx,
               ' vs=', Syms[j].Name, ' vsidx=', j,
-              ' samescope=', Ord((CurProc >= 0) and (j >= base)),
-              ' proc=', CurProc, ' at=', CurSrcBaseName, ':', CurTok.Line);
+              ' samescope=', Ord(same),
+              ' proc=', CurProc, ' base=', base,
+              ' unit=', CurrentUnitIdx, ' vsunit=', SymUnitIdx[j],
+              ' at=', CurSrcBaseName, ':', CurTok.Line);
       Exit;
     end;
     j := SymHashPrev[j];
@@ -4910,6 +4930,27 @@ end;
   nearer symbol even IN the chain", and a delta print structurally cannot —
   a delta print is silent when nothing moved and silent when the candidate
   never arrived, and those are different facts. }
+function DbgCaseBindOuter(hit: Integer; const lo: AnsiString): Integer;
+{ The candidate the OLD exact-first walk would have taken instead of `hit`: the
+  first EXACT name match still further out in the chain, under the identical
+  gates. -1 when there is none, which is the ordinary case-insensitive spelling
+  of a name only one symbol answers to. }
+var j: Integer;
+begin
+  DbgCaseBindOuter := -1;
+  j := SymHashPrev[hit];
+  while j >= 0 do
+  begin
+    if StrEqual(Syms[j].Name, lo) and IsBlockVisible(SymBlockId[j], CurBlockId)
+       and SymBindableHere(j) then
+    begin
+      DbgCaseBindOuter := j;
+      Exit;
+    end;
+    j := SymHashPrev[j];
+  end;
+end;
+
 procedure DbgCaseBindReport(hit: Integer; const lo: AnsiString);
 var j, outer, chain: Integer; why: Char;
 begin
@@ -4923,21 +4964,7 @@ begin
     chain := chain + 1;
     j := SymHashPrev[j];
   end;
-  { The candidate the OLD exact-first walk would have taken: the first EXACT
-    name match still further out, under the identical gates. }
-  outer := -1;
-  j := SymHashPrev[hit];
-  while j >= 0 do
-  begin
-    if StrEqual(Syms[j].Name, lo) and IsBlockVisible(SymBlockId[j], CurBlockId)
-       and SymBindableHere(j) then
-    begin
-      outer := j;
-      j := -1;
-    end
-    else
-      j := SymHashPrev[j];
-  end;
+  outer := DbgCaseBindOuter(hit, lo);
   Write('PXXDBG a.casebind ', lo, ' -> ', Syms[hit].Name,
         ' idx=', hit, ' kind=', Ord(Syms[hit].Kind), ' chain=', chain,
         ' at=', CurSrcBaseName, ':', CurTok.Line);
@@ -4984,6 +5011,20 @@ begin
     else DbgCaseBindMode := 1;
   end;
   if DbgCaseBindMode = 1 then Exit;
+  { The DENOMINATOR, counted before either filter. A channel that prints nothing
+    is saying one of two very different things -- nothing moved, or nothing
+    reached the site -- and the reader cannot tell them apart from an empty log.
+    Measured the hard way: the first run of this channel over
+    test_parallel_for_private.pas reported zero moved bindings and the file was
+    broken, because without --threadsafe the compile dies inside palthread.pas
+    before it ever reaches the program body. }
+  DbgCaseBindSeen := DbgCaseBindSeen + 1;
+  if not StrEqual(Syms[hit].Name, lo) then
+  begin
+    DbgCaseBindFold := DbgCaseBindFold + 1;
+    if DbgCaseBindOuter(hit, lo) >= 0 then
+      DbgCaseBindMoved := DbgCaseBindMoved + 1;
+  end;
   if DbgCaseBindMode = 3 then
   begin
     if not PxxDbgWants('a.casebind', lo) then Exit;

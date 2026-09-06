@@ -2565,6 +2565,18 @@ begin
     else
       WriteLn('PXXDBG a.rel8max max=', Rel8MaxAbs, ' (', Rel8MaxWhat,
               ') slack=', 128 - Rel8MaxAbs, ' bytes to the -128..127 limit');
+  { PXXDBG a.casebind — the DENOMINATOR, always printed when the channel is on.
+    An empty a.casebind log is two different findings: nothing moved, or nothing
+    reached the site. Without this line they are the same silence, and the
+    channel's own author read one as the other on the afternoon it landed --
+    a fixture needing --threadsafe died inside palthread.pas before the program
+    body was ever parsed, and the zero read as "clean". seen= is every name
+    FindSym resolved, fold= those it resolved through the case-insensitive
+    disjunct, moved= those of THOSE that had an exact candidate further out,
+    i.e. the bindings the 99c416b54 reordering actually changed. }
+  if DbgCaseBindMode > 1 then
+    WriteLn('PXXDBG a.casebind TOTAL seen=', DbgCaseBindSeen,
+            ' fold=', DbgCaseBindFold, ' moved=', DbgCaseBindMoved);
   DerefWalkReport;
   TokPoolReport;
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,

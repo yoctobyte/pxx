@@ -1967,6 +1967,18 @@ procedure ParseZigProgram;
 var callPatch, mainIdx, structDepth, jmpPatch: Integer;
     mainIsVoid: Boolean;
 begin
+  { Zig IS CASE-SENSITIVE, and nothing said so. The same hole ParseCProgram
+    had: DeclCaseSensitive (symtab.inc) is written for exactly this split and
+    the only entry point that ever called it was the one for a C source pulled
+    through `uses`. Every symbol in a Zig program was registered
+    case-INsensitively.
+
+    Invisible until 2026-09-06, because FindSym walked the whole chain
+    exact-case FIRST: an exact match won whatever the mode said. Once that
+    became one scope-ordered walk (99c416b54), the NEARER name started
+    answering. Measured on this compiler before the fix: `fn f(N: i64)` with a
+    local `var n: i64 = 100;` returned `n + n`, so f(5) gave 200, not 105. }
+  CaseSensitiveMode := True;
   if TargetArch <> TARGET_X86_64 then
     Error('Zig frontend: only the x86-64 target is supported by the skeleton (feature-zig-frontend)');
 

@@ -5758,6 +5758,18 @@ end;
 procedure ParseRustProgram;
 var callPatch, mainIdx, jmpPatch: Integer; wantStr: Boolean;
 begin
+  { Rust IS CASE-SENSITIVE, and nothing said so. The same hole ParseCProgram
+    had: DeclCaseSensitive (symtab.inc) is written for exactly this split and
+    the only entry point that ever called it was the one for a C source pulled
+    through `uses`. Every symbol in a Rust program was registered
+    case-INsensitively.
+
+    Invisible until 2026-09-06, because FindSym walked the whole chain
+    exact-case FIRST: an exact match won whatever the mode said. Once that
+    became one scope-ordered walk (99c416b54), the NEARER name started
+    answering. Measured on this compiler before the fix: `const N: i32 = 5;`
+    with a `let n = 100;` in main printed 100 for `N`. }
+  CaseSensitiveMode := True;
   if TargetArch <> TARGET_X86_64 then
     Error('Rust frontend: only the x86-64 target is supported by the skeleton (feature-rust-frontend-skeleton)');
 

@@ -6780,6 +6780,10 @@ var
     parse per call; 1 is asked-and-off. }
   DbgCaseBindMode : Integer;
   DbgCaseDupMode : Integer;
+  { a.casebind's population, so a SILENT channel can say WHICH silent it is:
+    0 of 0 and 0 of 4127 are different answers and both print as no lines.
+    Counted only while the channel is on. }
+  DbgCaseBindSeen, DbgCaseBindFold, DbgCaseBindMoved : Integer;
 
 { ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================
 

@@ -27,14 +27,14 @@ program test_threadsafe_heap_lock_deadlock_diag;
 const
   SYS_gettid = 186; SYS_tkill = 200;
   USR1 = 10;
-  RING = 64;
+  RING_SLOTS = 64;
   WORKERS = 12;
   WORK_ROUNDS = 200000;
   MAIN_ROUNDS = 2000000;
 
 var
   mainTid: Int64;
-  ring: array[0..RING - 1] of Pointer;
+  ring: array[0..RING_SLOTS - 1] of Pointer;
   ringN, hits, go, doneN: Integer;
   ids: array[0..WORKERS - 1] of TThreadID;
   sigId: TThreadID;
@@ -52,9 +52,9 @@ begin
   GetMem(p, 96);
   ring[ringN] := p;
   ringN := ringN + 1;
-  if ringN >= RING then
+  if ringN >= RING_SLOTS then
   begin
-    for i := 0 to RING - 1 do FreeMem(ring[i]);
+    for i := 0 to RING_SLOTS - 1 do FreeMem(ring[i]);
     ringN := 0;
   end;
 end;

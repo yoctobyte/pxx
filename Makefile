@@ -5866,7 +5866,15 @@ test-core: $(COMPILER)
 	  [ "$$out" -ge 1 ] || { echo "a.casebind: want at least one outer= line on the caseshadow fixture, got $$out"; exit 1; }
 	@out=$$(./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26 2>&1 | grep -c PXXDBG); \
 	  [ "$$out" = "0" ] || { echo "a.casebind/a.casedup print with PXXDBG unset: $$out lines"; exit 1; }
-	@echo "case-only name census channels ok: a.casedup samescope=1, a.casebind outer=, both silent when off"
+	@# THE DENOMINATOR. `moved=0` and "the compile never reached the site" are the
+	@# same empty log without it, and that is not hypothetical -- the first run of
+	@# this channel over test_parallel_for_private.pas reported nothing because,
+	@# without --threadsafe, the compile dies inside palthread.pas before the
+	@# program body is parsed. seen= must be a real count, not zero.
+	@seen=$$(PXXDBG=a.casebind ./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26 2>&1 \
+	  | sed -n 's/.*a.casebind TOTAL seen=\([0-9][0-9]*\).*/\1/p'); \
+	  [ -n "$$seen" ] && [ "$$seen" -gt 100 ] || { echo "a.casebind: no TOTAL denominator line, or seen=$$seen is not a real population"; exit 1; }
+	@echo "case-only name census channels ok: a.casedup samescope=1, a.casebind outer= and a TOTAL denominator, both silent when off"
 	# feature-a-x86-64-object-output-is-position-dependent
 	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
 	# TRAILS the displacement. A rip-relative displacement is measured from the
