@@ -9703,6 +9703,16 @@ test-core: $(COMPILER)
 	# on any checkout without the FPC RTL source, which is most of them, so the
 	# regression is guarded here where it needs no corpus. Two classes share the
 	# nested NAME because the fix must not let one answer for the other.
+	# A generic METHOD called across a uses clause -- the shape where the USE sits
+	# below the declaration in Tokens[], because a unit's tokens are appended after
+	# the program's. Only the CALL is behind TokPos, so only the call is deferred,
+	# to the end of the uses clause; the declaration and definition always expanded
+	# safely. `class generic function` is in here because that spelling never
+	# worked AT ALL -- `class` before `generic`, and the header scan stepped over
+	# `generic` only, so the emitted specialization was an ordinary method and the
+	# call failed IN ONE FILE at the pin.
+	./$(COMPILER) -Futest/generic_xunit_method_units test/test_generic_method_across_a_uses_clause.pas $(TESTTMP)/test_gen_xmeth26
+	tools/expect_same.sh test_gen_xmeth26 "$$($(TESTTMP)/test_gen_xmeth26)" "$$(printf '5\nab\n15\n42\n3\n13\n42')"
 	./$(COMPILER) -Futest/generic_nestedspec_units test/test_generic_body_sees_its_specializations_nested_type.pas $(TESTTMP)/test_gen_nestedspec26
 	tools/expect_same.sh test_gen_nestedspec26 "$$($(TESTTMP)/test_gen_nestedspec26)" "$$(printf '33 44\n55\n66')"
 	./$(COMPILER) -Futest/generic_unused_units test/test_generic_method_unused_is_erased.pas $(TESTTMP)/test_gen_unused26

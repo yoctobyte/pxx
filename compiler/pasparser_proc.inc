@@ -5730,6 +5730,12 @@ begin
   savedPreScan := PreScanPass;
   PreScanPass := False;
   SpecializeImportedGenericFuncUses;
+  { And the generic METHOD half, third at the same site for the same reason. It
+    only RENAMES -- the members were emitted when the unit's class body was
+    parsed -- so it needs no PreScanPass dance, but it must run inside the
+    cleared window anyway: the routine sweep above can splice a body whose own
+    tokens contain a method use. }
+  SpecializeImportedGenericMethodUses;
   PreScanPass := savedPreScan;
 end;
 

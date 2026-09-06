@@ -4471,14 +4471,39 @@ begin
     TokRoutineBodyEnd := j;
 end;
 
+function IsGenericKwTok(at: Integer): Boolean;
+begin
+  IsGenericKwTok := (Tokens[at].Kind = tkIdent) and
+                    CaseEqual(GetTokenStr(at), 'generic');
+end;
+
 function GenericKwAt(at: Integer): Integer;
-{ `at`, or at-1 when the token before it is the `generic` keyword -- the first
-  token of the declaration whichever surface it is written in. }
+{ The FIRST token of the routine header at `at`, walking back over the modifier
+  keywords that precede it.
+
+  It used to step over `generic` only, and a CLASS method is spelled
+  `class generic function Twice<T>` -- FPC's own order, and the one fgl and the
+  testsuite use. Stepping over only `generic` left the `class` behind, so the
+  expansion re-read the member from `function` and the emitted specialization
+  was an ORDINARY method: `TZ.specialize Twice<Integer>(21)` then failed with
+  `cannot call non-static method on class type directly`, in ONE FILE, at the
+  pin. A `class generic` method has therefore never worked on this surface.
+
+  THREE BOUNDED STEPS, NOT A LOOP, and the bound is the whole point. A loop
+  walking back over every `generic`/`class` eats the CLASS DECLARATION'S OWN
+  keyword when a generic method is the first member:
+
+      type TZ = class            <- this `class` ...
+             class generic function Twice<T>(a: T): T;   <- ... is two back
+
+  and removing it deletes the type. Taking at most one `class` makes that
+  unreachable while still covering both orders the surfaces write:
+  `generic function`, `class generic function`, `generic class function`. }
 begin
   GenericKwAt := at;
-  if (at > 0) and (Tokens[at - 1].Kind = tkIdent) and
-     CaseEqual(GetTokenStr(at - 1), 'generic') then
-    GenericKwAt := at - 1;
+  if (GenericKwAt > 0) and IsGenericKwTok(GenericKwAt - 1) then Dec(GenericKwAt);
+  if (GenericKwAt > 0) and (Tokens[GenericKwAt - 1].Kind = tkClass) then Dec(GenericKwAt);
+  if (GenericKwAt > 0) and IsGenericKwTok(GenericKwAt - 1) then Dec(GenericKwAt);
 end;
 
 procedure SetGenericRoutineSubs(const templateName, paramName, concreteName: AnsiString;
@@ -4842,24 +4867,46 @@ begin
     Exit;
   end;
 
-  { Every edit must be at or above the class body -- see SCOPE above. }
+  { Every edit must be at or above the class body -- see SCOPE above -- and
+    that is a statement about THIS construct, not about the whole stream.
+
+    A use BELOW startIdx is the importing program's: `t.specialize Add<Integer>`
+    in a program body, which sits behind the unit's tokens in Tokens[] while
+    being ahead of it in scope. Rewriting it HERE would shift startIdx and every
+    index this expansion still needs, so it is left in place and swept at the
+    end of the uses clause instead -- SpecializeImportedGenericMethodUses, the
+    same window and the same reason as the free routine's
+    SpecializeImportedGenericFuncUses. The DECLARATION and the DEFINITION are
+    both above that point, so they expand here and now, and by the time the
+    deferred sweep runs the class already HAS its Add_Integer member.
+
+    A use BETWEEN startIdx and implEnd is a different animal -- it is inside the
+    construct being rewritten, where the descending edit order is the only thing
+    keeping indices valid -- and still bails the expansion whole. }
   u := 0;
   while u < nUse do
   begin
-    if useName[u] <= implEnd then Exit;
+    if (useName[u] > startIdx) and (useName[u] <= implEnd) then Exit;
     Inc(u);
   end;
 
   { Capture both halves as templates WITHOUT their `<T>` groups: the
     substitution engine renames the template name and every occurrence of the
     parameter, and a group left behind comes out as `Add_LongInt<LongInt>`. }
+  { CAPTURE FROM THE SAME TOKEN THE REMOVAL WILL START AT, minus `generic`.
+    Capturing from startIdx while removing from GenericKwAt(startIdx) drops
+    whatever sits between them -- which is exactly the `class` keyword -- so the
+    two indices have to be the same one. `generic` is the only token skipped:
+    it is what makes the header generic, and the splice is not. }
   declTS := TemplateTokenCount;
-  for i := startIdx to ltIdx - 1 do CaptureTemplateTokenFrom(i);
+  for i := GenericKwAt(startIdx) to ltIdx - 1 do
+    if not IsGenericKwTok(i) then CaptureTemplateTokenFrom(i);
   for i := gtIdx + 1 to declEnd do CaptureTemplateTokenFrom(i);
   declTC := TemplateTokenCount - declTS;
 
   implTS := TemplateTokenCount;
-  for i := implStart to implNameIdx do CaptureTemplateTokenFrom(i);
+  for i := GenericKwAt(implStart) to implNameIdx do
+    if not IsGenericKwTok(i) then CaptureTemplateTokenFrom(i);
   for i := implGt + 1 to implEnd do CaptureTemplateTokenFrom(i);
   implTC := TemplateTokenCount - implTS;
 
@@ -4867,6 +4914,13 @@ begin
   u := nUse - 1;
   while u >= 0 do
   begin
+    if useName[u] < startIdx then
+    begin
+      { Deferred -- see the note on the guard above. Left EXACTLY as written, so
+        the later sweep finds it by the same spelling this one did. }
+      Dec(u);
+      Continue;
+    end;
     sn := mname + '_' + specArg[useSpec[u]];
     Tokens[useName[u]].Kind := tkIdent;
     Tokens[useName[u]].IVal := 0;
@@ -4909,6 +4963,101 @@ begin
   { Re-read the member from the first token just written. }
   TokPos := removeFrom;
   Next;
+end;
+
+procedure SpecializeImportedGenericMethodUses;
+{ Rewrite every REMAINING `recv.Add<Integer>` / `recv.specialize Add<Integer>`
+  into `recv.Add_Integer`, once, at the end of a uses clause.
+
+  The METHOD half of SpecializeImportedGenericFuncUses, at the same site and for
+  the same geometry: a unit's tokens are appended AFTER the importing program's,
+  so a program body calling a unit-declared generic method sits BEHIND the
+  declaration in Tokens[] while being ahead of it in scope. ExpandGenericMethod
+  runs while the unit's class body is parsed, and at that moment those use sites
+  are behind TokPos, where RemoveTokens would invalidate TokPos and every
+  DeclItem span already recorded. So it deliberately leaves them, and this is
+  the point where they are ahead again.
+
+  IT REWRITES ONLY, AND EMITS NOTHING -- which is what makes it small. The
+  expansion has already spliced `function Add_Integer` into the class body and
+  `function TTest.Add_Integer` into the unit's implementation, because both of
+  those are ABOVE the class body and were always safe to edit. The class does
+  not have to gain a member after ParseTypeSection closed it; it gained the
+  member at declaration time, from a specialization set the sweep could already
+  see, and only the CALL was left spelled generically.
+
+  The set is read back from GMSpec*, which ExpandGenericMethod maintains by NAME
+  for its own two-classes-one-name case. A name is the only thing a use site
+  offers -- the token stream cannot say what type the receiver has -- so a use
+  of another class's like-named method is rewritten too, which is exactly the
+  over-approximation that entry documents: both classes get a method per type
+  argument either was asked for.
+
+  AHEAD OF TokPos ONLY, and that bound is load-bearing rather than an
+  optimisation. This runs at the end of EVERY uses clause, including a clause
+  INSIDE an imported unit -- and when unit B's own `uses A` finishes, the
+  importing program's body lies at LOWER indices. Sweeping the whole stream
+  there removes tokens behind TokPos, which shifts TokPos itself: measured as
+  `expected ':' before ';'` in the middle of a `var` section three lines further
+  on, a diagnostic with nothing whatever to do with generics.
+
+  Nothing is lost by stopping at TokPos. A use behind this point is ahead of
+  some LATER uses clause -- the importing file's own -- and is rewritten there;
+  the program's body is ahead of the program's own clause, which is the last one
+  to run. Same window as SpecializeInlineGenericFuncUses, which scans forward
+  from the template for the same reason.
+
+  Descending, so a removal cannot invalidate an index still to be visited. }
+var i, k: Integer;
+    nm, sn: AnsiString;
+    kwAt: Boolean;
+begin
+  if GMSpecCount = 0 then Exit;
+  i := TokCount - 4;
+  while i >= TokPos do
+  begin
+    if (Tokens[i].Kind = tkIdent) and
+       (Tokens[i + 1].Kind = tkLt) and
+       IsConcreteTypeArgKind(Tokens[i + 2].Kind) and
+       (Tokens[i + 3].Kind = tkGt) and
+       not ((i >= 3) and (Tokens[i - 1].Kind = tkDot) and
+            (Tokens[i - 2].Kind = tkIdent) and
+            ((Tokens[i - 3].Kind = tkFunction) or
+             (Tokens[i - 3].Kind = tkProcedure))) then
+    begin
+      { `.`-prefixed, so a free routine of the same name is not swept up; the
+        excluded shape above is a DEFINITION header, which is dot-prefixed too. }
+      kwAt := (i >= 2) and (Tokens[i - 1].Kind = tkIdent) and
+              CaseEqual(GetTokenStr(i - 1), 'specialize') and
+              (Tokens[i - 2].Kind = tkDot);
+      if (Tokens[i - 1].Kind = tkDot) or kwAt then
+      begin
+        nm := GetTokenStr(i);
+        k := 0;
+        while k < GMSpecCount do
+        begin
+          if CaseEqual(GMSpecMeth[k], nm) and
+             CaseEqual(GMSpecArg[k], GetTokenStr(i + 2)) then
+          begin
+            sn := nm + '_' + GMSpecArg[k];
+            Tokens[i].Kind := tkIdent;
+            Tokens[i].IVal := 0;
+            Tokens[i].SOffset := TokCharsAppend(sn);
+            Tokens[i].SLen := Length(sn);
+            { The token now SAYS something else, so its source span no longer
+              describes it -- same clearing the in-place rewrite does. }
+            TokSrcOff[i] := 0;
+            TokSrcLen[i] := 0;
+            RemoveTokens(i + 1, 3);                 { `<` C `>` }
+            if kwAt then RemoveTokens(i - 1, 1);    { the `specialize` keyword }
+            Break;
+          end;
+          Inc(k);
+        end;
+      end;
+    end;
+    Dec(i);
+  end;
 end;
 
 { Parses: specialize Max<Integer> as MaxInt;
