@@ -129,3 +129,32 @@ it rather than to reason about which could.
 **Wall 575 is therefore still open, and it is now the ONLY thing between here
 and the next pscanner wall.** After the bracket fix, `uses pscanner` reports
 575 and 1994 and nothing else.
+
+### Where the `line 0` errors come from — the emitter, at least
+
+`ir.inc:11660`, the AN_ASSIGN type check:
+
+```pascal
+  if AssignSideKind(ASTLeft[node], asgDstTk) and
+     AssignSideKind(ASTRight[node], asgSrcTk) and
+     AssignKindsIncompatible(asgDstTk, asgSrcTk) and
+     not AssignHasConversionOperator(ASTRight[node], ASTLeft[node]) then
+    ErrorAtRecover(ASTLine[node], 'incompatible types: cannot assign ' + ...);
+```
+
+So it is a real assignment being rejected, in IR rather than in the parser, and
+`0` is `ASTLine[node]` — **the AN_ASSIGN node was built with no line recorded.**
+Two consequences worth separating:
+
+1. For this ticket: something in pscanner is assigning between an Integer and a
+   record once the `array of const` parameter exists. The check is
+   recovering rather than fatal, which is why three appear rather than one.
+2. Independently of this ticket: a diagnostic that can only ever print `0` is
+   the third position bug found today, after frankS's parked diagnostic that
+   carries a line but no FILE and frankB's line/`near:`-window desync. Three
+   different mechanisms, one reader-visible symptom — a real-looking position
+   that points nowhere or somewhere wrong. Worth one write-up rather than three.
+
+Next step is to find WHICH assignment, not to reason about which could be:
+`ASTLine` being 0 means the usual bisect-by-line does not work, so bisect
+pscanner by chopping the unit instead.
