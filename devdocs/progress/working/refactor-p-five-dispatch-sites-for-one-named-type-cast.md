@@ -23,10 +23,32 @@ not.** Every scalar door now builds its node in one body — `TryScalarNamedCast
 and the seven defects listed at the bottom of this ticket were all found by
 measuring the doors on the way there. What is left is the merge this ticket was
 filed for: one `name -> (castKind, enumId, aliasIdx)` resolver replacing
-`FindTypeAlias` and `BuiltinScalarTypeKind` being asked separately. That edit is
-the same edit as `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor`
-seen from the other side, and the ticket stays `working` with `owner: frankA` as
-attribution, not a claim — it is free for the taking.
+`FindTypeAlias` and `BuiltinScalarTypeKind` being asked separately. The ticket
+stays `working` with `owner: frankA` as attribution, not a claim — it is free
+for the taking.
+
+**CORRECTION, same day, to a sentence I wrote here and pushed: the recognition
+merge is NOT "the same edit seen from two sides" as
+`perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor`.** I asserted that
+twice without measuring it. The 92-arm chain is 98 `CaseEqual` sites in
+`ParseFactorCore`, and enumerating what they compare against shows they are
+overwhelmingly builtin FUNCTION names — `Abs`, `Chr`, `Copy`, `Length`,
+`sizeof`, `Ord`, `TypeInfo`, the `__pxx*` intrinsics. Merging `FindTypeAlias`
+with `BuiltinScalarTypeKind` merges two TABLE LOOKUPS and removes **zero** arms
+from that chain. The dozen type names that do appear in it (`byte`, `longword`,
+`ansistring`, `pchar`, `shortstring`, `string`, `text`) are the type-KEYWORD
+arms, and this ticket's own note already says those cannot join without a lexer
+change — so the overlap I claimed is exactly the part both tickets exclude.
+
+The true relation is weaker and worth stating as such: both are about how
+`ParseFactorCore` dispatches on a name, and a single name-resolution table could
+in principle subsume both. That is a design direction, not a shared edit. It also
+must not be used as this ticket's justification — the perf ticket has had its
+premise refuted three times and its remaining P question is ranked at ~0.3-3%
+with three named hazards. **The justification for this ticket is the defect
+RATE** (seven in one day, four in the ticket's whole prior history), which is a
+measurement; borrowing a perf ticket's authority would have replaced that with
+elegance, and a refactor justified by elegance gets deferred forever.
 
 **And the census was short by one: there is a SIXTH door**, in `ConstEvalPrimary`
 (~`:10546`), 4000 lines below `ParseFactorCore` and therefore invisible to every
