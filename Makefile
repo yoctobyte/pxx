@@ -27533,7 +27533,8 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	@overall=0; ran=0; \
 	for src in test/test_rust_else_if.rs test/test_rust_advanced.rs \
 	           test/test_rust_option.rs test/test_rust_result.rs \
-	           test/test_zig_skeleton.zig test/test_zig_structs.zig; do \
+	           test/test_zig_skeleton.zig test/test_zig_structs.zig \
+	           test/test_erlang_skeleton.erl; do \
 	  nm=$$(basename $$src); \
 	  ./$(COMPILER) $$src $(TESTTMP)/xtnat26 >/dev/null 2>&1 \
 	    || { echo "test-skeleton-frontends-cross-target: NATIVE compile failed for $$nm"; overall=1; continue; }; \
@@ -27558,7 +27559,7 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	    tools/expect_same.sh "xtarget-$$nm-$$t" "$$got" "$$nat" || overall=1; \
 	  done; \
 	done; \
-	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 16 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
+	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 20 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
 	if [ $$overall -ne 0 ]; then echo "test-skeleton-frontends-cross-target: RED"; exit 1; fi; \
 	echo "test-skeleton-frontends-cross-target: GREEN -- $$ran (program,target) pairs matched their native run"
 

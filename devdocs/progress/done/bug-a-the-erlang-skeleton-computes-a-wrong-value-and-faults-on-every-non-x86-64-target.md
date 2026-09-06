@@ -2,7 +2,7 @@
 track: A
 prio: 30
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankA
@@ -107,3 +107,38 @@ to native on all four. So something in the wider Zig surface still emits an
 instruction those targets do not have. Noted, not diagnosed; it is not covered
 by `test-skeleton-frontends-cross-target`, which carries only the two green Zig
 programs, and that omission is deliberate rather than accidental.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## RESOLVED 2026-09-06 (frankA) — ONE LINE, and the second defect was hiding behind the first
+
+`eparser.inc` hand-wrote a SECOND x86-64 sequence, twelve bytes of
+`mov [rbp+disp32], edi/esi/edx/ecx` with a REX prefix for 8-byte slots — the
+SysV argument registers, unconditionally, with no `case TargetArch of`. i386
+passes arguments on the STACK, so on i386 the parameters were never stored and
+every clause read an unwritten frame slot: `fact(5)` matched the `fact(0) -> 1`
+clause and printed 1. On aarch64 and arm32 the bytes are not decodable and the
+program SIGILLed with no output.
+
+**`EmitParamSpillsForTarget` (ir_codegen.inc) has covered every target since the
+layer refactor, and Pascal, C, NilPy, Rust and Zig all call it. Erlang is the
+one frontend that sweep missed.** Its own header describes this exact symptom —
+*"those copies are raw x86-64, so a NilPy or Rust program built for a cross
+target spliced x86-64 bytes into the middle of the ARM/RISC-V instruction
+stream ... and the program SIGILLed with no output."* The sentence was written
+about the copies that were removed; a sixth was still live and unreachable.
+
+**THE SECOND DEFECT WAS INVISIBLE UNTIL THE FIRST WAS FIXED, TWICE OVER.** The
+program tail killed it before it reached a body, so the spill could not be
+observed; with the spill fixed, riscv32 then showed `PXXWriteNL not found`, the
+missing unit pull, which the wrong values had been hiding in turn. Three
+defects in one file, strictly ordered, each only visible once the one in front
+of it was gone — and one refusal covering all three.
+
+Result: `test_erlang_skeleton.erl` is IDENTICAL to its native output on i386,
+aarch64, arm32 and riscv32. The refusal is narrowed to those four plus x86-64;
+xtensa and wasm32 stay refused as unmeasured. Covered by
+`test-skeleton-frontends-cross-target` (28 pairs). Positive control taken: with
+the hand-written spill restored, all four Erlang rows go MISMATCH and the row is
+RED; restoring reproduced the pre-control binary sha256 `733009e5762d` exactly.

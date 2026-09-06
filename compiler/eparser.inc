@@ -383,19 +383,24 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    if ParamSlotWordSize(idx) = 8 then EmitB($48);
-    EmitB($89);
-    case i of
-      0: EmitB($BD);
-      1: EmitB($B5);
-      2: EmitB($95);
-      3: EmitB($8D);
-    end;
-    EmitI32(Syms[idx].Offset);
-  end;
+  { THE SECOND HAND-WRITTEN x86-64 SEQUENCE IN THIS FILE, and the entry stub was
+    the first. These twelve bytes were `mov [rbp+disp32], edi/esi/edx/ecx` with
+    a REX prefix for 8-byte slots -- the SysV x86-64 argument registers, emitted
+    unconditionally with no `case TargetArch of`. i386 passes arguments on the
+    STACK, so on i386 the parameters were never stored at all and every clause
+    read an unwritten frame slot: `fact(5)` matched the `fact(0) -> 1` clause
+    and printed 1. On aarch64 and arm32 the bytes are not even decodable and the
+    program SIGILLed with no output.
+
+    EmitParamSpillsForTarget (ir_codegen.inc) has covered every target since the
+    layer refactor, and its own header describes exactly this symptom -- "those
+    copies are raw x86-64, so a NilPy or Rust program built for a cross target
+    spliced x86-64 bytes into the middle of the ARM/RISC-V instruction stream
+    ... and the program SIGILLed with no output". Pascal, C, NilPy, Rust and Zig
+    all call it. Erlang is the frontend that sweep missed, and its refusal is
+    why nobody could see it.
+    bug-a-the-erlang-skeleton-computes-a-wrong-value-and-faults-on-every-non-x86-64-target }
+  EmitParamSpillsForTarget(procIdx, nparams);
 
   bodySeq := -1;
   done := False;
@@ -521,8 +526,19 @@ end;
 procedure ParseEProgram;
 var callPatch, callAnchor, mainIdx, jmpPatch: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('Erlang frontend: only the x86-64 target is supported by the skeleton (feature-erlang-frontend-scoping)');
+  { NARROWED from x86-64-only, on the same terms as the Rust and Zig drivers:
+    every target named here was compiled and RUN and its output compared whole
+    against the native run. This one needed TWO fixes rather than one -- the
+    entry stub AND the parameter spill were both hand-written x86-64 in this
+    file, and the second was invisible until the first was fixed, because the
+    program died before reaching a body.
+
+    xtensa and wasm32 stay refused: unmeasured, which is a different fact from
+    broken and is written here rather than left to be inferred from a list.
+    bug-a-the-erlang-skeleton-computes-a-wrong-value-and-faults-on-every-non-x86-64-target }
+  if not (TargetArch in [TARGET_X86_64, TARGET_I386, TARGET_AARCH64,
+                         TARGET_ARM32, TARGET_RISCV32]) then
+    Error('Erlang frontend: the skeleton supports x86-64, i386, aarch64, arm32 and riscv32; this target has not been measured (feature-erlang-frontend-scoping)');
 
   ERegisterFnSignatures;
   mainIdx := FindProc('main');
@@ -553,6 +569,22 @@ begin
     bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
   EmitEntryStubCall(callPatch, callAnchor);   { call main }
   EmitExit(0);                               { the skeleton reports no status }
+
+  { This driver pulled no unit either, and riscv32 lowers its writes onto
+    builtinheap -- `PXXWriteNL not found`, measured, once the entry stub and the
+    parameter spill stopped hiding it. Same block, same order and same reason as
+    the Rust and Zig drivers: softfloat first (those unit bodies contain float
+    code and riscv32 has no FPU), then builtinheap, then builtin, all after the
+    exit above so the bodies are reached only by call.
+    bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+  if TargetCodegenCallsHeapRuntime then
+  begin
+    if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       (not EspBareBoot) then
+      ParseUsesUnitAmbient('softfloat');
+    ParseUsesUnitAmbient('builtinheap');
+    ParseUsesUnitAmbient('builtin');
+  end;
 
   while CurTok.Kind <> tkEOF do
   begin

@@ -4,7 +4,7 @@ title: "Rust, Zig and Erlang emit a literal x86-64 `call main; exit_group` tail;
 track: A
 prio: 50
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankA
@@ -196,3 +196,6 @@ honest narrowing is per frontend, not one edit repeated three times — Rust to
 five targets, Zig to four (riscv32 excluded, compile failure), Erlang to x86-64
 alone with the ticket for the body defect filed beside it. Rewriting all three
 refusals identically is what produced this ticket in the first place.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
