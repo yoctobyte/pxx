@@ -4108,6 +4108,59 @@ was missing rather than a defect that was observed. Necessity was not
 demonstrated; saying so is the honest form, and it is what lets the next reader
 tell this apart from a bug with a repro behind it.
 
+## A NAME THAT NEVER EXISTED IS INVISIBLE TO THE TOOL BUILT FOR STALE NAMES — because its population is names that were ONCE defined
+
+frankA, 2026-09-06, `eb06adcbb`. `IRRecCopyOpCall`'s comment said the
+const-record by-ref rule lives in **`ParseParamList`**. No routine of that name
+has ever existed in this tree. They had read the rule — it is deep inside
+`ParseSubroutine` — and then **supplied the name a parser ought to have**. It
+shipped three times over: in the comment, in the ticket, and in the commit
+message.
+
+**The failure is not "a citation went stale". It is that the citation was never
+live**, and those two are indistinguishable to a reader and to every reviewer
+downstream. A stale name decays from something true; an invented one was
+plausible on the day it was written and stays exactly as plausible forever.
+
+### Why the guard is silent, and why silence reads as confirmation
+
+`tools/ghost_names.py` exists for precisely this hazard and **cannot see this
+member of it.** Its population is identifiers that appear in comments and no
+longer have a definition — it finds a name whose definition **disappeared**. An
+invented name left no definition to disappear, so it is not in the population at
+all. The tool does not error, does not warn, and does not report a gap: it
+returns clean.
+
+**That is the expensive shape.** A tool aimed at a hazard, run against a member
+of that hazard, printing a clean result — the reader takes the clean result as
+having checked the thing. It is the general rule of this file in its nastiest
+form: every instrument that lies, lies by being CORRECT ABOUT SOMETHING ELSE.
+Here the something-else is *"no name in this comment used to exist and stopped"*,
+which is a true statement about a comment citing a name that never started.
+
+**So before trusting a name-checking tool's silence, ask what its POPULATION is
+built from** — and whether the failure you are actually worried about would ever
+enter that population. A census over "things that changed" cannot see things that
+were never there.
+
+### The repair, which is the same one three different failures wanted
+
+Three stale citations were fixed in this tree on one day, and they were three
+distinct failures with one fix:
+
+| failure | example |
+| --- | --- |
+| a name that CHANGED | `ArgListHasBracketElem` → `ArgListBracketElemMask` |
+| a name that NEVER WAS | `ParseParamList` (this one) |
+| a LINE NUMBER, copied five times before anyone opened it | `symtab.inc:6215` |
+
+**Cite by a searchable string taken from the code itself**, not by a routine name
+and not by a line number — `"const record param is passed by reference"` here,
+`consulted BEFORE the builtin` for the alias-table ordering rule. A quoted string
+survives a rename, a move and a re-number, and — the part that matters for the
+invented-name case — **you cannot quote a string you did not read.** Writing the
+citation forces the visit that would have caught it.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
