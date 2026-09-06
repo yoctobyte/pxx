@@ -7447,6 +7447,25 @@ test-core: $(COMPILER)
 	@# compared BYTE FOR BYTE against FPC's (identical, 12/72/32 bytes).
 	./$(COMPILER) test/test_typed_file_of_t.pas $(TESTTMP)/test_typed_file26
 	tools/expect_same.sh test_typed_file26 "$$($(TESTTMP)/test_typed_file26 | tail -1)" "total ok 24 / 24"
+	@# bug-p-file-of-string-n-refuses-with-a-width-sizeof-contradicts
+	@# `file of string[10]` was refused with a width nothing in the program
+	@# agreed with. The string[10] half is FPC 3.2.2's own output and the file
+	@# it writes was compared BYTE FOR BYTE against FPC's (identical, 22 bytes);
+	@# the string[300] rows have no oracle -- FPC caps a shortstring at 255 --
+	@# and assert OUR wide-kind layout. The `a.bytes` row is the only one that
+	@# can see the defect: FileSize counts RECORDS and every copying path
+	@# normalises the prefix, so values and record counts agree under BOTH
+	@# layouts. A values-only version of this test passes with the bug present.
+	./$(COMPILER) test/test_a_typed_file_of_string_n_writes_the_shortstring_layout.pas $(TESTTMP)/test_fileofstrn26
+	tools/expect_same.sh test_fileofstrn26 "$$($(TESTTMP)/test_fileofstrn26 | tail -n 2)" "$$(printf 'fails=0\nFILEOFSTRN OK')"
+	@# ...and the positive control: a GENUINE width disagreement must still be
+	@# refused, or the fix is "stop checking" wearing the shape of "check
+	@# correctly". Asserts the number too -- 256 is ShortString's real width and
+	@# the pre-fix compiler said 264 here, so the same field being wrong made
+	@# the diagnostic wrong as well as the decision.
+	! ./$(COMPILER) -dROW_MISMATCH test/test_a_typed_file_of_string_n_writes_the_shortstring_layout.pas $(TESTTMP)/test_fileofstrn_mm26 > $(TESTTMP)/test_fileofstrn_mm.log 2>&1
+	grep -q "the variable is 256 bytes and the file's element type is 11" $(TESTTMP)/test_fileofstrn_mm.log \
+	  || { echo "test_a_typed_file_of_string_n: FAIL - ROW_MISMATCH compiled, or refused with a different width"; exit 1; }
 	@# bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic
 	@# The `console` row prints to stdout, so the assertion reads the LAST line only.
 	./$(COMPILER) test/test_read_write_as_method_name.pas $(TESTTMP)/test_rwname26

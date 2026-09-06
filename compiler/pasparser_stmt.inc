@@ -3789,7 +3789,38 @@ begin
   tk := IntToTypeKind(ASTTk[node]);
   if TypeIsFrozenString(tk) then
   begin
-    if ASTKind[node] = AN_IDENT then Result := SizeOfSlot(tk, SymStrCap[ASTIVal[node]]);
+    if ASTKind[node] = AN_IDENT then
+    begin
+      { THE KIND AND THE CAPACITY MUST COME OUT OF THE SAME RECORD, and until now
+        they did not: the capacity was read off the SYMBOL and the kind off the
+        NODE. An ident node for a frozen string carries the legacy overloaded
+        `tyString` -- measured, not assumed: `nodeTk=4 symTk=25 symCap=10` for
+        `t: string[10]`. SizeOfSlot then sized a shortstring with an EIGHT-byte
+        length prefix and answered 24 where SizeOf, the file's own element and
+        fpc all say 11, so `Write(f, t)` was refused with a width nothing in the
+        program agrees with.
+
+        THE BUG IS INVISIBLE ABOVE 255 AND THAT IS THE WHOLE TELL. `string[N]`
+        is tyShortString for N <= 255 (one-byte prefix) and tyFixedString above
+        it (eight-byte prefix, ParseTypeKind's own bound). tyString's prefix is
+        eight, so for N > 255 the wrong kind and the right kind agree by
+        coincidence: `file of string[256]` and `file of string[300]` compile and
+        always did, while `file of string[10]` is refused. A reader who reaches
+        for the big case first finds the feature working.
+
+        This is the LAYOUT half of the frozen-string question, not the size
+        half, and a size assertion cannot see it -- every path that COPIES a
+        shortstring normalises, so sizes agree exactly where the layouts do not.
+        Reading the kind from the symbol is what makes the two arguments
+        describe one variable; it is not a widening, and the guard keeps the
+        arm's population identical by refusing to move a symbol that is not
+        itself a frozen string.
+        bug-p-file-of-string-n-refuses-with-a-width-sizeof-contradicts }
+      if (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) and
+         TypeIsFrozenString(Syms[ASTIVal[node]].TypeKind) then
+        tk := Syms[ASTIVal[node]].TypeKind;
+      Result := SizeOfSlot(tk, SymStrCap[ASTIVal[node]]);
+    end;
   end
   else
     Result := TypeStorageSize(tk, ResolveNodeRec(node));
