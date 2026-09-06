@@ -38,10 +38,32 @@ begin
   end;
 end;
 
-{ The strutils.pas shape, reduced: a parameter and a local differing only in
-  case. Each reference below uses ONE spelling only, so the routine's result is
-  the same under either reading and this file cannot be turned into an accidental
-  assertion that the two-symbol reading is right. }
+{ THE ASSERTION INVERTED WHEN THE DIAGNOSTIC LANDED, 2026-09-06, exactly as this
+  file's earlier header said it must. It used to RUN and print CASEDUP FIXTURE
+  OK, asserting only that the census channel saw the pair; it is now a program
+  that MUST NOT COMPILE, and the Makefile asserts the diagnostic text of both
+  message arms.
+
+  Row 1 is the strutils.pas shape reduced: a parameter and a local differing
+  only in case. Each reference uses ONE spelling only, so the routine's result
+  is the same under either reading and this file was never an accidental
+  assertion that the two-symbol reading is right.
+
+  Row 2 is the arm that needs the LANGUAGE named rather than the author: a local
+  `result` collides with the implicit function result, which is a name nobody
+  wrote, so a message pointing only at the declaration points at nothing. It is
+  the shape the one real site in this tree had -- lib/rtl/bignum.pas:495, since
+  renamed to `acc` -- and without it that arm has no positive control at all.
+
+  The shapes that must KEEP compiling are asserted elsewhere and are deliberately
+  not in this file, because a program that must be rejected cannot share one with
+  a program that must run: test_case_sensitive.pas ({$CASESENSITIVE ON}, where
+  the two names are genuinely two identifiers), any of the test_c_gtk* fixtures
+  (340 GDK keysym pairs arriving through a C header import, same reason), and
+  test_exception_handler_binder_is_scoped_to_its_handler.pas (`on E: Exception`
+  beside an outer `var e`, which fpc accepts with no warning -- a handler is a
+  scope, and eight sites in this corpus were misreported as same-scope until
+  that was recorded). }
 function WordCountish(const N: Integer): Integer;
 var
   i, n: Integer;
@@ -51,9 +73,17 @@ begin
   WordCountish := n;
 end;
 
+function Doubled(a: Integer): Integer;
+var
+  result: Integer;
+begin
+  result := a * 2;
+  Doubled := result;
+end;
+
 begin
   fails := 0;
-  Check('the routine still computes 1+2+3', WordCountish(9), 6);
+  Check('unreachable: this program must never be built', WordCountish(9), 6);
+  Check('unreachable', Doubled(2), 4);
   WriteLn('fails=', fails);
-  if fails = 0 then WriteLn('CASEDUP FIXTURE OK');
 end.

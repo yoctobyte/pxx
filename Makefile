@@ -5908,8 +5908,38 @@ test-core: $(COMPILER)
 	@# sit in FindSym and SymHashInsert, two of the hottest routines in the
 	@# compiler, behind an integer compare. A channel that prints with PXXDBG
 	@# unset is a correctness bug in the compiler, not a noisy log.
-	./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26
-	tools/expect_same.sh test_casedup26 "$$($(TESTTMP)/test_casedup26 | tail -n 2)" "$$(printf 'fails=0\nCASEDUP FIXTURE OK')"
+	@# THE ASSERTION INVERTED when the diagnostic landed: this file used to RUN,
+	@# asserting only that the census channel saw the pair. It must now be
+	@# REFUSED, and both message arms are asserted by TEXT -- a bare `!` passes
+	@# on a typo, and the second arm exists because a collision with the implicit
+	@# function result is a collision with a name nobody wrote.
+	! ./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26 > $(TESTTMP)/test_casedup.log 2>&1
+	grep -q 'duplicate identifier "n": Pascal is case-insensitive, so it is the same identifier as "N"' $(TESTTMP)/test_casedup.log
+	grep -q 'duplicate identifier "result": Pascal is case-insensitive, so it is the same identifier as the implicit function result "Result" of Doubled' $(TESTTMP)/test_casedup.log
+	@# ...and BOTH are reported from one compile, because the check recovers. A
+	@# fatal one would have certified the second arm untested.
+	test "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_casedup.log)" = 2
+	@# THE NEGATIVE CONTROLS, drawn from the population the census actually found
+	@# rather than from imagination. The census turned up three families that
+	@# differ only in case in ONE scope and are LEGAL, and the refusal must not
+	@# touch any of them: a {$CASESENSITIVE ON} declaration; 340 distinct GDK
+	@# keysym pairs arriving through a C header import; and an `on E: Exception`
+	@# binder beside an outer `var e`, which fpc accepts with no warning and
+	@# which eight sites in this corpus reported as same-scope until a handler
+	@# was recorded as a scope. Two of the three are asserted here -- see the
+	@# note under the first for why gtk3 is not, and where it is covered instead.
+	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_casedup_cs26
+	@# The gtk3 control is deliberately NOT here, and the reason is the whole
+	@# point of a negative control: `test_c_gtk_types.pas` needs compiler/gtk.h,
+	@# which most boxes do not have, so naming it in this recipe made testmgr's
+	@# pre-run dependency scan SKIP the entire job -- taking the two refusal
+	@# assertions above with it. Measured: with the diagnostic's grep string
+	@# deliberately corrupted, the job reported SKIP and scored passlike. A guard
+	@# that cannot fail is not a guard, and this one printed GREEN. The 340 GDK
+	@# keysym pairs are exercised by the test_c_gtk* jobs themselves wherever
+	@# gtk.h exists; tying this refusal to a header nobody has cost more than it
+	@# bought.
+	./$(COMPILER) test/test_exception_handler_binder_is_scoped_to_its_handler.pas $(TESTTMP)/test_casedup_binder26
 	@out=$$(PXXDBG=a.casedup ./$(COMPILER) test/test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas $(TESTTMP)/test_casedup26 2>&1 | grep -c 'a.casedup n idx=.* vs=N .*samescope=1'); \
 	  [ "$$out" = "1" ] || { echo "a.casedup: want exactly 1 samescope=1 line for the parameter/local pair, got $$out"; exit 1; }
 	@out=$$(PXXDBG=a.casebind ./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26 2>&1 | grep -c 'a.casebind counter -> Counter .*outer=counter'); \

@@ -3,11 +3,11 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankB
 created: 2026-09-06
 found-by: frankB
-summary: "`function WordPosition(const N: Integer; ...): Integer; var i, n, count: Integer;` declares a parameter `N` and a local `n` in one routine. Pascal is case-insensitive, so that is ONE identifier declared twice and fpc refuses it as a duplicate; pxx accepts it silently and registers two symbols. Three routines in our own `lib/rtl/strutils.pas` were written that way and read the two as different variables. Found only because a name-resolution fix (bug-p-an-exact-case-match-in-an-outer-scope-beats-a-case-insensitive-one-in-a-nearer-scope) made the two collapse onto one symbol and broke them -- the duplicate itself is invisible today. THE VALUE IS THE DECLARATION-SITE DIAGNOSTIC: the collision is trivially detectable where it is written and is otherwise found three functions later as a wrong value. Not landed with the resolution fix because a refusal is a NARROWING over a population nobody has enumerated, and that commit already moved name resolution. CENSUS DONE 2026-09-06 (frankA) AND IT DECIDES: ERROR -- the narrowing costs exactly ONE site corpus-wide, lib/rtl/bignum.pas:495, a routine-local `result` beside the implicit `Result`, which fpc refuses outright (Duplicate identifier 'RESULT') and which only survives because lib/rtl is built by $(PXX_STABLE) and never by the seed. Re-ranked 35->45. THE STATED BOUNDARY IS TOO NARROW: four of the five cascade instances were `const SPARE` beside `var spare` at PROGRAM scope, neither two locals nor an outer-scope collision -- the population is two declarations in ONE scope differing only in case, at ANY level. BEWARE THE COUNT: 342 of the 350 same-scope hits are gtk3 GDK keysyms arriving through a C header import, where the two names are legitimately distinct and DO resolve correctly (probed with four differing values), so ranking by hit count sends a reader straight to the one file that is fine."
+summary: "`function WordPosition(const N: Integer; ...): Integer; var i, n, count: Integer;` declares a parameter `N` and a local `n` in one routine. Pascal is case-insensitive, so that is ONE identifier declared twice and fpc refuses it as a duplicate; pxx accepted it silently and registered two symbols. Three routines in our own `lib/rtl/strutils.pas` were written that way and read the two as different variables, and four of the five fixtures in the 0dd59f05 cascade were `const SPARE` beside `var spare` at PROGRAM scope -- one of them handed a signal handler a stack pointer computed from an array read as an integer. Every instance was found as a wrong value far from the declaration that caused it, and every one is decidable AT the declaration. FIXED 2026-09-06: `CaseDupRefuse` in `SymHashInsert` refuses two case-insensitive declarations of one name in one scope, naming the implicit `Result` when that is the other side. THE CASE-SENSITIVITY BIT IS WHAT MAKES IT SAFE: 340 distinct GDK keysym pairs arrive through a C header import and are two names by construction, as are the `{$CASESENSITIVE ON}` fixtures and every NilPy symbol, so the rule asks BOTH sides` SymCaseSensitive rather than the current mode. MEASURED COST OVER THE CORPUS: exactly ONE file, and it is this ticket`s own fixture, which inverted from running to refused as its earlier header said it must. THE RE-COUNT IS WHY THIS DID NOT LAND ON THE FIRST CENSUS: it found EIGHT sites the first count called same-scope that are LEGAL -- an `on E: Exception` binder beside an outer `var e`, which fpc accepts with no warning -- because a HANDLER IS A SCOPE and nothing recorded that, so a refusal written on the old flag would have rejected the fixture that exists to prove the construct legal."
 ---
 
 # A parameter and a local that differ only in case are two symbols
@@ -169,3 +169,106 @@ unit nothing imports contributes no pairs and is indistinguishable here from a
 clean one. `examples/**` and the frontend corpora are not covered at all.
 `compiler/compiler.pas` was counted separately by frankB (21 pairs, all
 cross-scope).
+
+## RESOLVED 2026-09-06 — and the second census is the finding
+
+The diagnostic is `CaseDupRefuse`, called from `SymHashInsert`. What is worth
+recording is that **the census this ticket blocked on was not enough, and the
+re-count is what stopped a false refusal.**
+
+### The rule, and the one field that makes it safe
+
+Two declarations whose names differ only in case, visible in the same scope, and
+**neither declared under a case-sensitive mode** — `SymCaseSensitive` on BOTH
+sides, not the mode in force at the check. That last part is the whole safety
+argument and it is not a heuristic:
+
+| population | pairs | why it is not a duplicate |
+| --- | --- | --- |
+| GDK keysyms via `uses gtk3_c` | 340 distinct | a C header import; `GDK_KEY_dead_A` and `GDK_KEY_dead_a` are two names, and they resolve correctly and distinctly |
+| `{$CASESENSITIVE ON}` fixtures | 2 | the directive says so |
+| every NilPy user symbol | — | `DeclCaseSensitive := CaseSensitiveMode or NilPyUserCode` |
+
+A reader ranking by raw `samescope=1` count goes straight to gtk3, which is the
+one file that is fine. The bit is what separates them, per declaration, and it
+was already being recorded.
+
+### The re-count found eight LEGAL sites the first census called same-scope
+
+frankA's census answered the question this ticket blocked on — ERROR, one real
+site — and it was right about that. Re-measuring at HEAD before landing found
+the site already gone (`bignum:495`'s local `result` is renamed to `acc`) and
+found something the first count could not have known it was reporting:
+
+```
+on E: Exception do WriteLn(E.Message);   { beside an outer `var e` }
+```
+
+**fpc accepts this with no warning** — measured, not assumed — and
+`test_exception_handler_binder_is_scoped_to_its_handler.pas` exists in this tree
+to assert exactly that the binder is scoped to its handler. `a.casedup` reported
+all eight such sites, across three fixtures, as `samescope=1`.
+
+The cause: **a handler is a scope, and nothing recorded that.** A routine's scope
+is named by `Procs[CurProc].ScopeBase`; a handler's had no name, so at program
+scope the derivation fell through to "same unit" and the binder read as a
+program-scope declaration. `CurHandlerScopeBaseP1` records it now, set before
+`AllocVar` because the binder is itself in the handler's scope, saved and
+restored so nested handlers nest.
+
+**This is the second time this derived flag has been wrong, in opposite
+directions** — first it could never report 1 at program scope, which hid four of
+the five cascade fixtures; then it reported 1 for something legal. Both times a
+peer or a re-measurement caught it, never the flag itself. So every input it is
+derived from is now printed beside it (`proc=`, `base=`, `hbase=`, `cs=`,
+`vscs=`, `unit=`, `vsunit=`), and the census channel and the refusal call **one**
+`CaseDupSameScope` rather than two copies of the subtraction.
+
+### Measured cost: one file, and it is this ticket's fixture
+
+Not reasoned from the channel — **measured by compiling.** The whole corpus was
+compiled before and after with identical arguments and the exit codes diffed:
+
+| | compiled | refused |
+| --- | --- | --- |
+| before | 1834 | 275 |
+| after | 1833 | 276 |
+
+**Newly failing: exactly one**, this ticket's own fixture. Newly passing: none.
+Exactly one file in the corpus mentions the new diagnostic at all. The 691
+non-Pascal frontend sources compile identically (598 before, 598 after, zero
+refused by it) — expected, because C, Rust, Zig and NilPy all declare
+case-sensitively, but measured rather than argued.
+
+### The fixture inverted, as its own earlier header promised
+
+`test_a_parameter_and_a_local_that_differ_only_in_case_are_two_symbols.pas` used
+to RUN and print `CASEDUP FIXTURE OK`, asserting only that the census channel saw
+the pair. It is now a program that must not compile, and the Makefile asserts
+**both** message arms by text plus that both are reported from one compile —
+the check recovers, and a fatal one would have certified the second arm untested.
+
+The second arm is the one with no positive control otherwise: a local `result`
+colliding with the implicit function result. The collision is with a name the
+LANGUAGE declares, so a message pointing only at the user's declaration points at
+nothing, and ours names it:
+
+    duplicate identifier "result": Pascal is case-insensitive, so it is the
+    same identifier as the implicit function result "Result" of Doubled
+
+fpc says `Duplicate identifier "RESULT"`. Both refuse; ours says which side the
+author did not write.
+
+The three negative controls are wired beside it and are drawn from the census's
+own data rather than invented: `test_case_sensitive.pas`, `test_c_gtk_types.pas`
+and `test_exception_handler_binder_is_scoped_to_its_handler.pas`.
+
+### Blank, named
+
+`lib/` units that no fixture reaches are not covered, for the reason frankA's
+census records about the same population: a unit nothing imports contributes no
+pairs and is indistinguishable here from a clean one. A duplicate in one of those
+would now be a hard error the first time something imports it.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -4803,8 +4803,52 @@ end;
   {$CASESENSITIVE ON} -- and compiler.pas itself is compiled that way -- the two
   names never collide in FindSym at all, so a.casebind is structurally blind to
   exactly the file that needs this most. Two instruments, two questions. }
+{ WHICH SYMBOL INDEX DOES THE INNERMOST OPEN SCOPE START AT, and is there one
+  at all. `scoped` False means we are at program or unit scope, where there is
+  no base to compare against and the scope is the declaring UNIT instead.
+
+  ONE READER FOR BOTH THE CENSUS CHANNEL AND THE REFUSAL, because the first
+  version of this was inline in the channel and got the answer wrong twice, in
+  opposite directions. It asked only `j >= Procs[CurProc].ScopeBase`, so at
+  program scope, where CurProc is -1, it could never report 1 -- four of the
+  five fixtures the 0dd59f05 cascade was made of were program-scope pairs and
+  every one read 0. Fixing that with the unit test then made it report 1 for
+  something legal: an `on E: Exception do` binder beside an outer `var e`, which
+  fpc accepts with no warning and which a fixture in this tree exists to assert.
+  A HANDLER IS A SCOPE and nothing recorded that, so the binder looked like a
+  program-scope declaration. CurHandlerScopeBaseP1 records it now. }
+procedure InnermostScopeBase(var base: Integer; var scoped: Boolean);
+begin
+  base := 0;
+  scoped := False;
+  if (CurProc >= 0) and (CurProc < ProcCount) then
+  begin
+    base := Procs[CurProc].ScopeBase;
+    scoped := True;
+  end;
+  { A handler opened INSIDE a routine is nested within it, so the deeper of the
+    two bases wins; one opened at program scope is the only scope there is. }
+  if CurHandlerScopeBaseP1 > 0 then
+  begin
+    if (not scoped) or (CurHandlerScopeBaseP1 - 1 > base) then
+      base := CurHandlerScopeBaseP1 - 1;
+    scoped := True;
+  end;
+end;
+
+{ Is `idx` declared in the same scope as `j`, both being names that differ only
+  in case? Split out of the channel below so the diagnostic and the census
+  cannot disagree -- the census IS the diagnostic's population. }
+function CaseDupSameScope(idx, j: Integer): Boolean;
+var base: Integer; scoped: Boolean;
+begin
+  InnermostScopeBase(base, scoped);
+  if scoped then CaseDupSameScope := j >= base
+  else CaseDupSameScope := SymUnitIdx[j] = CurrentUnitIdx;
+end;
+
 procedure DbgCaseDupMaybe(idx: Integer);
-var j, base: Integer; same: Boolean;
+var j, base: Integer; same, scoped: Boolean;
 begin
   if DbgCaseDupMode = 0 then
   begin
@@ -4812,26 +4856,89 @@ begin
     else DbgCaseDupMode := 1;
   end;
   if DbgCaseDupMode = 1 then Exit;
-  base := 0;
-  if (CurProc >= 0) and (CurProc < ProcCount) then base := Procs[CurProc].ScopeBase;
+  InnermostScopeBase(base, scoped);
   j := SymHashPrev[idx];
   while j >= 0 do
   begin
     if CaseEqual(Syms[j].Name, Syms[idx].Name) and
        (not StrEqual(Syms[j].Name, Syms[idx].Name)) then
     begin
-      { INSIDE A ROUTINE the scope is the routine, and ScopeBase names it. AT
-        PROGRAM OR UNIT SCOPE there is no ScopeBase and CurProc is -1 -- but
-        SymRollbackTo has already unhashed every routine's symbols by then, so
-        the chain holds only globals and the scope is the declaring UNIT. }
-      if CurProc >= 0 then same := j >= base
-                      else same := SymUnitIdx[j] = CurrentUnitIdx;
+      same := CaseDupSameScope(idx, j);
+      { The derived flag has now been wrong in both directions, so every input
+        it is derived from is printed beside it and the reader can redo the
+        subtraction. `hbase` is the open handler scope, 0 for none. }
       WriteLn('PXXDBG a.casedup ', Syms[idx].Name, ' idx=', idx,
               ' vs=', Syms[j].Name, ' vsidx=', j,
               ' samescope=', Ord(same),
               ' proc=', CurProc, ' base=', base,
+              ' hbase=', CurHandlerScopeBaseP1,
+              ' cs=', Ord(SymCaseSensitive[idx]), ' vscs=', Ord(SymCaseSensitive[j]),
               ' unit=', CurrentUnitIdx, ' vsunit=', SymUnitIdx[j],
               ' at=', CurSrcBaseName, ':', CurTok.Line);
+      Exit;
+    end;
+    j := SymHashPrev[j];
+  end;
+end;
+
+{ TWO DECLARATIONS IN ONE SCOPE WHOSE NAMES DIFFER ONLY IN CASE ARE ONE
+  IDENTIFIER DECLARED TWICE, and fpc refuses it outright as a duplicate. pxx
+  registered two symbols and kept them apart by case, so the routine WORKED --
+  and started returning wrong answers the moment name resolution was corrected.
+  Three routines in lib/rtl/strutils.pas had this shape and four of the five
+  fixtures in the 0dd59f05 cascade were `const SPARE` beside `var spare` at
+  program scope; one of them handed a signal handler a stack pointer computed
+  from an array read as an integer. Every instance was found as a wrong value in
+  a routine that reads the two names as different variables, and every one is
+  decidable HERE, at the declaration, from a list we already have.
+
+  IT IS A NARROWING AND THE POPULATION WAS COUNTED FIRST, twice. frankA's census
+  over the fixture corpus put it at one real site, lib/rtl/bignum.pas:495, a
+  local `result` beside the implicit `Result`; that is renamed to `acc` and the
+  re-count at this commit finds the site gone. The re-count is what earned this
+  its own paragraph: it also found EIGHT sites that the first count reported as
+  same-scope and that are LEGAL, so a refusal landed on that count would have
+  rejected three fixtures -- see CurHandlerScopeBaseP1.
+
+  THE CASE-SENSITIVITY BIT IS WHAT MAKES THIS SAFE, and it is not a heuristic.
+  340 distinct pairs in the corpus are GDK keysyms arriving through a C header
+  import, where GDK_KEY_dead_A and GDK_KEY_dead_a are legitimately two names and
+  resolve correctly and distinctly. They carry SymCaseSensitive, as do the
+  deliberate {$CASESENSITIVE ON} fixtures and every NilPy user symbol, and a
+  case-SENSITIVE declaration is two names by construction. So the rule asks both
+  sides, not the current mode: a pair is a duplicate only when NEITHER side was
+  declared under a case-sensitive mode.
+
+  Recovering, so a file reports every duplicate it contains rather than the
+  first. The caller owes the parse a well-formed stand-in and already has one --
+  the symbol IS registered; only the program is refused.
+  bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols }
+procedure CaseDupRefuse(idx: Integer);
+var j: Integer;
+begin
+  if SymCaseSensitive[idx] then Exit;
+  j := SymHashPrev[idx];
+  while j >= 0 do
+  begin
+    if (not SymCaseSensitive[j]) and
+       CaseEqual(Syms[j].Name, Syms[idx].Name) and
+       (not StrEqual(Syms[j].Name, Syms[idx].Name)) and
+       CaseDupSameScope(idx, j) then
+    begin
+      { THE IMPLICIT RESULT NEEDS NAMING, because the collision is with a name
+        the LANGUAGE declared and not one the author wrote -- a message pointing
+        only at the user's declaration points at nothing. frankA's census note,
+        and it is the shape the one real site in the tree had. }
+      if (CurProc >= 0) and (CurProc < ProcCount) and
+         (Procs[CurProc].RetSymIdx = j) then
+        ErrorRecover('duplicate identifier "' + Syms[idx].Name +
+          '": Pascal is case-insensitive, so it is the same identifier as the '
+        + 'implicit function result "' + Syms[j].Name + '" of ' +
+          Procs[CurProc].Name)
+      else
+        ErrorRecover('duplicate identifier "' + Syms[idx].Name +
+          '": Pascal is case-insensitive, so it is the same identifier as "' +
+          Syms[j].Name + '", already declared in this scope');
       Exit;
     end;
     j := SymHashPrev[j];
@@ -4859,6 +4966,7 @@ begin
   { PXXDBG=a.casedup — see above. AFTER the link, so the walk starts at what
     was the head. 1 is asked-and-off, so an unset PXXDBG costs one compare. }
   if DbgCaseDupMode <> 1 then DbgCaseDupMaybe(idx);
+  CaseDupRefuse(idx);
 end;
 
 { Truncate the symbol table to newCount, unlinking the removed range from the

@@ -5065,6 +5065,20 @@ var
   ExceptionCodegenDepth: Integer;
   ExceptionFinallyBody : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionHandlerParseDepth: Integer;
+  { The symbol index an open `on E: T do` handler's scope starts at, PLUS ONE,
+    so a Pascal global's zero means "no handler scope is open" and nothing has
+    to initialise it. Saved and restored around each handler, so nesting works.
+
+    IT EXISTS BECAUSE A HANDLER IS A SCOPE AND NOTHING RECORDED THAT. A routine's
+    scope is named by Procs[CurProc].ScopeBase; a handler's had no name at all,
+    so any reader asking "were these two declared in the same scope" saw the
+    binder as a program-scope declaration and answered YES for `on E: Exception`
+    beside an outer `var e`. fpc accepts that pair -- measured, no warning -- and
+    a fixture in this tree exists to assert it. a.casedup reported all eight such
+    sites as samescope=1, and a refusal written on that flag would have rejected
+    the fixture written to prove the construct legal.
+    bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols }
+  CurHandlerScopeBaseP1: Integer;
   WithStack: array[0..31] of Integer;
   WithStackDepth: Integer;
   AsmBytes: array[0..65535] of Byte;

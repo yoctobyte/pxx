@@ -4353,6 +4353,7 @@ function ParseTryStatementAST: Integer;
 var
   trySeq, tryLast, actionSeq, stmtNode, node: Integer;
   handlerHead, lastHandler, handlerNode, handlerVar, ci, recId: Integer;
+  savedHandlerScope: Integer;
   handlerSymMark, hk: Integer;
   handlerName, className: AnsiString;
 begin
@@ -4435,12 +4436,19 @@ begin
           invariant SymRollbackTo relies on, and SymHashBkt is read rather than
           recomputed from the name for the same reason it gives. }
         handlerSymMark := SymCount;
+        { A HANDLER IS A SCOPE, and until this line nothing recorded that. Set
+          BEFORE AllocVar because the binder is itself in the handler's scope --
+          see CurHandlerScopeBaseP1 in defs.inc for the eight sites that made
+          the omission visible. Saved and restored so nested handlers nest. }
+        savedHandlerScope := CurHandlerScopeBaseP1;
+        CurHandlerScopeBaseP1 := handlerSymMark + 1;
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;
         SymSyncTypeRef(handlerVar);
         Inc(ExceptionHandlerParseDepth);
         actionSeq := ParseStatementAST;
         Dec(ExceptionHandlerParseDepth);
+        CurHandlerScopeBaseP1 := savedHandlerScope;
         for hk := SymCount - 1 downto handlerSymMark do
           if SymHashBkt[hk] >= 0 then
             SymHashHead[SymHashBkt[hk]] := SymHashPrev[hk];
