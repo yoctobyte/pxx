@@ -14897,11 +14897,39 @@ property is accepted where FPC refuses it. frankB stopped at the parity rule and
 > That is not a divergence from FPC. It is an inconsistency with OURSELVES, and internal
 > consistency is ours whatever FPC does.
 
-**The check to run before invoking the exemption is cheap and mechanical: is there another spelling,
-clause, or syntactic route to the SAME rule, and do we already refuse it?** If yes, the parity
-question was never the question. A codebase that refuses a construct under one name and accepts it
-under another gives the programmer a rule they cannot learn, and "FPC's answer is not a
-specification" says nothing about that.
+**The cheap first pass is mechanical: is there another spelling, clause, or syntactic route to the
+SAME rule, and do we already refuse it?** If YES, the parity question was never the question. A
+codebase that refuses a construct under one name and accepts it under another gives the programmer
+a rule they cannot learn, and "FPC's answer is not a specification" says nothing about that.
+
+**BUT A `NO` DOES NOT LICENSE THE EXEMPTION, AND THIS IS THE BRANCH THAT MATTERS** (frankB's
+refinement, and it is the case the check most needs to catch). This instance was the LUCKY
+configuration: `a class property cannot be published` was already in the tree, so the inconsistency
+was visible in our own code and a grep found it. **The commoner shape is that NEITHER spelling is
+refused** — and then the check answers "no sibling refusal exists", the exemption is granted, and
+the rule stays exactly as unlearnable as before. **Two paths agreeing to be wrong reads as
+consistency.** So a NO means only *the inconsistency is not yet visible in our own code*.
+
+**WHAT ACTUALLY REVEALED IT WAS PROSE, NOT BEHAVIOUR.** Neither our accept/reject columns nor FPC's
+contain the rule. Two fpc-testsuite files' own comments do, written by one author, saying it once
+each:
+
+```
+tclass14a   "class properties are not for sreaming therefore 'stored' is not supported"
+tclass14b   "class properties are not for sreaming therefore publishing them is not supported"
+```
+
+That is a statement about the RULE. So the question that survives the NO is not *"do we refuse the
+sibling"* but **"is there ONE rule here, and how many spellings does it have?"** — and the answer
+usually lives in prose: a spec sentence, a test's comment, a ticket's own words. Same shape as
+*a stated topic is the agent's BELIEF*: **the accept/reject table is behaviour, and the sentence is
+intent.** Grep the corpus comments, not only the corpus results.
+
+**AND THE EXEMPTION IS OFTEN RIGHT — it was right twice and wrong once in this one ticket.**
+`stored FF` with an Integer field where fpc demands a boolean stayed a real parity exemption in the
+same commit, and frankB dropped the row from the test rather than growing a type check for a value
+we discard. The refinement above is a branch to check, **not a presumption that a parity exemption
+is a mistake**; read it that way and you have swapped one reflex for another.
 
 Note where the argument came from. frankB had reached the correct stopping point for the question it
 was asking; the reframing came from a **second session that had the sibling ticket in view**. The
