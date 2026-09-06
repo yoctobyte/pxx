@@ -359,3 +359,9 @@ does not have.
 The row is repaired into its inverse (build with no flag, run, compare against
 the native build), so it now guards `f49c0e11f` against regression — strictly
 more than it guarded before, but not the same thing.
+
+**Date the gap correctly, because the obvious reading is wrong.** Nothing about
+`f49c0e11f` created this coverage hole and nothing about the repair closes it.
+The general two-ordinary-procs case has never had a row: `xt_bigcall` was
+reaching the epilogue call from the day it was written. The gap is as old as
+the row, not as old as yesterday's fix.

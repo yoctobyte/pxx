@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source. RAISED 50->65 on 2026-09-05: two MEASURED wrong readings during one night of live tier triage, both with attributable cost — one key standing for six unrelated targets (sqlite-threads x4, uforth, emit-obj) so the tier's red DENOMINATOR was unknown until settled by hand, and one job's history SPLIT ACROSS TWO KEYS when its recipe changed, which made test-uforth look like it had never run and pointed at a ~6.5 week bisect window instead of the true 234 commits. The key is derived from the recipe's TEXT rather than from the job's subject, so it is both too coarse and too brittle. 2026-09-06 adds the third and worst failure mode, SILENT REPOINTING: test/test_cross_record.pas occurs SIX times inside the single test-xtensa target as three different ABIs plus their x64 controls, so `@3` does not mean 'the third mention', it means `--xtensa-abi=windowed` and nothing in the key says so. Delete or insert one earlier compile line for that source and `@3` still resolves, still names a real row, and now names Call0 -- the verdict history stays attached to a key whose SUBJECT changed underneath it, with no error, no gap and no split to notice. The subject is (target, abi, source) and all three are already in the recipe."
+summary: "A tstate job is named after its group's FIRST source, so every later source in the group is invisible by name while being fully covered. Measured at 5b5fdb0b32d3: 384 of 3264 test/ sources (~11.8%) have no job key of their own, so for one source in eight `grep the job map` answers a DIFFERENT QUESTION and returns nothing. Hit live while checking whether test_record_class_var_fail had run — it had, as the 4th compile line of test-core#src:test/strict_fpc_case_fail.pas. This is the QUERY direction of bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step (done/), which covers the job's inability to name its failing STEP and not a reader's inability to ask about a source. RAISED 50->65 on 2026-09-05: two MEASURED wrong readings during one night of live tier triage, both with attributable cost — one key standing for six unrelated targets (sqlite-threads x4, uforth, emit-obj) so the tier's red DENOMINATOR was unknown until settled by hand, and one job's history SPLIT ACROSS TWO KEYS when its recipe changed, which made test-uforth look like it had never run and pointed at a ~6.5 week bisect window instead of the true 234 commits. The key is derived from the recipe's TEXT rather than from the job's subject, so it is both too coarse and too brittle. 2026-09-06 adds the third and worst failure mode, SILENT REPOINTING, and the same day CORRECTED ITS OWN MECHANISM -- see the two dated sections, the first of which is wrong and kept. `@N` indexes JOBS that share a first source, NOT occurrences of that source in the Makefile: three test-xtensa jobs begin with test/test_cross_record.pas (#84 3 lines, #138 6 lines, #147 115 lines), so `@3` is #147. That is STRICTLY WORSE than the version first filed here, because a Makefile occurrence can at least be counted by reading the file, while the job list is produced by the harness's own recipe grouping and is invisible in the source it indexes -- you cannot resolve the key without asking testmgr. Add a job that shares the first source earlier in the target and `@3` still resolves, still names a real row, and now names a different one: the verdict history stays attached to a key whose SUBJECT changed underneath it, with no error, no gap and no split to notice. MEASURED COST, this file's own author: I read `@3` as a Makefile occurrence, measured #138, and published a 'not reproducible' exculpation for #147, which was genuinely red. The subject is (target, abi, source) and all three are already in the recipe."
 ---
 
 # The job map cannot be asked whether a given source was exercised
@@ -196,3 +196,45 @@ checkout (it lives on seven) and the key reached me through a report, not a
 run of my own. Whoever holds the tier verdict owns "was it red, and what fixed
 it" — from here the only defensible claim is that it is green now, at that
 tree, with that binary.
+
+## 2026-09-06, later — the mechanism above is WRONG, and the true one is worse
+
+Kept rather than repaired, because a corrected claim with no history reads as a
+current-looking assertion nobody will check.
+
+**`@N` does not index occurrences of the source in the Makefile.** It indexes
+**jobs whose first source is that file**. Three test-xtensa jobs qualify:
+
+    test-xtensa#84    qemu        3 lines   test/test_cross_record.pas tools/expect_same.sh +1
+    test-xtensa#138   qemu        6 lines   test/test_cross_record.pas tools/run_target.sh +1
+    test-xtensa#147   selfhost  115 lines   test/test_cross_record.pas tools/expect_same.sh +4
+
+The report's `+4` names `#147`. The section above reasoned from six Makefile
+occurrences and concluded `@3` meant `--xtensa-abi=windowed`; `@3` is `#147`,
+a 115-line selfhost job.
+
+**Why the true mechanism is worse than the one first filed here.** A Makefile
+occurrence is at least *countable* — wrong, but checkable by reading the file
+the key appears to describe. The job list is produced by the harness's own
+recipe grouping, is not visible anywhere in the Makefile, and cannot be
+enumerated without running `testmgr --list`. So the key indexes a list that
+does not exist in the artefact it names, and the only way to resolve it is to
+ask the tool that generated it.
+
+**Measured cost, and it was this section's own author.** I read `@3` as
+occurrence 3, measured `#138` (green, and still green), and published a *"not
+reproducible"* exculpation for `#147` — which was genuinely red, and had been
+since `f49c0e11f` at 2026-09-05 19:48. Fixed at `0a96caf54`.
+
+**The discriminator was in the report I was reading.** Its truncated log carried
+`code=491372B / 446316B / 122648B`; every program I built came out `196460B`.
+Nothing errored and nothing was hidden. **A discriminator being present is not
+the same as a discriminator being consulted** — and a session reading its own
+job's report is the least likely reader to notice a size column, because the
+size is not what it came for.
+
+**An exculpation is the class that never gets revisited.** A green nobody
+re-checks and a "not reproducible" nobody re-runs are the same object: a verdict
+that stops work. This one was caught only because a peer asked an unrelated
+question about a different ticket and the answer required opening the archive.
+
