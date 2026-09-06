@@ -3563,6 +3563,32 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # before 2026-08-30: "not known", never empty.
                             "skip_hole_jobs": (report.get("skips")
                                                or {}).get("hole_jobs"),
+                            # ...and WHICH of the REST, for the identical
+                            # reason, which the field above accepted and the
+                            # `skips` count two fields up declined. "The
+                            # per-reason grouping lives in the report md" was
+                            # the argument for naming none of them, and the
+                            # report md is the same file that is missing for
+                            # ~8% of runs -- so the archive could name the
+                            # holes at a sha and not the others.
+                            # That asymmetry is now the larger half: on
+                            # 6d04b14cd88d (seven, full) `skips` was 7 and
+                            # `skip_holes` 2, so five sixths of what did not
+                            # run had no name anywhere queryable.
+                            # A self-skipping recipe is CORRECTLY not a
+                            # coverage hole -- the harness does not get to
+                            # decide the recipe's business, per
+                            # SKIP_HOLE_PREFIXES -- but "not the harness's
+                            # fault" is not "need not be recorded", and a
+                            # release bar reading `skip_holes: 0` as "every
+                            # job ran" is reading a field that never meant
+                            # that. Superset of skip_hole_jobs by construction.
+                            # Absent on rows before 2026-09-06: "not known",
+                            # never empty.
+                            "skip_jobs": sorted(
+                                n for v in (((report.get("skips") or {})
+                                             .get("by_reason")) or {}).values()
+                                for n in v),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             # WHICH of those reds had never run before. NEVER
