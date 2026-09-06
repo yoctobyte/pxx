@@ -3026,12 +3026,39 @@ begin
     likewise plain identifiers. Without them the section ran straight through
     `strict private` and consumed `strict` as the next const NAME
     (IsClassMemberStartWord covers private/protected/public/published + ctor/dtor). }
+  { ...and the three SECTION keywords that were missing, which is the whole
+    reason the comment above says "mirrors the type-section terminator set"
+    while not mirroring it. The type-section walk
+    (pasparser_generic.inc, DGenIdentIs) stops at `threadvar`,
+    `resourcestring` and `label`; this list did not, so a const block followed
+    by any of them ate the keyword as the next const NAME and died on the
+    `=` that never came:
+
+      const nFoo = 1030;
+      resourcestring SErr = '...';   -> expected '=' before 'SErr'
+
+    Found by attempting rung 7 of the Pascal corpus ladder (fcl-passrc): it is
+    the FIRST wall in `pscanner.pp`, at :74, and fpc 3.2.2 compiles the same
+    file. Two hand-maintained lists of one concept had drifted, and reading
+    them against each other is what the comment already claimed to have done.
+
+    STOP HERE, DO NOT JUDGE LEGALITY. Whether a section may appear in this
+    position is the enclosing dispatcher's question, and it still answers it:
+    `resourcestring` inside a ROUTINE's declaration part is refused by fpc and
+    is still refused here, because breaking the loop hands the word to a
+    dispatcher that does not accept it. Measured both directions rather than
+    assumed -- of the six context x keyword pairs probed against fpc 3.2.2,
+    four were pxx-only refusals and two are refused by both.
+    feature-pascal-corpus-expansion (rung 7) }
   while (CurTok.Kind = tkIdent) and
         (not IsClassMemberStartWord(CurTok.SVal)) and
         (not CaseEqual(CurTok.SVal, 'strict')) and
         (not CaseEqual(CurTok.SVal, 'operator')) and
         (not CaseEqual(CurTok.SVal, 'implementation')) and
         (not CaseEqual(CurTok.SVal, 'initialization')) and
+        (not CaseEqual(CurTok.SVal, 'threadvar')) and
+        (not CaseEqual(CurTok.SVal, 'resourcestring')) and
+        (not CaseEqual(CurTok.SVal, 'label')) and
         (not CaseEqual(CurTok.SVal, 'finalization')) do
   begin
     name := CurTok.SVal; Next;

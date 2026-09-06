@@ -3003,6 +3003,24 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_resourcestring_addressable.pas $(TESTTMP)/test_resstr26
 	@$(TESTTMP)/test_resstr26 | diff -u test/test_resourcestring_addressable.expected - \
 	  || { echo 'test_resourcestring_addressable: FAIL - @resourcestring broke'; exit 1; }
+	@# ...and a const section must END at an identifier-spelled SECTION keyword
+	@# rather than eat it as the next constant's NAME. The terminator list is
+	@# hand-maintained and had drifted from the type section's, which its own
+	@# comment claimed to mirror -- `resourcestring` and `label` are plain
+	@# identifiers here, so `const nFoo = 1030;` followed by either died on the
+	@# `=` that never came. First wall of corpus rung 7 (fcl-passrc), at FPC's
+	@# own pscanner.pp:74; fpc 3.2.2 compiles it.
+	./$(COMPILER) test/test_a_const_section_ends_at_a_section_keyword.pas $(TESTTMP)/test_constsectend26
+	@$(TESTTMP)/test_constsectend26 | diff -u test/test_a_const_section_ends_at_a_section_keyword.expected - \
+	  || { echo 'test_a_const_section_ends_at_a_section_keyword: FAIL - a const section swallowed a section keyword, or stopped at the wrong one'; exit 1; }
+	@# ...and the NEGATIVE half: stopping the loop must not make the section
+	@# LEGAL wherever it stops. fpc refuses `resourcestring` in a routine's
+	@# declaration part and so must we. Without this row the file above passes
+	@# just as well if the loop stopped at EVERY identifier, which accepts
+	@# anything.
+	@./$(COMPILER) test/test_a_resourcestring_in_a_routine_is_refused.pas $(TESTTMP)/test_rsroutine26 2>&1 \
+	  | grep -q "expected 'begin' before 'resourcestring'" \
+	  || { echo 'test_a_resourcestring_in_a_routine_is_refused: FAIL - a resourcestring inside a routine compiled, or refused for another reason'; exit 1; }
 	@# Two generics referencing each other where only ONE direction is a
 	@# declaration-time dependency (inheritance); the other is a method-body
 	@# reference FPC resolves when the method is compiled. Treating both as
