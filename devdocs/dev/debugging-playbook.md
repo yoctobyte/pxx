@@ -20026,3 +20026,51 @@ other seat pulls, and the twelve minutes were purely a choice of order. Fixed at
 > call to something declared later in the same include stream — the canary's
 > known class — **gate before the push.** Everywhere else the existing rule
 > stands and gating after is fine.
+
+## A `#` COMMENT INSIDE A BACKSLASH-CONTINUED make RECIPE DELETES THE REST OF THE LOOP, SILENTLY, AND STILL EXITS 0
+
+Grep terms: make recipe comment continuation, `#` swallows loop, recipe stops
+testing, green that means nothing, backslash continuation shell join.
+
+**The trap.** make hands a recipe line to the shell as ONE logical line, and the
+SHELL removes the backslash-newlines before it parses. So a `#` you put in the
+middle of a continued command does not comment one line — it comments out
+**everything after it on the joined line**, which is the rest of the loop.
+
+```make
+	@overall=0; \
+	for t in i386 aarch64 arm32 riscv32; do \
+	  # this looks like a comment on one line              <-- IT IS NOT
+	  e=1; x=test/whatever.expected; \
+	  ...every assertion below here is now inside the comment...
+	done; \
+	test "$$overall" = "0" || exit 1
+```
+
+The loop body vanishes, nothing is compared, `overall` stays 0, and the recipe
+**exits 0**. It does not error, it does not warn, and the test target reports
+success while testing nothing.
+
+**Measured 2026-09-06** (frank-subcoord), caught before commit while editing
+`c_pal_time`'s cross-target loop — and the specimen is what makes it worth a
+section: it would have produced *a green that means nothing, in the same recipe
+as a control that had just stopped being able to fail*. Two independent ways for
+the same rows to certify a system nobody had checked.
+
+**The rule.** Put the explanation at **column 0**, above the recipe, where make
+treats it as a make comment and the shell never sees it. Never inside the
+tab-indented continuation. If you genuinely need an in-loop note, `:` is a shell
+no-op that takes an argument and does not eat the line:
+
+```sh
+	  : "this is safe inside a continuation"; \
+```
+
+**Why it belongs beside the other entries here.** This is the same family as
+"A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS PASS" — but the failure
+is one layer lower and worse, because the guard is not merely unable to fail, it
+is *not present*. The positive-control discipline still catches it: a recipe
+whose must-fail row stops failing is telling you the row is gone. Assert that
+your loop RAN — a count of targets measured, printed and compared — and the
+deletion becomes visible instead of silent. `c_pal_time` already does this
+(`N of M cross targets measured`), which is the shape to copy.
