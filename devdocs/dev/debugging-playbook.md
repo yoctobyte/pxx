@@ -11900,3 +11900,35 @@ masking fix is effective IN THE BUILT BINARY before trusting a GOOD.**
 This is the truncation family's structural bias (`## The one instrument that identifies
 the ENDING`) in a bisect: *a step that never ran the test and a step that ran it clean are
 the same silence*, and every member of that family fails toward the reassuring answer.
+
+## ANCHORING ON THE EMITTER IS NECESSARY AND NOT SUFFICIENT — one emitter emits at several SEVERITIES, and a diagnostic-prefix grep answers "did it say anything", not "did it refuse"
+
+Caught before it went out, 2026-09-06 (frankA), while reporting the `test-fgl` close.
+
+The check for whether a reduction still failed was `grep '^pascal26:'`. That anchor is
+**correct** — `pascal26:` at column 0 is something the compiler produces and a comment
+line cannot, which is the rule in `## ...the discriminator is the line's ORIGIN, not its
+wording`. It matched, and the reduction was one keystroke from being reported as still
+failing. What it had matched was:
+
+```
+pascal26:20: warning: duplicate definition of 'TEnumSpec.GetCurrent' with the same
+parameter types; the later body wins, but calls written between the two bind to the
+earlier one
+```
+
+**`grep -c 'error:'` said 0, and the binary ran.**
+
+So the emitter anchor solves the previous failure (a comment or a test name masquerading
+as a verdict) and **does not solve severity**, because one emitter legitimately speaks at
+several severities and the prefix is the same for all of them. The anchored form has to
+carry BOTH: `^pascal26:[0-9]*: error:`, not `^pascal26:`. Same family as the `rc` guard
+one level down — *the instrument answered a real question that was not the one being
+asked.*
+
+**The habit that caught it is the one to copy: check whether the BINARY EXISTS AND RUNS
+rather than trusting the classification.** A refusal has a physical consequence — no
+output file — and that consequence cannot be produced by a warning, at any severity, in
+any wording. Prefer the consequence to the text whenever the consequence is cheap to
+observe. This is `## MATCH THE ASSERTION CLASS TO THE DEFECT CLASS` applied to a verdict:
+"did it refuse" is a question about an artefact, and it was being asked of a log.
