@@ -115,3 +115,6 @@ where the caret already did the job, and only a row that already dereferences ca
 catch that. Row B is a METHOD call — the walker reaches its method arm only once
 the receiver has become a record, so a fields-only fix prints every number
 correctly and still calls `Sum` with a pointer as Self.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
