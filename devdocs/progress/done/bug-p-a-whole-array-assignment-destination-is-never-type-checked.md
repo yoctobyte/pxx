@@ -168,3 +168,30 @@ because `AllocParam` stamps `ArrLen := 1000` on every array parameter.
 
 ## Log
 - 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fecdfe6dc.
+
+### The frontend corpora, measured after the fix landed — and the number is THIN
+
+Rust and Zig go through this funnel; only C and NilPy are excluded. The
+narrowing landed without them measured, so they were measured immediately after
+rather than left as a blank someone else would have to find.
+
+**691 non-Pascal sources, 596 compiled to the end, `refuse=0`. Read that number
+carefully, because it splits into one useful half and one vacuous one:**
+
+| population | whole-array destinations | refused |
+| --- | --- | --- |
+| Rust, Zig, BASIC, Erlang, Fortran, Algol, LOLCODE — the refusal **applies** | **12** | 0 |
+| C and NilPy — `CProgramMode` / `PyProgramMode` **exclude** them from this check | 2169 | 0 |
+
+The second row is a zero **by construction** and is not evidence of anything: it
+would read 0 with the rule set to refuse everything. It is recorded only so
+nobody re-derives it and mistakes it for coverage.
+
+The first row is the one that counts and **twelve is a thin aperture**. It is
+not a clear for those frontends; it is "no signal, from here". The Rust and Zig
+corpora simply do not assign whole arrays much. Ada has no corpus in this tree
+at all — zero sources, so its cell is unmeasured rather than clean.
+
+`lib/` units that no fixture reaches are still unmeasured, for the reason
+frankA's case-pair census records about the same population: a unit nothing
+imports contributes nothing and is indistinguishable here from a clean one.
