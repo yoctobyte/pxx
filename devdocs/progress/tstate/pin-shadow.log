@@ -603,3 +603,4 @@
 2026-09-06T18:02:17Z	seven	c69b52b6ea35cc01cea0721dc387f9b0bf24c848	would NOT pin c69b52b6ea35 — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-core#src:test/test_promoint_bitwise.pas
 2026-09-06T18:37:24Z	seven	6d04b14cd88dfc50f1fe0b20cfa558ea14fd2671	would NOT pin 6d04b14cd88d — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1, test-nilpy#src:test/test_nilpy_dotted_package_import.npy@2
 2026-09-06T19:55:22Z	seven	c543b335fb2fd97de3457a88e4f637011db157e5	would NOT pin c543b335fb2f — 2 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:test/lib_sysutils_delphi_exceptions.pas, test-debug-g#src:tools/compiler_srchash.sh
+2026-09-06T21:06:17Z	seven	51b5e535298adc4f9762782eecf319b40aa7439a	would-pin PENDING 51b5e535298a — qualifies, streak 1/2

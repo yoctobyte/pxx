@@ -4,45 +4,23 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 7d10h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `d2ed286e6b0d` | 2026-09-06T20:54:57Z | GREEN (native) | 172.7s | `c543b335fb2f` RED |
+| seven | `51b5e535298a` | 2026-09-06T21:06:17Z | RED (full) | 633.0s | `51b5e535298a` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `c543b335fb2f` on seven, 2026-09-06T19:55:22Z (59m ago).**
+**Newest full tier in the fleet: `51b5e535298a` on seven, 2026-09-06T21:06:17Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `c543b335fb2f` | RED | 59m | — (newest) |
-| plexus | `27424c927b65` | RED | 7d10h | 7d9h |
+| seven | `51b5e535298a` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 7d10h | 7d10h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
 ## Open regressions
-- **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `lib-test#src:test/lib_inttohex.pas@2`
-  - `lib-test#src:test/test_dynlib.pas`
-  - `test-aarch64#src:test/test_cdecl_indirect.pas`
-  - `test-aarch64#src:test/test_extern_c.pas`
-  - `test-aarch64#src:test/test_extern_c_float.pas`
-  - `test-aarch64#src:test/test_parallel_reduction.pas`
-  - `test-arm32#src:test/test_cdecl_indirect.pas`
-  - `test-arm32#src:test/test_extern_c.pas`
-  - `test-arm32#src:test/test_extern_c_float.pas`
-  - `test-emit-obj#src:test/cxtensa_obj.c@1`
-  - `test-i386#src:test/test_cdecl_indirect.pas`
-  - `test-i386#src:test/test_extern_c.pas`
-  - `test-i386#src:test/test_extern_c_float.pas`
-  - `test-nilpy#src:examples/tk/tkinter_facade.npy`
-  - `test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy`
-  - `test-nilpy#src:test/test_nilpy_startswith_tuple.npy`
-  - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
-  - `tools-devtest#00`
-  </details>
 - **lib-test#src:test/lib_sysutils_delphi_exceptions.pas** — test/lib_sysutils_delphi_exceptions.pas tools/expect_same.sh (seven): bad `c543b335fb2f`, last good `6d04b14cd88d`, 20 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
