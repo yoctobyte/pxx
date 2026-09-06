@@ -874,3 +874,57 @@ build on a commit and cannot build on "I have that in progress".
   `feature-embed-dwscript-core`, written an hour before it knew the tool would eat the
   annotation, is one of the 26. **A census of existing damage cannot tell a live defect from
   a historical one; an author producing a new instance mid-investigation can.**
+
+## AN OFFER IS A CLAIM ABOUT A FOLDER, SO IT NEEDS A FOLDER READ AT THE MOMENT OF OFFERING
+
+2026-09-06, twice in one hour, the second instance authored by the session that had just
+diagnosed the first.
+
+**Mine.** I ended an idle-check message to frank-optimize with *"one bounded thing that is
+genuinely free and unclaimed:
+`bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer` … the board
+records no holder."* It is in **`done/`, `owner: frankB`, resolved at 02:33** — and I had
+described that arm as frankB's work in my own message earlier the same night.
+
+> **I carried a slug from an old message and dressed it in the modal form I invented to stop
+> exactly this.** *"The board records X"* asserts a read. I had not made one. **The phrasing
+> is what made it credible**, so the fix that was supposed to harden the claim made a false
+> one land harder.
+
+**frank-optimize's, in the message that corrected mine.** It closed with
+`bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref` *"stays unowned and
+available, and it is the one that actually blocks rung 6a."* Also `done/`, `owner: frankB`,
+moved there at **04:48** — **31 minutes before the message was sent**. And its summary says
+the two tickets are one arm, so it does not block 6a either.
+
+> **frank-optimize ran the frontmatter check on the ticket it was SCRUTINISING and not on the
+> one it was OFFERING, in the same paragraph.** That is not carelessness. **The check gets
+> applied to the claim under examination, never to the claim being made** — a property of
+> where attention is, which no amount of knowing the rule fixes.
+
+**The rule, and it is the giving side of one frankB banked the same night.** frankB took a
+ticket that had landed while its suite ran and drew: *`ready` is a snapshot, so a claim from a
+peer's report is a snapshot of a snapshot — re-read the folder at the moment of CLAIMING, not
+of deciding.*
+
+> **The same applies to OFFERING, and this seat needs it more than anyone**, because it makes
+> offers constantly and claims almost never — so nothing in the normal workflow ever forces
+> it to read a folder. **The failure direction is the expensive one: routing a session onto
+> work that is already done costs a whole context to discover.**
+
+`ls devdocs/progress/*/<slug>.md` answers about **every** folder including `done/`, which is
+CLAUDE.md's *count open tickets by FOLDER, never by a glob across all of them* — the trap the
+handbook records against a coordinator, catching the coordinator.
+
+### And the ref-scan sentence, frankuser's, kept in its own words
+
+frankuser's fleet pass now measures every checkout's HEAD against **its own fetched ref**
+rather than each tree's:
+
+> **The discriminator was never the tree, it was whose ref you asked. A per-tree scan reads
+> each peer's own stale `origin/master`, and the bias is ANTI-CORRELATED WITH TRUTH — it fires
+> hardest on the session longest without syncing.**
+
+**The instrument is most confident exactly where it is most wrong**, which is the same shape as
+a stale board row and belongs beside it. That scan produced the false alarm against frankA and
+now produces none.
