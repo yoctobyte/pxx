@@ -2229,6 +2229,57 @@ pre code{background:none;padding:0}
                 f"DESIGN in the body"
             )
 
+        # UNOWNED IN working/ -- THE ONE BOARD STATE THAT IS INVISIBLE IN BOTH
+        # DIRECTIONS. `working/` asserts somebody is on it, so `ready`/`next`
+        # do not offer it; `owner:` is empty, so nothing attributes it. It is
+        # therefore missing from the offered queue AND from every "who holds
+        # what" answer, including the coordinator's holdings report, and it
+        # reads to a human as a row somebody parked and forgot.
+        #
+        # NOT A DEFECT IN unfinished/ OR blocked/: `park` CLEARS the owner by
+        # design, so an empty owner there is the correct record of "nobody is
+        # on this". Measured 2026-09-06: 11 of 21 in unfinished/ and 4 of 7 in
+        # blocked/ are unowned and every one of them is right. The contradiction
+        # is specific to the folder whose whole meaning is that someone is on it.
+        #
+        # Found because ONE such row turned up (feature-dynamic-compiler-tables,
+        # A, the topic a session had been working all night without claiming) and
+        # frankuser asked the right question: census it rather than fix the one.
+        # If it is one it is a slip; if it is several it is a shape. It was 4 of
+        # 23.
+        #
+        # ADVISORY AND SPECIFICALLY NOT A CLAIM INSTRUCTION. Claiming a row on
+        # someone's behalf is a guess about their intent that the board then
+        # presents as fact -- tried on 2026-09-06 and it raced a holder who was
+        # mid-resolve. Ask the likely holder; `park` it if there is none.
+        # ONE finding, not one per row. A twelve-line explanation repeated four
+        # times is the shape that earns the habit of being scrolled past, and
+        # the explanation is identical every time -- what differs is the list.
+        orphan_work = [t for t in self.by_status.get("working", [])
+                       if not str(t.fm.get("owner", "")).strip().strip('"\'')]
+        if orphan_work:
+            warning_count += 1
+            rows_txt = ", ".join(f"{t.slug} [{t.track} p{t.prio}]"
+                                 for t in sorted(orphan_work, key=lambda x: x.slug))
+            lines.append(
+                f"UNOWNED-IN-WORKING: {len(orphan_work)} ticket(s) sit in "
+                f"working/ with NO owner -- {rows_txt}. THAT COMBINATION IS "
+                f"INVISIBLE IN BOTH DIRECTIONS: the folder tells `ready`/`next` "
+                f"not to offer them, and the empty `owner:` tells every 'who "
+                f"holds what' check -- including a coordinator's holdings report "
+                f"-- that nobody has them. So they are neither queued nor "
+                f"attributed, and a session reading the board cannot tell live "
+                f"work from a park somebody forgot to record. Two repairs and "
+                f"they are NOT interchangeable: if someone is on it, `claim` it "
+                f"in their name -- ASK THEM FIRST, because claiming for someone "
+                f"is a guess about their intent that the board then presents as "
+                f"fact; if nobody is, `park` it with a reason, which clears the "
+                f"owner LEGITIMATELY and puts it where a reader expects an "
+                f"unowned row. An empty owner in unfinished/ or blocked/ is "
+                f"CORRECT -- `park` clears it by design -- and is not reported "
+                f"here"
+            )
+
         # DUPLICATE FACE NUMBERS -- an append-only index that numbers its
         # entries from its own tail CANNOT BE WRITTEN CONCURRENTLY. Found by
         # frankB 2026-08-30 after colliding TWICE in under ten minutes on
