@@ -527,6 +527,7 @@ end;
 
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
+    fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
@@ -1911,19 +1912,12 @@ begin
       LastExprTk := castTk;
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       LastExprTk := castTk;
-      op := AllocVar('', castTk);
-      node := AllocNode(AN_STR_FROM_CHAR);
-      argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
-      ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
-      left := AllocNode(AN_ASSIGN);
-      ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
-      ASTTk[left] := Ord(Syms[op].TypeKind);
-      ASTLeft[node] := left;
-      identNode := AllocNode(AN_IDENT);          { yielded value = the temp }
-      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
-      ASTRight[node] := identNode;
-      ASTTk[node] := Ord(Syms[op].TypeKind);
-      CurASTNode := node;
+      { THE FOURTH COPY OF THIS BLOCK, and the one that was here first: the
+        alias door and the builtin-name door each grew their own transcription
+        of it, and the builtin-name door's never arrived, which is how
+        `Currency(i)` came to hand on an integer's bits. One body now. }
+      fcNode := FloatCastToTemp(CurASTNode, castTk);
+      if fcNode >= 0 then CurASTNode := fcNode;
     end;
     tkString_T:
     begin
@@ -6611,7 +6605,8 @@ begin
           if TypeIsFloat(IntToTypeKind(AliasTk[aliasIdx])) then
           begin
             castTk := IntToTypeKind(AliasTk[aliasIdx]);
-            CurASTNode := FloatCastToTemp(CurASTNode, castTk);
+            fcNode := FloatCastToTemp(CurASTNode, castTk);
+            if fcNode >= 0 then CurASTNode := fcNode;
             LastExprTk := castTk;
             Exit;
           end;
@@ -7025,7 +7020,8 @@ begin
               alias spelling `TCur(i)` answered 7. }
             if TypeIsFloat(castTk) then
             begin
-              CurASTNode := FloatCastToTemp(CurASTNode, castTk);
+              fcNode := FloatCastToTemp(CurASTNode, castTk);
+              if fcNode >= 0 then CurASTNode := fcNode;
               LastExprTk := castTk;
               Exit;
             end;
