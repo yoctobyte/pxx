@@ -10490,8 +10490,11 @@ test-core: $(COMPILER)
 	@# same stroke it made IsArray true for a NAMED array, so the three method
 	@# parsers, which answered the open-array-default refusal with that flag
 	@# alone, started refusing `const a: TArr = nil` in a class body. A
-	@# regression shipped in that fix and caught only by running this file by
-	@# hand: these rows live in test-core and gate.sh quick does not run them.
+	@# regression shipped in that fix, and gate.sh quick was GREEN for it and not
+	@# wrong -- these rows live in test-core, which the gate does not run. The
+	@# one-case runner the full-suite hook's own refusal text names is
+	@#   tools/testmgr.py --tier native --job src:test/<file>.pas   (~1s)
+	@# and running it after a parser change is what makes a GREEN cover them.
 	@# The parsers now ask `IsArray and (dynDepth <= 0)`, which is what
 	@# ParseSubroutine has always asked. Four controls, each removing one of the
 	@# four explanations the failing row alone would have left open.

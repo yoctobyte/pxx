@@ -72,11 +72,25 @@ mean the literal spelling. It now also means a named array, so they pass
 `IsArray and (dynDepth <= 0)`, matching `ParseSubroutine`.
 
 **`gate.sh quick` was GREEN for that commit and was not wrong.** These rows live
-in `test-core`, which the gate does not run and the full-suite hook denies. The
-regression was found by running the file by hand against the new binary. A row
-asserted only in `test-core` is invisible to the per-fix loop until Track T
-samples the tip — worth knowing before trusting a GREEN about a construct only
-`test-core` exercises.
+in `test-core`, which the gate does not run and the full-suite hook denies. GREEN
+was a true statement about 33 unit tests.
+
+**And "invisible to the per-fix loop" is what I concluded, and it is wrong.**
+There is a sanctioned one-case runner and the full-suite hook's own refusal text
+names it:
+
+```
+tools/testmgr.py --tier native --job src:test/<file>.pas      # ~1s, one case
+```
+
+`--job <literal>` (no glob) is allowed at any tier — it is the repro line
+auto-filed regression tickets already print. Measured 2026-09-06: the row above
+runs in 0.5s against a compiler snapshot at the current sha. **So the row was
+not unreachable, it was unrun**, and the reason it was unrun is that I believed
+`gate.sh quick` and `make test-core` were the only two things that existed. Run
+it after any change to a parser your rows exercise; it costs a second and it is
+the difference between a GREEN that covers your assertion and one that does
+not.
 
 ## Log
 - 2026-09-06 — closed by another ticket's fix, with its own regression control
