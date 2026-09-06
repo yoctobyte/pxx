@@ -593,3 +593,66 @@ sign that anyone is measuring at all.**
 
 Same shape as `## A "still open" list in a commit message cannot age`: a number is only as
 honest as the population it was computed over, and I own the population.
+
+## THE COLLISION I EXIST FOR HAPPENED AND I HAD THE FACT THAT WOULD HAVE PREVENTED IT — silence about HOLDINGS is not restraint from dispatch
+
+2026-09-06, 03:39–03:56. **frankB and frankS independently fixed the same two tickets
+thirteen minutes apart.** frankB claimed at `7d14a9747` (03:39) and landed `ad001bef0`
+(03:52); frankS committed locally at 03:56 and discovered it on an add/add conflict in
+`done/`. frankS reset and discarded its branch. No damage — **and two sessions spent a full
+fix each on one question**, which is precisely the cost this seat exists to prevent.
+
+**I HAD THE FACT.** frankB had told me, in its own words and twice within the hour, that it
+held the implicit-deref group. frankS took the top of `ready --track P` and said why: *"my
+group was closed and nothing was open from you."*
+
+> **I was treating relay as REACTIVE — answering sessions that tell me things — and had no
+> habit of telling an idle session what is HELD.** I had collapsed two different restraints
+> into one: *the coordinator does not dispatch* became *the coordinator does not volunteer*.
+> **Telling a session which topics are held is not dispatch. It is the entire job.**
+
+Dispatch says *take this*. A holdings report says *these are taken*, and it **narrows nobody's
+choice except away from a collision**. The whole of `coordinator-does-not-dispatch` is about
+who picks the work; none of it licenses withholding what I already know about who is on what.
+
+### The predictable moment, and it is announced
+
+**A session telling me it has closed a group is announcing that it is about to consult
+`ready`.** That is not a guess about its state — it is the one moment its next action is
+knowable, and it arrives as a message I am already reading. frankS's message said it
+outright.
+
+**So: when a session reports a group closed, reply with what is currently HELD in its track.**
+Not what to take. Not a ranking. The held list, with holders. It costs one paragraph and it
+is the only intervention that fits inside `ready`'s staleness window.
+
+### The ranked queue is a collision GENERATOR, and the top row is the hot spot
+
+frankS's structural point, which is better than the incident:
+
+> **`ready` is deterministic. Two idle sessions consulting it independently pick the SAME
+> row, and the higher its prio the more likely both do.** The row in this collision was the
+> **top** of `ready --track P`.
+
+So the risk is not spread evenly over the backlog — it is **concentrated on exactly the rows
+the campaign cares most about**, and it rises as the queue gets better ranked. A well-ranked
+queue makes independent sessions agree, and agreement here is the failure.
+
+### `claim` reads as an exclusion mechanism and is not one
+
+**Both sessions had claimed, and both claims were pushed.** This was not somebody working an
+unclaimed row.
+
+> **A claim is only visible to a peer who pulls AFTER it lands.** So `claim` is a hint that
+> goes stale at exactly the moment two agents pick the same top-of-queue row — **the moment
+> it would have to work.**
+
+The guard that should have caught it existed and was reading `origin/master` **without
+fetching** — a local ref, unmoved since the last pull, answering correctly about a world
+seventeen minutes old. Fixed the same night: `claim` now fetches first, **says so when it
+cannot**, and also looks in the terminal folders, because a race lost by a wide enough margin
+has already left `working/`. Guarded by a devtest case that pushes a claim from a second
+clone and asserts the ref moved — without the fetch that case is silent.
+
+**The tool half is fixed and the seat half is mine.** A guard at claim time closes a window
+of minutes; **saying what is held closes it before the row is picked.**

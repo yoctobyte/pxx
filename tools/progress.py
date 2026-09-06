@@ -3173,10 +3173,41 @@ def _warn_claim_is_local(slug: str, owner: str) -> None:
     duplicate someone's live work and a `git pull --rebase` will tell you so
     only after you have started.
 
+    IT FETCHES FIRST, AND SAYS SO WHEN IT COULD NOT. Measured 2026-09-06: two
+    sessions fixed the same two tickets thirteen minutes apart, BOTH HAVING
+    CLAIMED, both claims pushed. The second claimed from a tree pulled minutes
+    earlier, so this check read a REF THAT HAD NEVER MOVED and answered,
+    correctly, about the world as of the last pull. `origin/master` is a local
+    ref: without a fetch this guard is a memory, not a measurement, and it is
+    silent in exactly the case it exists for. See CLAUDE.md's `git fetch` MOVES
+    REFS AND NOT YOUR TREE -- this is the same seam with the fetch missing
+    entirely.
+
+    A stale answer must not read like a clean one, so when the fetch fails the
+    check says which world it is talking about rather than printing nothing.
+
+    IT ALSO LOOKS IN THE TERMINAL FOLDERS. The collision above surfaced as an
+    add/add conflict in `done/`: by the time the second session pushed, the
+    first had already RESOLVED the ticket. A guard that only inspects
+    `working/` cannot see a race it lost by a wide enough margin, and reports
+    the row as free.
+
+    THE RANKED QUEUE MAKES THIS MORE LIKELY, NOT LESS. `ready` is
+    deterministic, so two idle sessions consulting it independently pick the
+    SAME row, and the higher its prio the more likely both do. The row in that
+    collision was the top of `ready --track P`.
+
     Advisory only. It never fails the claim, and it does NOT push -- pushing on
     someone's behalf is a different decision, and there are legitimate holds
     (avoiding a rebase under a running gate, for one).
     """
+    fetched = False
+    try:
+        fetched = subprocess.run(
+            ["git", "fetch", "--quiet", "origin"], cwd=ROOT,
+            capture_output=True, text=True, timeout=25).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        fetched = False
     try:
         branch = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
@@ -3186,6 +3217,27 @@ def _warn_claim_is_local(slug: str, owner: str) -> None:
             cwd=ROOT, capture_output=True, text=True)
     except OSError:
         return
+    if not fetched:
+        print(f"\nclaim: COULD NOT FETCH — every statement below is about "
+              f"origin/{branch} as of your", file=sys.stderr)
+        print("claim:      last pull, not about origin. A claim that landed since "
+              "then is invisible", file=sys.stderr)
+        print("claim:      here and this check will say nothing. Pull and re-run "
+              "before you start.", file=sys.stderr)
+    # A race lost by a wide enough margin has already left working/.
+    for folder in ("done", "rejected", "known-incompat", "low-prio", "rainy-day"):
+        gone = subprocess.run(
+            ["git", "rev-parse", "-q", "--verify",
+             f"origin/{branch}:devdocs/progress/{folder}/{slug}.md"],
+            cwd=ROOT, capture_output=True, text=True)
+        if gone.returncode == 0:
+            print(f"\nclaim: STOP — origin/{branch} already has this ticket in "
+                  f"{folder}/.", file=sys.stderr)
+            print("claim:      Somebody finished it while you were deciding to take "
+                  "it. Your claim will", file=sys.stderr)
+            print("claim:      conflict on push. Pull, read what they did, and pick "
+                  "another row.", file=sys.stderr)
+            break
     if held.returncode == 0:
         m = re.search(r"^owner:\s*(.+)$", held.stdout, re.I | re.M)
         other = (m.group(1).strip().strip('"\'') if m else "")
