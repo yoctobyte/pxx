@@ -12371,6 +12371,21 @@ test-core: $(COMPILER)
 	$(TESTTMP)/csubint_compare_promote26; tools/expect_same.sh csubint_compare_promote26-rc "$$?" "42"
 	./$(COMPILER) test/cmultidim_nested_index_subscript.c $(TESTTMP)/cmultidim_nested_index_subscript26
 	$(TESTTMP)/cmultidim_nested_index_subscript26; tools/expect_same.sh cmultidim_nested_index_subscript26-rc "$$?" "42"
+	# ...and the PARTIAL face of the same root, which the row above cannot see:
+	# both its subject lines are FULL-index at rank 2, so nothing in it decays to
+	# a pointer. A partial index computes its trailing stride from NDInfoSpan[]
+	# AFTER the subscript loop -- a different read of the same clobbered globals,
+	# failing as a wrong ADDRESS rather than a wrong value. THAT ROW IS ALSO THE
+	# ONE THAT SEPARATES TWO CANDIDATE REPAIRS: a fix copying only the RANK passes
+	# every other row here. Two sessions reached for the rank-only shape first.
+	# Compared against gcc's own output rather than a transcribed expectation, so
+	# a row added later needs no value re-derived and cannot pass by agreeing with
+	# a stale constant. The fixture's header says why each row is shaped as it is,
+	# including the one-subscript partial that is immune BY CONSTRUCTION and would
+	# read as coverage -- do not simplify row C. bug-c-multidim-nested-subscript
+	./$(COMPILER) test/cmultidim_nested_partial_index.c $(TESTTMP)/cmultidim_nested_partial_index26
+	gcc -std=gnu99 -w -o $(TESTTMP)/cmultidim_nested_partial_index_gcc test/cmultidim_nested_partial_index.c
+	tools/expect_same.sh cmultidim_nested_partial_index26 "$$($(TESTTMP)/cmultidim_nested_partial_index26)" "$$($(TESTTMP)/cmultidim_nested_partial_index_gcc)"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c $(TESTTMP)/crtl_string_leaf_b13026
 	$(TESTTMP)/crtl_string_leaf_b13026; tools/expect_same.sh crtl_string_leaf_b13026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c $(TESTTMP)/crtl_lfs64_aliases_b23426
