@@ -20612,3 +20612,139 @@ the one that will otherwise stand unchallenged.
 A single instance in the shedding direction reads as a character claim. **The
 pair is what makes it a property of context windows**, which is what it actually
 is.
+
+## A CENSUS WHOSE POPULATION EXCLUDES ONE SIDE OF A COLLISION CANNOT SEE THE COLLISION — AND THIS ONE FAILS TOWARD THE FALSE NEGATIVE
+
+Every population error catalogued above manufactures a false POSITIVE: a glob
+that swallows `done/`, a control drawn from the wrong set, a correlation over a
+superset. Measured 2026-09-06 (frankD), this one runs the other way, and the
+direction is the finding.
+
+Re-measuring a release claim — *"exactly one affected name in everything pxx
+ships: `IUnknown`"* — the first recount scanned `lib/` + `examples/`: **195
+files, 49 bare aliases, 5 names both aliased and declared, and `IUnknown`
+nowhere.** A tidy negative result. No error, no empty-set warning.
+
+**The colliding name is OWNED by `compiler/builtin/builtinheap.pas:466`, which
+was not in the population.** One side of the collision was outside the scan, so
+the one row that mattered could not appear. **It would have reported a TRUE
+claim as unsupported.**
+
+Corrected population — 13 builtin files plus 195 shipped, 83 builtin-owned type
+names — gives 5 collisions and the arithmetic that reduces them to one:
+`Exception`, `EConvertError`, `IInterface` are class or interface DECLARATIONS
+and go through the class table; `HResult = LongInt` is a scalar alias the gate
+excludes; `IUnknown = IInterface` is the only class-typed alias redeclared.
+
+**The rule, and it matters most during a review sweep: if your recount
+contradicts a claim that was carefully made, suspect your POPULATION before you
+suspect the claim.** Population discipline cuts both ways — a recount can
+manufacture a false negative as readily as an original can a false positive —
+and a re-measure that comes back empty reads as vindication of scepticism, which
+is the one shape nobody interrogates.
+
+**For a COLLISION or a UNIQUENESS claim specifically, the population must
+contain both sides by construction.** "Which shipped files declare X" cannot
+answer "does X collide with anything" if the other declarer is a builtin, a
+generated file, or a vendored tree. State the two sides before choosing the
+glob.
+
+## A TRUE REASSURANCE PLACED JUST BEFORE A HEDGE INOCULATES THE READER AGAINST THE HEDGE
+
+Same review, same seat, and it is not a stale claim or an overclaim — every word
+was true.
+
+A release paragraph said the alias defect *"failed loudly"*. True of the shipped
+instance. **False as a property of the defect**, and the author's own comment at
+`symtab.inc:1549` recorded the measurement: *"where the two targets happened to
+be compatible it compiled and bound the WRONG TYPE with no diagnostic at all."*
+
+**The placement is the defect.** It sat one sentence before an explicitly
+unmeasured third-party caveat — and a third-party `IUnknown = TMine` is exactly
+the compatible-target shape that binds silently. **So the reassurance carried
+forward into the single place where it is wrong.** A reader who reaches the
+hedge has just been told the failure mode is loud, and discounts it.
+
+**This will not be caught by re-measuring**, because the sentence is correct.
+Only reading the two sentences together catches it. The repair was to scope the
+"loudly" to that instance and say outright that the silent face is what the
+unmeasured shape fits — **two clauses longer, and it strengthens rather than
+softens, which is the tell that it was the right call.**
+
+Generalises to any document that mixes measured and unmeasured claims: **check
+what sits immediately BEFORE each hedge**, because an adjacent true statement
+can do the work of a false one.
+
+## AN IDENTIFIER THAT NAMES THE INSTRUMENT'S INTERNALS WEARS THE SHAPE OF A PRECISE FACT
+
+Three instances now, one family.
+
+- **A mangled name in a diagnostic is not stable.** `no overload of
+  PeekOper$62774` printed `PeekOper$62727` from the same source at a different
+  build (frankD, 2026-09-06): the suffix is a NODE COUNTER. **A ticket titled
+  with one looks like a precise citation and is unfindable by the next reader.**
+- A `Makefile:<n>` citation, correct when written, drifting 142 lines by the
+  same evening — pointing at a real line that explains nothing.
+- A job named after its FIRST source, read as naming its subject.
+
+**The shared property: the identifier is about the instrument's internals rather
+than about the subject, and it is more convincing than a description would be
+because it is specific.** It also has the ghost-sha property — correct when
+written, invalidated by an act nobody thinks of as invalidating (a rebuild, a
+line insertion, a compliance push).
+
+**Cite the SUBJECT and put the volatile identifier beside it, never instead of
+it.** `no overload of PeekOper (mangled $62774 at this build)` survives; the
+suffix alone does not.
+
+## THE OUTPUT FILENAME IS A MODE FLAG: `.o` SILENTLY SELECTS OBJECT EMISSION
+
+`compiler.pas:1994` — *"A .o output name implies object emission (same as
+`--emit-obj`)"*, and `.so` does the same for shared. Deliberate and gcc-like.
+
+Measured 2026-09-06 (frank-coord-front), and it made one seat's own matrix
+disagree with itself two hours apart. Same flags, same source, ESP profile:
+
+| output name | result |
+| --- | --- |
+| `probe` | the clean entry-stub refusal |
+| `probe.o` | `compiler error: PXXMemZero not found` |
+
+On x86-64 the two names produce an ELF executable and an ELF relocatable. **Not
+a defect — but the next person to re-check a claim about C on ESP will disagree
+with the notes, and the disagreement will look exactly like a regression.**
+
+The consequence for a release claim, which is the reason it is here: the clean
+refusal is **a property of the OUTPUT MODE, not of the chip**, and `--emit-obj`
+is the shipping path for C on that target (the refusal's own text says so). A
+matrix built with executable-spelled outputs therefore credits a target with a
+graceful refusal it does not have in the spelling that ships.
+
+**When re-measuring anyone's row, reproduce the exact output NAME, not just the
+flags.**
+
+## A REVIEW THAT NAMES WHAT IT DID NOT CHECK IS WORTH MORE THAN ONE THAT DOES NOT
+
+Three release-note reviews landed within an hour of each other and the pattern
+worth keeping is procedural rather than technical.
+
+- Each re-MEASURED rather than re-read, and said which instrument: one named
+  `stable_linux_amd64/default/pinned` sha256 `4bfd73d70588` and confirmed it
+  byte-identical to the binary the draft's own numbers came from — **not the
+  reviewer's working compiler**, which is the whole point.
+- Each wrote the review **BESIDE the draft rather than editing it**, because
+  four seats in one paragraph was the predicted collision.
+- **Each listed what it did NOT check, by name**, so the gap is routable instead
+  of being covered by silence: the ESP rows, `-O4`, an `examples/` count, the
+  wasm32 paragraph. One asked outright that somebody name who verified each.
+- Three of the findings were **UNDERSTATEMENTS** — a five-target row described
+  as three and two, a four-target frontend grouped with two one-target ones, a
+  refusal described as a gap when it is load-bearing. **A review that only looks
+  for overclaims finds half of them**, and a release that understates what it has
+  earned is a different defect with the same cause.
+- One found a claim **stale in the good direction** within ninety minutes of its
+  being written, by counting the tree instead of trusting a report.
+
+**"This claim is fine" is a deliverable.** A silent reviewer and a reviewer who
+found nothing are indistinguishable, which is the same silence problem as a
+skipped row and a passing one.
