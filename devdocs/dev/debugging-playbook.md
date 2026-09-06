@@ -8877,6 +8877,69 @@ of it.
 > that the instrument works.** Ask what population the control was drawn from before
 > the control's PASS is allowed to mean anything.
 
+## GIVE EVERY ACCESSOR A SIDE EFFECT THAT NAMES ITSELF — A TRACE HAS NO COLLISION WITH THE DEFAULT
+
+Measured 2026-09-06 (frankA), settling a question that neither reading nor a value
+comparison could.
+
+The question was which accessor a lowering actually fires, and in what order. **A class
+whose getter and setter each `WriteLn('[GetA]')` / `WriteLn('[SetA]')` turns "did this
+lower correctly" into a printed transcript.** The row that called **nothing** is then
+visible at a glance, and so is the order.
+
+**It found a silent bug on the first run.** `t := PTC(raw)^[3]` printed **no accessor
+line** and answered `0`, where `t := pc^[3]` and `t := PTC(raw)^.A[3]` both printed
+`[GetA]` and answered `77`. The cast walk's `.name` arm has delegated to the shared
+selector walker since it was written; **the `[` arm never did**, so it built a raw index
+node over the object.
+
+### Why a value assertion could not have caught it
+
+**The array slot was uninitialised, so a value check compared `0` against `0` and
+passed.** That is the unknown-default collision one register over: the wrong answer
+*equalled* the right answer for a field nobody had written.
+
+> **A trace has no such collision, because "no line printed" cannot be confused with
+> "the right line printed".** An absent event is distinguishable from a correct one;
+> an absent value very often is not.
+
+**And it doubles as the oracle diff**: run the same transcript under both compilers and
+compare **accessor identity and values together**, rather than comparing final values
+and hoping the route matched. Two lowerings that reach the same number by different
+accessors are a difference a value diff reports as agreement.
+
+### The asymmetry, again
+
+The target-position defects **announced themselves** with a diagnostic; the
+read-position one did not. **The bug that produces a plausible value is the one that
+needs the instrument**; the one that refuses has already told you where to look.
+
+## A TICKET'S STATED BLOCKER IS A HYPOTHESIS WITH THE SAME STANDING AS ITS STATED CAUSE
+
+Same fix, and it had the **direction** wrong rather than the detail.
+
+For two weeks the ticket recorded that the hand-off *"needs the same 'this is an
+assignment target' flag the class-cast arm passes today"* — the worry being that the
+expression parser might **CALL** a trailing `.name` that in target position must not be
+called.
+
+**The flag already exists and is not a flag** — it is a token lookahead every property
+arm already calls, and nine target shapes off a plain receiver are byte-identical to
+the oracle including *which accessor fires and in what order*. The real problem is the
+opposite one: **the shared walker sees the `:=` itself and performs the WHOLE store,
+then returns a call node, and the statement parser — not knowing the assignment already
+happened — demands its own `:=`.**
+
+> **The ticket named the risk it could IMAGINE from reading one side: a call that should
+> not happen. The real one was a store that already had.** So the merge does not need to
+> suppress a call; it needs a convention for *"I consumed the assignment"* — a smaller
+> thing than the ticket described.
+
+**A stated blocker is written at the moment of parking, from the same partial reading
+that produced the stated cause, and it ages the same way** — with one extra hazard: a
+cause invites re-measurement and a blocker invites *deferral*. Re-measure the blocker
+before sizing the work behind it.
+
 ## A DIAGNOSTIC MUST BE ABLE TO REPRESENT THE VALUE IT IS COMPLAINING ABOUT
 
 Measured 2026-09-06 (frankB), caught by a test row and not by reading.
