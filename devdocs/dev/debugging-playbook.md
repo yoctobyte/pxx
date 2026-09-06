@@ -16399,3 +16399,29 @@ intersection members, not in files. Ask *"how many inputs in my population are
 claimed by both sides?"* before quoting a sweep, and if the answer is zero the
 sweep is silent rather than reassuring.
 
+## A DIAGNOSTIC THAT SURVIVES ITS OWN FIX — an error right about a different position looks exactly like no progress
+
+frankS, 2026-09-06. Their new fixed-array-of-dynarray arm was **not gated on the
+element token**, so after consuming the last element it fired again on the closing
+paren and produced the **identical** `too many array initializer elements` — one
+element later, **with the fix in**. They read it as *"not fixed yet"* for a minute.
+
+**The whole family arriving in the feedback loop rather than in the test.** It did
+not error, it answered, and it was **correct about something else** — a different
+position. And unlike a stale binary or a truncated tail, there is no instrument to
+suspect: the compiler is the one you just built, the message is the one you just
+studied, and the only thing that changed is a column number nobody prints.
+
+**The tell, and it is free:** when a fix appears to do nothing, **compare the
+error's POSITION, not its text.** An unchanged message at a moved position is
+progress; an unchanged message at the same position is not. `PXXDBG` and a
+one-line `WriteLn` of the token index both answer it in seconds, and the guess it
+replaces — *"my fix did not take"* — sends you back to rebuild, reseed and re-run,
+which is the expensive branch.
+
+**The general form for any iterated repair:** a diagnostic emitted from a loop
+arm reports the FIRST position that trips it, so fixing the first cause reveals
+the second **wearing the same words**. Two distinct causes, one string, and the
+string is what you are watching. **Count the occurrences or print the position;
+do not read the message twice and conclude it is the same failure.**
+

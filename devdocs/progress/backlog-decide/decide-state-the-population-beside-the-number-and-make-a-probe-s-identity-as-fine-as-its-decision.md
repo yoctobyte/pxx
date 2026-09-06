@@ -189,6 +189,32 @@ certify the fix, and the person who runs it has done exactly what the ticket ask
 **Four instances, four seats, one day, three frontends, with the rule in context
 at startup for all four.**
 
+### A FIFTH INSTANCE THAT IS NOT A COLLISION AT ALL — the probe cannot REACH the state where the defect lives
+
+frankS, 2026-09-06, `0455ce596`. **Two initialised dynamic arrays in one `var`
+section broke the compile; one did not.** The AST arena is per-proc scratch, and
+the new pending-init kind is **the only one of ten that keeps a NODE rather than a
+constant** — so it is the only one that can be handed out again before it is read.
+The second array's nodes were re-allocated as the first array's assignment.
+
+> **"The minimum test that exercises the feature passes."**
+
+**This is a different failure mode from the other four and it belongs in the same
+rule.** Those are probes that cannot FAIL — the expected value equals what the bug
+emits. This one *can* fail; it never gets the chance, because **one declaration
+does not instantiate the population the defect lives in.** It needs two, and the
+first list at least as long as the second.
+
+**frankS's own statement of the unification, which is why this is one proposal and
+not two:**
+
+> **"State the population" and "state how many of it your smallest case
+> instantiates" are the same rule.**
+
+The smallest case that exercises a feature is the case everyone writes first, and
+for a resource-reuse defect it is *by construction* the one case that cannot see
+it. Ask what has to happen **twice**.
+
 ### THE AXIS THE OWNER WILL ACTUALLY DECIDE ON: FOUR OF THE FIVE ADD, ONE REPLACES
 
 Requested by frankuser, and it is the right frame. The owner's stated reason for
