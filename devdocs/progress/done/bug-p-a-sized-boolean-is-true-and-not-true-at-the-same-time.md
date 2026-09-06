@@ -3,7 +3,8 @@ track: P
 prio: 70
 type: bug
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
-summary: "`var a: ByteBool; a := True;` makes BOTH `if a` and `if not a` fire -- a program takes both branches, silently, no diagnostic. `not` on a sized boolean is an INTEGER complement: not 1 = 254, nonzero, true. It is right for False only by accident (not 0 = 255, also true, which is the wanted answer). WordBool and LongBool identical; plain Boolean is correct. Cause: ByteBool/WordBool/LongBool are mapped to tyUInt8/tyUInt16/tyInteger to keep their C-ABI WIDTH -- deliberate and documented -- so nothing downstream can tell them from integers. Same cause drops their display (WriteLn prints 1, fpc prints TRUE) and their Ord (1 here, -1 in fpc, all-bits-set being the C convention). QWordBool does not exist at all. Pre-existing on pin v403. Fixing it needs a way to say \"integer kind, boolean semantics\", which is a defs.inc design fork, not a local patch."
+summary: "FIXED 2026-09-06 (71b5bac58, vehicle ef518700b) -- and the aperture was WIDER than reported: `and`, `or` and all six comparisons were wrong too, on a nonzero-not-one value, which no probe here used. `not` is now normalised to `x <> 0` rather than re-tagged, because the logical path lowers to `xor 1` and $C8 xor 1 is still true. `xor` is left BITWISE, matching fpc, measured. Was: `var a: ByteBool; a := True;` makes BOTH `if a` and `if not a` fire -- a program takes both branches, silently, no diagnostic. `not` on a sized boolean is an INTEGER complement: not 1 = 254, nonzero, true. It is right for False only by accident (not 0 = 255, also true, which is the wanted answer). WordBool and LongBool identical; plain Boolean is correct. Cause: ByteBool/WordBool/LongBool are mapped to tyUInt8/tyUInt16/tyInteger to keep their C-ABI WIDTH -- deliberate and documented -- so nothing downstream can tell them from integers. Same cause drops their display (WriteLn prints 1, fpc prints TRUE) and their Ord (1 here, -1 in fpc, all-bits-set being the C convention). QWordBool does not exist at all. Pre-existing on pin v403. Fixing it needs a way to say \"integer kind, boolean semantics\", which is a defs.inc design fork, not a local patch.
+status: done
 ---
 
 # A sized boolean is true and not-true at the same time
@@ -204,3 +205,68 @@ Found by sweeping all 51 names from the union of `OrdinalNameToTk` and
 sweep where the spelling changes the answer. Detail and the negative half — zero
 direct-vs-alias disagreements at `SizeOf`, `High`/`Low` and `TypeInfo` for every
 other name — are on the thirteen-names ticket.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Fixed 2026-09-06 (frankH) — and the aperture was wider than this ticket
+
+`71b5bac58`, with the identity vehicle in `ef518700b`. Arm B of
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]], as decided.
+
+**`not` is normalised, not re-tagged, and the difference is the whole fix.** The
+first attempt set `bitNot := False` and let the logical path have the operand as
+it stood. **That path lowers to `xor 1`** — correct for a canonical 0/1 Boolean
+and wrong for a C-ABI one: `ByteBool(200)` is `$C8`, `$C8 xor 1` is `$C9`, still
+nonzero, still true. So the operand is converted to an ordinary `x <> 0` once,
+at the top of the expression parser, and `not` learns nothing.
+
+**Caught only because the test carries a nonzero-but-not-one row.** Every row in
+this ticket used 0 and 1, and on those inputs the broken fix and the correct one
+agree exactly.
+
+### THIS TICKET'S "COMPARISONS ARE UNAFFECTED" WAS TRUE OF THE VALUES AND FALSE OF THE TYPE
+
+Same cause, and no ticket had it, for the same reason. With
+`a := ByteBool(200)` and `b := ByteBool(1)`, both true, against fpc 3.2.2:
+
+| | was | fpc |
+| --- | --- | --- |
+| `a and b` | 0 (bitwise `200 and 1`) | TRUE |
+| `a or b` | -55 | TRUE |
+| `a = b` | FALSE (raw ordinals) | TRUE |
+
+`and`, `or` and all six comparisons now normalise both operands when at least
+one side is a sized boolean and both sides are truth values — never when the
+other side is an integer, so `a and 3` stays a type error to be diagnosed
+rather than being quietly rewritten into something that compiles.
+
+**`xor` is deliberately left BITWISE** and that is measured: fpc answers
+`Ord(a xor b)` = -55 while `Ord(a and b)` = 1. Bit patterns are meaningful in
+the type family that exists for the C ABI. Its result keeps the sized-boolean
+identity, so `WriteLn(a xor b)` prints TRUE while `Ord` of the same expression
+is the pattern.
+
+**The ORDINAL of a logical result is not asserted anywhere and must not be.**
+fpc's own answer moves with the SHAPE of the operands — 1 for two variables,
+-56 (the left operand's own bits) when the right side is written `ByteBool(1)`.
+There is no ordinal there to be compatible with; the declared type's value is
+the claim.
+
+### The `Ord` and display rows resolved with it, as this ticket predicted
+
+`Ord` needed **two** independent fixes and this ticket's diagnosis named only
+one of them. `tyInt8`/`tyInt16` (signedness) fixes `Ord(ByteBool(255))` = -1;
+materialising `True` as all-bits-set fixes `Ord(b)` after `b := True`.
+**LongBool was already signed and still answered 1**, which is the control that
+separates them.
+
+`QWordBool` is still not a type name — untouched, and it inherits none of the
+above now rather than all of it.
+
+### Tests
+
+`test_a_sized_boolean_is_not_true_and_not_true_at_once` (this ticket) and
+`test_a_sized_boolean_is_a_boolean_at_every_renderer`, both byte-identical to
+fpc 3.2.2's own output, both wired into the Makefile. The False rows are marked
+in the source as the ones that **cannot** fail.

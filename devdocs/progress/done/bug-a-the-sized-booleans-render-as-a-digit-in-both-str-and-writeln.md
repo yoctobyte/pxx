@@ -2,11 +2,11 @@
 track: A
 prio: 35
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-04
 blocked-by: [decide-how-a-type-carries-an-identity-its-kind-cannot-hold]
-summary: "`WordBool`, `LongBool` and `ByteBool` print as `1`/`0` from BOTH `writeln` and `Str`, where FPC (and our own `Boolean`) give TRUE/FALSE. Not the same defect as bug-p-str-of-a-boolean-formats-it-as-a-digit, which was one missing dispatch arm and is fixed: these three have no boolean-ness to dispatch ON. They are deliberately represented as integers of their own width (pasparser_lval.inc:6921 -- mapping them to tyBoolean would silently resize every struct that contains one), so both renderers correctly see an integer. The fix needs a way to carry `is a boolean` ALONGSIDE a width, which is a representation change, not a table row."
+summary: "FIXED 2026-09-06 (71b5bac58) at the TYPE as this ticket asked, not per renderer: one conversion (`x <> 0`) at four call sites and no renderer learned anything. A FIFTH consumer existed that this ticket could not have known -- the logical `not` lowering, same shape, silent control-flow inversion. Was: `WordBool`, `LongBool` and `ByteBool` print as `1`/`0` from BOTH `writeln` and `Str`, where FPC (and our own `Boolean`) give TRUE/FALSE. Not the same defect as bug-p-str-of-a-boolean-formats-it-as-a-digit, which was one missing dispatch arm and is fixed: these three have no boolean-ness to dispatch ON. They are deliberately represented as integers of their own width (pasparser_lval.inc:6921 -- mapping them to tyBoolean would silently resize every struct that contains one), so both renderers correctly see an integer. The fix needs a way to carry `is a boolean` ALONGSIDE a width, which is a representation change, not a table row.
 ---
 
 # The sized booleans render as a digit in both `Str` and `writeln`
@@ -84,3 +84,43 @@ begin
   bb := True; Str(bb, s); writeln('bytebool Str=', s, ' writeln=', bb);
 end.
 ```
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Fixed 2026-09-06 (frankH) — repaired at the TYPE, as this ticket asked
+
+`71b5bac58`. Arm B of
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]].
+
+This ticket said the repair belongs at the type and not at the renderers, and
+that doing it per renderer is how `Str`'s dispatch table drifted from `write`'s
+in the first place. That is what happened: **`SemBoolAsBoolean` converts a sized
+boolean to `x <> 0` once, and no renderer learned anything.**
+
+Four call sites, one function, and none of them is a dispatch arm:
+
+1. stdout `write`/`writeln`
+2. the Text-file writer (`ParseTextWriteRest`)
+3. `Str`, both of its value parses, including the field-width arm
+4. `array of const` boxing — which takes the **tag** rather than the value,
+   since a consumer reads the slot's low byte and that is nonzero for every
+   true value however it is stored
+
+The third renderer this ticket found on its own — `vtInteger` where FPC boxes
+`vtBoolean` — is row 4 and is asserted by tag. **A fifth consumer existed and
+this ticket could not have known it: the logical `not` lowering.** It has the
+identical shape (a kind-only dispatch answering correctly about an integer) and
+it was a silent control-flow inversion rather than a display difference; see
+[[bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time]]. That is the
+argument for repairing at the type stated one consumer more strongly than the
+ticket stated it.
+
+`Ord` needed two further fixes on top, both in later slices: the kinds became
+signed (`e06cfdeeb` records why `LongBool` is the control that proves it is
+signedness), and `True` now materialises all-bits-set.
+
+Test: `test_a_sized_boolean_is_a_boolean_at_every_renderer`, all four renderers
+in one program, byte-identical to fpc 3.2.2. Its Text-file row **reads the file
+back and prints it** — a file written and never inspected asserts nothing, and
+that row's output is the only one that does not reach stdout on its own.

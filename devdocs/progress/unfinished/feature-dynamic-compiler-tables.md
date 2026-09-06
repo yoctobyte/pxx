@@ -4,8 +4,8 @@ title: "Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+
 prio: 45  # auto
 track: A
 type: feature
-status: working
-owner: "frankH"
+status: unfinished
+owner: 
 blocked-by: []
 summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frankH. The compiler held ~305 fixed parallel `array[0..MAX_*-1]` tables in defs.inc; each is a hard ceiling a large translation unit can hit (sqlite''s 257k-line amalgamation broke MAX_TOKENS) and together they dominate the compiler''s BSS. DONE: Tokens, Syms, UField, IR, AST, Code, LoadFileBuf, CPrepChars, Data, Strs, Fixups+FixupPCRel+FixupPicDelta. STILL FIXED: TokChars (STRING_CAP, 8 MB), LabelFixupPos/Target (MAX_IR, 1 MB each), UCls* (MAX_UCLASS), and Procs DELIBERATELY. THE TICKET''S REAL VALUE IS ITS METHOD, and it is not optional: BEFORE CONVERTING A FAMILY, GREP ITS `MAX_` NAME ACROSS compiler/** AND READ EVERY HIT -- deleting a cap does not delete the code that assumed it, and four sites had taken MAX_X to mean `a number the count can never reach`, one of them an out-of-bounds stack write in IRVerify which runs on every body (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). 2026-09-05: LoadFileBuf converted, worth 8 MB of BSS (106842604 -> 98454060) and a measured before/after correctness fix on the FPC-seed path -- see that section; it also stopped BORROWING STRING_CAP, which is the token char pool''s capacity with ~40 overflow checks against it, so one constant had been sizing two unrelated things. 2026-09-06: CPrepChars converted, another 8 MB (98454060 -> 90066100), and this time the cap was PROVEN REACHABLE -- 30000 macros with ~430-byte values trip this table''s own `C preprocessor text overflow`, while an 18.5 MB file of 300000 SHORT macros trips MAX_CPREP_MACROS instead and would have read as unreachable: TWO CAPS CAN BE IN RANGE OF ONE INPUT and the diagnostic string is the only thing that says which axis you tested. 2026-09-06: Data converted, 2 MB (90066100 -> 87985348), and it settled a coupling the ticket''s own grep method CANNOT see: TWO TABLES CAN SHARE A CEILING WITHOUT SHARING A CONSTANT. Every string literal costs 32 bytes of managed-string header plus its 8-aligned text, so MAX_DATA (2 MB) capped the string table at ~52108 entries and MAX_STRS (65536) WAS UNREACHABLE -- `Error(''string table overflow'')` was a guard that could not fail. Proven by the SAME 66000-literal input answering `data overflow` before and `string table overflow` after. Converting Strs was worth nothing before this and is load-bearing now. The conversion also segfaulted first: five byte runs and two constant-offset writes reach Data with no overflow check at all, because a fixed bss array never needed one. METHOD ADDITION: after converting a table, enumerate its WRITE sites, not its CAP sites -- the cap sites were already thinking about the limit. 2026-09-06: Strs converted too (1.5 MB, 87985348 -> 86412492) -- FIRST table here whose growth carries a MANAGED field (TStrEntry.Text is an AnsiString), probed before converting. One input crossed three states and that is the whole proof: 66000 short literals said `data overflow`, then `string table overflow`, then compiled and RAN. 2026-09-06: the fixup family converted (2752488 bytes, 86425036 -> 83672548), all THREE parallel arrays through ONE helper so there is no site that can grow the table without the columns. THE CHAIN IS NOW COMPLETE FOR ONE INPUT SHAPE AND IT TERMINATES: 52200 literals `data overflow` -> 66000 `string table overflow` -> 40000 a 22.24s TIME ceiling -> 200000 `fixup overflow` -> 500000 COMPILES in 14.04s at 992 MB peak RSS and runs correctly. Each conversion revealed the next ceiling and the reveal is the only way any were known reachable; the terminal state is memory, not a constant. AND THE ORPHANED COMMENT KNEW SOMETHING: the 2026 raise of MAX_STRS from 8192 to 65536 is what MADE that guard unreachable, because 65536 sat 13000 above anything MAX_DATA could fund -- RAISING A CAP WITHOUT CHECKING THE RESOURCE IT IS DENOMINATED IN IS HOW A GUARD STOPS BEING ABLE TO FIRE. LANDMINE ON THE LIFTED CAP: InternStr dedups by LINEAR SCAN, so it is O(n^2) -- 5000/10000/20000/40000 literals take 1.29/2.48/6.30/25.69s. Removing the cap swaps a hard error for a time ceiling, which is strictly better but is NOT the same claim; a hash index is the next change. STILL STANDING FOR TokChars: STRING_CAP also sizes the SHORTSTRING TYPE (ast_syminfer.inc:151, ir.inc:2703), so that constant must be SPLIT before TokChars can be converted at all. And the pattern is realloc PRESERVING INDICES: a free list or a compaction pass is OUT OF SCOPE, because it turns zero-init sentinel columns like AliasEnumId from inert into stale-fail-open."
 ---
@@ -13,8 +13,8 @@ summary: "INCREMENTAL CONVERSION ON MASTER, PROVEN AND MID-FLIGHT, held by frank
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A
-- **Status:** working
-- **Owner:** frankH
+- **Status:** unfinished
+- **Owner:** 
 - **Opened:** 2026-06-27
 - **Relation:** forced into view by [[feature-c-desktop-lua-sqlite-path]] M5 —
   sqlite's 257k-line amalgamation blew `MAX_TOKENS` (512K) and needed a bump to
@@ -1006,3 +1006,24 @@ up until someone moves the constant.
 
 **Convert all six together, and add the Specialize guard as part of the same
 change rather than trusting the implicit bound being removed.**
+
+## Parked 2026-09-06
+
+parked by frankH 2026-09-06 — not abandoned and not in progress. This session was redirected to owner-directed work (arm B of decide-how-a-type-carries-an-identity-its-kind-cannot-hold) and finished it; nothing of this ticket was started, so the tree carries no partial work for it. It read status:working owner:frankH at origin all day, which reads as ACTIVELY HELD and was over-claiming. Free to take; message frankH for context if any is wanted.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## Parked 2026-09-06 (frankH) — nothing started, no partial work in the tree
+
+Parked for bookkeeping, not because it was attempted. This session was
+redirected to owner-directed work (arm B of
+[[decide-how-a-type-carries-an-identity-its-kind-cannot-hold]]) and finished it;
+**no line of this ticket was written.** The tree is clean and everything is
+pushed, so there is nothing half-applied to revert — which is the one thing
+`check`'s "Track A ticket in unfinished/" rule is actually about.
+
+It read `status: working`, `owner: frankH` at origin all day. That reads as
+**actively held**, so it was over-claiming rather than under-claiming, and it
+would have kept anyone else off it for nothing. **Free to take.**
+
+Next step is unchanged from the ticket above.

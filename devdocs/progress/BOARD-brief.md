@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:21 blocked:6 backlog:13 backlog-umbrella:7 backlog-core:141 backlog-nilpy:98 backlog-tools:44 backlog-pascal:32 backlog-decide:43 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:146 done:3432 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:13 backlog-umbrella:7 backlog-core:139 backlog-nilpy:98 backlog-tools:44 backlog-pascal:31 backlog-decide:43 backlog-libs:21 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:147 done:3434 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -19,7 +19,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
-- `feature-dynamic-compiler-tables` [A] — owner: frankH
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
@@ -32,7 +31,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -43,6 +42,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — blocked-by: refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
+- `feature-dynamic-compiler-tables` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -65,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 408, ranked
+## Ready — top 30 of 410, ranked
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -78,7 +78,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
-- `[p 70] [A]` decide-how-a-type-carries-an-identity-its-kind-cannot-hold (unblocks 4)
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
@@ -97,5 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
+- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
-_378 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_380 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
