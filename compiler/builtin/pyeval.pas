@@ -190,7 +190,7 @@ function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
   captured at build time via pyclosure_src_cap (returns the object, so the
   frontend can chain caps as one expression). The result is the same
   magic-sentinel closure object Word.native already dispatches on. }
-function pyclosure_src_new(const params, src: AnsiString): Pointer;
+function pyclosure_src_new(const params, srcText: AnsiString): Pointer;
 function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
 function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
 
@@ -2897,7 +2897,7 @@ end;
   (token buffer, cursor, source scanner) is saved and restored, so this is safe
   to call from inside a running EvalPyStmts. BodyPos 0 = the start of the flat
   `return <expr>` statement; ExecSuite's inline form runs it. }
-function pyclosure_src_new(const params, src: AnsiString): Pointer;
+function pyclosure_src_new(const params, srcText: AnsiString): Pointer;
 var sKinds: array of Integer; sTexts: array of AnsiString;
     sInts: array of Int64; sFloats: array of Double;
     sTkN, sCur, sPos, sSLen: Integer; sSrc: AnsiString;
@@ -2905,9 +2905,9 @@ var sKinds: array of Integer; sTexts: array of AnsiString;
 begin
   sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
   sTkN := TkN; sCur := Cur; sSrc := Src; sPos := Pos; sSLen := SLen;
-  Tokenize(src);
+  Tokenize(srcText);
   c := PyClosureAllocRow;
-  { ref-share, not deep-copy — see PyMakeClosure; here Tokenize(src) just
+  { ref-share, not deep-copy — see PyMakeClosure; here Tokenize(srcText) just
     allocated these arrays fresh, so nothing else mutates them }
   Closures[c].Kinds  := TkKind;
   Closures[c].Texts  := TkText;
@@ -4443,7 +4443,7 @@ end;
 procedure DoAssignment;
 var
   base, aug, fld: AnsiString;
-  recv, idx, rhs, cur, v, tcont, tindex, hiTmp: Variant;
+  recv, idx, rhs, curV, v, tcont, tindex, hiTmp: Variant;
   tkind: Integer;   { 0 local, 1 attribute, 2 subscript, 3 slice }
   tname: AnsiString;
   tobj: Pointer;
@@ -4509,27 +4509,27 @@ begin
   if aug = '=' then v := rhs
   else
   begin
-    if tkind = 0 then EnvGet(tname, cur)
-    else if tkind = 1 then PyFieldGet(tobj, tname, cur)
-    else PySubscriptGet(tcont, tindex, cur);
+    if tkind = 0 then EnvGet(tname, curV)
+    else if tkind = 1 then PyFieldGet(tobj, tname, curV)
+    else PySubscriptGet(tcont, tindex, curV);
     { promo-aware for the int-ish operators (the double-cell re-sign step
       `lo -= 0x10000000000000000` is an augassign with a bignum RHS) }
     if aug = '+=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIAdd(cur, rhs, v) else v := pyadd_v(cur, rhs); end
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyIAdd(curV, rhs, v) else v := pyadd_v(curV, rhs); end
     else if aug = '-=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyISub(cur, rhs, v) else v := pysub_v(cur, rhs); end
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyISub(curV, rhs, v) else v := pysub_v(curV, rhs); end
     else if aug = '*=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIMul(cur, rhs, v) else v := pymul_v(cur, rhs); end
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyIMul(curV, rhs, v) else v := pymul_v(curV, rhs); end
     else if aug = '//=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIFloorDiv(cur, rhs, v) else v := pyfloordiv_v(cur, rhs); end
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyIFloorDiv(curV, rhs, v) else v := pyfloordiv_v(curV, rhs); end
     else if aug = '%=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIMod(cur, rhs, v) else v := pymod_v(cur, rhs); end
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyIMod(curV, rhs, v) else v := pymod_v(curV, rhs); end
     else if aug = '&=' then
-    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIBitAnd(cur, rhs, v) else v := pybitand_v(cur, rhs); end
-    else if aug = '|=' then v := pybitor_v(cur, rhs)
-    else if aug = '^=' then v := pybitxor_v(cur, rhs)
-    else if aug = '<<=' then PyIShl(cur, rhs, v)
-    else PyIShr(cur, rhs, v);
+    begin if IsIntishV(curV) and IsIntishV(rhs) then PyIBitAnd(curV, rhs, v) else v := pybitand_v(curV, rhs); end
+    else if aug = '|=' then v := pybitor_v(curV, rhs)
+    else if aug = '^=' then v := pybitxor_v(curV, rhs)
+    else if aug = '<<=' then PyIShl(curV, rhs, v)
+    else PyIShr(curV, rhs, v);
   end;
 
   if tkind = 0 then LclSet(tname, v)

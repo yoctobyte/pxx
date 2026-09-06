@@ -253,26 +253,26 @@ begin
 end;
 
 function WordPosition(const N: Integer; const S: AnsiString; const WordDelims: TSysCharSet): Integer;
-var i, n, count: Integer;
+var i, sLen, count: Integer;
 begin
   Result := 0;
   count := 0;
-  n := Length(S);
+  sLen := Length(S);
   i := 1;
   { N <= 0 never matches, so the loop exits with 0 — FPC's answer, not an error }
-  while (i <= n) and (count <> N) do
+  while (i <= sLen) and (count <> N) do
   begin
-    while (i <= n) and (S[i] in WordDelims) do Inc(i);
-    if i <= n then Inc(count);
+    while (i <= sLen) and (S[i] in WordDelims) do Inc(i);
+    if i <= sLen then Inc(count);
     if count <> N then
-      while (i <= n) and not (S[i] in WordDelims) do Inc(i)
+      while (i <= sLen) and not (S[i] in WordDelims) do Inc(i)
     else
       Result := i;
   end;
 end;
 
 function ExtractWordPos(N: Integer; const S: AnsiString; const WordDelims: TSysCharSet; var Pos: Integer): AnsiString;
-var i, j, n: Integer;
+var i, j, sLen: Integer;
 begin
   j := 0;
   i := WordPosition(N, S, WordDelims);
@@ -280,8 +280,8 @@ begin
   if i <> 0 then
   begin
     j := i;
-    n := Length(S);
-    while (j <= n) and not (S[j] in WordDelims) do Inc(j);
+    sLen := Length(S);
+    while (j <= sLen) and not (S[j] in WordDelims) do Inc(j);
   end;
   { i = 0 leaves j = 0 too, so the length is 0 and the result is '' }
   Result := Copy(S, i, j - i);
@@ -296,13 +296,13 @@ end;
 { ---- delimiter family: every delimiter starts a new FIELD ---- }
 
 function ExtractDelimited(N: Integer; const S: AnsiString; const Delims: TSysCharSet): AnsiString;
-var w, i, n: Integer;
+var w, i, sLen: Integer;
 begin
   Result := '';
   w := 0;
   i := 1;
-  n := Length(S);
-  while (i <= n) and (w <> N) do
+  sLen := Length(S);
+  while (i <= sLen) and (w <> N) do
   begin
     if S[i] in Delims then
       Inc(w)

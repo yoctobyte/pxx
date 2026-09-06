@@ -4824,6 +4824,18 @@ begin
   SymCount := keepTo;
 end;
 
+function SymBindableHere(i: Integer): Boolean;
+{ Every gate FindSym applies to a candidate EXCEPT the name comparison and the
+  block it lives in. Factored out because FindSym asks it from four places and
+  the four copies are only correct identical -- the decl-order arm in
+  particular reads five columns. }
+begin
+  SymBindableHere :=
+    DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
+    and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
+             and (SymDeclTok[i] > CurBodyHdrTok));
+end;
+
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
@@ -4831,36 +4843,62 @@ begin
   { Inside an FPC named-result operator body the declared result name is an
     alias of Result (feature-pascal-operator-decl-fpc-compat). }
   if (OpResultAlias <> '') and CaseEqual(lo, OpResultAlias) then lo := 'Result';
-  { Exact-case match first, innermost scope out (preserves shadowing). A global
-    variable declared textually after the current routine is hidden (decl-order
-    gating, DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity.
-    Hash chain is NEWEST-first, so walking it is the linear downto order. }
+  { ONE WALK, INNERMOST SCOPE OUT. The hash chain is NEWEST-first, and
+    SymRollbackTo UNHASHES every symbol a routine declared when that routine
+    exits — so the chain holds only symbols that are genuinely in scope and its
+    order IS scope depth. The first match is the nearest one. A global declared
+    textually after the current routine is hidden (decl-order gating,
+    DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity.
+
+    IT WAS TWO WALKS OF THE WHOLE CHAIN UNTIL 2026-09-06 — exact-case, then
+    case-insensitive for `not SymCaseSensitive` symbols — under a comment
+    claiming "innermost scope out (preserves shadowing)". That is true WITHIN a
+    walk and false across two of them: the structure ranked case-exactness ABOVE
+    scope depth, so an exact match in ANY visible scope beat a case-insensitive
+    match in a NEARER one.
+
+      var counter: LongInt;
+      procedure Bump(Counter: Integer);
+      begin counter := 55; end;
+
+    wrote the GLOBAL and left the parameter at 7, where fpc 3.2.2 writes the
+    parameter and leaves the global alone. Both halves wrong, in opposite
+    directions, on reads, writes and by-ref intrinsics alike, silently, and
+    `--strict-case` did not fire on it either. The control that named the
+    mechanism rather than blaming case-folding in general: with NO exact-case
+    match anywhere — global `COUNTER`, local `Counter`, reference `counter` —
+    both compilers already picked the local, because the exact walk found
+    nothing and the ordinary innermost-first order then applied.
+
+    NILPY IS STILL SAFE, and this was measured rather than argued. SymCaseSensitive
+    is True for a NilPy user's own symbols precisely so `X` and `x` stay two
+    names in one scope; the second disjunct is disabled for those, so they are
+    reachable only by an exact match while the Pascal RTL around them stays
+    findable under any case.
+
+    WHAT THE OLD ORDER WAS MASKING, and it is the reason this change is bigger
+    than its diff: TWO FILES OF OUR OWN depended on it. compiler/builtin/pyeval.pas
+    had a local `cur: Variant` in DoAssignment beside the unit's `Cur: Integer`
+    token cursor, and a parameter `src` in pyclosure_src_new beside the unit's
+    `Src: AnsiString`; uforth died with `pyeval: invalid assignment target` until
+    both were renamed. lib/rtl/strutils.pas declared a PARAMETER `N` and a LOCAL
+    `n` in one routine, three times — which fpc rejects outright as a duplicate
+    identifier — and read them as two variables. Neither file is wrong about
+    Pascal because of this fix; both were already wrong and the two-walk order
+    was the only thing making them work.
+
+    The second walk that used to follow is GONE rather than kept: its predicate
+    is strictly implied by this one's second disjunct under identical gates, so
+    it could not fire. FindSymInUnit keeps ITS two walks deliberately — a unit
+    is ONE scope, so there is no depth for exactness to outrank. }
   i := SymHashHead[SymNameFoldHash(lo)];
   while i >= 0 do
   begin
-    if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
-       and DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
-       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
-                and (SymDeclTok[i] > CurBodyHdrTok)) then
+    if (StrEqual(Syms[i].Name, lo) or
+        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo)))
+       and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
-      Result := i;
-      Exit;
-    end;
-    i := SymHashPrev[i];
-  end;
-  { Case-insensitive fallback for case-insensitive symbols only (same folded
-    bucket holds every case variant). }
-  i := SymHashHead[SymNameFoldHash(lo)];
-  while i >= 0 do
-  begin
-    if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
-       IsBlockVisible(SymBlockId[i], CurBlockId)
-       and DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
-       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
-                and (SymDeclTok[i] > CurBodyHdrTok)) then
-    begin
-      if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
       Result := i;
       Exit;
     end;

@@ -5822,6 +5822,25 @@ test-core: $(COMPILER)
 	@# so it is not an fpc-differential row and must not be read as one.
 	./$(COMPILER) test/test_a_lone_open_array_overload_still_accepts_a_nil_argument.pas $(TESTTMP)/test_nilopenlax26
 	tools/expect_same.sh test_nilopenlax26 "$$($(TESTTMP)/test_nilopenlax26 | tail -n 2)" "$$(printf 'fails=0\nNILOPENLAX OK')"
+	@# bug-p-an-exact-case-match-in-an-outer-scope-beats-a-case-insensitive-one-in-a-nearer-scope
+	@# FindSym walked the WHOLE chain exact-case, then the WHOLE chain
+	@# case-insensitively -- so case-exactness outranked SCOPE DEPTH and an exact
+	@# match in any visible scope beat a case-insensitive one in a nearer scope:
+	@# `procedure Bump(Counter: Integer); begin counter := 55; end;` wrote the
+	@# GLOBAL and left the parameter at 7. Silent, both halves wrong in opposite
+	@# directions, and --strict-case did not fire on it.
+	@# ROW 6 IS THE CONTROL AND IT PASSED BEFORE THE FIX: with no exact-case match
+	@# anywhere, both compilers already picked the local, because the exact walk
+	@# found nothing and innermost-first then applied. That is what identifies the
+	@# two-walk ORDER as the cause rather than case-folding in general.
+	@# Rows 1, 4 and 7 also passed before, as the boundary.
+	@# WHAT THE OLD ORDER WAS MASKING: compiler/builtin/pyeval.pas had a local
+	@# `cur` beside the unit's `Cur`, and a parameter `src` beside the unit's
+	@# `Src` (uforth died on it until both were renamed); lib/rtl/strutils.pas
+	@# declared a PARAMETER `N` and a LOCAL `n` in one routine three times, which
+	@# fpc rejects outright as a duplicate identifier.
+	./$(COMPILER) test/test_a_nearer_scope_wins_even_when_an_outer_name_matches_case_exactly.pas $(TESTTMP)/test_caseshadow26
+	tools/expect_same.sh test_caseshadow26 "$$($(TESTTMP)/test_caseshadow26 | tail -n 2)" "$$(printf 'fails=0\nCASESHADOW OK')"
 	# feature-a-x86-64-object-output-is-position-dependent
 	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
 	# TRAILS the displacement. A rip-relative displacement is measured from the
