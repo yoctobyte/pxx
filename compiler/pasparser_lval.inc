@@ -4749,6 +4749,48 @@ begin
         Continue;
       end;
 
+      { IMPLICIT DEREF: `p.field` on a value that is STILL A POINTER means
+        `p^.field` (FPC/Delphi). ParseLValueAST has had this arm for as long as
+        `p.a` has worked; THE SHARED WALKER NEVER DID -- so every caller that
+        delegates to it (the three postfix cast loops, the record-name cast, a
+        call result) had no way to reach one, and its hand-rolled builder makes
+        AN_FIELD and nothing else. The field offset was applied to the POINTER
+        VALUE: `PRec(x).b` printed 0 and `PPRec(pp)^.b` printed 0 beside a low
+        half-address for `.a`, where fpc 3.2.2 prints 22 and 11. Silent, no
+        diagnostic, and one spelling of two -- `PRec(x)^.b` and `PPRec(pp)^^.b`
+        were right throughout, which is what says this is the walk and not the
+        alias table.
+
+        Two tickets, one arm, and the count is the evidence rather than the
+        claim: they are the depth-1 and depth-2 faces of the same absent step,
+        and the depth-2 face survives ONLY through a cast, because the
+        variable spelling `pp^.f` goes through ParseLValueAST's copy and was
+        fixed there separately.
+
+        ResolveNodeRec answers the pointee and gates on the declared DEPTH, so
+        a half-dereferenced pointer stays refused rather than resolving to the
+        ultimate record -- which is exactly how a wrong offset becomes a
+        plausible value. Nothing that resolves today moves: the arm only fires
+        when the pointee is a record that really has this member.
+        bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref
+        bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped }
+      if tk = tyPointer then
+      begin
+        sub := AllocNode(AN_DEREF);
+        ASTLeft[sub] := node;
+        w := ResolveNodeRec(sub);
+        if (w >= REC_UCLASS_BASE) and UClsIsRecord[w - REC_UCLASS_BASE] and
+           ((FindUField(w - REC_UCLASS_BASE, fieldName) >= 0) or
+            (FindUMeth(w - REC_UCLASS_BASE, fieldName) >= 0)) then
+        begin
+          ASTTk[sub] := Ord(tyRecord);
+          node  := sub;
+          tk    := tyRecord;
+          outTk := tyRecord;
+          recId := w;
+        end;
+      end;
+
       ci := -1;
       if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
 

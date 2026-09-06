@@ -6739,6 +6739,26 @@ test-core: $(COMPILER)
 	@# untaught spellings, which is not what the ticket predicted.
 	@$(TESTTMP)/test_stridxptrslot26 | diff -u test/test_indexing_a_string_cast_of_a_pointer_slot.expected - \
 	  || { echo 'test_indexing_a_string_cast_of_a_pointer_slot: FAIL - an indexed string cast reads/stores by the PChar adapter rule, or a spelling lost its subscript'; exit 1; }
+	./$(COMPILER) test/test_a_pointer_cast_dereferences_implicitly_for_a_selector.pas $(TESTTMP)/test_castimplderef26
+	@# .expected is fpc 3.2.2's own output, byte for byte.
+	@# ROWS E..H ARE THE CONTROLS AND THEY ARE THE WHOLE RISK OF THE CHANGE: each
+	@# is the SAME access with the dereference written out, or off a plain
+	@# variable. The new arm inserts a dereference, so what it can break is
+	@# inserting a SECOND one where the caret already did the job -- and only a
+	@# row that already dereferences can catch that. A file with A..D alone
+	@# passes just as well when every explicit `^` has started double-stepping.
+	@# ROW B IS NOT DECORATION: the walker reaches its METHOD arm only once the
+	@# receiver has become a record, so a fix that repaired fields alone would
+	@# leave `PRec(x).Sum` calling with a pointer as Self and still print the
+	@# right numbers on every other row.
+	@# ROW D IS THE STORE FACE, through the route a cast-headed assignment target
+	@# now takes: refactor-p-one-lvalue-path-for-statements-and-expressions sends
+	@# it to the expression parser, so read and write share one walk.
+	@# TWO TICKETS, ONE ARM. bug-p-a-cast-to-a-pointer-to-pointer-drops-the-
+	@# implicit-second-deref and bug-p-an-implicit-deref-over-a-typed-pointer-
+	@# cast-is-dropped are the depth-2 and depth-1 faces of the same absent step.
+	@$(TESTTMP)/test_castimplderef26 | diff -u test/test_a_pointer_cast_dereferences_implicitly_for_a_selector.expected - \
+	  || { echo 'test_a_pointer_cast_dereferences_implicitly_for_a_selector: FAIL - a . on a pointer-valued cast lost (or doubled) its implicit dereference'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

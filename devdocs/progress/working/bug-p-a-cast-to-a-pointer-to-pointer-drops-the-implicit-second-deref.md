@@ -2,10 +2,10 @@
 track: P
 prio: 70
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frankB
-summary: "`PP(x)^.field` where PP is a pointer-to-POINTER alias applies the field offset one indirection too early: the explicit `^` is emitted and the IMPLICIT second deref the selector requires is not, so `.a` reads the intermediate pointer VALUE as if it were the record. Measured against fpc 3.2.2: `PPRec(pp)^.a` / `.b` give 4310376 / 0 where fpc gives 11 / 22. A SILENT WRONG VALUE on a program both compilers accept. Order-INDEPENDENT (both declaration orders, unlike its former sibling) and identical on pin v404, so long-standing. The explicit spelling `pp^^.a` is CORRECT, which is the discriminator: the record identity is resolved fine and only the address computation is short a level. Split out of bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read, which turned out to be a different cause (a one-pass alias repair) and is fixed; this is the half that blocks corpus rung 6a, because generics.defaults spells it as a CAST."
+summary: "RESOLVED 2026-09-06, together with bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped: ONE ARM, and the two tickets are the depth-2 and depth-1 faces of the same absent step. ParseLValueAST has carried the implicit-deref arm for as long as `p.a` has worked; ParseClassRecordSelectors -- THE SHARED WALKER the three postfix cast loops delegate to -- never had it, and its builder makes AN_FIELD and nothing else, so every caller that correctly delegated got a field applied to a POINTER VALUE. Fixed by that arm in the shared walker plus the C4 loop's delegation guard widened to hand over a pointer-valued `.` at all. THIS TICKET'S OWN DISCRIMINATOR WAS FALSE WHEN I MEASURED IT: it says only the CAST spelling is short a level, and the non-cast `pp^.a` was short a level too until frankA's b7b9e309e landed an hour later. Test: test_a_pointer_cast_dereferences_implicitly_for_a_selector, 8 rows, fpc 3.2.2's own output byte for byte. A third, distinct defect was split out rather than folded in -- bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing -- because its repair is a DIAGNOSTIC and not an address computation."
 ---
 
 # A cast to a pointer-to-pointer drops the implicit second deref
@@ -64,3 +64,54 @@ a one-field probe is green while the bug is live.
 `{$DEFINE EXTENDED_HASH_FACTORY := PPExtendedEqualityComparerVMT(Self)^.__ClassRef}`.
 That is the **cast** spelling, so corpus rung 6a is blocked on this ticket rather
 than on the alias-repair fix that closed its former sibling.
+
+## RESOLVED 2026-09-06 — the SHARED walker had no implicit-deref arm
+
+`test/test_a_pointer_cast_dereferences_implicitly_for_a_selector.{pas,expected}`,
+wired in the `Makefile`; `.expected` is fpc 3.2.2's own output byte for byte.
+
+**ONE ARM, TWO TICKETS.** This and
+`bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped` are the depth-2
+and depth-1 faces of the same absent step, and both are fixed by the same
+change. They were filed a day apart by two reporters, each saying explicitly
+that it was not the other.
+
+- `ParseLValueAST` (`pasparser_lval.inc:443`) has carried the implicit-deref arm
+  for as long as `p.a` has worked.
+- **`ParseClassRecordSelectors` — the SHARED walker, the one the three postfix
+  cast loops delegate to precisely so they stop keeping private notions of what
+  a `^` yields — never had it**, and its builder makes `AN_FIELD` and nothing
+  else. So every caller that did the right thing and delegated got a field
+  applied to a POINTER VALUE. The delegation was the remedy for four earlier
+  tickets in this file and carried this hole into each of them.
+
+The fix is that arm, in the shared walker's `tkDot` branch, plus the C4 cast
+loop's delegation guard widened to hand over a pointer-valued `.` at all.
+
+**THE TICKET'S OWN DISCRIMINATOR WAS DEAD BY THE TIME I MEASURED IT.** This
+ticket says *"the explicit `pp^^.a` spelling is correct ... only the CAST-headed
+spelling is short a level"*. When I ran the 2x2 — {cast, no cast} x {carets
+written} — the NON-cast `pp^.a` was short a level too. frankA's `b7b9e309e`
+landed underneath me an hour later and turned that row green; measured before
+it, the cast was not the discriminator at all. Reasoning from the premise would
+have aimed the fix at the cast path.
+
+**WHAT COST THE MOST, and it is a scope error not a code one:** I first widened
+the delegation guard, rebuilt, and nothing moved. The delegation was being taken.
+The arm I was delegating TO was in a different function 2100 lines away in the
+same file — I had read the arm at `:2561` and the walker at `:4683` in one
+session without noticing they are not the same routine. *A file is not a scope*,
+and "the shared walker has this arm" was a claim I had checked about the FILE.
+
+**A THIRD DEFECT IS FILED, NOT FOLDED IN**, because its repair is a DIAGNOSTIC
+and not an address computation:
+`bug-p-a-half-dereferenced-pointer-chain-answers-garbage-instead-of-refusing` —
+`ppp^.a` on a three-deep pointer compiles and prints 4310376 where fpc says
+`Illegal qualifier`. Pre-existing on pin v404 and unchanged by this fix.
+
+Controls: rows E..H are every spelling where the dereference is WRITTEN OUT.
+The change INSERTS a dereference, so what it can break is inserting a SECOND one
+where the caret already did the job, and only a row that already dereferences can
+catch that. Row B is a METHOD call — the walker reaches its method arm only once
+the receiver has become a record, so a fields-only fix prints every number
+correctly and still calls `Sum` with a pointer as Self.

@@ -7585,8 +7585,31 @@ begin
                 (bug-pascal-record-cast-chain-drops-method-call). Hand the rest
                 to the shared selector parser, which resolves methods,
                 properties and default properties. }
-              if (recName >= REC_UCLASS_BASE) and
-                 (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+              { ...and A `.` ON A VALUE THAT IS STILL A POINTER is the same
+                answer for the same reason: `PRec(x).f` and `PPRec(pp)^.f` mean
+                one more dereference (FPC/Delphi), and the hand-rolled builder
+                below cannot make one -- it makes AN_FIELD and nothing else. So
+                both applied the field offset to the POINTER VALUE: `PRec(x).b`
+                printed 0 and `PPRec(pp)^.b` printed 0 beside a low half-address
+                for `.a`, where fpc 3.2.2 prints 22 and 11. Silent, no
+                diagnostic, and one spelling of two -- `PRec(x)^.f` and
+                `PPRec(pp)^^.f` were right throughout, which is what says this
+                is the loop and not the alias table.
+
+                The shared walker has had the implicit-deref arm since
+                bug-p-an-implicit-deref-over-an-explicit-caret-is-dropped, and
+                it asks ResolveNodeRec, which counts the deref chain and gates
+                on the declared depth -- so a HALF-dereferenced pointer is
+                refused rather than resolved to the ultimate record, which is
+                exactly how a wrong offset becomes a plausible value. Handing it
+                the `.` is the fifth thing this loop has given up to the shared
+                one and the argument is unchanged: not what the arm reaches, but
+                whether it is the right arm at all.
+                bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref
+                bug-p-an-implicit-deref-over-a-typed-pointer-cast-is-dropped }
+              if (tk = tyPointer) or
+                 ((recName >= REC_UCLASS_BASE) and
+                  (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0)) then
               begin
                 node := ParseClassRecordSelectors(node, recName, tk);
                 recName := REC_NONE;
