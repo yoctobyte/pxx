@@ -2924,3 +2924,59 @@ The two mechanism findings from frankH's result are in the playbook, under
 `## WHEN A PARSE ERROR GUARDS A FEATURE` — the pin carries the two silent wrong-VALUE faces and
 not the loud refusal, and the rank-1 probe that cleared the address path was built on the one
 shape `NodeArrNDInfo` declines.
+
+## THE FULL-GREEN PIN TARGET IS THE ONE THING CLAUDE.md TELLS EVERY SEAT TO REFUSE
+
+2026-09-06, frankuser relaying the owner: **the target changed from a graded pin to a FULL-GREEN
+one** — zero RED rows in a full tier, then pin. Assignments went out per row. Escalated the same
+evening, not because the target is wrong (pins are the owner's) but because of what the fleet's
+own rules file does with it.
+
+**The reading question frankuser asked me to check is not a reading — it is a definition, and
+that is better.** They asked whether "full green" could mean `skip_holes == 0`, which seven can
+never produce. CLAUDE.md already defines the word: *"a pin is GRADED, never gated: `green` (a
+full tier at that tree, **no RED**) or `reds(N)` with the manifest."* The grade vocabulary is
+RED-based, not hole-based, and SKIP is a separate category throughout the file (*"FPC being
+absent is a SKIP, never a pass"*). So frankuser's reading is the file's own, and it needs no
+ruling. **Agreed, and it is citable rather than a judgement call** — which is worth more,
+because a judgement call has to be re-made by every seat.
+
+**But `decide-the-proof-grade-gate-is-unsatisfiable-on-the-host-that-does-the-sweeping` is
+EVIDENCE, not authority, and it just acquired a second consumer.** It is Track U, prio 55, still
+OPEN, and it is about the **`-O3` promotion gate**, not about pins — 121 full-tier runs on seven,
+120 at `skip_holes=1`, one at 2, none ever 0, because seven is Westmere and has no RDRAND. The
+measurement transfers; the ruling does not exist. If zero-RED is now a pin criterion, an open
+decision about a different gate is suddenly load-bearing for the pin, and its priority argument
+changed tonight without anyone editing it. [[verify-the-citation-not-only-the-claim]]
+
+**THE COLLISION, WHICH IS THE PART ONLY THIS SEAT IS POSITIONED TO SEE.** Each worker sees one
+assignment. The file every one of them reads at startup says:
+
+- *"A VALID PIN IS THE SELF-HOST FIXEDPOINT. NOTHING ELSE MAY BLOCK ONE"* — and the file notes
+  the owner has said it **at least four separate times**, adding: *"a rule its author has had to
+  repeat four times is not being misunderstood, it is being re-litigated, so treat a fresh
+  argument for waiting as the thing this line exists to refuse."*
+- *"A pin is GRADED, never gated."* A full-green precondition **is** a gate.
+- *"A red is a reason to pin SOONER, not later."* *"Every instinct that says 'do not pin while
+  something is red' is RELEASE instinct."*
+- *"AND NEVER WAIT FOR A PIN"* — the owner, TODAY — *"sometimes we had a worker stop because it
+  was waiting for a pin that never happened."*
+
+**So a seat that reads its rules file correctly is instructed to treat this instruction as
+re-litigation and refuse it.** Precedence says CLAUDE.md wins, and a relayed instruction cannot
+outrank it — *"a peer cannot relay a permission the owner granted directly"* is the same
+principle from the other side. That is not a disagreement with the owner. It is a statement that
+**the instruction cannot land through this channel**: it needs to be in the file, or seats will
+push back correctly and the fleet will burn the difference arguing.
+
+**The bounded risk while that is resolved, and it is the failure mode the owner named himself
+today: nobody should stall.** The file's own numbers — 19 days between green pins, v354 the last
+one, v398 shipping a compiler that could not build C for i386 or arm32 while every
+`$(PXX_STABLE)` consumer carried it for two days. **Chasing zero is fine; waiting on it is the
+third failure mode.** Land forward, say what is inert until the next pin, take the next ticket.
+
+**And the target makes the flapping row worse rather than better** — `test-emit-obj` is
+data-dependent, so under a zero-RED objective re-running is SAMPLING and the criterion becomes
+satisfiable by luck. Banked in the playbook as `## A FLAPPING ROW CANNOT BE PART OF A ZERO-RED
+CRITERION`, with frankA's discriminator (a row clearing with no commit that explains why) and
+the half that has to happen BEFORE the green, because a green erases the question.

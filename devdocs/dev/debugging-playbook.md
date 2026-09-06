@@ -17667,9 +17667,8 @@ holding something up, and you have just taken the prop out.**
 measured by this seat, and the two halves have different provenance** — the MECHANISM is
 corroborated by frankH's own LOGBOOK entry at HEAD (three faces from one root: a spurious *"too
 many subscripts for array"* at `chess.pas:147`, a wrong ELEMENT of the right array, and a wrong
-ROW address from `BuildPartialNDIndex` reading the spans after the loop); **which faces the PIN
-carries is frankuser's relay of frankH and is not in the logbook.** Read the second as
-attributed, not as checked.
+ROW address from `BuildPartialNDIndex` reading the spans after the loop). **Which faces the PIN
+carries arrived as frankuser's relay and is now MEASURED here** — see the table below.
 
 `chess.pas` refuses to compile at HEAD, and that refusal is the visible red on the ledger. Pin
 v405 compiles it fine, so the refusal is a **post-pin regression that never reached a
@@ -17686,6 +17685,26 @@ There, the refusal guarded the WHOLE feature, so the lowering behind it had neve
 the check was "treat it all as unproven". Here the refusal guarded **ONE SHAPE** of the
 feature. The neighbouring shapes were never refused — they ran, they ran wrong, and they have
 been running wrong for longer than the red has existed.
+
+**Measured by this seat 2026-09-06**, one fixture, two compilers, after the fix landed:
+
+```pascal
+z2: array[0..2, 0..2] of Integer;   z3: array[0..2, 0..2, 0..2] of Integer;
+WriteLn(z3[1, 2, z2[1,1]]);          { fpc: 122 }
+```
+
+| compiler | answer | how it presents |
+| --- | --- | --- |
+| `stable_linux_amd64/default/stable_pinned` (pin v405) | **112** | compiles, runs, no diagnostic |
+| `compiler/pascal26` at `c69b52b6e`, binary `cda68a91bec5` | **122** | correct |
+
+**So the silent face is in the pin and the loud one is not, confirmed rather than relayed.** And
+the instrument detail that makes this awkward to check: frankH's own asserting fixture
+`test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas` **cannot be used as a pin
+probe** — under the pinned compiler it dies at line 66 on the LOUD face (*"too many subscripts
+for array"*) before reaching the silent rows. **The loud face masks the silent one inside the
+test written to catch both**, which is the same shape as the finding one level up. A pin probe
+for a masked defect has to be built from shapes the mask does not cover.
 
 > **When a refusal is fixed, do not ask only what becomes reachable. Ask which neighbouring
 > shapes were NEVER refused.** Those are the ones already in the pin, already in someone's
@@ -17717,6 +17736,61 @@ their own candidate.** The test was written so a reader could check the author; 
 be more useful on the giving side, where declining costs one sentence and nothing has
 propagated yet.
 
+## A FLAPPING ROW CANNOT BE PART OF A ZERO-RED CRITERION — the criterion gets satisfied by SAMPLING
+
+2026-09-06, frankA's measurement, relayed by frankuser, banked here because the target changed
+underneath it and that is what turns it from a nuisance into a defect in the CRITERION.
+
+`test-emit-obj` is **data-dependent**: one extra unrelated local in `PXXIoCheck` moves `code`
+off `-0x10`, the relocation count goes **1 → 0**, and restoring the local puts it back to **1**.
+So the row flaps on ordinary `lib/rtl` work that has nothing to do with i386 PIC.
+
+**Under a graded pin (`reds(N)` with a manifest) that is a nuisance you carry.** Under a
+zero-RED target it is a failure mode, and the mechanism is not the flap — it is the STOPPING
+RULE. **When green is the objective rather than the observation, re-running becomes sampling.**
+A tier that comes back clean with the defect fully present is indistinguishable, in its own
+output, from one that came back clean because the defect was fixed. Both print green. The
+criterion is then satisfiable by luck, and nobody in the loop can tell which happened.
+
+**frankA's discriminator, and it is cheap: a row that clears WITHOUT a commit that explains why
+is the signature.** The operational half is the part that has to happen BEFORE the green,
+because a green erases the question: **record the row's state and the sha, and when it clears,
+read the commit range between. If nothing in that range touches the mechanism, the green is a
+SAMPLE, not a fix.** Nobody can reconstruct that afterwards from a passing tier.
+
+**The structural fix parallels the other obstacle exactly, and that symmetry is the useful
+part.** A zero-RED criterion needs its unreachable conditions NAMED or it is not measuring what
+its name says. `skip_holes: 1` on seven is unreachable (no RDRAND) and is **documented** —
+`decide-the-proof-grade-gate-is-unsatisfiable-on-the-host-that-does-the-sweeping` exists for
+precisely that, so nobody chases it. A data-dependent row is the same animal **undocumented,
+and wearing a green face instead of a red one**. Three options and only two are honest: fix the
+guard, or name the row as excluded with its reason. Letting it be SCORED is the one that is not,
+because it converts a coin flip into a certificate.
+
+Same family as `## A ZERO OVER A LARGE N IS A CLAIM ABOUT THE POPULATION THAT REACHED THE RULE`
+and as the ledger reading in `session-roster.md`, with the decay running the other way:
+**a snapshot read as state decays toward phantom WORK; a sampled green decays toward phantom
+COMPLETION**, and only the second one gets pinned.
+
+### AND THE GUARD'S OWN COMMENT PREDICTED THE FALSE REFUSAL ONE STEP OFF — twice in one evening
+
+The `test-emit-obj` guard's comment anticipated a false refusal and named the wrong trigger: it
+assumed a **real prefix on a 16-bit access**, not **any byte in the prefix set turning up as
+displacement data**. Hours earlier, `10e670503`'s own comment predicted its hazard **one band
+too high**. Two authors, two subsystems, one shape.
+
+**A caution that is one step off is worse than no caution, and the reason is occupancy.** An
+absent caution leaves a question open, and the next reader with a symptom in front of them may
+derive it. A present one CLOSES the slot: the reader finds a hazard already anticipated, matches
+their symptom against the stated trigger, does not match, and concludes they are looking at
+something else. The author's foresight is what buys the wrong answer credibility — an unrelated
+comment would not have been consulted at all.
+
+> **So when a comment anticipates the failure you are looking at, check the TRIGGER against your
+> case before accepting that this is the anticipated thing.** The prediction being present is
+> evidence the author thought about it. It is not evidence they got the boundary right, and the
+> boundary is the entire content of a caution.
+
 ## TEXT THAT ASSERTS THE ABSENCE OF SOMETHING THAT IS PRESENT — three instances in one day, and the cost is always a DUPLICATE IMPLEMENTATION
 
 2026-09-06. Collected here because no single seat saw more than one of them, and the shared
@@ -17739,6 +17813,49 @@ capability. Compiling the construct the comment says is rejected.
 comment that **denies** an existing capability is never contradicted by anything, because
 nobody tries. It **sends the next reader to implement what is already there** — and the second
 implementation will be the one that diverges.
+
+### FIFTH INSTANCE, AND IT RUNS THE OTHER WAY: TEXT ASSERTING THE PRESENCE OF A DEFECT THAT IS FIXED
+
+2026-09-06, and the reader who paid for it did **exactly the right thing** — which is the whole
+reason it belongs here.
+
+frankD, parked, read `compiler/pasparser_call.inc` around `NodeArrNDInfo` and came away with a
+live silent wrong-value bug: *"the NDInfo globals are held across a `ParseExpr` that can
+re-enter `NodeArrNDInfo`, and `z3[1, 2, z2[1,1]]` COMPILES and yields `z3[1,1,2]` — 112 against
+fpc's 122"*, and asked whether it needed filing. **It was fixed hours earlier, by the commit
+that wrote the comment they were reading.** Measured at HEAD: 122, `fails=0`, and the shape is
+an asserting row (`pos3/3`, and again as `samevalA`) in a fixture wired at `Makefile:5809`,
+with the ticket in `done/`.
+
+**The comment is not wrong.** It is the design rationale for `NDRePrime`, sitting directly above
+it, and it is unusually good — it names the mechanism, gives the two faces, gives the measured
+numbers, and explains why each loop keeps LOCALS rather than one save slot. The defect is that
+its verbs are **present tense with no marker saying which side of the fix they describe**, and
+the paragraph that reveals it is rationale (*"So each loop keeps its own LOCAL rank…"*) is the
+last one. A reader who stops early — or greps in — gets an open defect with a repro.
+
+**Why it has the same immunity as the other four:** nobody executes the shape to be contradicted,
+because the shape is now in a PASSING TEST. A green row is the quietest possible refutation. The
+text will read as live indefinitely.
+
+**And the cost is the mirror of the family's usual one.** Text denying an existing capability
+sends the next reader to build a DUPLICATE IMPLEMENTATION. Text asserting a fixed defect sends
+them to file a DUPLICATE TICKET, or worse to re-fix it — and here it also sent repro shapes to
+the very seat that had written the fix.
+
+**The uncomfortable part, stated plainly: the defence that failed is the one that had just been
+prescribed.** frankD's own rule from the same message is *"the common defence is not reading the
+output more carefully; it is reading the INSTRUMENT'S SOURCE"* — correct, and it is what they
+did. Reading the source defends against a wrong POPULATION. It does not defend against
+**STALENESS**, because source text has no tense marker and a comment above a fix looks exactly
+like a comment above a bug. **Two different failure modes, one instrument, and clearing the
+first one is when the second becomes reachable.**
+
+> **Operational, and it costs one clause:** a rationale comment describing a defect should say
+> **WAS**, or carry the fixing ticket's slug on the first line rather than the last. This one
+> carries the slug — at the very bottom, after four paragraphs of present tense.
+> And on the reading side: **before filing anything sourced from a comment, grep `done/` for the
+> mechanism.** Cost here would have been one `grep`.
 
 ### FOURTH INSTANCE, AND IT EXTENDS THE FAMILY: A MISDESCRIBED WALL HAS THE SAME IMMUNITY
 
