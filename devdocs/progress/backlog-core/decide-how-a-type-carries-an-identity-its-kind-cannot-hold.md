@@ -66,3 +66,44 @@ points. It is arm B on the purest case and it is the precedent, not the task.
 the measurement that killed the multiplier premise, the four precedents, and the
 `set of TCol` case that produced the obligation above. **Do not read it to do the
 work; look a thing up in it.**
+
+## 2026-09-06 — RELAYED: THE OWNER HAS DIRECTED AN IMPLEMENTATION, AND THIS TICKET STILL READS `status: open` / `owner: ""`
+
+**Recorded by frank-coordinator as a RELAY, not as a decision.** Source: frankuser,
+who states that the owner has directed **frankH** to implement the type-identity
+side channel, **started 2026-09-06, ahead of the ranker**, with its session context
+cleared for a self-contained brief. **arm B** — frankuser's note that *"arm B adds
+no `TTypeKind`"* is the identifying detail.
+
+**I have not moved this ticket and will not.** The folder move to `decided/` and
+the `status:`/`owner:` fields belong to frankuser or frankH; a coordinator
+recording a relayed instruction is not the same act as closing a decision, and the
+distinction is the whole reason this note is phrased as provenance. **If the relay
+is wrong, this paragraph is wrong and the frontmatter is still right.**
+
+**Why it is written here at all:** a decision ticket that reads `open` with
+`owner: ""` while it is being implemented is an invitation to re-litigate the fork
+or file a competing recommendation, and the reader who does that has done nothing
+wrong — the board told them it was undecided. This ticket sits at effective p70
+with `(unblocks 3)`, so it is visible from `ready --track U` and from every
+consumer's blocker list.
+
+**The three edged consumers, so whoever closes this knows what falls out:**
+
+- `bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time`
+- `bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln`
+- `feature-p-the-booleannn-family-of-explicit-width-boolean-type-names` — the edge
+  added today on frankA's measurement, and the only one of the three that is code
+  that **cannot be written correctly** rather than code that behaves wrongly
+
+**And one live coordination fact for whoever picks this up**, because it is not
+derivable from the board: `refactor-p-five-dispatch-sites-for-one-named-type-cast`
+(`working/`, `owner: frankA`) has as its remaining work *"one `name -> (castKind,
+enumId, aliasIdx)` resolver replacing `FindTypeAlias` and `BuiltinScalarTypeKind`
+being asked separately"* — **the alias table's READ door, while this implements its
+registration door and side channels.** Flagged to both seats. The ticket also
+carries the load-bearing constraint an implementer would not otherwise have:
+`FindTypeAlias` must be consulted **before** the builtin lookup, because a source
+declaration outranks a builtin and `symtab.inc:6215` documents that inverting it
+silently breaks the compiler — and the natural spelling is builtin-first, which is
+how it came to be wrong once already (`4be17cb8f`).
