@@ -1705,7 +1705,11 @@ begin
       if match then begin Result := i; Exit; end;
     end;
   end;
-  if StrCount >= MAX_STRS then Error('string table overflow');
+  if StrCount >= StrCap then
+  begin
+    if StrCap = 0 then StrCap := 1024 else StrCap := StrCap * 2;
+    SetLength(Strs, StrCap);
+  end;
   Strs[StrCount].Text   := s;
 
   { ---- the static managed-string header, laid down BEFORE Offset is taken ----

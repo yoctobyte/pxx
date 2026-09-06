@@ -78,7 +78,6 @@ const
     At 65536 that program compiles in 2.7s and its checksum agrees with gcc.
     Cost is ~24 B/entry of BSS, ~1.4 MB, virtual only — the same cost model as
     MAX_CODE above. bug-a-string-table-cap-refuses-a-14k-line-c-program }
-  MAX_STRS    = 65536;
 
   { ---- the STATIC managed-string block, built at compile time ----------------
     Mirrors the runtime header in compiler/builtin/builtinheap.pas
@@ -110,7 +109,9 @@ const
   MSTR_STATIC_RC       = $40000000;
   { The compiled-unit ceiling, enforced at `if CompiledUnitCount < 256` in
     ParseUnit. Named here because VisCacheVis is sized by it and USED to be
-    sized by MAX_STRS — see the note on that array. }
+    sized by MAX_STRS — see the note on that array. (MAX_STRS itself is gone
+    since 2026-09-06: the string table grows. The history is kept because the
+    point of the note is the COUPLING, which was real, not the constant.) }
   MAX_UNITS   = 256;
   { Compile-time-only identity keys (see KeyStrs). Bounded by the compiled-unit
     count, which CompiledUnitFile already caps at 256; 1024 leaves headroom for
@@ -3134,8 +3135,20 @@ var
   BSSSize : Integer;
   DbgDataBase : Integer; { absolute address of .data, for a DWARF location on a data-resident global (see DATA_SYM_BIAS); set beside DbgBssBase by the ELF writer }
 
-  Strs     : array[0..MAX_STRS-1]    of TStrEntry;
+  { Grown in InternStr. MAX_STRS was 65536 and COULD NOT BE REACHED: every entry
+    costs at least 40 bytes of Data (a 32-byte managed-string header plus its
+    8-aligned text), so the old 2 MB MAX_DATA capped this table at ~52108 and
+    `Error('string table overflow')` was a guard that could not fire. Making
+    Data dynamic (feature-dynamic-compiler-tables, same ticket) is what made
+    this cap real -- the identical 66000-literal input moved from `data
+    overflow` to `string table overflow` -- and is why this table is converted
+    immediately after it rather than whenever.
+    TStrEntry holds an AnsiString, so this is the first table here whose growth
+    has to carry a MANAGED field through the realloc; probed before converting
+    (5000 entries, 11 regrows, every earlier string intact). }
+  Strs     : array of TStrEntry;
   StrCount : Integer;
+  StrCap   : Integer;
 
   { `uses` edge table (bug-pascal-uses-is-transitive measurement step): one
     entry per `uses X` clause actually parsed, recorded even when X was
@@ -4364,8 +4377,9 @@ var
   VisCacheUnit  : Integer;
   VisCacheEdges : Integer;
   { Indexed by UNIT (`declUnit + 1`, `curUnit + 1`), never by string — it was
-    sized by MAX_STRS, which is a different quantity that merely happened to be
-    larger. That coupling was not a live overflow (units cap at 256, so the
+    sized by MAX_STRS (a constant that no longer exists: the string table grows
+    on demand since 2026-09-06), which is a different quantity that merely
+    happened to be larger. That coupling was not a live overflow (units cap at 256, so the
     array was ~8x oversized) but VisibilityAllows CLEARS THE WHOLE THING on
     every cache miss and is called from every name lookup, so raising the string
     table would have made a hot-path clear proportionally longer for a reason
