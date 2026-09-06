@@ -7,7 +7,7 @@ owner: unassigned
 blocked-by: []
 found: 2026-09-05
 found-by: frank-optimize, after re-deriving a playbook answer the hard way three times in one session
-summary: "CLAUDE.md tells every session the debugging playbook is 279KB / ~70k tokens and to LOOK UP THE SECTION, and states that `grep '^## '` lists the 72 sections free. The cost warning is vivid and the free-index clause is subordinate, and the observed result is that the cost-avoidance rule over-applies from 'do not read the file' to 'do not consult the file'. Three measured instances in one night, two of them by the sessions that wrote the surrounding rules. This is a WORDING fork for the owner, not a proposal to restructure the playbook."
+summary: "NUMBERS UPDATED 2026-09-06 (fe0c7e2cd): the playbook is 905KB / ~225k tokens / 237 sections, not the 279KB / 70k / 72 quoted below -- it TRIPLED while the pointer stood still, which is this ticket's own thesis happening to it. Fork unchanged. CLAUDE.md tells every session the debugging playbook is large and to LOOK UP THE SECTION, and states that `grep '^## '` lists the 72 sections free. The cost warning is vivid and the free-index clause is subordinate, and the observed result is that the cost-avoidance rule over-applies from 'do not read the file' to 'do not consult the file'. Three measured instances in one night, two of them by the sessions that wrote the surrounding rules. This is a WORDING fork for the owner, not a proposal to restructure the playbook."
 ---
 
 # The free section index is documented, and it is not being used
@@ -70,3 +70,32 @@ which makes reader-error an expensive theory.
 The file is fine and its size is what makes the index valuable. A restructuring
 proposal would rank as a project and never happen, and it would not fix the
 thing measured here — the index already exists and already works.
+
+## 2026-09-06 — THE QUOTED NUMBERS ARE STALE, AND THE DRIFT ARGUES THE TICKET'S OWN CASE
+
+Every figure this ticket quotes from CLAUDE.md was corrected at `fe0c7e2cd`:
+
+| quoted here | actual, 2026-09-06 |
+| --- | --- |
+| 279KB | **905KB** |
+| ~70k tokens | **~225k tokens** |
+| 72 sections | **237 sections** |
+
+**The playbook TRIPLED while the pointer to it stayed still**, and nothing
+errored — the pointer kept answering, with a number that had been true. That is
+this repo's own "the name is not the thing", applied to the very sentence this
+ticket is about.
+
+**It strengthens the fork rather than changing it.** The ticket's case is that a
+vivid cost warning beside a subordinate free-index clause makes sessions stop
+consulting the file at all. At 279KB that was an over-application; at 905KB the
+cost warning is *more* vivid and the index is *more* valuable, because 237
+section headers are the only affordable way in. The correction at `fe0c7e2cd`
+also downgraded *"lists them free"* to *"lists the sections for a few thousand
+tokens, which is cheap, not free"* — accurate, and it makes the subordinate
+clause weaker, which is the direction this ticket argues against.
+
+**Still a wording fork and still the owner's.** What is settled is only that the
+numbers no longer support an argument from either side, and that any future
+phrasing should carry a date or no number at all: a size in a pointer is a lower
+bound with a date on it.

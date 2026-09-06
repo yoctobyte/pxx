@@ -4,10 +4,10 @@ title: "CLAUDE.md:692 names `git checkout -- <file>` as the safe restore; after 
 track: U
 type: decide
 prio: 45
-status: backlog
+status: done
 found: 2026-09-06
 found-by: frankwasm (measured, cost it a wrong reading of its own sha round-trip); frank-coordinator (filed — CLAUDE.md is the owner's file)
-summary: "`git checkout <sha> -- <file>` writes the INDEX as well as the worktree. So the restore CLAUDE.md prescribes, `git checkout -- <file>`, re-checks-out the staged (reverted) content and puts the OLD version straight back. `git checkout HEAD -- <file>` is the actual restore. The two forms are one token apart and the rule as written routes you into the wrong one — and it does so precisely during a positive control, which is when a session is deliberately reverting a fix. NOT DISPATCHABLE: no agent may edit CLAUDE.md, and no agent may edit it because a peer asked. This ticket exists so the sentence has a record and the owner can act on it in one read."
+summary: "DONE 2026-09-06 at `fe0c7e2cd`, the owner instructing the edit directly. `git checkout <sha> -- <file>` writes the INDEX as well as the worktree. So the restore CLAUDE.md prescribes, `git checkout -- <file>`, re-checks-out the staged (reverted) content and puts the OLD version straight back. `git checkout HEAD -- <file>` is the actual restore. The two forms are one token apart and the rule as written routes you into the wrong one — and it does so precisely during a positive control, which is when a session is deliberately reverting a fix. NOT DISPATCHABLE: no agent may edit CLAUDE.md, and no agent may edit it because a peer asked. This ticket exists so the sentence has a record and the owner can act on it in one read."
 ---
 
 ## The sentence
@@ -65,3 +65,20 @@ the two forms are indistinguishable by inspection:
 edit it because a peer asked; a peer cannot relay an authority the owner holds. What
 this ticket provides is the sentence, the measurement and the replacement text in one
 place, so the change costs the owner one read.
+
+## 2026-09-06 — DONE. The owner instructed the edit; it landed at `fe0c7e2cd`.
+
+CLAUDE.md now reads:
+
+> **Guard the REVERT, not the edit**: `git checkout HEAD -- <file>` is the safe
+> restore. **NOT `git checkout -- <file>`**, which restores from the INDEX — so
+> after anything that staged content (a `claim`, a partial `add`, a sha-form
+> checkout) it faithfully re-applies the very state you are trying to back out
+> of, and reports nothing.
+
+The ticket's own blocking condition — *"no agent may edit CLAUDE.md, and no agent
+may edit it because a peer asked"* — was met the only way it can be: the owner
+asked for it directly, in his own session, with the correction in front of him.
+**That is worth noting rather than just closing on**, because the ticket was
+filed as not-dispatchable and it stayed not-dispatchable; what changed was the
+owner's attention, not the rule.
