@@ -846,10 +846,31 @@ build on a commit and cannot build on "I have that in progress".
 - **frankH's aperture, as stated, returns 1992 of 6218 files** — a wrapped bullet value is
   ordinary authoring. The discriminator is not *"there is a continuation"* but *"the value
   is one the tool WRITES"* — Status and Owner, the only two `set_field` call sites. That
-  gets 67 against frankH's independently-measured 69, and two scans that nearly agree from
-  different directions is the corroboration neither had alone.
+  gets 67 against frankH's independently-measured 69.
+
+  **AND I THEN CALLED THAT CORROBORATION, WHICH IT IS NOT** — frankH's correction, within the
+  hour. The two scans count **disjoint populations**: frankH's keys on a WRAPPED value, mine
+  on a value the tool writes; a bullet is in one set or the other and never both. Two numbers
+  landing three apart is a **coincidence of two different questions**, and calling it
+  agreement makes BOTH look checked. `## TWO VERIFIED COUNTS CAN MAKE ONE UNVERIFIED
+  INFERENCE` is two screens above this in the playbook and I wrote the inference anyway,
+  about my own measurement, the same night I banked the mirror of it.
 - **And 69 is a FLOOR, not the population** (frankH's, and the best thing in the exchange):
   the scan keys on the ORPHAN, so it sees only bullets that wrapped. A single-line
   `- **Status:** backlog — opened 2026-07-12.` was truncated identically and leaves nothing
   to scan for. Refusing to guess the multiplier is the same discipline as the `MAX_IR`
-  refusal — **a bound with a reason beats an estimate.**
+  refusal — **a bound with a reason beats an estimate.** frankH then measured that half too:
+  **67 single-line annotated bullets, 41 in `done/` and 26 OPEN**, so it is forward-looking
+  loss and not archaeology.
+- **AND MY FIX INHERITED THE SCAN'S SAMPLING FRAME.** `_bullet_value_continues` asks *"did
+  the value wrap"* — which is the shape the ORPHAN SCAN can find, not the shape that loses
+  text. A single-line `- **Status:** backlog — opened 2026-07-12.` takes the ordinary path
+  and `.*$` eats the date exactly as before. **I wrote the guard from the instrument that
+  found the bug rather than from the bug**, one hour after banking floor-not-population as
+  frankH's contribution. The repair is frankH's and the formulation is better than mine:
+  the tool declines when **the bullet carries text it did not write and cannot interpret** —
+  a principle rather than a symptom, so the next shape after these two is already in scope.
+- **The clinching evidence was frankH filing a fresh instance while investigating.**
+  `feature-embed-dwscript-core`, written an hour before it knew the tool would eat the
+  annotation, is one of the 26. **A census of existing damage cannot tell a live defect from
+  a historical one; an author producing a new instance mid-investigation can.**

@@ -76,6 +76,48 @@ census, when the summary it measures crossed the floor.
 Noted on that ticket's summary rather than in its slug: `six-reds-with-four-causes` was true
 on 2026-09-03 and repairing it in place would make a dated claim look freshly measured.
 
+## The calibration data, and it changes the fork (frankZ, 2026-09-06)
+
+frankZ reproduced 0.089 for `feature-dynamic-compiler-tables` exactly, then measured the
+population this check is drawn from:
+
+- **623 open tickets, 600 scoreable, exactly ONE below the 0.10 floor.**
+- **Median 0.401** — four and a half times the floor.
+
+**So the metric is healthy and this is a single outlier, not a population trend.** That
+removes one option outright: there is nothing wrong with the score, and normalising by
+document length would be changing a ranking that works to green a devtest.
+
+**And it surfaces the failure direction nobody had looked at.** `probes` is `[:25]` — the
+first 25 open tickets **in board order**, 4% of the board — and it **happens to contain the
+global minimum**. That is luck. The second-worst is `feature-pascal-corpus-expansion` at
+**0.113**, outside the slice and close to the floor.
+
+> **This check has BOTH failure directions.** It reds on board prose, as filed — and it will
+> go **GREEN while the identical condition exists**, the moment the long-summary ticket falls
+> outside the first 25. A guard whose population is a 4% slice chosen by board order is not
+> measuring the property it names; it is sampling.
+
+**That is now the sharper half of the fork.** A fixed synthetic corpus fixes both directions
+at once — reproducible numbers, and a population chosen deliberately rather than by whatever
+`Board()` enumerates first. Raising the floor fixes neither: the outlier moves out of the
+slice on its own and the check goes quiet without anything being repaired.
+
+## The inference is still flagged, and now for a MEASURED reason
+
+frankZ looked in the archive — which **is** in this checkout, at
+`devdocs/progress/tstate/reports/`, contrary to what both of us believed. `progress_near_devtest`
+appears in exactly **two** reports, `20260830T023316Z` and `20260831T062413Z`, and in **none**
+of the recent ones.
+
+**That does not close the inference.** The `tools-devtest#00` row in the current report is
+**truncated mid-word** — it ends `twatch_verify_request_devtest.p` — so the row **cannot
+enumerate which devtest failed**, and absence from it is uninformative in both directions.
+
+> **A truncated list answers "not present" for everything past the cut.** The lookup ran, the
+> instrument did not error, and the result is still not evidence. The flag stays, with a
+> measured reason replacing a missing one.
+
 **One caveat on scope, and it is the only claim here I did not measure.** The three numbers
 above were measured on this checkout with `python3 tools/progress_near_devtest.py`. That the
 `#00` job on seven is also red for this reason follows from the glob and from the corpus
