@@ -46,3 +46,6 @@ expect_same: MISMATCH [test_libwln26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-06 — auto-closed by the seven watcher: `test-core#src:test/test_libwriteln_parity.pas` passes at a4ce5c00774a (tier native); it was red at fa5e9ef55813. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
