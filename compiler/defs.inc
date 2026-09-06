@@ -3286,6 +3286,24 @@ var
   PasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   PasDefineCharLen : Integer;
   PasDefineCount   : Integer;
+  { THE COMMAND-LINE BASELINE: the define table exactly as it stood when the
+    driver finished seeding it (-d, the target defines, PXX_NILPY_STR), before
+    any source was read. A used unit is compiled from THIS, not from whatever
+    the unit that pulled it in had defined -- FPC scopes {$define} to the unit
+    that writes it and only `-d` is global (bug-p-a-units-define-leaks-into-the-
+    units-it-uses). Snapshotted once by PasSnapshotDefineBaseline; a compile
+    that never calls it has PasDefineBaseCount = 0 and the reset is a no-op,
+    which is the right answer for a frontend that has no Pascal units.
+    NameOff/NameLen are not snapshotted: they are write-once per slot and read
+    only below Count, so rolling Count back also retires every name a unit's own
+    {$define}s registered -- the same argument ParseUsesUnitBody's own save
+    makes. {$CLAIM} is unaffected BY CONSTRUCTION: it is not a row in this
+    table at all, which is exactly why it was built that way. }
+  PasDefineBaseActive  : array[0..MAX_PAS_DEFINES-1] of Boolean;
+  PasDefineBaseValue   : array[0..MAX_PAS_DEFINES-1] of Int64;
+  PasDefineBaseHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  PasDefineBaseCharLen : Integer;
+  PasDefineBaseCount   : Integer;
   { {$CLAIM name} — a define that outlives the unit that set it
     (feature-p-defineglobal-a-define-that-crosses-unit-boundaries; the spelling
     was settled in decide-a-cross-unit-define-name-and-semantics, which retired

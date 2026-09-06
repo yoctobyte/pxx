@@ -13801,6 +13801,34 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pascal_define_unit_scope_order226 "$$($(TESTTMP)/test_pascal_define_unit_scope_order226)" "$$(printf 'ub does not see it\nua')"
 	./$(COMPILER) -Futest/units_claim test/test_pascal_claim_crosses_units.pas $(TESTTMP)/test_pascal_claim_crosses_units26
 	tools/expect_same.sh test_pascal_claim_crosses_units26 "$$($(TESTTMP)/test_pascal_claim_crosses_units26)" "$$(printf 'early: no claim yet\na: claimed\nb: stood down\nundef: claim survived\ninc: claim taken in an include\nlater: include claim crossed the boundary\nprogram: plain define stayed in the unit\nprogram: scanned before its units, no claim')"
+	@# bug-p-a-units-define-leaks-into-the-units-it-uses
+	@# The two rows above cover SIBLINGS -- ua and ub, both used by the program,
+	@# neither using the other. This one covers PARENT -> CHILD, which is the
+	@# direction that was broken: the save/restore around a used unit kept a
+	@# child's define from escaping upward and did nothing about the parent's
+	@# reaching down, so the child was compiled with whatever its caller had
+	@# defined. It does not error; it takes the other arm, so the used unit is
+	@# built with a different interface than fpc would build and the complaint
+	@# lands somewhere else. `uses` ORDER became semantically significant.
+	@# AND THE SECOND HALF IS THE WORSE ONE: {$PACKRECORDS 1} leaked identically,
+	@# so a used unit's `record a: Byte; b: LongInt` was FIVE bytes where fpc
+	@# builds eight. An ABI, in a unit that never asked, with no {$ifdef} in it.
+	@# FOUR DIRECTIONS, because a fix that CLEARS the table instead of saving and
+	@# restoring passes the obvious two: down (the bug), up (the reverse leak),
+	@# in (a command-line -d must still reach the child), and self (a unit's own
+	@# define and its own packing must survive its own `uses`).
+	@# -dCLIDEF is not decoration -- it is row 2, and without it the file cannot
+	@# tell a correct fix from one that empties the table.
+	@# THE ROOT SOURCE IS A DELIBERATE EXCEPTION and is NOT asserted here, because
+	@# it is the one place we differ from fpc on purpose: a MAIN program's defines
+	@# DO reach the units it uses, since pxx's RTL is configured that way
+	@# ({$undef PXX_MANAGED_STRING} on line 1 selects the frozen-string model and
+	@# compiler/builtin/*.pas reads it). test_frozen_string_reentrant.pas in the
+	@# QUICK tier is the positive control for that exception -- cutting the root
+	@# leak made it fail with `call to a runtime stub that was never emitted`
+	@# inside builtinheap.pas. Do not add a second control here.
+	./$(COMPILER) -dCLIDEF -Futest/units test/test_a_units_define_and_packing_do_not_reach_the_units_it_uses.pas $(TESTTMP)/test_defscope26
+	tools/expect_same.sh test_defscope26 "$$($(TESTTMP)/test_defscope26 | tail -n 2)" "$$(printf 'fails=0\nDEFSCOPE OK')"
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
 	# mistakes reports the first and hides three behind it, which is how a

@@ -2040,6 +2040,14 @@ begin
   if isNilPy then
     PasDefine('PXX_NILPY_STR');
 
+  { EVERY define that is GLOBAL to this compilation has now been seeded: -d,
+    PasApplyTargetDefines, and the frontend ones above. Freeze that as the
+    baseline each used unit is compiled from -- FPC scopes {$define} to the unit
+    that writes it and only `-d` crosses (see PasResetDefinesToBaseline).
+    HERE and not in PasInitDefines, which runs BEFORE option parsing, and not
+    later, because the next thing that happens is source being read. }
+  PasSnapshotDefineBaseline;
+
   { The MAIN input must EXIST. LoadFile answers "" for an unopenable path, which
     is indistinguishable from a genuinely empty file — and an empty NilPy source
     is a perfectly valid (empty) program, so `pxx typo.py out` reported `ok`,

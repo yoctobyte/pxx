@@ -309,6 +309,58 @@ begin
   Result := PasDefineInTable(name) or PasClaimed(name);
 end;
 
+{ Freeze the define table as the COMMAND-LINE BASELINE — see PasDefineBase* in
+  defs.inc. Called once by the driver after -d, the target defines and the
+  frontend defines have all been seeded, and before a single source byte is
+  read. }
+procedure PasSnapshotDefineBaseline;
+var i: Integer;
+begin
+  PasDefineBaseCount := PasDefineCount;
+  PasDefineBaseCharLen := PasDefineCharLen;
+  for i := 0 to MAX_PAS_DEFINES - 1 do
+  begin
+    PasDefineBaseActive[i] := PasDefineActive[i];
+    PasDefineBaseHasValue[i] := PasDefineHasValue[i];
+    PasDefineBaseValue[i] := PasDefineValue[i];
+  end;
+end;
+
+{ Put the define table back to that baseline, for a unit about to be compiled.
+
+  THE POINT IS THE RESET, NOT THE RESTORE. ParseUsesUnitBody already saved and
+  restored the caller's table around the used unit, so a child's {$define} did
+  not escape upward -- but the child was compiled with the PARENT's defines
+  still in force, and FPC scopes {$define} to the unit that writes it. The
+  observable is not an error: the child silently takes the other {$ifdef} arm,
+  so it is built with a different interface, a different field set or different
+  types than FPC would build, and whatever complains about that complains
+  somewhere else entirely. It also makes `uses` ORDER semantically significant,
+  which under FPC it is not.
+
+  Measured 2026-09-06, six lines: unit ua does {$define LEAKED} then uses ub,
+  whose body tests {$ifdef LEAKED}. fpc 3.2.2 -Mobjfpc printed `not-defined`,
+  pxx printed `LEAKED-IS-DEFINED`. Real code depends on the scoping --
+  fcl-passrc's pparser.pp defines UsePChar, UseAnsiStrings, HasStreams and
+  HasFS and then uses pscanner, which has its own arms of the same names
+  meaning different things.
+
+  NOT called for an {$I} include: an include DOES inherit the including unit's
+  ambient defines, which is the one direction top-down visibility is correct
+  for, and ExpandIncludes has its own save/restore for that. }
+procedure PasResetDefinesToBaseline;
+var i: Integer;
+begin
+  PasDefineCount := PasDefineBaseCount;
+  PasDefineCharLen := PasDefineBaseCharLen;
+  for i := 0 to MAX_PAS_DEFINES - 1 do
+  begin
+    PasDefineActive[i] := PasDefineBaseActive[i];
+    PasDefineHasValue[i] := PasDefineBaseHasValue[i];
+    PasDefineValue[i] := PasDefineBaseValue[i];
+  end;
+end;
+
 procedure PasDefine(const name: AnsiString);
 var i, j, len: Integer;
 begin

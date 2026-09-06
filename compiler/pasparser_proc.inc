@@ -4415,6 +4415,7 @@ var
   unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
   unitTnm: AnsiString;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
+  savedPackRecords, savedPackEnum: Integer;
   savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
@@ -5658,6 +5659,45 @@ begin
       savedPasDefineHasValue[pdi] := PasDefineHasValue[pdi];
       savedPasDefineValue[pdi] := PasDefineValue[pdi];
     end;
+    { ...and then RESET to the baseline, which is the half that was missing. The
+      save above kept a child's {$define} from escaping UPWARD; it did nothing
+      about the parent's reaching DOWN, and FPC scopes {$define} to the unit
+      that writes it. Measured: `{$define LEAKED}` in ua, tested by ub which ua
+      uses -- fpc printed `not-defined`, pxx printed `LEAKED-IS-DEFINED`.
+      bug-p-a-units-define-leaks-into-the-units-it-uses. Before the manifest
+      below, so a unit's own pxxlib.cfg still lands on top. {$CLAIM} survives
+      by construction: it is not a row in this table.
+
+      THE ROOT SOURCE IS A DELIBERATE EXCEPTION and it is not FPC's rule.
+      Descending from the MAIN program or main unit (CurrentUnitIdx < 0) folds
+      its defines into the baseline instead of discarding them, because pxx's
+      own RTL is CONFIGURED that way: `{$undef PXX_MANAGED_STRING}` on line 1 of
+      a program selects the frozen-string model, and compiler/builtin/*.pas --
+      units the compiler appends, that the user never wrote -- read it. Cutting
+      that turned test_frozen_string_reentrant.pas into `call to a runtime stub
+      that was never emitted` inside builtinheap.pas, which is what a
+      configuration define silently losing its effect looks like from the far
+      end. The defect this ticket is about is UNIT-to-unit, where `uses` ORDER
+      becomes semantically significant; the root is one source, its directives
+      are lexically ordered, and nothing about it is order-dependent. The
+      general cross-unit mechanism, for anyone who wants one, is {$CLAIM}. }
+    if savedCurrentUnitIdx < 0 then PasSnapshotDefineBaseline;
+    PasResetDefinesToBaseline;
+    { THE SAME LEAK, IN THE RECORD LAYOUT, and it is the worse half because it
+      is an ABI: `{$PACKRECORDS 1}` in ua made ub's `record a: Byte; b: LongInt`
+      five bytes where fpc builds eight, silently, in a unit that never asked.
+      Reset to the per-file defaults PasInitDefines sets rather than saved from
+      the caller, because that IS the rule -- a unit starts at the default and
+      its own directive applies to it alone. Same root exception as the defines
+      above, for the same reason and measured the same way. Restored below
+      beside the modes. }
+    savedPackRecords := PackRecordsVal;
+    savedPackEnum := PackEnumVal;
+    if savedCurrentUnitIdx >= 0 then
+    begin
+      PackRecordsVal := 8;
+      PackEnumVal := 4;
+    end;
 
     { …and the per-library MANIFEST goes on top of that snapshot: the nearest
       pxxlib.cfg at or above this unit's own directory supplies its defines,
@@ -5835,6 +5875,8 @@ begin
     CaseSensitiveMode := savedCaseMode;
     NestedComments := savedNestedComments;
     DelphiMode := savedDelphiMode;
+    PackRecordsVal := savedPackRecords;
+    PackEnumVal := savedPackEnum;
     PyExprMode := savedPyExprMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
     InUnitImpl := savedUnitImplCU;
