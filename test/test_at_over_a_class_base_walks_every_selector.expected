@@ -1,0 +1,15 @@
+ctl class 1 dot   FALSE
+ctl record 2 dots TRUE
+ctl record int    46
+ctl array elem    TRUE
+ctl array int     47
+class .R.M        44
+class .R.N        TRUE
+class .Sub.V      42
+class .Sub.R.M    43
+class .Arr[2].M   45
+class .Arr[2].N   TRUE
+store .Sub.R.M    91
+store .Arr[2].M   92
+store .R.N        FALSE
+AT SELECTOR WALK OK

@@ -940,6 +940,34 @@ begin
           ASTSLen[node] := Tokens[TokPos-1].SLen;
           ASTTk[node] := UFldTk[mmi];
           Next;   { consume field name }
+          { ...AND THE REST OF THE DESIGNATOR, which this arm used to leave in
+            the token stream. It consumed the object name, the dot and exactly
+            ONE identifier and then took the address of that, so `@o.R.N` --
+            a class instance, a record field, a field of THAT -- parsed as
+            `@o.R` and left `.N` for the statement parser, which reported
+            `a statement cannot start with '.'`. The error text depends on
+            what follows the truncated parse and not on the defect, which is
+            why the same cause reads as three unrelated bugs: `@o.R.Ev` gives
+            `expected 'then' before '.'` and `@o.Items[0].Ev` gives
+            `@obj.method: unknown method or field`, the latter because the
+            name after the dot is a PROPERTY and both FindUMeth and FindUField
+            miss it.
+
+            THE BOUNDARY SAYS IT IS THE CLASS BASE AND NOT THE SHAPE: `@r.Inner.N`
+            over a plain record and `@a[0].N` over an array element both
+            compiled throughout, because those go through ParseLValueAST, which
+            has always walked the whole chain. One opener of three.
+
+            ParseClassRecordSelectors is that walk -- fields, methods,
+            properties, default properties and `[` -- so this hands it the tail
+            rather than growing a sixth hand-rolled selector loop here.
+            refactor-p-three-hand-rolled-postfix-loops
+            bug-p-at-over-a-class-base-consumes-only-one-selector }
+          if CurTok.Kind in [tkDot, tkLBrack] then
+          begin
+            tk := IntToTypeKind(ASTTk[node]);
+            node := ParseClassRecordSelectors(node, ResolveNodeRec(node), tk);
+          end;
           valNode := AllocNode(AN_ADDR);
           ASTLeft[valNode] := node;
           ASTTk[valNode] := Ord(tyPointer);
