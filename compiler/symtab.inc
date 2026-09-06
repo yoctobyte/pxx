@@ -16090,6 +16090,15 @@ function DerefPtrArrayNDInfo(node: Integer): Boolean;
 var dpnSi, dpnAi, dpnD, dpnBase: Integer;
 begin
   Result := False;
+  { The element triple is cleared HERE and not at each arm's exit, because a
+    False return must leave no stale element behind either: NodeArrNDInfo asks
+    this arm FIRST and falls through to its own two when it declines, and a
+    reader that trusted a leftover NDInfoElemSize from a previous node would
+    get a plausible wrong stride. Cleared, never defaulted -- 0 means NOT
+    KNOWN, and TypeStorageSize(tyUnknown, REC_NONE) would have said 4. }
+  NDInfoElemTk := Ord(tyUnknown);
+  NDInfoElemRec := REC_NONE;
+  NDInfoElemSize := 0;
   dpnSi := DerefPtrArraySym(node);
   if dpnSi >= 0 then
   begin
@@ -16101,6 +16110,9 @@ begin
       NDInfoLo[dpnD] := SymArrDimLo[dpnBase + dpnD];
       NDInfoSpan[dpnD] := SymArrDimSpan[dpnBase + dpnD];
     end;
+    NDInfoElemTk := Ord(Syms[dpnSi].PtrElemTk);
+    NDInfoElemRec := Syms[dpnSi].PtrElemRec;
+    NDInfoElemSize := TypeStorageSize(Syms[dpnSi].PtrElemTk, Syms[dpnSi].PtrElemRec);
     Result := True;
     Exit;
   end;
@@ -16115,6 +16127,9 @@ begin
     NDInfoLo[dpnD] := ArrTypeDimLo[dpnBase + dpnD];
     NDInfoSpan[dpnD] := ArrTypeDimSpan[dpnBase + dpnD];
   end;
+  NDInfoElemTk := ArrTypeElemTk[dpnAi];
+  NDInfoElemRec := ArrTypeElemRec[dpnAi];
+  NDInfoElemSize := TypeStorageSize(IntToTypeKind(ArrTypeElemTk[dpnAi]), ArrTypeElemRec[dpnAi]);
   Result := True;
 end;
 

@@ -713,6 +713,13 @@ begin
     base := sym * MAX_ARR_DIMS;
     for d := 0 to NDInfoNDims - 1 do
     begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
+    { The element, where the symbol is already in hand. Every caller that
+      needed it used to re-open the spelling question one line after this
+      function answered it -- see the NDInfoElem* declarations for the three C
+      bugs that were all a missing FIELD half of that second switch. }
+    NDInfoElemTk := Ord(Syms[sym].ElemType);
+    NDInfoElemRec := Syms[sym].ElemRecName;
+    NDInfoElemSize := TypeStorageSize(Syms[sym].ElemType, Syms[sym].ElemRecName);
     Result := True;
   end
   else if ASTKind[node] = AN_FIELD then
@@ -728,6 +735,13 @@ begin
         base := fIdx * MAX_ARR_DIMS;
         for d := 0 to NDInfoNDims - 1 do
         begin NDInfoLo[d] := UFldArrDimLo[base + d]; NDInfoSpan[d] := UFldArrDimSpan[base + d]; end;
+        { ...and the FIELD half, which is the one that was missing at every
+          caller's own second switch. Asked through RecFieldType/RecFieldRecId,
+          the same pair the field spelling is asked everywhere else. }
+        NDInfoElemTk := Ord(RecFieldType(baseRec, fname));
+        NDInfoElemRec := RecFieldRecId(baseRec, fname);
+        NDInfoElemSize := TypeStorageSize(RecFieldType(baseRec, fname),
+                                          RecFieldRecId(baseRec, fname));
         Result := True;
       end;
     end;
@@ -753,7 +767,7 @@ end;
   bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
 function NDRowSourceInfo(node: Integer; var rowCount: Integer;
                          var rowElemTk: TTypeKind; var rowElemRec: Integer): Boolean;
-var nrBase, nrSym, d, nrStrCap, nrTk, nrRec: Integer; nrFld: AnsiString;
+var nrBase, d: Integer;
 begin
   Result := False;
   rowCount := 0; rowElemTk := tyUnknown; rowElemRec := REC_NONE;
@@ -767,29 +781,22 @@ begin
   rowCount := 1;
   for d := ASTNDRowSubs[node] to NDInfoNDims - 1 do rowCount := rowCount * NDInfoSpan[d];
   if rowCount <= 0 then begin rowCount := 0; Exit; end;
-  if ASTKind[nrBase] = AN_IDENT then
-  begin
-    nrSym := ASTIVal[nrBase];
-    if (nrSym < 0) or (nrSym >= SymCount) then begin rowCount := 0; Exit; end;
-    rowElemTk := Syms[nrSym].ElemType;
-    rowElemRec := Syms[nrSym].ElemRecName;
-  end
-  else if ASTKind[nrBase] = AN_FIELD then
-  begin
-    nrFld := GetASTIdentName(nrBase);
-    nrRec := ResolveNodeRec(ASTLeft[nrBase]);
-    rowElemTk := RecFieldType(nrRec, nrFld);
-    rowElemRec := RecFieldRecId(nrRec, nrFld);
-  end
-  else if ASTKind[nrBase] = AN_DEREF then
-  begin
-    if not DerefPtrArrayElem(nrBase, nrTk, nrRec, nrStrCap) then
-      begin rowCount := 0; Exit; end;
-    rowElemTk := IntToTypeKind(nrTk);
-    rowElemRec := nrRec;
-  end
-  else
-    begin rowCount := 0; Exit; end;
+  { THE SECOND SWITCH IS GONE. This used to re-open the ident / field / deref
+    spelling question one line after NodeArrNDInfo had answered it -- the same
+    duplication Track C's CNodeArrayShape was made of, and the same one whose
+    missing FIELD half was three shipped C bugs. NodeArrNDInfo now publishes
+    the element beside the spans, filled in whichever of its four arms
+    matched, so the answer comes from the arm that actually resolved the array
+    rather than from a second guess about the node's shape.
+    THE TEST IS ON tyUnknown AND NOT ON THE NODE KIND, which is the point: a
+    node shape this function has never heard of cannot reach here at all --
+    NodeArrNDInfo returned True, so one of its arms matched -- and a future
+    arm that resolves an array without being able to name its element says so
+    in the column instead of falling into an `else` nobody updated.
+    refactor-p-nodearrndinfo-yields-spans-but-not-the-element }
+  if NDInfoElemTk = Ord(tyUnknown) then begin rowCount := 0; Exit; end;
+  rowElemTk := IntToTypeKind(NDInfoElemTk);
+  rowElemRec := NDInfoElemRec;
   Result := True;
 end;
 

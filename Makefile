@@ -5760,6 +5760,21 @@ test-core: $(COMPILER)
 	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32 riscv32; do \
 	    ./$(COMPILER) --target=$$arch test/test_nd_subarray_as_param.pas $(TESTTMP)/test_ndsub_$$arch >/dev/null; \
+	@# ...and the same row through EVERY BASE SPELLING, which is the regression
+	@# guard on deleting NDRowSourceInfo's second switch. NodeArrNDInfo resolves
+	@# an array through four arms and used to publish the spans and nothing else,
+	@# so every caller that needed the ELEMENT re-opened the spelling question one
+	@# line after the function answered it. Track C's CNodeArrayShape was literally
+	@# that second switch run again, and three shipped C bugs were all its missing
+	@# FIELD half. The element is published beside the spans now.
+	@# ABLATION, RECORDED IN THE FILE: setting the field arm's NDInfoElemTk to
+	@# tyUnknown breaks row 3, so that column is guarded here. Setting the field
+	@# arm's NDInfoElemRec to REC_NONE changes nothing on any row, INCLUDING the
+	@# record-element ones -- so this file does NOT cover NDInfoElemRec and says
+	@# so rather than inferring coverage from the presence of records.
+	@# refactor-p-nodearrndinfo-yields-spans-but-not-the-element
+	./$(COMPILER) test/test_a_partial_nd_row_reaches_a_copying_parameter_through_every_base_spelling.pas $(TESTTMP)/test_ndrowbases26
+	tools/expect_same.sh test_ndrowbases26 "$$($(TESTTMP)/test_ndrowbases26 | tail -n 2)" "$$(printf 'fails=0\nNDROWBASES OK')"
 	    tools/expect_same.sh $$arch/test_ndsub_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_ndsub_$$arch)" "ND SUBARRAY OK" \
 	      || { echo "cross N-D sub-array param FAIL on $$arch"; exit 1; }; \
 	  done; echo "cross N-D sub-array param ok: i386 aarch64 arm32 riscv32"; \

@@ -6651,6 +6651,38 @@ var
   NDInfoNDims : Integer;
   NDInfoLo    : array[0..MAX_ARR_DIMS-1] of Integer;
   NDInfoSpan  : array[0..MAX_ARR_DIMS-1] of Integer;
+  { ...and WHAT AN ELEMENT IS, which the spans alone never said. The function
+    resolves the array through four arms -- ident, record field, and the two
+    halves of a deref (the pointer SYMBOL, and the pointee's ArrType row) --
+    and every caller that needed the element re-opened that same spelling
+    question immediately afterwards, with its own AN_IDENT/AN_FIELD pair.
+    Track C's CNodeArrayShape was literally that: a wrapper whose whole body
+    was the second switch, run again. THREE SHIPPED C BUGS WERE ALL A MISSING
+    FIELD HALF OF THAT SECOND SWITCH -- a struct field's partial index using
+    the outer row stride, a multi-dim array field decaying with the element
+    stride, and sizeof of a partial index answering the element rather than the
+    row. One switch, filled where the symbol is already in hand.
+    NDInfoElemSize IS 0 WHEN UNKNOWN AND THE ZERO IS LOAD-BEARING: the natural
+    thing to write is TypeStorageSize(tyUnknown, REC_NONE), which is 4 -- the
+    same 4 as sizeof(LongInt), so a caller could not tell a real answer from a
+    blank one. Callers must test it. Same reason NDInfoElemRec starts REC_NONE
+    rather than 0.
+    refactor-p-nodearrndinfo-yields-spans-but-not-the-element }
+  NDInfoElemTk   : Integer;   { TTypeKind ord of the element; Ord(tyUnknown) when the arm cannot say }
+  NDInfoElemRec  : Integer;   { the element's record/class id, REC_NONE when it is not one }
+  NDInfoElemSize : Integer;   { the element's storage size in bytes; 0 = NOT KNOWN, never a default }
+  { THE FROZEN-STRING CAPACITY IS DELIBERATELY NOT A FOURTH COLUMN HERE, and
+    the reason is this group's own subject. Two of the four arms can fill it
+    (SymPtrElemStrCap on the pointer symbol, ArrTypeElemStrCap on the ArrType
+    row) and two cannot: a plain array symbol and a record array field record
+    their OWN cap (SymStrCap, RecFieldStrCap) and no column anywhere holds
+    their ELEMENT's. A column two arms fill and two leave at zero is a
+    PARTIALLY CONSULTED RECORD -- the exact shape whose staleness is
+    indistinguishable from a defect in a neighbouring subsystem, and the one
+    an absence-hunting grep cannot find, because every reader compiles and the
+    two filled arms make the two blank ones look like arrays of plain strings.
+    Add the two missing columns first, or ask DerefPtrArrayElem, which is
+    honest about serving only the deref spelling. }
   NDIdxNode   : array[0..MAX_ARR_DIMS-1] of Integer; { parsed index exprs for a multidim ref }
 
   CurSelfClass : Integer;

@@ -4,8 +4,8 @@ prio: 25
 type: refactor
 blocked-by: []
 summary: "NodeArrNDInfo returns False for a rank-1 array — every arm tests `>= 2`. Correct for its original caller (multi-subscript lowering, where rank 1 has no comma chain), but it makes the function unusable as the general 'what shape is this array' reader that three frontends now want. Not a Pascal defect: no Pascal program behaves wrong today."
-status: backlog
-owner: unassigned
+status: working
+owner: frankB
 ---
 
 # NodeArrNDInfo answers nothing for a rank-1 array
