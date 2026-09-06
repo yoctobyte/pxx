@@ -1,0 +1,8 @@
+enum  same=TRUE
+dyn   same=TRUE
+rec   same=TRUE
+alias same=TRUE
+int   kind=1
+dyn   kind=21 rec kind=13
+enumname=eB
+enumname=eC

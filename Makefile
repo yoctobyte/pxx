@@ -6265,6 +6265,30 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_a_dynamic_array_concatenates_with_an_element_list \
 	  "$$($(TESTTMP)/test_dynconcat26)" \
 	  "$$(cat test/test_a_dynamic_array_concatenates_with_an_element_list.expected)"
+	# A named SUBRANGE type is a type NAME, and three doors that take a type name
+	# had never been told subranges exist: `for x in T`, `T.member`, and
+	# TypeInfo(T) feeding GetEnumName. Low/High was the fourth door and was fixed
+	# first, so the for-in builder reads the SAME AliasIsSub/SubLo/SubHi columns
+	# rather than growing a second source for a subrange's bounds. No bound in
+	# the fixture is 0..N-1: the builder is shared with the enum spelling, whose
+	# range IS 0..Count-1, so ignoring the subrange bounds would print a
+	# plausible ascending run -- `IntRange = 3..7` sums to 25 against 28 and 10.
+	# The GetEnumName row SEGFAULTED before the fix rather than printing wrongly.
+	./$(COMPILER) test/test_a_named_subrange_type_is_a_type_name_in_expressions.pas $(TESTTMP)/test_subrangename26
+	tools/expect_same.sh test_a_named_subrange_type_is_a_type_name_in_expressions \
+	  "$$($(TESTTMP)/test_subrangename26)" \
+	  "$$(cat test/test_a_named_subrange_type_is_a_type_name_in_expressions.expected)"
+	# TypeInfo(<variable>), which fpc takes as readily as a type name and which
+	# is the spelling real RTTI code writes. Every shape was refused, an enum
+	# variable included. The rows assert POINTER IDENTITY against the type
+	# spelling -- that IS the claim -- and deliberately do NOT assert
+	# Ord(TypeInfo(TEnum)^.Kind), which is 3 under fpc and an address here for a
+	# PRE-EXISTING reason this change does not touch (an enum resolves to the
+	# enum's own RTTI blob, everything else to a TTypeInfo header).
+	./$(COMPILER) test/test_typeinfo_of_a_variable_answers_its_own_type.pas $(TESTTMP)/test_typeinfovar26
+	tools/expect_same.sh test_typeinfo_of_a_variable_answers_its_own_type \
+	  "$$($(TESTTMP)/test_typeinfovar26)" \
+	  "$$(cat test/test_typeinfo_of_a_variable_answers_its_own_type.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow

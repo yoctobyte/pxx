@@ -809,6 +809,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
     tiArr: Integer;     { …and the ArrType row when it is a NAMED array type }
+    tiSym: Integer;     { …and the SYMBOL row when the name is a VARIABLE, not a type at all — TypeInfo(c) }
+    seAi: Integer;      { `TSubOfEnum.member`: the subrange alias row whose base enum owns the members }
     elemTk: TTypeKind; elemRec: Integer;   { pointee of the node a `^` is applied to }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
     arrCast: Boolean;       { this named-type cast targets an ARRAY type: take the
@@ -3305,6 +3307,24 @@ begin
          (FindSym(name) < 0) then
       begin
         seEtid := FindEnumType(name);
+        { …and through a named SUBRANGE OF AN ENUM: `TRange1 = first..second`
+          then `TRange1.second`. The members belong to the BASE enum, so the
+          subrange name has to resolve to that enum's id -- AliasSemId carries
+          it (stored +1, 0 = none) and is written by the same RegisterGeneralAlias
+          that retains AliasSubLo/Hi, so a subrange of an enum has both.
+          Resolve-then-fall-through, deliberately NOT a second member-lookup arm:
+          the ordinal, the node shape and the diagnostic all stay in the one
+          place, which is what keeps `TEnum.m` and `TSubOfEnum.m` from drifting
+          (the same shape Low/High uses one file over). No range check against
+          AliasSubLo/Hi: an out-of-range member is a program that is already
+          wrong, and CLAUDE.md's "ask what the source MEANT" says fpc's answer
+          there is not a specification -- so no row asserts it. tenum3 }
+        if seEtid < 0 then
+        begin
+          seAi := FindTypeAlias(name);
+          if (seAi >= 0) and AliasIsSub[seAi] and (AliasSemId[seAi] <> 0) then
+            seEtid := AliasSemId[seAi] - 1;
+        end;
         if (seEtid >= 0) and
            FindEnumMemberOrd(seEtid, GetTokenStr(TokPos+1), seOrd) then
         begin
@@ -4438,6 +4458,91 @@ begin
                 did; this only turns an error into an answer. }
               if tiTk = tyUnknown then tiArr := FindArrayType(tiName);
               if (tiTk = tyUnknown) and (tiArr < 0) then tiAlias := FindTypeAlias(tiName);
+              { A named SUBRANGE OF AN ENUM answers its BASE ENUM's RTTI, not the
+                alias's. TypeInfo does not return one shape of pointer here: an
+                enum resolves down the legacy path to the enum's own RTTI blob,
+                which is what GetEnumName reads, while every other type gets a
+                TTypeInfo header. So handing GetEnumName the alias blob for
+                `TRange1 = first..second` did not answer wrongly -- it SEGFAULTED,
+                because the reader walked an enum's member table over a subrange's
+                typedata (measured: `GetEnumName(TypeInfo(TRange1), 2)` crashed,
+                fpc prints `second`).
+                MEASURED LIMIT, so nobody reads more into this than it does: the
+                base enum's info is not NARROWED -- fpc reports MinValue/MaxValue
+                clipped to first..second and this reports the full enum's. The
+                member NAMES, which is what GetEnumName and every caller in the
+                corpus ask for, are identical either way, and there is no channel
+                carrying a narrowed range into the legacy enum blob. Widen it the
+                day a row asserts the bounds. tenum3 }
+              if (tiAlias >= 0) and AliasIsSub[tiAlias] and (AliasSemId[tiAlias] <> 0) then
+              begin
+                i := AliasSemId[tiAlias] - 1;
+                tiAlias := -1;
+              end;
+            end;
+          end;
+          { TypeInfo(<VARIABLE>). FPC's TypeInfo takes a variable as readily as a
+            type name, and `GetEnumName(TypeInfo(c), Ord(c))` is the spelling real
+            code writes -- it is how tforin1 and every RTTI-over-a-value idiom is
+            written. Everything above resolves NAMES OF TYPES, so a variable
+            reached none of them and got `TypeInfo is not supported for type: c`
+            for EVERY shape, an enum variable included.
+
+            Resolved from the SYMBOL'S OWN CHANNELS, never from a spelling: a
+            variable does not reliably remember the name it was declared through
+            (SymDeclTypeNOff is written at ONE site and only for `x: TName;`
+            terminated by ; / begin / end, so `x: TName = v` and every parameter
+            leave it 0) -- a name-based route would work for the cases someone
+            tested and silently refuse its neighbours. The channels below are
+            written at every declaration site and each one says WHOSE identity it
+            carries, which is the discipline defs.inc's SemId note demands.
+
+            LAST, not first, so a TYPE whose name a variable shadows keeps
+            resolving as the type exactly as it did before this arm existed;
+            this can only turn an error into an answer.
+
+            An ARRAY variable deliberately falls through to the refusal below.
+            RTTI for an array is keyed by an ArrType ROW, and a variable declared
+            `arr: array of LongInt` has no row -- its shape lives on the symbol
+            (SymDynDepth/ElemType). Minting a row here would be a SECOND way to
+            create an array type, at expression-parse time; the refusal names
+            what is missing instead. tarray13 is the row that wants it. }
+          if (i < 0) and (ci < 0) and (tiTk = tyUnknown) and
+             (tiArr < 0) and (tiAlias < 0) then
+          begin
+            tiSym := FindSym(tiName);
+            if tiSym >= 0 then
+            begin
+              if Syms[tiSym].IsArray then
+              begin
+                { An array variable is the one shape whose type is not on the
+                  symbol: RTTI for an array is keyed by an ArrType ROW. When the
+                  variable WAS declared through a named array type the row
+                  exists and only the link is missing, so recover the name from
+                  SymDeclTypeNOff -- the one channel that stores it -- and ask
+                  the same table the type-name path asks. This is a supplement,
+                  not the route: that column is written at ONE site and only for
+                  `a: TName;` terminated by ; / begin / end, which is why it can
+                  answer here and could not be the general mechanism above. }
+                if SymDeclTypeNOff[tiSym] <> 0 then
+                  tiArr := FindArrayType(TokSliceStr(SymDeclTypeNOff[tiSym],
+                                                     SymDeclTypeNLen[tiSym]));
+                if tiArr < 0 then
+                  Error('TypeInfo(' + tiName + '): the RTTI for an array is keyed by a '
+                      + 'named array TYPE, and this variable''s array type has no name -- '
+                      + 'declare `type T = ...` and ask TypeInfo(T)');
+              end
+              { An enum is tyInteger PLUS an id, so the identity is the only thing
+                that separates `c: TColor` from a plain Integer. SymSemId is THIS
+                VALUE's identity and >= 0 means enum, per its own contract. }
+              else if SymSemId[tiSym] >= 0 then i := SymSemId[tiSym]
+              else if Syms[tiSym].RecName >= REC_UCLASS_BASE then
+                ci := Syms[tiSym].RecName - REC_UCLASS_BASE
+              { Declared through a named alias: answer about the NAME the program
+                wrote, not the kind underneath, so `type TMyB = Byte` reports
+                TMyB. Same reason Low/High resolve the alias row first. }
+              else if SymAliasIdx[tiSym] >= 0 then tiAlias := SymAliasIdx[tiSym]
+              else tiTk := Syms[tiSym].TypeKind;
             end;
           end;
         end

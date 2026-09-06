@@ -1,0 +1,7 @@
+intrange: 3 4 5 6 7  sum=25
+letters: c d e f
+enumsub: 1 2  count=2
+scoped=2
+scoped=1
+name2=second
+name1=first

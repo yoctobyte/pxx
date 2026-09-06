@@ -1736,24 +1736,38 @@ end;
   The advance is at the TOP and driven by a hidden counter — see the comment on
   the body below, and BuildForInArrayLoop, which has the identical shape for the
   identical reason (Continue). }
-function ParseForInEnumTypeAST(varIdx, etid: Integer): Integer;
+{ `for x in <ordinal type name>` -- the ONE loop builder behind both spellings
+  the language has for "iterate a type's whole range": a named ENUM type, whose
+  range is 0..Count-1, and a named SUBRANGE type (`IntRange = 0..9`,
+  `TRange1 = first..second`), whose range is its own declared bounds.
+
+  It takes lo/hi rather than an enum id because the two are the SAME question,
+  and Low/High already answered it that way: pasparser_lval.inc's bound folder
+  consults AliasIsSub first and the enum identity second, out of one arm. Before
+  that fix `for i := Low(T) to High(T)` over a named subrange ran four billion
+  times; `for i in T` is the identical question through a different door, and a
+  second builder here is how the two doors would drift
+  (devdocs/dev/normalise-dont-special-case.md). }
+function ParseForInOrdRangeAST(varIdx: Integer; lo, hi: Int64;
+                               baseTk: TTypeKind): Integer;
 var
   bodyNode, initN, condN, incN, whileN, innerSeq, idxSym, assignE: Integer;
-  cnt, vtk: Integer;
+  vtk: Integer;
 begin
   { Inline `for var x in TEnum`: enums are ordinal/integer-sized (no distinct
     tyEnum), so backfilling x's type is just tyInteger, mirroring the
     resolution ParseTypeKind already uses for a named enum type
-    (feature-inline-loop-var-rio). }
+    (feature-inline-loop-var-rio). A subrange passes its BASE kind instead, so
+    `for var c in TLetter` where `TLetter = 'a'..'e'` backfills tyChar and not
+    tyInteger -- the enum caller passes tyInteger and is unchanged. }
   if Syms[varIdx].TypeKind = tyAuto then
   begin
-    Syms[varIdx].TypeKind := tyInteger;
+    Syms[varIdx].TypeKind := baseTk;
     SymSyncTypeRef(varIdx);
   end;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
-  cnt := EnumTypeValCount[etid];
   vtk := Ord(Syms[varIdx].TypeKind);
   { Same shape as BuildForInArrayLoop, and for the same reason: advance at the
     TOP so `Continue` — whose target is AN_WHILE's condition test — cannot skip
@@ -1766,9 +1780,9 @@ begin
     of one past the end, which is the more defensible of the two.
     bug-a-continue-in-a-for-in-loop-never-advances }
   idxSym := AllocVar('', tyInteger);
-  initN := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(-1));
+  initN := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(lo - 1));
   condN := GenMakeBinop(tkLt, GenMakeIdent(idxSym, tyInteger),
-                        GenMakeIntLit(cnt - 1), tyBoolean);
+                        GenMakeIntLit(hi), tyBoolean);
   incN := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
     GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger),
                  GenMakeIntLit(1), tyInteger));
@@ -2892,6 +2906,7 @@ var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
   pair1, pair2, pair3, isDownNode: Integer;
   gpi, fsym: Integer;
+  faIdx: Integer;   { `for x in <named subrange type>`: that alias row, else -1 }
   selfClassCi, fldIdx, fldTokIdx, selfSym: Integer;
   srcIdx, srcTokIdx: Integer;
   down, inlineVar: Boolean;
@@ -3073,7 +3088,24 @@ begin
       if EnumTypeHasHoles[fsym] then
         Error('for-in: the enum has non-contiguous values (explicit ordinals) — iteration order is undefined');
       Next;
-      Result := ParseForInEnumTypeAST(varIdx, fsym);
+      Result := ParseForInOrdRangeAST(varIdx, 0, EnumTypeValCount[fsym] - 1, tyInteger);
+      Exit;
+    end;
+    { …and a named SUBRANGE type name → iterate ITS bounds. `IntRange = 0..9`,
+      `TLetter = 'a'..'e'`, `TRange1 = first..second` -- FPC's native for-in
+      tier takes any ordinal TYPE, and a subrange is one. Reached only when the
+      name is not also a variable: `for x in v` where `v` happens to share a
+      type's name must stay the container path, which is the same guard the
+      enum arm above relies on by FindEnumType answering about types only.
+      The bounds are read from the columns Low/High already reads, so the two
+      cannot disagree about the same type (bug-a-low-high-of-a-named-subrange-
+      answer-the-base-type). tforin1 }
+    faIdx := FindTypeAlias(CurTok.SVal);
+    if (faIdx >= 0) and AliasIsSub[faIdx] and (FindSym(CurTok.SVal) < 0) then
+    begin
+      Next;
+      Result := ParseForInOrdRangeAST(varIdx, AliasSubLo[faIdx], AliasSubHi[faIdx],
+                                      IntToTypeKind(AliasTk[faIdx]));
       Exit;
     end;
     { iterable variable (string / array / dynarray / open-array param).

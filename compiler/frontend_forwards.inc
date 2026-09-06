@@ -20,6 +20,15 @@ procedure LoadFileCI(const path: AnsiString; var dst: AnsiString); forward;
   the one permanent note on a clean forwardlint tree.
   bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed }
 function LowerCase(const s: AnsiString): AnsiString; forward;
+function TokSliceStr(off, len: Integer): AnsiString; forward;
+{ Real body in rtti_emit.inc, beside the RTTI emitters that are its other
+  callers -- it builds a string from a name slice in TokChars, which is where
+  every identifier the lexer saw already lives, so it belongs with the one
+  reader that walks those slices in bulk rather than being copied toward the
+  parser. pasparser_expr.inc's TypeInfo(<variable>) arm asks it for a symbol's
+  declared type name (SymDeclTypeNOff/NLen). Caught by gate.sh quick's FPC SEED
+  CANARY and by nothing else: pxx prescans headers so the self-host build and
+  --tier quick both passed, while FPC is single-pass and had not seen it. }
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
 procedure NormalizePath(var p: AnsiString); forward;
