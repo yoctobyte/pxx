@@ -84,7 +84,7 @@ procedure ParseSetElemSpec;
 var elemTk: TTypeKind;
     elemLo, elemHi: Int64;
 begin
-  LastTypeEnumId := -1;
+  LastTypeSemId := -1;
   elemLo := 0; elemHi := -1;   { Hi < Lo = the element is not a subrange }
   if CurTok.Kind = tkInteger then
   begin
@@ -129,9 +129,9 @@ begin
       elemHi := LastTypeSubHi;
     end;
   end;
-  { the element parse records the enum identity in LastTypeEnumId; carry it
+  { the element parse records the enum identity in LastTypeSemId; carry it
     as the set's element enum for RTTI. }
-  LastTypeSetEnumId := LastTypeEnumId;
+  LastTypeSetEnumId := LastTypeSemId;
   LastTypeSetElemTk := Ord(elemTk);
   LastTypeSetElemLo := elemLo;
   LastTypeSetElemHi := elemHi;
@@ -195,7 +195,7 @@ begin
 end;
 
 { The TTypeKind an enum's values travel in -- its WIDTH, with the identity
-  carried beside it in SymEnumId as it always was. Enums were unconditionally
+  carried beside it in SymSemId as it always was. Enums were unconditionally
   tyInteger, and the same one-line comment sat on both arms that said so; this
   is that decision in one place now that the answer can differ per type.
   A packed enum is UNSIGNED where it can be: an enum's ordinals are
@@ -228,7 +228,7 @@ end;
   Seven sites used to ask `tk = tyInteger` for this, which was exact while every
   enum was integer-sized and became wrong the moment {$PACKENUM} narrowed one.
   The kind half is NOT redundant with `etid >= 0` and must not simply be
-  dropped: `set of TCol` leaves LastTypeEnumId holding the ELEMENT's id, so the
+  dropped: `set of TCol` leaves LastTypeSemId holding the ELEMENT's id, so the
   kind test is the only thing stopping a set from inheriting a member name and
   printing `cRed` for a bitset.
 
@@ -240,6 +240,28 @@ end;
 function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean;
 begin
   Result := (etid >= 0) and (tk = EnumStorageTypeKind(etid));
+end;
+
+{ The same test, generalised to every SEMANTIC IDENTITY family: is the type
+  just declared actually the one `sem` names, or is `sem` merely the window
+  channel's leftover from something NEARBY?
+
+  This is the obligation the identity design is under, in one function. A bare
+  "is there an identity" read hands `set of TCol` its ELEMENT's member names,
+  because parsing the element is what filled the channel -- and the kind test
+  is the only thing that stops it, exactly as EnumKindMatches's header says.
+  Every family has to answer it, so every family answers it HERE rather than at
+  the carry sites, where the copies would drift.
+
+  Delegating per family rather than enumerating kinds, for the reason
+  EnumKindMatches gives: a list of kinds is right today and rots at the next
+  width. The boolean arm asks BoolStorageTypeKind, which is the one place the
+  three widths map to kinds, so there is no second table.
+  decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+function SemKindMatches(tk: TTypeKind; sem: Integer): Boolean;
+begin
+  if SemIsBool(sem) then Result := tk = BoolStorageTypeKind(SemBoolWidth(sem))
+  else Result := EnumKindMatches(tk, SemEnumOf(sem));
 end;
 
 procedure ParseEnumMembers(etid: Integer);
@@ -292,7 +314,7 @@ begin
         plain Integer const -- so it arrived at an assignment carrying nothing but
         its ordinal, and `aColor := banana` silently stored TFruit's 1 as green
         (tenum4). Tag the const with its enum so the identity survives the lookup. }
-      SymEnumId[AddConst(enumNm, tyInteger, ordinal)] := etid;
+      SymSemId[AddConst(enumNm, tyInteger, ordinal)] := etid;
     Inc(ordinal);
     if not Eat(tkComma) then done := True;
   end;
@@ -402,7 +424,7 @@ begin
       mon:` resolves its members through it, and it is the pair an enum-valued
       expression already carries (tyInteger PLUS an id) -- the same convention
       the array-index arm records in LastArrIdxEnumId. }
-    LastTypeEnumId := eidLo;
+    LastTypeSemId := eidLo;
     Result := tyInteger;
   end
   else if tkLo = tyChar then Result := tyChar
@@ -621,7 +643,7 @@ begin
   LastTypePointerBaseTk := Ord(tyUnknown);
   LastTypePointerBaseRec := REC_NONE;
   LastTypeProcSig := -1;
-  LastTypeEnumId := -1;
+  LastTypeSemId := -1;
   LastTypeStrCap := 0;
   LastTypeFileRecSize := 0;
   LastTypeFileElemTk := 0;
@@ -650,10 +672,10 @@ begin
         the record-field walker and every consumer see no difference.
         Scoping is off by definition -- {$SCOPEDENUMS} makes members reachable
         only as `TName.member`, and there is no TName here. }
-      LastTypeEnumId := RegisterEnumType(0, 0);
-      EnumTypeScoped[LastTypeEnumId] := False;
-      ParseEnumMembers(LastTypeEnumId);
-      Result := EnumStorageTypeKind(LastTypeEnumId);   { width per {$PACKENUM} }
+      LastTypeSemId := RegisterEnumType(0, 0);
+      EnumTypeScoped[LastTypeSemId] := False;
+      ParseEnumMembers(LastTypeSemId);
+      Result := EnumStorageTypeKind(LastTypeSemId);   { width per {$PACKENUM} }
       Exit;
     end;
     tkInteger, tkMinus, tkString:
@@ -1085,6 +1107,14 @@ begin
       else if (not tnUserDecl) and (BuiltinScalarTypeKind(lo) <> tyUnknown) then
       begin
         Result := BuiltinScalarTypeKind(lo);
+        { …and the MEANING the kind cannot hold, from the shadow table. The
+          sized booleans are the only names that answer; every other one leaves
+          the channel at the SEM_NONE ParseTypeKind reset it to.
+          A side effect on the CALLER's arm for the same reason the widestring
+          alias break below is one: the table itself must stay pure, because it
+          has speculative callers that ask it only whether a token names a type.
+          decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+        LastTypeSemId := BuiltinScalarSemId(lo);
         { THE ALIAS BREAK. WideString/UnicodeString keep the same KIND as
           AnsiString -- that is Option B: one managed-string kind carrying an
           element WIDTH, rather than a second kind -- and differ from it only
@@ -1358,7 +1388,7 @@ begin
               if AliasTk[aliasIdx] = Ord(tySet) then
               begin
                 { Named set type: element enum kept in AliasElemTk but not
-                  exposed as LastTypeEnumId, so the property kind stays SET.
+                  exposed as LastTypeSemId, so the property kind stays SET.
                   Expose it as LastTypeSetEnumId for RTTI typeRef. }
                 LastTypeSetEnumId := AliasElemTk[aliasIdx];
                 LastTypeSetElemTk := AliasSetElemTk[aliasIdx];
@@ -1418,11 +1448,11 @@ begin
                 if AliasStrElemTk[aliasIdx] <> 0 then
                   LastTypeStrElemTk := IntToTypeKind(AliasStrElemTk[aliasIdx]);
                 { …and an ENUM alias hands back its IDENTITY, so the decl site
-                  stamps SymEnumId and WriteLn prints the member name rather
+                  stamps SymSemId and WriteLn prints the member name rather
                   than the ordinal. Sixth in this list; see RegisterGeneralAlias
                   for why it is stored +1. }
                 if AliasEnumId[aliasIdx] <> 0 then
-                  LastTypeEnumId := AliasEnumId[aliasIdx] - 1;
+                  LastTypeSemId := AliasEnumId[aliasIdx] - 1;
                 if AliasIsSub[aliasIdx] then
                 begin
                   { named subrange: hand the retained bounds to Alloc* for
@@ -1436,8 +1466,8 @@ begin
             end
             else
             begin
-              LastTypeEnumId := FindEnumType(lo);
-              if (LastTypeEnumId < 0) and CaseEqual(lo, 'tclass') then
+              LastTypeSemId := FindEnumType(lo);
+              if (LastTypeSemId < 0) and CaseEqual(lo, 'tclass') then
               begin
                 { TClass — a class REFERENCE (metaclass). It was never recognised, so it
                   fell through to tyInteger: `var c: TClass` was a 4-byte int and a class
@@ -1448,7 +1478,7 @@ begin
                 LastTypePointerElemTk := tyClass;
                 Result := tyPointer;
               end
-              else if (LastTypeEnumId < 0) and CaseEqual(lo, 'tobject') then
+              else if (LastTypeSemId < 0) and CaseEqual(lo, 'tobject') then
               begin
                 { Builtin root class with no user TObject row (a user-declared
                   TObject won via IsClassType above): same rooted object
@@ -1459,8 +1489,8 @@ begin
                 LastTypePointerElemTk := tyClass;
                 Result := tyPointer;
               end
-              else if LastTypeEnumId >= 0 then
-                Result := EnumStorageTypeKind(LastTypeEnumId)   { width per {$PACKENUM} }
+              else if LastTypeSemId >= 0 then
+                Result := EnumStorageTypeKind(LastTypeSemId)   { width per {$PACKENUM} }
               else if PtrElemDepth > 0 then
               begin
                 { A `^` ELEMENT may name a type that does not exist yet — `PNode = ^TNode;`
@@ -1825,14 +1855,14 @@ begin
           Inc(VDElemDynDepth);
         end;
         VDElemTk := ParseTypeKind;
-        VDElemEnumId := LastTypeEnumId;
+        VDElemEnumId := LastTypeSemId;
         VDTk := VDElemTk;
         elemResolved := True;
       end;
       if not elemResolved then
       begin
         VDElemTk := ParseTypeKind;
-        VDElemEnumId := LastTypeEnumId;
+        VDElemEnumId := LastTypeSemId;
         VDTk := VDElemTk;
         { array of <proctype>: element carries a call signature (plain proc =>
           tyPointer, method pointer => tyRecord). Captured for indexed indirect
@@ -1915,14 +1945,14 @@ begin
       end;
     end;
     if VDElemProcSig >= 0 then SymElemProcSig[idx] := VDElemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
-    { array of TEnum: the element's enum identity. NOT SymEnumId — that one means
+    { array of TEnum: the element's enum identity. NOT SymSemId — that one means
       "this value is an enum", and an array is not one. }
     if EnumKindMatches(VDElemTk, VDElemEnumId) then SymElemEnumId[idx] := VDElemEnumId;
   end
   else
   begin
     idx := AllocVar(nm, VDTk);
-    if EnumKindMatches(VDTk, LastTypeEnumId) then SymEnumId[idx] := LastTypeEnumId;
+    if SemKindMatches(VDTk, LastTypeSemId) then SymSemId[idx] := LastTypeSemId;
     { …and the alias NAME the declaration was written through, read from the
       same still-live LastType* channel the enum identity above is read from.
       -1 for every declaration that did not go through a named alias.
@@ -3293,7 +3323,7 @@ procedure ParseConstSection(clsCi, clsVis: Integer; isResStr: Boolean);
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
     cEnumId: Integer;   { typed const of an enum type: its enum index, else -1 }
-    cOrdIdx: Integer;   { the sym just added for a folded ENUM const, to stamp SymEnumId on }
+    cOrdIdx: Integer;   { the sym just added for a folded ENUM const, to stamp SymSemId on }
     isLocalConst: Boolean;
     constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
@@ -3774,7 +3804,7 @@ begin
       else
       begin
         cTk := ParseTypeKind;
-        cEnumId := LastTypeEnumId;
+        cEnumId := LastTypeSemId;
         if cTk = tySet then
         begin
           { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
@@ -3858,7 +3888,7 @@ begin
         cIdx := AllocVar(name, cTk);
         AllocStaticLocal := False;
         { `const K: TEnum = Two` is an enum-typed value like any var of that type. }
-        if EnumKindMatches(cTk, cEnumId) then SymEnumId[cIdx] := cEnumId;
+        if EnumKindMatches(cTk, cEnumId) then SymSemId[cIdx] := cEnumId;
         if cTk = tyPointer then
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
@@ -4185,11 +4215,11 @@ begin
         begin
           { A folded ENUM expression -- `const X = eB`, `const Z = Low(TE)`,
             `const E = Succ(eA)`. An enum is not a TTypeKind here: an enum
-            symbol is tyInteger carrying SymEnumId, the same shape
+            symbol is tyInteger carrying SymSemId, the same shape
             ParseVarDecl produces for `var e: TE`, so WriteLn resolves the
             member name from the id. }
           cOrdIdx := AddConst(name, tyInteger, v);
-          SymEnumId[cOrdIdx] := CEEnumId;
+          SymSemId[cOrdIdx] := CEEnumId;
         end
         else
         { Widen to Int64 when the value does not fit a 32-bit Integer. The value
@@ -4886,7 +4916,7 @@ begin
       Expect(tkOf, 'of');
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeEnumId;
+      fEnumId := LastTypeSemId;
       isArr := True;
     end
     else
@@ -4903,7 +4933,7 @@ begin
       end;
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeEnumId;
+      fEnumId := LastTypeSemId;
       { THE ELEMENT'S CAPACITY, CAPTURED HERE BECAUSE NOTHING ELSE WILL.
         `fIsDyn` short-circuits the frozen-field arm below, which is the one
         place fStrCap was ever assigned -- so a dynamic-array field kept
@@ -4981,7 +5011,7 @@ begin
     begin
       fTk := ParseTypeKind;
       fRec := LastTypeRecId;
-      fEnumId := LastTypeEnumId;
+      fEnumId := LastTypeSemId;
     end;
   end;
   if fIsDyn then
@@ -5588,14 +5618,14 @@ begin
     else
       retType := ParseTypeKind;
     { Only a type just parsed by ParseTypeKind leaves a meaningful
-      LastTypeEnumId. An ARRAY result reaches here with retType = the ELEMENT
+      LastTypeSemId. An ARRAY result reaches here with retType = the ELEMENT
       kind and whatever enum the last unrelated parse left behind, and the
       RESULT of such a call is an array, not an enum value — so it gets -1
       rather than its element's identity. }
     if retType = tyInteger then
     begin
       if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
-      else retEnumId := LastTypeEnumId;
+      else retEnumId := LastTypeSemId;
     end;
     { The SET result's element identity, under exactly the rule the enum arm
       above states and for the same reason: an ARRAY result reaches here with
@@ -6144,7 +6174,7 @@ begin
   LastTypeSetEnumId := -1;
   propTk := ParseTypeKind;
   propRec := LastTypeRecId;
-  propEnumId := LastTypeEnumId;
+  propEnumId := LastTypeSemId;
   propSetEnumId := LastTypeSetEnumId;
 
   { `index N` — a COMPILE-TIME constant handed to the accessor as its first
@@ -6679,7 +6709,7 @@ begin
               TCol printed **1** where FPC prints **cGreen**, while the same
               method called on the CLASS printed cGreen, which is exactly the
               body-fills-it asymmetry. }
-            mRetEnumId := LastTypeEnumId;
+            mRetEnumId := LastTypeSemId;
             if mRetType = tyAnsiString then
             begin
               if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -7376,7 +7406,7 @@ begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
               mRetRecId := LastTypeRecId;   { see the twin site above }
-              mRetEnumId := LastTypeEnumId; { see the twin site above }
+              mRetEnumId := LastTypeSemId; { see the twin site above }
               if mRetType = tyAnsiString then
               begin
                 if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -8153,7 +8183,7 @@ begin
           else
           begin
             aElemTk := ParseTypeKind;
-            aElemEnumId := LastTypeEnumId;
+            aElemEnumId := LastTypeSemId;
             aElemStrCap := LastTypeStrCap;
           end;
           if tdCnt = 1 then
@@ -8257,7 +8287,7 @@ begin
           else
           begin
             aElemTk := ParseTypeKind;
-            aElemEnumId := LastTypeEnumId;
+            aElemEnumId := LastTypeSemId;
             aElemStrCap := LastTypeStrCap;
           end;
           ArrTypeName[ArrTypeCount] := tname;

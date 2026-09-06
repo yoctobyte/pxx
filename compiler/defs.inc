@@ -2268,6 +2268,48 @@ const
     is multiplied by. feature-pascal-typed-and-untyped-files }
   FILE_UNTYPED_RECSIZE = 128;
 
+  { ---- SEMANTIC IDENTITY -------------------------------------------------
+    What a value MEANS, when its TTypeKind carries only how it is LAID OUT.
+
+    THE RULE THIS ENCODES (owner, 2026-09-06): if the WIDTH differs it needs a
+    KIND; if only the MEANING differs it needs a CHANNEL. `tyBool8`,
+    `tyUCS4Char` and `tyWideChar` are kinds because they are stored
+    differently. An enum is `tyInteger` PLUS an id, `{$H-}` capacity rides
+    beside `tyShortString`, and `T = type Base` is `AliasIsDistinct` -- three
+    channels, because none of them changes a byte of layout.
+
+    A SemId is ONE Integer, so it threads through the channels the enum id
+    already travels in and costs no second array. The families are laid out so
+    that the ENUM family is exactly the values `SymSemId` has always held:
+
+      >= 0                the enum type index          (SEM family: enum)
+      SEM_NONE   (-1)     no identity
+      -2 .. SEM_BOOL_BASE reserved for future families
+      < SEM_BOOL_BASE     a sized boolean of width SEM_BOOL_BASE - sem
+
+    THE NEGATIVE SPACE IS THE POINT, not a packing trick. Every pre-existing
+    reader of an enum channel asks `>= 0` or `< 0`, so a boolean identity
+    arriving in a channel whose readers have not been widened is INVISIBLE to
+    them -- it reads as "not an enum", which is TRUE. A positive encoding would
+    have made a boolean read as enum type 0 in every unmigrated reader, and
+    `AliasEnumId`'s own comment records what an unwritten row that reads as
+    enum 0 costs. This lets the carry sites widen ONE AT A TIME, which is how
+    this work is meant to land.
+
+    WHOSE identity a SemId is, is the CHANNEL's job and not the value's --
+    the one obligation this design is under. `SymSemId` is this value's,
+    `SymElemEnumId` its element's, `UFldEnumId` a field's; `NodeSemIdOf` in
+    pasparser_expr.inc is where that discipline is written down, per node
+    shape. A bare "is there an identity" channel hands a `set of TCol` its
+    ELEMENT's member names (measured, frankB) -- so never add a channel whose
+    name does not say whose it is.
+    decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+  SEM_NONE = -1;
+  { The boolean family's base. Values BELOW it are `SEM_BOOL_BASE - width`, so
+    ByteBool is -17, WordBool -18, LongBool -20 and QWordBool -24. The gap
+    -2..-16 is deliberate headroom for the next family; do not close it. }
+  SEM_BOOL_BASE = -16;
+
   NILCHK_DEFAULT = 0;
   NILCHK_ON      = 1;
   NILCHK_OFF     = 2;
@@ -3444,9 +3486,9 @@ var
   SymProcSig  : array of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
-  SymEnumId : array of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
-  SymAliasIdx : array of Integer; { the alias row a var/param was DECLARED THROUGH, else -1. Not the same question as its TypeKind: `var x: TMyB` and `var b: byte` are both tyByte and only this says which name was written. Stamped at the declaration sites from LastTypeAlias, the way SymEnumId is stamped from LastTypeEnumId and for the same reason -- NOT inside AllocVar, where the LastType* channel may be stale. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
-  SymElemEnumId : array of Integer; { ARRAY var whose ELEMENT is an enum: that enum type index, else -1. An array symbol's TypeKind IS its element kind, so an enum element leaves TypeKind=tyInteger and SymEnumId would be the wrong slot to reuse — every reader of SymEnumId means "this VALUE is an enum", which an array is not. Set at the array decl sites beside SymEnumId's scalar arm; drives `WriteLn(a[i])` printing the member name. }
+  SymSemId : array of Integer; { THIS VAR'S OWN semantic identity, else SEM_NONE — the enum it is a member of, or the width of the sized boolean it is. Was SymEnumId, holding an enum index; enum SemIds are numerically unchanged, so a reader still asking `>= 0` keeps meaning "is an enum" and is correct. Set at decl sites (NOT inside AllocVar — LastTypeSemId may be stale there); drives enum-identity diagnostics, the logical/bitwise split on `not`, and boolean rendering. Its subject is the VALUE: an array var's element identity is SymElemEnumId's job, never this one. }
+  SymAliasIdx : array of Integer; { the alias row a var/param was DECLARED THROUGH, else -1. Not the same question as its TypeKind: `var x: TMyB` and `var b: byte` are both tyByte and only this says which name was written. Stamped at the declaration sites from LastTypeAlias, the way SymSemId is stamped from LastTypeSemId and for the same reason -- NOT inside AllocVar, where the LastType* channel may be stale. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  SymElemEnumId : array of Integer; { ARRAY var whose ELEMENT is an enum: that enum type index, else -1. An array symbol's TypeKind IS its element kind, so an enum element leaves TypeKind=tyInteger and SymSemId would be the wrong slot to reuse — every reader of SymSemId means "this VALUE is an enum", which an array is not. Set at the array decl sites beside SymSemId's scalar arm; drives `WriteLn(a[i])` printing the member name. }
   SymSetElemTk : array of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   { The element SUBRANGE bounds of `set of 1..10`. SymSetElemTk answers the
     element KIND and SymSetEnumId the enum identity, which between them cover
@@ -3666,7 +3708,7 @@ var
     `Length(F^)` answer 4 for 'abcd' instead of 8.
     feature-unicodestring-model }
   ProcRetPtrElemStrTk : array of Integer;
-  ProcRetEnumId : array of Integer;      { enum-typed RESULT: its enum type index, else -1. A call node has no symbol and no field to ask, so the callee's row is the only place the identity can live; read by NodeEnumIdOf's AN_CALL arm. }
+  ProcRetEnumId : array of Integer;      { enum-typed RESULT: its enum type index, else -1. A call node has no symbol and no field to ask, so the callee's row is the only place the identity can live; read by NodeSemIdOf's AN_CALL arm. }
   ProcRetSetEnumId : array of Integer;   { `set of TEnum` RESULT: the element enum type index, else -1. THE SIXTH CARRIER OF ONE FACT, and it did not exist until 2026-09-06. A set's element identity is carried once per carrier -- SymSetEnumId (variable), UFldSetEnumId (record field), UPropSetEnumId (property), ProcParamSetEnumId (parameter), AliasSetElemTk (type alias) -- and the RESULT had no column at all, so `function F: TMs` lost its element type on the way out and `for m in F` could not be lowered even once the container dispatch learned to accept it. Five copies in four files, all agreeing with each other, and a sixth that was never conceived: an ABSENT copy has no diff, so reading the five against one another could never have produced it. Note ProcParamStrElemTk's own comment already NAMES this family in prose ("the five-carrier set") for a different fact, and the sixth member was missing anyway -- an enumeration nothing is forced to walk is a comment. bug-p-for-in-over-a-set-returning-function-call-is-refused }
   ProcRetSetElemTk : array of Integer;   { ...and the element KIND beside it: Ord(tyChar) for `set of Char`, Ord(tyInteger) for an ordinal or enum element, 0 = not a set result. The pair is SymSetEnumId/SymSetElemTk's twin and is read the same way -- the identity alone cannot type an inline `for var c in F`, because tyChar and an enum are both "not -1" on the id channel. Stored at the three sites that store ProcRetElemTk, computed ONCE beside the tyInteger and tyAnsiString return arms; if a fourth store site ever appears, move the trio into one routine rather than adding a fourth copy. }
   { ...and the rest of the returned pointer's identity, so `GetQ^` on a
@@ -4021,7 +4063,7 @@ var
     type whose kind does not describe it fully. Adding a new LastType* means
     asking which of those five must capture it.
 
-    Individual entries below restate this where it bit (LastArrIdxTk, SymEnumId,
+    Individual entries below restate this where it bit (LastArrIdxTk, SymSemId,
     UFldEnumId, ArrTypeElemStrCap). Stated once here because a fact about a
     mechanism recorded only on one member of it is a fact nobody searching for
     the mechanism will find. }
@@ -4603,7 +4645,7 @@ var
   VDElemRowLen   : Integer;
   VDElemRowLo    : Integer;
   VDElemProcSig  : Integer;
-  VDAliasIdx     : Integer;  { the alias row the declared type resolved through, else -1. Captured from LastTypeAlias at the END of ParseDeclTypeDesc rather than read at the allocation site, because the two are separated by AllocVar/AllocArray/AllocDynArray -- any of which may parse nothing but does call into code that runs ParseTypeKind for an initializer. A LastType* read at the far end is the stale-channel shape this file's own comments warn about for LastTypeEnumId. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
+  VDAliasIdx     : Integer;  { the alias row the declared type resolved through, else -1. Captured from LastTypeAlias at the END of ParseDeclTypeDesc rather than read at the allocation site, because the two are separated by AllocVar/AllocArray/AllocDynArray -- any of which may parse nothing but does call into code that runs ParseTypeKind for an initializer. A LastType* read at the far end is the stale-channel shape this file's own comments warn about for LastTypeSemId. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   VDElemEnumId   : Integer;  { array element's enum type index, else -1 -> SymElemEnumId }
   VDIdxTk        : Integer;  { the declared array's dimension-0 INDEX type -> SymArrIdxTk. Reset per declaration beside VDElemEnumId; filled either from the named type's ArrTypeIdxTk or from LastArrIdxTk after the inline `[..]` list. }
   VDIdxEnumId    : Integer;  { its enum type index when VDIdxTk is Ord(tyInteger) -> SymArrIdxEnumId. }
@@ -5571,7 +5613,7 @@ var
     bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit }
   DynResultTempSym : Integer;
   CEOrdTk  : TTypeKind; { WHICH ORDINAL the const expression just folded by ConstEval yielded. ConstEval collapses every ordinal (char, enum, bool) to a bare Int64 -- a genuine simplification that is why Ord/Succ/Pred need no code at all -- so the declaration site has no way to ask what kind came back and used to guess from the FIRST TOKEN. That is right for a bare literal and wrong for every folded form: `const X = eB` printed 1, `const Z = Low(TE)` printed 0, `const W = Low(TC)` printed 97. tyInteger unless an arm says otherwise; tyBoolean and tyChar are the two it can say. Propagated through the levels: a relational sets tyBoolean, and/or/xor keep tyBoolean only when BOTH operands were boolean, everything else clears to tyInteger. Read by the untyped-const declaration immediately after its own top-level ConstEval call. bug-p-the-constant-evaluator-erases-an-ordinals-type }
-  CEEnumId : Integer;   { companion to CEOrdTk: the enum TYPE id when the folded value is an enum member, else -1. An enum is not a TTypeKind in this dialect -- an enum symbol is tyInteger with SymEnumId >= 0 (see pasparser_decl.inc's VDTk handling) -- so the kind alone cannot carry it. }
+  CEEnumId : Integer;   { companion to CEOrdTk: the enum TYPE id when the folded value is an enum member, else -1. An enum is not a TTypeKind in this dialect -- an enum symbol is tyInteger with SymSemId >= 0 (see pasparser_decl.inc's VDTk handling) -- so the kind alone cannot carry it. }
   GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }
 
   { Scratch stack for IRLowerAST's statement-sequence lowering, which used to
@@ -5719,7 +5761,7 @@ var
     the second may not. Nothing else reads it.
     bug-p-bare-all-defaulted-routine-refused-in-argument-position }
   ASTCallParenless : array of Boolean;
-  ASTEnumId : array of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
+  ASTSemId : array of Integer; { the semantic identity of the VALUE this node produces, else SEM_NONE. Was ASTEnumId: an enum member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from — so cross-enum assignment stayed diagnosable only because of this slot. Widened to carry a sized boolean's identity through a cast and through the derived shapes (Succ/Pred, an explicit `T(i)`) it already covered for enums. Ask NodeSemIdOf, not this array: it is one of five places a node's identity can live and the only one that knows which of them applies to which node shape. }
   ASTLine    : array of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTFile    : array of Integer; { .debug_line file index for that line (1 = main file); see DbgFileOfTok }
   ASTQChk    : array of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
@@ -6103,7 +6145,7 @@ var
   UFldIsSub : array of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
   UFldSubLo : array of Int64;
   UFldSubHi : array of Int64;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
-  UFldEnumId : array of Integer; { FIELD whose type is an enum — or whose ELEMENT type is, for an array field, since UFldTk is the element kind there too: that enum type index, else -1. A reader that means "this field's VALUE is an enum" must therefore check `not UFldIsArray[fi]` first. The record/class twin of SymEnumId, set at the Pascal field-decl site (never inside AddUField — the C frontend calls that with tyInteger constantly and LastTypeEnumId would be stale). Drives `WriteLn(r.f)` printing the member name. }
+  UFldEnumId : array of Integer; { FIELD whose type is an enum — or whose ELEMENT type is, for an array field, since UFldTk is the element kind there too: that enum type index, else -1. A reader that means "this field's VALUE is an enum" must therefore check `not UFldIsArray[fi]` first. The record/class twin of SymSemId, set at the Pascal field-decl site (never inside AddUField — the C frontend calls that with tyInteger constantly and LastTypeSemId would be stale). Drives `WriteLn(r.f)` printing the member name. }
   UFldSetEnumId : array of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
   UFldSetElemTk : array of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
   { managed-STRING field: element TTypeKind ordinal -- Ord(tyWideChar) for a
@@ -6224,7 +6266,17 @@ var
     Pascal `class var` (always False) keeps its single-slot lowering. }
   ClassVarPyOvr   : array[0..MAX_TYPEALIAS-1] of Boolean;
   ClassVarCount   : Integer;
-  LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
+  { The SEMANTIC IDENTITY of the type ParseTypeKind just resolved, or SEM_NONE.
+    Was LastTypeEnumId and held only an enum type index; it is the same channel
+    with a wider domain, and an enum SemId is still exactly that index (see
+    SEM_NONE in this file for why the other families are negative).
+
+    A WINDOW, like every LastType* channel here: reset at ParseTypeKind entry,
+    read by the allocation site that follows. NEVER read it inside AllocVar --
+    the note above SymSemId says why, and it applies unchanged to the wider
+    domain. Read it through SemKindMatches (pasparser_decl.inc), which is what
+    stops `set of TCol` inheriting its ELEMENT's identity. }
+  LastTypeSemId  : Integer;
   LastTypeSetEnumId : Integer;  { set by ParseTypeKind for set types: element enum index or -1 }
   { Set-literal element accounting, filled while `[...]` is parsed and read once
     at the `]`. A set literal folds every element to a bare ordinal, which throws

@@ -398,11 +398,16 @@ function FrozenStrAlign(tk: TTypeKind): Integer; forward;
   bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
 function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer; forward;
 { ...and "is this declaration actually OF that enum", which RegisterGeneralAlias
-  asks for the same reason its seven other callers do: LastTypeEnumId being set
+  asks for the same reason its seven other callers do: LastTypeSemId being set
   is not the same claim as this type BEING that enum -- `set of TCol` leaves the
   ELEMENT's id in it. Forwarded here rather than in pasparser_name.inc, which is
   included later, so there stays exactly one forward. }
 function EnumKindMatches(tk: TTypeKind; etid: Integer): Boolean; forward;
+{ The same question for ANY semantic identity, not just an enum's. The window
+  guard for LastTypeSemId, and the only sanctioned way to read that channel at
+  an allocation site. Same forward, same reason: its body is in
+  pasparser_decl.inc beside EnumKindMatches, which it delegates to. }
+function SemKindMatches(tk: TTypeKind; sem: Integer): Boolean; forward;
 
 procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
 begin
@@ -557,15 +562,15 @@ begin
     reads as a display quirk rather than a lost type.
 
     Guarded on the kind MATCHING the enum's own storage kind, not on
-    `LastTypeEnumId >= 0` alone: `set of TCol` leaves the ELEMENT's id in that
+    `LastTypeSemId >= 0` alone: `set of TCol` leaves the ELEMENT's id in that
     global (pasparser_decl.inc says so at LastTypeSetEnumId), so an unguarded
     read would stamp a set alias with its element's enum identity and
     `WriteLn(s)` would try to print a set as a member name.
 
     Stored +1; the column's comment in defs.inc says why, and the reason is this
     bug's own history. }
-  if EnumKindMatches(IntToTypeKind(tk), LastTypeEnumId) then
-    AliasEnumId[AliasCount] := LastTypeEnumId + 1
+  if EnumKindMatches(IntToTypeKind(tk), LastTypeSemId) then
+    AliasEnumId[AliasCount] := LastTypeSemId + 1
   else
     AliasEnumId[AliasCount] := 0;
   AliasCommit;
@@ -2259,10 +2264,10 @@ begin
     UFldPtrBaseTk[fi] := Ord(tyUnknown);
     UFldPtrBaseRec[fi] := REC_NONE;
   end;
-  { Never read LastTypeEnumId here: AddUField is the C frontend's chokepoint too,
-    and it arrives with tk=tyInteger and a stale LastTypeEnumId from whatever
+  { Never read LastTypeSemId here: AddUField is the C frontend's chokepoint too,
+    and it arrives with tk=tyInteger and a stale LastTypeSemId from whatever
     Pascal type was parsed last. The Pascal field-decl site stamps this, the way
-    SymEnumId is stamped at var-decl sites and not inside AllocVar. }
+    SymSemId is stamped at var-decl sites and not inside AllocVar. }
   UFldEnumId[fi] := -1;
   if tk = Ord(tySet) then
   begin
@@ -5028,7 +5033,7 @@ begin
   SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
   SetLength(SymIsExcBinder, n);
-  SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
+  SetLength(SymSetEnumId, n);      SetLength(SymSemId, n);         SetLength(SymSetElemTk, n);
   SetLength(SymAliasIdx, n);
   SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
@@ -5240,7 +5245,7 @@ begin
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
-  SymEnumId[SymCount] := -1;
+  SymSemId[SymCount] := -1;
   SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
@@ -5579,7 +5584,7 @@ begin
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
-  SymEnumId[SymCount] := -1;
+  SymSemId[SymCount] := -1;
   SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
@@ -5949,7 +5954,7 @@ begin
   SymGenSlot[SymCount] := -1;
   SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
-  SymEnumId[SymCount] := -1;
+  SymSemId[SymCount] := -1;
   SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
@@ -6075,7 +6080,7 @@ begin
   SymGenSlot[SymCount] := -1;
   SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
-  SymEnumId[SymCount] := -1;
+  SymSemId[SymCount] := -1;
   SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
@@ -6217,7 +6222,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
-  SymEnumId[SymCount] := -1;
+  SymSemId[SymCount] := -1;
   SymAliasIdx[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := DeclCaseSensitive;

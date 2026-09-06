@@ -4361,12 +4361,18 @@ begin
     
     idx := AllocVar(names[0], tk);
     { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
-      lands here with tk=tyInteger and used to claim SymEnumId — the slot that
+      lands here with tk=tyInteger and used to claim SymSemId — the slot that
       means "this VALUE is an enum". Element identity has its own slot. }
-    if EnumKindMatches(tk, LastTypeEnumId) then
+    if SemKindMatches(tk, LastTypeSemId) then
     begin
-      if isArr then SymElemEnumId[idx] := LastTypeEnumId
-      else SymEnumId[idx] := LastTypeEnumId;
+      { SemEnumOf on the ELEMENT arm and not on the value arm: SymElemEnumId
+        has NOT been widened past enums, and handing a channel an identity
+        from a family its readers do not know is how a set inherits its
+        element's member names. It reads as SEM_NONE there, which is the
+        truth — an array of ByteBool has no element identity anyone can use
+        yet. Drop the conversion when that channel is widened, not before. }
+      if isArr then SymElemEnumId[idx] := SemEnumOf(LastTypeSemId)
+      else SymSemId[idx] := LastTypeSemId;
     end;
     if isArr then
     begin
@@ -4411,12 +4417,18 @@ begin
     begin
       idx := AllocVar(names[i], tk);
       { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
-        lands here with tk=tyInteger and used to claim SymEnumId — the slot that
+        lands here with tk=tyInteger and used to claim SymSemId — the slot that
         means "this VALUE is an enum". Element identity has its own slot. }
-      if EnumKindMatches(tk, LastTypeEnumId) then
+      if SemKindMatches(tk, LastTypeSemId) then
       begin
-        if isArr then SymElemEnumId[idx] := LastTypeEnumId
-        else SymEnumId[idx] := LastTypeEnumId;
+        { SemEnumOf on the ELEMENT arm and not on the value arm: SymElemEnumId
+          has NOT been widened past enums, and handing a channel an identity
+          from a family its readers do not know is how a set inherits its
+          element's member names. It reads as SEM_NONE there, which is the
+          truth — an array of ByteBool has no element identity anyone can use
+          yet. Drop the conversion when that channel is widened, not before. }
+        if isArr then SymElemEnumId[idx] := SemEnumOf(LastTypeSemId)
+        else SymSemId[idx] := LastTypeSemId;
       end;
       if isArr then
       begin

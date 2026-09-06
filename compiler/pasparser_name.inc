@@ -477,7 +477,7 @@ procedure SetLitNoteElem(symIdx: Integer; v: Int64);
 var eid: Integer;
 begin
   eid := -1;
-  if symIdx >= 0 then eid := SymEnumId[symIdx];
+  if symIdx >= 0 then eid := SymSemId[symIdx];
   if eid < 0 then SetLitHasPlain := True else SetLitNoteEnum(eid);
   if (v < 0) or (v > 255) then
     Warn('set element ' + AInt64ToStr(v) + ' is outside a set''s 0..255 domain; '
@@ -620,7 +620,7 @@ function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseDynArrayInitElemsAST: Integer; forward;
-function NodeEnumIdOf(node: Integer): Integer; forward;
+function NodeSemIdOf(node: Integer): Integer; forward;
 { An enum's STORAGE WIDTH as a kind, and "is this declaration of that enum" --
   bodies in pasparser_decl.inc, which compiler.pas includes AFTER the expression
   and statement parsers that call them. Forwarded for FPC's single pass; pxx
@@ -886,7 +886,7 @@ end;
   built it. That is what keeps every path this does NOT reach (params, record
   fields, the C frontend) answering what it answered before.
 
-  An ENUM index reads back as tyInteger plus an ASTEnumId, which is the same
+  An ENUM index reads back as tyInteger plus an ASTSemId, which is the same
   pair an enum-valued expression carries; there is no tyEnum to stamp.
 
   ONE function because both fold sites must move together: the type-name arm
@@ -898,7 +898,7 @@ begin
   if (node < 0) or (idxTk = 0) then Exit;
   ASTTk[node] := idxTk;
   if (idxTk = Ord(tyInteger)) and (idxEnumId >= 0) then
-    ASTEnumId[node] := idxEnumId;
+    ASTSemId[node] := idxEnumId;
 end;
 
 { Is High(...)/Low(...)'s operand an EXPRESSION rather than a name?

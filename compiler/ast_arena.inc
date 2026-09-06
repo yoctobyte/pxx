@@ -27,7 +27,7 @@ begin
   SetLength(ASTSLen, n);       SetLength(ASTCLongRank, n); SetLength(ASTLeft, n);
   SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
   SetLength(ASTCallParenless, n);
-  SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
+  SetLength(ASTSemId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
   SetLength(ASTFile, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
   SetLength(ASTNilChk, n);
@@ -66,7 +66,7 @@ begin
   ASTTk[ASTNodeCount]      := 0;
   ASTLiftedVar[ASTNodeCount] := -1;
   ASTCallParenless[ASTNodeCount] := False;
-  ASTEnumId[ASTNodeCount]  := -1;
+  ASTSemId[ASTNodeCount]  := -1;
   ASTQChk[ASTNodeCount]    := False;
   { AN_ASSIGN carries its {$R+} region state from birth — one central tag
     instead of 27 build sites. Anchored at the enclosing STATEMENT's first

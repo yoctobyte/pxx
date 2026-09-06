@@ -1049,9 +1049,9 @@ begin
           ptypesSetElemLo[i] := 0;
           ptypesSetElemHi[i] := -1;
         end;
-        { ...and the same rule for a plain enum param: LastTypeEnumId is only
+        { ...and the same rule for a plain enum param: LastTypeSemId is only
           meaningful when the type just parsed WAS one. }
-        if tk = tyInteger then ptypesEnum[i] := LastTypeEnumId
+        if tk = tyInteger then ptypesEnum[i] := LastTypeSemId
         else ptypesEnum[i] := -1;
         { ...and the same rule a third time for a managed string's ELEMENT
           WIDTH -- the window read and the normalisation are both stated where
@@ -2325,7 +2325,7 @@ begin
     if (ptypes[i] = tyInteger) and (ptypesEnum[i] >= 0) then
     begin
       if parr[i] then SymElemEnumId[idx] := ptypesEnum[i]
-      else SymEnumId[idx] := ptypesEnum[i];
+      else SymSemId[idx] := ptypesEnum[i];
     end;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];

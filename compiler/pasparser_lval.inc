@@ -3871,7 +3871,7 @@ begin
     ASTTk[node] := Ord(tyBoolean);
     { `x in [...]`: the target element type is the LEFT operand's, which is
       already known here — no plumbing needed for this arm. }
-    SetLitCheckAgainst(NodeEnumIdOf(leftExpr));
+    SetLitCheckAgainst(NodeSemIdOf(leftExpr));
     Result := node;
     Exit;
   end;
@@ -3923,7 +3923,7 @@ begin
     end;
   end;
   Expect(tkRBrack, ']');
-  SetLitCheckAgainst(NodeEnumIdOf(leftExpr));
+  SetLitCheckAgainst(NodeSemIdOf(leftExpr));
   LastExprTk := tyBoolean;
   Result := node;
 end;
@@ -3968,7 +3968,7 @@ begin
   begin
     sci := FindSym(CurTok.SVal);
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := Syms[sci].ConstVal; ASTTk[n] := Ord(Syms[sci].TypeKind);
-    ASTEnumId[n] := SymEnumId[sci];
+    ASTSemId[n] := SymSemId[sci];
     Next;
     SetLitNoteElem(sci, Syms[sci].ConstVal);
     Result := n;
@@ -3990,8 +3990,8 @@ begin
       Anything else stays untallied: a bare ordinal variable is indistinguishable
       from an enum-typed one at this level, and a missed diagnostic is a smaller
       failure than a wrong one. }
-    if NodeEnumIdOf(CurASTNode) >= 0 then
-      SetLitNoteEnum(NodeEnumIdOf(CurASTNode))
+    if NodeSemIdOf(CurASTNode) >= 0 then
+      SetLitNoteEnum(NodeSemIdOf(CurASTNode))
     else if (CurASTNode >= 0) and (IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) then
       SetLitHasPlain := True;
     { A STRING element (more than one character -- one is a Char and folded
@@ -7265,9 +7265,9 @@ begin
     begin
       litTypes[i] := argTypes[i];
       exprNode := ASTLeft[currArg];
-      { ASTEnumId >= 0: an enum MEMBER folds to an AN_INT_LIT carrying its
+      { ASTSemId >= 0: an enum MEMBER folds to an AN_INT_LIT carrying its
         ordinal — re-typing that by value would rank it as a plain number. }
-      if (ASTKind[exprNode] = AN_INT_LIT) and (ASTEnumId[exprNode] < 0) and
+      if (ASTKind[exprNode] = AN_INT_LIT) and (ASTSemId[exprNode] < 0) and
          IsIntTypeKind(argTypes[i]) then
       begin
         litTypes[i] := LiteralIntKind(ASTIVal[exprNode]);
@@ -7732,10 +7732,26 @@ begin
   { FPC's sized booleans are C-ABI booleans — a fixed-width integer where
     nonzero means true. They must keep their WIDTH (LongBool 4, WordBool 2,
     ByteBool 1); mapping them onto tyBoolean would silently resize any struct
-    or call that crosses to C. }
+    or call that crosses to C.
+
+    SIGNED, all three, and that is the C-ABI convention rather than a detail:
+    FPC materialises True as ALL BITS SET and reads the value back through a
+    signed ordinal, so `Ord(ByteBool(255))` is -1 and `Ord(WordBool(65535))` is
+    -1. ByteBool and WordBool were tyUInt8/tyUInt16 and answered 255/65535.
+    LongBool was already tyInteger and already agreed -- which is the control
+    that says the mechanism here is SIGNEDNESS and not something else
+    (measured by frankA, 2026-09-06, against fpc 3.2.2).
+    A probe value must exceed the signed range to discriminate: `ByteBool(200)`
+    separates the two worlds and `WordBool(200)` does not, because 200 fits a
+    signed 16-bit and answers 200 either way.
+
+    The booleanness itself is NOT here. It rides in the SemId channel beside
+    the kind (BuiltinScalarSemId below), because the width is already right and
+    it was only ever the MEANING that had nowhere to live.
+    decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
   else if CaseEqual(nm, 'longbool') then Result := tyInteger
-  else if CaseEqual(nm, 'wordbool') then Result := tyUInt16
-  else if CaseEqual(nm, 'bytebool') then Result := tyUInt8
+  else if CaseEqual(nm, 'wordbool') then Result := tyInt16
+  else if CaseEqual(nm, 'bytebool') then Result := tyInt8
   { WideChar is a UTF-16 code UNIT; UCS4Char is a CODE POINT and converts to a
     string as UTF-8. Distinct kinds on purpose — see defs.inc.
 
@@ -7769,6 +7785,46 @@ begin
     Result := tyAnsiString
   else Result := tyUnknown;
 end;
+
+{ The SEMANTIC IDENTITY of a built-in scalar type NAME, or SEM_NONE -- the
+  companion to BuiltinScalarTypeKind above and, deliberately, its exact
+  shadow: same names, same table, one call site.
+
+  It is a SECOND FUNCTION rather than an out-parameter on the first because
+  BuiltinScalarTypeKind has speculative callers -- pasparser_expr.inc asks it
+  `<> tyUnknown` merely to test whether a token names a type -- and a lookup
+  that also wrote a parser-wide channel would poison the window for whatever
+  type is parsed next. That is the same argument BuiltinScalarTypeKind's own
+  header makes for staying pure, and it is why the widestring alias break is a
+  side effect on the CALLER's arm rather than in the table.
+
+  ONE CALLER, and it must stay one: ParseTypeKindInner's builtin arm, right
+  where it already calls BuiltinScalarTypeKind, which is reached only AFTER
+  FindTypeAlias has missed. That ordering is load-bearing and inverting it is
+  silent -- builtinheap's private `PWord = ^NativeInt` once outranked the
+  builtin `PWord = ^UInt16` and wrote eight bytes where the source said two,
+  at every -O level -- grep symtab.inc for `consulted BEFORE the builtin`, which
+  is where that is written down, and cite it by that string rather than by a
+  line number: the line moved, and the stale number was copied five times before
+  anyone checked it (frankA, 2026-09-06).
+  Adding a second door here would be the same class of mistake with the
+  identity instead of the kind: a name that is BOTH a user alias and a builtin
+  would take its LAYOUT from the user's declaration and its MEANING from this
+  table.
+
+  Only the sized booleans answer today. Enums never reach here -- an enum is
+  not a builtin name -- so this function returning SEM_NONE for everything
+  else is not a hole, it is the table saying "no builtin scalar name but these
+  three carries a meaning its kind cannot hold".
+  decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+function BuiltinScalarSemId(const nm: AnsiString): Integer;
+begin
+  if CaseEqual(nm, 'bytebool') then Result := SemBool(1)
+  else if CaseEqual(nm, 'wordbool') then Result := SemBool(2)
+  else if CaseEqual(nm, 'longbool') then Result := SemBool(4)
+  else Result := SEM_NONE;
+end;
+
 
 { Low/High of a STRING TYPE, one answer for every spelling that reaches it.
 
@@ -8128,7 +8184,7 @@ function TryOrdinalVarBound(symIdx: Integer; wantHigh: Boolean;
   value is a storage kind PLUS an identity, and this routine reported only the
   kind -- so `Low(a)` for `var a: D` answered the right ordinal 0 and printed
   `0` where fpc prints `mon`. The TYPE-NAME spelling `Low(D)` was correct the
-  whole time, because TryFoldHighLowType stamps ASTEnumId on the node it
+  whole time, because TryFoldHighLowType stamps ASTSemId on the node it
   builds; the two spellings of one intrinsic disagreed because only one of them
   had a channel for the answer. `set of D` had the same hole one level down on
   the element. -1 = not an enum. }
@@ -8150,11 +8206,11 @@ begin
     Result := True;
     Exit;
   end;
-  if SymEnumId[symIdx] >= 0 then
+  if SymSemId[symIdx] >= 0 then
   begin
-    EnumTypeOrdRange(SymEnumId[symIdx], eLo, eHi);
+    EnumTypeOrdRange(SymSemId[symIdx], eLo, eHi);
     if wantHigh then v := eHi else v := eLo;
-    eidOut := SymEnumId[symIdx];
+    eidOut := SymSemId[symIdx];
     Result := True;
     Exit;
   end;
@@ -8328,7 +8384,7 @@ function TryConstHighLowValueInner(wantHigh: Boolean; var v: Int64): Boolean;
 
   Each arm also publishes WHICH ordinal the bound is, through the same
   CEOrdTk/CEEnumId channel ConstEvalFactor resets before calling here. Its
-  expression twin TryFoldHighLowType stamps ASTTk/ASTEnumId on the node it
+  expression twin TryFoldHighLowType stamps ASTTk/ASTSemId on the node it
   builds; this one had the answer in hand at every arm and threw it away, so
   `const Z = Low(TE)` declared tyInteger and printed 0 instead of eA, and
   `const W = Low(TC)` printed 97 instead of 'a'.
@@ -8608,7 +8664,7 @@ begin
     { carry the enum identity, or `WriteLn(Low(TE))` prints 0 where fpc prints
       eA -- the ordinal was right and the node simply forgot which enum it came
       from. The same missing fact as the array-index case below. }
-    ASTEnumId[outNode] := etid;
+    ASTSemId[outNode] := etid;
     Result := True; Exit;
   end;
 

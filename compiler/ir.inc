@@ -11744,17 +11744,17 @@ begin
         shadowed member of the other enum). Checked here because every syntactic form of
         assignment funnels through this node.
 
-        Identity is ident-level (SymEnumId, tagged at var decls and now at enum-member
+        Identity is ident-level (SymSemId, tagged at var decls and now at enum-member
         consts): both sides must actually KNOW their enum for this to fire, so an integer,
         a cast or a call result is left alone. A diagnostic, not a type system. }
-      if (NodeEnumIdOf(ASTLeft[node]) >= 0) and (NodeEnumIdOf(ASTRight[node]) >= 0) and
-         (NodeEnumIdOf(ASTLeft[node]) <> NodeEnumIdOf(ASTRight[node])) then
+      if (NodeSemIdOf(ASTLeft[node]) >= 0) and (NodeSemIdOf(ASTRight[node]) >= 0) and
+         (NodeSemIdOf(ASTLeft[node]) <> NodeSemIdOf(ASTRight[node])) then
         ErrorAt(ASTLine[node], 'cannot assign a value of enum type ' +
-              GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTRight[node])],
-                                 EnumTypeNLen[NodeEnumIdOf(ASTRight[node])]) +
+              GetTokenStrFromRaw(EnumTypeNOff[NodeSemIdOf(ASTRight[node])],
+                                 EnumTypeNLen[NodeSemIdOf(ASTRight[node])]) +
               ' to a variable of enum type ' +
-              GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTLeft[node])],
-                                 EnumTypeNLen[NodeEnumIdOf(ASTLeft[node])]));
+              GetTokenStrFromRaw(EnumTypeNOff[NodeSemIdOf(ASTLeft[node])],
+                                 EnumTypeNLen[NodeSemIdOf(ASTLeft[node])]));
 
       { ...and, one step below enum identity, the pairs that are not a type
         SYSTEM question at all but a wrong ANSWER: a managed string handle
@@ -15783,7 +15783,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         wEnumId := -1;
         if (not CProgramMode) and (not isNilPy) and
            (IntToTypeKind(ASTTk[wValNode]) <> tyBoolean) then
-          wEnumId := NodeEnumIdOf(wValNode);
+          wEnumId := NodeSemIdOf(wValNode);
         if IntToTypeKind(ASTTk[wValNode]) = tyBoolean then
         begin
           { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }

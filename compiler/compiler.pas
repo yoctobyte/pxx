@@ -2154,7 +2154,7 @@ begin
   RTTIRegistryOff := -1; RTTIRegistryCount := 0;
   AnonDynArrayCount := 0;
   ResPendCount := 0; ResourceTableOff := -1; ResourceCount := 0;
-  EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
+  EnumTypeCount := 0; EnumValCount := 0; LastTypeSemId := -1;
   TypeInfoReqCount := 0;
   AliasCount := 0;
   AddConst('StdErr', tyInteger, 2);

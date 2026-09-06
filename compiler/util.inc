@@ -337,3 +337,77 @@ begin
   SetLength(FixupPCRel, FixCap);
   SetLength(FixupPicDelta, FixCap);
 end;
+
+{ ---- SEMANTIC IDENTITY: the accessors ------------------------------------
+
+  The encoding, the families and the reason the non-enum families live in
+  NEGATIVE space are all documented at SEM_NONE in defs.inc. These are the only
+  things that know it: nothing outside this block may compare a SemId against a
+  number, because the whole value of the negative layout is that an unwidened
+  reader's `>= 0` keeps meaning "is an enum" without being told.
+
+  Here rather than in symtab.inc because they are pure arithmetic on one
+  Integer -- no symbol table, no enum table, no parser state -- and every
+  frontend's declaration path needs them. SemKindMatches, the WINDOW guard, is
+  NOT here: it has to ask EnumStorageTypeKind, so it lives beside
+  EnumKindMatches in pasparser_decl.inc.
+  decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
+
+{ The identity of a value of enum type `etid`. The identity function on
+  purpose: an enum SemId IS its enum type index, which is what makes every
+  channel that used to hold only enum ids able to hold a SemId unchanged. }
+function SemEnum(etid: Integer): Integer;
+begin
+  if etid < 0 then Result := SEM_NONE else Result := etid;
+end;
+
+function SemIsEnum(sem: Integer): Boolean;
+begin
+  Result := sem >= 0;
+end;
+
+{ The enum type index a SemId names, or -1 for every other family. This is the
+  accessor an OLD enum-only reader turns into when it is widened; it is also
+  what makes widening optional, since `sem >= 0` already answers the same
+  question for a reader that has not been touched. }
+function SemEnumOf(sem: Integer): Integer;
+begin
+  if sem >= 0 then Result := sem else Result := -1;
+end;
+
+{ The identity of a C-ABI boolean `width` bytes wide -- ByteBool 1, WordBool 2,
+  LongBool 4, QWordBool 8. Its KIND stays an integer of that width, deliberately
+  (see BuiltinScalarTypeKind): the width is right and it is the booleanness that
+  had nowhere to live. }
+function SemBool(width: Integer): Integer;
+begin
+  if width <= 0 then Result := SEM_NONE else Result := SEM_BOOL_BASE - width;
+end;
+
+function SemIsBool(sem: Integer): Boolean;
+begin
+  Result := sem < SEM_BOOL_BASE;
+end;
+
+{ Storage width in bytes of a sized-boolean SemId, else 0. }
+function SemBoolWidth(sem: Integer): Integer;
+begin
+  if sem < SEM_BOOL_BASE then Result := SEM_BOOL_BASE - sem else Result := 0;
+end;
+
+{ The TTypeKind a sized boolean of `width` travels in -- its layout, with the
+  booleanness carried beside it. SIGNED, and that is not cosmetic: FPC's
+  `Ord(ByteBool(True))` is -1 because True is stored all-bits-set and read back
+  through a SIGNED ordinal, which is the C-ABI convention these types exist to
+  speak. An unsigned kind reads the same byte as 255 and cannot ever answer -1.
+  The twin of EnumStorageTypeKind, and it answers the same question. }
+function BoolStorageTypeKind(width: Integer): TTypeKind;
+begin
+  case width of
+    1: Result := tyInt8;
+    2: Result := tyInt16;
+    8: Result := tyInt64;
+  else
+    Result := tyInteger;
+  end;
+end;

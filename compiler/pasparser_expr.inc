@@ -1688,6 +1688,25 @@ begin
       end;
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
       bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
+      { …UNLESS the operand's kind is carrying a MEANING it cannot express. A
+        sized boolean is an integer of its own width by design -- that is the
+        C ABI and the width is right -- so the tag says tyInt8 and the whitelist
+        note above says to trust the tag. The tag is not wrong here; it is
+        INCOMPLETE, and the identity beside it is the rest of the answer.
+
+        This is NOT the node-kind arm the note forbids. That whitelist asked
+        "is this SHAPE one whose type I believe"; this asks the type system what
+        the value MEANS, through the one resolver that knows which of the five
+        identity channels applies to which node shape. A new shape is right here
+        for free; a new shape was wrong under the whitelist by default.
+
+        Without it `var a: ByteBool; a := True` made `if a` and `if not a` BOTH
+        fire, silently, with no diagnostic: `not 1` is 254 as a byte and -2 as a
+        LongBool, and both are nonzero and therefore true. It was correct for
+        False by accident (`not 0` is nonzero, which is the wanted answer), so a
+        probe that only sets False cannot see it.
+        bug-p-a-sized-boolean-is-true-and-not-true-at-the-same-time }
+      if bitNot and SemIsBool(NodeSemIdOf(left)) then bitNot := False;
       if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
@@ -5299,7 +5318,7 @@ begin
             the same question. bug-p-low-and-high-of-an-enum-variable-print-the-ordinal }
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := hlBoundV; ASTTk[CurASTNode] := Ord(hlBoundTk);
-          if hlBoundEid >= 0 then ASTEnumId[CurASTNode] := hlBoundEid;
+          if hlBoundEid >= 0 then ASTSemId[CurASTNode] := hlBoundEid;
           LastExprTk := hlBoundTk;
           Exit;
         end
@@ -5489,7 +5508,7 @@ begin
             number. }
           ASTIVal[CurASTNode] := hlBoundV;
           ASTTk[CurASTNode] := Ord(hlBoundTk);
-          if hlBoundEid >= 0 then ASTEnumId[CurASTNode] := hlBoundEid;
+          if hlBoundEid >= 0 then ASTSemId[CurASTNode] := hlBoundEid;
           LastExprTk := hlBoundTk;
           Exit;
         end
@@ -5756,7 +5775,7 @@ begin
         ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := ASTTk[node];
         { Succ/Pred of an enum is still that enum — the desugar to `e +/- 1`
           would otherwise drop the identity and WriteLn would print the ordinal. }
-        ASTEnumId[op] := NodeEnumIdOf(node);
+        ASTSemId[op] := NodeSemIdOf(node);
         { {$Q+}: FPC checks Succ/Pred too — the desugar IS a +/- binop, so
           tag it like one (feature-overflow-checks-cross-and-intrinsics). }
         if TokQChecks[TokPos - 1] then ASTQChk[op] := True;
@@ -6859,7 +6878,7 @@ begin
             correct test only while every enum WAS tyInteger. Narrowing the kind
             without moving that guard would have made `TSmall(i)` under
             {$PACKENUM 1} lose its enum identity and print an ordinal, with
-            nothing failing: the same shape as NodeEnumIdOf naming one of five
+            nothing failing: the same shape as NodeSemIdOf naming one of five
             call kinds. Two lines that must change together, so they hold one
             value between them instead of agreeing by coincidence. }
           castEtid := -1;
@@ -6923,7 +6942,7 @@ begin
               `Integer(x)` and every other builtin spelling, and is set only by
               the enum arm above -- it does not ask what kind the cast became,
               which is what let {$PACKENUM} narrow the kind safely. }
-            if castEtid >= 0 then ASTEnumId[node] := castEtid;
+            if castEtid >= 0 then ASTSemId[node] := castEtid;
             { `Pointer(expr)^` — FPC's untyped deref, legal where only the
               ADDRESS matters (an untyped var/const argument: synautil's
               `Move(Pointer(Value)^, ...)` is the driving consumer). There is
@@ -7492,8 +7511,8 @@ begin
           node := AllocNode(AN_INT_LIT);
         ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind);
         { An enum MEMBER const folds to its ordinal here, which is where the enum
-          identity would be lost — carry it on the literal (see ASTEnumId). }
-        ASTEnumId[node] := SymEnumId[idx];
+          identity would be lost — carry it on the literal (see ASTSemId). }
+        ASTSemId[node] := SymSemId[idx];
         { A CHAR const folds to a bare ordinal too, and a bare ordinal is not a
           one-character STRING to anything downstream: `pv := Dash` stored 45
           into a PChar and segfaulted, while `pv := '-'` and `pv := #45` — which
@@ -8725,7 +8744,7 @@ begin
       column at the alias door -- and is never re-derived from the kind here. A
       guard on the layout kind is a bet the layout kind never narrows, and
       {$PACKENUM 1} is that bet losing. }
-    if enumId >= 0 then ASTEnumId[scNode] := enumId;
+    if enumId >= 0 then ASTSemId[scNode] := enumId;
     CurASTNode := scNode;
     LastExprTk := castTk;
     TryScalarNamedCast := True;
@@ -9739,30 +9758,30 @@ end;
   Enum identity is not carried by the TYPE (a pxx enum is tyInteger at codegen),
   so every shape that can name an enum value has to be asked separately:
 
-    ident            SymEnumId       tagged at the var decl
-    folded member    ASTEnumId       a member const folds to its ordinal literal
+    ident            SymSemId       tagged at the var decl
+    folded member    ASTSemId       a member const folds to its ordinal literal
     a[i]             SymElemEnumId   an array symbol's TypeKind IS its element kind,
                                      so the ELEMENT's identity needs its own slot
-    r.f              UFldEnumId      the field twin of SymEnumId
+    r.f              UFldEnumId      the field twin of SymSemId
 
-  ASTEnumId doubles as the stamp for anything the parser can DERIVE — Succ/Pred
+  ASTSemId doubles as the stamp for anything the parser can DERIVE — Succ/Pred
   of an enum, an explicit `TE(i)` cast — so those need no arm here.
 
   Whatever migrates type identity into one vehicle
   ([[feature-a-typeref-migrate-consumers]]) should absorb all four; until then a
   shape that is missing here prints the ORDINAL where FPC prints the name, which
   is the whole of bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal. }
-function NodeEnumIdOf(node: Integer): Integer;
+function NodeSemIdOf(node: Integer): Integer;
 var neBase, neRec, neFld: Integer;
 begin
   Result := -1;
   if node < 0 then Exit;
   if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
   begin
-    { An ARRAY ident is not an enum VALUE even when its elements are: SymEnumId
+    { An ARRAY ident is not an enum VALUE even when its elements are: SymSemId
       is deliberately left clear on it, and answering SymElemEnumId here would
       make `WriteLn(a)` claim to be an enum. }
-    if not Syms[ASTIVal[node]].IsArray then Result := SymEnumId[ASTIVal[node]];
+    if not Syms[ASTIVal[node]].IsArray then Result := SymSemId[ASTIVal[node]];
     Exit;
   end;
   if ASTKind[node] = AN_INDEX then
@@ -9790,7 +9809,7 @@ begin
         end;
       end;
     end;
-    if Result < 0 then Result := ASTEnumId[node];
+    if Result < 0 then Result := ASTSemId[node];
     Exit;
   end;
   if ASTKind[node] = AN_FIELD then
@@ -9803,7 +9822,7 @@ begin
         field must not answer it — same rule as the ident arm above. }
       if (neFld >= 0) and (not UFldIsArray[neFld]) then Result := UFldEnumId[neFld];
     end;
-    if Result < 0 then Result := ASTEnumId[node];
+    if Result < 0 then Result := ASTSemId[node];
     Exit;
   end;
   if ASTNodeIsCall(node) and (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
@@ -9826,12 +9845,12 @@ begin
       the node. Both halves were needed and neither is sufficient -- which is
       the argument for measuring a fix rather than reasoning about it. }
     Result := ProcRetEnumId[ASTIVal[node]];
-    if Result < 0 then Result := ASTEnumId[node];
+    if Result < 0 then Result := ASTSemId[node];
     Exit;
   end;
-  { An enum MEMBER reached here as a folded ordinal literal; ASTEnumId is the only
+  { An enum MEMBER reached here as a folded ordinal literal; ASTSemId is the only
     thing that still remembers which enum minted it. }
-  Result := ASTEnumId[node];
+  Result := ASTSemId[node];
 end;
 
 procedure ParseExpr;
@@ -9980,20 +9999,20 @@ begin
     right := CurASTNode;
     { FPC-parity: an ENUM operand cannot compare against a pointer — there is
       no implicit conversion between them (toperatorerror). Detection is
-      ident-level (SymEnumId is tagged at var decls), so complex expressions
+      ident-level (SymSemId is tagged at var decls), so complex expressions
       stay unchecked — this is a diagnostic, not a type system. }
-    if (NodeEnumIdOf(left) >= 0) and (IntToTypeKind(ASTTk[right]) = tyPointer) or
-       (NodeEnumIdOf(right) >= 0) and (IntToTypeKind(ASTTk[left]) = tyPointer) then
+    if (NodeSemIdOf(left) >= 0) and (IntToTypeKind(ASTTk[right]) = tyPointer) or
+       (NodeSemIdOf(right) >= 0) and (IntToTypeKind(ASTTk[left]) = tyPointer) then
       Error('cannot compare an enum with a pointer');
     { ...and two DIFFERENT enum types have no common ordering either: `aColor = apple`
       compared TColor against TFruit's ordinal and quietly answered yes/no. Same
       identity, same ident-level limits as the assignment check. }
-    if (NodeEnumIdOf(left) >= 0) and (NodeEnumIdOf(right) >= 0) and
-       (NodeEnumIdOf(left) <> NodeEnumIdOf(right)) then
+    if (NodeSemIdOf(left) >= 0) and (NodeSemIdOf(right) >= 0) and
+       (NodeSemIdOf(left) <> NodeSemIdOf(right)) then
       Error('cannot compare enum type ' +
-            GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(left)], EnumTypeNLen[NodeEnumIdOf(left)]) +
+            GetTokenStrFromRaw(EnumTypeNOff[NodeSemIdOf(left)], EnumTypeNLen[NodeSemIdOf(left)]) +
             ' with enum type ' +
-            GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(right)], EnumTypeNLen[NodeEnumIdOf(right)]));
+            GetTokenStrFromRaw(EnumTypeNOff[NodeSemIdOf(right)], EnumTypeNLen[NodeSemIdOf(right)]));
     { ORDERING a record operand with no registered `class operator`. `b := r < 1`
       compared the record's first qword against 1 and answered off garbage; FPC
       says "Illegal qualifier".
@@ -10873,7 +10892,7 @@ begin
         CEOrdTk := Syms[idx].TypeKind
       else
         CEOrdTk := tyInteger;
-      CEEnumId := SymEnumId[idx];
+      CEEnumId := SymSemId[idx];
     end
     else
       { compat-pascal-const-expr-ord-chr-succ: this used to dump raw lexer

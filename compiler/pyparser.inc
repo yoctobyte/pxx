@@ -49030,8 +49030,8 @@ begin
           node := AllocNode(AN_INT_LIT);
         ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind);
         { An enum MEMBER const folds to its ordinal here, which is where the enum
-          identity would be lost — carry it on the literal (see ASTEnumId). }
-        ASTEnumId[node] := SymEnumId[idx];
+          identity would be lost — carry it on the literal (see ASTSemId). }
+        ASTSemId[node] := SymSemId[idx];
         CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and

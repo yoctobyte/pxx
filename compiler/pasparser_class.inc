@@ -404,7 +404,7 @@ begin
     else nd := AllocNode(AN_INT_LIT);
     ASTIVal[nd] := Syms[si].ConstVal;
     ASTTk[nd] := Ord(Syms[si].TypeKind);
-    ASTEnumId[nd] := SymEnumId[si];
+    ASTSemId[nd] := SymSemId[si];
     outTk := Syms[si].TypeKind;
     Result := nd; Exit;
   end;
