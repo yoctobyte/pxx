@@ -117,6 +117,10 @@ ALLOWED = {
         "created, or onto an explicit --archive override — never onto the "
         "worktree, which it deliberately falls back to only when the ref "
         "carries no tstate, and says so when it does",
+    "twatch_requested_report_devtest.py":
+        "fixture case: joins TSTATE_REL onto a tempfile.mkdtemp() it just "
+        "made, reads the ONE report write_report_md emitted there, and drops "
+        "the tree. It never opens the repo's own tstate",
     "devtest_pin_shadow.py":
         "joins TSTATE_REL onto the throwaway root it makes at line 46",
     "devtest_pin_verify.py":

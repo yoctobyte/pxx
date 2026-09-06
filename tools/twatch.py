@@ -1856,7 +1856,7 @@ SUBJECT_NOTES = {
 
 
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
-                    st=None, not_reached=()):
+                    st=None, not_reached=(), unclassified_red=()):
     ts = utcnow().replace(":", "").replace("-", "")
     rel = os.path.join(TSTATE_REL, "reports",
                        "%s-%s-%s.md" % (ts, sha[:7], host))
@@ -2116,7 +2116,19 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                          # these jobs were red at the last look and this run
                          # never got to them. Unknown is not fixed.
                          ("NOT REACHED — red at last look, unknown now",
-                          list(not_reached))):
+                          list(not_reached)),
+                         # For a run with NO BASELINE to be relative to -- a
+                         # targeted request, which deliberately does not walk
+                         # the HEAD progression. Its reds are red HERE and that
+                         # is the whole claim. Filing them under STILL-RED
+                         # would assert they were red before, and under NEW-RED
+                         # that they were not; both are baseline claims this
+                         # run cannot make. `parent_tested: none` in the front
+                         # matter says the same thing, and this says it where
+                         # the names are.
+                         ("RED — no baseline at this sha, so none of these is "
+                          "classified as new or inherited",
+                          list(unclassified_red))):
         if names:
             lines.append("## %s" % title)
             lines += ["- %s" % listed(n) for n in names]
@@ -6848,6 +6860,29 @@ def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
     # records for the pin path.
     reds = [job_key(j) for j in report["jobs"]
             if j["status"] not in ("pass", "skip")]
+    # ...AND A REPORT, which this path never wrote. The comment below records
+    # that all three requested rows in the archive have none, so the row was the
+    # only record that the run happened. Adding `reds` to the row (ce8567b28)
+    # made the verdict checkable; it still cannot carry what only a report has
+    # -- the per-job failure reasons, compiler_sha256, the toolchain, and the
+    # skip accounting that says whether the answer covers anything. Somebody
+    # ASKED for each of these runs, which is the argument for attesting them at
+    # least as well as a run nobody asked for.
+    #
+    # Non-fatal for the same reason as the pin path: a report is DIAGNOSTIC and
+    # the verdict is not, and this runs in a daemon where an exception would be
+    # a crash rather than a message.
+    if reds or verdict in ("RED", "TIMEOUT"):
+        try:
+            # parent=None and unclassified_red, NOT still_red: with no baseline
+            # walked, "still" and "new" are both claims about a previous state
+            # this function deliberately never looked at.
+            write_report_md(clone, host, sha, None, report, [], [], [],
+                            unclassified_red=sorted(reds))
+        except Exception as e:                       # noqa: BLE001 - see above
+            print("twatch: requested-verify report not written (%s: %s) — the "
+                  "verdict below still stands" % (type(e).__name__, e),
+                  flush=True)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
         # `reds` is the measurement. `new_red` and `fixed` are ABSENT here,
