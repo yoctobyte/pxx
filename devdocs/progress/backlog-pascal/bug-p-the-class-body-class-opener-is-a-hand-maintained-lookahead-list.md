@@ -183,3 +183,28 @@ live wrong answer, and it should be judged as such rather than on a defect it is
 not currently causing. The value is that the next `class X` spelling either
 finds its arm or is refused by name — instead of falling through a `Next` and
 working, or not working, by accident.
+
+### CORRECTION, same day, one probe later: the accident IS producing a wrong answer
+
+The section above says *"the `class X` accident is not currently producing a
+wrong value anywhere I can reach."* **That is false, and the very next probe
+reached one.**
+
+`class constructor` is not in the four-arm list either. It falls past all four,
+the terminus steps over the `class`, the ordinary constructor arm takes the
+bare `constructor`, and the class-ness is discarded — so a class constructor
+compiles, is never run, and cannot even be called by hand. Class-level state
+stays at zero with no diagnostic. Filed as
+[[bug-p-a-class-constructor-is-accepted-and-never-runs]], measured against fpc.
+
+**The error in my own claim is the one this ticket is about.** I measured four
+rows over generic METHODS, found one benign divergence, and wrote a conclusion
+about *the enumeration* — a population I had not enumerated. `constructor` and
+`destructor` were two entries away. **An enumeration is exactly the thing you
+cannot sample**: any subset of it behaves consistently, which is what makes a
+partial check feel complete.
+
+So the ranking argument goes back: this is not only regression prevention. It
+has at least one live silent wrong answer under it today, and the honest count
+of how many more is the same "we do not know" that frankD's two censuses give,
+for the same reason.
