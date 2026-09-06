@@ -15946,3 +15946,53 @@ rule** and asked someone else to judge it. Recording that too, because it is the
 right instinct: a rule proposed by the person who just broke it reads as
 self-exculpation whichever way it is written, and the question *"does this earn a
 line"* has a better answer from anyone else.
+
+## A PROBE NAMED FOR A DEFECT FAMILY IS NOT COVERAGE OF IT
+
+frankA, 2026-09-06. `tools/scalar_cast_door_probe.py` exists for exactly one
+family — named type casts at the scalar doors — and it was **GREEN through all
+seven defects found in that family in a single day.** Not stale, not broken, not
+mis-aimed at the wrong file. Three properties, each individually reasonable:
+
+- its **29 names are all one category**, so a cross-category route error has no row;
+- its **operand is always an `Int64`**, so a conversion that is right for integers
+  and wrong for everything else passes;
+- it **always STORES the result**, and **the store coerces** — which is the one
+  position that hides a reinterpret.
+
+**The third is the one to steal.** A probe that assigns its result into a
+declared variable is asking the compiler to fix the answer before the assertion
+sees it. **Choose the position that does NOT coerce** — pass it to an overload,
+take `SizeOf`, read it back through a pointer — or the probe certifies the
+coercion rather than the cast.
+
+**A name is not a population.** *"There is a probe for that"* is a claim about a
+file's title; what it covers is the cross product of the values it varies, and
+here that cross product was one category × one operand type × one syntactic
+position. Extended (`b44b796c2`) with a category family, it fires **4 DIFFER and
+7 route mismatches** against a pre-fix binary — so the rows were always reachable
+and nobody had written them.
+
+**Ask of any existing probe, before trusting a green: which axes does it vary,
+and is the defect I am worried about ON one of them?** The answer is usually one
+axis and the defect is usually on another.
+
+## SEVEN INSTANCES IN A DAY AGAINST FOUR IN THE WHOLE HISTORY IS THE NUMBER THAT MOVES A REFACTOR
+
+Same ticket, and it is the argument shape rather than the finding. `refactor-p-five-dispatch-sites-for-one-named-type-cast` was ranked as a tidy-up. Entering it by
+**measuring the doors** rather than by writing the resolver first produced seven
+silent wrong-value or wrong-refusal defects in one day — a const fold asking the
+builtin table before the alias table, a float target reinterpreted at one door, an
+enum alias losing its identity, a variant alias reading the tag word instead of
+boxing, `Real(d)` refused for want of an arm, an `operator Explicit` answering at
+one door only, and an enum-alias fix that was half a fix under `{$PACKENUM 1}`.
+
+**Every one is a case the merged resolver could not have had**, which is the
+sentence that turns a refactor from housekeeping into a fix. And the counting
+argument is the persuasive part: **seven in one day against four in the ticket's
+entire recorded history.** A refactor justified by elegance gets deferred forever;
+one justified by a defect RATE gets done.
+
+**The method generalises: enter a unification ticket by measuring the doors, not
+by writing the resolver.** The measurement is what produces the argument for the
+resolver, and it produces fixes on the way whether or not the resolver ever lands.

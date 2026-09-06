@@ -2022,10 +2022,35 @@ pre code{background:none;padding:0}
                         dangling.add(cand)
             if by_design:
                 dangling.clear()
+            # A PARK BLOCK MAY BE MARKED SUPERSEDED, AND THE MARKER IS
+            # WINDOW-SCOPED RATHER THAN TICKET-SCOPED.
+            #
+            # Why this exists (frankS, 2026-09-06): the flag fired correctly on
+            # feature-pascal-corpus-fpc-testsuite, whose 2026-07-10 park waited
+            # on "sole-A confirmation" -- a thing this repo no longer has. They
+            # marked it superseded in place, and the flag then named FIVE slugs
+            # instead of four, because the prose LEGITIMATELY cites resolved
+            # tickets as HISTORY and this check cannot tell a live resume
+            # condition from a record of one that was lifted. Rewriting history
+            # to satisfy a lint is the wrong move, so the lint has to learn.
+            #
+            # SCOPED TO THE WINDOW, NOT THE TICKET, deliberately. A whole-ticket
+            # escape ("PARK CONDITION SUPERSEDED anywhere in the body") would
+            # also silence a genuinely NEW stale condition added months later --
+            # the same over-reach as `by_design` clearing every dangling link,
+            # which is tolerable there because a dangle is a typo class and not
+            # tolerable here because a park condition is load-bearing. The
+            # marker must sit within +/-2 lines of the citation it excuses, the
+            # same window the citation itself is matched in, so each excused
+            # block is excused by prose a reader will see beside it.
+            SUPERSEDED_MARK = "PARK CONDITION SUPERSEDED"
             for i, line in enumerate(rows if park_scope else []):
                 if not PARK_COND.search(line):
                     continue
-                for j in range(max(0, i - 2), min(len(rows), i + 3)):
+                window = range(max(0, i - 2), min(len(rows), i + 3))
+                if any(SUPERSEDED_MARK in rows[j].upper() for j in window):
+                    continue
+                for j in window:
                     # A DANGLING WIKILINK READS AS AN OPEN DEPENDENCY TO
                     # ANYTHING THAT COUNTS THEM AND AS A TYPO TO A HUMAN --
                     # which is why nobody fixes it and every counter is wrong.
@@ -2100,7 +2125,11 @@ pre code{background:none;padding:0}
                         f"dependency hides longest, because the holder has "
                         f"stopped re-reading the park they wrote. THE SLUG "
                         f"MATCHED, NOT THE QUESTION -- see the STALE-PARK note "
-                        f"below"
+                        f"below. If the block is a RECORD of a condition that "
+                        f"was already lifted rather than a live one, put PARK "
+                        f"CONDITION SUPERSEDED within two lines of it -- that "
+                        f"excuses THAT BLOCK ONLY, so a new stale condition "
+                        f"added later still fires"
                     )
                 else:
                     lines.append(
@@ -2110,7 +2139,10 @@ pre code{background:none;padding:0}
                         f"{more}) — the resume condition may already be met. "
                         f"Read the park; a prose condition has no owner and "
                         f"nothing else re-checks it. THE SLUG MATCHED, NOT THE "
-                        f"QUESTION — see the NOTE below"
+                        f"QUESTION — see the NOTE below. If the block RECORDS a "
+                        f"condition already lifted rather than stating a live "
+                        f"one, put PARK CONDITION SUPERSEDED within two lines "
+                        f"of it — that excuses THAT BLOCK ONLY"
                     )
 
         # PROSE EDGE THAT SHOULD HAVE BEEN FRONTMATTER.
