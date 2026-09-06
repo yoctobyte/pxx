@@ -240,3 +240,116 @@ name in the UNION of the two tables at every door — declaration, `SizeOf`, a
 cast stored in its declared type, the cast's value, `High`, `Low`, `TypeInfo` —
 and reports names accepted at some and refused at others. It is indexed in
 `devdocs/dev/differential-probes.md`.
+
+## 2026-09-06 (frankA) — entered by MEASURING the doors, not by writing the resolver, and that turned up five live defects before any collapse
+
+**The method, and it is the transferable part.** The obvious way in is to write
+the `name -> (castKind, enumId, aliasIdx)` resolver and check nothing moved.
+Instead: hold the TARGET TYPE and the OPERAND fixed and vary only **which door
+recognises the name** — `Int64(x)` through the builtin-name door, `type TA =
+Int64; TA(x)` through the user-alias door. That is the axis that SELECTS the
+arm, which is what a duplication ticket's sweep has to vary
+(`a-clean-sweep-certifies-only-the-axis-it-varied`). 20 rows. **A row where the
+two spellings disagree needs no oracle at all, because one program answered its
+own question twice.**
+
+Five defects, all of them "one door taught, the sibling left shut" — which is
+this ticket's thesis, now with a fifth and sixth instance:
+
+| # | commit | what |
+| --- | --- | --- |
+| 1 | `4be17cb8f` | the CONST fold asked the builtin table BEFORE the alias table |
+| 2 | `96d805e3d` | a cast to a FLOAT type reinterpreted at the builtin-name door |
+| 3 | `96d805e3d` | an ENUM ALIAS lost its identity (`FindEnumType` asked about the ALIAS name) |
+| 4 | `96d805e3d` | a VARIANT ALIAS read the tag word instead of boxing |
+| 5 | `1e0323c82` | `Real(d)` was REFUSED — tkReal_T was not in the float arm's case label |
+
+plus `ad6d0bf54`, which is not a defect: the float-temp block turned out to be
+written out **four** times character for character, and three callers now share
+`FloatCastToTemp`.
+
+### THE CENSUS WAS SCOPED TO ONE FUNCTION AND THE SCOPE WAS IN MY HEAD
+
+There is a **sixth recognition door**, and this ticket's table could never have
+listed it: `ConstIntCastWidth` / `ConstAliasCastWidth` live in
+`ConstEvalPrimary`, four thousand lines below `ParseFactorCore`. Every census in
+this ticket — five doors, then four, then the fourteen construction sites —
+silently means "in `ParseFactorCore`", and none of them says so.
+
+    type LongInt = Int64;
+    const A = LongInt(4294967296 + 5);   ->  5             (builtin door, 4 bytes)
+    var b: LongInt; b := LongInt(...);   ->  4294967301    (alias door, 8 bytes)
+
+`symtab.inc:6215` documents that a source declaration must outrank a builtin and
+that inverting it breaks the compiler outright; the builtin POINTER names are
+registered lazily for exactly that reason. This door had it backwards. The
+realistic spelling is a portability shim (`type PtrInt = LongInt;`,
+`type SizeInt = Int64;`), which is what makes it a bug rather than a curiosity
+about shadowing.
+
+**So the count in this ticket's title is not four. It is "four in
+`ParseFactorCore`, plus two in `ConstEvalPrimary` that nobody has counted", and
+nobody should re-take it without naming the function first.**
+
+### CENSUS RE-TAKEN AT HEAD, because frankD was editing the population
+
+frankD deleted eleven dead NilPy arms from `ParseFactorCore` at 05:54
+(`2626683d6`) while this ticket's construction census was being written, and
+told me. Re-derived at HEAD: **13** `AllocNode(AN_PTR_CAST)` sites, and
+`ParseFactorCore` spans **528–8186** (7659 lines). The table above says 14 and
+8002. The whole delta is `1df943481` removing the OrdinalNameToTk door; the
+eleven deleted arms contained no cast construction site, so the count is
+unaffected. **Every line number in every table in this ticket remains stale by
+construction and must be derived, never read.**
+
+### THE ZERO IN MY OWN INSTRUMENT
+
+I wrote "the reachable set at the builtin-name door is exactly `Currency`,
+`TDateTime` and `ValReal`, because every other float spelling is a lexer
+keyword" — and I established it by OBSERVING that `Double(i)`, `Single(i)` and
+`Extended(i)` answered correctly and inferring they must be going somewhere
+else. That is a zero (no misbehaviour observed) read as a finding of absence,
+and the boundary would have been written either way.
+
+Going to the **token table** instead of the behaviour is what produced two
+things the behavioural reading structurally could not: the fourth
+character-for-character copy of the float-temp block (**a copy that works is
+indistinguishable from the original by output**) and the missing `tkReal_T`
+(**a keyword with no arm looks like a name the language does not have**).
+
+frankD's framing of the same day, worth keeping: theirs was a POPULATION defect
+— files that never reached the probe — and this one is an INFERENCE defect,
+correct behaviour at the front door read as evidence about which door it went
+through. No counter catches the second kind.
+
+### WHAT IS STILL LEFT, unchanged in substance
+
+`FindTypeAlias` + `BuiltinScalarTypeKind` into one `name -> (castKind, enumId,
+aliasIdx)` resolver, alias consulted FIRST. The type-KEYWORD arms still cannot
+join without a lexer change. What the five fixes above change is the *price*:
+the two doors' scalar arms now differ by strictly less, because the float arm,
+the enum-identity rule and the variant-boxing rule are the same code at both.
+
+**And the acceptance instrument now exists.** The 20-row door-selector sweep is
+the thing that says whether a collapse preserved behaviour, and unlike a
+byte-identical build it varies the axis that selects the arm. Any collapse
+should be run against it with a poisoned resolver as a positive control — the
+byte-identity harness used for `ad6d0bf54` (9 files, processed 9 / compiled 9 /
+refused 0, plus a poisoned-helper run that moved 6 rows) is the shape.
+
+### NOT PART OF THIS, with owners
+
+- frankD's `TryParseBracketArgForSlot` (`fe0c492d1`) stays theirs: it is an
+  argument-SHAPE question keyed on a bracket token, not a name resolution, and
+  folding it behind a name resolver would put two unrelated questions behind one
+  lookup. Agreed with frankD both ways.
+- frankS's token-kind rewrite at `ParseFactorCore`'s entry (Read/Write/Exit/Halt
+  declarable as user routines) is upstream of every arm here and untouched. Their
+  reading, which I agree with: mine is a PRECEDENCE bug (two tables both hold
+  the name, consulted in the wrong order), theirs is a REACHABILITY bug (the
+  name reaches no table because the lexer already decided). Adjacent in
+  position, different in kind.
+- `bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list`
+  (frankD) is a third instance of this shape in a different loop: four
+  hand-written lookaheads with a terminus that happens to parse. Cited here so
+  the general case has three witnesses and not two.
