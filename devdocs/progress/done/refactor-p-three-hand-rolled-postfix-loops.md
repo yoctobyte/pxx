@@ -3,8 +3,8 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-summary: "TWO now, down from three (27e656541), four (7927fe685) and five (8627d25ce). THE SLUG SAYS THREE AND IS LEFT SAYING THREE: a count in a slug is frozen at filing, nothing anywhere dates it, and repairing it in place would destroy the only evidence it was ever a different number -- the series belongs here. The two expression-side loops are MERGED: ParseCastPostfixSuffix in pasparser_lval.inc parses the `^ / .field / [i]` chain for both cast spellings, and it is a PARAMETERISATION rather than a lift, because a record-name cast has no alias row (its ASTIVal is 0 for `plain reinterpret`, which ResolveDerefShapeAt would read as alias row ZERO) so that caller passes aliasIdx = -1 and a seed that IS the answer. The record-name copy turned out to be a strict SUBSET of the alias copy arm for arm, every gap already filed as a silent wrong value on that spelling alone, so the merge was a deletion of the weaker twin and not a reconciliation. WHAT IS LEFT is ONE loop: ApplyCallResultPtrSuffix in pasparser_lval.inc, which frankB is holding (bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type adds a `(` arm to it). Its `[` arm survived a deadness probe -- live on a deliberate pxx extension with a committed test and no fpc oracle -- and pyparser.inc's two remain DELIBERATE per the-substrate-is-ast-and-ir-not-the-parser. The guard is tools/cast_suffix_walk_probe.py, 132 rows, with a twin check for the 38 rows fpc refuses by construction."
-status: working
+summary: "ONE now, down from two, three (27e656541), four (7927fe685) and five (8627d25ce). THE SLUG SAYS THREE AND IS LEFT SAYING THREE: a count in a slug is frozen at filing, nothing anywhere dates it, and repairing it in place would destroy the only evidence it was ever a different number -- the series belongs here. DONE for Track P: `ParseCastPostfixSuffix` in `pasparser_lval.inc` is the one `^ / .field / [i]` walker, for both cast spellings AND for a call RESULT. The last merge (217e530a0) deleted `ApplyCallResultPtrSuffix`'s 231-line loop, and what made it possible was widening the SEED from a pair to a SHAPE: `aliasIdx < 0` already meant "no alias row, the caller knows the answer", exact at depth one for a cast, and a call result is the third opener with no alias row but WITH levels (ProcRetPtrDepth/BaseTk/BaseRec). BOTH helpers only the call loop called were measured and neither had to be ported: `DerefPtrArrayElemPtr` was compensation for a moved-off bit the shared `[` arm simply sets, and `RequireRecMember` could not fire -- the escape guard three lines above is its exact negation on the same recId and token, proved with separate REACH and FIRE canaries. Guards: `tools/call_result_suffix_probe.py` rc=0, zero route mismatches (it was rc=1 with two), and `tools/cast_suffix_walk_probe.py` BYTE-IDENTICAL across the change. pyparser.inc's two remain DELIBERATE per the-substrate-is-ast-and-ir-not-the-parser."
+status: done
 owner: frankA
 ---
 
@@ -909,3 +909,6 @@ Result: **231 lines deleted**, `call_result_suffix_probe.py` `rc=0` with zero
 route mismatches (`defprop` and `frozen-str` were the two reds), and
 `cast_suffix_walk_probe.py` byte-identical across the change — which is the
 point of a refactor that must not move one route.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
