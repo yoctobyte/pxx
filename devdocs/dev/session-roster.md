@@ -1966,3 +1966,53 @@ FORMAT, the blast radius is every use since the format was written, not the use
 that exposed it.** Say so when reporting one, and re-run the checks that mattered
 rather than only the one that broke. I did not, and frankB had to point out that
 the correction I sent covered a single reading.
+
+## THE FLEET ALREADY HAD MY INSTRUMENT AND IT HAD BEEN BLIND SINCE THE SPEC CHANGED — `tools/whoholds.py`
+
+2026-09-06, found while measuring my own commit rate. I have been hand-rolling
+`git log ... -- <file>` for every collision check in this seat, and that is where
+both of the defects frankB caught came from. **`tools/whoholds.py` exists, is 199
+lines, and was written for exactly this question** — *"who has been writing to
+these files, and how recently"* — by a lane that had measured 607 commits in six
+hours against three ticket locks and concluded, correctly, that the ticket lock is
+not the instrument for *may I open this file right now*.
+
+**I did not consult it.** That is the *written answer, present and unconsulted*
+failure landing on this seat's primary function, and it cost both defects: the
+tool would not have fixed the wrong-file one, but its truncation-proof output and
+its per-row honesty about unknowns would have made the second impossible.
+
+**AND WHEN I FINALLY RAN IT, IT WAS BLIND — in the same direction as everything
+else this week.** Its session fallback tested `tok.startswith("session_")`, and
+CLAUDE.md's trailer is a URL, so the whitespace-delimited token starts with
+`https://`. Measured: **722 commits in twelve hours, 509 with a URL-form trailer,
+0 with a bare `session_` token.** The test had matched nothing, ever. The tool
+printed `?×27` for `pasparser_decl.inc` and told the caller *"you cannot tell who
+to ask"* — a true-sounding warning about a false condition. Repaired, the same
+query names **five sessions in one file**.
+
+**So the fleet's shared collision instrument had been reporting the fleet as
+anonymous for as long as the URL spelling has been the spec**, and nobody noticed,
+because `?` is a plausible answer and the tool is careful enough about unknowns
+that its warning reads as diligence. **The care in the message is what made the
+defect invisible** — a tool that shrugged would have been checked.
+
+**What I added rather than remembered** (`coordinator-also-owns-tooling`:
+build the check, never resolve to remember): `--containing=STRING` resolves files
+by `git grep -l` before reporting, so the wrong-file failure is removed from the
+instrument instead of living in my discipline. **Zero matches exits 2 and says
+nothing was measured** — a quiet row there would rebuild the defect one layer up.
+Six-case devtest, ablated against a copy of the pre-fix tool in both directions.
+
+**Two numbers worth carrying, both measured:**
+- **`Lane:` — the field that names someone you can MESSAGE — has 0 uses in 722
+  commits.** The tool prefers it and falls back to a session id, which identifies
+  a transcript and not a person. That gap is real, it is not fixed by the repair,
+  and it is now stated in the tool's own docstring rather than assumed.
+- **This seat is 25-35% of the fleet's commit log, hour after hour** (12/56, 15/60,
+  19/54), and **140 of my last 159 commits touch only `devdocs/`.** A peer running
+  a raw `git log` to see who is on a topic reads a listing that is a third
+  coordinator prose, none of which is topic evidence. That is an argument for
+  peers using `whoholds` over a raw log — and an argument I should have made by
+  fixing the tool rather than by writing another doc, which is what this section
+  is doing.

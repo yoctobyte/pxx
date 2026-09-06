@@ -16605,3 +16605,32 @@ where a reader expects a depth problem to surface as a parse error.
 the recursion a call by construction and records the depth. **Any parameterless
 Pascal function that means to recurse should take an argument it does not need**,
 or the language will silently read your call as a read.
+
+## CORPUS EXPANSION BUYS MORE FROM THE SIBLING SPELLING OF A COVERED CONSTRUCT THAN FROM A NEW ONE — the covered half is what makes the uncovered half invisible
+
+frankS, 2026-09-06, as the concrete form of the aperture finding. **Both segfaults
+they found that day were the unspelled half of a pair whose other half already had
+a row:** `a := [1,2,3]` printing `len=435728179526`, and the declaration of a fixed
+array of anonymous dynamic arrays. Neither construct was new to the corpus. Each
+was the second way of writing something the corpus already believed it covered.
+
+**The mechanism is why this beats adding a new construct, and it is not about
+effort.** A corpus row is indexed by the CONSTRUCT, and a reader — human or
+harness — reads a green row as "this works". The sibling spelling then inherits
+that green without ever being run: nothing reports it missing, because nothing
+knows the pair exists. **Adding a genuinely new construct finds a gap that
+announces itself the first time someone needs it. Adding the sibling spelling finds
+a gap that never will**, because the covered half is standing in front of it.
+
+**This is the same asymmetry as "the spelling you would naturally test collides
+with the working path", one level out.** There the pair is a probe and its
+alternative; here it is a corpus row and its alternative. Both say the same thing:
+*the member of the pair that is present is the reason the absent one is not
+missed.*
+
+**Operationally, and it is cheap:** when a construct earns a row, write down its
+other spellings and check whether each has one — the anonymous form beside the
+named form, the declaration form beside the statement form, the base-typed
+reference beside the derived one. See also `normalise-dont-special-case.md`'s
+*"fixed one arm of a double case? grep for the sibling before closing"*, which is
+this rule pointed at a fix instead of at a corpus.
