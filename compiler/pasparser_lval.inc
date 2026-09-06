@@ -446,19 +446,25 @@ end;
 
   bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
 function ParseNDSubscriptTail(indexNode: Integer; base: Integer; var isNDOut: Boolean): Integer;
-var nIdx: Integer;
+var nIdx, d, ndims: Integer;
+    idxSave: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   ParseNDSubscriptTail := -1;
   isNDOut := NodeArrNDInfo(base);
   if not isNDOut then Exit;
+  { LOCAL rank and LOCAL index nodes -- see NDRePrime. ParseExpr below can
+    re-enter NodeArrNDInfo and take both globals with it. }
+  ndims := NDInfoNDims;
   if CurTok.Kind = tkComma then
   begin
-    NDIdxNode[0] := CurASTNode; nIdx := 1;
+    idxSave[0] := CurASTNode; nIdx := 1;
     while Eat(tkComma) do
     begin
-      if nIdx >= NDInfoNDims then Error('too many subscripts for array');
-      ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+      if nIdx >= ndims then Error('too many subscripts for array');
+      ParseExpr; idxSave[nIdx] := CurASTNode; Inc(nIdx);
     end;
+    NDRePrime(base);
+    for d := 0 to nIdx - 1 do NDIdxNode[d] := idxSave[d];
     ParseNDSubscriptTail := BuildPartialNDIndex(indexNode, nIdx);
     Expect(tkRBrack, ']');
   end
@@ -469,14 +475,16 @@ begin
   else if (CurTok.Kind = tkRBrack) and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLBrack) then
   begin
-    NDIdxNode[0] := CurASTNode; nIdx := 1;
+    idxSave[0] := CurASTNode; nIdx := 1;
     Expect(tkRBrack, ']');
-    while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+    while (CurTok.Kind = tkLBrack) and (nIdx < ndims) do
     begin
       Expect(tkLBrack, '[');
-      ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+      ParseExpr; idxSave[nIdx] := CurASTNode; Inc(nIdx);
       Expect(tkRBrack, ']');
     end;
+    NDRePrime(base);
+    for d := 0 to nIdx - 1 do NDIdxNode[d] := idxSave[d];
     ParseNDSubscriptTail := BuildPartialNDIndex(indexNode, nIdx);
   end;
 end;
@@ -6234,6 +6242,8 @@ procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
     mcCi, mcallNode: Integer; mcFin: Boolean;
     arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
+    ndims, ndSaveD: Integer;
+    idxSave: array[0..MAX_ARR_DIMS-1] of Integer;
     remDepth, ptrBaseTk, ptrBaseRec: Integer;  { the RESULT's pointer shape — now the walker's seed }
 begin
   tk := Procs[procIdx].RetType;
@@ -6510,29 +6520,34 @@ begin
     Next;                                   { the '[' }
     ParseExpr;
     isND := NodeArrNDInfo(tmpN);
+    ndims := NDInfoNDims;   { LOCAL rank -- see NDRePrime }
     if isND and (CurTok.Kind = tkComma) then
     begin
-      NDIdxNode[0] := CurASTNode; nIdx := 1;
+      idxSave[0] := CurASTNode; nIdx := 1;
       while Eat(tkComma) do
       begin
-        if nIdx >= NDInfoNDims then Error('too many subscripts for array');
-        ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+        if nIdx >= ndims then Error('too many subscripts for array');
+        ParseExpr; idxSave[nIdx] := CurASTNode; Inc(nIdx);
       end;
-      if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+      if nIdx <> ndims then Error('wrong number of array subscripts');
+      NDRePrime(tmpN);
+      for ndSaveD := 0 to nIdx - 1 do NDIdxNode[ndSaveD] := idxSave[ndSaveD];
       ASTRight[sub] := BuildFlatNDIndex(nIdx);
       Expect(tkRBrack, ']');
     end
     else if isND and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
     begin
-      NDIdxNode[0] := CurASTNode; nIdx := 1;
+      idxSave[0] := CurASTNode; nIdx := 1;
       Expect(tkRBrack, ']');
-      while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+      while (CurTok.Kind = tkLBrack) and (nIdx < ndims) do
       begin
         Expect(tkLBrack, '[');
-        ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+        ParseExpr; idxSave[nIdx] := CurASTNode; Inc(nIdx);
         Expect(tkRBrack, ']');
       end;
-      if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+      if nIdx <> ndims then Error('wrong number of array subscripts');
+      NDRePrime(tmpN);
+      for ndSaveD := 0 to nIdx - 1 do NDIdxNode[ndSaveD] := idxSave[ndSaveD];
       ASTRight[sub] := BuildFlatNDIndex(nIdx);
     end
     else

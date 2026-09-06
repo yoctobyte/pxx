@@ -903,6 +903,37 @@ begin
     Result := False;
   end;
 end;
+
+{ NDInfo* AND NDIdxNode[] ARE GLOBAL, AND EVERY N-D SUBSCRIPT LOOP HOLDS THEM
+  ACROSS A ParseExpr THAT CAN RE-ENTER NodeArrNDInfo. A nested N-D subscript in
+  any index position -- `z3[1, 2, z2[1,1]]` -- refills NDInfoNDims/Lo/Span for
+  the INNER array and overwrites NDIdxNode[0..] with the inner array's index
+  nodes. Two faces, and only one of them is loud:
+
+    a[0, b[0], 0]        rank 3, b rank 1 -> `too many subscripts for array`,
+                         because the count check compares this array's index
+                         count against the inner array's rank. Refused, visible.
+    z3[1, 2, z2[1,1]]    both N-D -> compiles, and yields z3[1,1,2]. The outer's
+                         saved index nodes were replaced by the inner's, so the
+                         emitted address is a DIFFERENT ELEMENT of the right
+                         array. Measured 112 against fpc's 122; predicted
+                         exactly by the inner indices (z2[0,2] gives 22,
+                         z2[2,0] gives 202). No diagnostic.
+
+  A nested subscript of rank 1 clobbers nothing -- NodeArrNDInfo refuses and
+  clears -- so a probe built from a 1-D inner array measures the address path
+  as CLEAN and is correct about a case this bug cannot reach.
+
+  So each loop keeps its own LOCAL rank and its own LOCAL index nodes, and
+  re-primes the globals here immediately before BuildFlatNDIndex /
+  BuildPartialNDIndex read them. Locals, not one global save slot, because the
+  nesting has no depth limit: `z3[1, 2, z2[a[1,1], 0]]` is two levels.
+  bug-p-a-nested-n-d-subscript-clobbers-the-outer-subscripts-global-parse-state }
+procedure NDRePrime(base: Integer);
+var reprimed: Boolean;
+begin
+  reprimed := NodeArrNDInfo(base);
+end;
 { A PARTIAL fixed N-D subscript -- `pa[0]` on `array[0..2] of TG`, `r2.rows[0]`,
   `p^[0]` -- names a whole SUB-ARRAY. Answer True and describe it as a 1-D
   array: how many elements it holds, and of what.

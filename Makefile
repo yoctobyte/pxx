@@ -5783,6 +5783,31 @@ test-core: $(COMPILER)
 	@# refactor-p-nodearrndinfo-yields-spans-but-not-the-element
 	./$(COMPILER) test/test_a_partial_nd_row_reaches_a_copying_parameter_through_every_base_spelling.pas $(TESTTMP)/test_ndrowbases26
 	tools/expect_same.sh test_ndrowbases26 "$$($(TESTTMP)/test_ndrowbases26 | tail -n 2)" "$$(printf 'fails=0\nNDROWBASES OK')"
+	@# ...and the same globals held ACROSS A ParseExpr, which is the other half:
+	@# NDInfo*/NDIdxNode[] are parser scratch, and a nested N-D subscript in any
+	@# index position re-enters NodeArrNDInfo and refills them for the INNER
+	@# array. Three faces from one root, and the loud one hid the other two:
+	@# a spurious `too many subscripts for array` (examples/chess/chess.pas:147),
+	@# a wrong ELEMENT of the right array (NDIdxNode[] overwritten), and a wrong
+	@# ROW address (BuildPartialNDIndex reads NDInfoSpan[] AFTER the loop).
+	@# THE REFUSAL IS THE NEWEST FACE AND THE LEAST HARMFUL -- pin v405 compiles
+	@# chess.pas fine, so it never reached a $(PXX_STABLE) consumer, while the
+	@# two silent faces are older and did. A reader who meets chess first will
+	@# assume the whole thing arrived with it; it did not.
+	@# THE ROW THAT DISCRIMINATES IS THE PARTIAL ONE. A fix that takes only a
+	@# local copy of the RANK -- the shape this was first diagnosed as needing,
+	@# independently, by two sessions -- passes the refusal and the wrong-element
+	@# rows and still computes `trailing` from the inner array's spans. Measured
+	@# against pin v405, which reads that row as `12 20 21`, not `120 121 122`.
+	@# EVERY NESTED INDEX HERE IS ITSELF N-D, deliberately: a rank-1 inner array
+	@# makes NodeArrNDInfo refuse and CLEAR, so a probe built from one measures
+	@# this whole class as clean and is correct about a case it cannot reach.
+	@# That is how the address path got reported as unaffected while face 3 was
+	@# already live -- not a thin probe, a probe that could not have come out any
+	@# other way. Values asserted against fpc, which agrees on every row.
+	@# bug-p-a-nested-n-d-subscript-clobbers-the-outer-subscripts-global-parse-state
+	./$(COMPILER) test/test_a_nested_nd_subscript_does_not_clobber_the_outer_one.pas $(TESTTMP)/test_ndnested26
+	tools/expect_same.sh test_ndnested26 "$$($(TESTTMP)/test_ndnested26 | tail -n 2)" "$$(printf 'fails=0\nNDNESTED OK')"
 	@# THE FIFTH SHAPE, and it was a SEGFAULT rather than a wrong value.
 	@# StaticArraySourceInfo -- the one resolver both the by-value/const arm and
 	@# the var/out arm ask "what static array is behind this argument" -- knew a
