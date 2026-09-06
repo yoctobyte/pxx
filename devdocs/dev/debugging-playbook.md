@@ -16273,3 +16273,63 @@ opinion about `vtQWord` and has not been asked. That is the same instrument as
 *grep for the sibling before closing a double case*, applied before writing rather
 than after fixing.
 
+## A CHECK THAT MISNAMES ITS SUBJECT AND A COMMENT THAT MISNAMES ITS COVERAGE ARE ONE ANIMAL — both are CORRECT ABOUT SOMETHING ELSE
+
+frankA, 2026-09-06, pairing two of their own defects from the same afternoon and
+finding the shared shape. CLAUDE.md's line is *every instrument that lies, lies by
+being correct about something else*; this is that line reaching **prose and
+diagnostics**, not only instruments.
+
+| artefact | what it claimed | what was true | where it pointed |
+| --- | --- | --- | --- |
+| a registration lint's flag | *"`park_superseded_devtest.py` defines 4 cases that nothing runs"* | a count did not include something | **at the harness**, which was correct; the defect was in the lint |
+| a test row's docstring | *"guards against this specific wrong fix"* | `case_two` is unrun | at a coverage that did not exist — the row passed against that wrong fix too |
+
+> *"Neither claim is false. Both point away from what they are for."* — frankA
+
+**The consequence for a DIAGNOSTIC is one nobody prices in:** a flag is read by
+everyone who runs the gate, so a misaimed one **recruits** rather than merely
+misleads. Three sessions fixed the harness the flag named. **And the repair the
+flag asked for would have entrenched the defect** — hand-list the discovered
+cases, the lint goes green, and its exemption stays broken for every harness that
+adopts the idiom afterwards.
+
+**The consequence for a COMMENT is quieter and lasts longer:** a docstring naming
+a coverage the row does not have tells the next reader the case is handled, and
+nothing will ever disagree with it. frankA's disposal is the right one — **they
+built the wrong fix the row claimed to guard against, measured, found it passed,
+and deleted the row** rather than keeping it as approximately useful.
+
+**The test, for both: state what the artefact would say if the thing it names were
+FINE, and check whether that differs from what it says now.** A flag that reads
+identically in both worlds is naming the wrong subject. A guard whose docstring
+survives its own stated failure mode is not guarding it.
+
+
+## A PREMISE REFUTED THREE TIMES IS STILL AVAILABLE AS A JUSTIFICATION, BECAUSE IT SITS ONE INFERENCE SHORT OF TRUE
+
+frankA, 2026-09-06, correcting a claim they had pushed an hour earlier and had
+written **twice**: that a recognition merge was *"the same edit seen from two
+sides"* as `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor`.
+
+**Enumerating the chain killed it: 98 `CaseEqual` sites, and what they compare
+against is overwhelmingly builtin FUNCTION names.** Merging `FindTypeAlias` with
+`BuiltinScalarTypeKind` merges two table lookups and **removes zero arms from
+it.**
+
+**Why it survived two writings, in their words:** *"both are about how
+`ParseFactorCore` dispatches on a name"* is **true**, and sits one inference short
+of the claim. A sentence that is true and adjacent does not feel like an
+assumption, so it never gets the interrogation an assumption gets.
+
+**And the reason to care is not tidiness.** That perf ticket has had its premise
+**refuted three times**, and it was still reachable as a justification —
+*"leaning on it would have swapped this ticket's measured defect rate for
+elegance."* A refuted premise does not disappear from the vocabulary; it stays
+available as a rationale, and it is most attractive exactly when the honest
+justification is a number rather than a story.
+
+**So a refutation needs to reach the SENTENCES that lean on the premise, not only
+the ticket that states it** — the ticket carries the refutation and the borrowers
+do not. Grep for the phrase, not for the slug.
+

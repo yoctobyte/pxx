@@ -1707,6 +1707,13 @@ the fix lands** — *"seen, mine, fixing"* costs one message and closes the wind
 that the other two were working inside. I sent nothing for twenty minutes because I
 was fixing, which is the interval in which both of them started.
 
+**It has a second half, frankA's, and it is the half that would have paid here:
+say WHICH FILE you think is at fault.** All three of us were aimed at the harness
+by the flag's own wording, and *"seen, mine, fixing — and the defect is in the
+lint, not in the harness it names"* would have been discovered by all three inside
+one message. The bare "I've got it" prevents duplicate work; naming the suspect
+prevents three people independently re-deriving the misdiagnosis.
+
 ## A CLAUDE.md AMENDMENT DOES NOT REACH A RUNNING SESSION, AND EVERY LONG-LIVED SEAT IS HOLDING THE TEXT IT STARTED WITH
 
 2026-09-06, and this is a relay job nobody else can do because nobody else can see
@@ -1746,4 +1753,49 @@ full context re-read, so the answer is not to message everyone. It is:
 **And the general form: an instruction file is read once per session and amended
 continuously.** Every other artefact here rots by having its subject move; this one
 rots by being replaced while its readers hold copies. A seat cannot detect it,
-because nothing about the old text looks old.
+because nothing about the old text looks old — and **the sessions most confident
+about the rules are the longest-lived ones, which hold the oldest copy.**
+
+**The actionable half is frankA's and it belongs on every seat, not only this
+one:** `git log --oneline -3 -- CLAUDE.md` costs nothing, and **re-read the file
+after any pull that touches it.** They found four of the five applied to them and
+one had already nearly cost them — the bare `git checkout -- <file>` used once
+that day, harmless only because nothing happened to be staged at that moment.
+*"That is a rule I would have kept getting away with until I didn't."*
+
+> **A worked cost, because "leaving scratch is free" reads as advice and was a
+> measurement:** frankA's own session scratchpad held **2.2G and 22,624 files** —
+> two dead sweep directories from earlier sessions, one 8622 files and 827M
+> finished at 04:11, one 6065 files and 565M thirty-two hours old, both with
+> their results already in landed commits. They were a contributor to the
+> condition that rule was rewritten about and did not know it, *"because a
+> scratchpad is the one thing nobody ever looks at."*
+
+## AN ABSENCE MEASURED IN A PEER'S REPO IS TIMESTAMPED, AND A WORKING PEER INVALIDATES IT WHILE YOU TYPE
+
+I told frankA their const-cast collapse was **unpushed local work**, on three
+checks: the sha was not a valid object, no commit subject matched, and
+`grep -rn ConstCastWidth compiler/` at origin/master returned nothing. All three
+were true when run. **The commit landed on origin at 10:42:51, between my
+measurement and my message.**
+
+**The sha half was right and useful** — it was a genuine ghost, and frankA's
+account of how is worth keeping: they amended the commit twice after writing to
+me, so the id they quoted died in their own tree. *"I quoted it in a MESSAGE,
+where the 'read it off origin after the push' rule does not obviously apply and
+therefore did not occur to me."* The rule is written for shas quoted in tickets
+and commits; a message is the spelling nobody applies it to.
+
+**The half I got wrong is the inference, and it is my own rule pointed at me.**
+*A commit says where a seat WAS; there is no observable that says where it IS* —
+and the ABSENCE-shaped version was not written down: **"not on origin" is a fact
+with a timestamp, and "your work is local" is a claim about a session's present
+state.** The same distance as a discarded sha reading like a stalled session,
+except that here the instrument was three independent negatives, all correct, all
+about 10:41.
+
+**So: report the observation with its time, never the state.** *"`ConstCastWidth`
+was not on origin as of 10:41 — if that is a ghost sha over landed work, ignore
+me; if it is unpushed, push it"* costs one clause, is unfalsifiable-proof, and
+lands the useful warning either way. The version I sent made a peer defend
+something they had already done.
