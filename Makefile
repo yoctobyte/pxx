@@ -12822,6 +12822,13 @@ test-core: $(COMPILER)
 	# the positive control -- it injects the exact defect (a payload write into
 	# a slot the table calls a child) and requires the census to report it.
 	python3 tools/ast_slot_overloads.py --self-check
+	# ...and the second hand-maintained list in ast_arena.inc: every AST-indexed
+	# slot AllocNode initialises must be one CloneAST carries. It was missing TWO
+	# at once on 2026-09-06 under a header asserting the list was complete, which
+	# is why both sides are derived from the source rather than compared against
+	# an expected list -- an expected list would have been a third copy of the
+	# thing that was already wrong twice.
+	python3 tools/clone_ast_field_sets.py
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
 	$(TESTTMP)/test_asm_branch26; tools/expect_same.sh test_asm_branch26-rc "$$?" "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26

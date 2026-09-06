@@ -699,6 +699,25 @@ else
   RC=1
 fi
 
+# ...and the OTHER hand-maintained list in the same file: every AST-indexed slot
+# AllocNode initialises must be one CloneAST carries. On 2026-09-06 CloneAST was
+# missing TWO at once -- ASTSemId (a cloned subtree lost its enum-or-sized-
+# boolean identity) and ASTCLongRank (a cloned C expression lost its `long`
+# rank) -- under a header asserting the list was "the full per-node field set
+# AllocNode initialises". The sentence described an intention and read as a
+# census, so nobody re-derived it. Both sides are derived from the source here,
+# because a hand-written list of expected fields would be a third copy of the
+# thing that was already wrong twice and would have passed that day.
+# bug-t-clonast-and-allocnode-field-sets-are-hand-kept-in-sync
+if [ -f tools/clone_ast_field_sets.py ]; then
+  step "CloneAST carries every slot AllocNode sets" "$LOGDIR/clone-ast-fields.log" \
+       python3 tools/clone_ast_field_sets.py                                   || RC=1
+else
+  say "  FAIL  CloneAST field-set check — tools/clone_ast_field_sets.py is MISSING"
+  echo "        Tracked, so its absence is a broken tree rather than a configuration."
+  RC=1
+fi
+
 # EVERY MAKEFILE ASSERTION CAN FAIL, AND CAN SAY WHY. ~3900 recipe lines
 # already assert through tools/expect_same.sh; a bare `test "$(a)" = "$(b)"`
 # prints NOTHING on mismatch, so testmgr's log-tail reason records the two
