@@ -26,16 +26,20 @@ unit libwriteln;
   is here. It also keeps this unit portable to every backend including ESP,
   since it needs no syscall of its own.
 
-  KNOWN DIVERGENCES FROM THE BUILTIN, both measured, both in the BOXING and so
-  unreachable from here. A reader of the vector cannot recover what the tag
-  never carried, so these cannot be fixed in this unit:
+  KNOWN DIVERGENCE FROM THE BUILTIN, measured, in the BOXING and so unreachable
+  from here. A reader of the vector cannot recover what the tag never carried,
+  so it cannot be fixed in this unit:
 
-    * a QWord >= 2^63 boxes as vtInt64 and renders SIGNED. `LibWriteLn(q)`
-      gives -1 where builtin `writeln(q)` gives 18446744073709551615.
-      bug-a-a-qword-boxes-as-vtint64-so-array-of-const-loses-unsignedness
     * WordBool / LongBool / ByteBool box as vtInteger and render as 1/0, where
       the builtin prints TRUE/FALSE. A plain Boolean is correct.
       bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln
+
+  The QWord entry that used to head this list is GONE, and the way it went is
+  worth one line: d210325a6 gave QWord its own tag, which fixed the BOXING half
+  and silently broke this unit, because a `case` over tags renders the empty
+  string for one it does not list. The divergence went from "renders signed" to
+  "renders nothing" and the test caught the second, not the first. Measured
+  2026-09-06 at 18000000000000000000: builtin and LibWriteLn now agree.
 
   Everything else is byte-identical to the builtin, which is asserted row by row
   in test/test_libwriteln_parity.pas rather than claimed here. }
@@ -87,6 +91,14 @@ begin
       VarRecToText := StrPas(PChar(v.VPChar));
     vtInt64:
       VarRecToText := IntToStr(PInt64Rec(v.VInt64)^);
+    vtQWord:
+      { d210325a6 gave QWord its own tag. Until then it arrived as vtInt64 and
+        rendered signed; this arm did not exist, so every QWord fell to the
+        `else` below and printed the EMPTY STRING -- an arm whose comment calls
+        an empty result honest, which is true of the tags it was written for and
+        false for a tag added later. UIntToStr, not IntToStr: rendering signed
+        is the defect the new tag exists to fix. }
+      VarRecToText := UIntToStr(PQWordRec(v.VInt64)^);
   else
     { A tag this compiler does not emit, or one whose payload is not text --
       vtPointer, vtObject, vtClass. The builtin refuses those at compile time

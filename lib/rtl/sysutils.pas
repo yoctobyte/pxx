@@ -192,6 +192,7 @@ type
   TEventTypes = set of TEventType;
 
   PInt64Rec  = ^Int64;
+  PQWordRec  = ^QWord;   { the same boxed slot read UNSIGNED, for vtQWord }
   PDoubleRec = ^Double;
 
   { Days (integer part) since 1899-12-30, with the time-of-day as the
@@ -4032,6 +4033,13 @@ begin
   case v.VType of
     vtInteger: Result := v.VInteger;
     vtInt64:   Result := PInt64Rec(v.VInt64)^;
+    vtQWord:   Result := Int64(PQWordRec(v.VInt64)^);   { Int64, and that is the
+                 CONTRACT rather than a limitation: `%d` is the signed
+                 conversion and `%u` is the unsigned one. Measured 2026-09-06
+                 against fpc 3.2.2 with q = 18000000000000000000 --
+                 Format('%d') gives -446744073709551616 in BOTH compilers and
+                 Format('%u') gives the full value in both. Do not "fix" this
+                 arm to be unsigned; it would diverge from the oracle. }
     vtBoolean: Result := Ord(v.VBoolean);
     vtChar:    Result := Ord(v.VChar);
     vtExtended: Result := Trunc(PDoubleRec(v.VExtended)^);
@@ -4048,6 +4056,7 @@ begin
     vtChar:       Result := v.VChar;
     vtInteger:    Result := IntToStr(v.VInteger);
     vtInt64:      Result := IntToStr(PInt64Rec(v.VInt64)^);
+    vtQWord:      Result := UIntToStr(PQWordRec(v.VInt64)^);
     vtBoolean:    if v.VBoolean then Result := 'TRUE' else Result := 'FALSE';
     vtExtended:   Result := FloatToStr(PDoubleRec(v.VExtended)^);
   else
@@ -4061,6 +4070,7 @@ begin
     vtExtended: Result := PDoubleRec(v.VExtended)^;
     vtInteger:  Result := v.VInteger;
     vtInt64:    Result := PInt64Rec(v.VInt64)^;
+    vtQWord:    Result := PQWordRec(v.VInt64)^;
   else
     Result := 0;
   end;

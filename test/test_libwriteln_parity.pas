@@ -19,19 +19,27 @@ program test_libwriteln_parity;
   loss is in the tag space and fpc shares it exactly, so there is nothing to
   fix and the row exists to notice if that ever changes.
 
-  DELIBERATELY ABSENT: QWord >= 2^63 and WordBool/LongBool/ByteBool. Those box
-  losing information too, but unlike the Single case they are OURS to fix --
-  fpc emits vtQWord where we emit vtInt64, and the sized-boolean identity is an
-  open Track U fork. So their pairs cannot match today and a row for them would
-  be a known-red assertion rather than a test. They are filed, and named in libwriteln.pas's header:
-    bug-a-a-qword-boxes-as-vtint64-so-array-of-const-loses-unsignedness
+  DELIBERATELY ABSENT: WordBool/LongBool/ByteBool, which box as vtInteger and
+  render as 1/0 where the builtin prints TRUE/FALSE. The sized-boolean identity
+  is an open Track U fork, so a row for them would be a known-red assertion
+  rather than a test:
     bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln
-  A QWord BELOW 2^63 is included, because that one must and does agree. }
+
+  QWord >= 2^63 USED TO BE ABSENT HERE FOR THE SAME REASON AND NO LONGER IS.
+  The old text said "fpc emits vtQWord where we emit vtInt64"; d210325a6 gave
+  QWord its own tag and that sentence stopped being true. The row is now
+  asserted, and it is the row that matters most in this file: fixing the boxing
+  silently broke the RENDERING, because libwriteln's `case` over tags returned
+  the empty string for a tag nobody had added an arm for. The below-2^63 row is
+  what went red and caught it; this row would not have, since it was absent.
+  A negative assertion expires when the feature it denies lands, and the way to
+  notice is to re-read the reason, not the row. }
 uses libwriteln;
 var
   i: Integer;
   i64: Int64;
   q: QWord;
+  qb: QWord;   { >= 2^63: unsigned or it comes back negative }
   b: Boolean;
   c: Char;
   sh: ShortString;
@@ -40,6 +48,7 @@ var
   sg: Single;
 begin
   i := -42; i64 := 9223372036854775807; q := 9000000000;
+  qb := 18000000000000000000;
   b := True; c := 'Z'; sh := 'short'; an := 'ansi'; d := 3.5; sg := 0.5;
 
   writeln('int      builtin=', i);
@@ -50,6 +59,9 @@ begin
 
   writeln('qword    builtin=', q);
   LibWriteLn(['qword    library=', q]);
+
+  writeln('qwordbig builtin=', qb);
+  LibWriteLn(['qwordbig library=', qb]);
 
   writeln('bool     builtin=', b);
   LibWriteLn(['bool     library=', b]);
