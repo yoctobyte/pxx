@@ -218,3 +218,76 @@ half reachable on this target — and it fires, as the table shows.
 So the next step is not "apply it and see", which is now two sessions' worth of
 inconclusive greens. It is to construct the failing program the predicate
 exists for, on a target where it is absent, and watch it fail.
+
+## 2026-09-06, later still — THE DISTINGUISHING CASE EXISTS, and I had already run past it (frank-coord-core)
+
+The section above ended by saying the missing piece was "a program that is
+WRONG without the predicate and right with it", and that finding one was the
+next step. **It is six lines, it was inside the shapes I had already compiled,
+and I did not see it because I only ever ran the PATCHED half.**
+
+```python
+def g(n):
+    s = "a" * n
+    t = s + "b"
+    yield len(t)
+    u = t + "c"
+    yield len(u)
+for x in g(3):
+    print(x)
+```
+
+| build | output |
+| --- | --- |
+| x86-64 (oracle) | `4 5` |
+| wasm32, HEAD as it stands (`0426b285ba35`) | **`4 2`** |
+| wasm32, predicate patch applied (`20d814eef8e7`) | `4 5` |
+
+`t` is `"aaab"`, so `u = t + "c"` is `"aaabc"` and `len(u)` is 5. wasm32 answers
+2, which is what you get if `t` is one character long when the generator
+resumes: the persistent slot holding it is released at the yield, because the
+yield is a return from the step function and the scope-exit loop runs with
+nothing to tell it that `t` is live state rather than a dead temp. **That is
+precisely the hole `SymSkipScopeExitRelease` exists to close, and the six other
+copies of the loop close it.**
+
+### What this changes
+
+- **This is a SILENT WRONG VALUE on a cross-target row, not a leak.** It ranks
+  above everything else in this ticket. The program does not crash, does not
+  warn, and prints a plausible number.
+- **The predicate is not inert on wasm32.** The section above established that
+  it fires (35-40KB of module change) and left open whether firing mattered. It
+  matters: it is the difference between 5 and 2.
+- **The control problem compounds.** `yield 1; yield 2` emits a byte-identical
+  module here AND prints correctly on both targets in every configuration, so
+  it cannot see this defect either — before or after the patch.
+
+### The error I made, because it is the reusable part
+
+I ran three generator shapes that hold a managed local across a yield, saw all
+three agree with the x86-64 oracle under the patch, and concluded the patch
+"changes nothing observable". Every measurement was correct. **The conclusion
+needed the UNPATCHED reading of those same shapes and I never took it** — I had
+compared patched-wasm32 against x86-64 and, separately, patched-module against
+unpatched-module, and neither pair is the comparison that answers "does this
+patch fix anything". Two correct comparisons, and the one that mattered was the
+third.
+
+The tell was visible at the time and I read past it: three shapes changed the
+emitted module by tens of kilobytes. **A patch that rewrites 40KB of a module
+and "changes nothing observable" should never have been written down without
+running the before.**
+
+### What is NOT concluded
+
+That the patch should land. frankwasm measured a regression with this same
+change, and although it does not reproduce in the four shapes I have, I do not
+know which rows they ran. What is established is narrower and firmer than
+before: **there is now a case that the predicate demonstrably fixes**, so the
+question has stopped being "is this loop merely inconsistent with the other
+six" and become "what breaks when we make it consistent, and is that a second
+bug this one was masking".
+
+Whoever takes this needs both halves in the same run: this repro, and
+frankwasm's failing rows.
