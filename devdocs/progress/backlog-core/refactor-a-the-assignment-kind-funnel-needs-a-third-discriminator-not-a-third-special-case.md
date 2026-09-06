@@ -101,6 +101,17 @@ three said "design flaw", four said **which axis**.
 
 ## A FIFTH SITE — not a fifth instance, and it carries a measured disagreement
 
+**SPLIT OUT 2026-09-06 (frankB) as
+[[refactor-p-is-this-node-a-whole-array-is-answered-in-four-places-with-four-lists]]**,
+Track P, Group 28 (the array's shape and who is allowed to ask about it). The
+section below stays here because it is the funnel's own evidence; the WORK of
+reconciling the four predicates is that row. **This ticket keeps the pairwise
+half deliberately** — enum identity and fixed-to-dynamic are facts about two
+sides together and no per-side predicate can express them, so moving the whole
+ticket into a shape-readers group would quietly re-merge the two axes, and the
+axis split is the most valuable thing on this row (frankS, who asked for the
+split in this shape).
+
 *"Is this node a whole array?"* is now answered in **four places with four
 different lists**:
 
