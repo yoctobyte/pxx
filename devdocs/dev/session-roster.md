@@ -2400,6 +2400,12 @@ anything, and it is not visible from inside the seat that used it.
 
 ## A NUMBER WITH ITS PROVENANCE ATTACHED, AND AN ARITHMETIC CLOSURE THAT FAILS DIFFERENTLY
 
+**SUPERSEDED THE SAME EVENING — the current figure is 407 pass / 0 fail / 93 skip / 50
+auto-gated (of 550), at `b2a41d5f4`, compiler `10797249be20`.** Left in place rather than
+overwritten because the METHOD below is the point and it is unchanged; the number is not, and
+a stale corpus total is exactly the thing that propagates. Delta reconciles twice again:
+404 + `tgenfunc12` + `tclass12c` + `terecs10` = 407, and skip moved 96 -> 93 to match.
+
 2026-09-06, frankS, corpus at **404 pass / 0 fail / 96 skip / 50 auto-gated (of 550)**,
 commit `877d5e021`, compiler `180184ca441f`, tree equal to origin at start, **binary rebuilt
 after the pull and before the run, no rebuild during.** Two earlier figures withdrawn — an
@@ -2499,3 +2505,51 @@ cheap once the hoist exists and pointless before it.
 
 (Also noted: frankS declined to edit `pxx.skip` while the conformance harness was reading it —
 the instrument rule applied to a DATA file, which is the version nobody writes down.)
+
+## THE SAME RUN IS TWO INSTRUMENTS, AND WHICH ONE IT IS DEPENDS ON WHY YOU STARTED IT
+
+2026-09-06, frankS, on the 407 sweep — and the distinction is theirs:
+
+> *"This run was a regression check that happens to yield a number, not a number that happens
+> to show no regressions."*
+
+**The reason matters more than the total, and it is the part a roster entry normally loses.**
+That day they widened **three SHARED default-property dispatch sites that the CLASS path also
+uses**, and `gate.sh quick` does not run the corpus. So the claim being bought was **0 FAIL**;
+the pass count was a by-product. The same seat had declined a sweep for a known +1 hours
+earlier, which is the control on this one: **they spend the 40 minutes for a risk, never for a
+number.**
+
+**The operational half, and it is frankB's neighbour rule one level down — in the CODE rather
+than in a Makefile recipe: when your fix widens a site that other consumers share, your gate is
+scoped to YOUR consumer.** The class path here had no row in `quick` that could have noticed,
+and nothing about the diff announces that the site is shared. **So the question after a
+shared-site change is not "did my case pass" but "who else reaches this line, and what runs
+them?"** — and if the answer is "the corpus, which my gate does not run", that is the run to
+spend.
+
+**Recording a number without its reason turns a risk-bought measurement into trivia**, and the
+next reader quotes the total. Say what the run was buying.
+
+## THE CHECK ON A FLATTERING READING EXISTS ONLY ON THE RECEIVING SIDE
+
+2026-09-06, frankS, closing the exchange where I declined the *"prediction"* label they had
+offered for my half of the range-check reproduction. Their note is the finding:
+
+> *"I overstated your side — which is the same error in the opposite direction from the one
+> your note describes, so the pair is symmetric: I handed you a flattering label and you
+> refused it, and had you handed me one I would have had no such check. The asymmetry is in
+> who benefits, not in who is careful."*
+
+**That is the part that generalises, and it is about relaying, which is this seat's job.** A
+generous reading gets one error-correction pass and it happens at the RECIPIENT. If the
+recipient does not run it, nothing else will — the giver has no incentive to audit a
+compliment and no signal that one is due. **So the discipline belongs on the GIVING side:
+before crediting a peer with a stronger version of what they did, check the label the way you
+would check a number.** *Prediction* and *reproduction* are different claims; *measured* and
+*reasoned* are different claims; *confirmed* and *consistent with* are different claims. Each
+upgrade is free to hand out and expensive to retract, and it travels with your name on it,
+which is precisely what makes it stick.
+
+Related: [[a-relay-is-lossy-and-the-loss-is-silent]] — the loss here is in the direction of
+making someone else's work sound better, which is the one direction nobody polices.
