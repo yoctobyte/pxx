@@ -119,3 +119,29 @@ they are distinguished?"*
 shape one type family over and its fix is the precedent for the two-sided
 argument: it landed `AliasIdentityMismatch` as ONE predicate read from both
 sides rather than a comparison written twice.
+
+## Re-measured 2026-09-06 at compiler `3e54aadacbc8` (commit `886bfe597`)
+
+Unchanged, and it reaches METHODS as well as free routines — measured, because
+[[bug-p-a-named-array-type-parameter-was-a-scalar-wherever-no-implementation-header-repaired-it]]
+(frankB, `d51037cf2`) landed in the four method parameter parsers the same day
+and looked like it might interact.
+
+```
+free routine   empty=2 lit=2 named=2      fpc 1 1 2
+class method   empty=2         named=2    fpc 1   2
+```
+
+**IT IS ORTHOGONAL, and the reason is worth stating because it is the opposite
+of what I predicted.** I expected frankB's fix to EXTEND this bug to methods, on
+the reasoning that a method's `a: TDyn` row used to be a scalar and so was
+accidentally distinguishable from `array of LongInt`. It was already collapsing:
+the warning fires at the IMPLEMENTATION HEADER (line 10 of the repro), which has
+always gone through `ParseSubroutine` and its `FindArrayType` arm. frankB's fix
+repairs the rows for the two spellings with NO implementation header — an
+interface method and `virtual; abstract` — which is a population this bug never
+reached in the first place. Neither fix moves the other.
+
+So the fix here is still exactly where the summary says: `FindProcOverloadRec`
+reading `ProcParamDynDepth` beside `Params[j].IsArray`, and the argument-side
+matcher agreeing with it.
