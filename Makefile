@@ -10483,6 +10483,20 @@ test-core: $(COMPILER)
 	@# one both read as Length 0.
 	./$(COMPILER) test/test_a_named_array_type_parameter_survives_a_method_that_has_no_implementation_header.pas $(TESTTMP)/test_namedarrayparam26
 	tools/expect_same.sh test_namedarrayparam26 "$$($(TESTTMP)/test_namedarrayparam26 | tail -n 1)" "NAMEDARRAYPARAM OK"
+	@# bug-p-a-named-dynamic-array-default-declared-in-a-class-body-is-lost-if-the-implementation-omits-it
+	@# -- and it is ALSO the regression control for the row above. Teaching the
+	@# four parameter parsers about named array types made the declaration and
+	@# implementation rows agree, which is what fixed `o.M` here -- and in the
+	@# same stroke it made IsArray true for a NAMED array, so the three method
+	@# parsers, which answered the open-array-default refusal with that flag
+	@# alone, started refusing `const a: TArr = nil` in a class body. A
+	@# regression shipped in that fix and caught only by running this file by
+	@# hand: these rows live in test-core and gate.sh quick does not run them.
+	@# The parsers now ask `IsArray and (dynDepth <= 0)`, which is what
+	@# ParseSubroutine has always asked. Four controls, each removing one of the
+	@# four explanations the failing row alone would have left open.
+	./$(COMPILER) test/test_a_declaration_only_default_on_a_named_dynamic_array_parameter_survives.pas $(TESTTMP)/test_declonlydefault26
+	tools/expect_same.sh test_declonlydefault26 "$$($(TESTTMP)/test_declonlydefault26 | tail -n 1)" "DECLONLYDEFAULT OK"
 	@# bug-p-a-default-value-is-accepted-on-an-open-array-parameter -- FOUR
 	@# PARAMETER PARSERS, ONE REFUSAL. A default on an open-array parameter cannot
 	@# mean anything: there is no array-literal syntax for it, so the value parsed

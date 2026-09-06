@@ -29,6 +29,7 @@ right.
 | bracket-argument arms (2 of them) | `IsArray` alone | sent every `[...]` to the TVarRec builder, so `array of Integer` got the wrong stride |
 | overload signature identity | both, but not `ProcParamDynDepth` | `array of LongInt` and `TLongIntArray` are one signature; the later body wins and fpc binds two |
 | `ParamIsConstVariant` | `TypeKind = tyVariant` alone | answers True for `const a: array of Variant` — the ELEMENT kind read as the parameter's own. **Accidentally right**, and left alone (below) |
+| `FindUMethOverloadAhead`'s candidate probe | `IsArray` alone, one line above `argIsNil` | a named-array parameter recorded with `IsArray = False` was asked about BY TYPE against the ELEMENT kind — so the same row REFUSED `i.A(t)` and marshalled `i.A(nil)` as a scalar into a segfault |
 
 The first two are closed. The third is
 [[bug-p-an-open-array-and-a-named-dynamic-array-parameter-are-one-signature]]
@@ -36,6 +37,37 @@ The first two are closed. The third is
 `FindProcOverloadRec` to consult `ProcParamDynDepth`, which already records the
 difference. This ticket makes that class of misread impossible to write; it does
 not decide any particular caller's semantics.
+
+### The fifth is the first where one field produces TWO different wrong answers at one call site
+
+`pasparser_call.inc`, `FindUMethOverloadAhead`'s single-candidate probe:
+
+```pascal
+if Procs[pi].Params[pj].IsArray then continue;    { array param: no type question }
+if ProcParamUntyped[...] then continue;
+if argIsNil[j] then continue;
+if not MatchParamAccepted(pi, pj, argTk[j]) then ok := False;
+```
+
+Two skips, one line apart, on two different questions. A named array-type
+parameter that the declaration parsers had recorded with `IsArray = False`
+([[bug-p-an-interface-dispatched-call-passing-a-named-dynamic-array-segfaults]],
+closed 2026-09-06) therefore fell past the first skip and was asked about **by
+type** — against the element kind, because that is what the field holds when
+`IsArray` is set — so `i.A(t)` was refused. `i.A(nil)` on the SAME declaration
+took the second skip, was never type-checked at all, and reached the call
+marshalling a dynamic array as a scalar: a segfault.
+
+**One field, one row, one call site, and two different wrong outcomes depending
+on how the argument was spelled** — a refusal for a variable and a crash for
+`nil`. The other four instances each produce one wrong answer; this is the one
+that shows the two meanings are a defect rather than a naming complaint, because
+no single reading of the field is right for both lines (frankS's observation,
+2026-09-06).
+
+Note the declaration-side half of that bug is fixed and this probe is unchanged:
+it is correct **given a correct row**. That is the point — the accessor is for
+the caller who did not know there was a question, and this caller asks two.
 
 ### The fourth instance is the interesting one, because nothing broke
 

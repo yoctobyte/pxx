@@ -4773,7 +4773,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(curTk, Ord(LastTypePointerElemTk), rmIsArr, rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
+        ParseParamDefaultValue(curTk, Ord(LastTypePointerElemTk), rmIsArr and (rmDyn <= 0), rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
                                rmDefSOff, rmDefSLen);
         for k := startIdx to nP - 1 do
         begin
@@ -6853,6 +6853,7 @@ begin
                 if CurTok.Kind = tkColon then mDoneParam := True;
               end;
               mIsArr := False;
+              mDyn := 0;
               if CurTok.Kind <> tkColon then
               begin
                 { Untyped INTERFACE-method param (`out Obj`, no type) — the
@@ -6882,7 +6883,7 @@ begin
               if CurTok.Kind = tkEq then
               begin
                 Next;
-                ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr and (mDyn <= 0), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                        mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                 mHasDefault := True;
               end;
@@ -7535,6 +7536,7 @@ begin
                   if CurTok.Kind = tkColon then mDoneParam := True;
                 end;
                 mIsArr := False;
+                mDyn := 0;
                 mIsUntyped := False;
                 mHasDefault := False;
                 mDefaultVal := 0;
@@ -7576,7 +7578,7 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                    ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mIsArr and (mDyn <= 0), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                            mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                     mHasDefault := True;
                   end;
