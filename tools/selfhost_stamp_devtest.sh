@@ -206,6 +206,47 @@ else
   fails=$((fails+1))
 fi
 
+# --- 5d. AN UNMEASURABLE SOURCE HASH MUST REFUSE, NOT COMPARE EQUAL ----------
+# The guard in $(COMPILER)'s recipe compares the live source hash against the
+# stamp's. If compiler_srchash.sh cannot run, BOTH sides are empty and they
+# MATCH -- so the check that exists to refuse a stale stamp passes vacuously and
+# prints "sources match it" for a tree it never saw.
+#
+# That was not hypothetical. compiler_srchash.sh was `#!/usr/bin/env bash` using
+# ${BASH_SOURCE[0]}, and measured 2026-09-06 in `podman run alpine` with only
+# git and make: `env: can't execute 'bash'`, make carried on, the stamp was
+# written with an empty srchash and srccount 0, and a MODIFIED compiler.pas
+# still produced "verified -- sources match it". The script is POSIX sh now, and
+# this row is the control that keeps it that way: it plants a script that runs
+# and prints nothing, which is exactly the shape a missing interpreter produced.
+restore
+if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
+  cp "$STAMP" "$BAK.src5d"
+  cp tools/compiler_srchash.sh "$BAK.script5d"
+  printf '#!/bin/sh\nexit 0\n' > tools/compiler_srchash.sh
+  chmod +x tools/compiler_srchash.sh
+  touch compiler/pascal26 "$STAMP"
+  out=$(make compiler/pascal26 2>&1)
+  rc=$?
+  cp "$BAK.script5d" tools/compiler_srchash.sh
+  chmod +x tools/compiler_srchash.sh
+  cp "$BAK.src5d" "$STAMP"
+  rm -f "$BAK.script5d" "$BAK.src5d"
+
+  case "$out" in *"produced NO source hash"*) r=yes;; *) r=no;; esac
+  check "an unmeasurable source hash is refused, not compared equal" "$r" "yes"
+
+  if [ "$rc" -ne 0 ]; then r=yes; else r=no; fi
+  check "...and the refusal is a nonzero exit, not just a message" "$r" "yes"
+
+  # Match the SUCCESS LINE, not the phrase. The refusal message itself quotes
+  # "sources match it" while explaining what used to go wrong, so a substring
+  # test for that phrase matches the guard's own prose and fails on a correct
+  # refusal -- which is exactly what it did when this row was first written.
+  case "$out" in *"self-host fixedpoint: verified"*) r=yes;; *) r=no;; esac
+  check "...and it does NOT print the success line" "$r" "no"
+fi
+
 # --- 6. the stamp is a build artifact, not a tracked file --------------------
 if git check-ignore -q "$STAMP" 2>/dev/null; then r=yes; else r=no; fi
 check "the stamp is gitignored" "$r" "yes"

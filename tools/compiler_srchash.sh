@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Print one hash over EVERY source the self-host fixedpoint is a fixedpoint of.
 #
 # WHY A SCRIPT AND NOT A MAKE EXPRESSION. The expression has to name 210 files,
@@ -19,8 +19,30 @@
 # as well as contents -- adding or deleting an .inc changes it -- and does not
 # depend on the order a glob expands.
 # bug-a-the-mandatory-fixedpoint-step-reports-success-from-a-stale-stamp
-set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+#
+# POSIX sh, NOT bash, and that is load-bearing rather than tidiness. This was
+# `#!/usr/bin/env bash` using ${BASH_SOURCE[0]}, and on a system without bash
+# -- an Alpine/musl container, a BusyBox userland, any minimal image -- it did
+# not run at all. `env: can't execute 'bash'` is printed, make CARRIES ON, and
+# the stamp is written with an EMPTY srchash and srccount 0. The guard in
+# $(COMPILER)'s recipe then compares the live hash (empty, same reason) against
+# the stamp's (empty) and they MATCH, so the check that exists to refuse a
+# stale stamp passes vacuously and prints "sources match it".
+#
+# Measured 2026-09-06 in `podman run alpine` with only git and make installed:
+# modified compiler/compiler.pas, re-ran make, and got
+#   "self-host fixedpoint: verified -- 1 round(s), 67075a6033c8 (stamp read
+#    back; sources match it)"
+# on sources the stamp had never seen. That is exactly the failure 01dd27dd1
+# added the guard to make impossible, restored by the interpreter being absent.
+#
+# So: no bashisms here. $0 rather than ${BASH_SOURCE[0]} (this script is always
+# invoked as a command, never sourced), and `set -u` without `-o pipefail`,
+# which dash rejects outright. The pipeline's failure mode is covered instead by
+# the recipe REFUSING an empty hash -- see the same commit -- because an empty
+# result means "could not measure", never "measured and they match".
+set -u
+cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 
 if [ "${1:-}" = "--list" ]; then
   # the devtest's half of the contract: print the set, one per line, sorted

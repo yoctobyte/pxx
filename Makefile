@@ -373,6 +373,16 @@ selfhost-verify: $(COMPILER_STAMP)
 $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
 	@livesrc=$$($(COMPILER_SRCHASH)); \
 	 stampsrc=$$(sed -n 's/^srchash //p' $(COMPILER_STAMP)); \
+	 if [ -z "$$livesrc" ]; then \
+	   echo "$(COMPILER_SRCHASH) produced NO source hash, so this check cannot run."; \
+	   echo "  An empty result means 'could not measure', never 'measured and they match'."; \
+	   echo "  Both sides of the comparison below would be empty and would COMPARE EQUAL,"; \
+	   echo "  which is how a stale stamp used to print 'sources match it' on a tree it"; \
+	   echo "  had never seen. Refusing instead."; \
+	   echo "  Usual cause: the script could not execute at all. Run it directly to see"; \
+	   echo "  why -- $(COMPILER_SRCHASH)"; \
+	   exit 1; \
+	 fi; \
 	 if [ "$$livesrc" != "$$stampsrc" ]; then \
 	   echo "$(COMPILER_STAMP) was written for DIFFERENT SOURCES than the tree has."; \
 	   if [ -z "$$stampsrc" ]; then \
