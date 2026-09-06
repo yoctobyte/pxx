@@ -125,6 +125,61 @@ CASES = {
 }
 
 
+def readback_guard_cases(tmp: pathlib.Path) -> list[str]:
+    """THE GUARD'S OWN POSITIVE CONTROL, and it needs a BROKEN WRITER to have one.
+
+    Every case in CASES asserts the write LANDED. None of them can tell you the
+    read-back check works, because a correct write and a missing check produce
+    the same green -- which is precisely the shape of the four defects this
+    check exists for: `claim` printed success four separate times while the
+    field did not land, and no test noticed, because every test was written
+    against a writer that worked.
+
+    So: replace the writer with one that does nothing, and assert the wrapper
+    SAYS SO. Then restore it and assert the same call is silent, or the guard
+    would be one that fires on everything, which is as empty as one that never
+    fires.
+    """
+    import contextlib
+    import io
+
+    failed = []
+    real = progress._set_field_write
+
+    p = tmp / "readback-positive-control.md"
+    p.write_text("---\ntrack: T\nowner: nobody\n---\n\n# t\n", encoding="utf-8")
+    try:
+        progress._set_field_write = lambda path, marker, value: None
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            progress.set_field(p, "Owner", "claude@xeon")
+        said = buf.getvalue()
+    finally:
+        progress._set_field_write = real
+
+    if "DID NOT STICK" not in said or "nobody" not in said:
+        failed.append("a write that silently did NOTHING was reported as success")
+        print("  FAIL readback-fires-when-the-write-does-not-land")
+        print("    got: " + repr(said))
+    else:
+        print("  ok   readback-fires-when-the-write-does-not-land")
+
+    # CONTROL: the real writer must not trip it. A guard that fires on the
+    # working case trains everyone to ignore it.
+    q = tmp / "readback-negative-control.md"
+    q.write_text("---\ntrack: T\nowner: nobody\n---\n\n# t\n", encoding="utf-8")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        progress.set_field(q, "Owner", "claude@xeon")
+    if "DID NOT STICK" in buf.getvalue():
+        failed.append("the read-back fired on a write that DID land")
+        print("  FAIL CONTROL-readback-is-silent-on-a-good-write")
+        print("    got: " + repr(buf.getvalue()))
+    else:
+        print("  ok   CONTROL-readback-is-silent-on-a-good-write")
+    return failed
+
+
 def main() -> int:
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="setfield-devtest-"))
     failed = []
@@ -141,6 +196,7 @@ def main() -> int:
         if not ok:
             failed.append(name)
             print("    got: " + repr(out))
+    failed += readback_guard_cases(tmp)
     print("FAILED: " + ", ".join(failed) if failed else "all set_field cases pass")
     return 1 if failed else 0
 

@@ -3046,7 +3046,7 @@ def _ensure_fm_key(path: Path, text: str, fm, key: str, value: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def set_field(path: Path, marker: str, value: str) -> None:
+def _set_field_write(path: Path, marker: str, value: str) -> None:
     """Write `<marker>: <value>` in whichever form the ticket already uses.
 
     Prefers an existing `- **Marker:** ...` bullet; otherwise writes the YAML
@@ -3153,6 +3153,61 @@ def set_field(path: Path, marker: str, value: str) -> None:
         else:
             text = f"---\n{line}\n---\n\n" + text
     path.write_text(text, encoding="utf-8")
+
+
+def field_reads_back_as(path: Path, marker: str) -> str:
+    """What the file NOW says this field is, in the authority order everyone reads.
+
+    Frontmatter wins where it exists (since `f1758c6f4`); the bullet is the
+    legacy form. This is deliberately a RE-READ FROM DISK and not a check of the
+    string this module just built -- an in-memory check would agree with the
+    write by construction, which is the whole failure mode below.
+    """
+    text = path.read_text(encoding="utf-8")
+    fm, _ = parse_frontmatter(text)
+    key = marker.lower()
+    if key in fm:
+        return str(fm[key]).strip().strip('"').strip("'")
+    return first_bullet_value(text, marker)
+
+
+def set_field(path: Path, marker: str, value: str) -> None:
+    """`_set_field_write`, then READ THE FIELD BACK AND SAY SO IF IT DID NOT LAND.
+
+    FOUR DEFECTS IN THIS WRITE PATH, AND THE TOOL NEVER ONCE KNEW. Every one was
+    found by a human noticing damage downstream, days or hours later:
+
+      2026-07-31  no bullet to replace -> written back byte for byte unchanged,
+                  `claim` printed success. Two agents did the same work.
+      2026-09-06  bullet won, frontmatter went stale -> 10 tickets carried both
+                  forms, 5 disagreed, two of those naming live sessions.
+      2026-09-06  a whitespace class spanned the newline -> the value landed
+                  in the prose two lines down, bullet still empty.
+      2026-09-06  `.*` is single-line -> a wrapped value was truncated, 67
+                  bullets board-wide.
+
+    A CLAIM IS THE FLEET'S DISTRIBUTED MUTEX. A claim that reports success and
+    does not stick is not a formatting bug, it is two sessions on one topic --
+    the exact collision nothing else in this repo can see. So the write is no
+    longer trusted on its own report: read the field back the way `ready`,
+    `check` and every holdings report will read it, and if it does not say what
+    was asked, SAY SO LOUDLY. This catches the CLASS, not the four instances:
+    the next regex defect here will be different and will fail the same way.
+
+    Deliberately a loud print and not an exception. The write may have partly
+    landed, the caller may be mid-`resolve`, and a traceback would leave the
+    ticket in a worse state than a warning does. The point is that the failure
+    stops being SILENT, which is the only property all four shared.
+    """
+    _set_field_write(path, marker, value)
+    got = field_reads_back_as(path, marker)
+    want = value.strip().strip('"').strip("'")
+    if got != want:
+        print(f"  !! {path.name}: `{marker}` DID NOT STICK. Asked for "
+              f"{want!r}, the file now reads {got!r}. The write reported "
+              f"success and the field did not land -- if this was a `claim`, "
+              f"NOBODY HOLDS THIS TICKET and it will be offered to someone "
+              f"else. Fix the field by hand and say which tool wrote it.")
 
 
 # ---------------------------------------------------------------------------
