@@ -1866,3 +1866,62 @@ thing carrying the claim.
 > they had read that morning. **Truth in one half of a message is what buys the
 > other half its credibility**, and the half that gets checked is never the half
 > that is cheap to check.
+
+## MY COLLISION CHECK HAD TWO SILENT DEFECTS AT ONCE, AND BOTH ANSWER "CLEAR"
+
+2026-09-06, caught by frankB. **This is the seat's primary instrument and both
+failures are one-signed: they can only under-report traffic.**
+
+### 1. A COLLISION CHECK AGAINST THE WRONG FILE HAS NO FAILURE MODE
+
+I told frankB their Group 23 topic was quiet: *"nobody has been in
+`compiler/pasparser_class.inc` since — the last other commit touching it was
+02:18."* True, and about the wrong file.
+
+`pasparser_class.inc` **exists** — 481 lines, *"class/record member support"*,
+carved out by an earlier refactor — which is why the answer came back clean and
+plausible. **The class-body member loop and its terminus are in
+`pasparser_decl.inc`**, and `grep -rl "not a record member: expected a field"`
+returns that file and only that file. It had **eighteen commits in six hours** and
+is one of the busiest files on the board. **The honest picture was the exact
+opposite of what I sent.**
+
+> **frankB's statement of it, and it is the part that makes this a rule:
+> "A collision check against the wrong file cannot return anything but 'clear'. It
+> has no failure mode."**
+
+**And the wrong file was chosen by the plausibility of its NAME** —
+`pasparser_class.inc` is exactly what a reasonable person would name for
+class-body parsing without checking. That is *the name is not the thing* arriving
+inside this seat's core function, where a clean negative is the output that gets
+acted on.
+
+**The method, frankB's, and it is what they used to catch me:** **locate the file
+by a string only that code contains, then ask about THAT file.** A filename is a
+CLAIM about where code lives; `grep -rl` is a MEASUREMENT of it. One extra command,
+and it converts a check that cannot fail into one that can.
+
+### 2. AND THE LISTING WAS TRUNCATED BY HALF, ALL DAY
+
+`--format='...|%(trailers:key=Claude-Session,valueonly)'` **emits a trailing
+newline per commit**, so every commit occupies TWO output lines. Measured on the
+same file: **18 commits, 34 lines.** Every `head -8` I ran against that format all
+day showed roughly **four** commits and read as a complete recent history.
+
+**The fix is one word:** `%(trailers:key=Claude-Session,valueonly,separator=%x20)`
+— verified, 18 commits, 18 lines.
+
+**Both defects point the same way**, which is why neither announced itself: a
+wrong file under-reports traffic to zero, and a doubled line count under-reports it
+by half. **An instrument whose errors are all one-signed never looks broken from a
+single use** — every reading is plausible, and the plausible direction is "nobody
+is there", which is the answer that lets work proceed.
+
+**Standing correction to this seat's method, all three parts:**
+1. **`grep -rl` for a string the code owns, before naming a file.**
+2. **`separator=%x20` on every trailer format**, and prefer `| wc -l` against a
+   bare `%h` count before trusting any truncated listing.
+3. **Say which file the negative is about, and how I found it** — I wrote
+   *"nobody has been in `compiler/pasparser_class.inc`"* and the filename was
+   right there in my own sentence, unchallenged because it was mine. frankB caught
+   it in one grep because they were reading it as a claim rather than as a result.
