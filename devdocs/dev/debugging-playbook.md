@@ -15806,3 +15806,37 @@ check passes a compiler whose `halt` stopped halting, and an rc-only check passe
 one whose `break` stopped bounding the loop.** One assertion class per defect
 class, in the same file, because the two intrinsics fail observably in different
 channels.
+
+## AN OLD PINNED BINARY MOVED OUT OF ITS TREE READS THE *LIVE* RTL — so the control passes
+
+frankH, 2026-09-06, immediately after landing pin v405, trying to prove the red
+was cleared. They extracted the OLD pinned binary from git, copied it into a
+scratchpad, and re-ran the canary's probe against it **expecting failure** on
+`mimic_string` / `mimic_urllib_request`, which is what the gate had reported.
+
+**It passed. Both units. The positive control could not fail.**
+
+**A pinned binary resolves `uses builtin` / `builtinheap` via its ExeDir** —
+`stable_linux_amd64/default/builtin/` — **checked BEFORE the CWD-relative
+fallback.** Copied elsewhere, the old binary has no ExeDir `builtin/` at all, so
+it falls through to the **live `compiler/builtin/` at HEAD**, which is exactly
+where the missing `pyvar_is_objtag` is defined. **The control was measuring the
+new RTL with the old compiler** — a compiler-plus-RTL pairing that has never
+existed and never will.
+
+Every instrument that lies, lies by being correct about something else. This one
+was correct about a configuration nobody has ever shipped.
+
+**CONSEQUENCE, and it is the operational half: a pre-pin canary failure is not
+reconstructable from a `git show` of one file.** `make pin` replaces the frozen
+`builtin/` set, and any copy of the old binary placed anywhere else silently
+changes which RTL it reads. To reproduce one you need the old binary **in situ**
+with its own frozen set — a checkout of the whole `stable_linux_amd64/default/`
+directory, not one blob.
+
+**And note the sequence, because it is the usual one.** The first probe was
+mis-aimed in a duller way — feeding units straight to the compiler, which
+answered *"this file is a unit, not a program"*, the compiler being right and the
+probe being wrong. **Fixing the obvious aim problem is what made the wrong answer
+look earned:** a second, better-aimed probe produced a clean pass, and a clean
+pass after a visible correction reads as a result rather than as the next bug.

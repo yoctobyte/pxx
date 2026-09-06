@@ -1441,9 +1441,20 @@ over-refusal reads as licensing the single under-refusal that matters.
 **`CLAUDE.md` is the owner's file; this seat does not edit it and has relayed the
 wording upward instead.**
 
-**The operational rule, which needs no file change to follow: of the gate's rows,
-exactly one is not a grade.** Before pinning, read the fixedpoint row on its own
-and treat every other RED as a number to record in the grade.
+**The operational rule, which needs no file change to follow — and the FIRST
+VERSION OF IT WAS ALREADY THE WRONG SHAPE.** I wrote *"of the gate's rows,
+exactly one is not a grade."* frankH corrected it before it hardened: **that is a
+fact about a row LIST, and a fact about a list goes stale silently the moment
+somebody adds a row.** A new definitional row tomorrow makes "exactly one" false
+without anything reporting it — the same animal as a stale `Makefile:<n>`
+citation, which does not error, it points somewhere. The durable form states the
+REASON:
+
+> **A row that restates the pin's own DEFINITION is not a grade. Every row that
+> reports a property of the TREE is.**
+
+That survives a new row; a count does not. Before pinning, sort the rows by that
+question and treat every tree-property RED as a number to record in the grade.
 
 **And an unreproducible fixedpoint red is a HOLD, not a delay and not a pass.**
 frankH could not reproduce it — reseeded from the pin, removed the stamp, touched
