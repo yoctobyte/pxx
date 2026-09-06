@@ -14622,3 +14622,63 @@ something the moment an unrelated hole was closed.** Read that with *"a hole is 
 someone widens a guard into it"*: **the population of latent wrong comments is not static, and
 closing a gap can promote several of them at once.** After landing a change that fills in a column
 or enables a path, grep for the guards that were reading that column as always-empty.
+
+## THE CONSTANT-VALUE RULE IS NOT ABOUT CAPTURES — IT IS ABOUT ANY COLUMN THAT DOES NOT VARY, AND THREE SESSIONS HIT IT INDEPENDENTLY IN ONE NIGHT
+
+The rule went in as *"a capture whose value is the same for every row is a guard that cannot fire"*.
+frankS generalised it the same night, from the other side: **an ASSERTION whose expected value is
+constant across the population is the same animal.** Three instances, 2026-09-06, three sessions,
+three different subjects — which is what makes this a class rather than an anecdote.
+
+**1. A capture (this seat).** `--diag-map` recorded the first non-blank line of the compiler's
+output. Against a compiler that prints a banner, every one of 88 rows records the same string; the
+map looks fully populated and the diff can never fire.
+
+**2. An assertion (frankS).** A six-row test asserting that a `string[N]` VALUE parameter truncates
+through six different call shapes. Every row's correct answer is the same four characters, so the
+test printed `len=4 [lite]` six times. **A missing row shortens the diff, but two rows SWAPPING
+produces no signal at all**, and a failure cannot say which call shape regressed. Each row prints
+its own tag now.
+
+**3. A carrier read (frankS).** The `string[N]` capacity was read off the parameter's own symbol,
+and it worked — until a second call to the same routine. A hidden argument temp recycles the symbol
+slot, so **the same program read 4 at one call site and 255 at two.** The tell that did not fire:
+**4 IS THE RIGHT ANSWER**, so the stale read looked correct for as long as there was one call.
+`defs.inc` already says this about five other columns — *"a param symbol does not outlive the
+callee's scope ... not merely unreliable, it is reliably WRONG"* — and this was the sixth column.
+
+**The unifying question, and it now covers three kinds of thing: "if the machinery did nothing at
+all, what value appears — and does it differ ACROSS the population?"** For a capture, the answer is
+the banner. For an assertion, it is the one expected value shared by every row. For a carrier, it is
+whatever was in the slot last. **A column that does not vary cannot carry information, whether you
+are writing it, asserting it, or reading it.**
+
+Note how close this sits to frankD's `Length([]) = 0` the same night: there the DEGENERATE case
+collides with the failure value; here the WHOLE POPULATION collides with itself. Both are answered by
+the same discipline — **make the rows differ on purpose, and prefer a probe whose failure value is
+absurd rather than merely plausible.**
+
+### And the same night's second convergence: a wrong VALUE is worse than a wrong DIAGNOSTIC
+
+frankD reverted a three-line parse fix because it turned `unknown type: const` into
+`Length(Args)=4025888`. frankS hit the mirror image while narrowing a refusal that was *correct
+about something else* — `a Char VALUE is not a PChar` is true of a PChar parameter, and the
+predicate it was gated on also answered yes for a frozen-string parameter, where fpc prints `Q`.
+Scoping the check to the pointer destination **exposed a missing conversion**: the row printed an
+empty string. **A wrong value where there had been a wrong diagnostic**, which is the worse of the
+two, so the conversion arm had to be BUILT rather than the check merely deleted.
+
+> **Narrowing an over-broad refusal is not a one-sided change.** The rows it stops refusing have to
+> land somewhere, and "somewhere" is only correct if the code they now reach exists. **Before
+> deleting or scoping a guard, run the cases it was wrongly catching and check they produce a
+> RIGHT answer, not merely a non-refusal.** A refusal is a result; replacing it with a wrong value
+> is a regression wearing the shape of a fix.
+
+### A footnote on apertures, from the session that has now hit it twice
+
+frankS ran `run_pascal_conformance.sh --all` as a regression check and published "379 fail" before
+noticing that `--all` is **every top-level `.pp`, 1362 files**, while the curated set — the default
+invocation — is **550**. The curated re-run was 385/0/115, identical to baseline: nothing had
+regressed. Same shape as `grep -c 'gap:'` counting prose. **A flag that widens a population changes
+what the number MEANS, not just how big it is**, and the two numbers are not comparable even when
+both are correct.
