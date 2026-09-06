@@ -17774,6 +17774,112 @@ their own candidate.** The test was written so a reader could check the author; 
 be more useful on the giving side, where declining costs one sentence and nothing has
 propagated yet.
 
+## THE REFUTATION WAS AUTHORED BY THE PERSON IT REFUTES, IN THE SAME ARTEFACT — twice in one evening
+
+2026-09-06. Two seats, two subsystems, one shape, and neither could have seen the other.
+
+**frankS**, replacing `FindProc` with a raw `Procs[]` scan in the generic-routine path: *"I
+replaced `FindProc` with a raw `Procs[]` scan and wrote a comment explaining that FindProc's
+visibility filter was the reason not to use it. That filter was the load-bearing part"* — a
+specialization emitted for an in-unit use lands in that unit's implementation where the
+importing program cannot see it, so the program must emit its own copy, which `FindProc`
+answering `-1` across that boundary had always arranged. **"I stated the exact fact that refuted
+my change, inside the change, and shipped it to a build."**
+
+**This seat**, the same evening: wrote *"the silent face is in the pin and the loud one is
+not"*, and **three sentences later** recorded the pinned compiler ISSUING the loud refusal, at
+line 66, by name — filed under *"can this fixture serve as a pin probe?"*.
+
+**In both cases the refuting fact was PRESENT, AUTHORED BY THE CLAIMANT, and in the SAME
+ARTEFACT as the claim.** Not missing. Not expensive. Not somewhere else.
+
+**Why they never meet: the two sentences are written under different QUESTIONS.** frankS's
+comment answers *"why not FindProc?"*; the claim it refutes answers *"is this scan safe?"*. Mine
+answered *"can this fixture be a pin probe?"*; the claim answered *"does the pin carry the loud
+face?"*. **Adjacency in the text is not adjacency in the reasoning** — a fact is shelved under
+the question that was live when it arrived, and nothing re-reads the shelf.
+
+**frankS's sentence is the general form and it is the best line of the night:**
+
+> **"Reasoning written into a comment is not thereby checked."**
+
+Writing the justification FEELS like discharging the objection. Articulating why a known risk
+does not apply produces the same closure as testing whether it applies, and it produces a
+durable artefact, which is worse — the next reader inherits a settled tone over an unrun check.
+
+**Operational, two halves:**
+- **A justification you write for why a known objection does not apply is the HYPOTHESIS, not
+  the answer.** Go run the thing it exculpates. If it were cheap enough to write a paragraph
+  about, it was cheap enough to probe.
+- **Reviewing your own diff: grep it for the sentences that NAME a risk, and check each one has
+  a corresponding test or measurement rather than a corresponding paragraph.** The named risks
+  are the ones you already know the shape of; they are also the ones you have already talked
+  yourself out of.
+
+**Sorting, by the first-question test.** Not the artefact-vs-rendering family — both of us read
+our artefacts correctly. Not the wrong-population family — both populations were right. The
+first question here is **"did I CHECK this, or did I EXPLAIN it?"**, which nothing else in this
+file opens with.
+
+### THE COROLLARY THAT MAKES IT WORSE: THE BETTER THE PROSE, THE LONGER IT SURVIVES
+
+Both artefacts were well written. frankS's comment names the exact mechanism it is wrong about;
+mine gave the sha, the binary and the line number. **A vague note would have been re-derived by
+the next reader; a precise one is accepted.** Same asymmetry as `## TEXT THAT ASSERTS THE
+ABSENCE OF SOMETHING THAT IS PRESENT`, and frankH's phrasing from the same evening covers both:
+**an artefact written for a reader who finishes it.**
+
+## A FIXTURE'S COVERAGE IS SET BY ITS SHAPE AND TRUNCATED BY ITS EARLIEST REFUSAL
+
+Two fixture-design rules arrived within an hour of each other from different lanes, and they are
+complements rather than duplicates.
+
+**frankS — coverage EXCEEDS the stated cause, so write the shape down.**
+`test_generic_body_end_counting` was built to catch a truncated generic body and it caught a
+**visibility regression**, because its specializing use lives in the PROGRAM body — the right
+SHAPE for a question nobody had asked of it. *"Write the shape down, not only the cause."* A
+fixture named and documented by its cause is findable only by someone chasing that cause; the
+shape is what makes it reusable, and the shape is what the next author needs in order to know
+they already have the row.
+
+**frankH — coverage is CUT SHORT by anything the same file asserts that can refuse first.** A
+fixture asserting a REFUSAL and a VALUE in one file **cannot measure the value on any build that
+still refuses.** Measured: under the pin, the nested-N-D fixture dies at line 66 on the loud
+face and never reaches a single silent row, so the test written to catch both faces can observe
+neither on the build where it matters.
+
+**Together:** a fixture reaches as far as its shape and stops at its first refusal. So **put a
+refusal row and a value row in different files** whenever the value rows are ever going to be
+run against a build that might still refuse — which for this fleet means any fixture that will
+ever be pointed at `$(PXX_STABLE)`. And record the SHAPE in the file, because that is the field
+the next author greps for.
+
+## A DIAGNOSTIC THAT ENUMERATES CANDIDATES IS COMPLETE ABOUT THE TABLE, NOT ABOUT THE SOURCE
+
+frankS, 2026-09-06, `04de42311`. Two generic routines sharing a name and type arity but
+differing in value-parameter count both mangled to `Add_LongInt`; the sweep is destructive, so
+the first template consumed every use and the second emitted nothing. The compiler said:
+
+```
+no overload of Add_LongInt matches these arguments
+  argument types: (ShortString)
+  candidates:
+    Add_String(AnsiString, AnsiString)
+```
+
+**Every line is true.** The candidate list is an accurate rendering of the candidate TABLE. The
+table was missing a member, and **nothing in the diagnostic's vocabulary can say "a candidate
+that should exist was never emitted"** — an absent overload and an overload the programmer never
+wrote produce the identical message. frankS's phrasing: **a true report about a program that is
+not the one written.**
+
+So it reads as a USER error with unusual confidence, because the compiler has helpfully listed
+what it does have. **When an overload/candidate/lookup diagnostic surprises you, the first
+question is not "which candidate did I want" but "is the table complete"** — and the table's
+population is built by a pass that has its own failure modes and no voice in the message.
+Another member of the CLAUDE.md family: it does not error, it answers, and it is correct about
+something else.
+
 ## A FLAPPING ROW CANNOT BE PART OF A ZERO-RED CRITERION — the criterion gets satisfied by SAMPLING
 
 2026-09-06, frankA's measurement, relayed by frankuser, banked here because the target changed
