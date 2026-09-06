@@ -7736,6 +7736,50 @@ They are what killed every *shape* explanation, and it was round 5's conclusion 
 **content** instrument (which register holds what) the only remaining move. The
 falsifications were the work; the delay was one unasked question inside them.
 
+## WHEN THE CONTROL IS THE ONLY ROW THAT FAILS, THE OTHER ROWS ARE NOT PASSING — they are agreeing with each other and wrong together
+
+Two instances 24 hours apart, both by this file's reader, both on a fixture
+built to reproduce a defect before fixing it. In each case every assertion row
+went green and the **positive control** — the row that replays the broken
+behaviour and must show the defect — came back green too, i.e. FAILED. And in
+each case the reflex is to distrust the control, because N rows agree and one
+does not.
+
+**The control was right both times, and chasing it is what found the real
+condition.**
+
+1. **2026-09-06, pin verify.** The wedge control expected `git` to refuse a
+   checkout over restored artefacts. It did not. Cause: git refuses only when
+   the target content **DIFFERS** — so verifying the *current* pin would never
+   have wedged, and only a pin already overtaken by a newer one bites. The
+   defect was conditional and the fixture had built the unconditional case.
+2. **2026-09-07, a stub closing into two buckets.** The control replayed
+   `publish()`'s old ordering and expected a duplicate. It did not appear.
+   Cause: `git checkout <branch>` restores an unlinked file only when its
+   content **DIFFERS** between the detached sha and the branch tip — so a stub
+   nobody edited closes cleanly even against the broken code. All four
+   assertion rows passed **against the unfixed `publish()`**, and the test was
+   measuring nothing.
+
+**The shared shape: a conditional defect and a fixture that accidentally built
+the condition where it does not fire.** Both times the trigger was the same
+word — git acts only when content DIFFERS — which is worth carrying as a prior
+whenever a control over git behaviour comes back quiet.
+
+**So the rule is not "trust the control over the rows".** It is narrower and
+more useful: **a green control means the fixture is not reproducing the defect,
+and therefore the passing rows are unproven, not confirmed.** Do not adjust the
+control until it passes. Ask what condition the real occurrence had that your
+fixture lacks — and in this repo, ask first whether the file you are acting on
+actually differs between the two trees.
+
+**And the payoff is usually bigger than the fix.** In case 2 the condition —
+the stub must have been EDITED after the sha under test — means the tickets at
+risk are exactly the ones somebody bothered to annotate. **A defect whose
+incidence rises with how much attention a thing received** is worth more than
+the ordering bug that causes it, and nothing but the failing control would have
+surfaced it.
+
 ## A selftest over fixtures YOU wrote tests the logic, not the input — run the control against the real file
 
 Sharpens *"the best positive control is one you FIND, not one you build"* above,
