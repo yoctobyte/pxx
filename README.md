@@ -59,27 +59,43 @@ choose to ignore this, you do so entirely at your own risk.
 Prerequisites: Linux x86-64 and GNU `make`. FPC is needed only for bootstrap or
 recovery builds.
 
-**Latest stable** (recommended) — clone, then check out the newest stable
-release tag:
+**A fresh checkout already ships a working compiler** at
+`stable_linux_amd64/default/pinned`, so you can compile something before you
+build anything. `./install.sh` is the friendly setup path — it checks that a
+compiler runs on this host and writes a ready-to-use `./pxx` wrapper in the
+project root (`--yes` to skip the prompts, `--no-path` to skip the PATH
+offer); the documentation's [Install page](docs/install/index.md) leads with
+it. The recipes below are the from-source path, and `./pxx` in the
+documentation's examples is the wrapper that script writes — this README uses
+`./compiler/pascal26`, which is the same compiler after `make`.
+
+> **During the `0.x` beta there is no stable tag yet.** Use the **Current**
+> recipe below; the stable-tag one is what to use once tags exist. The
+> command is written to be a no-op rather than an error in the meantime,
+> because a bare `git checkout ""` fails with *"empty string is not a valid
+> pathspec"* — which reads as a typo and sends a first-time reader hunting
+> for one.
+
+**Latest stable** (recommended, once a stable tag exists) — clone, then check
+out the newest stable release tag:
 
 ```sh
 git clone https://github.com/yoctobyte/pxx
 cd pxx
-git checkout "$(git tag -l 'v*.*.*' | awk '!/-/' | sort -V | tail -n1)"   # newest stable tag
+TAG="$(git tag -l 'v*.*.*' | awk '!/-/' | sort -V | tail -n1)"   # newest stable tag
+if [ -n "$TAG" ]; then git checkout "$TAG"; else echo 'no stable tag yet — staying on master'; fi
 make
 make test
 ```
 
-**Current** — the tip of `master` is the live tree (passes its gates; just ahead
-of the last stable tag). Skip the checkout to track it:
+**Current** — the tip of `master` is the live tree (passes its gates; ahead of
+the last stable tag, and during the beta it is the only tree there is). Skip
+the checkout to track it:
 
 ```sh
 git clone https://github.com/yoctobyte/pxx && cd pxx
 make && make test
 ```
-
-> During the `0.x` beta there may be no stable tag yet — use `master`, or check
-> out the latest prerelease with `git tag -l` + `git checkout <tag>`.
 
 Bootstrap from FPC (first build on a fresh machine, or recovery):
 
