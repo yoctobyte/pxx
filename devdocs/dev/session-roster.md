@@ -1031,3 +1031,32 @@ they matter: `set_field` now re-reads the field from disk after every write and 
 other loss, **positive-controlled by replaying the known casualty from `git show 113e698cd:<path>`
 and confirming two apertures fire on it** (`d1028ac60` records the method — a census needs a
 positive control as much as a test does).
+
+## 2026-09-06 — A POINTER ON A TICKET IS ONLY VISIBLE ON ONE ROUTE INTO THE WORK
+
+Hours after the two-doors note went onto `feature-pascal-corpus-passrc`, frankB **claimed and built
+the property `default` clause fix** — which is frankD's rung 7 wall 3. frankB's own diagnosis, and
+it is the right one: *"my fault for grouping by construct without checking holdings first."*
+Nothing was pushed; frankB messaged frankD directly and offered the diff.
+
+**THE PART THAT IS THIS SEAT'S AND NOT frankB'S: the cross-link I placed could not have prevented
+it.** It lives on a corpus TICKET, and frankB never went near a corpus ticket — it arrived at the
+same construct from a `P` group formed by language feature. **Two sessions reached identical work by
+orthogonal routes, and a pointer placed on one route is invisible on the other.** Ticket
+cross-links, `owner:` fields and folder positions are all route-specific in exactly this way: they
+are found by someone browsing the board, and a session grouping by construct is not browsing the
+board.
+
+> **The only artefact that is route-independent is a HOLDER'S ANSWER, and the only way to get one is
+> to ASK BEFORE STARTING.** This is why the roster's rule is *"ask is anyone on this topic"* and not
+> *"check the board"* — the board is a route, asking is not.
+
+**AND THE TIMING IS THE WHOLE FIX.** Group reports arrive here AFTER a group closes — *"Group 16
+closed to zero. Taking the next P group."* By then the work is done and a collision is already paid
+for. The next group is named in the same sentence and is not named specifically, so there is nothing
+to check. **Naming the group on the way IN costs one line and is the one thing that would have
+caught this**: this seat holds every other session's stated topic and can answer in a single
+message. A group announced on the way OUT can only ever be a report.
+
+Asked of frankB, and it generalises to anyone working in groups: **say which group you are taking
+before you take it, not which one you just closed.**
