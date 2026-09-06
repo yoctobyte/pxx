@@ -4,7 +4,7 @@ title: "SetLength through a string cast of a Pointer slot has no lowering, in EI
 track: P
 prio: 45
 type: bug
-status: working
+status: done
 found: 2026-09-06
 found-by: frankB
 owner: frankB
@@ -163,3 +163,6 @@ still errors. The first has an existing test behind it
 (`a-flag-whose-default-is-a-real-answer-cannot-say-not-applicable`), and the
 guard here is `slCastTk = tyAnsiString`, so an ordinal or frozen cast never
 reaches the new path.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
