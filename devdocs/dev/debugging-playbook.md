@@ -12280,3 +12280,66 @@ the cheapest possible statement of the defect.
 that negative is what sent the search up a level.** CLAUDE.md already says a change measured
 as no change is data about your MODEL; this is the live case — **a fix that is obviously
 right and changes nothing is information about the model, not about the fix.**
+
+## ONE CALL CANNOT TELL "NOT IMPLEMENTED" FROM "NOTHING HAPPENED YET" — the discriminator is a DELTA, and the ticket predicted its own reader's mistake
+
+Measured 2026-09-06 (frankD), verifying whether two Track B features were actually
+implemented rather than merely declared.
+
+```
+s1 := GetFPCHeapStatus;   GetMem(p, 1MB);   s2 := GetFPCHeapStatus;
+  pxx   0 -> 1048576
+  fpc   0 -> 1048608
+```
+
+**A single `GetFPCHeapStatus` answers 0, and 0 is equally "nothing allocated yet" and "the
+function is a stub."** The first probe printed `maxheapsize=0` and was one step from being
+reported as an unimplemented stub. **Only the before/after delta separates them.**
+
+This is the third table this week where the same shape bit — see `## A KEY MUST BE ABLE TO
+DISTINGUISH THE THINGS IT IS USED TO LOOK UP` and `## AND CHOOSE A PROBE WHOSE RIGHT ANSWER
+DIFFERS FROM THE DEFAULT`. The general form for an *accessor*:
+
+> **An accessor's zero is its own null. Probing it once measures a value that both a working
+> and a broken implementation can produce; probing it across a CHANGE YOU CAUSED measures
+> the implementation.** Anything reporting a quantity — a count, a size, a used-bytes, a
+> position — has this shape, and the delta costs one extra line.
+
+**The ticket had predicted exactly this failure and the prediction did not prevent it.** Its
+own summary said *"Returning zeros would make four units compile while the function lies."*
+The reader had that sentence available, ran the non-discriminating probe anyway, and was
+saved by adding the second call. **A hazard named in a ticket's prose is not a guard** —
+which is the same lesson as `## A FALSE PREMISE IN A TICKET … AIMS YOU AT THE WRONG
+FUNCTION`, one register over: prose in a ticket routes attention and never enforces anything.
+
+### And a declaration is not an implementation is not a completion
+
+Three distinct claims, and the gap between them is where a ticket gets closed early:
+
+| claim | instrument | what it does NOT establish |
+| --- | --- | --- |
+| the symbol is **declared** | `grep` of the builtin unit | that the frontend resolves it from user code |
+| the feature is **implemented** | a delta probe in an ordinary build | that the ticket's consumers work |
+| the ticket is **complete** | its own stated criterion | — |
+
+Here the criterion is a march over `cclasses`, `comphook`, `finput` and `cfileutl` past
+`cclasses.pas:676` — the **FPC compiler-source** corpus, which is a *different candidate*
+from `fpc-testsuite` and was not fetched. **Feature measurably implemented, four consumers
+unverified, ticket correctly left open.** Closing on the working function alone would be the
+declaration-level move one layer up.
+
+The other half worth recording: *"the real work — deciding whether the allocator carries
+always-on counters and paying that cost"* is what the ticket called the whole ticket, and it
+**has been done by someone and never written down.** A feature landing without its ticket
+being touched is invisible in exactly the direction that makes the board over-report work
+remaining.
+
+### An output difference that is pxx being MORE truthful
+
+`tstring4` prints `[HEAP] Size: 262144 Kb, Used: 128 bytes` under pxx where fpc prints
+`0 bytes / 0 bytes` on the same line — **because pxx now has live accounting and fpc's row
+reports none.** A corpus comparison will flag it as a divergence, and under CLAUDE.md's rule
+(*the test is the VALUE in its declared type*, and a truthful instrument returning an answer
+you did not expect is not a defect) it is arguably the better answer. **A feature landing can
+turn a green corpus row red without anything breaking**, and the disposition belongs to the
+corpus owner rather than to whoever measured it.
