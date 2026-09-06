@@ -10248,6 +10248,32 @@ test-core: $(COMPILER)
 	  || { echo "imt-arity: the RESOLUTION CLAUSE spelling compiled where the plain one refused -- the two paths have diverged"; exit 1; }
 	grep -q 'no matching implementation for interface method "M" found (the class method is "MyM")' $(TESTTMP)/imtarity_clause.log \
 	  || { echo "imt-arity: the clause refusal must name the INTERFACE method and then the class method:"; cat $(TESTTMP)/imtarity_clause.log; exit 1; }
+	@# bug-p-a-class-constructor-is-accepted-and-never-runs -- THE WARNING, which
+	@# is an INTERIM and not the fix. `class constructor` is not in the class
+	@# body's hand-maintained `class X` list, so it falls to the member-loop
+	@# terminus, the `class` is stepped over, and the ordinary constructor arm
+	@# takes what is left: class-level state stays at its zero value and the
+	@# program runs on it. Refusing would reject terecs_u1.pp, a {$$mode delphi}
+	@# record fpc compiles, so the interim warns. THREE ROWS, because a warning
+	@# fails no build and can therefore rot in silence: it must FIRE (twice, one
+	@# per keyword), it must NOT fire on any other `class X` opener, and it must
+	@# fire at the RECORD terminus too -- a separate member loop with its own
+	@# terminus, which is the sibling arm this repo keeps finding unfixed.
+	./$(COMPILER) test/test_a_class_constructor_that_never_runs_is_warned_about.pas $(TESTTMP)/test_classctorwarn26 > $(TESTTMP)/classctorwarn.log 2>&1 \
+	  || { echo "class-ctor-warn: the warning became a REFUSAL -- terecs_u1.pp is why it must not:"; cat $(TESTTMP)/classctorwarn.log; exit 1; }
+	tools/expect_same.sh test_classctorwarn26 "$$(grep -c 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/classctorwarn.log)" "2"
+	tools/expect_same.sh test_classctorwarn26_run "$$($(TESTTMP)/test_classctorwarn26 | tail -n 2)" "$$(printf 'fails=0\nCLASSCTORWARN OK')"
+	./$(COMPILER) test/test_an_ordinary_class_member_draws_no_class_constructor_warning.pas $(TESTTMP)/test_noclassctorwarn26 > $(TESTTMP)/noclassctorwarn.log 2>&1 \
+	  || { echo "class-ctor-warn: the NEGATIVE CONTROL stopped compiling:"; cat $(TESTTMP)/noclassctorwarn.log; exit 1; }
+	tools/expect_same.sh test_noclassctorwarn26 "$$(grep -c 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/noclassctorwarn.log)" "0"
+	tools/expect_same.sh test_noclassctorwarn26_run "$$($(TESTTMP)/test_noclassctorwarn26 | tail -n 2)" "$$(printf 'fails=0\nNOCLASSCTORWARN OK')"
+	@# The record terminus. rc is deliberately IGNORED: pxx refuses a
+	@# parameterless record constructor for unrelated reasons and that refusal
+	@# arrives after the warning, so asserting it here would make fixing THAT
+	@# look like a regression in THIS.
+	-./$(COMPILER) test/test_a_record_class_constructor_is_warned_about.pas $(TESTTMP)/test_recclassctorwarn26 > $(TESTTMP)/recclassctorwarn.log 2>&1
+	grep -q 'class constructor/destructor is parsed but NEVER RUNS here' $(TESTTMP)/recclassctorwarn.log \
+	  || { echo "class-ctor-warn: the RECORD member loop's terminus is silent -- the class one was fixed and its sibling was not:"; cat $(TESTTMP)/recclassctorwarn.log; exit 1; }
 	./$(COMPILER) test/test_an_abstract_override_keeps_its_parents_vmt_slot.pas $(TESTTMP)/test_absoverride26
 	tools/expect_same.sh test_absoverride26 "$$($(TESTTMP)/test_absoverride26 | tail -n 2)" "$$(printf 'fails=0\nABSTRACTOVERRIDE OK')"
 	./$(COMPILER) test/test_a_procedural_member_is_callable_through_a_selector_chain.pas $(TESTTMP)/test_chaincall26

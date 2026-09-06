@@ -5461,7 +5461,34 @@ begin
         no others -- so this list is the whole of the live traffic and the
         `Error` below cannot reach a construct the corpus uses.
         bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
-      Next
+      begin
+        { `class constructor` / `class destructor` reach here because the four
+          `class X` arms above test tkProcedure and tkFunction only. The keyword is
+          stepped over and the ORDINARY constructor arm takes the bare
+          `constructor`, so the class-ness is discarded and FPC's semantics -- run
+          once, automatically, before the class is first used -- are attached to
+          nothing. The body compiles into code that cannot be reached: an explicit
+          `TC.Init;` is refused with `expected ':=' before ';'`.
+
+          WARNED RATHER THAN REFUSED, DELIBERATELY, and the corpus is why. Refusing
+          would reject terecs_u1.pp -- a Delphi record with `class constructor
+          Create` and `class destructor Destroy` that fpc compiles. That is valid
+          Delphi somebody MEANT to write, so it is compat, not a mistake to make
+          visible. But accepting in SILENCE is the worse half: class-level state
+          stays at its zero value and the program runs on it. A warning keeps the
+          code compiling and stops the failure being silent, which is all the
+          interim has to do. The fork between refusing and implementing FPC's
+          once-before-first-use semantics stays open and is stated on the ticket.
+          bug-p-a-class-constructor-is-accepted-and-never-runs }
+        if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+           (Tokens[TokPos].Kind = tkIdent) and
+           (CaseEqual(GetTokenStr(TokPos), 'constructor') or
+            CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+          Warn('class constructor/destructor is parsed but NEVER RUNS here'
+               + ' -- class-level state it sets stays at its zero value'
+               + ' (bug-p-a-class-constructor-is-accepted-and-never-runs)');
+        Next;
+      end
     else
       Error('this token is not a record member: expected a field, method, ' +
             'property, a var/class/type/case section, or end');
@@ -7800,7 +7827,34 @@ begin
               2276 files before narrowing: 6287 fires, 6283 tkSemicolon and 4
               tkVar, no others.
               bug-p-a-class-or-record-body-silently-swallows-any-token-it-does-not-recognise }
-            Next
+            begin
+              { `class constructor` / `class destructor` reach here because the four
+                `class X` arms above test tkProcedure and tkFunction only. The keyword is
+                stepped over and the ORDINARY constructor arm takes the bare
+                `constructor`, so the class-ness is discarded and FPC's semantics -- run
+                once, automatically, before the class is first used -- are attached to
+                nothing. The body compiles into code that cannot be reached: an explicit
+                `TC.Init;` is refused with `expected ':=' before ';'`.
+
+                WARNED RATHER THAN REFUSED, DELIBERATELY, and the corpus is why. Refusing
+                would reject terecs_u1.pp -- a Delphi record with `class constructor
+                Create` and `class destructor Destroy` that fpc compiles. That is valid
+                Delphi somebody MEANT to write, so it is compat, not a mistake to make
+                visible. But accepting in SILENCE is the worse half: class-level state
+                stays at its zero value and the program runs on it. A warning keeps the
+                code compiling and stops the failure being silent, which is all the
+                interim has to do. The fork between refusing and implementing FPC's
+                once-before-first-use semantics stays open and is stated on the ticket.
+                bug-p-a-class-constructor-is-accepted-and-never-runs }
+              if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+                 (Tokens[TokPos].Kind = tkIdent) and
+                 (CaseEqual(GetTokenStr(TokPos), 'constructor') or
+                  CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+                Warn('class constructor/destructor is parsed but NEVER RUNS here'
+                     + ' -- class-level state it sets stays at its zero value'
+                     + ' (bug-p-a-class-constructor-is-accepted-and-never-runs)');
+              Next;
+            end
           else
             Error('this token is not a class member: expected a field, ' +
                   'method, property, a visibility section, var/class/type, ' +
