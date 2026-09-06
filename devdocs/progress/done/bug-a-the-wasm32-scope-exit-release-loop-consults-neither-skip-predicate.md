@@ -3,7 +3,7 @@ track: A
 prio: 70
 type: bug
 blocked-by: []
-status: backlog
+status: done
 summary: "SILENT WRONG VALUE on wasm32, measured 2026-09-06 and no longer just an inconsistency. WasmEmitManagedLocals is the seventh copy of the scope-exit release loop and consults neither StacklessPersistentSlotSym nor SymSkipScopeExitRelease, so a managed local a generator holds ACROSS A YIELD is released at the yield and the generator resumes holding garbage: a six-line NilPy program prints 4 5 on x86-64 and 4 2 on wasm32, and the predicate patch makes it 4 5. Does not crash, does not warn, prints a plausible number. frankwasm has WITHDRAWN the regression they attributed to this change (7dd75f85a: the loop has no symbol to iterate for their program, so the patch was a no-op there; likeliest cause a stale binary), so the bar for landing is ordinary -- run the repro, run a battery that HOLDS A MANAGED LOCAL ACROSS A YIELD, gate, land. The `yield 1; yield 2` control in circulation is INERT for this: byte-identical module, correct output either way."
 ---
 
@@ -320,3 +320,6 @@ above, run a generator battery that HOLDS A MANAGED LOCAL ACROSS A YIELD (the
 circulating control does not and cannot), gate, and land. The only reason it is
 not landed in this session is that compiler pushes were frozen while Track T
 backfilled.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
