@@ -250,7 +250,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (98)
+## backlog-nilpy (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -320,6 +320,7 @@ _none_
 | feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
 | feature-n-from-accepts-a-quoted-foreign-file | N | 45 | feature | `from 'basehook.pas' import ConfigBase` and `from 'basehook.pas' as bh import X, Y` are refused with \"expected a module name after from\", while `import 'basehook.pas' as bh` works. Both from-arms test tkIdent and never consider tkString. The semantics already exist — from-import discards its name list and importing a unit opens its namespace flat — so this is a parser change with no new resolution path. | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 20 | feature | NilPy: type MODULE locals from the AST too | — |
+| feature-n-nilpy-has-no-__del__-and-its-absence-is-load-bearing-in-an-open-fork | N | 35 | feature | `grep -rn __del__ compiler/ lib/ test/` is EMPTY at da2fea0fd — no lexer token, no parser arm, no runtime call, no test, and no entry in nilpy-semantics-divergences.md, so it is an unrecorded gap rather than a chosen divergence. That is a hole in an otherwise near-complete protocol family: __init__, __enter__/__exit__, __iter__/__next__, __getattr__, __getitem__/__setitem__/__delitem__, __call__, __bool__, __len__, __contains__, __repr__/__str__, __index__, every arithmetic operator with its reflected and in-place forms, and the six comparisons are all present. THE REASON IT IS NOT MERELY MISSING: decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock argues option (b) -- defer the nested release -- on the ground that its observable finalizer-ORDERING change is 'a cost against a feature nobody has built'. That is true today and it stops being true the moment this lands, so implementing __del__ under (b) reintroduces exactly the cost (b) was costed as not having. Under (a), a reentrant lock, a user finalizer can allocate and the ordering question does not arise. So this is not independent work: it should be built on whichever arm the owner picks, and it is an argument for (a). Siblings, also absent and also unrecorded, filed here as a note rather than as tickets: __new__, __slots__, __format__. | decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock |
 | feature-n-nilpy-has-no-reachable-path-to-the-sys-and-arg-intrinsics | N | 20 | feature | NilPy cannot reach sysopen/sysread/syswrite/argcount/argstr as INTRINSICS, and has not been able to for as long as anyone has measured. PyParseFactorCore held five case arms matching those as TOKENS, and every -Ord(tkXxx) construction site in pyparser.inc was inside them — so the arms were the only path, and the arms could not fire. Surfaced by deleting them (they went dead for good when 5f177b181 made the spellings soft keywords), which is the only reason this is visible at all: dead code was standing in for a missing capability. NOT a regression — nothing that used to work stopped. The open question is whether NilPy should have these at all, given a NilPy program can already declare and bind its own paramstr/paramcount (frankD measured exactly that), and Python's own idiom is sys.argv rather than a paramstr intrinsic. | — |
 | feature-n-route-pypal-through-wasi-imports-so-nilpy-can-do-file-io-on-wasm32 | N | 25 | feature | pypal on wasm32 returns a defined -1 from every entry point rather than trapping (the ESP precedent), which is what made NilPy compile for that target at all. It is not real file I/O: `open` fails, `os.listdir` is empty, `time.time()` raises. wasi preview1 HAS open/read/write/close/seek/getcwd/unlink/rename/readlink as imports, and lib/rtl/platform/wasi already binds them for the Pascal RTL -- so the work is a pypal backend that calls those imports, not new capability. ppoll is the one that does not map. | — |
 | feature-n-sys-version-info-implementation-and-the-probe-suite | N | 62 | feature | Implement sys.version_info / version / hexversion at (3, 9, 0, 'final', 0) plus sys.implementation carrying NilPy's own identity, per the owner's ruling. All four read ONE constant. The number is a compatibility affordance and must be backed by a probe suite that fails when it stops being true -- the same feature probes that produced the ruling. | — |
@@ -1188,10 +1189,10 @@ _none_
 - [p 45] [P] refactor-p-the-frozen-string-cap-travels-to-its-sizer-in-a-global-whose-window-nobody-enforces
 - [p 45] [B] task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
 - [p 42] [P] feature-pascal-builtin-tobject-class
+- [p 40] [U] decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock (unblocks 2)
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
 - [p 40] [A] bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate (unblocks 1)
-- [p 40] [U] decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock (unblocks 1)
 - [p 40] [B] feature-b-delphi-extended-rtti-object-model (unblocks 1)
 - [p 40] [A] bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized
 - [p 40] [A] bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other
@@ -1436,6 +1437,7 @@ _none_
 
 - **3** — feature-port-windows-pe
 - **2** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
+- **2** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **2** — decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - **2** — decide-how-a-type-carries-an-identity-its-kind-cannot-hold
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
@@ -1454,7 +1456,6 @@ _none_
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-a-class-constructor-is-accepted-and-never-runs
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
-- **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **1** — decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one
