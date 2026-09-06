@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:48 backlog-pascal:36 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3501 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:12 backlog-umbrella:7 backlog-core:145 backlog-nilpy:99 backlog-tools:48 backlog-pascal:36 backlog-decide:43 backlog-libs:23 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3502 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -96,6 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [P]` bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record
+- `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
 
 _398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

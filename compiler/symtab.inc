@@ -1534,16 +1534,63 @@ end;
   where TP was declared in TTest's body. A caller that wants owner scoping must
   add the column, and that is a wider change than any qualified-walk fix needs.
   bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+{ ONE ranked scan, shared by both alias lookups, because they must not drift:
+  the comment in FindUClassNonRecord below records what it cost the last time
+  two predicates disagreed about the same name.
+
+  RESOLUTION IS BY SCOPE, NOT BY REGISTRATION ORDER, and it mirrors FindUClass's
+  policy for UCls rows exactly -- the current unit wins outright, then the
+  highest UsesRankOf among the rest, ties keeping the first row.
+
+  It used to return the FIRST name match, which meant the first row registered
+  captured the name for the entire program. builtinheap declares
+  `IUnknown = IInterface`, so a user or RTL `IUnknown = <anything>` was silently
+  DISCARDED and every `var v: IUnknown` bound to builtinheap's IInterface. Note
+  what that is and is not: the user's alias row was built correctly and simply
+  never consulted, so nothing looked wrong at the declaration. The visible
+  symptom was a baffling overload refusal three phases later -- `(record)`
+  against a candidate also printing `(record)` -- and where the two targets
+  happened to be compatible it compiled and bound the WRONG TYPE with no
+  diagnostic at all. lib/rtl/classes.pas re-declares those names deliberately,
+  so this reached any program using `classes` with an IUnknown-typed value; it
+  is the whole of test-fpjson, whose suite runner failed to compile so 0 of 203
+  tests ran. bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record }
+function FindUClassAliasRow(const lo: AnsiString; nonRecordOnly: Boolean): Integer;
+var i, bestRank, r: Integer;
+
+  function Candidate(k: Integer): Boolean;
+  begin
+    Candidate := UNameMatch(UClsAliasNOff[k], UClsAliasNLen[k], lo) and
+                 ((not nonRecordOnly) or
+                  ((UClsAliasCi[k] >= 0) and (not UClsIsRecord[UClsAliasCi[k]])));
+  end;
+
+begin
+  Result := -1;
+  bestRank := -2;
+  if CurrentUnitIdx >= 0 then
+    for i := 0 to UClsAliasCount - 1 do
+      if (UClsAliasUnitIdx[i] = CurrentUnitIdx) and Candidate(i) then
+      begin
+        Result := i;
+        Exit;
+      end;
+  for i := 0 to UClsAliasCount - 1 do
+    if Candidate(i) then
+    begin
+      r := UsesRankOf(CurrentUnitIdx, UClsAliasUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then
+      begin
+        Result := i; bestRank := r;
+      end;
+    end;
+end;
+
 function FindUClassAliasCi(const lo: AnsiString): Integer;
 var i: Integer;
 begin
-  Result := -1;
-  for i := 0 to UClsAliasCount - 1 do
-    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
-    begin
-      Result := UClsAliasCi[i];
-      Exit;
-    end;
+  i := FindUClassAliasRow(lo, False);
+  if i < 0 then Result := -1 else Result := UClsAliasCi[i];
 end;
 
 function FindUClass(const name: AnsiString): Integer;
@@ -1569,6 +1616,25 @@ begin
          UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
       Inc(i);
     end;
+    { AN ALIAS DECLARED HERE ALSO BEATS A CLASS ROW FROM ELSEWHERE, and it did
+      not, because the alias table is consulted only after the whole UCls scan
+      fails. So `type IInterface = TMine;` lost to builtinheap's IInterface row
+      for the same reason a re-declared alias lost to builtinheap's alias: the
+      name was captured by whoever registered first, one table over. Same rule
+      as the UCls arm just above -- your own scope wins -- and it has to sit
+      HERE rather than at the fallback, because the fallback runs only when no
+      class of that name exists anywhere. }
+  end;
+  { NOT inside the guard above: at PROGRAM scope CurrentUnitIdx is -1, which is
+    a real scope here and not "unknown" -- RegisterBuiltinTObject stamps the
+    program with exactly that. Guarding this on >= 0 fixed the same bug in a
+    unit and left it live in a program, which is the harder half to notice
+    because the repro is shorter. }
+  i := FindUClassAliasRow(lo, False);
+  if (i >= 0) and (UClsAliasUnitIdx[i] = CurrentUnitIdx) then
+  begin
+    Result := UClsAliasCi[i];
+    Exit;
   end;
   i := 0;
   while i < UClsCount do
@@ -1622,6 +1688,7 @@ begin
   UClsAliasNOff[UClsAliasCount] := noff;
   UClsAliasNLen[UClsAliasCount] := nlen;
   UClsAliasCi[UClsAliasCount]   := ci;
+  UClsAliasUnitIdx[UClsAliasCount] := CurrentUnitIdx;
   Inc(UClsAliasCount);
 end;
 
@@ -2467,13 +2534,8 @@ begin
     `RealName(9)` constructed normally
     (bug-nilpy-from-import-as-alias-is-discarded found it; it is not specific
     to imports — any class alias reached from NilPy had it). }
-  for i := 0 to UClsAliasCount - 1 do
-    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) and
-       (UClsAliasCi[i] >= 0) and (not UClsIsRecord[UClsAliasCi[i]]) then
-    begin
-      Result := UClsAliasCi[i];
-      Exit;
-    end;
+  i := FindUClassAliasRow(lo, True);
+  if i >= 0 then Result := UClsAliasCi[i];
 end;
 
 { Is there a CLASS of this name? Asks FindUClassNonRecord, not FindUClass:

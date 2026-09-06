@@ -11270,6 +11270,15 @@ test-core: $(COMPILER)
 	# FPC 3.2.2 prints `42 21 8 7` for the four rows it will compile.
 	./$(COMPILER) -Futest/generic_func_unit_units test/test_generic_func_in_unit.pas $(TESTTMP)/test_generic_func_in_unit26
 	tools/expect_same.sh test_generic_func_in_unit26 "$$($(TESTTMP)/test_generic_func_in_unit26)" "42 21 8 10 7 12"
+	# A type ALIAS resolves by SCOPE, not by which row registered first. builtinheap
+	# owns IInterface/IUnknown; lib/rtl/classes.pas re-declares them deliberately, and
+	# the re-declared row was built correctly then never consulted, so `var v: IUnknown`
+	# bound to builtinheap's IInterface. That was the whole of test-fpjson -- the suite
+	# runner did not compile, so 0 of 203 tests ran. Two fixes: unit scope, then program
+	# scope, where CurrentUnitIdx is -1 and the first guard skipped it.
+	./$(COMPILER) -Futest/iface_alias_scope_units test/test_a_redeclared_interface_alias_resolves_in_its_own_scope.pas $(TESTTMP)/test_iface_alias_scope26
+	tools/expect_same.sh test_iface_alias_scope26 "$$($(TESTTMP)/test_iface_alias_scope26 | tail -1)" "IFACEALIASSCOPE OK"
+	tools/expect_same.sh test_iface_alias_scope26-rows "$$($(TESTTMP)/test_iface_alias_scope26 | head -6)" "$$(printf '1 unit alias  = 1\n2 unit iface  = 1\n3 prog alias  = 42\n4 prog tag    = 42\n5 control     = 42\n6 sum         = 43')"
 	# A reference to a DIFFERENT specialization of the SAME template, from inside
 	# that template's own body -- `FOther: TOuter<ShortInt>` inside `TOuter<T>`.
 	# A different TEMPLATE in that position always worked (its own desugar sweep

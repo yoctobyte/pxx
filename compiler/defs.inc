@@ -6210,6 +6210,13 @@ var
   UClsAliasNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasCi   : array[0..MAX_TYPEALIAS-1] of Integer;
+  { The declaring unit, so a re-declared alias name resolves by SCOPE instead of
+    by registration order. Without it the first row registered captured the name
+    for the whole program: builtinheap declares `IUnknown = IInterface`, so a
+    user `IUnknown = TMine` was silently discarded and `var v: IUnknown` bound
+    to builtinheap's IInterface with no diagnostic.
+    bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record }
+  UClsAliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasCount : Integer;
   UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
   { An interface's GUID literal (`['{...}']`), which the parser used to discard.

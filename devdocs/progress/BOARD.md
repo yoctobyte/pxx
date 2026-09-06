@@ -426,9 +426,9 @@ _none_
 | bug-p-a-shadowed-soft-intrinsic-is-closed-without-consulting-the-arguments | P | 30 | bug | SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape -- including shapes it could never bind. Fixed for the bare-name dyn-array Delete/Insert case (DynArrayReopensIntrinsic, pasparser_stmt.inc); the general answer, and the non-bare spellings `Delete(obj.Items, i, 1)` / `Insert(x, p^.list, i)`, are still closed. Sixteen call sites share the predicate. | — |
 | bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse | P | 45 | bug | A specialization in a routine-local `type` section desyncs the parse | — |
 | bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow | P | 55 | bug | A string literal bound to a PWideChar is emitted narrow, and only the cast surface refuses | — |
-| bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record | P | 65 | bug | A unit re-declaring a builtin interface alias makes it a `record`, and every call taking the interface is refused | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token | P | 40 | bug | Once any nested routine has been lambda-lifted, every LATER syntax error in the file reports the right LINE with the wrong token and the wrong `near:` window. Nine-line repro: `if q 2 then` on line 18 is reported as `pascal26:18: error: expected 'then' before 'q'` with `near: procedure TC . Later ; var >>> q : Integer` -- line 15's tokens. Without the nested routine the identical error reads `before '2'` with the right window. So CurTok (which supplies the line) and TokPos (which supplies both the name and the window) are out of step after a lift. WHICH of the two moved is NOT established and must not be guessed: this diagnostic cost a session an hour by sending it to a routine 128 lines from the actual defect, and a ticket that names the wrong mechanism would cost the next one the same. | — |
+| bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name | P | 45 | bug | An alias in a used unit loses to a same-named class row from another unit | — |
 | bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section | P | 40 | bug | An imported generic routine is spliced before the program's own type section | — |
 | bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid | P | 60 | bug | An interface name in a var initialiser stores the GUID's ADDRESS, not the GUID | — |
 | bug-p-declared-cannot-see-a-used-units-declarations | P | 50 | bug | `{$if declared(X)}` cannot see a used unit's declarations, and answers False rather than refusing | — |
@@ -944,9 +944,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3501)
+## done (3502)
 
-3501 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3502 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1063,7 +1063,6 @@ _none_
 - [p 65] [A+S] bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
-- [p 65] [P] bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record
 - [p 65] [T] bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
 - [p 65] [T] bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
@@ -1172,6 +1171,7 @@ _none_
 - [p 45] [P] bug-p-a-conversion-operators-destination-string-capacity-has-no-carrier
 - [p 45] [P] bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles
 - [p 45] [P] bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse
+- [p 45] [P] bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name
 - [p 45] [S] bug-s-c-on-the-esp-profile-cannot-reach-crtl
 - [p 45] [T] bug-t-a-gate-red-does-not-say-whether-it-is-yours-or-the-trees
 - [p 45] [T] bug-t-a-negative-test-row-cannot-say-which-way-it-flipped
