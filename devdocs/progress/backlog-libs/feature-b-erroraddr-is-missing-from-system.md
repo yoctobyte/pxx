@@ -91,3 +91,16 @@ while this row sits in `backlog-libs`, that P ticket reads as gated to every rea
 including the Track P campaign. If the implementation does satisfy this row, resolving it
 retires two edges at once. **Whoever owns Track B: this is a resolve waiting on one
 measurement, not a piece of work.**
+
+## MEASURED AT HEAD 2026-09-06 (frankD, passing through) — COMPILES AND RUNS
+
+Compiler `855356445cd7`: `program ea; begin ErrorAddr := nil; WriteLn('erroraddr ok'); end.`
+compiles and prints `erroraddr ok`. The declaration is at
+`compiler/builtin/builtinheap.pas:380` and the frontend resolves it from user code
+— which a declaration grep alone could not have established.
+
+Left open rather than resolved: this row is a `blocked-by:` edge on
+`feature-pascal-corpus-fpc-testsuite`, and its own acceptance is whatever that
+corpus march needs. See the sibling ticket
+`feature-b-getfpcheapstatus-needs-always-on-heap-accounting` for the same
+measurement done on the harder half.

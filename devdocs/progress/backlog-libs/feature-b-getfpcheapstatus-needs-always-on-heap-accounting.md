@@ -133,3 +133,45 @@ while this row sits in `backlog-libs`, that P ticket reads as gated to every rea
 including the Track P campaign. If the implementation does satisfy this row, resolving it
 retires two edges at once. **Whoever owns Track B: this is a resolve waiting on one
 measurement, not a piece of work.**
+
+## MEASURED AT HEAD 2026-09-06 (frankD, Track P, passing through) — THE FEATURE IS LIVE, AND IT IS NOT RETURNING ZEROS
+
+This ticket's own summary names the failure it feared: *"Returning zeros would
+make four units compile while the function lies."* **That is not what is there.**
+Compiler `855356445cd7`, ordinary build, no `-dPXX_ALLOC_CENSUS`:
+
+```pascal
+s1 := GetFPCHeapStatus;  GetMem(p, 1024*1024);  s2 := GetFPCHeapStatus;
+  pxx  before: curr=0 size=0 max=0    after: curr=1048576 size=268435456 max=1048576
+  fpc  before: curr=0 size=0 max=0    after: curr=1048608 size=1114112  max=1048608
+```
+
+`CurrHeapUsed` tracks the megabyte exactly. **The counters are always-on in a
+released binary**, which is the "real work" this ticket said had to be decided and
+paid for. `ErrorAddr := nil` also compiles and runs
+(`feature-b-erroraddr-is-missing-from-system`).
+
+**A single query does NOT discriminate and that is why this needed a delta.** One
+call answers 0, and 0 is equally "nothing allocated yet" and "not implemented" —
+the collision-with-a-legal-value shape. Only a before/after pair around a known
+allocation separates them.
+
+`CurrHeapSize` differs from fpc by two orders of magnitude (268435456 vs 1114112)
+because pxx reserves a large arena. Per CLAUDE.md that is a representational
+choice, not a defect: both answers are true about their own allocator.
+
+### NOT RESOLVED HERE, and precisely why
+
+The completion criterion in this ticket is a corpus march — `cclasses`, `comphook`,
+`finput`, `cfileutl` moving past `cclasses.pas:676` — and that is the **FPC
+compiler-source** corpus, a different candidate from `fpc-testsuite`. Not present
+in this checkout, not fetched, not run. So: **the feature is measurably
+implemented; the four units are unverified.** Whoever owns Track B should re-run
+that march rather than trust this note, which covers the function and not the
+consumers.
+
+One consumer IS visible in `fpc-testsuite`: `tstring4.pp` prints
+`[HEAP] Size: 262144 Kb, Used: 128 bytes` under pxx where fpc prints
+`0 bytes / 0 bytes` on the same line. pxx is reporting real accounting where fpc
+reports none — more truthful, and still an output difference a corpus comparison
+will flag. Worth a decision by the corpus owner, not by this seat.
