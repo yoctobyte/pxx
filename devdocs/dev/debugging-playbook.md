@@ -14726,6 +14726,29 @@ small and too noisy for a checker; the MECHANISM is the deliverable, and it is n
 
 ## A REGRESSION REPORT NAMES THE SHA IT *TESTED*, NEVER THE SHA THAT *BROKE IT* — and the window is between two verdicts OF THE SAME TIER
 
+### FIRST: the report may ALREADY CONTAIN the answer, in a field that reads as boilerplate
+
+This is the general lesson and it has nothing to do with tstate, so it goes first. The auto-filed
+stub for the case worked below carried, in its **first** commit, under `## Range`:
+
+```
+bad `b6815e5b8675`, last good `f1148d82c2d4`, 1 commit(s) in range
+  -- the watcher narrows this by idle bisect; check tstate/TSTATE.md for the current range.
+```
+
+**One commit. Correct. Present before any human or agent read the ticket, and naming its own
+source.** The 14-commit window was then computed from `reports/*.md` and written into a
+blockquote *above* it, where a re-derivation reads as the enrichment and the stub's own field
+reads as generated filler. Position on the page became authority.
+
+So before computing a window at all: **read the report's own fields.** `## Range` is a measurement by
+the instrument that owns the question, `last good` is a real verdict, and disagreeing with it is
+a finding in itself — one of you is wrong and the stub is the one with a bisector behind it.
+**A generated field reads as filler and a hand-derived paragraph reads as analysis, independently
+of which one is right** — so the re-derivation wins on layout, and it wins silently.
+
+### The window itself
+
 Track T samples the tip every ~8 commits, so **every auto-filed red carries a sha that is a
 SAMPLING POINT, not a cause.** The filename, the `sha:` frontmatter and the `NEW-RED:` line all name
 the tree that was measured. Nothing in the report is a claim about which commit did it — and the
@@ -14734,8 +14757,8 @@ report reads exactly like one, because a sha next to a failure is the shape of a
 Measured 2026-09-06. `NEW-RED: test-core#src:test/test_builtin_type_names_cast_and_declare.pas`
 arrived tagged `b6815e5b8` — *"a cast to Variant boxes instead of punning"* — landed minutes
 earlier by a session that was still busy. The fleet's monitor read it as *"covered by the session
-that caused it"* and took no action, which is the correct action **if the premise holds**. The
-previous verdict on the same tier says it does not:
+that caused it"* and took no action. **That reading was correct** — but nobody had a verdict
+behind it, and the next reader went looking for the previous same-tier verdict and found this:
 
 ```
 GREEN  9046a2fdd  04:52:57Z   (native)     <-- WRONG. Not the last native GREEN. See below.
@@ -14789,7 +14812,7 @@ and the sha on a report is a sampling point. What changed is only *where the ver
 `86f935479` reasoning stays on the page as the demonstration that **a topical argument is not a
 bisect either** — it was the better-looking candidate and it was innocent.
 
-### Two traps in computing the window, and the second one is quiet
+### Three traps in computing the window yourself, and the last two are quiet
 
 1. **The tier must match.** A `full` GREEN does not bound a `native` RED and vice versa — they are
    different populations, and the newest report of *any* tier is the one you will reach for because
@@ -14811,24 +14834,6 @@ bisect either** — it was the better-looking candidate and it was innocent.
    differently from both. And if you compare their sizes as a sanity check, compare **one host's
    reports to that host's ndjson** — `reports/` is four hosts deep, and the mixed ratio reads as
    surplus while the coverage is 869 of 1256.
-
-### The last trap: the report may already contain the answer, in a field that reads as boilerplate
-
-The auto-filed stub for the case above carried, in its **first** commit, under `## Range`:
-
-```
-bad `b6815e5b8675`, last good `f1148d82c2d4`, 1 commit(s) in range
-  -- the watcher narrows this by idle bisect; check tstate/TSTATE.md for the current range.
-```
-
-**One commit. Correct. Present before any human or agent read the ticket, and naming its own
-source.** The 14-commit window was then computed from `reports/*.md` and written into a
-blockquote *above* it, where a re-derivation reads as the enrichment and the stub's own field
-reads as generated filler. Position on the page became authority.
-
-So before computing a window: **read the report's own fields.** `## Range` is a measurement by
-the instrument that owns the question, `last good` is a real verdict, and disagreeing with it is
-a finding in itself — one of you is wrong and the stub is the one with a bisector behind it.
 
 **And do not hand-bisect it. T bisects backwards on its own** — that is the documented behaviour and
 the whole reason a ~8-commit sampling gap is acceptable. The value a reader adds is the WINDOW and
