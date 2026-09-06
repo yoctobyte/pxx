@@ -2191,3 +2191,58 @@ the sources, then `make`), assert the log says `converged after` rather than
 Nobody holds it: the body has said 'owner: frankA is stale' since 2026-08-30 and the frontmatter owner has been empty ever since. working/ + no owner is the one board state invisible in both directions -- out of ready, attributed to nobody -- so at p75 this was the highest-prio P row in existence and absent from the campaign's own count. Parked so it ranks again; RESUME by re-claiming, the ladder itself is live and episodic.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+---
+
+# 2026-09-06 (frankD) — RUNG 7 ATTEMPTED for the first time; wall 1 cleared
+
+`fcl-passrc` is on this box at `/usr/share/fpcsrc/3.2.2/packages/fcl-passrc/src`
+(no fetch needed — it is not under `library_candidates/`, which holds only
+busybox / c-testsuite / fpc-testsuite / lua in this checkout).
+
+Dependency order is `pscanner` (5333) → `pastree` (5947) → `pparser` (7823) →
+`pasresolver` (29660). **Start at `pscanner`**; a driver program is required
+because pxx refuses a standalone unit.
+
+    ./compiler/pascal26 --mimic-fpc -Fu$S -Fi$S driver.pas out
+
+## `--mimic-fpc` IS REQUIRED and its absence looks like a frontend bug
+
+Without it the first error is
+`FPC_FULLVERSION has no integer value here, so it cannot be compared`. That is
+**my invocation, not a defect** — `paslexer.inc:1010` defines it as 30202 under
+the mimic profile. `paslexer.inc:1402` already records this exact confusion from
+2026-09-05 on `cfileutl.pas`. An undefined symbol pushes on the conditional
+stack as a BOOLEAN, so a missing define presents as a type mix. Recorded here
+because the next person attempting a rung will hit it in their first minute.
+
+## Wall 1 — CLEARED, `c4036925a`
+
+`pscanner.pp:74`: a `const` section followed by `resourcestring` ate the keyword
+as the next constant's NAME. Two hand-maintained terminator lists of one concept
+had drifted, and the comment on the broken one already claimed to mirror the
+other. `resourcestring` and `label` fixed; `threadvar` is in the list but still
+refuses on its own ticket (unsupported at any scope — the control is that it
+refuses identically with NO preceding const).
+
+## Wall 2 — FILED, not fixed
+
+Rung 7 now reaches **`pscanner.pp:893`** and names two:
+
+- `Args: array of const` in a method-pointer type →
+  [[bug-p-array-of-const-in-a-method-pointer-type-is-refused-and-parsing-it-is-the-trap]].
+  **The three-line parse fix is written, measured and REVERTED**: it makes the
+  declaration compile while the indirect call prints `Length=4025888` for `n=3`.
+  Read that ticket before touching the parameter loop.
+- `property ... default DefaultMaxIncludeStackDepth;` — a property `default`
+  clause taking a named constant. Not yet characterised; no ticket.
+
+**Wall 1 to wall 2 is +819 lines, past the whole const and type section.**
+
+## Carrying the file's own standing lesson forward
+
+This section is a dated snapshot like every other wall table here. The `:74` and
+`:893` coordinates were true at `c4036925a` / binary `eda82aef9249`. Re-run the
+rung before trusting either — and note both were reported against `pscanner.pp`
+by name, which is the reliable half; the ticket warns the LINE and the `near:`
+have taken turns being wrong.
