@@ -9,9 +9,22 @@ owner: frankH
 
 ## summary
 
-The full tier's breadth is inversely coupled to the fleet's push rate, with a
-threshold at roughly **one push per 60 seconds** — and above it breadth degrades
-**silently**, because the native tier keeps publishing green.
+The full tier's breadth is starved when TESTABLE commits arrive closer together
+than **`native_wall + full_commit_secs` (~230s)** — and above that rate breadth
+degrades **silently**, because the native tier keeps publishing green.
+
+**CORRECTED 2026-09-06, and the first version of this ticket had the wrong
+population.** It said "one push per 60 seconds", counting ALL commits. The code
+does not count all commits: `needs_test()` (twatch.py:6612) returns False for a
+commit whose every path is under `NOTEST_PREFIXES = ("devdocs/", "docs/")`, and
+the abort check is `any(needs_test(...) for c in commits_between(...))`. Since
+18:37Z, 50 of 69 commits were docs-only — **72% of the traffic is free.**
+Corrected by frankuser and frank-coordinator; the raw-commit correlation was
+real and fitted the outage perfectly, and it fitted because docs traffic and
+code traffic are produced by the same seats and move together. **A correlation
+measured over a superset tracks the subset whenever the two move together**,
+which is why the check has to be against what the code counts, never against
+the quality of the fit.
 
 ## the mechanism, measured 2026-09-06
 
@@ -22,15 +35,24 @@ request queue): a push inside the first 60s aborts the run and it publishes
 nothing; after 60s it is allowed to finish. So a full needs **60 contiguous
 push-free seconds to become uninterruptible.**
 
+**THE TERM BOTH CORRECTIONS MISSED: the native verdict must finish first.** A
+full is an IDLE-cycle phase, and the box is not idle while it is running the
+fast native verdict for the newest sha — ~170s wall, measured. So a full does
+not need 60 quiet seconds; it needs the native to complete AND THEN 60 seconds,
+i.e. a testable gap of roughly `170 + 60 = 230s`.
+
+Gaps between consecutive TESTABLE commits since the last published full:
+
 ```
-commits/15min on origin/master, 2026-09-06:
-  15:00-18:30   5..17        full tiers completing every ~15-25 min (13 that day)
-  18:45         26           <- last full was 18:37Z; none for the next 40+ min
-  19:00         20
+  all 18 gaps >= 60s :  11   [68, 92, 108, 124, 130, 135, 140, 162, 191, 256, 416]
+  ... but >= 230s    :   2   [256, 416]
 ```
 
-26 per 15 min is a push every ~35s. Natives (~170s wall, every ~4.5 min) keep
-landing green throughout, so every visible signal says healthy.
+So the run had **two** opportunities in forty minutes, not eleven, and the
+longer of the two leaves 186s of margin while the shorter leaves 26s. Zero
+published fulls is what that distribution predicts. The eleven-gap count is what
+made "sixty seconds" look refuted; the two-gap count is the one the mechanism
+acts on.
 
 The pre-18:37 fulls were COMPLETE, not truncated — `timed_out: False`,
 `unreached: 0`, deadline 4547s never approached. They read ~601s because
@@ -38,6 +60,28 @@ partial-resume carries decided jobs forward; the cold cost is 1867s (the
 16:16:30Z run). A commit touching `compiler/**` invalidates the partial
 (`load_resume()` keeps it only if the compiler rebuilds byte-identical), so a
 busy fleet also raises the price of each attempt.
+
+## the "never STARTED" alternative is refuted, not merely untested
+
+It was proposed that `idle_phase`'s ladder restarts at the bottom on every
+testable push and, with the shipped default collapsing mid and deep to `full`,
+the daemon might never REACH the full rung — a different failure, since a full
+never started and one started-then-aborted are indistinguishable in the archive.
+
+The code settles it against that reading. `idle_phase` is:
+
+```python
+lf = st.get("last_full") or {}
+if lf.get("sha") != tested:        return mid_tier     # == "full" by default
+if mid_tier != deep_tier and lf.get("tier") != deep_tier:  return deep_tier
+return None
+```
+
+Under `mid_tier == deep_tier == "full"` the FIRST idle rung already returns
+`full`; there is no two-step climb to be interrupted before reaching it. The
+collapse that was thought to hide the rung is what makes it immediate. So the
+archive's silence is started-and-aborted, which is what a commitment window
+describes.
 
 ## why it is not just "ask for one"
 
