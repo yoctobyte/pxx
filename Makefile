@@ -27488,9 +27488,14 @@ test-fpjson:
 	done; \
 	cp test/fpjson/testutils.pas test/fpjson/tjrun.pp "$$wd/"; \
 	echo "compiling fpjson suite runner ..."; \
-	( cd "$$wd" && "$$root/$(PXX_STABLE)" --mimic-fpc \
+	if ! ( cd "$$wd" && "$$root/$(PXX_STABLE)" --mimic-fpc \
 	    -Fu"$$root/lib/rtl" -Fu"$$root/lib/rtl/platform/posix" \
-	    tjrun.pp "$$wd/tjrun" ) > /dev/null || exit 1; \
+	    tjrun.pp "$$wd/tjrun" ) > "$$wd/compile.txt" 2>&1; then \
+	  echo "test-fpjson: FAIL — the suite runner did not COMPILE (this is a"; \
+	  echo "  compile failure, not a test failure; 0 of 203 tests ran):"; \
+	  tail -20 "$$wd/compile.txt"; \
+	  exit 1; \
+	fi; \
 	"$$wd/tjrun" > "$$wd/out.txt" 2>&1; rc=$$?; \
 	tail -1 "$$wd/out.txt"; \
 	if [ "$$rc" = "0" ] && grep -q "run: 203  failures: 0  errors: 0" "$$wd/out.txt"; then \

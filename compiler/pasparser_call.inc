@@ -3101,6 +3101,7 @@ var
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   nBr, brOnly: Integer;
+  rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
   ok, okBr, vetoed: Boolean;
   lo, name2: AnsiString;
@@ -3530,7 +3531,37 @@ begin
     MatchArgArrayValid := False;
     MatchArgElemValid := False;
     if not ok then
-      Error('no overload of ' + name + ' matches these arguments');
+    begin
+      { THE ARGUMENT TYPES, because the METHOD probe never populates
+        OverloadReport and the FREE path does. Both sites print the same
+        sentence and only one of them says anything a reader can act on: the
+        free arm at pasparser_stmt.inc appends OverloadReport (argument types
+        plus candidates), and this arm appended nothing at all, so a refusal
+        here named the routine and left you to guess which argument it
+        disliked. Measured 2026-09-06 on fcl-fpcunit: `no overload of
+        AssertNullIntf matches these arguments` and not one word more, on a
+        call whose two arguments are both spelled correctly at the call site --
+        the whole cost of the row was that the compiler knew the answer and did
+        not say it.
+
+        Argument types ONLY, not candidates. This probe has REWOUND its token
+        stream and asks the union of MatchProcCall's phases directly (see the
+        note above), so it does not hold the per-candidate rejection reasons the
+        free path's builder walks; printing a candidate list from here would
+        mean re-deriving it against a different question and could disagree with
+        the refusal it accompanies. Half a report that is true beats a whole one
+        that is reconstructed. }
+      rep := '';
+      AppendChar(rep, Chr(10));
+      rep := rep + '  argument types: (';
+      for j := 0 to nExplicitArgs - 1 do
+      begin
+        if j > 0 then rep := rep + ', ';
+        rep := rep + TypeKindSpelling(argTk[j]);
+      end;
+      rep := rep + ')';
+      Error('no overload of ' + name + ' matches these arguments' + rep);
+    end;
     Result := FindUMethArity(ci, name, nExplicitArgs);
     Exit;
   end;
