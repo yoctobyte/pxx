@@ -20675,6 +20675,63 @@ Generalises to any document that mixes measured and unmeasured claims: **check
 what sits immediately BEFORE each hedge**, because an adjacent true statement
 can do the work of a false one.
 
+### AND THE MIRROR: A TRUE CAVEAT PLACED AFTER THE COMMAND IT WARNS ABOUT CANNOT BE READ IN TIME
+
+Same seat, same day, opposite end of the same axis — and together they make the
+axis the finding rather than either instance.
+
+`README.md`'s *"Latest stable (recommended)"* checks out the newest `v*.*.*`
+tag. The repo has four tags and **none match**, so the substitution is empty and
+a first-time reader gets `fatal: empty string is not a valid pathspec`.
+
+**The mitigation existed and was unreachable.** The note *"there may be no stable
+tag yet"* sat BELOW both code blocks — so it is read after the failure, by
+someone who has already left the page.
+
+**And the error message routes them further away.** Git says *"pathspec"*, which
+sends the reader hunting for a typo in a PATH rather than at the tag list. So
+the caveat is unreachable AND the diagnostic actively misdirects: three things
+working against the reader, none of them wrong.
+
+**The pair, stated as one rule.** In both cases every sentence is correct and
+the ORDER does the damage:
+
+| | placement | effect |
+| --- | --- | --- |
+| reassurance | immediately BEFORE a hedge | the reader discounts the hedge |
+| caveat | AFTER the command it guards | the reader never reaches it |
+
+**Neither is findable by re-measuring**, because there is nothing to measure —
+only reading the two passages in sequence, in the order a stranger meets them,
+catches either. For any document a first-time reader executes top to bottom,
+**a warning is only as good as its position relative to the failure it
+predicts.**
+
+### AND TWO PAGES THAT ARE EACH INTERNALLY CORRECT
+
+The third one from the same clone, and it is why a per-page review cannot find
+it. `docs/install` leads with `./install.sh` and every example is `./pxx`; the
+README never mentions `install.sh` once and its examples are
+`./compiler/pascal26`; and neither says that a fresh checkout **already ships a
+working compiler**, which the Install page leads with.
+
+Separately, `docs/index.md` under-claimed `--emit-obj` — omitting x86-64 and
+i386 compiled-source objects, a capability with a whole `test-emit-obj` target
+behind it — while `docs/reference/cli.md` had it right. **Drift between two
+pages with the front page wrong.**
+
+**Each page is internally consistent, so a reviewer reading one page finds
+nothing.** The instrument that catches it is a fresh clone followed LITERALLY,
+by someone who does not already know which page to trust — and verified against
+**the stranger's pinned binary, not the reviewer's own build**.
+
+**Worth recording as a non-defect so nobody re-runs it**: all 32 relative links
+across `README.md`, `CONTRIBUTING.md` and `docs/index.md` resolve in a fresh
+clone, every path the Repository Layout and License sections name exists there,
+the first-program example runs from the shipped compiler, and `-g` produces four
+debug sections. **A negative result nobody has to repeat is worth as much as a
+defect**, and it only exists because it was written down.
+
 ## AN IDENTIFIER THAT NAMES THE INSTRUMENT'S INTERNALS WEARS THE SHAPE OF A PRECISE FACT
 
 Three instances now, one family.
