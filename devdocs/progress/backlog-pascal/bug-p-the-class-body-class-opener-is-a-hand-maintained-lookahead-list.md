@@ -7,7 +7,7 @@ status: backlog
 owner: ""
 created: 2026-09-06
 found-by: frankD
-blocked-by: []
+blocked-by: [bug-p-a-class-constructor-is-accepted-and-never-runs]
 summary: "A class body recognises `class` only through a hand-maintained lookahead list -- `class const` (pasparser_decl.inc:6772), `class var` (:6796), `class property` (:6808), `class procedure`/`class function` (:6828) -- and every other `class X` spelling falls past all four to the member-loop terminus. It worked because the terminus was a bare `else Next` that stepped over the `class` and left something the remaining arms could parse, so FPC's `class generic function` and `class class function` (its generic-class-method spellings) have never had an opener and have always been handled by accident. Narrowing the terminus in 76efae23e turned that accident into two regressions within an hour -- the full suite caught `class generic function`, frankS's conformance corpus caught `class class function` in tgenfunc3/tgenfunc4 -- both fixed at 7d263221f by putting tkClass back in the skip list, which restores the accident rather than removing it. THE LIST IS THE DEFECT: it is an enumeration that must be extended for every new `class X`, with no diagnostic when it is not, and `class` sitting in a skip list DOCUMENTED as section keywords now hides that. The fix is a tkClass opener that consumes the keyword and re-dispatches, so an unknown `class X` is refused by the arm that owns X."
 ---
 
@@ -208,3 +208,38 @@ So the ranking argument goes back: this is not only regression prevention. It
 has at least one live silent wrong answer under it today, and the honest count
 of how many more is the same "we do not know" that frankD's two censuses give,
 for the same reason.
+
+### Why this is now BLOCKED rather than merely unstarted
+
+I went to write the opener and found the fix cannot be completed without
+deciding the class-constructor question, which is a fork and not a detail.
+
+**Measured which `class X` spellings actually reach the terminus** (the four
+arms above take the rest): `class generic function`, `class type`,
+`class constructor`, `class destructor`. Everything else is either owned by an
+arm or already refused by name — **`class 42` refuses today**, so the "unknown
+X is refused by the arm that owns X" half of the proposed fix is already in
+place. That is not the gap.
+
+**The gap is the spellings where an arm DOES take X and cannot honour the
+`class`.** The terminus steps over the keyword and the bare `constructor` /
+`destructor` / `type` arm takes it with the class-ness discarded. So the
+correct opener must refuse exactly there — and refusing there IS the
+"refuse `class constructor`" arm of the fork in
+[[bug-p-a-class-constructor-is-accepted-and-never-runs]].
+
+| spelling reaching the terminus | today | under a correct opener |
+| --- | --- | --- |
+| `class generic function` | works (GenericKwAt re-reads the `class`) | unchanged |
+| `class type` | class-ness dropped; **fpc refuses it too** | refused |
+| `class constructor` | **accepted, never runs** | refused, or implemented |
+| `class destructor` | same | same |
+
+So the opener is not blocked on effort or on risk. It is blocked on one
+decision that changes what two of its four rows do, and taking that decision
+inside a structural refactor is exactly how a fork gets settled by whoever
+happened to be refactoring. Blocked-by added rather than guessed.
+
+**What is NOT blocked:** the `class 42` refusal already works, and the four-arm
+list can be extended safely at any time for a spelling that is purely additive.
+The block is only on the arms where refusing changes an accepted program.
