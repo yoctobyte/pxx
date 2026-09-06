@@ -109,7 +109,7 @@ by `test-skeleton-frontends-cross-target`, which carries only the two green Zig
 programs, and that omission is deliberate rather than accidental.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6f0ee4be7.
 
 ## RESOLVED 2026-09-06 (frankA) — ONE LINE, and the second defect was hiding behind the first
 

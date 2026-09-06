@@ -198,4 +198,4 @@ alone with the ticket for the body defect filed beside it. Rewriting all three
 refusals identically is what produced this ticket in the first place.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6f0ee4be7.
