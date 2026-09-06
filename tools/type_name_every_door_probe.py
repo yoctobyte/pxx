@@ -66,6 +66,23 @@ ALL_NAMES = sorted(set(ORD_NAMES) | set(table_names('BuiltinScalarTypeKind')))
 # committed probe here carries the same directive for the same reason.
 HDR = '{$mode delphi}\n'
 
+# Character kinds get their bound printed as an ORDINAL. `WriteLn(High(WideChar))`
+# measures the OUTPUT ENCODING, not the bound: pxx emits the UTF-8 bytes of
+# U+FFFF and fpc emits `?`, so the row reports a divergence that has nothing to
+# do with High. It showed up the moment those names STOPPED being refused
+# (26742a0ca) -- before the fix the cell read PXX-REFUSES and the confound was
+# invisible behind it. Ord() is applied ONLY to these names, never as a uniform
+# printer: `Ord(q)` for a QWord answers -1 in pxx against fpc's
+# 18446744073709551615, which is intermediate-overload latitude per CLAUDE.md
+# and would be a second phantom row.
+CHARISH = {'char', 'ansichar', 'widechar', 'unicodechar', 'ucs4char'}
+
+
+def ordwrap(expr, name):
+    if name in CHARISH:
+        return 'Ord(%s)' % expr
+    return expr
+
 def prog(name, door):
     if door == 'decl':
         return HDR + "program p; var x: %s; begin WriteLn('ok'); if SizeOf(x) < 0 then WriteLn(1); end." % name
@@ -76,9 +93,9 @@ def prog(name, door):
     if door == 'castval':
         return HDR + "program p; begin WriteLn(Ord(%s(233))); end." % name
     if door == 'high':
-        return HDR + "program p; begin WriteLn(High(%s)); end." % name
+        return HDR + "program p; begin WriteLn(%s); end." % ordwrap('High(%s)' % name, name)
     if door == 'low':
-        return HDR + "program p; begin WriteLn(Low(%s)); end." % name
+        return HDR + "program p; begin WriteLn(%s); end." % ordwrap('Low(%s)' % name, name)
     if door == 'typeinfo':
         return HDR + "program p; begin WriteLn(TypeInfo(%s) <> nil); end." % name
     raise AssertionError(door)

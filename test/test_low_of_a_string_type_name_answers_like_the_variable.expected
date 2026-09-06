@@ -1,0 +1,17 @@
+type  string       1
+type  ansistring   1
+type  unicodestring1
+type  widestring   1
+type  utf8string   1
+type  rawbytestring1
+type  shortstring  0
+high  shortstring  255
+alias ansi         1
+alias short lo/hi  0 255
+alias s10   lo/hi  0 10
+const KL KH KSL KKW1 10 0 1
+var   string       1
+var   ansistring   1
+var   shortstring  0 255
+var   s10          0
+STRING BOUNDS OK

@@ -7694,6 +7694,71 @@ begin
   else Result := tyUnknown;
 end;
 
+{ Low/High of a STRING TYPE, one answer for every spelling that reaches it.
+
+  Placed here, immediately after BuiltinScalarTypeKind, because it CALLS that
+  function and the FPC seed build is single-pass -- the same constraint
+  gate.sh's forward-decl canary exists to catch. It has no other reason to be
+  at this point in the file.
+
+  Written as a shared function rather than an arm in each caller because the
+  two High/Low resolvers -- the expression one (TryFoldHighLowType) and the
+  constant one (TryConstHighLowValue) -- are already documented as one concept
+  in two places that must change together, and each of them asks this question
+  twice: once for a builtin NAME and once for a user ALIAS of one. That is four
+  sites, which is how the ordinal arms next door came to drift.
+
+  `Low(AnsiString)` = 1 and `Low(ShortString)` = 0 is the string INDEX BASE,
+  and the reason Delphi-compat code spells a loop `for i := Low(s) to
+  High(s)`. The VARIABLE spelling has answered it correctly all along (the
+  hlIsAnsi / hlIsFrozen arms in ParseFactorCore's Low), so `Low(s)` worked
+  while `Low(AnsiString)` reported `undefined variable (AnsiString)` -- one
+  concept, two spellings, and only the spelling nobody had written a test for
+  was missing.
+
+  HIGH OF A MANAGED STRING TYPE RETURNS FALSE ON PURPOSE. fpc 3.2.2 REFUSES
+  `High(AnsiString)` ("type identifier not allowed here") because a managed
+  string type has no upper bound to report, while it ANSWERS
+  `High(ShortString)` = 255 and `High(S10)` = 10 for `S10 = string[10]`,
+  because a frozen one does. Measured for all seven spellings before this was
+  written; the asymmetry is fpc's, not an omission here.
+
+  `cap` is the frozen capacity (AliasStrCap for an alias, 0 for a bare
+  `ShortString`), and 0 means the kind default rather than a zero-length
+  string -- the same convention SymStrCap uses. }
+function StringTypeBound(strTk: TTypeKind; cap: Integer; wantHigh: Boolean; var v: Int64): Boolean;
+begin
+  Result := False;
+  if TypeIsFrozenString(strTk) then
+  begin
+    if wantHigh then
+    begin
+      if cap > 0 then v := cap else v := DEFAULT_STR_CAP;
+    end
+    else v := 0;
+    Result := True;
+  end
+  else if (strTk = tyString) or (strTk = tyAnsiString) then
+  begin
+    if wantHigh then Exit;
+    v := 1; Result := True;
+  end;
+end;
+
+{ The string kind a builtin TYPE NAME denotes, or tyUnknown.
+
+  `shortstring` is asked BY NAME rather than left to BuiltinScalarTypeKind,
+  which deliberately excludes it: that table holds only side-effect-free names
+  and `shortstring` sets LastTypeStrCap. A BOUND needs the prefix convention
+  and not the capacity, so asking the name here is right, and routing through
+  ParseTypeKind for a capacity nobody reads would not be. }
+function StringTypeNameKind(const nm: AnsiString): TTypeKind;
+begin
+  if CaseEqual(nm, 'shortstring') then Result := tyShortString
+  else Result := BuiltinScalarTypeKind(nm);
+end;
+
+
 { The alias index for a built-in pointer name, REGISTERING it on first use. Registering lazily is
   what keeps a source declaration winning: FindTypeAlias is consulted first by every caller, so a
   real `PInteger` in the source or the RTL is found before we ever get here. Returns -1 for a name
@@ -8159,11 +8224,34 @@ function TryConstHighLowValueInner(wantHigh: Boolean; var v: Int64): Boolean;
   `const Z = Low(TE)` declared tyInteger and printed 0 instead of eA, and
   `const W = Low(TC)` printed 97 instead of 'a'.
   bug-p-the-constant-evaluator-erases-an-ordinals-type }
-var btk: TTypeKind; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
+var btk: TTypeKind; strTk: TTypeKind; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
   aliasEtid := -1;
+  { the KEYWORD spelling `Low(string)`, answered before the ordinal-token
+    branch because it arrives as a type TOKEN rather than an identifier. A
+    keyword cannot be shadowed by a variable, so it needs no FindSym guard;
+    the identifier spellings are answered after theirs.
+
+    ParseTypeKind RESOLVES the keyword rather than this arm assuming a kind,
+    which is the difference between agreeing with the declaration and only
+    looking like it: `string` is tyAnsiString under managed strings and a
+    FROZEN kind otherwise, and TypeIsFrozenString is true of tyString. Passing
+    tyString made `Low(string)` answer 0 while `var s: string; Low(s)` answered
+    1 -- the two spellings of one type disagreeing, and the type-name spelling
+    is the one nobody would have checked against the variable one. It also sets
+    LastTypeStrCap, which is what `string[N]` needs.
+
+    Exits either way, like the ordinal-token branch below: the token is
+    consumed, so there is no falling through to the variable path, and a False
+    here is the right answer for `High(string)` -- which fpc refuses too. }
+  if CurTok.Kind = tkString_T then
+  begin
+    btk := ParseTypeKind;
+    Result := StringTypeBound(btk, LastTypeStrCap, wantHigh, v);
+    Exit;
+  end;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
      (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
   begin
@@ -8179,12 +8267,32 @@ begin
     here for the same reason its subrange and enum-alias arms are: these two are
     one concept in two places and they change together. Same save/restore. }
   EatQualifiedTypePrefix(nm);
+
+  { a builtin string TYPE NAME -- AnsiString, UnicodeString, ShortString and
+    the rest. After the FindSym shadow guard above, so a variable of that name
+    still wins, and before the ordinal table, which does not hold them. }
+  strTk := StringTypeNameKind(nm);
+  if StringTypeBound(strTk, 0, wantHigh, v) then
+  begin
+    Next; Result := True; Exit;
+  end;
+
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then
   begin
     aliasIdx := FindTypeAlias(nm);
     if aliasIdx >= 0 then
     begin
+      { ...and a user ALIAS of one (`type TS = AnsiString`, `S10 =
+        string[10]`), asking the same helper with the alias's own capacity so
+        `High(S10)` is 10 rather than the 255 default. Without this arm an
+        alias fell through to OrdinalTypeBound, which answers False for every
+        string kind, and came back as `undefined variable (S10)`. }
+      if StringTypeBound(IntToTypeKind(AliasTk[aliasIdx]), AliasStrCap[aliasIdx],
+                         wantHigh, v) then
+      begin
+        Next; Result := True; Exit;
+      end;
   { A named SUBRANGE answers its OWN bounds, not the base type's. `TDigit = 0..9`
     gave Low = -2147483648 / High = 2147483647 (Integer's), and `TLetter =
     'a'..'e'` gave #0/#255 — so the idiomatic `for i := Low(T) to High(T)` over a
@@ -8270,11 +8378,39 @@ begin
 end;
 
 function TryFoldHighLowTypeInner(wantHigh: Boolean; var outNode: Integer): Boolean;
-var btk: TTypeKind; bv: Int64; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
+var btk: TTypeKind; strTk: TTypeKind; bv: Int64; etid, aliasIdx, aliasEtid, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
   aliasEtid := -1;
+  { the KEYWORD spelling `Low(string)`, answered before the ordinal-token
+    branch because it arrives as a type TOKEN rather than an identifier. A
+    keyword cannot be shadowed by a variable, so it needs no FindSym guard;
+    the identifier spellings are answered after theirs.
+
+    ParseTypeKind RESOLVES the keyword rather than this arm assuming a kind,
+    which is the difference between agreeing with the declaration and only
+    looking like it: `string` is tyAnsiString under managed strings and a
+    FROZEN kind otherwise, and TypeIsFrozenString is true of tyString. Passing
+    tyString made `Low(string)` answer 0 while `var s: string; Low(s)` answered
+    1 -- the two spellings of one type disagreeing, and the type-name spelling
+    is the one nobody would have checked against the variable one. It also sets
+    LastTypeStrCap, which is what `string[N]` needs.
+
+    Exits either way, like the ordinal-token branch below: the token is
+    consumed, so there is no falling through to the variable path, and a False
+    here is the right answer for `High(string)` -- which fpc refuses too. }
+  if CurTok.Kind = tkString_T then
+  begin
+    btk := ParseTypeKind;
+    if StringTypeBound(btk, LastTypeStrCap, wantHigh, bv) then
+    begin
+      outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+      ASTTk[outNode] := Ord(tyInteger);
+      Result := True;
+    end;
+    Exit;
+  end;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
      (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
   begin
@@ -8300,12 +8436,36 @@ begin
     bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
   EatQualifiedTypePrefix(nm);
 
+  { a builtin string TYPE NAME -- AnsiString, UnicodeString, ShortString and
+    the rest. After the FindSym shadow guard above, so a variable of that name
+    still wins, and before the ordinal table, which does not hold them. }
+  strTk := StringTypeNameKind(nm);
+  if StringTypeBound(strTk, 0, wantHigh, bv) then
+  begin
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+    ASTTk[outNode] := Ord(tyInteger);
+    Result := True; Exit;
+  end;
+
+
   btk := OrdinalNameToTk(nm);
   if btk = tyUnknown then
   begin
     aliasIdx := FindTypeAlias(nm);
     if aliasIdx >= 0 then
     begin
+      { ...and a user ALIAS of one (`type TS = AnsiString`, `S10 =
+        string[10]`), asking the same helper with the alias's own capacity so
+        `High(S10)` is 10 rather than the 255 default. Without this arm an
+        alias fell through to OrdinalTypeBound, which answers False for every
+        string kind, and came back as `undefined variable (S10)`. }
+      if StringTypeBound(IntToTypeKind(AliasTk[aliasIdx]), AliasStrCap[aliasIdx],
+                         wantHigh, bv) then
+      begin
+        Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+        ASTTk[outNode] := Ord(tyInteger);
+        Result := True; Exit;
+      end;
       { the same subrange rule as TryConstHighLowValue — these two are one
         concept in two places, so they change together }
       if AliasIsSub[aliasIdx] then

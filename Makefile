@@ -7121,6 +7121,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_varwidechar26 "$$($(TESTTMP)/test_varwidechar26)" "$$(cat test/test_a_variant_cast_to_widechar_converts_like_char.expected)"
 	./$(COMPILER) test/test_high_low_of_the_carved_out_char_kinds.pas $(TESTTMP)/test_carvedbounds26
 	tools/expect_same.sh test_carvedbounds26 "$$($(TESTTMP)/test_carvedbounds26)" "$$(cat test/test_high_low_of_the_carved_out_char_kinds.expected)"
+	./$(COMPILER) test/test_low_of_a_string_type_name_answers_like_the_variable.pas $(TESTTMP)/test_strbounds26
+	tools/expect_same.sh test_strbounds26 "$$($(TESTTMP)/test_strbounds26)" "$$(cat test/test_low_of_a_string_type_name_answers_like_the_variable.expected)"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas $(TESTTMP)/test_virtual_call_string26
 	tools/expect_same.sh test_virtual_call_string26 "$$($(TESTTMP)/test_virtual_call_string26)" "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"

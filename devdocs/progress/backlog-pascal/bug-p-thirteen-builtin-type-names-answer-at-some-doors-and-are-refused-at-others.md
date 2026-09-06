@@ -3,7 +3,7 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-summary: "TEN of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High`/`Low` of ByteBool, LongBool and WordBool; `Low` of AnsiString, RawByteString, UnicodeString, UTF8String and WideString; and a cast to Variant/OleVariant stored in its declared type. Every one DECLARES fine, casts fine and answers SizeOf, so nothing about the name looks broken from any single door. WideChar, UnicodeChar and UCS4Char were the same shape and are FIXED — `OrdinalTypeBound` had no arm for the two character kinds carved out of integer kinds. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
+summary: "FIVE of an original thirteen builtin type names are accepted at some doors and refused at others while fpc 3.2.2 accepts them everywhere: `High`/`Low` of ByteBool, LongBool and WordBool, and a cast to Variant/OleVariant stored in its declared type. Every one DECLARES fine, casts fine and answers SizeOf, so nothing about the name looks broken from any single door. WideChar/UnicodeChar/UCS4Char (26742a0ca) and the five string types (this ticket's second update) were the same shape and are FIXED. The sized booleans are the hard remainder: they map to tyUInt8/tyInteger/tyUInt16 on purpose to keep their C-ABI WIDTH, so answering High from the kind would give 2147483647 rather than TRUE. Found by asking every name at every door (`tools/type_name_every_door_probe.py`), not by a failing program."
 status: new
 owner: ""
 ---
@@ -29,7 +29,7 @@ Measured at `1df943481` over all 51 names in the union of `OrdinalNameToTk` and
 | --- | --- | --- |
 | ~~`WideChar` `UnicodeChar` `UCS4Char`~~ | ~~`High` `Low`~~ | **FIXED** — see below |
 | `ByteBool` `LongBool` `WordBool` | `High` `Low` | `TRUE` / `FALSE` |
-| `AnsiString` `RawByteString` `UnicodeString` `UTF8String` `WideString` | `Low` | `1` |
+| ~~`AnsiString` `RawByteString` `UnicodeString` `UTF8String` `WideString`~~ | ~~`Low`~~ | **FIXED** — see below |
 | `Variant` `OleVariant` | the cast (`x := Variant(y)`) | accepts |
 
 **The sized booleans are the interesting one and they are NOT a one-liner.**
@@ -101,3 +101,56 @@ together). Positive control is pin v404, which fails with
 
 **Ten left, and the sized booleans are still the hard one** — they need a kind
 carrying a width AND boolean bounds, which no current table can express.
+
+
+## 2026-09-06 (frankA) — five more, and the mechanism was already there in a sibling spelling
+
+`Low(s)` on a string VARIABLE has always answered 1 (0 for a frozen string),
+through ParseFactorCore's `hlIsAnsi` / `hlIsFrozen` arms. Only the TYPE-NAME
+spelling of the same fact was missing. Not a missing mechanism — a missing
+*caller*, which is the shape that reads as the harder ticket and is the easier
+one.
+
+One shared `StringTypeBound`, asked at SIX sites: the `string` keyword, a
+builtin name, and a user alias, each in the expression resolver and the
+constant one. Six rather than a pair because those two resolvers are already
+documented in the source as one concept in two places that must change
+together, and four unshared arms is exactly how the ordinal arms beside them
+drifted.
+
+**`High` of a managed string stays refused, and that is fpc's asymmetry.** fpc
+3.2.2 answers `High(ShortString)` = 255 and `High(S10)` = 10 for
+`S10 = string[10]` — both now answered here, from `AliasStrCap` — and REFUSES
+`High(AnsiString)` / `High(string)` with *"type identifier not allowed here"*,
+because a managed string has no upper bound. All seven spellings measured
+before the helper was written.
+
+**The row that caught the first version of the fix** is worth keeping: it passed
+`tyString` to the helper, and `TypeIsFrozenString(tyString)` is TRUE — it is the
+legacy overloaded frozen kind — so `Low(string)` answered 0 while
+`var s: string; Low(s)` answered 1. The keyword now resolves through
+`ParseTypeKind`, the way a declaration does, and the test keeps that row beside
+its variable twin: apart, neither can show the disagreement.
+
+**Five left, all of them the sized booleans and the Variant cast** — and that
+five is the probe's own re-run at this tree, not thirteen minus eight:
+
+```
+bytebool    refused at: high low
+longbool    refused at: high low
+wordbool    refused at: high low
+variant     refused at: cast
+olevariant  refused at: cast
+names=51  cells-agree=323  cells-differ=14
+```
+
+**The fix produced a new PHANTOM row in the probe and it is worth recording,**
+because it is the shape a probe goes quietly wrong in. Once `High(WideChar)`
+stopped being refused, the probe's `WriteLn(High(WideChar))` started measuring
+the OUTPUT ENCODING — pxx emits the UTF-8 bytes of U+FFFF, fpc emits `?` — and
+the cell flipped from `PXX-REFUSES` to `DIFFER`. **The confound was there all
+along and the refusal was hiding it.** The probe now prints the char kinds'
+bounds through `Ord()`, and only those names: `Ord()` as a UNIFORM printer
+would introduce a second phantom, since `Ord(q)` for a QWord answers -1 in pxx
+against fpc's 18446744073709551615, which is intermediate-overload latitude and
+not a defect.
