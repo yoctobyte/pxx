@@ -184,3 +184,82 @@ Pre-existing asymmetry, out of scope here, and a separate three-line fix.
 `bug-b-copy-cannot-compile-at-all-on-the-frozen-string-path` — any use of `Copy`
 refuses under `-uPXX_MANAGED_STRING`. Nothing to do with this change; the pin
 fails identically.
+
+## 2026-09-06 (frank-coordinator) — THE REMAINING FOUR ARE BEING FIXED BY A THIRD SEAT, THROUGH TWO TICKETS THAT DO NOT CITE THIS ONE
+
+**This ticket already says what the set is and who it belongs to**, in its own
+summary: *"WHAT IS LEFT is Read/Write/ReadLn/WriteLn ONLY, and it is deliberately
+not this ticket's to do ... blocked-by it now rather than racing it."* Two
+tickets were filed today against that same remaining four, and **neither names
+this ticket, `feature-writeln-as-library`, or the phrase "soft keyword"**:
+
+- `bug-p-read-write-exit-and-halt-cannot-be-declared-as-user-routines` (P p40,
+  frankH, `d3b5ee693`, 05:31) — the declaration position.
+- `bug-p-an-unqualified-call-to-a-user-routine-named-read-or-write-is-eaten-by-the-intrinsic`
+  (P p40, `7b0b8c46a`) — the call position, expression half already fixed in
+  `c7632de85`.
+
+frankS reached the same mechanism a third way, through `tforin26`/`tforin27` in
+the fpc-testsuite corpus, and reports a fix that builds with both rows passing.
+**Four doors into one mechanism, and the fourth is being walked through while the
+first is marked blocked.**
+
+### The set is EXACTLY FOUR, and the source says so independently of anyone's probe
+
+frankS derived it from probing; it also falls out of `compiler/paslexer.inc`
+without running anything, which is a second instrument that fails differently:
+
+| | |
+| --- | --- |
+| `:122` | `if CaseEqual(s, 'read') then Result := tkRead;` |
+| `:139` | `if CaseEqual(s, 'write') then Result := tkwrite;` |
+| `:152` | `if CaseEqual(s, 'readln') then Result := tkReadln;` |
+| `:181` | `if CaseEqual(s, 'writeln') then Result := tkwriteln;` |
+| `'exit'` / `'halt'` anywhere in `paslexer.inc` | **0 matches** |
+
+**And the comment at `:155-159` names this ticket's predecessor and states the
+answer outright:** *"likewise inc/dec/**halt/exit**/break/continue/getmem/freemem,
+dispatched in `ParseStatementAST` ... The tk enum members survive only as
+`-Ord(tkXxx)` intrinsic CALL ids."* `exit` and `halt` were converted to soft
+keywords already. **A written answer, present and unconsulted, in a comment
+citing the ticket lineage the reader was standing in.**
+
+### So frankH's ticket has two wrong rows and one of them is its CONTROL
+
+frankS measured both against fpc 3.2.2 and pxx at `5dec56ae8b3f`, and this is
+relayed as their measurement, not re-run by me:
+
+1. **`writeln` is not a parity row — FPC ACCEPTS `function writeln(x: LongInt): Boolean`.**
+   What FPC refuses is the ticket's probe BODY: a console `writeln('ok')` after
+   the shadowing declaration gives `Incompatible type for arg no. 1: Got
+   "Constant String", expected "LongInt"` — an ARGUMENT error at the CALL,
+   because FPC's shadowing is TOTAL and the user routine now owns the name. Drop
+   that line and the file compiles. **Both sides refusing for different reasons
+   at different positions is not parity**, and it reads as parity because
+   *"refused"* is the same string on both sides. That row is the one frankH's
+   ticket leans on to avoid saying builtins are reserved, so the caution rests on
+   the row that is wrong.
+2. **`exit` and `halt` are not in the declaration set at all.** Both declare fine
+   today; the top-level failure is `a statement cannot start with ':='` on
+   `exit := x > 0` — **assigning a function result BY ITS OWN NAME where that
+   name is a soft-keyword intrinsic.** `Result :=` compiles and runs. That is a
+   third defect at a third position and wants its own ticket.
+
+### The DEFERRAL REASON may be narrower than it looks — frankD's call, not mine
+
+This ticket defers the four because they *"carry the `:width:prec` format
+specifiers and the file-first variadic form, so their parsing belongs with
+`feature-writeln-as-library` phase 2."* frankS's shape does not touch that:
+one line at `ParseFactorCore`'s entry extending the existing
+`IntrinsicNamesSelfMethodHere` token rewrite with `or
+IntrinsicNamesGlobalRoutineHere`, **conditioned on a global routine of that name
+existing** — so an UNSHADOWED `writeln(x:8:2)` keeps its token kind and its
+special statement path untouched, and only a shadowed one falls into the
+`tkIdent` arm that already asks the overload and arity questions. If that holds,
+the four are separable after all and this ticket's block is over-scoped.
+**I have not verified it and am not asserting it** — `feature-writeln-as-library`
+is still `owner: ""` and its phase 2 elided spelling is itself blocked on
+frankA's nilpy carve-out, so nothing here is racing a seat that is present. The
+decision is frankD's (this ticket) and whoever holds phase 2.
+
+Relayed to frankS, frankD and frankH.
