@@ -3488,8 +3488,26 @@ begin
           { A CLASS method reached through an INSTANCE: `obj.ClassMethod(...)`. FPC
             allows it, and Self is the instance's RUNTIME class -- not the static type
             of the variable -- so it comes from __pxxRttiOf(obj), not a fixed
-            AN_CLASSREF. }
-          mselfArg := GenMakeRttiOfCall(node);
+            AN_CLASSREF.
+
+            A RECORD HAS NO RUNTIME CLASS AND NO HEADER WORD TO READ ONE OUT OF,
+            and `class function ... static` on a record is reached through an
+            instance just as often as through the type name (terecs3.pp's
+            `F.Test1(4)`). __pxxRttiOf then took the record's own first bytes as
+            an object and the call SEGFAULTED, while the identical `TR.T1(4)` on
+            the line above printed the right answer -- no diagnostic between the
+            two spellings. ParseRecordMethodDecl types param 0 of a record's
+            class method as the RECORD (by reference for a plain record, by
+            value for a type helper), never as a metaclass, so the receiver
+            itself is the argument the callee is declared to take; passing it
+            also keeps a side-effecting receiver evaluated, which a dummy would
+            not. A CLASS helper is the one UClsIsRecord entry whose Self really
+            is a metaclass (UClsHelperTk = tyClass), and it keeps the RTTI path.
+            bug-p-a-records-static-class-method-segfaults-through-an-instance }
+          if UClsIsRecord[mci] and (UClsHelperTk[mci] <> Ord(tyClass)) then
+            mselfArg := node
+          else
+            mselfArg := GenMakeRttiOfCall(node);
           GenVirtSlot := UMthVirSlot[mmi];
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           node := mcallNode;

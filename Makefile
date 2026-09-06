@@ -16177,6 +16177,8 @@ test-core: $(COMPILER)
 	grep -q "a dynamic array is not allowed in a variant part" $(TESTTMP)/test_vbdyn.log
 	./$(COMPILER) test/test_class_var_in_a_record.pas $(TESTTMP)/test_classvarrec26
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
+	./$(COMPILER) test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26
+	tools/expect_same.sh test_recstaticinst26 "$$($(TESTTMP)/test_recstaticinst26)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
