@@ -6878,7 +6878,17 @@ begin
     Result := IRAppend(IR_LOAD_SYM, IRA[ptrVal], -1, -1, 0, tk);
 end;
 
-function IRWrapRangeChk(value: Integer; destTk: TTypeKind): Integer;
+function IsSignedOrdKind(tk: TTypeKind): Boolean;
+{ Does this ordinal kind carry a sign bit? Used by the {$R+} 64-bit arm below,
+  which is the only range check whose answer depends on the SOURCE's signedness
+  rather than on the destination's width alone. Char and Boolean are unsigned;
+  every ty*Int* without a U is signed. }
+begin
+  IsSignedOrdKind := (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) or
+                     (tk = tyInteger) or (tk = tyInt64);
+end;
+
+function IRWrapRangeChk(value: Integer; destTk, srcTk: TTypeKind): Integer;
 { {$R+} narrowing-assignment guard: wrap the assigned value in a
   PXXRangeChkI64(v, lo, hi) call when the DEST's ordinal range is narrower
   than the 64-bit compute width. Pure-Pascal helper = portable to every
@@ -6896,6 +6906,31 @@ begin
     tyInteger, tyInt32: begin lo := -2147483648; hi := 2147483647; end;
     tyUInt32:  begin lo := 0; hi := 4294967295; end;
     tyChar:    begin lo := 0; hi := 255; end;  { chr(300) := ch raises in FPC }
+    { THE 64-BIT PAIR, AND THE CHECK IT IS OWED IS A SIGN CHECK, NOT A WIDTH
+      ONE. Neither Int64 nor QWord is NARROWER than the compute width, so both
+      fell out of this case to the passthrough below and {$R+} emitted nothing
+      whatsoever for a QWord destination: `q := s` with s = -128 stored
+      $FFFFFFFFFFFFFF80 in silence. trange5.pp is a whole file of that shape and
+      says so itself -- it printed "64bit range checking still buggy!" while
+      every narrower row in the same program raised correctly.
+
+      One condition covers both directions. The value reaches PXXRangeChkI64 as
+      an Int64, so a negative signed source and an unsigned source above
+      High(Int64) BOTH arrive as a negative Int64, and `v >= 0` is exactly what
+      each violates. High(Int64) is therefore not a stand-in for QWord's 2^64-1
+      that we settle for -- no value that can reach this helper exceeds it, so
+      the upper arm is unreachable rather than approximate.
+
+      SOURCE-CONDITIONAL, which is the entire reason srcTk is a parameter and
+      not a local re-derivation: a blanket lo=0 on a QWord destination refuses
+      `q1 := q2` for every q2 above 2^63 -- a legal same-type copy that must
+      never check, and one whose breakage would be invisible below 2^63. }
+    tyUInt64:  if IsSignedOrdKind(srcTk) then
+               begin lo := 0; hi := High(Int64); end
+               else Exit;
+    tyInt64:   if srcTk = tyUInt64 then
+               begin lo := 0; hi := High(Int64); end
+               else Exit;
   else
     Exit;
   end;
@@ -12652,7 +12687,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             if (varIdx >= 0) and (varIdx < SymCount) and SymIsSub[varIdx] then
               value := IRWrapChkBounds(value, SymSubLo[varIdx], SymSubHi[varIdx])
             else
-              value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]));
+              value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]),
+                                      IntToTypeKind(ASTTk[ASTRight[node]]));
           end
           else if (ASTKind[ASTLeft[node]] = AN_FIELD) and
                   (ResolveNodeRec(ASTLeft[ASTLeft[node]]) <> REC_NONE) and
@@ -12662,7 +12698,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             { subrange FIELD dest: its retained lo..hi outranks the width table }
             value := IRWrapChkBounds(value, rcSubLo, rcSubHi)
           else
-            value := IRWrapRangeChk(value, lhsStoreTk);
+            value := IRWrapRangeChk(value, lhsStoreTk,
+                                    IntToTypeKind(ASTTk[ASTRight[node]]));
         end;
         if ASTKind[ASTLeft[node]] = AN_IDENT then
         begin

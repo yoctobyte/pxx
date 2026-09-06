@@ -12197,6 +12197,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_rplus_df26 "$$($(TESTTMP)/test_rplus_df26)" "caught=2"
 	./$(COMPILER) test/test_range_checks_nd.pas $(TESTTMP)/test_rplus_nd26
 	tools/expect_same.sh test_rplus_nd26 "$$($(TESTTMP)/test_rplus_nd26)" "ok 42 7 caught=2"
+	./$(COMPILER) test/test_range_checks_64bit_sign.pas $(TESTTMP)/test_rplus_64s26
+	tools/expect_same.sh test_rplus_64s26 "$$($(TESTTMP)/test_rplus_64s26)" "copy-ok caught=5 lax=7"
 	./$(COMPILER) test/test_io_checks_iplus.pas $(TESTTMP)/test_iplus26
 	tools/expect_same.sh test_iplus26 "$$($(TESTTMP)/test_iplus26)" "ioresult=TRUE caught=1"
 	./$(COMPILER) test/test_io_checks_mimic.pas $(TESTTMP)/test_iplus_lax26

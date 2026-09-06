@@ -101,7 +101,7 @@ tgeneric11.pp	gap: objfpc generic/specialize syntax; `specialize TList<_T>` as a
 tgeneric14.pp	wontfix: dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
 tgeneric20.pp	wontfix: dialect-pass — generic method impl without <T> marker — PXX's generics surface deliberately accepts the stripped form (3d71edcf); not a bug
 tgeneric21.pp	gap: accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
-tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects runtime error 201)
+tgeneric7.pp	gap: a generic body takes its {$R}/{$Q}/{$I}/... directive state from the SPECIALIZATION SITE, not from where the template was written. ugeneric7 wraps `field:=l` in {$R+} and the program specializes under {$R-}, so the check is dropped and 1234 stores as 210. Measured both directions (an identical body in a plain class in the same unit DOES raise; a {$R-} body specialized under {$R+} gains a check it never asked for). Not per-unit state: ShiftTokParallel fills a splice gap from the token before it, and the specializer overwrites only TokSrcOff/TokSrcLen afterwards, not the nine directive states
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
@@ -114,7 +114,6 @@ tprocvar1.pp	decided: old-style TP `object` types are not implemented (decide-ol
 tprocvar2.pp	gap: typed const procvar initialized with bare proc name (TP mode), procvar via move()
 tprocvar3.pp	gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)
-trange5.pp	gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
 tsealed6.pp	decided: old-style TP `object` types are not implemented (decide-old-style-object-types, option A, 28c19f214). NOT a gap to chase -- the decision's revisit trigger is a real program needing it, not a conformance row. Named by that ticket as an acceptance test; wants `object abstract` / `object sealed` on top of the base feature.
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 tarray16.pp	gap: dynamic-array const initializers ([1,2,3]) and delphi-mode generic function CheckArray<T>
