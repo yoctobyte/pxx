@@ -488,7 +488,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | task-u-evaluate-the-2026-08-31-ticket-rules-next-week | U | 60 | task | Owner asked to evaluate the new rules next week. Written as a ticket rather than a scheduled callback BECAUSE timed callbacks are one of the rules. Carries the 2026-08-31 baseline so the comparison is possible at all -- without it, next week's evaluation is an opinion. | — |
 
-## backlog-libs (21)
+## backlog-libs (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -513,6 +513,7 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
+| task-b-nineteen-sysutils-names-that-fpc-keeps-in-system | B | 45 | task | `lib/rtl/sysutils.pas` declares NINETEEN names that FPC resolves with no uses clause at all -- measured by asking fpc, not by grepping it (`tools/rtl_unit_boundary_census.py`, 169 interface routines probed, controls branched on): AllocMem Concat Copy Delete DynArraySize Error HexStr Insert LowerCase Pos SetString sLineBreak StringOfChar StrLen StrPas SysBackTraceStr UpCase UTF8Decode UTF8Encode. The class has TWO SIGNS pointing opposite ways -- the declaration SHADOWS a capability we already have (frankD: `uses sysutils` took dyn-array Delete/Insert from every program, fixed f5ad23c32) or it is the ONLY home of one (frankS: tarray13 dies at line 23 on `undefined variable (DynArraySize)`, one `uses sysutils` line advances it to line 68). Six rows are already classified: Delete/Insert were sign one, DynArraySize is sign two, Copy/UpCase/Pos measured CLEAR by frankD. Thirteen are unclassified and the census cannot say which sign a row has -- that is the work. A fix that handles only the shadowing sign will read as complete. | — |
 
 ## backlog-cfront (11)
 
@@ -1185,6 +1186,7 @@ _none_
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field-and-the-name-says-neither
 - [p 45] [P] refactor-p-the-frozen-string-cap-travels-to-its-sizer-in-a-global-whose-window-nobody-enforces
+- [p 45] [B] task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
