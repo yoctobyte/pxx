@@ -792,7 +792,13 @@ authoritative and far larger, and today only a rainy-day probe touches it.
    standalone). The "real app compiles" flex. (candidate — file when reached.)
 4. **PascalScript / DWScript** — embeddable script engines, heavy
    RTTI/OO/generics = the hard rung (tcc-equivalent).
-   [[feature-embed-pascal-script]] · [[feature-embed-dwscript-rtti]].
+   [[feature-embed-pascal-script]] · [[feature-embed-dwscript-core]].
+   **The DWScript row is the CORE ticket, split out 2026-09-06.**
+   [[feature-embed-dwscript-rtti]] is the RTTI-exposer half and is NOT a corpus
+   rung — it is blocked on
+   [[feature-b-delphi-extended-rtti-object-model]], which fpc 3.2.2 does not
+   have either, so it cannot be started. The core is blocked only on ordinary
+   RTL gaps and is the one to point a session at.
 5. **Pascal chess engine** — perft oracle already cross-validates the C and Rust
    chess ([[feature-c-corpus-chess]]); a Pascal one = three frontends, one oracle.
    Cheap, high-signal cross-language check. (candidate.)

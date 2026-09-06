@@ -1,13 +1,13 @@
 ---
 slug: feature-embed-dwscript-rtti
-title: "DWScript -- compile under pxx + RTTI auto-bind (scripting stress test)"
+title: "dwsRTTIExposer -- auto-bind host classes to script via Delphi extended RTTI"
 track: B
 prio: 40
 type: feature
 status: backlog
 owner: ""
-blocked-by: []
-summary: "PREMISE FALSE, MEASURED 2026-09-05 BY ATTEMPTING THE TARGET at af8b53310 / compiler 450d7de641d8: `dwsRTTIExposer` DOES NOT USE `typinfo`. It uses Delphi EXTENDED RTTI -- 15 distinct `TRtti*` classes including `TRttiIndexedProperty` eight times -- and across all 102 units in Source/ exactly one file (dwsComp.pas) touches the classic GetPropInfo/GetStrProp API at all. Packages/ holds only Delphi packages, and dws.inc names FPC exactly twice, both `{$IFNDEF FPC}`. fpc 3.2.2 CANNOT COMPILE dwsRTTIExposer EITHER: it has TRttiContext/TRttiType but no TRttiIndexedProperty. pxxs lib/rtl/rtti.pas exports TRttiMethod and TRttiProc and has no TRttiContext at all. DONE ANYWAY AND STILL WORTH IT: lib/rtl/typinfo.pas gained the sixteen FPC by-name arms it was missing (GetStrProp(Instance, PropName) and siblings), verified byte-identical to FPCS OWN typinfo on every comparable row, and a stale ALL-CAPS warning in that unit claiming its TObject lookups crash was retracted after re-measuring under both HEAD and the PIN -- real FPC parity, one DWScript consumer (dwsComp.pas), and zero lines of dwsRTTIExposer moved. THE CORPUS WALL WAS A FLAG, NOT A GAP: the `{$IF CompilerVersion>21.0}` float-literal refusal both this ticket and feature-embed-pascal-script record sits inside `{$IFNDEF FPC}`, and --mimic-fpc removes it outright. With that flag the ONLY remaining wall is Delphi dotted unit-scope names -- 7 of 8 probed units stop at `unit source not found: system.classes`, and the 8th (dwsStrings) COMPILES CLEAN -- filed as [[feature-p-resolve-delphi-dotted-unit-scope-names]], with fpc 3.2.2 measured failing the same way. NEXT DECISION IS A SPLIT, NOT A DEMOTION: the DWScript core (100 of 102 units) is a live corpus target blocked on that one feature, while the RTTI exposer this ticket is NAMED for needs extended RTTI and is not startable. Nothing here is vendored."
+blocked-by: [feature-b-delphi-extended-rtti-object-model]
+summary: "SPLIT 2026-09-06 AND THIS TICKET IS NOW THE EXPOSER HALF ONLY. The core went to [[feature-embed-dwscript-core]] (corpus rung 4, startable today) and the blocker this half waits on is now a filed row, [[feature-b-delphi-extended-rtti-object-model]], instead of a sentence -- the ranker had been seeing prio 40 with blocked-by [] for work nobody could begin. PREMISE STILL FALSE AND STILL THE HEADLINE: `dwsRTTIExposer` does not use `typinfo`. It uses Delphi EXTENDED RTTI -- 15 distinct `TRtti*` classes including `TRttiIndexedProperty` eight times -- and fpc 3.2.2 CANNOT COMPILE IT EITHER (it has TRttiContext/TRttiType, not TRttiIndexedProperty), so our usual oracle settles nothing here. pxx `lib/rtl/rtti.pas` exports TRttiMethod and TRttiProc and has no TRttiContext at all. TWO CLAIMS THAT WERE HERE ARE NOW CORRECTED. (1) This summary said the ONLY remaining wall was Delphi dotted unit-scope names; that feature LANDED -- [[feature-p-resolve-delphi-dotted-unit-scope-names]] is in done/ and Source/pxxlib.cfg carries 11 unitalias rows. (2) Its replacement, recorded in that done ticket, was that the wall moves to `lclintf` and DWScripts FPC branch WANTS LAZARUS. Measured false at 8b55d1918 / compiler 5ca36ce7aae9: an EMPTY `lclintf.pas` makes the compile walk straight past it, LCLIntf is never qualified anywhere in dwsXPlatform, and what it was load-bearing for is a transitive re-export of TCriticalSection -- our own `syncobjs` has a real one. What remains is an ordinary RTL gap ladder (TFileName, TLightweightMREW, IMultiReadSingleWrite), all recorded on the core ticket. THAT CORRECTION ALSO FIXES A CITATION: the done ticket says the Lazarus problem was Recorded on [[feature-embed-dwscript-rtti]] and it never was -- the sentence read as a receipt for a write that did not happen. Corpus is 96 .pas in Source/ (128 including subdirs), not the 102 claimed here before. The typinfo work recorded below was real FPC parity, is differentially verified, serves dwsComp.pas, and moves this ticket zero lines. Nothing vendored; MPL 1.1 obligations below still apply to any demo."
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
@@ -346,3 +346,74 @@ The honest move is to split them rather than to demote or reject the whole: the
 core is a good target, the exposer is a different and much larger one. Left for
 whoever picks this up, because choosing between "one ticket re-scoped" and "two
 tickets" is a judgement about the backlog's shape rather than a measurement.
+
+## 2026-09-06 (frankH) — THE SPLIT THIS TICKET ASKED FOR, AND WHY IT IS TWO TICKETS
+
+The section above left the choice between "one ticket re-scoped" and "two
+tickets" to whoever picked this up, calling it a judgement about the backlog's
+shape rather than a measurement. **It turned out to be a measurement**, and the
+measurement pointed one way.
+
+### First, the staleness check, because both walls on record were wrong
+
+**Wall 1 is gone.** [[feature-p-resolve-delphi-dotted-unit-scope-names]] landed
+and is in `done/`. `Source/pxxlib.cfg` already carries its 11 `unitalias` rows.
+
+**Wall 2 never existed.** That done ticket recorded the replacement: all eight
+probed units now stop at `lclintf`, and *"telling DWScript we are FPC sends it
+into Lazarus"*. Measured at `8b55d1918`, compiler `5ca36ce7aae9`:
+
+| stub dropped into `Source/` | wall |
+| --- | --- |
+| none | `unit source not found: lclintf` (`dwsxplatform.pas:76`) |
+| **an EMPTY `lclintf.pas`** | `base type not found: TCriticalSection` (`:99`) |
+| `lclintf` re-exporting our `syncobjs` | `TLightweightMREW` (`:141`), `TFileName` (`:163`) |
+
+An empty unit satisfied it. **LCLIntf's own surface is used zero times** — there
+is no qualified `LCLIntf.` call in `dwsXPlatform.pas` either. It is load-bearing
+only for a transitive re-export: `System.SyncObjs` is imported in the *non-FPC*
+arm (line 71) while `TdwsCriticalSection` derives from `TCriticalSection`
+unconditionally (line 99), so under `--mimic-fpc` the type has to arrive through
+LCLIntf. Our `syncobjs` has a real `TCriticalSection`.
+
+So "wants Lazarus" was a claim about an **import**, not about a dependency, and
+what is actually left is an ordinary RTL gap ladder. That is the fact that
+decided the split.
+
+**The empty stub is the whole method.** It is a probe whose right answer differs
+from the default: if LCLIntf had been supplying anything, an empty unit would
+have named it in a list of unknown identifiers. It named none. A *shim* would
+have proved nothing either way.
+
+### The judgement
+
+Two tickets, because the halves differ in **startability**, which is the one
+property a shared row cannot represent:
+
+- **[[feature-embed-dwscript-core]]** — 94 of 96 units, blocked on nothing but
+  nameable RTL gaps, work available today. It takes corpus rung 4.
+- **this ticket** — needs Delphi extended RTTI, which
+  **fpc 3.2.2 does not have either**. Not startable.
+
+One row carrying both ranks the startable half behind the unstartable one at a
+single prio, and rung 4 of [[feature-pascal-corpus-expansion]] needs something a
+session can actually be pointed at. Re-scoping alone would have left the corpus
+rung linking to a ticket about extended RTTI.
+
+### Two smaller things this turned up
+
+**A citation that read as a receipt.** The done ticket says the Lazarus problem
+was *"Recorded on [[feature-embed-dwscript-rtti]]"*. It was not — this file
+contained no mention of LCL, Lazarus or Posix before today. The sentence was
+written in the same breath as the intent and never became the write.
+
+**The blocker had no row.** "Will not be until pxx has Delphi extended RTTI"
+named no ticket, so the ranker saw prio 40 with `blocked-by: []`. Now
+[[feature-b-delphi-extended-rtti-object-model]].
+
+**And the measurement nearly went the other way.** Compiling from *inside*
+`Source/` resolves no `unitalias` rows at all, because the manifest walk stops
+before the cwd and a bare filename has no directory part — so the landed feature
+looked broken for an hour. Only running its own `test/libmanifest` positive
+control separated "feature is broken" from "probe is mis-invoked". Filed as
+[[bug-p-a-manifest-is-skipped-in-silence-when-the-source-is-compiled-from-its-own-directory]].
