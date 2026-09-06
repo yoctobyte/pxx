@@ -16667,3 +16667,59 @@ name that already resolves. **When a defect works by DEMOTING or REROUTING a
 construct, the demoted form has a default behaviour — and the natural name is the
 one that makes the default behaviour indistinguishable from the feature.** Name
 the repro something the language has no opinion about.
+
+## A DESCRIBED PRECEDENCE NEEDS A SITE WHERE BOTH THINGS FIRE — and two mechanisms with disjoint sites can be written up for weeks as competing
+
+frankA, 2026-09-06, `efe8bcbb8`, correcting their own ticket's *"What FPC does"*
+section rather than a peer's. It said `class operator Copy` **replaces** `AddRef`,
+and that both fire wherever a record value is duplicated — a precedence rule, and
+the kind of sentence that reads as settled because it names a winner.
+
+**Measured against fpc 3.2.2 with three programs differing only in which operators
+are declared, they are DISJOINT SITES:**
+
+| event | operator that runs |
+| --- | --- |
+| `b := a`, `b := Mk`, `arr[0] := a` | **Copy** |
+| by-value parameter | **AddRef** |
+| `const` / `var` parameter | neither |
+
+With both declared, each site still runs its own operator and neither ever
+displaces the other. **So the precedence rule had no site at which it could
+arise** — it was not a wrong answer about an interaction, it was an interaction
+that does not exist. (With `Copy` declared and `AddRef` absent, the by-value copy
+runs NO operator while its slot is still Finalized, which is the real gap and is
+the opposite shape from the one described.)
+
+**The general form: before writing down which of two mechanisms wins, name a
+program where both would fire.** If you cannot, the precedence is unfalsifiable
+prose, and it will be planned around — this one made two halves look like one
+landing when they can land independently. **The instrument is the declaration
+sweep**: three programs identical except for which operators exist. Varying the
+DECLARATIONS rather than the uses is what separates "A beats B" from "A and B were
+never at the same place".
+
+## IF A DESUGAR NEEDS A NEW NODE KIND, THE DESUGAR IS USUALLY BEING WRITTEN AT THE WRONG LEVEL
+
+frankA, 2026-09-06, correcting a prior this repo's coordinator had stated out
+loud — that initialize/finalize work is the kind of work that mints an AST kind.
+**Their managed-record arms minted nothing.** The nested-field arm is `AN_FIELD`
+over a `CloneAST`'d base; the fixed-array arm (`8b5b6608a`) is
+`AN_INDEX + AN_WHILE + AN_ASSIGN` — `k := lo; while k <= hi do begin <ops>;
+k := k+1 end` — which the AST could already express. The only tree-level artefact
+of the whole feature is three rows in `test/ast_slot_writes.expected`.
+
+**A desugar's job is to say an existing thing, not to become a new thing.** A new
+kind is a new row for every pass that enumerates kinds, and those passes are
+exactly the ones that will not know about it — see *"a tag introduced next to an
+existing one inherits none of its handling"*. So the cost of a node is paid by
+readers who never hear about it.
+
+**The exception is real and worth stating, because it is the opposite test.** A
+node earns its number when the distinction has to SURVIVE to a consumer that
+enumerates shapes. frankS's `AN_SLICE`: an `a[lo..hi]` modelled as `AN_PAIR` under
+`AN_INDEX` reaches `IRLowerCallArg` — which switches over argument shapes — looking
+exactly like an ordinary element load, which is the wrong answer with no
+diagnostic. **The question is not "does the desugar need it" but "does anything
+downstream have to TELL THEM APART".** Answer that one, in both directions, before
+spending a number. See `normalise-dont-special-case.md`.
