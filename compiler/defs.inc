@@ -6818,6 +6818,21 @@ var
     0 of 0 and 0 of 4127 are different answers and both print as no lines.
     Counted only while the channel is on. }
   DbgCaseBindSeen, DbgCaseBindFold, DbgCaseBindMoved : Integer;
+  { a.wholearr — the population of a NARROWING that has not been landed yet.
+    A whole-array assignment destination is never type-checked (the funnel bails
+    because an array's TypeKind IS its element's kind), so `sa := s` on an
+    array of AnsiString compiles and SIGSEGVs. The refusal is easy; the reason
+    it is a ticket and not a commit is that nobody has enumerated the programs
+    the refusal would start rejecting. This channel reports every whole-array
+    destination and whether the candidate rule would keep it, so the census can
+    be taken with a COMMITTED compiler.
+    Same 0/1/2 convention as the two above: 0 is not-asked-yet, 1 is
+    asked-and-off, so an unset PXXDBG costs one integer compare per AN_ASSIGN. }
+  DbgWholeArrMode : Integer;
+  { seen = whole-array destinations; keep = the candidate rule accepts the RHS;
+    refuse = the candidate rule would REFUSE it. refuse is the narrowing's cost
+    and it is the only number this channel exists to produce. }
+  DbgWholeArrSeen, DbgWholeArrKeep, DbgWholeArrRefuse : Integer;
 
 { ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================
 

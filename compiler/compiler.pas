@@ -2586,6 +2586,14 @@ begin
   if DbgCaseBindMode > 1 then
     WriteLn('PXXDBG a.casebind TOTAL seen=', DbgCaseBindSeen,
             ' fold=', DbgCaseBindFold, ' moved=', DbgCaseBindMoved);
+  { a.wholearr's denominator, for the reason a.casebind's exists: a run that
+    prints no REFUSE lines has either measured a clean file or measured
+    nothing, and those are different answers that both print as silence. A
+    FAILING compile never reaches here, so an absent TOTAL means the file did
+    not compile — it is not a zero. }
+  if DbgWholeArrMode > 1 then
+    WriteLn('PXXDBG a.wholearr TOTAL seen=', DbgWholeArrSeen,
+            ' keep=', DbgWholeArrKeep, ' refuse=', DbgWholeArrRefuse);
   DerefWalkReport;
   TokPoolReport;
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,

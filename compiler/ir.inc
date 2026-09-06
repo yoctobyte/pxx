@@ -8581,6 +8581,112 @@ begin
             ' wants ', Procs[cpi].ParamCount, ' got ', n);
 end;
 
+{ ===== a.wholearr — the population of a narrowing nobody has landed ========
+
+  `sa := s` — a managed string assigned to a WHOLE static array of AnsiString —
+  compiles under pxx and SIGSEGVs; fpc 3.2.2 refuses it. The check that should
+  fire is the kind funnel at AN_ASSIGN below, and it cannot: an array's
+  TypeKind IS its element's kind, so AssignSideKind returns False for an
+  array-valued side and the funnel short-circuits into its documented
+  fall-back-to-accept. bug-p-a-whole-array-assignment-destination-is-never-
+  type-checked.
+
+  Writing the refusal is four lines. The reason it is a ticket is that it is a
+  NARROWING: the funnel would start refusing programs the tree compiles today
+  and nobody has counted them. So this channel reports the population FIRST,
+  from a committed compiler, which is the only kind of measurement anyone else
+  can reproduce.
+
+  DbgWholeArrRhsShaped IS THE CANDIDATE RULE ITSELF, not a description of it.
+  Landing the refusal means calling this same function and erroring on False —
+  so a `refuse=` count here is exactly the number of sites the narrowing would
+  break, and no second implementation can drift away from the measured one.
+
+  Two shapes must survive by name and both fall out of the dyn-depth arm:
+    `d := e`  dyn -> dyn.
+    `t := o`  an OPEN-ARRAY PARAMETER assigned to a dynamic array, which fpc
+              rejects and we accept deliberately (CLAUDE.md: us accepting what
+              fpc rejects is not a defect). A parameter's recorded ArrLen is
+              1000 — AllocParam's open-array placeholder — so nothing here may
+              ask a length; NodeDynDepth answers from SymDynDepth instead.
+  `d := nil` is the third and it is not an array at all: the parser builds nil
+  as an AN_INT_LIT 0 tagged tyPointer, and releasing a dynamic array that way
+  is ordinary Pascal.
+
+  The per-line report prints the RAW AST kind NUMBERS rather than names. A
+  hundred-entry spelling table for a probe is bloat; `grep '^  AN_' defs.inc`
+  decodes them and cannot go stale the way a second copy of that list would.
+
+  Deliberately writeln and not WarnAt, for PxxArityProbe's reason one screen
+  up: a measurement must not touch WarnCount or interact with -Werror. }
+function DbgWholeArrRhsShaped(rhs: Integer): Boolean;
+begin
+  DbgWholeArrRhsShaped := True;
+  if rhs < 0 then Exit;   { no RHS to disagree with }
+  { nil — see the header. }
+  if (ASTKind[rhs] = AN_INT_LIT) and (ASTIVal[rhs] = 0) and
+     (ASTTk[rhs] = Ord(tyPointer)) then Exit;
+  { A whole array in any of its three lvalue spellings: ident, field, deref. }
+  if ASTNodeIsWholeArray(rhs) then Exit;
+  { ...and any expression whose VALUE is a dynamic array: a dyn-array-returning
+    call, Copy, a retagged array constructor, an open-array parameter. }
+  if NodeDynDepth(rhs) >= 1 then Exit;
+  { The array-shaped node kinds that are not yet retagged, so their dyn depth
+    is not readable here. }
+  if (ASTKind[rhs] = AN_ARRAY_CTOR) or (ASTKind[rhs] = AN_SET_LIT) or
+     (ASTKind[rhs] = AN_DYN_COPY) or (ASTKind[rhs] = AN_DYN_INSERT) or
+     (ASTKind[rhs] = AN_DYN_DELETE) or (ASTKind[rhs] = AN_VARREC_ARRAY) or
+     (ASTKind[rhs] = AN_SLICE) then Exit;
+  DbgWholeArrRhsShaped := False;
+end;
+
+procedure DbgWholeArrMaybe(node: Integer);
+var wl, wr: Integer; ok: Boolean;
+begin
+  if DbgWholeArrMode = 0 then
+  begin
+    if PxxDbgEnabled('a.wholearr') then DbgWholeArrMode := 2
+    else DbgWholeArrMode := 1;
+  end;
+  if DbgWholeArrMode = 1 then Exit;
+  wl := ASTLeft[node];
+  if not ASTNodeIsWholeArray(wl) then Exit;
+  wr := ASTRight[node];
+  ok := DbgWholeArrRhsShaped(wr);
+  Inc(DbgWholeArrSeen);
+  if ok then Inc(DbgWholeArrKeep) else Inc(DbgWholeArrRefuse);
+  Write('PXXDBG a.wholearr ');
+  if ok then Write('keep ') else Write('REFUSE ');
+  Write('lk=', ASTKind[wl], ' ldyn=', NodeDynDepth(wl));
+  if (ASTKind[wl] = AN_IDENT) and (Integer(ASTIVal[wl]) >= 0) and
+     (Integer(ASTIVal[wl]) < SymCount) then
+    Write(' lname=', Syms[ASTIVal[wl]].Name,
+          ' lkind=', Ord(Syms[ASTIVal[wl]].Kind),
+          ' llen=', Syms[ASTIVal[wl]].ArrLen);
+  if wr < 0 then Write(' rk=-1')
+  else
+  begin
+    Write(' rk=', ASTKind[wr], ' rdyn=', NodeDynDepth(wr),
+          ' rtk=', Ord(ASTTk[wr]));
+    if (ASTKind[wr] = AN_IDENT) and (Integer(ASTIVal[wr]) >= 0) and
+       (Integer(ASTIVal[wr]) < SymCount) then
+      Write(' rname=', Syms[ASTIVal[wr]].Name,
+            ' rkind=', Ord(Syms[ASTIVal[wr]].Kind),
+            ' rlen=', Syms[ASTIVal[wr]].ArrLen);
+  end;
+  if (CurProc >= 0) and (CurProc < ProcCount) then
+  begin
+    Write(' proc=', Procs[CurProc].Name);
+    if (ProcUnitIdx[CurProc] >= 0) and (ProcUnitIdx[CurProc] < StrCount) then
+      Write(' unit=', Strs[ProcUnitIdx[CurProc]].Text)
+    else
+      Write(' unit=-');
+  end
+  else
+    Write(' proc=- unit=-');
+  WriteLn(' line=', ASTLine[node]);
+end;
+
 { Free the CAUGHT exception object parked in ownTmp, guarded by clsTmp's
   "this is a user class instance" bit (BSS_EXC_CLS, which AN_RAISE normalises
   to REC_NONE for anything below REC_UCLASS_BASE, so `raise 42` is excluded
@@ -12548,6 +12654,15 @@ begin
             'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
             ' to ' + TypeKindSpelling(asgDstTk));
       end;
+
+      { PXXDBG=a.wholearr — the census for the not-yet-landed refusal of a
+        whole-array destination. HERE, above the fixed->dynamic guard, because
+        that guard REWRITES ASTRight into an element-list ctor: measured below
+        it, every `d := s` would report as an array constructor and the channel
+        would count its own neighbour's fix as the population. 1 is
+        asked-and-off, so an unset PXXDBG costs one integer compare per
+        assignment. bug-p-a-whole-array-assignment-destination-is-never-type-checked }
+      if DbgWholeArrMode <> 1 then DbgWholeArrMaybe(node);
 
       { ...AND A SECOND PAIR THE KIND CANNOT EXPRESS: a FIXED-length array
         assigned to a DYNAMIC one. `var d: array of LongInt; s: array[0..2] of
