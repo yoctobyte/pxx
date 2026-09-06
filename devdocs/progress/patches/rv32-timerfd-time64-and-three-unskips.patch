@@ -1,0 +1,92 @@
+diff --git a/Makefile b/Makefile
+index d38382697..ff26254c5 100644
+--- a/Makefile
++++ b/Makefile
+@@ -23767,9 +23767,21 @@ test-riscv32: $(COMPILER)
+ 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy
+ 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy_x64
+ 	tools/expect_same.sh riscv32/test_rv32x_dyncopy "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dyncopy)" "$$($(TESTTMP)/test_rv32x_dyncopy_x64)"
+-	# SKIP test/test_timer.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+-	# SKIP test/test_reactor.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+-	# SKIP test/test_asyncecho.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
++	# UN-SKIPPED 2026-09-06. These three said "backend feature gap", which was
++	# true when written and had stopped being true -- and a SKIP IS SILENT, so
++	# nothing said so. Measured on this box with qemu-riscv32: reactor and
++	# asyncecho pass and passed BEFORE any fix of mine (they went green whenever
++	# rv32 coroutines landed, and nobody re-tested); test_timer HUNG FOREVER,
++	# which is a red the skip was hiding, and is fixed in the same commit
++	# (rv32 has no timerfd_settime(86) -- it needs timerfd_settime64(411) and a
++	# 64-bit itimerspec). The two extern_c rows below stay skipped and their
++	# reason is REAL: pxx refuses them loudly with a diagnostic.
++	./$(COMPILER) --target=riscv32 test/test_timer.pas $(TESTTMP)/test_rv32x_timer
++	tools/expect_same.sh riscv32/test_rv32x_timer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_timer)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
++	./$(COMPILER) --target=riscv32 test/test_reactor.pas $(TESTTMP)/test_rv32x_reactor
++	tools/expect_same.sh riscv32/test_rv32x_reactor "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_reactor)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
++	./$(COMPILER) --target=riscv32 -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_rv32x_asyncecho
++	tools/expect_same.sh riscv32/test_rv32x_asyncecho "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_asyncecho)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+ 	# SKIP test/test_extern_c.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+ 	# SKIP test/test_extern_c_float.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+ 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_rv32x_centry
+diff --git a/lib/rtl/scheduler.pas b/lib/rtl/scheduler.pas
+index c96ab71c9..d7ec9080a 100644
+--- a/lib/rtl/scheduler.pas
++++ b/lib/rtl/scheduler.pas
+@@ -243,7 +243,12 @@ const
+   SYS_read            = 63;
+   SYS_close           = 57;
+   SYS_timerfd_create  = 85;
+-  SYS_timerfd_settime = 86;
++  { timerfd_settime64. rv32 is time64-only and has NO timerfd_settime(86):
++    measured -38 ENOSYS, while 411 answers 0 on the same fd. The itimerspec
++    it wants is four 64-bit fields, which is why ArmOneShotTimer branches on
++    SCHED_TIME64 and not on CPU64. timerfd_create(85) is unaffected -- it
++    takes no timespec and works here. }
++  SYS_timerfd_settime = 411;
+   SYS_mmap            = 222;
+   SYS_mprotect        = 226;
+   SYS_munmap          = 215;
+@@ -274,6 +279,13 @@ type
+ 
+ type
+   PW = ^NativeInt;  { pointer-sized machine-word access at an address }
++  PQ = ^Int64;      { an explicitly 64-BIT field, whatever the machine word is }
++
++{ The kernel's timespec is 64-bit on riscv32 EVEN THOUGH the machine word is 32
++  -- rv32 is time64-only. So the itimerspec layout cannot be selected by CPU64,
++  which is what ArmOneShotTimer used to do and what put it on the 8/12 offsets.
++  Same rule, same target, as PAL_TIME64 in platform_backend.pas. }
++{$ifdef CPU_RISCV32}{$define SCHED_TIME64}{$endif}
+ 
+ const
+ { Independent reactors, one per OS thread that ever calls into the scheduler.
+@@ -601,8 +613,9 @@ procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
+   PW = ^NativeInt writes the matching word width. }
+ { Arm a fresh one-shot non-blocking timerfd for ms milliseconds and return it.
+   itimerspec is two timespecs (it_interval, it_value); timespec is tv_sec then
+-  tv_nsec with the machine word width, so it_value starts at one timespec
+-  (16 bytes on 64-bit, 8 on 32-bit). }
++  tv_nsec, so it_value starts at one timespec -- 16 bytes where the timespec is
++  64-bit (every 64-bit target AND riscv32, which is time64-only), 8 bytes on the
++  legacy-time32 32-bit targets. The selector is SCHED_TIME64, NOT CPU64. }
+ function ArmOneShotTimer(ms: Integer): Integer;
+ var tfd, i: Integer; spec: array[0..31] of Byte; base, rc: Int64;
+ begin
+@@ -612,9 +625,18 @@ begin
+ {$ifdef CPU64}
+   PW(base + 16)^ := ms div 1000;             { it_value.tv_sec }
+   PW(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
++{$else}
++{$ifdef SCHED_TIME64}
++  { 32-bit machine, 64-bit timespec: the 64-bit OFFSETS with explicitly 64-bit
++    writes. Not PW at 16/24 -- that would be a 4-byte store whose high half
++    happens to be zero only because `spec' was cleared above, which is a fact
++    about this function rather than about the struct. }
++  PQ(base + 16)^ := ms div 1000;             { it_value.tv_sec }
++  PQ(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+ {$else}
+   PW(base + 8)^  := ms div 1000;             { it_value.tv_sec  (8-byte timespec) }
+   PW(base + 12)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
++{$endif}
+ {$endif}
+   rc := __pxxrawsyscall(SYS_timerfd_settime, tfd, 0, base, 0, 0, 0);
+   ArmOneShotTimer := tfd;

@@ -243,7 +243,12 @@ const
   SYS_read            = 63;
   SYS_close           = 57;
   SYS_timerfd_create  = 85;
-  SYS_timerfd_settime = 86;
+  { timerfd_settime64. rv32 is time64-only and has NO timerfd_settime(86):
+    measured -38 ENOSYS, while 411 answers 0 on the same fd. The itimerspec
+    it wants is four 64-bit fields, which is why ArmOneShotTimer branches on
+    SCHED_TIME64 and not on CPU64. timerfd_create(85) is unaffected -- it
+    takes no timespec and works here. }
+  SYS_timerfd_settime = 411;
   SYS_mmap            = 222;
   SYS_mprotect        = 226;
   SYS_munmap          = 215;
@@ -274,6 +279,13 @@ type
 
 type
   PW = ^NativeInt;  { pointer-sized machine-word access at an address }
+  PQ = ^Int64;      { an explicitly 64-BIT field, whatever the machine word is }
+
+{ The kernel's timespec is 64-bit on riscv32 EVEN THOUGH the machine word is 32
+  -- rv32 is time64-only. So the itimerspec layout cannot be selected by CPU64,
+  which is what ArmOneShotTimer used to do and what put it on the 8/12 offsets.
+  Same rule, same target, as PAL_TIME64 in platform_backend.pas. }
+{$ifdef CPU_RISCV32}{$define SCHED_TIME64}{$endif}
 
 const
 { Independent reactors, one per OS thread that ever calls into the scheduler.
@@ -601,8 +613,9 @@ procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
   PW = ^NativeInt writes the matching word width. }
 { Arm a fresh one-shot non-blocking timerfd for ms milliseconds and return it.
   itimerspec is two timespecs (it_interval, it_value); timespec is tv_sec then
-  tv_nsec with the machine word width, so it_value starts at one timespec
-  (16 bytes on 64-bit, 8 on 32-bit). }
+  tv_nsec, so it_value starts at one timespec -- 16 bytes where the timespec is
+  64-bit (every 64-bit target AND riscv32, which is time64-only), 8 bytes on the
+  legacy-time32 32-bit targets. The selector is SCHED_TIME64, NOT CPU64. }
 function ArmOneShotTimer(ms: Integer): Integer;
 var tfd, i: Integer; spec: array[0..31] of Byte; base, rc: Int64;
 begin
@@ -613,8 +626,17 @@ begin
   PW(base + 16)^ := ms div 1000;             { it_value.tv_sec }
   PW(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
 {$else}
+{$ifdef SCHED_TIME64}
+  { 32-bit machine, 64-bit timespec: the 64-bit OFFSETS with explicitly 64-bit
+    writes. Not PW at 16/24 -- that would be a 4-byte store whose high half
+    happens to be zero only because `spec' was cleared above, which is a fact
+    about this function rather than about the struct. }
+  PQ(base + 16)^ := ms div 1000;             { it_value.tv_sec }
+  PQ(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+{$else}
   PW(base + 8)^  := ms div 1000;             { it_value.tv_sec  (8-byte timespec) }
   PW(base + 12)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+{$endif}
 {$endif}
   rc := __pxxrawsyscall(SYS_timerfd_settime, tfd, 0, base, 0, 0, 0);
   ArmOneShotTimer := tfd;

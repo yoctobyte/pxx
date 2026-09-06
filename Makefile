@@ -23767,9 +23767,21 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy_x64
 	tools/expect_same.sh riscv32/test_rv32x_dyncopy "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dyncopy)" "$$($(TESTTMP)/test_rv32x_dyncopy_x64)"
-	# SKIP test/test_timer.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_reactor.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_asyncecho.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# UN-SKIPPED 2026-09-06. These three said "backend feature gap", which was
+	# true when written and had stopped being true -- and a SKIP IS SILENT, so
+	# nothing said so. Measured on this box with qemu-riscv32: reactor and
+	# asyncecho pass and passed BEFORE any fix of mine (they went green whenever
+	# rv32 coroutines landed, and nobody re-tested); test_timer HUNG FOREVER,
+	# which is a red the skip was hiding, and is fixed in the same commit
+	# (rv32 has no timerfd_settime(86) -- it needs timerfd_settime64(411) and a
+	# 64-bit itimerspec). The two extern_c rows below stay skipped and their
+	# reason is REAL: pxx refuses them loudly with a diagnostic.
+	./$(COMPILER) --target=riscv32 test/test_timer.pas $(TESTTMP)/test_rv32x_timer
+	tools/expect_same.sh riscv32/test_rv32x_timer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_timer)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	./$(COMPILER) --target=riscv32 test/test_reactor.pas $(TESTTMP)/test_rv32x_reactor
+	tools/expect_same.sh riscv32/test_rv32x_reactor "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_reactor)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	./$(COMPILER) --target=riscv32 -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_rv32x_asyncecho
+	tools/expect_same.sh riscv32/test_rv32x_asyncecho "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_asyncecho)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# SKIP test/test_extern_c.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_extern_c_float.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_rv32x_centry
