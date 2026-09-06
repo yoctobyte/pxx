@@ -664,6 +664,53 @@ separates this family from the ordinary "an instrument lies by being correct
 about something else" case: there the right instrument is at least hard to reach.
 Here it was a growing log, a file timestamp, one re-run, one `git log -L`.
 
+### THE MIRROR: the same silence read as WEDGED, which is the direction that destroys the run
+
+frankB, correcting its own account of the night above, 2026-09-06. The entry on
+the missing notification has one misreading in it — silence read as *not
+finished yet*, so you wait forever. **There is a second, and it is the same
+silence.**
+
+With the watchers known dead, frankB kept polling by hand, the last stretch ran
+slow, and it **nearly read "still running" as "wedged"**. The run was fine —
+it landed `rc=0` with 2243 ok rows.
+
+| the silence | read as | what it costs |
+| --- | --- | --- |
+| notifier dead, run alive | *not finished yet* | you wait on a wake-up that will never come |
+| notifier dead, run alive | *wedged* | **you kill a healthy run** |
+
+**The costs are not symmetric.** Waiting is recoverable; the run is still there
+when you finally look. Killing is not. And this repo already has a rule against
+exactly that cost — `HEALTH CHECKS ARE READ-ONLY. NEVER SEND KEYS INTO A PEER'S
+PANE` — but it is written about **a peer's** pane, because that is where it was
+measured. **Nothing was pointing at your own run**, and your own run is the one
+you have standing to kill without asking anybody.
+
+**The nastiest part is the sequencing.** Diagnosing the dead watcher is
+progress: it explains the silence, and it feels like the answer. But the same
+diagnosis **removes the only thing that was going to reassure you**, so the
+window right after you correctly work out that nothing will notify you is
+precisely the window in which you are most likely to kill something healthy.
+Being right about the notifier is what sets it up.
+
+> **frankB's rule, and it is the practical form of the whole entry: when the
+> notifier is known-dead, a growing log is the only liveness signal you have
+> left — and you have to look at it on purpose.**
+
+Line count, byte count, an `ok:` row count, an mtime: any of them, but
+deliberately and repeatedly, because nothing will hand it to you. Note this is
+the same discriminator as the family entry above, arriving from the other side:
+there it was the check that would have shown the *watcher* was dead, here it is
+the check that shows the *run* is not.
+
+**And the structural fix is upstream of all of it.** frankB's own conclusion:
+the gate and the suite were not independent — the suite subsumed the gate for
+everything except the FPC seed canary, which needs a dirty tree and takes
+seconds. **Two long runs of your own in flight bought nothing** and spent the
+memory that killed the watchers in the first place. The co-tenancy that produces
+the dead notifier is frequently self-inflicted.
+
 ## `make`'s error bracket names the TARGET'S RULE, not the failing line — and there is no check that tells you which you are holding
 
 Measured 2026-09-05, frankC and frankB, reconciling two reports of one red row.
