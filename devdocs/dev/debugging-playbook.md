@@ -16723,3 +16723,91 @@ exactly like an ordinary element load, which is the wrong answer with no
 diagnostic. **The question is not "does the desugar need it" but "does anything
 downstream have to TELL THEM APART".** Answer that one, in both directions, before
 spending a number. See `normalise-dont-special-case.md`.
+
+> **AND FRANKS TESTED THE RULE INSTEAD OF ARGUING WITH IT, WHICH SHARPENED BOTH
+> SIDES.** The obvious lower level for `a[lo..hi]` is `Copy(a, lo, hi-lo+1)`,
+> which already exists and already passes its result to an open-array parameter.
+> Measured at `aa3669390683`: `Sum(Copy(c, 2, 3))` over a dynamic array **works
+> today, answers 12, correct — no node needed, frankA is right about that case**.
+> `Sum(Copy(a, 2, 3))` over `a: array[1..6] of LongInt` is refused (*"dynamic-array
+> Copy needs a dynamic-array first argument"*), and the row that motivates the work
+> — `average(a[-1000..0])` — is a STATIC array, so the desugar does not reach it.
+> `Upper(Copy(d, 3, 4))` for `var u: array of Char` picks Copy's STRING overload.
+> **One of five source kinds, one of two directions.**
+>
+> **The load-bearing reason turned out not to be the one frankS first gave, and
+> the better one is general.** They had justified the node by *"the distinction
+> must survive into a lowering that enumerates shapes"* — true, and not the point.
+> The point is that **a slice is not a value; it is a value plus a WRITE-BACK
+> OBLIGATION, and no existing node carries an obligation.** `Copy` is precisely
+> the node that discards it. So there is no lower level that keeps the aliasing,
+> and the `const` direction only *looks* desugarable because it happens to have no
+> obligation to lose.
+>
+> **Generalised, this is the better form of the test:** ask what the construct
+> obliges someone to do LATER — a write-back, a finalize, a release, an ordering —
+> and check whether any existing node carries that obligation. A construct that is
+> only a value can almost always be spelled with what exists. **A construct that is
+> a value plus a promise cannot, and the promise is the part a desugar silently
+> drops**, because dropping it still produces a working program for every input
+> that never exercises it.
+
+## A `%FAIL` FIXTURE CAN BE PASSING ON A DIFFERENT REFUSAL THAN THE ONE IT NAMES — and fixing an unrelated bug is what exposes it
+
+frankS, 2026-09-06, correcting their own aperture finding after it had already
+gone into this file. **tarrconstr2 went RED as `accepted-invalid` the moment
+tarrconstr1 was fixed** — and nothing about tarrconstr2 changed.
+
+It is a `%FAIL` row: the suite asserts that `TAB.create(1+2,'c')` is refused. It
+had been passing, and it had been passing for the wrong reason — **pxx rejected it
+as `undefined variable (TAB)`, having no dynamic-array constructor at all to
+reject it properly.** Implementing the constructor removed that accidental
+rejection and exposed a divergence **that was always there**.
+
+**A `%FAIL` row asserts that something fails. It does not assert WHY**, and the
+why is the entire content of the claim. So a negative fixture is green under two
+completely different worlds: the feature exists and correctly rejects this input,
+or the feature does not exist and everything in its shape is rejected. **The
+second world is indistinguishable from the first until someone builds the
+feature** — at which point the fixture flips and looks like the new work broke it.
+
+**This is the same animal as "a diagnostic that survives its own fix" and "a green
+that is correct about a different compiler", and it has the nastiest incentive of
+the three:** the flip arrives attached to an unrelated change, so the natural
+reading is *my fix caused this*, and the natural response is to make the new code
+reject the input again — restoring a green row by reintroducing a wrong answer.
+
+**The guard is cheap and belongs on every `%FAIL` row: record the refusal TEXT,
+not just the fact of refusal.** A row that stores `undefined variable (TAB)` fails
+loudly the day the message becomes something else, which is the day the assertion
+stopped meaning what it said. Absent that, when a negative fixture flips next to
+an unrelated fix, **the first question is "which refusal was it passing on
+before", not "what did I break"**.
+
+frankS's disposition, which is the other half worth copying: they classified it
+`wontfix: dialect-pass` rather than restoring the refusal, because an array
+constructor stores elements through the normal element-assign path and `b := 'c'`
+is a defined conversion here — **a constructor stricter than the assignment it
+lowers to would be the inconsistency.** And the sibling spelling settled it:
+`D := [1+2,'c']` behaves identically and **has no corpus row at all**, so the
+suite held a `%FAIL` row for one spelling of the divergence and nothing for the
+other. See "corpus expansion buys more from the sibling spelling".
+
+## RE-AIM A RETIRED FIXTURE, DO NOT DELETE IT — a deleted guard is one nobody notices is gone
+
+frankA, 2026-09-06 (`8b5b6608a`), stated by frankS as the part they would have got
+wrong. When a fixed one-dimensional array of a managed record started
+initializing and finalizing every element, **the two fixtures asserting that it
+was REFUSED became false.** They were not deleted: they were re-aimed at the cases
+that are still refused — the dynamic and 2-D ones.
+
+**A deleted fixture leaves no artefact.** The next reader sees a suite with no row
+for the dynamic case and has no way to distinguish *nobody has tested it* from
+*it was tested and the row was retired on purpose*. A re-aimed one carries its own
+history: the file name still says what it was for, the assertion says what is true
+now, and the gap it used to cover is visibly still covered by something.
+
+**The rule: when a fix makes a negative fixture false, ask what is STILL negative
+in that family before reaching for `git rm`.** There is almost always a
+neighbouring case the same fixture can assert, and the version that survives the
+fix is worth more than the one that was deleted by it.
