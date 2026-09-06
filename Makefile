@@ -14673,6 +14673,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_op_overload_ir26 "$$($(TESTTMP)/test_op_overload_ir26)" "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_op_fpc_named_result.pas $(TESTTMP)/test_op_fpc_named_result_ir26
 	tools/expect_same.sh test_op_fpc_named_result_ir26 "$$($(TESTTMP)/test_op_fpc_named_result_ir26)" "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	# An operator declared in a unit's INTERFACE registers THERE, not only when
+	# its implementation body is parsed -- under a circular implementation-`uses`
+	# the body has not been parsed yet when the other unit is compiled (fpc
+	# testsuite toperator1/2/3). The last two rows are the positive control for
+	# the name scheme the fix needed: a unary and a binary `-` differ only in
+	# parameter count, and with arity dropped from the synthesised name they
+	# collide into one proc -- measured, that build SEGFAULTS on the unary row.
+	# Byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.pas $(TESTTMP)/test_opcirc_ir26
+	tools/expect_same.sh test_a_unit_interface_operator_is_visible_to_a_circular_uses \
+	  "$$($(TESTTMP)/test_opcirc_ir26)" \
+	  "$$(cat test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope_ir26
 	tools/expect_same.sh test_op_unit_scope_ir26 "$$($(TESTTMP)/test_op_unit_scope_ir26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading_ir26
@@ -15758,6 +15770,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_op_overload26 "$$($(TESTTMP)/test_op_overload26)" "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_op_fpc_named_result.pas $(TESTTMP)/test_op_fpc_named_result26
 	tools/expect_same.sh test_op_fpc_named_result26 "$$($(TESTTMP)/test_op_fpc_named_result26)" "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	# An operator declared in a unit's INTERFACE registers THERE, not only when
+	# its implementation body is parsed -- under a circular implementation-`uses`
+	# the body has not been parsed yet when the other unit is compiled (fpc
+	# testsuite toperator1/2/3). The last two rows are the positive control for
+	# the name scheme the fix needed: a unary and a binary `-` differ only in
+	# parameter count, and with arity dropped from the synthesised name they
+	# collide into one proc -- measured, that build SEGFAULTS on the unary row.
+	# Byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.pas $(TESTTMP)/test_opcirc26
+	tools/expect_same.sh test_a_unit_interface_operator_is_visible_to_a_circular_uses \
+	  "$$($(TESTTMP)/test_opcirc26)" \
+	  "$$(cat test/test_a_unit_interface_operator_is_visible_to_a_circular_uses.expected)"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
 	tools/expect_same.sh test_op_unit_scope26 "$$($(TESTTMP)/test_op_unit_scope26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	# `TFn(p)(args)` -- calling straight through a procedural-type cast -- was

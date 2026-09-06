@@ -68,7 +68,9 @@ var
   opKey, dupPi: Integer;
   scalarTk2: TTypeKind;
   synName: AnsiString;
-  typeName, rightName: AnsiString;
+  typeName, rightName, resultName: AnsiString;
+  paramCount, bdepth: Integer;
+  opAlreadyReg, scalarAlreadyReg: Boolean;
   recId: Integer;
   opTypeKind: Integer;
   rightTk, rightRec: Integer;
@@ -241,7 +243,15 @@ begin
     feature-a-operator-table-keyed-on-both-operands }
   typeName := '';
   rightName := '';
+  { PARAMETER COUNT, counted here because the synthesised NAME needs it and the
+    name is built before ParseSubroutine has told us Procs[].ParamCount.
+    `1 +` the separators at paren depth 1: `(const a,b: op1)` is 2,
+    `(a: Double; b: TCx)` is 2, `(a: TFoo)` is 1. Bracket depth guards a set or
+    array default value, which no operator has today and which would otherwise
+    make a comma inside `[...]` look like a parameter break. }
+  paramCount := 1;
   depth := 0;
+  bdepth := 0;
   i := TokPos; { Tokens[TokPos] = '(' }
   while i < TokCount do
   begin
@@ -251,6 +261,11 @@ begin
       Dec(depth);
       if depth = 0 then i := TokCount;   { end of the parameter list }
     end
+    else if Tokens[i].Kind = tkLBrack then Inc(bdepth)
+    else if Tokens[i].Kind = tkRBrack then Dec(bdepth)
+    else if (depth = 1) and (bdepth = 0) and
+            ((Tokens[i].Kind = tkComma) or (Tokens[i].Kind = tkSemicolon)) then
+      Inc(paramCount)
     else if (Tokens[i].Kind = tkColon) and (depth = 1) then
     begin
       Inc(i);
@@ -314,10 +329,47 @@ begin
     isFunc := True;
   end;
 
-  { Synthesize unique proc name __op__NN }
+  { THE SYNTHESISED NAME IS A SCHEME, NOT A COUNTER, AND THAT IS THE WHOLE FIX.
+
+    It used to be `__op__` + OvrlCount, which is unique per PARSE rather than
+    per DECLARATION -- so an interface header and its implementation definition
+    would be given two different names and become two procs, one declared and
+    never defined. That is why the interface header could not simply be routed
+    here, and why a unit's operator was invisible to anything compiled before
+    its implementation section (a circular implementation-`uses` is exactly that
+    situation).
+
+    Two operator declarations must collide in this name if and only if they are
+    the SAME declaration, so every component FPC uses to tell two operators
+    apart is in it and nothing else is:
+
+      opKey | left operand type | right operand type | param count | result type
+
+    ARITY has to be here: `operator -(a: TFoo): TFoo` and
+    `operator -(a, b: TFoo): TFoo` agree on every other component, because
+    rightName is read off the LAST colon and is TFoo for both. THE RESULT TYPE
+    has to be here too: `operator :=(a: Integer): TA` beside
+    `operator :=(a: Integer): TB` is a legal pair the duplicate-conversion check
+    deliberately allows.
+
+    Type names go in as their SOURCE TEXT, so two spellings of one type (a name
+    and its alias) would make two procs and a `forward declared but not defined`
+    -- the same thing FPC reports for a mismatched forward, and for the same
+    reason. Case does not matter: FindProc falls back to a case-insensitive
+    match, so `op1` and `Op1` still find one proc.
+    bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed }
+  resultName := '';
+  if isFunc and (i + 1 < TokCount) and (Tokens[i + 1].SLen > 0) then
+    resultName := GetTokenStrFromRaw(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
   synName := '__op__';
-  AppendChar(synName, Chr(Ord('0') + OvrlCount div 10));
-  AppendChar(synName, Chr(Ord('0') + OvrlCount mod 10));
+  AppendChar(synName, Chr(Ord('0') + (opKey div 1000) mod 10));
+  AppendChar(synName, Chr(Ord('0') + (opKey div 100) mod 10));
+  AppendChar(synName, Chr(Ord('0') + (opKey div 10) mod 10));
+  AppendChar(synName, Chr(Ord('0') + opKey mod 10));
+  synName := synName + '_' + typeName + '_' + rightName + '_';
+  AppendChar(synName, Chr(Ord('0') + (paramCount div 10) mod 10));
+  AppendChar(synName, Chr(Ord('0') + paramCount mod 10));
+  synName := synName + '_' + resultName;
 
   { Insert 'function/procedure synName' at TokPos (before '(') }
   EnsureTokCapacity(TokCount + 3);
@@ -409,6 +461,16 @@ begin
   rightRec := REC_NONE;
   if Procs[procIdx].ParamCount = 2 then
     OperandTypeKindRec(rightName, rightTk, rightRec);
+  { THE SAME DECLARATION, SEEN TWICE. With the name scheme above, a unit's
+    interface header and its implementation definition are ONE proc, so both
+    parses arrive here with every component of the row equal. Registering again
+    is harmless for lookup and NOT harmless for the duplicate-conversion check
+    below, which reads the table and would refuse every interface-declared
+    `:=`/`Implicit`/`Explicit` as a duplicate of itself. Asked once, here, so
+    the two consumers cannot disagree about what "already there" means. }
+  opAlreadyReg := OpOverloadRowExists(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
+  scalarAlreadyReg := (scalarTk2 <> tyUnknown) and
+    OpOverloadRowExists(opKey, Ord(scalarTk2), REC_NONE, rightTk, rightRec, procIdx);
   { Arity: conversion/unary named operators take exactly ONE parameter —
     FPC rejects `operator :=(S1, S2: String)` (tassignmentoperator1 %fail). }
   { AddRef is recognised so the spelling is not a syntax error, and still
@@ -560,7 +622,7 @@ begin
     maxRank 0: only an EXACT source-kind clash is a duplicate. QWord and Int64
     to one destination are two conversions, not one written twice — that is the
     pair FPC's own constexp.pas declares. }
-  if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) then
+  if ((opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT)) and (not opAlreadyReg) then
   begin
     dupPi := FindOpConvRanked(opKey, opTypeKind, recId,
                               Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx], 0);
@@ -587,8 +649,9 @@ begin
       Error('either the result or at least one parameter must be of type '
             + qualName);
   end;
-  RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
-  if scalarTk2 <> tyUnknown then
+  if not opAlreadyReg then
+    RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
+  if (scalarTk2 <> tyUnknown) and (not scalarAlreadyReg) then
     RegisterOpOverload(opKey, Ord(scalarTk2), REC_NONE, rightTk, rightRec, procIdx);
 end;
 

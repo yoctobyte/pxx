@@ -6274,19 +6274,25 @@ begin
           machinery lives in whoever consumes the string. }
         if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
         else if CaseEqual(CurTok.SVal, 'operator') then
-          { An operator DECLARATION in the interface: a header with no body. pxx
-            keys an operator on its operand types and registers it from the
-            IMPLEMENTATION section's definition, so the header carries nothing
-            this side needs -- consume it as a unit and move on.
+          { An operator DECLARATION in the interface: a header with no body, and
+            it REGISTERS. It used to be consumed and discarded, on the stated
+            assumption that the implementation section's definition registers it
+            "before any importer's body" -- true for every straight `uses`, and
+            false under a CIRCULAR implementation-`uses`, where the second unit
+            is compiled while the first one's implementation is still pending.
+            The type resolved and only the operator was missing, so `c := a + b`
+            in the other unit failed with `no operator overload found for record
+            operands` (toperator1/2/3).
 
-            Consuming it as a UNIT is the point. Until now it fell to the `else
-            Next` below and was chewed one token at a time; measured across
-            test/ and lib/rtl, that path fired 1949 times and every single event
-            was a piece of an operator header (`+`, `(`, `a`, `:`, `TBigInt`,
-            `;` ...). It looked harmless only because the implementation-side
-            definition registered the real thing, and it is the whole reason the
-            stray-token error below could not be turned on before. }
-          SkipDeclHeaderToSemicolon
+            ParseOperatorDef handles a bodiless header the same way this loop's
+            tkFunction arm does -- it rewrites the header to a `function` and
+            lets ParseSubroutine make a FORWARD -- which only became possible
+            once the synthesised name became a scheme rather than a counter, so
+            the header and the definition are one proc rather than two. See the
+            name comment in ParseOperatorDef; registration is idempotent for the
+            same reason.
+            bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed }
+          ParseOperatorDef
         else if CaseEqual(CurTok.SVal, 'generic') then
           { `generic function F<T>(a: T): T;` in the INTERFACE: a header with no
             body, exactly like the operator declaration above. The template is

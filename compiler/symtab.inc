@@ -8425,6 +8425,38 @@ begin
   Inc(OvrlCount);
 end;
 
+function OpOverloadRowExists(opKind, typeKind, recId, rightTk, rightRec, procIdx: Integer): Boolean;
+{ Is this EXACT row already in the table -- same key AND the same proc?
+
+  It exists because one operator can now be parsed TWICE: a unit declares it in
+  its interface (registered there so a circular implementation-`uses` can see
+  it) and defines it in its implementation, and both parses reach
+  RegisterOpOverload with everything equal. A second row would be harmless for
+  lookup -- same proc either way -- but the duplicate-CONVERSION check reads the
+  table and would fire on every interface-declared `:=`/`Implicit`/`Explicit`,
+  turning the fix into three new refusals.
+
+  Six components, not five: procIdx is what separates "the same declaration seen
+  twice" from "a genuine second operator with the same key", which is the case
+  the duplicate check exists to catch.
+  bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed }
+var i: Integer;
+begin
+  Result := False;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and
+       (OvrlRecId[i] = recId) and (OvrlRightTk[i] = rightTk) and
+       (OvrlRightRec[i] = rightRec) and (OvrlProcIdx[i] = procIdx) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function FindOpOverload(opKind, typeKind, recId: Integer): Integer;
 var i: Integer;
 begin

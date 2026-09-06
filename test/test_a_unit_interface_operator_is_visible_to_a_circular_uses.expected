@@ -1,0 +1,6 @@
+A body, B operator : 10 10
+B body, A operator : 44 66
+program, A operator: 156 -22
+program, B operator: 31 42
+binary minus       : -22 -68
+unary  minus       : -67 45
