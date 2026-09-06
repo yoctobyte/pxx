@@ -2210,6 +2210,14 @@ compiler/pascal26` AND `--tier quick`.** The canary was the only instrument that
 saw any of them. Four in one day in one seam, which is no longer a run of luck:
 treat a canary red during forward-threading as this seam until shown otherwise.
 
+**FIFTH, from a different seat, same afternoon** (frankB, `ce5a257d9` ->
+`c49bd5a4f`): `DerefPtrArrayShape` placed below a caller in the same include
+stream. Five green instruments — the build, a byte-identical fixedpoint at
+`converged after 1 round(s)`, `--tier quick`, and every array fixture matching
+fpc — against one red, and the red was right. **So the seam is not one seat's
+habit.** It is the shape of the class: a body placed below one of its callers,
+which is invisible to every instrument that uses our own prescanning compiler.
+
 That is CLAUDE.md's declaration-order class with a specific address: PXX prescans
 headers and FPC is single-pass, so a call across the parser/`ir.inc` boundary
 without a forward is invisible to every gate that uses our own compiler and

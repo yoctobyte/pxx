@@ -18306,3 +18306,106 @@ rather than qualifying one item — `class var`, `var`, `const`, `threadvar`,
 and assert the contrast itself rather than only the values. Same family as
 *choose a probe whose right answer differs from the default*: here the two arms
 have the same right answer because they are the same arm.
+
+## A PREMISE CHECK IS NOT A CHECK THAT THE PROPOSED FIX DOES ANYTHING
+
+A ticket carries two claims and they rot independently: **the defect is real**,
+and **this is what would fix it**. Everything in this repo's discipline points at
+the first. Nothing points at the second, and the second is the one a reader
+executes.
+
+Measured 2026-09-06 (frankB), on `refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array`.
+The one-line sketch was *"drop the `>= 2` tests to `>= 1`"*. **It is a no-op:
+`SymArrNDims` and `UFldArrNDims` are 0 for a rank-1 array, not 1**, so the
+rewritten condition is false on exactly the arrays it was meant to admit.
+
+**Three seats had read that ticket and two had confirmed it non-stale.** Both
+confirmations were correct — the defect was real, the citations resolved, the
+observable reproduced. **Nobody checked the sketch**, because "is this ticket
+still true" is a question about the premise, and a fix sketch is not a premise.
+
+> **A fix sketch is the most quotable line in a ticket and the least
+> verified.** It is short, it is concrete, it is what a reader takes to the
+> editor — and it was written by someone who had diagnosed the defect and not
+> yet made the change. **Confirming a ticket non-stale says nothing about it.**
+
+**The check is one grep and it is not the same grep as the premise check:** read
+what the values named in the sketch actually ARE at the boundary the sketch turns
+on. Here, `>= 2` versus `>= 1` is a claim that rank-1 arrays record `1`; they
+record `0`. **Ask "what does this field hold in the case the fix is FOR",
+separately from "does the defect still reproduce".**
+
+Related: *a blocker that names a missing MECHANISM goes stale when the mechanism
+arrives under another NAME* — that is this failure on a ticket's blocker instead
+of on its fix, and both survive re-reading for the same reason: re-reading
+returns the claim.
+
+## A NARROWING WEARING A WIDENING'S COMMIT MESSAGE
+
+frankB's first draft of a rank-1 fix *"rewrote a guard as a stricter
+conjunction"* — a change whose message, ticket and intent all said **widen**, and
+whose code said **narrow**. Their own account of why no test would have saved
+them: *"the case it breaks is one I could not construct."*
+
+**That is the defining property, not an excuse.** A widening's new cases are
+enumerable — you are adding them on purpose, so you can write them down. **A
+narrowing's lost cases are whatever used to reach the guard and now does not**,
+which is a population defined by the OLD code and not by your intent. You cannot
+write a row for a case you did not know was passing through.
+
+> **So the direction of a guard change cannot be verified from the tests. It has
+> to be read off the PREDICATE.** Before landing a change described as a
+> widening, put the old and new conditions side by side and ask: **is there any
+> assignment of inputs the OLD one accepts and the NEW one rejects?** If yes, it
+> is not a widening whatever the ticket says, and the commit message is about to
+> mislead every future bisect.
+
+The mechanical form: a widening only ever **removes** conjuncts or **adds**
+disjuncts. Adding a conjunct — even one that looks like a clarification, even one
+that is true of every case you tested — is a narrowing, and it will be described
+as a clarification by the person adding it.
+
+## FIVE GREEN INSTRUMENTS AND ONE RED ONE, AND THE RED ONE WAS RIGHT
+
+The FPC seed canary's aperture, stated as a live case rather than as a rule.
+`ce5a257d9` added `DerefPtrArrayShape` and placed its body beside the contract it
+generalises — with a caller **above** it in the same include stream. PXX prescans
+headers; FPC is single-pass. That tree:
+
+| instrument | verdict |
+| --- | --- |
+| `make compiler/pascal26` | clean |
+| the self-host fixedpoint | **byte-identical**, `converged after 1 round(s)` |
+| `testmgr --tier quick` | pass |
+| every array fixture just written | pass, byte-identical to fpc 3.2.2 |
+| `fpc seed compiles (forward decls)` | **RED**, naming the file and both line numbers |
+
+**And no wider tier would have helped.** `PXX_ALLOW_FULL_SUITE=1` runs
+**pxx-built** tests, and every one of them passes — the defect is not in what the
+programs do, it is in what a *different compiler* can parse. A stale-binary check
+would not have helped either. **The only discriminator is a compiler that is
+single-pass, and there is exactly one of those on this box.**
+
+frankB's own note is the part worth keeping: they had **read that paragraph in
+`CLAUDE.md` this session** and still did not connect *"I am adding a function
+called from above its own body"* to *"this is the class the canary exists for"*
+until it fired. **The rule was known, present and correctly stated; the trigger
+is what did not fire.** So the useful form is not the rule but its trigger:
+**placing a body below one of its callers in the same include stream is the
+canary's class, every time.**
+
+### And the ORDER of push-and-gate has a cost even where detection is identical
+
+`CLAUDE.md` says the canary arms against the merge-base, so it catches this
+before or after the commit, and **that is correct** — frankB is explicit that
+they are not proposing a rule change. **What the rule does not say is that the
+two orders cost differently even when the detection does not.**
+
+They pushed, then gated: a **twelve-minute RED on origin**, which is a red every
+other seat pulls, and the twelve minutes were purely a choice of order. Fixed at
+`c49bd5a4f`; pulling again clears it.
+
+> **Detection symmetry is not cost symmetry.** For a change that introduces a
+> call to something declared later in the same include stream — the canary's
+> known class — **gate before the push.** Everywhere else the existing rule
+> stands and gating after is fine.
