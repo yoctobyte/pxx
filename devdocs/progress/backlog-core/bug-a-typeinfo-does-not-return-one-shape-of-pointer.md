@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-summary: "`TypeInfo(T)` returns two structurally different pointers depending on T. An ENUM resolves to the enum's own RTTI blob (what GetEnumName reads); every other type resolves to a TTypeInfo header (kind, name, DataPtr). Nothing in the type, the operator or typinfo.pas says which one you got, so a routine that reads one shape CRASHES on the other rather than answering wrongly — measured: `GetEnumName(TypeInfo(TRange1), 2)` on a subrange of an enum segfaulted, walking a member table over a subrange's typedata. That instance is fixed; the two-shapes fact is not, and the next alias or type family that reaches GetEnumName has the same crash waiting. `Ord(PTypeInfo(TypeInfo(TEnum))^.Kind)` is the standing tell: 3 under fpc, an ADDRESS here. TWO MORE INSTANCES ADDED 2026-09-06 (frankA), from the alias census: an ordinary ALIAS OF AN ENUM (TMyColour = TColour) yields a HEADER with Kind=1 named \"Integer\" instead of the enum blob -- the OPPOSITE direction to the subrange instance, so a fix that only detects \"blob where header expected\" misses it; and an alias of a RECORD yields a correct Kind=13 and SEGFAULTS on its own NamePtr, which the Kind tell cannot detect at all because Kind is right. The standing Ord(Kind)-is-an-address tell covers NEITHER. Meets bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses in one table; fix neither without reading the other."
+summary: "`TypeInfo(T)` returns two structurally different pointers depending on T. An ENUM resolves to the enum's own RTTI blob (what GetEnumName reads); every other type resolves to a TTypeInfo header (kind, name, DataPtr). Nothing in the type, the operator or typinfo.pas says which one you got, so a routine that reads one shape CRASHES on the other rather than answering wrongly — measured: `GetEnumName(TypeInfo(TRange1), 2)` on a subrange of an enum segfaulted, walking a member table over a subrange's typedata. That instance is fixed; the two-shapes fact is not, and the next alias or type family that reaches GetEnumName has the same crash waiting. THE `Ord(PTypeInfo(TypeInfo(TEnum))^.Kind)`-IS-AN-ADDRESS TELL IS RETIRED (frankS, 2026-09-06, on frankA's measurement): it was never the invariant, it was the SYMPTOM of the first instance, and it was written into this summary as though it were the property. It is ONE-DIRECTIONAL and the defect is not -- an enum ALIAS has a plausible small Kind and a record ALIAS has the RIGHT Kind, and a reader following the tell certifies both as clean. A one-directional tell on a two-directional defect is worse than none. THE INVARIANT THAT SURVIVES ALL THREE INSTANCES IS ABOUT THE SHAPE, NOT ANY FIELD: TypeInfo must return ONE kind of pointer, and the check a caller can actually run is `does the type I asked about answer the SAME pointer as the type it aliases` -- the five SAME rows of the census in bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses, which is this ticket's acceptance test. TWO MORE INSTANCES ADDED 2026-09-06 (frankA), from the alias census: an ordinary ALIAS OF AN ENUM (TMyColour = TColour) yields a HEADER with Kind=1 named \"Integer\" instead of the enum blob -- the OPPOSITE direction to the subrange instance, so a fix that only detects \"blob where header expected\" misses it; and an alias of a RECORD yields a correct Kind=13 and SEGFAULTS on its own NamePtr, which the Kind tell cannot detect at all because Kind is right. The standing Ord(Kind)-is-an-address tell covers NEITHER. Meets bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses in one table; fix neither without reading the other."
 status: backlog
 owner: unassigned
 ---
@@ -122,10 +122,44 @@ callers to detect "blob where header expected" will not catch this one.**
 and crashes on its own name field is a shape failure the `Kind` tell cannot
 detect at all, because `Kind` is right.
 
-**The standing tell in this ticket's summary does not cover either.**
-`Ord(PTypeInfo(TypeInfo(TEnum))^.Kind)` being an address catches a blob wearing
-a header's clothes. Both instances above have a plausible small `Kind` and fail
-elsewhere, so a checker built on that tell alone reports them clean.
+## The tell is retired, and how it got written is the point
+
+**`Ord(PTypeInfo(TypeInfo(TEnum))^.Kind)` being an address is withdrawn as this
+ticket's tell** (frankS, 2026-09-06, on the measurement above). Recorded as a
+mistake rather than quietly replaced, at frankS's request, because the summary
+read as though someone had checked that the tell generalises and nobody had:
+
+> It was never the invariant. It was the SYMPTOM of my instance, and I wrote it
+> into the summary as though it were the property. — frankS
+
+It is **one-directional** and the defect is not. A checker built on it reports
+both of the instances above as clean: the enum alias has a plausible small
+`Kind`, and the record alias has the **right** `Kind` and fails on a different
+field. **A one-directional tell on a two-directional defect is worse than none**,
+because it converts "unmeasured" into "checked".
+
+This is the *name is not the thing* failure in its usual clothes — the part you
+sample confirms it. Same shape as `ArrLen > 0` the same day.
+
+## The invariant that does survive all three instances
+
+**`TypeInfo` must return ONE kind of pointer.** Not a property of any field:
+
+| instance | what arrived | what was expected |
+| --- | --- | --- |
+| subrange of an enum (frankS) | a blob | a header |
+| alias of an enum (frankA) | a header | a blob |
+| alias of a record (frankA) | a header, structurally right, semantically empty | a header describing `TRec` |
+
+Three failures, one cause: **every named type mints a descriptor and nothing
+reconciles it with the type it aliases.** The record alias describing `Integer`
+is what a freshly minted descriptor with no opinion says.
+
+So the check a caller can actually run is not "is this `Kind` plausible" but
+**"did the type I asked about and the type it aliases answer the SAME
+pointer"** — which is the five SAME rows of the census in
+[[bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses]].
+**That census is this ticket's acceptance test**; the `Kind` tell is not.
 
 **A probe here must read `Kind` before `NamePtr`.** The first cut of the census
 did not, segfaulted on row 6, and reported nothing about rows 7–13 — which is

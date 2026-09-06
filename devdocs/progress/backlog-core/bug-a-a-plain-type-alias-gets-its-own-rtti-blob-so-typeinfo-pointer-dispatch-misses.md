@@ -139,6 +139,16 @@ for a fixer to reach for, it passes today, and it will pass after a wrong fix
 too — it can only fail if identity collapses too far. **Do not use it as the
 control.** The discriminating rows are the five that should say SAME.
 
+**The general form, because this row will be reached for again** (frankS's
+framing, and it is the sharper statement): a guard cannot fail when **its
+expected answer collides with the do-nothing answer.** Here "DIFFER" is both the
+correct result for a distinct type and what a compiler with no alias mechanism
+at all emits for everything, so the row cannot separate the two — the same
+animal as CLAUDE.md's `sizeof(int)` = 4 case, where the unknown default equals
+the expected value. Ask of any row you plan to trust: **if the machinery did
+nothing whatsoever, would this still pass?** For this row the answer is yes, and
+it is the only row here for which it is.
+
 ## Two further defects the same census turned up
 
 Both are self-inconsistent and need no oracle.
