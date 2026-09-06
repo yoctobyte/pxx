@@ -3,7 +3,7 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-summary: "MEASURED 2026-09-06 at 4d0642bfa917. `type TMyInt = Integer` mints its OWN RTTI blob, so `TypeInfo(TMyInt) <> TypeInfo(Integer)` while both blobs carry the SAME name (`Integer`) and the SAME kind (1) -- two descriptors for one type. FPC answers SAME (a plain alias is the same type there; only `= type Integer` makes a distinct one). It breaks the standard RTTI-keyed dispatch idiom `if p = TypeInfo(Integer)`: a variable declared through the alias matches NOTHING, silently, and every name/kind inspection says it should have matched. SELF-INCONSISTENT SO IT NEEDS NO ORACLE -- same name, same kind, different identity. NOT frankS's variable path, which is correct: TypeInfo(m) = TypeInfo(TMyInt) and TypeInfo(i) = TypeInfo(Integer) both hold; the divergence is in the TYPE-NAME path and the pin cannot reach the variable form at all. CORRECTS A PREMISE IN decide-typeinfo-scalar-name-spelling, which argued option 3 'buys nothing here -- the observable behaviour is already identical and only the RTTI label differs'. Here the LABEL IS IDENTICAL AND THE BEHAVIOUR DIFFERS, exactly inverted. That decision is about the NAME STRING and is not reopened by this."
+summary: "WIDENED 2026-09-06 BY CENSUS at 0e3558e5a4d4: pxx has NO alias identity mechanism at all. Filed as `type TMyInt = Integer` minting its own RTTI blob; measured across six spellings, pxx answers DIFFER on EVERY row -- plain scalar alias, synonym (LongInt vs Integer), alias of an ENUM, of a STRING and of a RECORD -- where fpc 3.2.2 answers SAME on all five. Every named type mints its own descriptor. THE ONE ROW PXX GETS RIGHT (`= type Integer`, which SHOULD differ) IT GETS RIGHT BY HAVING NO OPINION, so it is the obvious control, it passes today, and it passes after a wrong fix too -- do not use it as the control; the five SAME rows discriminate. Breaks the standard RTTI dispatch idiom `if p = TypeInfo(Integer)`: a variable declared through an alias matches NOTHING while name and kind both say it should. SELF-INCONSISTENT, NO ORACLE NEEDED. TWO FURTHER DEFECTS FROM THE SAME CENSUS: (1) an alias of an ENUM yields an INTEGER header (Kind=1, name "Integer") instead of the enum blob, so GetEnumName gets a header where its PEnumRTTI signature says blob -- a second live instance of bug-a-typeinfo-does-not-return-one-shape-of-pointer, reached by an ordinary alias rather than a subrange; (2) an alias of a RECORD yields Kind=13 and SEGFAULTS on its own NamePtr. NOT frankS's variable path, which is correct. CORRECTS A PREMISE IN decide-typeinfo-scalar-name-spelling (the label is identical and the behaviour differs, exactly inverting its dismissal of option 3); that decision is about the NAME STRING and is NOT reopened."
 status: backlog
 owner: unassigned
 ---
@@ -100,10 +100,67 @@ for, and a fix that collapses both is trading one wrong answer for another.
 `test/test_typeinfo_named_types.pas` asserts `TypeInfo(TMyInt)` prints
 `Integer`, which a correct fix leaves green.
 
-## Not taken
+## Provenance
 
 Found while probing the keyword-vs-identifier spelling seam
 (`refactor-p-five-dispatch-sites-for-one-named-type-cast`); it is not that seam —
-both spellings resolve correctly. Left unfixed because frankS is actively in
-`rtti_emit`/TypeInfo and this is one question with two possible holders, not a
-file conflict git would show.
+both spellings resolve correctly.
+
+**The original filing said "not mine to touch while frankS is in the file". That
+is no longer true and the sentence is replaced rather than left standing:** frankS
+and I agreed it is ONE question with two holders, the census below was run once
+to answer both halves, and this ticket is now frankA's. The reciprocal half is
+[[bug-a-typeinfo-does-not-return-one-shape-of-pointer]] and neither should be
+fixed without reading the other — they meet in the same table.
+
+## The census — 2026-09-06 at `0e3558e5a4d4`, and it widens the ticket
+
+Run once to answer this ticket's identity question and the shape question in
+[[bug-a-typeinfo-does-not-return-one-shape-of-pointer]] together. Pointer
+comparison only, no field reads, so it compiles under both compilers.
+
+| spelling | fpc 3.2.2 | pxx |
+| --- | --- | --- |
+| `TMyInt = Integer` (plain alias) | SAME | **DIFFER** |
+| `TMyInt2 = type Integer` (distinct) | DIFFER | DIFFER |
+| `LongInt` vs `Integer` (synonym) | SAME | **DIFFER** |
+| `TMyColour = TColour` (alias of ENUM) | SAME | **DIFFER** |
+| `TMyStr = string` (alias of string) | SAME | **DIFFER** |
+| `TMyRec = TRec` (alias of RECORD) | SAME | **DIFFER** |
+
+**pxx answers DIFFER on every row.** So the defect is not "a plain scalar alias
+mints a blob" as filed — **there is no alias identity mechanism at all**: every
+named type mints its own descriptor, for every type family.
+
+**And the one row where pxx agrees with fpc, it agrees with by having no
+opinion.** `= type Integer` is *supposed* to differ, and pxx gets it right
+because it cannot tell that row from any other. That row is the obvious control
+for a fixer to reach for, it passes today, and it will pass after a wrong fix
+too — it can only fail if identity collapses too far. **Do not use it as the
+control.** The discriminating rows are the five that should say SAME.
+
+## Two further defects the same census turned up
+
+Both are self-inconsistent and need no oracle.
+
+**1. An alias of an ENUM reports as an INTEGER header.** `TypeInfo(TMyColour)`
+where `TMyColour = TColour` yields a TTypeInfo header with `Kind` = 1 and
+`NamePtr^` = `"Integer"` — not an enum blob, and not named for anything the
+program declared. `TColour` itself correctly yields the enum blob. So the alias
+does not merely mint a *separate* descriptor, it mints a descriptor **of the
+wrong shape and the wrong kind**, and `GetEnumName(TypeInfo(TMyColour), 0)` is
+handed a header where its `PEnumRTTI` signature says blob. That is a second live
+instance of the shape bug, distinct from the subrange one already recorded
+there, and it is reached by an ordinary alias rather than by a subrange.
+
+**2. An alias of a RECORD yields a header whose `NamePtr` is unreadable.**
+`TypeInfo(TMyRec)` gives `Kind` = 13 (correct for a record) and then
+**segfaults** on `NamePtr^`. `TRec` itself reads fine. A descriptor that
+type-checks, reports the right kind, and crashes on its own name field is worse
+than the identity miss this ticket was filed for, because the identity miss is
+at least silent and recoverable.
+
+**The probe must read `Kind` before `NamePtr` or it dies mid-census.** The first
+cut did not and segfaulted on row 6, reporting nothing about rows 7–13 — where
+both defects above live. A probe that dies partway through reads as a short
+table, not as an error.

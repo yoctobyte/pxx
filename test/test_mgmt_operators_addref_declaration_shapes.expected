@@ -1,0 +1,22 @@
+-- record method, var, BIG --
+   id=2
+-- record method, var, SMALL --
+   id=2
+-- record method, const, SMALL --
+  const-small sees 2
+   id=2
+-- proc type, var, BIG --
+   id=3
+-- proc type, var, SMALL --
+   id=3
+-- virtual abstract method, var, BIG --
+   id=4
+-- interface method, var, BIG --
+   id=5
+-- interface method, const, BIG --
+  intf const sees 5
+   id=5
+-- POSITIVE CONTROL: record method, BY VALUE, big --
+  !! TBig AddRef fired
+  byval-big sees 105
+-- done --

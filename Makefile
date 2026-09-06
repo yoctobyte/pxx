@@ -14117,6 +14117,18 @@ test-core: $(COMPILER)
 	# gap the PINNED compiler shares. The fixture header names them.
 	./$(COMPILER) test/test_mgmt_operators_addref_nonlvalue_arg.pas $(TESTTMP)/test_mgmt_operators_addref_nonlvalue26
 	tools/expect_same.sh test_mgmt_operators_addref_nonlvalue26 "$$($(TESTTMP)/test_mgmt_operators_addref_nonlvalue26)" "$$(cat test/test_mgmt_operators_addref_nonlvalue_arg.expected)"
+	# The four declaration shapes with no implementation header to repair the
+	# parameter row (interface method, virtual;abstract, record method, proc
+	# type) -- the population frankB measured and fixed in 74e823da0. The
+	# AddRef/Finalize hook READS ProcParamExplicitByRef to tell a real by-ref
+	# parameter from an ABI-promoted by-value one, so this row fails if that
+	# column silently stops being written for any of the four. Both sizes: a
+	# `var` parameter carries IsRef at ANY size, so the 4-byte rows reach the
+	# same arm despite the flag being named for the >8-byte promotion. The last
+	# row is a positive control that MUST fire -- every other row asserts an
+	# absence, and absences pass when the operator is disconnected entirely.
+	./$(COMPILER) test/test_mgmt_operators_addref_declaration_shapes.pas $(TESTTMP)/test_mgmt_operators_addref_shapes26
+	tools/expect_same.sh test_mgmt_operators_addref_shapes26 "$$($(TESTTMP)/test_mgmt_operators_addref_shapes26)" "$$(cat test/test_mgmt_operators_addref_declaration_shapes.expected)"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26
