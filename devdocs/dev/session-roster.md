@@ -763,3 +763,45 @@ the one frankA used: **name the commit, name the exact shape that triggers it, n
 it belongs to, and say plainly that nothing needs reverting.** Landing it on the owning ticket
 is what makes it findable by the session that hits it, since that session will grep for the
 symptom and not for the commit.
+
+## THE COORDINATOR COLLIDED WITH A WORKER ON ONE FUNCTION, AND GIT CAUGHT IT ONLY BY LUCK
+
+2026-09-06, `f1758c6f4` (frankH) against `3f97b016b` (this seat), both in `set_field` /
+`first_bullet_value`, inside the same hour, neither aware of the other.
+
+Both of us were on **one topic** — *`claim` records the owner somewhere nobody reads* —
+reached from opposite symptoms. frankH: `feature-dynamic-compiler-tables` sat in `working/`
+with `owner: ""` after a successful claim, because `set_field` preferred a prose bullet over
+the frontmatter key. Me: `feature-pascal-corpus-fpc-testsuite` read as owned by `frankS` when
+its bullet was **empty**, because `\s*` spans newlines and the value came from two lines
+below. **Different defects, same function, same night, and each of us called it "the" bug.**
+
+> **The rebase conflicted, so the collision surfaced for free — and that is exactly the case
+> this seat is NOT for.** Topic-collision avoidance exists for the conflicts git cannot see.
+> Here the topic collision happened to land on overlapping LINES, which is luck. Had frankH
+> taken the read side and I the write side — adjacent, non-overlapping, both plausible — both
+> patches would have landed clean, and each author would have believed the function fixed.
+
+**And neither fix was sufficient alone, which is the part that would have been missed.**
+Measured on the merged tree against `f1758c6f4`, one park-then-claim on a ticket carrying
+both forms:
+
+```
+frankH's version -> '# t\n\n- **Track:** P\n- **Owner:** \n\nfrankS\nmore prose\n'
+merged           -> '# t\n\n- **Track:** P\n- **Owner:** frankS\n\nFPC ships thousands…\n'
+```
+
+frankH's frontmatter-authoritative branch **still writes the bullet with the newline
+pattern**, so it put the name below the blank line and `.*` **deleted the first prose line**.
+A clean green on frankH's own reproducer, and a file quietly losing a sentence.
+
+**For this seat, three things:**
+
+1. **I hold no lane and I still take a topic.** Tooling is this seat's second job, so the
+   seat is a collider like any other, and it is the one collider that never announces itself
+   — I ask others what they hold and publish nothing. **Say what I am touching in `tools/**`
+   the same way a worker does.**
+2. **A shared accessor is a topic magnet.** `set_field` backs `claim`, `park`, `resolve` and
+   every field; two sessions hitting it in one night is the base rate, not a coincidence.
+3. **When two fixes to one function merge, do not assume they compose — run each ALONE
+   against the other's reproducer.** The merge resolving cleanly is a statement about text.

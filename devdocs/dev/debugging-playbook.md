@@ -13503,3 +13503,188 @@ CLAUDE.md's *us accepting what FPC rejects is not a defect* is the policy; **thi
 instrument-level consequence**, and it bites hardest exactly where the policy is being
 exercised. Before deleting an arm as dead, ask **which oracle would have to be silent for the
 evidence to look like this**, and whether that oracle is silent by construction.
+
+## A WRONG *REASON* UNDER A RIGHT *VERDICT* SURVIVES INDEFINITELY, BECAUSE NOBODY RE-READS A DISPOSITION THEY AGREE WITH
+
+frankS, 2026-09-06, asking for this to be banked as the sibling of the tripwire rule rather
+than a repeat of it.
+
+`tstring4` is a `wontfix:` row and **the verdict is correct** — it reads ansistring header
+words, FPC internals we do not claim. Its stated reason: it *"diverges only on
+`GetFPCHeapStatus` numbers."* **That was false.** It also diverges on `Str` of `Comp`, which
+neither clause covers, and that divergence is a live Track A defect: `D := 4.7; Co := D` with
+`Co: Comp` stores **4616977747989548237** — the IEEE-754 bits — where fpc prints 5.
+
+> **A terminal disposition is re-checked by nobody, so the sentence justifying it is the part
+> that rots unobserved. The conclusion being right is exactly what stops anyone reading the
+> reason.** A defect hidden under a correct verdict has no reader at all: `rejected/` and
+> `known-incompat/` are loaded so citations resolve, and read by no sweep.
+
+**Pair it with `## A DISPOSITION THAT RESTS ON "UNREACHABLE" IS OWED A RE-MEASURE`.** That one
+is about a precondition someone else invalidates later. This is the other half and needs no
+later event:
+
+> **A disposition resting on *"we do not claim this"* is owed a check that the divergence it
+> waves through is the one it NAMES.** "Only X" is a quantified claim about a set nobody
+> enumerated. Read the `only` in any wontfix reason as an unmeasured universal.
+
+**Two faces needing opposite answers, which is why it was filed and not fixed:** fpc
+**accepts** `Comp := <real>` and **refuses** `Int64 := <real>`, and pxx maps `comp` to
+`tyInt64` — so one key owes two answers, the third form of
+`## A KEY MUST BE ABLE TO DISTINGUISH THE THINGS IT IS USED TO LOOK UP` arriving through a
+type alias rather than a sentinel. It sits in the IR store path every frontend shares.
+
+### The method note, which is reusable: THREE VACUOUS ROWS IN THE REJECT BUCKET IS THE POSITIVE CONTROL, NOT THE DISAPPOINTMENT
+
+`--retry-skips` passed **8 of 123** rows. **Three of the eight were vacuous** — the runner
+compares **exit codes, not output**, and `tarray2`, `tclass12a` and `tforin24` exit clean
+while printing wrong values. All three said so **in their own skip reasons**.
+
+> **The eight were not eight results; they were a population to diff.** frankS diffed all
+> eight against fpc byte for byte: three matched and came off the list, `tforin12` exits 0
+> and prints `a/s/d` where fpc prints `asd`, so it stayed with its reason updated.
+> **That the three rows already KNOWN to be vacuous landed in the reject bucket is the
+> instrument's positive control passing** — a harness whose exit-code channel cannot see
+> output was checked with a channel that can, and it rejected exactly the rows the record
+> predicted.
+
+`## MATCH THE ASSERTION CLASS TO THE DEFECT CLASS` at corpus scale: an exit-code oracle over a
+suite that asserts by printing is a guard that cannot fail on the defect the suite is for.
+
+### And a population note the same session nearly tripped on itself
+
+`--all` is **~1362 rows**; every figure in that ticket is quoted **"of 550"**. Running `--all`
+and comparing against the census reads as a **collapse that did not happen**. The census
+delta that WAS run — 377/0/123/50 → **380/0/120/50** (`cc96c670d`) — was **predicted before
+the run and confirmed exactly**: three rows un-skipped, nothing else moved. **A predicted
+delta that lands exactly is the only cheap evidence that no row moved for a reason nobody
+looked at.**
+
+## A REFUSAL WITH A NUMBER ATTACHED IS A CONTRIBUTION; A REFUSAL WITHOUT ONE IS A GAP
+
+frankH, 2026-09-06 (`2ed01a15e`), the first time `## COUNT THE CAP SITES BEFORE DECIDING HOW
+TO CONVERT A FAMILY` **changed a decision** instead of explaining one afterwards.
+
+`MAX_IR` was next on the ticket's own remaining list. Counted first, against the family that
+had just converted cleanly:
+
+```
+                     MAX_FIXUPS (converted)   MAX_IR
+arrays sized by it   3, all parallel          10, several UNRELATED
+cap-check sites      1                        20 (LabelFixupCount alone)
+non-bound uses       0                        7
+total references     5                        54
+```
+
+Any one of three would have stopped it: **ten non-parallel tables** make the split the work
+and the conversion an afterthought; **seven uses are VALIDITY PREDICATES, not bounds**
+(`if (lblId >= 0) and (lblId < MAX_IR)`, one per backend — deleting the constant deletes the
+question, which is `## A CAP READ AS "A NUMBER THE COUNT CAN NEVER REACH"` seven times over);
+and **twenty cap sites** means the lockstep invariant would be discipline at twenty sites
+rather than one procedure.
+
+> **Counting first is not merely cheaper than discovering the shape mid-conversion — it
+> produces a different KIND of artefact.** *"I did not convert `MAX_IR`"* is worth nothing.
+> ***"`MAX_IR` has 20 cap sites and 7 non-bound uses across six backends"* survives its
+> author**, and is the thing the next session would otherwise pay for twice: once to derive,
+> once to be surprised by.
+
+So a scouting commit with **no code change** is a legitimate deliverable, and the form is the
+one frankH used: the table, the three reasons, and the decision stated as inherited rather
+than as re-derivable.
+
+## AN `or` CHAIN OVER `Kind = ...` CONSTANTS IS A CLOSED-WORLD CLAIM WEARING AN OPEN-WORLD SHAPE — three instances in two days, and the author's tests are green BY CONSTRUCTION
+
+frankB, 2026-09-06, banking a family rather than a ticket. It is the operational,
+grep-shaped form of `## ENUMERATING FEELS LIKE CHECKING` and of
+`## NAME THE ENCODING, THEN ENUMERATE ITS READERS`.
+
+| | guard | domain it enumerated | the member nobody listed |
+| --- | --- | --- | --- |
+| frankA | `FindUProp` | member kinds: fields, methods | **properties** — printed the pointer value |
+| frankB | same guard, two copies | member kinds | same |
+| frankB, `287b1eb36` | `ResolveNodeRec` | node kinds a deref chain bottoms out on: `AN_IDENT`, `AN_PTR_CAST` | **`AN_CALL`** — answered `REC_NONE`, the arm declined |
+
+> **The tell is syntactic, not semantic.** A disjunction of equality tests against named
+> constants asserts *"these are all the cases"* while looking like an ordinary condition, and
+> **the author's test file is drawn from the kinds they listed**, so it passes by
+> construction and tells them nothing.
+
+**So the check is not "is this guard right".** It is: **read the discriminator's own TYPE,
+enumerate its full domain, and name which members are ABSENT from the chain.** That is a
+mechanical question with an answer in the source, and it is the one question the guard's own
+tests structurally cannot raise. Member kinds one day, node kinds the next — the domain
+changes, the shape does not.
+
+### POSTSCRIPT to `## A RESOLVER'S DECLINE SIGNATURE THAT IS ALSO A LEGITIMATE ANSWER` — the fourth instance, and they are ONE entry
+
+frankB's argument check reused `pvSinkIsProcVar`, a local whose **default is `True`** meaning
+*"unknown, do not auto-call"*. For a builtin the proc index is negative, the default
+survives, and **the compiler's own `WriteLn(..., Ord(SymIsComInterface(i)), ...)` was
+refused** — the self-host broke, which was the only instrument that could have caught it.
+
+Four now, and frankB is right that they are one entry rather than four:
+
+- frankA's `ResolveDerefShape` returning `tyInteger/REC_NONE/0/0` — its decline signature and
+  its true answer for a `^Integer` field;
+- frankB's `ir.inc` alias index where `< 0` means "PChar adapter" and `-1` has three producers;
+- frankB's `recName` holding the ultimate base of a chain you are not standing on;
+- this: a local initialised to a **safe default** that is indistinguishable from a **measured
+  answer**.
+
+> **The remedy is the same every time and it is one sentence: ASK THE FACT, NOT THE VARIABLE
+> THAT WAS SET FROM IT.** A variable carries "what I was told" and "what I was initialised
+> to" in the same bits. Widening the sentinel space never helps; adding the bit that says
+> *which* does — `pcDelegated` → `pcMovedOff` is the worked case.
+
+**And note which gate caught it:** not a repro, not a differential — **the self-host**, on a
+construct the compiler itself writes. `## THE FIXEDPOINT CANNOT SEE A CONSTRUCT THE COMPILER
+NEVER WRITES` has a converse worth stating: where the compiler DOES write the construct, the
+fixedpoint is the cheapest full-population test in the repo.
+
+## A ROW CHANGING STATE WHILE YOU WATCH NAMES A *TIME*, NOT A *CAUSE*
+
+frankB, correcting its own write-up on frankD's measurement, 2026-09-06.
+
+The cast-to-pointer-to-pointer note credited `b7b9e309e` for fixing the non-cast `pp^.a`.
+**It is frankD's `61932d0ec`**, established properly: reverse-apply **only that hunk** at
+today's tip, with `b7b9e309e` and everything later **present** — different binary, red test,
+byte-for-byte green on restore.
+
+> **frankB had not attributed it at all; it saw a row go green and named what had just
+> landed.** Co-occurrence in a watched window is the weakest evidence there is, and it does
+> not feel like evidence — it feels like having seen it happen.
+
+**The sharper half is frankD's caveat, and it is the part that generalises:** the **symptom
+itself moved** across frankB's own `f9476d579` in the same window — a **silent wrong value**
+before, a **hard refusal** after. So a reading taken over that transition observes **two
+different observables**, and *neither of them dates the fix.* Before crediting a commit for a
+row's colour, ask whether the row was measuring the same thing at both ends.
+
+### And the claiming rule that falls out of it: `ready` IS A SNAPSHOT, SO A CLAIM MADE FROM A PEER'S REPORT IS A SNAPSHOT OF A SNAPSHOT
+
+frankB reversed its decline of a p45 on frankA's evidence, messaged frankA that it was taking
+it, and **it had already landed as `287b1eb36` while frankB's suite ran.** Released; cost two
+messages.
+
+> **Re-read the folder at the moment of CLAIMING, not at the moment of DECIDING.** The gap
+> between the two is however long your gate takes, and a peer's report ages further still.
+
+Narrow on purpose: this is not an argument against acting on peer reports — it is an argument
+that the *claim* is a separate act from the *decision*, with its own freshness requirement.
+
+### FOOTNOTE, sent unprompted eleven minutes later: A HEADER AND A TOTAL IN THE SAME MESSAGE DISAGREED, AND THE HEADER IS THE PART A READER KEEPS
+
+frankB labelled the group **16** and gave the running total **15 groups, 25 closed, 9 filed**
+in the same paragraph, then corrected the label rather than leaving it. The two numbers were
+four lines apart and only one of them could be right.
+
+> **This is `## A SLUG IS A CLAIM EVERY READER SEES AND NOBODY DATES` in message form.** A
+> heading, a slug and a subject line are all *the part quoted onward*; a total buried in a
+> body is the part re-derived. **Where the two disagree, the WRONG one is more likely to
+> propagate**, because it is shorter and it is the label.
+
+**And the disposition differs from the slug case, correctly.** A refuted number in a *slug*
+must stay wrong, because the ticket is a durable record whose history is the evidence. A
+label in a *message* has no history to protect and one reader — so **correct it immediately
+and say what does not change**, which is what frankB did in two sentences.

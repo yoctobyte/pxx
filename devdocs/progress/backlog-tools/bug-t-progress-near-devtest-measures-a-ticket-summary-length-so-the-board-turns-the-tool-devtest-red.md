@@ -1,0 +1,64 @@
+---
+slug: bug-t-progress-near-devtest-measures-a-ticket-summary-length-so-the-board-turns-the-tool-devtest-red
+track: T
+prio: 45
+type: bug
+status: backlog-tools
+owner:
+blocked-by: []
+summary: "`tools/progress_near_devtest.py`'s `a slug reaches its own ticket with a usable score` builds its corpus from `progress.Board()` — the LIVE board — and asserts a floor of 0.10 over the 25 first open tickets. The quantity it actually measures is the LENGTH OF ONE TICKET'S `summary:` FIELD: `feature-dynamic-compiler-tables` scored 0.138 at 125 summary-tokens (`2ecd771d9`), 0.098 at 247, and 0.089 today at 292, with the tool's code unchanged throughout. So `make tools-devtest` is RED fleet-wide because a session did what CLAUDE.md tells it to do — keep a ticket's summary true — and no tool defect exists. Needs a calibration DECISION (fixed synthetic corpus for the metric properties, live board only for the corpus-shape assertions; or an IDF/length normalisation; or a floor expressed relative to the corpus rather than absolute), which is why this is filed rather than fixed: bumping the threshold would re-green it until the next long summary and would delete the evidence that the instrument is aimed at the wrong thing."
+---
+
+# `near`'s devtest fails on board prose, not on the tool
+
+## The measurement
+
+`main()` builds `heads = {slug: _tokens(_ticket_head(t))}` from a live `progress.Board()`.
+`_ticket_head` is `slug + title + summary` — so a ticket's **summary length** is the
+denominator of every score in that index. The failing check asserts that the worst
+self-score across the first 25 open tickets is `>= 0.10`.
+
+Measured 2026-09-06, one slug, tool code identical at all three points:
+
+| summary tokens | self-score | verdict |
+| --- | --- | --- |
+| 125 (`2ecd771d9`) | 0.138 | green |
+| 247 | 0.098 | red |
+| 292 (today) | 0.089 | red |
+
+`feature-dynamic-compiler-tables` is a heavily-worked Track A row whose summary was kept
+accurate across a night of ten commits. **Nothing about `near` changed.**
+
+## Why this is a defect in the devtest and not in the board
+
+A tool devtest that reads the live board **cannot distinguish a broken tool from a long
+ticket**, and it fails in the direction that reads as tool breakage. The red is currently
+the only red in `tools/*devtest*.py`, so `make tools-devtest` is red for every session,
+which is the state in which nobody reads a red.
+
+It also drifts silently: the same named failure printed 0.098 earlier the same day and
+0.089 hours later. **A check whose number moves while its subject is untouched is
+reporting about something else.**
+
+## The fork (why this is not a unilateral fix)
+
+The devtest has two KINDS of assertion mixed into one corpus:
+
+1. **Properties of the METRIC** — a slug reaches its own ticket; a short unrelated query
+   does not saturate a long document. These want a **fixed synthetic corpus** with hand-
+   written long and short documents, so the numbers are reproducible and a red means the
+   metric changed.
+2. **Properties of the BOARD** — the known duplicate pair is still present. These
+   legitimately want the live board, and they are the ones that would go stale in a
+   fixture.
+
+Splitting on that line is the recommendation. The alternatives, both cheaper and both
+worse: raise the floor (re-greens until the next long summary, and erases the finding),
+or normalise the score by document length (changes what `near` ranks, which is a
+behaviour change to a tool people use, decided by a devtest — the tail wagging).
+
+## Do not "repair" it by shortening the summary
+
+The summary is long because it is TRUE, which is what CLAUDE.md requires of it. Trimming
+a ticket's summary to green a tool devtest would be fixing the measured object to suit
+the instrument.
