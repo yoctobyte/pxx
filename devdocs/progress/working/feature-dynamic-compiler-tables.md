@@ -954,3 +954,55 @@ been doing.** The mechanical conversions are done. What is left should be filed
 and ranked as its own piece rather than continued as the sixth, seventh and
 eighth item in a rhythm — the rhythm is exactly how a `while guard < MAX_UCLASS`
 gets deleted by someone who has converted five tables successfully.
+
+## MAX_TEMPLATE_TOKENS — scouted 2026-09-06, CHEAP, and half-converting it is a trap
+
+Routed here by the coordinator because
+`bug-a-a-generic-body-takes-its-directive-state-from-the-specialization-site`
+wants ~10 new parallel columns on these pools, and whether that is small work
+depends on whether they convert.
+
+**They do. This is the `MAX_FIXUPS` shape, not the `MAX_IR` shape:**
+
+| | MAX_TEMPLATE_TOKENS | MAX_IR (refused) |
+| --- | --- | --- |
+| arrays | 6, in two parallel trios | 10, unrelated |
+| cap sites | **2** | 20 |
+| validity predicates | 0 | 7 |
+| refs | 10 (8 are decls/comments in defs.inc) | 54 |
+| files outside defs.inc | 1 | many |
+
+```
+TemplateTokens   TemplateSrcOff   TemplateSrcLen      { cap tested at :866, :976 }
+SpecializeTokens SpecSrcOff       SpecSrcLen          { NO cap site at all }
+```
+
+One `Ensure` grows all six, and the ticket's ten new columns become ten
+`SetLength`s inside it rather than ten more arrays kept in lockstep by
+discipline. **The generic-directive ticket should therefore wait for this
+conversion**, not be written against the fixed tables.
+
+### The trap, and it is the reason this section exists
+
+**The Specialize trio has no cap site and does not need one today, because it is
+bounded implicitly through the Template pool's cap.** `SpecializeToBuffer` runs
+`while i < count`, and `subCount` advances at most once per iteration — checked
+at all three `Inc(subCount)` sites, including the two that look like they might
+outrun `i` (`i := HoistEnd[..]+1`, `i := gEnd+1`) and the one that looks like a
+rewind (`i := gSelf`, where `SelfSpecGroupEnd` returns a position at or after
+`i`). All three advance `i` forward, so `subCount <= count <=
+MAX_TEMPLATE_TOKENS` with no guard anywhere.
+
+So **converting the Template trio alone silently un-bounds the Specialize trio.**
+The moment `count` can exceed 65536, six arrays are written at `subCount` with no
+cap site to fail and nothing in the source naming the dependency. It would not
+error — it would write past a fixed array and surface somewhere else.
+
+This is *"after converting a table, enumerate its WRITE sites, not its CAP
+sites"* with the teeth showing: a cap-site census finds **2**, a write-site
+census finds **21**, and the 21 belong to a table the 2 do not mention. It is
+also *"two tables can share a ceiling without sharing a constant"* — benign right
+up until someone moves the constant.
+
+**Convert all six together, and add the Specialize guard as part of the same
+change rather than trusting the implicit bound being removed.**
