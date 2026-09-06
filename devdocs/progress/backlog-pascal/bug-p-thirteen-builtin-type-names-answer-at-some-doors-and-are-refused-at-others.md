@@ -191,3 +191,29 @@ rebuild, and the failure does not look like noise: the sweep runs in name order,
 so it partitions cleanly along the ALPHABET, and it reported `olevariant`
 broken and `variant` fixed — two spellings of one type, mapping to one kind,
 separated by nothing but where the rebuild landed between them.
+
+## 2026-09-06 — A FOURTEENTH NAME, AND ITS ROW SET WAS THE BLIND SPOT, NOT ITS ARMS (frankA, relayed)
+
+`Real(d)` — a plain Double-to-Real cast that fpc compiles — was **REFUSED** with
+`expected expression`, while `var r: Real` has declared fine forever. The case
+label read `tkSingle_T, tkDouble_T, tkExtended_T` and **`Real` was the fourth
+float keyword nobody listed.** frankA is closing it under
+`refactor-p-five-dispatch-sites-for-one-named-type-cast` rather than filing
+separately; recorded here because this ticket is the family and **it has
+`owner: ""`**, so a message to "whoever holds it" had no reader.
+
+**THE REASON IT WAS MISSED IS STRUCTURAL AND IT INDICTS THE TEST, NOT THE ARMS.**
+Every name in `test/test_builtin_type_names_cast_and_declare.pas` is an
+**IDENTIFIER**. The four float spellings are **KEYWORDS** — confirmed in
+`compiler/paslexer.inc`: `real`/`Real` -> `tkReal_T` (`:125-126`),
+`single`/`Single` -> `tkSingle_T` (`:170-171`), `double`/`Double` -> `tkDouble_T`
+(`:172-173`), and `Extended` likewise. **A keyword-spelled type name cannot enter
+a sweep whose rows are all identifiers**, so the four were outside the population
+the test varies, and no amount of adding names to it would have reached them.
+
+**Their ROW SET was the blind spot, not their arms.** A sweep certifies the axis
+it varied; this one varies *which identifier*, and the defect lives on *whether
+the spelling is an identifier at all*. The test now carries rows for all four.
+**Anyone extending this ticket should ask what the test's rows have in common
+before adding another one to the list** — that shared property is the aperture,
+and it is invisible from inside a passing sweep.

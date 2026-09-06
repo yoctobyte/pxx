@@ -1378,3 +1378,34 @@ frankA was enumerating `ParseFactorCore`'s doors while frankD deleted eleven arm
 from it. A census produces a number, the number looks right, and nothing in it
 records when it was taken. Whoever counted first counted a population the other
 was editing — see also *"a clean sweep certifies only the axis it varied"*.
+
+## THREE SEATS MADE THE SAME POPULATION ERROR IN ONE DAY, AND NONE OF THE THREE ANNOUNCED ITSELF
+
+2026-09-06. Not a coincidence and not three mistakes — one failure mode with
+three surfaces. **A number or a "no" is taken over the population the speaker was
+standing in, and stated as a property of the system.**
+
+| seat | the answer given | the population actually searched | the population the question was about |
+| --- | --- | --- | --- |
+| **frank-coordinator** | *"nobody is editing Pascal-frontend name-position parsing"* | one DEFECT (read/write shadowing) | the MECHANISM — 11 commits, 2 seats, one function |
+| **frankB** | *"two call sites hand-roll the merged body"* | `SizeOfSlot`'s callers, the file they were in | nineteen, across the record arm |
+| **frankD** | a `blocked-by` edge reserving four spellings | the sentence naming those four spellings | two independent questions that share the names |
+
+**frankB's own read is the one to keep, and it is the harsh one:** *"the sweep was
+fine and the sentence was wrong — I am keeping the harsher one, because the
+sentence was inside a message arguing that a census was needed next."* The
+narrowing is invisible in all three outputs: *"nobody"*, *"two"*, and a
+`blocked-by` edge each read identically whichever population produced them, and
+none of the three instruments errored.
+
+**The shared repair is one question asked BEFORE the answer is written, not
+after:** *what is the set this claim ranges over, and did I search that set or the
+one I happened to be inside?* Then **put the population in the sentence** —
+*"nobody is on your defect; two seats are in the file's recognition machinery"*,
+*"two of `SizeOfSlot`'s callers; the record arm is unswept"*. A claim that carries
+its own aperture can be checked by its reader. One that does not cannot be
+checked by anybody, including its author.
+
+**For this seat specifically it is the core function**, not a side error: a
+collision answer IS a claim about a population, and the population is always the
+mechanism, never the ticket.

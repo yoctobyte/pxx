@@ -15597,3 +15597,66 @@ fleet rule is to background a job and let its completion be the wait.
 Found by frankH, in their own waiter, by re-checking with an anchored match
 rather than trusting the loop. The coordinator seat's own `pgrep`, run to verify
 the report, matched itself in the same breath.
+
+## A POSITIVE CONTROL DRAWN FROM THE WRONG ARM OF THE SAME CONCEPT — two instances are not a shape
+
+2026-09-06, frankB, caught one message before shipping. Two real bugs shared a
+defect shape — **a node-sourced kind paired with a symbol-sourced companion** —
+and a gate row keyed on that shape was about to be promised on the strength of
+both. frankH swept the **nineteen** hand-rolled record-sizing arms and found the
+shape **zero times**.
+
+**The two arms of one concept have different mixing hazards.** The nineteen are
+all the RECORD arm: parameter-plus-global, hand-maintained state machines. Both
+of frankB's bugs were the FROZEN-STRING arm: node-versus-symbol. **A gate row
+keyed on the two would have caught none of the nineteen, and one keyed on the
+nineteen would have caught neither of the two.**
+
+This is the repo's *"a control from the wrong population certifies the broken
+instrument"* rule with the population boundary in a place nobody looks for it:
+**not a different subsystem, a different ARM of the function you are already
+standing in.** Two instances establish a shape *within their arm* and say nothing
+about the sibling arm, which is exactly the reach a gate row claims.
+
+**Scope the claim in the sentence:** *"the shape is absent from the record arm;
+the frozen-string arm is unswept"* — frankH sent that caveat unprompted, after
+frankB had already quoted their zero back at them. **A peer narrowing their own
+result before it can be over-read is the cheapest correction available**, and it
+only works if the number and its population travel together.
+
+## MERGING TWO HALF-SIZERS INTO ONE THREE-PARAMETER CALL WIDENS THE DOORWAY
+
+Follow-on, and it **supersedes** *"name the parameter each function does not
+take"* as the FIX while leaving it correct as the DETECTOR (frankH, via frankB).
+
+`SizeOfSlot(tk, cap)` hands records to an 8-byte placeholder; `TypeStorageSize(tk,
+recId)` hands strings to a pointer width. The tempting repair is one sizer taking
+`(tk, cap, recId)`. **That is worse.** The class is not *"the sizer has too few
+parameters"* — it is:
+
+> **the `(kind, companion)` pair is assembled by the CALLER from two independent
+> lookups.**
+
+A three-parameter merged sizer lets a caller who could already supply a stale
+kind with a fresh capacity **also** supply a fresh `recId`, and be wrong in a new
+way. More parameters means more independently-sourced pairs. **The form that
+closes it takes the OWNER and reads all three from one record** — one lookup, one
+consistency domain.
+
+**Detector and remedy are different questions**, and a detector that names a
+missing parameter suggests adding it. Ask instead: *who is assembling these
+arguments, and from how many sources?*
+
+## A MECHANICAL PREDICATE OVER CODE SITES FAILS TOWARD FALSE POSITIVES THAT READ AS FINDINGS
+
+Same sweep. Classifying a site by **nearest-preceding-assignment** produced a
+mismatched `(kind, companion)` pair that looks exactly like a live defect. The
+matching assignment was inside the same `else` branch and **the backward scan had
+crossed the branch boundary.**
+
+**A syntactic proximity heuristic has no model of control flow**, so its errors
+are *plausible* rather than obviously broken — the one-signed, all-plausible
+shape that never looks wrong from a single use. Make it branch-aware, or
+hand-check every hit **before it reaches a ticket**: a false positive that has
+been written up costs the next reader an afternoon disproving it, and a disproof
+is much more expensive than a check.
