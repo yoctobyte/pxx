@@ -59,3 +59,37 @@ seed build and the self-hosted build run different implementations there.
 [[bug-p-a-parameter-and-a-local-that-differ-only-in-case-are-two-symbols]] is
 the same collision INSIDE one scope, where fpc refuses the file outright. This
 one is across scopes, where fpc accepts it and means something else.
+
+## A census that reports ZERO is conditioned on the input reaching the site
+
+*(frankA, 2026-09-06 — recorded here at frankB's request, because the instrument
+this ticket ships is the one it bites.)*
+
+`a.casebind` and `a.casedup` are delta instruments: their null output is a
+**number**. Zero is a legitimate value of that number, so it does not look like
+the "nothing ran" case — it looks like an answer.
+
+**The measured instance is frankB's.** Their first `a.casebind` run over
+`test_parallel_for_private` and `test_critsec_once` reported **zero moved
+bindings**, which reads as "the resolution change did not cause these". Both
+fixtures need `--threadsafe`; without it the compile dies inside `palthread.pas`
+before the program body is parsed, so `FindSym` never reached a single
+identifier the instrument had been asked about. The instrument was correct and
+answered a question nobody asked: *how many bindings moved in the part of the
+compile that ran.*
+
+**My own part in this belongs on the record accurately: I supplied the shape and
+the wrong instance.** I framed it after arguing that the same census had missed
+a real defect in `pasparser_proc.inc:4471`. It had not. The census was right,
+the defect did not exist, and the thing I mistook for one is `{$CASESENSITIVE
+ON}` — this ticket. So the section rests on frankB's measurement, not on mine.
+
+CLAUDE.md already carries the general rule: *"a guard must also be AIMED and
+READ … a comparison whose inputs were never proven to exist cannot fail."* The
+wrinkle a census adds is that there is no comparison to inspect — only a count,
+and the count is well-formed either way.
+
+**The cheap fix is in the instrument, not in the discipline.** Have
+`a.casebind` report the resolutions it **SAW** beside the ones that **MOVED**.
+`0 of 0` and `0 of 4127` are different answers and only the second one is
+evidence; today both print as zero.
