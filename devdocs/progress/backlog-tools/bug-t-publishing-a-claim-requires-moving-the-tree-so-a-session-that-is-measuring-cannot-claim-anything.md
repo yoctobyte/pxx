@@ -142,3 +142,29 @@ worth more to the next reader than one never made, because the next person to se
 
 **Nothing about the tool needs fixing. The missing FILE above is the whole defect** —
 "make `claim` louder" would be work aimed at a bug that is not there.
+
+## A CHECK FOR THIS WAS PROPOSED, MEASURED, AND REJECTED — do not re-propose it
+
+2026-09-06, frank-coordinator. The obvious tooling fix is a `check` row: *"this ticket
+has an `owner:` and is still in a ranked folder."* It would have fired on the live
+incident above the moment the owner was set.
+
+**Measured against the real board before building it: ~20 ranked tickets carry a real
+owner right now** — `frankS` ×4, `user` ×5, `frankZ` ×2, `frankwasm` ×2, plus `frankA`,
+`frankC`, `frank-optimize`, `frankO`, `frank2`, `claude-A`, `agent-AN`,
+`claude-A-uforth`, `pxx-a5`. **Almost all of them are correct and dispatchable**, and
+several are retired session names.
+
+`tools/progress.py`'s own `not_dispatchable` docstring already records this experiment
+from 2026-08-29: *"16 of 332 ranked tickets carry an owner and most are RETIRED session
+names on perfectly dispatchable backlog items. Suppressing on `owner` would have hidden
+~14 real tickets to catch one bad dispatch."*
+
+> **So the check would cry wolf ~20 times to catch the one case, and a check that cries
+> wolf earns the habit of being scrolled past.** `owner:` is ATTRIBUTION per CLAUDE.md,
+> not a claim — an owned ranked ticket is the NORMAL state, not the anomaly.
+
+**The anomaly is not "owned and ranked". It is "being worked right now", and the only
+signal the artefact has for that is the FOLDER** — which is precisely what this ticket
+says cannot be published from a measuring tree. The remedy is a channel, not a warning,
+and a warning would make the board noisier while leaving the gap exactly where it is.
