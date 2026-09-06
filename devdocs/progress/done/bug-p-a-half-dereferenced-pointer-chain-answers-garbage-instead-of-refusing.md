@@ -91,3 +91,6 @@ edit made without the measurement is the wider-blast-radius shape.
 reaches a different builder in a different function, with the ultimate base
 record already in hand. One guard, two sites — found by running the repro
 through both spellings after the first one went green, not by reading.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
