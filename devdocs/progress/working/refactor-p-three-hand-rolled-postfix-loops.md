@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-summary: "THREE now, down from four (7927fe685) and from five (8627d25ce), and the title is finally true. The `^ / .field / [i]` suffix chain is parsed by three hand-rolled loops in the PASCAL frontend -- pasparser_lval.inc's ApplyCallResultPtrSuffix and two in pasparser_expr.inc, for the record-name and pointer-alias casts -- plus two more in Track N's pyparser.inc, which are DELIBERATE (the-substrate-is-ast-and-ir-not-the-parser says duplicate the parser per LANGUAGE) and are not in scope here, though they owe the same field-encoding contract. Re-derived 2026-09-06 with `grep -n 'while CurTok.Kind in [tkCaret, tkDot, tkLBrack]' compiler/*.inc`. The statement-side copy is GONE: refactor-p-one-lvalue-path-for-statements-and-expressions merged the cast-headed assignment target onto the expression parser and deleted both arms and ParseCastTargetSuffix with them, so the count fell by deleting a CALLER rather than by unifying two bodies. The divergences on the survivors are worked out -- an escape census (which shared routines each loop reaches) predicted and closed four separate defects, and all three reach ResolveDerefShape and ParseClassRecordSelectors where reachable. What is left is the original ask, ONE suffix parser instead of three, with no defect backlog attached, so rank it as a pure refactor. NOT THE SAME MERGE the statement pair was: the expr record-cast twin hand-builds its own AN_INDEX arm where the pointer-alias twin has real element-type logic, so unifying them asks whether each arm is RIGHT, not whether a body can be lifted. Two caveats, both paid for: the census cannot see a loop that CALLS an escape and discards its answer (one of the four defects), and it cannot see an arm whose guard is a DECLINE SIGNATURE that is also a true answer -- the pointer-alias caret arm restored the alias element type on tyInteger/REC_NONE/0/0 and was refusing `PA(q)^.pi^` in both faces on the pin until 7927fe685."
+summary: "TWO now, down from three (27e656541), four (7927fe685) and five (8627d25ce). THE SLUG SAYS THREE AND IS LEFT SAYING THREE: a count in a slug is frozen at filing, nothing anywhere dates it, and repairing it in place would destroy the only evidence it was ever a different number -- the series belongs here. The two expression-side loops are MERGED: ParseCastPostfixSuffix in pasparser_lval.inc parses the `^ / .field / [i]` chain for both cast spellings, and it is a PARAMETERISATION rather than a lift, because a record-name cast has no alias row (its ASTIVal is 0 for `plain reinterpret`, which ResolveDerefShapeAt would read as alias row ZERO) so that caller passes aliasIdx = -1 and a seed that IS the answer. The record-name copy turned out to be a strict SUBSET of the alias copy arm for arm, every gap already filed as a silent wrong value on that spelling alone, so the merge was a deletion of the weaker twin and not a reconciliation. WHAT IS LEFT is ONE loop: ApplyCallResultPtrSuffix in pasparser_lval.inc, which frankB is holding (bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type adds a `(` arm to it). Its `[` arm survived a deadness probe -- live on a deliberate pxx extension with a committed test and no fpc oracle -- and pyparser.inc's two remain DELIBERATE per the-substrate-is-ast-and-ir-not-the-parser. The guard is tools/cast_suffix_walk_probe.py, 132 rows, with a twin check for the 38 rows fpc refuses by construction."
 status: working
 owner: frankA
 ---
@@ -748,4 +748,48 @@ is therefore blind on exactly the rows the record-cast twin exists to serve.
 Those nine need a **pxx-before vs pxx-after byte-identity** check instead: a
 refactor that is meant to change nothing makes byte-identity a bug detector,
 where an oracle differential can only say "still refused by fpc".
+
+## 2026-09-06 (frankA) — the merge landed in two steps, and what each one could prove
+
+`e40274490` moved the pointer-alias loop out of `ParseFactorCore` into
+`ParseCastPostfixSuffix` with NOTHING semantic changed; `27e656541` deleted the
+record-name loop and pointed its site at the same body. Split deliberately:
+landing both together would have made one diff in which a 300-line move and a
+behaviour change were indistinguishable. Step 1 had an exact expected result
+(byte-identical output on every row); step 2's diff is only the lines that can
+change an answer.
+
+**The instrument grew three things before either step, and each changed what the
+numbers meant:**
+
+1. **`{$POINTERMATH ON}`, which gives fpc an ORACLE for `PRec(raw)[i]`.** Nine
+   rows moved from PXX-ONLY to `agree` when I added it. I had recorded them as
+   oracle-less one commit earlier and they were not — fpc refuses pointer
+   indexing only because the harness had not asked for it. **An absent oracle
+   can be an absent flag.**
+2. **An ADVANCED RECORD** — the only shape where the two dot-arm guards
+   disagreed (the record-name loop delegated *every* name once
+   `recName >= REC_UCLASS_BASE`; the alias loop delegates only names that are
+   not fields). A plain record cannot tell them apart, so without it the merge's
+   riskiest line was unasserted. Its `av` field is at **offset 0 and is a
+   LongInt**, which a walker that had lost the field type entirely would still
+   answer correctly for, so it carries a nonzero-offset twin and a `Double`.
+3. **A twin check that branches.** Verified it can fail: pointing `recname` at a
+   different record produces 9 `TWIN MISMATCH` lines and exit 1.
+
+**And the rows were proven to REACH the new arm rather than assumed to**, because
+identical output is also what a change that never executes produces:
+
+| probe | result |
+| --- | --- |
+| canary in the `aliasIdx < 0` arm, on `TRec(raw)^.a` | fires |
+| the same canary over the whole self-host | silent — `compiler.pas` does not walk it |
+| poison `recName` in that arm | 15 lines move, twin check exits 1 |
+| poison `ASTIVal[indexNode]` in that arm | **nothing moves** |
+
+The last row is a blank and is recorded as one. The rows that consult that write
+reach it through the `[` arm, not the caret arm, so this harness does not assert
+it — and it is not being deleted on a null result. **Only `field-dbl`, `method`
+and `prop` moved under the `recName` poison**: the discriminating rows are the
+ones whose answer depends on a TYPE or a dispatch, never on an offset.
 
