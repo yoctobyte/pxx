@@ -8,7 +8,7 @@ blocked-by: []
 status: unfinished
 owner: ""
 created: 2026-08-25
-summary: "Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them."
+summary: "THE MERGE IS DONE AND THIS TICKET'S SUMMARY WAS FALSE FOR THREE DAYS. `DynArrayNodeDepth` was DELETED on 2026-09-03 by `45391912a` (`fix(A): delete the second dyn-depth walker`); measured 2026-09-06, it has no definition anywhere in the tree and `NodeDynDepth` (ast_arena.inc) is the single walker, with callers in nine files. WHAT IS LEFT IS THE RESIDUAL, AND IT IS WHY THIS ROW STAYS OPEN: two comments still name the deleted function as though it existed -- `pasparser_decl.inc:1753` (which counts THREE mechanisms answering `how deep is this array` and is now wrong by one) and `symtab.inc:15898` (past tense, deliberate history, fine as written). The decl.inc one is load-bearing prose: it is the stated justification for a design decision taken on 2026-09-06, and it was written from a count relayed by this repo's coordinator that was already three days stale. Fix the two citations and close. NOTE the third mechanism the decl.inc comment names, `NodeArrNDInfo` (pasparser_call.inc), is REAL and still there -- so the live count is TWO, not one and not three."
 ---
 
 # The two
@@ -139,3 +139,41 @@ recipe for whoever picks it up:
 The `AN_COMMA` arm both functions were missing was added to BOTH on 2026-08-25
 (`1facc0a40`), and each now carries a note pointing at the other, so the drift is
 at least visible while this waits.
+
+## 2026-09-06 — measured: the merge landed three days ago and nothing closed this row
+
+`45391912a` (2026-09-03 14:40, `fix(A): delete the second dyn-depth walker -- a
+field-rooted array of array of string[N] indexed as a Char`) did the merge this
+ticket asks for. Measured at HEAD today:
+
+| name | defined | callers |
+| --- | --- | --- |
+| `NodeDynDepth` | `ast_arena.inc` | nine files |
+| `DynArrayNodeDepth` | **nowhere** | two COMMENTS only |
+| `NodeArrNDInfo` | `pasparser_call.inc` | seven files |
+
+**How it was found, because the route matters more than the row.** Not by reading
+the ticket and not by a checker: by a ghost-identifier sweep over comments in
+`compiler/**` — routine names once defined there, absent from every tracked Pascal
+file today, still cited in a comment. Eighteen such names across thirteen files;
+this is one of them. **A comment naming a function that does not exist is
+invisible to the build, to the gate, and to every reviewer reading a diff**, and
+the cost lands on the next reader rather than on the author (frankD's framing,
+the same day, about their own `ArgListHasBracketElem`).
+
+**The decl.inc citation is not cosmetic and that is why this stays open.** It
+reads *"three separate functions answer 'how deep is this array' (NodeDynDepth,
+DynArrayNodeDepth, NodeArrNDInfo) and two of them are already known to
+disagree"*, and it is the written justification for making two spellings of
+`array of array[0..2] of T` build one symbol. **The design conclusion survives
+the correction and the premise does not:** with two mechanisms rather than three
+the argument is weaker and still sound — one symbol is still the shape that
+cannot host a divergence. The number is what needs fixing, in the comment and in
+anyone's head who read it.
+
+**Provenance, stated because it is the defect's actual origin:** the three-count
+was relayed to a working seat by this repo's coordinator on 2026-09-06 from this
+ticket and from the code, without checking that the function still existed —
+already three days stale when it was sent, and written into the compiler an hour
+later. A stale count relayed in a message and then committed as a comment is the
+stale-citation multiplication path with a person in the middle.
