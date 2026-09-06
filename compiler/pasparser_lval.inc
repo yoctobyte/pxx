@@ -8098,6 +8098,16 @@ begin
   else if CaseEqual(nm, 'longbool') then Result := tyInteger
   else if CaseEqual(nm, 'wordbool') then Result := tyInt16
   else if CaseEqual(nm, 'bytebool') then Result := tyInt8
+  { ...and the fourth, which was simply ABSENT rather than wrong. Every piece of
+    machinery a sized boolean needs already answered for width 8 --
+    SemBool(8) = -24 is in defs.inc's own worked example of SEM_BOOL_BASE, and
+    BoolStorageTypeKind(8) has always returned tyInt64 -- so `QWordBool` was one
+    name missing from two tables while the design behind it was complete. It
+    answered `unknown type: QWordBool` (tenum6.pp:6), which reads as an
+    unimplemented type and was a gap in an enumeration.
+    A rule spelled as a list fails by an ABSENT entry, and the three that were
+    present agreed with each other perfectly. }
+  else if CaseEqual(nm, 'qwordbool') then Result := tyInt64
   { WideChar is a UTF-16 code UNIT; UCS4Char is a CODE POINT and converts to a
     string as UTF-8. Distinct kinds on purpose — see defs.inc.
 
@@ -8160,14 +8170,18 @@ end;
 
   Only the sized booleans answer today. Enums never reach here -- an enum is
   not a builtin name -- so this function returning SEM_NONE for everything
-  else is not a hole, it is the table saying "no builtin scalar name but these
-  three carries a meaning its kind cannot hold".
+  else is not a hole, it is the table saying "no builtin scalar name but the
+  sized booleans carries a meaning its kind cannot hold" -- FOUR of them since
+  QWordBool joined, and the count is out of this sentence deliberately: it was
+  written as "these three" while the fourth was missing from the table below,
+  and a comment that states a cardinality goes stale the moment the list grows.
   decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
 function BuiltinScalarSemId(const nm: AnsiString): Integer;
 begin
   if CaseEqual(nm, 'bytebool') then Result := SemBool(1)
   else if CaseEqual(nm, 'wordbool') then Result := SemBool(2)
   else if CaseEqual(nm, 'longbool') then Result := SemBool(4)
+  else if CaseEqual(nm, 'qwordbool') then Result := SemBool(8)
   else Result := SEM_NONE;
 end;
 
