@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `c543b335fb2f` on seven, 2026-09-06T19:55:22Z (44m ago).**
+**Newest full tier in the fleet: `c543b335fb2f` on seven, 2026-09-06T19:55:22Z (55m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `c543b335fb2f` | RED | 44m | — (newest) |
+| seven | `c543b335fb2f` | RED | 55m | — (newest) |
 | plexus | `27424c927b65` | RED | 7d10h | 7d9h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
