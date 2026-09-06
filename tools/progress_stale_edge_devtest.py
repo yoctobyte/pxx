@@ -269,6 +269,49 @@ def t_the_filesystem_scan_sees_the_fixture_not_the_live_repo():
     return "the on-disk scan is confined to the fixture"
 
 
+def t_one_slug_in_two_folders_is_reported_even_when_neither_is_ranked():
+    """frankB's case, and the ablation is what makes it a guard.
+
+    `progress.sh claim` MOVES a ticket to working/. A later heredoc rewrite
+    addressed to the OLD path therefore CREATES a second ticket rather than
+    editing the first, and both get committed -- one `status: working` with a
+    stale body, one `status: done` with the real one.
+
+    DUP-SLUG used to run inside the RANKED_STATUSES loop, so this exact pair
+    was invisible at BOTH ends: working/ is not ranked and done/ is not
+    ranked. Each file parses alone, so `check` was silent. Restrict the scan
+    back to RANKED_STATUSES and this assertion fails, which is the ablation
+    that says the widening is load-bearing rather than decorative.
+    """
+    out = _check([("working", "zz-dup-one", {"track": "P", "prio": 40}),
+                  ("done", "zz-dup-one", {"track": "P", "prio": 40})])
+    assert "DUP-SLUG" in out and "zz-dup-one.md" in out, out
+    assert "working" in out and "done" in out, out
+    return "one slug in working/ and done/ is reported"
+
+
+def t_the_ranked_plus_done_pair_is_reported():
+    """The worse direction: finished in one folder, still RANKED in another.
+
+    A ticket that is done/ and backlog/ at once keeps being offered by
+    `ready`/`next` -- the "finished ticket still open" misroute -- and the
+    two bodies can disagree about whether the work exists.
+    """
+    out = _check([("backlog", "zz-dup-two", {"track": "P", "prio": 40}),
+                  ("done", "zz-dup-two", {"track": "P", "prio": 40})])
+    assert "DUP-SLUG" in out and "zz-dup-two.md" in out, out
+    return "a slug that is both done and ranked is reported"
+
+
+def t_distinct_slugs_across_folders_are_silent():
+    """The negative control. A scan that flags every cross-folder filename
+    would flag the whole board, which is as empty as flagging nothing."""
+    out = _check([("working", "zz-solo-alpha", {"track": "P", "prio": 40}),
+                  ("done", "zz-solo-beta", {"track": "P", "prio": 40})])
+    assert "DUP-SLUG" not in out, out
+    return "two different slugs in two folders are not a duplicate"
+
+
 TESTS = [t_cleared_edge_in_blocked_is_a_failure,
          t_cleared_edge_in_a_ranked_folder_is_not_a_failure,
          t_cleared_edge_in_a_ranked_folder_is_a_strict_warning,
@@ -277,7 +320,10 @@ TESTS = [t_cleared_edge_in_blocked_is_a_failure,
          t_a_decided_blocker_counts_as_closed,
          t_an_open_blocker_is_silent,
          t_the_aperture_note_is_always_printed,
-         t_the_filesystem_scan_sees_the_fixture_not_the_live_repo]
+         t_the_filesystem_scan_sees_the_fixture_not_the_live_repo,
+         t_one_slug_in_two_folders_is_reported_even_when_neither_is_ranked,
+         t_the_ranked_plus_done_pair_is_reported,
+         t_distinct_slugs_across_folders_are_silent]
 
 
 def main():

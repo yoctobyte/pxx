@@ -1639,12 +1639,46 @@ pre code{background:none;padding:0}
                 slug_toks.append((st, path.name, {
                     t for t in re.split(r"[-_.]", path.stem.lower())
                     if len(t) > 2 and t not in _DUP_STOP}))
+
+        # --- identical slugs, ACROSS EVERY FOLDER ---------------------------
+        # This scan used to run inside the RANKED_STATUSES loop above, which
+        # made it blind to the way the duplicate is actually produced.
+        # Measured 2026-09-06 (frankB): `progress.sh claim` MOVES the file to
+        # working/, so a later heredoc rewrite addressed to the OLD path does
+        # not edit the ticket -- it CREATES a second one. They committed both
+        # copies of one slug, `status: working` carrying the stale body and
+        # `status: done` carrying the real one.
+        #
+        # NEITHER FOLDER WAS SCANNED. working/ is not ranked and done/ is not
+        # ranked, so the pair was invisible at both ends, and `check` was
+        # silent because each file parses perfectly well alone -- which is the
+        # whole shape of this defect: two coherent tickets, neither able to
+        # announce the other, and the board taking the last.
+        #
+        # The done/-plus-ranked pair is the WORSE direction and the one this
+        # now catches: a ticket that is finished in one folder and still ranked
+        # in another keeps being offered, which is the "finished ticket still
+        # open" misroute CLAUDE.md spends a paragraph on.
+        #
+        # Widened rather than duplicated because an identical FILENAME in two
+        # folders has no legitimate case in either direction -- unlike
+        # NEAR-DUP below, whose threshold is calibrated against a real family
+        # of same-topic tickets and which therefore stays on ranked folders.
+        for st in STATUSES:
+            d = PROG / st
+            if not d.is_dir():
+                continue
+            for path in sorted(d.glob("*.md")):
+                if path.name == "README.md" or path.name.startswith("BOARD"):
+                    continue
                 prev = seen_slug.get(path.name)
                 if prev is not None:
                     lines.append(
                         f"DUP-SLUG: {path.name} is in BOTH {prev}/ and {st}/ — "
-                        f"unresolvable by construction: claiming one leaves the other ranked, "
-                        f"and the two bodies can differ. Merge by hand; do not auto-pick.")
+                        f"unresolvable by construction: the two bodies can differ, each "
+                        f"parses alone, and neither can announce the other. Usually a write "
+                        f"addressed to a path `claim` had already moved. Merge by hand; "
+                        f"do not auto-pick.")
                     problems = 1
                 else:
                     seen_slug[path.name] = st

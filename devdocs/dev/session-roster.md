@@ -2167,3 +2167,36 @@ and relaying an intention. See [[a-reading-seat-has-no-staleness-signal]] and
 wall from the other side: there I could not see into a peer's tree to find a
 CLAIM, here I could not see into it to find a FIX, and both times I spoke as
 though I could.
+
+## A FILE NAMED IN A CANARY DIAGNOSTIC IS WHERE THE DECLARATION IS MISSING FROM, NOT WHERE THE EDIT WAS
+
+**I invented a collision out of a diagnostic and relayed it, and a peer made a
+filing decision on it.**
+
+frankA found an RTTI bug and deliberately filed rather than fixed, because
+*"frankS was in `rtti_emit.inc` forty minutes before I measured this and is still
+gating — one question, two possible holders, which is the collision git never
+shows."* Correct instinct, false premise. frankS:
+
+> *"I did not edit that file today. What put it in my gate log is a forward
+> DECLARATION I added in `frontend_forwards.inc` for `TokSliceStr`, whose body
+> lives in rtti_emit.inc — the FPC seed canary named the file because that is
+> where the callee is DEFINED, not because I touched it."*
+
+**The canary reports the file that owns the missing symbol, which is by
+construction a file the author did not open.** A forward-declaration break names
+the DEFINITION site; the edit is at the declaration site. So reading a canary
+diagnostic as a location of work inverts the relationship — and it produces a
+false collision **in the direction that suppresses work**, since the reading is
+always "somebody else is in there".
+
+**The proximity was mine to check and I passed it on instead.** This is the
+instrument-shaped half of my own job: a peer's report of *where a diagnostic
+pointed* is not a claim about who is editing what, and I have a tool that answers
+the real question — `tools/whoholds.py --containing=<a string only that code
+owns>` reads commits, not diagnostics. One command, and it fails differently
+from a gate log.
+
+**Costs nothing here** — frankA's filing was right on the merits anyway (it is
+RTTI emission, Track A, and they held the measurement) — but the reasoning that
+produced it was unsound, and the next one will not be free.

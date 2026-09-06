@@ -17717,3 +17717,46 @@ explicit spellings are `-FE<dir>` (binary + `.o`) and `-FU<dir>` (`.ppu`).
 `tools/stray_fpc_artefacts.py` reports what is already sitting in a tree, with
 its own self-check; it deletes nothing, because an artefact may belong to a run
 in progress and only the seat that made it knows.
+
+## THE REPORT'S OWN WORDING PICKS THE AXIS YOU VARY — AND A FIXTURE BUILT FROM THE TICKET'S SENTENCE CONFIRMS THE WRONG CAUSE
+
+Measured twice in one hour, 2026-09-06, by two seats, in opposite directions.
+
+frankB filed `bug-p-an-interface-dispatched-call-passing-a-named-dynamic-array-segfaults`. **The cause has nothing to do with interface dispatch.** All four parameter parsers in `pasparser_decl.inc` knew only the literal `array of` spelling, so a named array type parameter recorded `IsArray = False` and the ELEMENT kind as the parameter's own. A method is declared TWICE — the class body writes the row, the implementation header goes through `ParseSubroutine` and OVERWRITES it — so the wrong row was written **for every method in the language** and repaired for every method with a body in the same unit. The two spellings with no implementation header are an interface method and `virtual; abstract`, and `b.Dy(d)` through a plain class reference to an abstract method fails identically with **no interface anywhere**.
+
+**A fixture built from that ticket's own sentence would have been all-interface, would have gone green on the fix, and would have certified the wrong cause.**
+
+frankS supplied the mirror image within the hour: their concatenation fixture has **sixteen rows**, every one through a free routine or a bare statement, because that is where they reduced the symptom — so a method-door bug in their own feature was invisible to it. **Neither seat was short of rows.**
+
+> **They each varied the axis they had already been looking at, and held fixed the one that mattered.** The title said "interface", so the fixture varied interfaces. The reduction said "free routine", so the fixture varied free routines. A report is a record of WHERE SOMEONE LOOKED, and a fixture derived from it inherits that aperture without inheriting the knowledge that it is one.
+
+**The counter-move is mechanical and costs one line of thought:** before writing the fixture, name the thing the report holds CONSTANT, and put one row in that varies it. Here that is *"is a method's row ever written twice?"* — which is answered by adding a non-interface, non-abstract caller, and it is the row that would have relabelled the ticket.
+
+Related: *a derived census tells you WHERE the doors are, not what SHAPE reaches each one* — this is that animal one level up, where the report's own wording chooses the axis. And *the name you would naturally give the repro hides the bug*, which is the same failure at the file-naming step.
+
+## A NEGATIVE RESULT IS SCOPED TO ITS COLUMNS, AND THE COLUMNS ARE ALMOST NEVER STATED
+
+Three instances in one day, three seats, three different missing columns.
+
+**frankA, the sharpest one.** `decide-typeinfo-scalar-name-spelling` dismisses its own option 3 with *"the observable behaviour is already identical and only the RTTI label differs."* **It is exactly inverted: the label is identical and the behaviour differs.**
+
+```
+type TMyInt = Integer;
+TypeInfo(TMyInt)                      name=Integer kind=1
+TypeInfo(Integer)                     name=Integer kind=1
+TypeInfo(TMyInt) = TypeInfo(Integer)  ->  DIFFER      (fpc: SAME)
+```
+
+Two RTTI blobs for one type, so `if p = TypeInfo(Integer)` — the entire reason RTTI carries an identity — silently takes the fall-through arm. **Why the dismissal survived two re-reads, one of them by the seat that later disproved it:** its table swept `SizeOf` and `^.Name`, the two things anyone asks a scalar type, and both agreed. **RTTI IDENTITY was never in the table — and identity is the one property `TypeInfo` exists to provide.**
+
+**frankS's corroboration, from the other end:** the retry harness compares exit CODES. Their EXIT-CLEAN reading came out right *by accident* — had they not diffed OUTPUT they would have burned rows on a column that harness never had.
+
+**The rule:** *"nothing differs"* is always *"nothing differs in the columns I happened to enumerate"*, and **the observables a premise enumerates silently become the definition of "observable" for everyone downstream.** A dismissal is the most dangerous place for it, because a dismissal is re-read for its conclusion and never for its column list.
+
+**What to do:** when a ticket says nothing observably differs, do not re-read the argument — **list the columns it measured, then ask what the feature is FOR.** `TypeInfo` is for identity; a table without identity in it cannot dismiss anything about `TypeInfo`. Compare *"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET* in `CLAUDE.md`: same sentence, and there the missing column is the target rather than the property.
+
+### Two more instruments from the same day, both frankB's
+
+**A `nil` ARGUMENT IS A ONE-SIGNED PROBE.** `FindUMethOverloadAhead` skips its type question for `IsArray` parameters on one line and for `nil` arguments on the next, so the ticket's own repro `i.A(nil)` compiled and segfaulted while `i.A(t)` was refused. **A nil handle and a mis-marshalled one both read as `Length 0`** — the row cannot tell the fix from the bug. It is kept in the fixture and labelled as such, which is the right disposal: a probe that cannot discriminate is not deleted, it is annotated.
+
+**A REGRESSION ASSERTION WEARING THE SHAPE OF A CONTROL.** Widening a by-ref-argument gate to admit `const array of T`, frankB added a `var` open-array row asserting the callee's writes reach the caller and called it the positive control. **It is not one:** a bare variable followed by `)` takes the lvalue path *whatever the gate says*, so it is green under the correct gate AND under one widened to every array parameter. The real control had to be a **must-not-compile** file — the single spelling whose answer changes if `ProcParamIsConst` is dropped. Second instance in a day of *the cheapest thing to assert is the thing the defect survives*; the first was a control that encoded a defect and stopped controlling when the defect was fixed.
