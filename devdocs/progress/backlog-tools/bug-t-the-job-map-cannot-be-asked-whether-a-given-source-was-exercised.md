@@ -285,3 +285,58 @@ exist.
 **This does not change the recommended fix** — subject is `(target, abi, source)` and all
 three are already in the recipe. It bounds the migration: **5 open tickets to re-key**, not a
 board-wide sweep.
+
+## 2026-09-06 (frank-coordinator) — THE PROPOSED SUBJECT `(target, abi, source)` IS INSUFFICIENT, measured against the job table
+
+frankuser asked the right question before anyone started the migration: *do the thirteen jobs
+sharing `tools/compiler_srchash.sh` differ in target and abi, or do some collide on all three?*
+**Some collide, and by a wide margin.** Measured with `PXX_ALLOW_FULL_SUITE=1 testmgr.py --tier
+full --list` — a print-and-exit that runs nothing; the guardrail is a speed limit and this is
+the one lookup that cannot be done any other way.
+
+**68 jobs** have `tools/compiler_srchash.sh` as their FIRST source, across 31 prefixes:
+
+```
+13  test-uforth#corpus #core #coreplustest #doubletest #exceptiontest #facilitytest
+    #localstest #memorytest #searchordertest #stringtest #coreexttest #toolstest #filetest
+ 6  test-c-conformance      6  -i386   6  -arm32   6  -aarch64   6  -riscv32
+ 1  each of 26 others (test-core, test-smoke, test-asm, test-nilpy, test-zlib, …)
+```
+
+> **The thirteen `test-uforth` jobs share target AND abi AND first source.** They differ only
+> by **corpus suite** — which is not target, not abi, and not a source. `(target, abi, source)`
+> **collapses all thirteen into one key**, and each `test-c-conformance` group of six likewise.
+> The scheme fails at exactly the worst case the ticket's own key list points at.
+
+### And the harness ALREADY assigns a unique key per job — the citation form throws it away
+
+`--list` prints **4312 jobs**, every one uniquely keyed, and **not one of them uses the
+`#src:<path>@N` form**:
+
+```
+test-xtensa#84    qemu       3 lines   test/test_cross_record.pas tools/expect_same.sh +1
+test-xtensa#138   qemu       6 lines   test/test_cross_record.pas tools/run_target.sh +1
+test-xtensa#147   selfhost 136 lines   test/test_cross_record.pas tools/expect_same.sh +4
+```
+
+So `#src:…@N` is a **report-side rendering**, not the harness's key, and it discards
+information that already exists one command away. **The three xtensa jobs are separated by
+job TYPE and by their FULL source list** — `qemu`/`qemu`/`selfhost`, `expect_same`/
+`run_target`/`expect_same +4` — neither of which the `@N` form carries, and neither of which
+is abi.
+
+### The residual, which is why this is a specification and not yet a fix
+
+**4259 of the 4312 keys are NUMERIC** (`test-xtensa#147`) and only **49 are NAMED**
+(`test-uforth#stringtest`). The named ones are stable and meaningful. The numeric ones are
+**brittle-FORWARD**: insert a job earlier in the target and every later index shifts, carrying
+its verdict history onto a different subject — the same failure as `@N`, one level up, in the
+harness's own key rather than in the report's rendering.
+
+> **So there is no tuple of (target, abi, source) that works, and there does not need to be:
+> the job already HAS an identity. What it lacks is a STABLE one.** The fix is to make the
+> harness's key name the job (as `test-uforth#<suite>` already does for 49 of them) and to cite
+> that key, rather than to derive a new subject from the recipe's contents.
+
+**Bounds unchanged:** 5 open tickets to re-cite. The `done/` and `tstate/` citations stay as
+they are.
