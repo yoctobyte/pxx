@@ -67,3 +67,70 @@ answers (`DbgFileId`, `MarkUnitPxxDialect`, `TargetHasSignalRuntime` are all tha
 - Whether any curated-550 row hits this. The eleven are in the wide set only, so this may
   move no number the default runner prints.
 - Which types the evaluator would need beyond `Extended` and `Double`.
+
+
+## Resolved 2026-09-06 — frankB, Group 19 ("how many bytes is this type", asked through a door that never reaches the capacity table)
+
+Implemented the way this ticket's own constraint demanded: **the evaluator was
+given the READER, not the data.**
+
+`PasCondSizeOfTypeName` is forward-declared in `compiler.pas`'s pre-`lexer.inc`
+block — the block that exists for exactly this ordering problem, alongside
+`TargetHasSignalRuntime`, `MarkUnitPxxDialect` and nine others — and its body
+sits beside `BuiltinTypeNameTk` in `pasparser_lval.inc`. It holds no widths. It
+asks `BuiltinTypeNameTk` for a kind and `TypeSlotSize` for that kind's width,
+which are the two functions the declaration path itself uses.
+
+That mattered more than it looked. `BuiltinTypeNameTk`'s own comment records
+**three** separate fixes for a second name-to-width table drifting from the
+declaration path — `Real`, bare `string` and `Extended` each answered a width
+their own declarations contradicted, one fix each. A fourth table in
+`paslexer.inc` would have drifted the same way, and the drift would have been
+worse than those three: a conditional that takes the wrong branch does not
+produce a wrong number, **it produces a different program.**
+
+### What it refuses, and why refusing is the feature
+
+`-1` (a diagnostic naming the type) for a record, a frozen string, and an
+unknown name. A record's width is its layout and a frozen string's is its
+capacity plus a kind-dependent prefix; neither exists during `LexAll`, where
+conditionals are resolved. Answering 0 or a pointer width would silently pick a
+branch. Positive control `-dROW_RECORD` asserts the message names the operand.
+
+### The corpus count — measured, and the ticket's mechanism was better than its number
+
+The ticket says eleven helper rows die here. The mechanism is sharper than
+that: **the directive is in ONE shared unit and the family `uses` it.**
+`uthlp.pp` carries `{$if sizeof(extended) <> sizeof(double)}` at lines 179 and
+188, and **12 test files reference `uthlp`** (tthlp3, 4, 5, 6, 7, 8, 14, 18,
+19, 26a, 26b, 26c). One operand, one file, twelve blocked. Corpus-wide there
+are 5 files containing a `sizeof` conditional at all — the four above plus
+`tcalext6.pp`, whose operand is `cextended`, a ctypes name this door does not
+know and correctly refuses.
+
+Measured before and after on the real corpus files, pinned binary as the
+control:
+
+```
+PINNED  tthlp3   -> error: conditional directive: expected operator
+PINNED  tthlp14  -> error: conditional directive: expected operator
+FIXED   tthlp3   -> error: unknown type: Boolean16
+FIXED   tthlp14  -> error: unknown type: Boolean16
+```
+
+**They now clear the preprocessor and stop at a different, later, real defect.**
+That is the whole claim and it is deliberately not "they pass" — `Boolean16` is
+a separate missing type name and belongs to whoever takes it.
+
+### Why the test does not compare itself to FPC
+
+pxx's `Extended` is eight bytes and FPC's is ten (a deliberate earlier fix,
+`bug-p-sizeof-extended-...`). So fpc takes the `differ` branch and we take the
+`same` branch, from identical source, **both correctly, about two different
+compilers' representations.** Asserting fpc's branch would assert fpc's
+Extended, which is not ours and is not a goal.
+
+Every row therefore asserts a RELATION and carries no width: that the
+preprocessor's answer agrees with the compiler's own `SizeOf`. That is the only
+property a second source of size truth could break, and it holds on every
+target.

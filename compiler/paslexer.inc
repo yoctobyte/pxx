@@ -1553,6 +1553,41 @@ begin
           Inc(PasCondExprPos);
           PasCondPushBool(PasCondNameDeclared(name));
         end
+        else if CaseEqual(word, 'sizeof') then
+        begin
+          { `{$if sizeof(Extended) <> sizeof(Double)}` -- shaped exactly like
+            the `declared` arm above it, and deliberately so: same bracket
+            handling, same ReadPasCondExprIdent, same push. The DIFFERENCE is
+            where the answer comes from. `declared` can be answered here because
+            it is a question about the token stream, which is what this pass
+            owns. A width is not: it is a fact about the type table, and a copy
+            of it kept in this file would be the fourth name-to-width table in a
+            compiler that has already fixed three for drifting.
+            PasCondSizeOfTypeName is forwarded from compiler.pas so the answer
+            stays beside BuiltinTypeNameTk.
+
+            A NAME THIS DOOR CANNOT SIZE IS A DIAGNOSTIC, NOT A DEFAULT.
+            Records and frozen strings need a layout or a capacity that does not
+            exist during LexAll, and an unknown name is a typo or a user type;
+            answering 0 or a pointer width for any of them would pick a branch
+            silently, and a conditional that takes the wrong branch does not
+            produce a wrong value -- it produces a different program. }
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> '(') then
+            Error('conditional directive: sizeof requires (TYPENAME)');
+          Inc(PasCondExprPos);
+          name := ReadPasCondExprIdent;
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> ')') then
+            Error('conditional directive: sizeof requires (TYPENAME)');
+          Inc(PasCondExprPos);
+          intval := PasCondSizeOfTypeName(name);
+          if intval < 0 then
+            Error('conditional directive: sizeof cannot size this type here: ' + name);
+          PasCondPushInt(intval);
+        end
         else if PasCondWordIsDigits(word) then
         begin
           { Reject float literals loudly rather than mis-evaluating. }

@@ -7922,6 +7922,39 @@ begin
   else Result := tyUnknown;
 end;
 
+function PasCondSizeOfTypeName(const nm: AnsiString): Int64;
+{ `sizeof(<type name>)` inside a `{$if}` -- FPC's ordinary idiom for guarding a
+  platform-dependent arm, and unanswerable here until now, so the file died in
+  the PREPROCESSOR with `conditional directive: expected operator` and no
+  mention of sizeof at all.
+
+  IT ASKS BuiltinTypeNameTk AND HOLDS NO WIDTHS OF ITS OWN, which is the whole
+  design of it. The obvious implementation is a small name-to-width table in
+  paslexer.inc, next to the evaluator that needs it -- and that would be the
+  SECOND SOURCE OF SIZE TRUTH this compiler has already paid for three times:
+  the table above records `Real`, bare `string` and `Extended` each answering a
+  width its own declaration path contradicted, one fix each, all three on the
+  same two-table split. A fourth table would drift the same way and the drift
+  would be invisible, because a conditional that takes the wrong branch does not
+  produce a wrong number -- it produces a different program.
+
+  ANSWERS ONLY WHAT A KIND ALONE DESCRIBES, and refuses the rest with -1 rather
+  than guessing. A frozen string's width is its capacity plus a kind-dependent
+  length prefix and a bare type NAME carries no capacity here; a record's width
+  is its layout, which does not exist yet -- conditionals are resolved during
+  LexAll, before any of it is parsed. -1 makes the caller say `sizeof: <name>`,
+  which is a diagnostic naming the operand rather than a plausible number
+  steering a branch.
+  bug-p-the-conditional-evaluator-cannot-answer-sizeof-so-eleven-corpus-rows-die-in-the-preprocessor }
+var tk: TTypeKind;
+begin
+  tk := BuiltinTypeNameTk(nm);
+  if (tk = tyUnknown) or (tk = tyRecord) or TypeIsFrozenString(tk) then
+    Result := -1
+  else
+    Result := TypeSlotSize(tk);
+end;
+
 { If the current token names an ordinal TYPE (a type-keyword token, a builtin
   ordinal name like ShortInt/Word, an ordinal type alias, or a user enum),
   consume it and produce an AN_INT_LIT for High/Low of that type; return True.

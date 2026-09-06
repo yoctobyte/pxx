@@ -10014,6 +10014,23 @@ test-core: $(COMPILER)
 	@# right kind have the same eight-byte prefix.
 	./$(COMPILER) test/test_sizeof_through_a_pointer_to_a_string_n.pas $(TESTTMP)/test_sizeof_deref_strn26
 	tools/expect_same.sh test_sizeof_deref_strn26 "$$($(TESTTMP)/test_sizeof_deref_strn26 | tail -n 2)" "$$(printf 'fails=0\nSIZEOFDEREFSTRN OK')"
+	@# bug-p-the-conditional-evaluator-cannot-answer-sizeof-...
+	@# `{$$if sizeof(Extended) <> sizeof(Double)}` died in the PREPROCESSOR with
+	@# `conditional directive: expected operator`. EVERY ROW ASSERTS A RELATION
+	@# AND CARRIES NO WIDTH: the claim is that the preprocessor and the compiler
+	@# agree, which is the only property a second source of size truth could
+	@# break, and it is target-independent. It deliberately does NOT compare to
+	@# FPC -- pxx's Extended is 8 bytes and FPC's is 10, so the two take
+	@# different branches from the same source, both correctly.
+	./$(COMPILER) test/test_the_conditional_evaluator_can_answer_sizeof.pas $(TESTTMP)/test_condsizeof26
+	tools/expect_same.sh test_condsizeof26 "$$($(TESTTMP)/test_condsizeof26 | tail -n 2)" "$$(printf 'fails=0\nCONDSIZEOF OK')"
+	@# ...and the positive control: a record has no layout during LexAll, so the
+	@# operand must produce a diagnostic NAMING THE TYPE and never a default. A
+	@# conditional that takes the wrong branch does not produce a wrong value,
+	@# it produces a different program.
+	! ./$(COMPILER) -dROW_RECORD test/test_the_conditional_evaluator_can_answer_sizeof.pas $(TESTTMP)/test_condsizeof_rec26 > $(TESTTMP)/test_condsizeof_rec.log 2>&1
+	grep -q 'sizeof cannot size this type here: TRec' $(TESTTMP)/test_condsizeof_rec.log \
+	  || { echo "test_the_conditional_evaluator_can_answer_sizeof: FAIL - ROW_RECORD compiled, or refused without naming the type"; exit 1; }
 	# a method at the end of a cast-deref chain: PRec(q)^.o.F(1), PRec(q)^.cr.NewN(3)
 	./$(COMPILER) test/test_pascal_cast_chain_method_call.pas $(TESTTMP)/test_pascal_cast_chain26
 	tools/expect_same.sh test_pascal_cast_chain26 "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" "total ok 9 / 9"
