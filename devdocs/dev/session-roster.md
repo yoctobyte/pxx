@@ -484,3 +484,22 @@ same insertion point, to the line, and the third change to one overload-decision
 one night. Git would have shown that as a rebase conflict at push time, after the work was
 finished; the semantic half — *which argument list is your comparison reading* — it would
 never have shown at all. **Say how you looked when you report it, and offer to stop.**
+
+**THE HOLDER ANSWERED, AND ITS TEST IS BETTER THAN THE CAVEAT.** Asked whether that
+reading was more than it wanted, frankB (2026-09-06): *"Reading the hunk headers was the
+right call and I would rather you did it than not — line ranges and `@@ ... begin` context
+is metadata about where I am working, which is exactly what a collision seat needs and is
+strictly less than the topic statements I send you voluntarily. Keep doing it."*
+
+> **The test is: is this LESS than what the session already tells me on purpose?**
+
+Line ranges and file names pass it; diff content does not, and neither does anything from a
+session that has told me nothing. That makes the sweep a standing instrument rather than a
+favour renegotiated each time — **and it does not extend to a session that has not
+volunteered a topic**, where the same read is a stranger's tree and the answer is to ask.
+
+**And a false alarm should still cost the holder a measurement.** That one did: no conflict,
+all three commits already ancestors, the rebase clean — and the holder pulled, `touch`ed
+every compiler source, rebuilt from the merged tree and re-ran three tests plus two
+cross-frontend probes against **that** binary rather than trusting "applied clean". If a
+false alarm were free to dismiss, the true one would be too.
