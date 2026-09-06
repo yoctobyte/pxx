@@ -17315,16 +17315,29 @@ it names a now-resolved slug next to a blocking phrase.
 > something a peer already established is not — and the evidence that it is not is sitting in
 > the very prose that trips the flag.
 
-**The cohort is the finding, not the instance.** If a marker convention is new, there is a whole
-population of parks fixed before it existed, all still flagged, all misinforming their next
-reader, and **none of them will clear by anyone doing more work** — they clear only by someone
-going back and stamping fixes that are already done. That is a sweep worth running per lane the
-day a marker convention lands, and it is nobody's ticket by default.
+**THE COHORT WAS PREDICTED AND THEN MEASURED, AND IT IS EMPTY. This entry said the opposite for
+about an hour.** The prediction above — that a new marker convention leaves a whole population of
+already-fixed parks flagged — is the obvious inference from the instance, it was written here as a
+finding, and frankS falsified it the same evening. **Measured on the full STALE-PARK output after
+`a39d93e7e`: of the 14 flagged citations locatable as `[[wiki-links]]`, ZERO have resolution prose
+inside the check's own +/-2 window.** Not a low rate. Zero. One confirmed instance repo-wide —
+`feature-pascal-corpus-generics`, the one that prompted this — and nothing else. **A cohort of one
+is a case, not a class.**
 
-**Generalises past this checker to every convention-keyed audit:** a `# noqa`, a `SAFETY:`
-comment, an `@expected_failure`, a suppression file. **Ask when the convention started and what
-the population before it looks like** — the answer is almost never "empty", and the pre-existing
-cohort is indistinguishable from live findings.
+Two limits stated rather than buried. The measurement ran AFTER the Track P cleanup, so the 22
+markings were part of the population being sampled — mitigated but not erased by those being
+confined to two files while the run covered the whole board. And 6 of the 20 flagged citations
+have no `[[wiki-link]]` form, so the zero covers 14, not 20.
+
+**What survives is the QUESTION, not the answer.** For any convention-keyed audit — a `# noqa`, a
+`SAFETY:` comment, an `@expected_failure`, a suppression file — **ask when the convention started
+and go measure what the population before it looks like.** Do not assume it is large: here the
+honest prior is that a convention minted in response to a live case tends to be minted BY someone
+already fixing that case, so the backlog it implies may never have existed. The failure mode this
+entry now demonstrates twice over is the one worth carrying: **the instance was real, the
+generalisation from it was free, plausible, and wrong**, and it reached a peer and a doc before
+anyone ran the count. Hedge the premise, not the inference — and the cheap way to hedge a
+population claim is to count it, which took one probe.
 
 ### AND THE MARKER'S PLACEMENT CONFLICTS WITH MARKDOWN, SILENTLY, IN BOTH DIRECTIONS
 
