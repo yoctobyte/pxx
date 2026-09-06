@@ -1,0 +1,8 @@
+emit 1
+global reads 41
+global wrote 42
+method address matches
+emit 3
+local reads 42
+local wrote 55
+seed ends 55

@@ -16415,6 +16415,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ccimplhdr26 "$$($(TESTTMP)/test_ccimplhdr26)" "$$(cat test/test_a_class_const_is_a_constant_in_an_out_of_line_method_header.expected)"
 	./$(COMPILER) test/test_a_record_property_can_be_indexed_and_default.pas $(TESTTMP)/test_recidxprop26
 	tools/expect_same.sh test_recidxprop26 "$$($(TESTTMP)/test_recidxprop26)" "$$(cat test/test_a_record_property_can_be_indexed_and_default.expected)"
+	./$(COMPILER) test/test_a_var_section_initialiser_can_hold_an_address.pas $(TESTTMP)/test_varinitaddr26
+	tools/expect_same.sh test_varinitaddr26 "$$($(TESTTMP)/test_varinitaddr26)" "$$(cat test/test_a_var_section_initialiser_can_hold_an_address.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

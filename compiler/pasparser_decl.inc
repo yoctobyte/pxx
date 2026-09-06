@@ -2563,6 +2563,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     grpN: Integer;                                   { ...and how many; 0 before the first }
     dirName: AnsiString;
   grpHadInit: Boolean;
+    fvKind, fvAux: Integer; fvVal: Int64;   { TryParseInitValForm's non-ordinal value form }
 begin
   Next;
   { Stop at section / declaration-introducer keywords: these are plain
@@ -2861,6 +2862,17 @@ begin
 	          LocalInitValAux[LocalInitCount] := Tokens[TokPos - 1].SLen;
 	          Next;
 	        end
+	        else if TryParseInitValForm(tk, Ord(Syms[idx].PtrElemTk),
+	                                    fvKind, fvVal, fvAux) then
+	        begin
+	          { The routine-local twin of the global `= @Something` arm
+	            further down this same procedure. FlushLocalInits already
+	            reads kinds 2 and 4; only the parse was missing. }
+	          LocalInitKind[LocalInitCount]   := fvKind;
+	          LocalInitVal[LocalInitCount]    := fvVal;
+	          LocalInitValAux[LocalInitCount] := fvAux;
+	          LocalInitTk[LocalInitCount]     := Ord(tk);
+	        end
 	        else
 	        begin
 	          LocalInitKind[LocalInitCount] := 0;
@@ -3113,6 +3125,33 @@ begin
 	          PendingInitKind[PendingInitCount] := 1;
 	          PendingInitTk[PendingInitCount]   := Ord(tk);
 	          Next;
+	        end
+	        else if TryParseInitValForm(tk, Ord(Syms[idx].PtrElemTk),
+	                                    fvKind, fvVal, fvAux) then
+	        begin
+	          { `var P: Pointer = @Something` -- the same non-ordinal value
+	            forms the typed-CONST path already takes, through the same
+	            helper and the same emitter kinds (2 = AN_PROCADDR,
+	            4 = AN_ADDR). A var and a const initialiser are one grammar;
+	            only the const half was ever wired to them.
+	
+	            What that cost was not a refusal. ConstEval cannot evaluate
+	            `@` and does not CONSUME it either, so the loop desynced,
+	            `Eat(tkSemicolon)` quietly failed, the section ended on a
+	            token that cannot start a declaration, and the program
+	            reported `expected 'begin' before '@'` -- a diagnostic about
+	            a var section that had already ended, naming a construct the
+	            user never got wrong. TryParseInitValForm's own header calls
+	            out that desync for the record-field path; this is the third
+	            caller that needed it.
+	
+	            Its string arm cannot fire from here: tkString is taken by
+	            the arm above, for EVERY destination type rather than only a
+	            char pointer, so a var keeps its broader string rule. }
+	          PendingInitKind[PendingInitCount]   := fvKind;
+	          initVal                             := fvVal;
+	          PendingInitValAux[PendingInitCount] := fvAux;
+	          PendingInitTk[PendingInitCount]     := Ord(tk);
 	        end
 	        else
 	        begin
