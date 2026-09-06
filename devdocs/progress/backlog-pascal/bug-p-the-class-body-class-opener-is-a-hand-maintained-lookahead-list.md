@@ -129,3 +129,57 @@ nothing about the 1491, and the `class X` question this ticket is about is
 *still* answered only by "the spellings two instruments happened to reach".
 A census cannot enumerate a lookahead list's missing members; only replacing the
 list with an opener can.
+
+
+## 2026-09-06 — measured before restructuring: the accident is not producing a wrong answer today (frankB, Group 23)
+
+Tree at `48a18d6ec`, compiler `b85745ae61a3`, fpc 3.2.2 `-Mobjfpc`. Measured
+because the ticket argues from fragility and I wanted to know what the fragility
+is currently COSTING, which changes how the fix should be judged.
+
+### The four rows that matter, and only one differs
+
+| row | pxx | fpc |
+| --- | --- | --- |
+| `generic class function` called via the CLASS | ok | ok |
+| `generic class function` called via an INSTANCE | ok | ok |
+| **`generic function` (instance) called via the CLASS** | **ok** | **refused** |
+| `generic function` (instance) called via an INSTANCE | ok | ok |
+
+### …and the one that differs is us being MORE permissive, safely
+
+The third row is only accepted while the body never touches `Self`. Add a field
+read and pxx refuses it — `cannot call non-static method` — so the check exists
+and fires exactly when `Self` would be needed. fpc refuses earlier, on the
+declaration's staticness rather than on the body's use of it.
+
+**That is "us accepting what FPC rejects", which CLAUDE.md says is not a
+defect**, and the acceptance is safe by construction rather than by luck: the
+only programs it admits are ones in which `Self` is unobservable. So the
+`class X` accident is not currently producing a wrong value anywhere I can
+reach.
+
+**Two spellings, and they are not the same one.** FPC's testsuite writes
+`generic class function` (tgenfunc3.pp); our own `test/generic_xunit_method_units/uxgm.pas`
+writes `class generic function`, which **fpc 3.2.2 refuses outright**
+(`Procedure or Function expected`). `GenericKwAt` in `pasparser_generic.inc`
+already handles both orders deliberately, with a three-step bound and a written
+reason — a loop would eat the class DECLARATION's own `class` when a generic
+method is the first member.
+
+### What this does and does not change about the fix
+
+It does **not** weaken the ticket: the list is still an enumeration that must be
+extended for every new `class X`, with no diagnostic when it is not, and frankD's
+two censuses cannot answer whether a spelling is missing — `find test lib/rtl
+lib/pcl` compiled standalone reported `class` at 0 of 6287 because pxx refuses a
+unit standalone, and the fpc-testsuite re-census was `processed=2294
+compiled=803 refused=1491 fires=12` with `tkClass` not among the twelve. **Two
+instruments, 1491 files that never reached the probe, and anything found by
+neither would look exactly like this.** "We do not know" is the number.
+
+It **does** change the ranking argument: this is regression PREVENTION, not a
+live wrong answer, and it should be judged as such rather than on a defect it is
+not currently causing. The value is that the next `class X` spelling either
+finds its arm or is refused by name — instead of falling through a `Next` and
+working, or not working, by accident.
