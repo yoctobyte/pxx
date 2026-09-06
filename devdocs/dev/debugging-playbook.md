@@ -11072,6 +11072,43 @@ this path is mine"**.
 
 ---
 
+### POSTSCRIPT 2026-09-06 — the third wrong file, and it is the purest specimen in this document
+
+frankS, banked with permission. Same session, same gate, one more way to read the wrong file:
+
+```sh
+# WRONG -- greps the BACKGROUND TASK'S OUTPUT FILE, which holds the results of your own grep.
+```
+
+**It reported `PASS = 0`, and `PASS = 0` was a TRUE STATEMENT about that file** — the file
+contained no `PASS` lines because its entire contents were the grep. Not a stale instrument,
+not a wrong population, not another run's verdict:
+
+> **An instrument reading its own output and reporting it as measurement.** Every other entry
+> in this family lies by being correct about a different SUBJECT; this one is correct about
+> **itself**. It is the limit case of *every instrument that lies, lies by being correct
+> about something else*, and it needs no context to teach.
+
+The tell is the one this section already gives — **name the file by the run that produced
+it**, not by recency, not by whatever handle the harness left lying around. A background
+task's output file is a transcript of *your commands*, and a gate log is a transcript of *the
+gate*; the two are never interchangeable and they are both plain text.
+
+### And the load half of "do not touch the instrument while it is measuring"
+
+The same session ran **the conformance census and the gate concurrently on one box**, then
+read a `self-host fixedpoint` RED and nearly reported it as its own. The RED was real — a
+sibling had landed `11c8d3e45` in `compiler/` and the checkout had not rebuilt; pull, rebuild,
+green. **The correct diagnosis and the concurrency were independent, and the session said so
+rather than crediting itself.**
+
+Worth adding explicitly, because the rule is usually read as being about EDITS: **two heavy
+jobs on one machine is inside "do not touch the instrument while it is measuring" too.**
+Nothing was edited, no tree moved under anything — but a timing-sensitive verdict was taken
+off a loaded box, and had the stale binary not been a genuine independent cause, a wrong
+attribution would have been the *expected* outcome rather than a near miss. **Serialise the
+heavy job and the gate, or say in the report that they overlapped.**
+
 ## A PROBE CAN BE DRAWN FROM A POPULATION WHERE THE MACHINERY NEVER RUNS — and the obvious simplification is usually that probe
 
 Measured 2026-09-05 (frankB, corpus rung 6b). It is the third member of the
@@ -12416,3 +12453,93 @@ reports none.** A corpus comparison will flag it as a divergence, and under CLAU
 you did not expect is not a defect) it is arguably the better answer. **A feature landing can
 turn a green corpus row red without anything breaking**, and the disposition belongs to the
 corpus owner rather than to whoever measured it.
+
+## "REFUSED AT THE RIGHT TOKEN" AND "DOES NOT SUPPORT THE TOKEN AT ALL" ARE THE SAME PASS — the discriminator is a probe of the SAME CONSTRUCT WHERE IT IS LEGAL
+
+Measured 2026-09-06 (frankS, `62749a0a6`), auditing the 12 syntax-shaped `%FAIL` refusals
+left over from the unit-source gate. **Six of the twelve are vacuous.**
+
+**The method is the finding, and it is one line.** For each row: compile it, take the
+refusal, then **write the same construct somewhere it is LEGAL and compile that too.**
+
+> **Without the second probe, *"refused at the right token"* and *"the token is not supported
+> at all"* are indistinguishable — and BOTH print PASS on a `%FAIL` row.** The row asserts
+> that the compile is rejected, never *which* rejection, so a construct we have simply never
+> implemented satisfies every negative test it appears in, forever.
+
+This is the unit gate one aperture down. **The unit case asked what KIND of file it is; this
+asks whether the construct is supported at all.** Same guard-that-cannot-fail, one level
+finer, and the corpus contained both at once.
+
+### The six, each with what actually refused it
+
+| row | its stated subject | what the probe found |
+| --- | --- | --- |
+| `tgeneric100`, `tgeneric101` | (generics) | refused **inside `ugeneric99.pp`**, a USED unit — their own source is never reached |
+| `tclass14a` | *`stored` is invalid on a CLASS property* | an ordinary `published property … stored False`, which FPC accepts, is **also refused**: `stored` is unsupported outright |
+| `tclass10b` | *a visibility section after `type` resets the section* | **`private type` is ACCEPTED, `type private` is not** — FPC takes both, so the row dies before its own construct |
+| `tclass17`, `terecs21` | *`threadvar` not allowed in a class* | a **program-level** `threadvar` is refused — unsupported at any scope |
+
+**The first pair is its own sub-shape and the sneakiest:** a row refused inside a `uses`d
+unit never reaches its own source, so the file being audited is not the file being compiled.
+**A negative row can be satisfied by a file it merely mentions.**
+
+The other six clear their probes properly. `toperator7` is the clean specimen worth keeping
+as the positive control: its source is literally `AValue = 1;` under `// this construction
+must fail`, and pxx answers `expected ':=' before '='`. **Exactly the rule, exactly the
+token.**
+
+### The disposition, and why the audit paid for itself twice
+
+**None were re-refused to keep them green.** Re-refusing is the move that destroys the
+evidence — see `## "IT PASSED AT THE PIN" AND "IT PASSED FOR THE REASON IT NAMES"`: the red
+is the signal that a feature LANDED.
+
+**Three compat gaps fell out, and that is the actual value.** Each was measured by a probe on
+code **FPC accepts**, so each is a real gap rather than an inference from a refusal: `stored`
+on a property (p45), `threadvar` (p40), `type <visibility>` ordering (p25). `stored` ranks
+highest because it is a **streaming** attribute and `lib/pcl` is our own widget set — a form
+that round-trips through us cannot currently say *do not persist this property*.
+
+**Each new ticket names the row it was propping up.** That is the part to copy: closing the
+gap is then also the **trigger to re-measure that row**, rather than leaving a green whose
+reason changed. A gap ticket that does not name its vacuous row leaves the row green for a
+new wrong reason.
+
+## A NET THAT TWO CHANGES MOVED IN OPPOSITE DIRECTIONS IS NOT A MEASUREMENT OF EITHER — and predicting it from the half you measured gets the SIGN wrong
+
+Measured 2026-09-06, and the wrong prediction is this file's coordinator's.
+
+The unit gate removes rows from the pass count. I measured that half — *"up to 9 rows that
+previously counted as PASSES are now gated"* — and told the corpus ticket's owner the next
+census would **read lower** than the 368 on record, suggesting an annotation saying so. The
+census was then taken (`63350e13c`):
+
+```
+377 pass, 0 fail, 123 skip, 50 auto-gated (of 550)
+at e929e720f, compiler d1d15deee084       (the ticket recorded 368)
+```
+
+**Up, not down.** And even the subtraction I had was low: **17** rows gate as `unit-source`,
+not 9, because non-`%FAIL` unit rows gate too. The generic-method work landing in the same
+window added more than the gate removed.
+
+> **A net moved by two changes in opposite directions carries no information about either
+> one, and a prediction of its SIGN from one side is a coin toss dressed as an inference.**
+
+**The annotation I proposed would have been actively misleading** — *"this census predates
+the unit gate"* reads as *the 368 was inflated*, and on net it was **understated**. Which is
+the durable half:
+
+> **An annotation is a claim about a number nobody has re-read. Re-measuring costs one run
+> and retires the claim instead of restating it.** Prefer the measurement; if you cannot
+> take it, say what you did not measure rather than which way it moved.
+
+**The holder did the honest thing with the result and it is the model:** the 377 is a **net
+and was explicitly NOT decomposed**, because separating *newly gated* from *newly passing*
+requires the old runner at the old commit. `--report` now writes a **per-row TSV**, so the
+next delta is a **diff rather than a re-derivation** — which is the general repair for this
+whole class. **A scalar cannot be decomposed after the fact; a per-row record can.**
+
+Footnote worth having beside the number: **`0 fail` across all 550**, `tgeneric4` and
+`tgenfunc13` the last two.
