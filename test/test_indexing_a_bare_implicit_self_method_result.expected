@@ -1,0 +1,8 @@
+bare expr  = Z
+bare stmt  = A
+set test   = FALSE
+dyn result = 20
+cls result = 77
+self qual  = Z
+outside    = Z
+global fn  = A

@@ -8683,10 +8683,40 @@ begin
               end;
               Expect(tkRParen, ')');
             end;
-            { trailing `.field` / `[i]` on a class/record method result }
+            { A SUFFIX ON THE RESULT — and the RETURN-TYPE LIST HERE WAS THE BUG.
+              This asked `RetType = tyClass or tyRecord` and dropped the suffix
+              for every other kind, so a bare implicit-Self call to a method
+              returning a STRING lost its `[i]`: `CurTokenText[1]` inside a
+              TPasParser method died as `expected ')' before '['` in an
+              expression and `a statement cannot start with '['` in a statement.
+              Two diagnostics, neither about the method's return type, which is
+              what the defect actually was. fcl-passrc pparser.pp:2468.
+
+              THREE SIBLING SPELLINGS OF THE SAME CALL ALREADY WORKED and that
+              is how the enumeration is visible at all: `Self.CurTokenText[1]`,
+              `p.CurTokenText[1]` and a bare global `GT[1]` all index correctly
+              today. Only the implicit-Self spelling has its own list — every
+              other route reaches ApplyCallResultPtrSuffix, which
+              pasparser_lval.inc calls "the ONE materialisation point for a
+              suffix on a call RESULT" and which handles `.`, `[`, `^` and `(`
+              over strings, arrays, pointers and metaclasses alike.
+
+              So this is not a widened list, it is the arm joining the funnel:
+              the class/record branch keeps ParseClassRecordSelectors because
+              that walker needs the receiver's ci, and everything else goes
+              where the parenless-routine arm twenty lines above already goes,
+              unguarded and for the same reason. A list that has to grow a
+              member per return kind, with no diagnostic when it does not, is
+              the shape that produced this one.
+              bug-p-indexing-the-result-of-a-bare-implicit-self-method-call }
             if (mpi >= 0) and (CurTok.Kind in [tkDot, tkLBrack]) and
                ((Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord)) then
-              mcallNode := ParseClassRecordSelectors(mcallNode, ProcRetRecId[mpi], tk);
+              mcallNode := ParseClassRecordSelectors(mcallNode, ProcRetRecId[mpi], tk)
+            else if mpi >= 0 then
+            begin
+              ApplyCallResultPtrSuffix(mcallNode, mpi);
+              mcallNode := CurASTNode;
+            end;
             CurASTNode := mcallNode;
             node := mcallNode;
           end;

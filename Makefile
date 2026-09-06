@@ -7423,6 +7423,30 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_routine_local_var_array_initializer \
 	  "$$($(TESTTMP)/test_lvarrinit26)" \
 	  "$$(cat test/test_a_routine_local_var_array_initializer.expected)"
+	@# INDEXING THE RESULT OF A BARE IMPLICIT-SELF METHOD CALL. The implicit-Self
+	@# dispatch applied a trailing selector only when the method returned tyClass
+	@# or tyRecord, so `CurTokenText[1]` inside a method lost its `[`: `expected
+	@# ')' before '['` in an expression, `a statement cannot start with '['` in a
+	@# statement -- two diagnostics, neither about a return type, which is what
+	@# the defect was. The arm now joins ApplyCallResultPtrSuffix, which
+	@# pasparser_lval.inc calls the ONE materialisation point for a suffix on a
+	@# call RESULT; the class/record branch stays because that walker needs the
+	@# receiver's ci.
+	@# THE THREE CONTROLS ARE THE SPELLINGS THAT ALREADY WORKED and all three
+	@# were MEASURED at the unfixed binary: Self.Txt[2], p.Txt[2] from outside,
+	@# and a bare global GT[1] each indexed correctly before the change. One
+	@# spelling of four behaving differently is what an enumerated list looks
+	@# like from outside, and it is the only reason this was findable.
+	@# The `dyn` and `cls` rows are the kinds either side of the old list and
+	@# were measured separately: at the unfixed binary a bare dyn-array result
+	@# failed and a bare class result printed 77. dyn must now work; cls must
+	@# not move. Every row asserts a character or a value -- the funnel can also
+	@# index the WRONG thing, and "it compiles" cannot tell that from a fix.
+	@# fcl-passrc pparser.pp:2468, which advanced to :4768.
+	@./$(COMPILER) test/test_indexing_a_bare_implicit_self_method_result.pas $(TESTTMP)/test_bareselfidx26
+	@tools/expect_same.sh test_indexing_a_bare_implicit_self_method_result \
+	  "$$($(TESTTMP)/test_bareselfidx26)" \
+	  "$$(cat test/test_indexing_a_bare_implicit_self_method_result.expected)"
 	@# THE MEMBER-LOOP TERMINI, BOTH OF THEM, and they are two rows because they
 	@# are two arms with DIFFERENT allow-lists. Each used to be a bare `else
 	@# Next` that discarded any unrecognised token in silence: a class body
