@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 7d7h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `c69b52b6ea35` | 2026-09-06T17:51:50Z | RED (native) | 178.8s | `77f298a17d86` RED |
+| seven | `c69b52b6ea35` | 2026-09-06T18:02:17Z | RED (full) | 600.8s | `c69b52b6ea35` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `77f298a17d86` on seven, 2026-09-06T17:47:03Z (4m ago).**
+**Newest full tier in the fleet: `c69b52b6ea35` on seven, 2026-09-06T18:02:17Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `77f298a17d86` | RED | 4m | — (newest) |
+| seven | `c69b52b6ea35` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 7d7h | 7d7h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -118,7 +118,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
   </details>
 - **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `2a4cd0bcf664`, last good `c1fe3e414d25`, 5 commit(s) in range
 - **test-core#src:test/test_promoint_bitwise.pas** — test/test_promoint_bitwise.pas tools/expect_same.sh (seven): bad `0aff068c6d08`, last good `bb18f83c859e`, 2 commit(s) in range
-- **test-i386#src:examples/chess/chess.pas** — examples/chess/chess.pas tools/expect_same.sh +1 (seven): bad `33bf8f7badd4`, last good `bb18f83c859e`, 7 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
