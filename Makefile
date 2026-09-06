@@ -7415,10 +7415,14 @@ test-core: $(COMPILER)
 	@# rows went red and none was local. Every element the file asserted was a
 	@# string, a small integer or a class reference, all of which survive a
 	@# narrowing to 32 bits intact, so it stayed green at any width. Both values
-	@# are chosen so truncation is not silent: 35.75's IEEE low word is exactly
-	@# zero (a lost high word reads 0.00, not a near-miss) and 6000000000 mod
-	@# 2^32 = 1705032704. Re-narrowing the parameter was measured to fail exactly
-	@# these four rows and no others.
+	@# EVERY value is chosen so truncation is not silent, which is stronger than
+	@# "big": 35.75's IEEE low word is exactly zero (a lost high word reads 0.00,
+	@# not a near-miss); High(Int64) cannot survive ANY narrowing, truncating to
+	@# -1; and 6000000000 is kept beside it because it is the value the real
+	@# regression produced (mod 2^32 = 1705032704). The trap specific to width is
+	@# that the wrong answer is a PLAUSIBLE NUMBER rather than a zero or a crash,
+	@# so it survives eyeballing as well as a weak assertion. Re-narrowing the
+	@# parameter was measured to fail exactly these four rows and no others.
 	@./$(COMPILER) test/test_a_routine_local_var_array_initializer.pas $(TESTTMP)/test_lvarrinit26
 	@tools/expect_same.sh test_a_routine_local_var_array_initializer \
 	  "$$($(TESTTMP)/test_lvarrinit26)" \

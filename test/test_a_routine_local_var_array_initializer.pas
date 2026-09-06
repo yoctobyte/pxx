@@ -51,12 +51,18 @@ var GNames: array[TCC] of string = ('', 'register', 'cdecl');
   only meant to pass through. Three test-core rows went red and none of them was
   local. Every element above is a string, a small integer or a class reference:
   all of them survive a narrowing to 32 bits intact, so the file was green.
-  BOTH VALUES ARE CHOSEN SO TRUNCATION IS NOT SILENT. 35.75's IEEE low word is
-  exactly zero, so a lost high word reads 0.00 rather than a near-miss; and
-  6000000000 mod 2^32 = 1705032704, nowhere near it. A value whose high word is
-  already zero would pass either way. }
+  EVERY VALUE IS CHOSEN SO TRUNCATION IS NOT SILENT, and that is a stronger
+  requirement than "big". 35.75's IEEE low word is exactly zero, so a lost high
+  word reads 0.00 rather than a near-miss. High(Int64) cannot survive ANY
+  narrowing (it truncates to -1), where 6000000000 only survives none wider than
+  32 bits — both are here because the second is the value the real regression
+  produced and the first is the one that fails under more narrowings for the
+  same one row. A value whose high word is already zero would pass either way,
+  and the trap specific to width is that the wrong answer is a PLAUSIBLE NUMBER
+  rather than a zero or a crash, so it survives eyeballing as well as it
+  survives a weak assertion. }
 var GDbl: array[0..1] of Double = (35.75, -1.5);
-var GQwd: array[0..1] of Int64  = (6000000000, -6000000000);
+var GQwd: array[0..1] of Int64  = (6000000000, High(Int64));
 
 function LocalStrings(c: TCC): string;
 var Names: array[TCC] of string = ('', 'register', 'cdecl');
@@ -97,9 +103,9 @@ begin
 end;
 
 function LocalQwd: Int64;
-var Q: array[0..1] of Int64 = (6000000000, -6000000000);
+var Q: array[0..1] of Int64 = (High(Int64), -6000000000);
 begin
-  LocalQwd := Q[0] + Q[1] + Q[0];
+  LocalQwd := Q[0] + Q[1];
 end;
 
 { CONTROL 2: the local CONST spelling, which already worked }
