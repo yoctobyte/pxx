@@ -5503,101 +5503,6 @@ begin
     end;
 end;
 
-procedure ParseCastTargetSuffix(var valNode: Integer; var castTk: TTypeKind;
-                                var castRec: Integer;
-                                castElemTk, castElemRec: Integer;
-                                aliasSeeded: Boolean);
-{ The `^` / `.field` / `[i]` chain after a TYPECAST used as an assignment
-  target. ONE body for the record-name spelling and the pointer-alias one,
-  which had it twice, character for character apart from the `^` arm.
-
-  `^` is answered here because what a cast's pointee IS depends on the cast;
-  everything else -- `.field`, `[i]`, an N-D or jagged subscript, a property,
-  a chain of them -- goes to ParseClassRecordSelectors, the node-keyed walker
-  the expression side and the call-result path already share. Growing a
-  subscript arm here instead would have made another copy of a walk this
-  ticket exists to remove (devdocs/dev/normalise-dont-special-case.md).
-
-  `aliasSeeded` is the ONE thing the two callers disagree about, and it is a
-  fact about the CAST, not a preference:
-
-    False -- a record-name cast. The pointee is the cast's own record, known
-             here, and there is no alias row for ResolveDerefShape to read
-             (the node carries ival 0, which would index alias 0).
-    True  -- a pointer-alias or PChar cast. The alias row carries the whole
-             triple (depth, base kind, base rec), so the resolver is asked.
-
-  AFTER DELEGATION THE SEED IS NEVER THE ANSWER, in both modes: the value in
-  hand is then a FIELD and its pointee has nothing to do with the cast.
-  `TA(b).pi^ := 7` and `PA(q)^.pi^ := 7`, both with `pi: ^Integer`, were each
-  refused for exactly that -- "incompatible types: cannot assign Integer to
-  record", the TARGET typed as the cast's record. The same store off a plain
-  variable, `b.pi^ := 7`, was right throughout, which is the control saying it
-  is the cast arm and not the shape.
-
-  The PChar ADAPTER (ival -2) carries no alias row at all, so the resolver
-  falls to its final else and answers tyInteger -- and tyInteger/REC_NONE/0/0
-  is BOTH the decline signature and a true answer, so the test cannot tell
-  them apart. That is why the restore is gated on `not stDelegated` as well:
-  a default that is also a real answer cannot signal "not applicable", so the
-  membership question needs its own bit.
-  refactor-p-one-lvalue-path-for-statements-and-expressions
-  refactor-p-three-hand-rolled-postfix-loops }
-var
-  fieldNode, prevTok: Integer;
-  remDepth, baseTk, baseRec: Integer;
-  delegated: Boolean;
-begin
-  delegated := False;
-  while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
-  begin
-    if CurTok.Kind = tkCaret then
-    begin
-      Next;
-      fieldNode := AllocNode(AN_DEREF);
-      ASTLeft[fieldNode] := valNode;
-      if aliasSeeded or delegated then
-      begin
-        remDepth := 0; baseTk := Ord(tyUnknown); baseRec := REC_NONE;
-        if not delegated then
-        begin
-          castTk := IntToTypeKind(castElemTk); castRec := castElemRec;
-        end;
-        ResolveDerefShape(valNode, castTk, castRec, remDepth, baseTk, baseRec);
-        ASTSOffset[fieldNode] := remDepth;
-        ASTSLen[fieldNode]    := baseTk;
-        if baseRec > 0 then ASTIVal[fieldNode] := baseRec;
-        if aliasSeeded and (not delegated) and
-           (castTk = tyInteger) and (castRec = REC_NONE) and
-           (remDepth = 0) and (baseRec <= 0) then
-        begin
-          castTk  := IntToTypeKind(castElemTk);
-          castRec := castElemRec;
-        end;
-        ASTTk[fieldNode] := Ord(castTk);
-      end
-      else
-      begin
-        ASTIVal[fieldNode] := castRec;   { pointee rec for ResolveNodeRec }
-        castTk := tyRecord;
-        ASTTk[fieldNode] := Ord(tyRecord);
-      end;
-      valNode := fieldNode;
-    end
-    else
-    begin
-      prevTok := TokPos;
-      valNode := ParseClassRecordSelectors(valNode, castRec, castTk);
-      castRec := ResolveNodeRec(valNode);
-      delegated := True;
-      { The walker consumes the whole chain it can, so a second turn of this
-        loop only happens for a following `^`. If it consumed NOTHING the loop
-        would spin, so stop rather than hang. }
-      if TokPos = prevTok then Break;
-    end;
-  end;
-end;
-
 { Defined just below; ParseCastAsLValueStore is its `(` -consuming wrapper and
   the FPC seed build is single-pass, so the forward is mandatory rather than a
   style choice. }
@@ -5701,13 +5606,14 @@ var
   slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
   slCastTk: TTypeKind;   { ...and the kind that decided it }
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
-  aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
-  castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
-  castElemTk: Integer; pcharCast: Boolean;   { PChar(p)^ := c as a statement target }
-  castElemRec: Integer;   { the alias's own row, kept for the adapter fallback }
-  { castDerefRem / castDerefBaseTk / castDerefBaseRec / stDelegated LEFT THIS
-    BLOCK with the two hand-rolled cast-target walks -- they are locals of
-    ParseCastTargetSuffix now, which is the only thing that ever read them. }
+  castPrevTok, qUnit: Integer;
+  castFieldName: AnsiString; castTk: TTypeKind;
+  { aliasIdx / fieldNode / indexNode / castRec / castElemTk / castElemRec /
+    pcharCast, and before them castDerefRem / castDerefBaseTk /
+    castDerefBaseRec / stDelegated, all LEFT THIS BLOCK with the two
+    hand-rolled cast-target walks. Nothing in this routine holds a cast's shape
+    any more: the expression parser does.
+    refactor-p-one-lvalue-path-for-statements-and-expressions }
   lfTmp, lfCall, lfAsn: Integer;   { LoadFile into a non-identifier destination — see its parse arm }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
@@ -7954,7 +7860,9 @@ begin
           end;
 
           if (node = -1) and (Tokens[TokPos].Kind = tkLParen) and
-             ((IsRecordType(name) <> REC_NONE) or (FindTypeAlias(name) >= 0)) then
+             ((IsRecordType(name) <> REC_NONE) or (FindTypeAlias(name) >= 0) or
+              (BuiltinPtrNameElemTk(name) <> tyUnknown) or
+              CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar')) then
           begin
             { A cast-headed statement handed WHOLE to the expression parser,
               which already builds this chain correctly -- it is what the right
@@ -8059,243 +7967,21 @@ begin
             end;
           end;
 
+          { The pointer-alias cast-target arm that stood here is GONE, and with
+            it ParseCastTargetSuffix, its last caller. Same subsumption as the
+            record-name arm: this one was entered on FindTypeAlias >= 0, on
+            EnsureBuiltinPtrAlias minting a row for a BUILT-IN pointer name, or
+            on the PChar adapter -- and the delegation above now asks those
+            three questions itself (BuiltinPtrNameElemTk is the pure predicate
+            EnsureBuiltinPtrAlias is built on, so the guard mints nothing).
+
+            THE FIRST HALF OF THIS MERGE LEFT THIS ARM ALIVE AND A CANARY IS
+            WHY: with the guard still asking FindTypeAlias alone, a canary here
+            fired during the self-host itself. With the guard widened it is
+            silent -- through the self-host, the 44-row target differential and
+            a 57-row before/after over the repo's own cast-target fixtures.
+            refactor-p-one-lvalue-path-for-statements-and-expressions }
           if node = -1 then
-          begin
-            { C4: pointer-type-alias cast as lvalue statement — PFoo(expr)^.field := val }
-            aliasIdx := FindTypeAlias(name);
-            { ...and, only if that missed, a BUILT-IN pointer name -- the exact
-              fallback the EXPRESSION site has (pasparser_expr.inc, "C4"), in
-              the exact order, because the ordering is load-bearing: registering
-              the builtins up front shadows a source declaration and silently
-              re-types this compiler's own `PWord = ^NativeInt`
-              (bug-pascal-builtin-pointer-type-cast).
-
-              Without it `PInteger(p)^ := 42;` was "undefined variable
-              (PInteger)" while `WriteLn(PInteger(p)^)` on the line above
-              compiled, and the five names that did work as targets -- PByte,
-              PWord, PInt32, PInt64, PDouble -- were exactly the five declared
-              for real in the always-linked prelude, i.e. found by FindTypeAlias
-              like any source alias. One concept, two lookup paths, and the
-              second one never got the fallback.
-              bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target }
-            if (aliasIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
-              aliasIdx := EnsureBuiltinPtrAlias(name);
-            { PChar is not in that table and never was: the expression site
-              builds it as the -2 ADAPTER, which skips a string operand's inline
-              length prefix, and a plain `^Char` alias would write into the
-              handle instead. So the statement target takes the same adapter,
-              spelled the same way. }
-            pcharCast := (aliasIdx < 0) and (Tokens[TokPos].Kind = tkLParen) and
-                         (CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar'));
-            if ((aliasIdx >= 0) or pcharCast) and (Tokens[TokPos].Kind = tkLParen) then
-            begin
-              Next; { consume alias name }
-              Expect(tkLParen, '(');
-              ParseExpr;
-              Expect(tkRParen, ')');
-              indexNode := AllocNode(AN_PTR_CAST);
-              ASTLeft[indexNode] := CurASTNode;
-              if pcharCast then
-              begin
-                ASTIVal[indexNode] := -2;   { the PChar adapter }
-                castElemTk := Ord(tyChar);
-                castRec := REC_NONE;
-              end
-              else
-              begin
-                ASTIVal[indexNode] := aliasIdx;
-                castElemTk := AliasElemTk[aliasIdx];
-                castRec := AliasElemRec[aliasIdx];
-              end;
-              ASTTk[indexNode]   := Ord(tyPointer);
-              castTk  := tyPointer;
-              valNode := indexNode;
-              { A NON-POINTER alias over a MANAGED STRING is not a pointer cast,
-                and treating it as one corrupted memory in silence.
-
-                This arm's own heading says "pointer-type-alias cast as lvalue",
-                but it is entered on FindTypeAlias, which finds EVERY named type
-                alias, and then stamps AN_PTR_CAST / tyPointer unconditionally.
-                For `type TS = AnsiString; TS(s) := 'z'` that stores a managed
-                string through a pointer-shaped target: the descriptor is written
-                raw and the refcount release/addref is skipped entirely.
-                Measured against fpc 3.2.2 -- FPC prints `len=3 [zzz]`, pxx
-                printed `len=1073741824` and then walked off into the heap, with
-                NO diagnostic, which is the expensive class.
-
-                SCOPED TO WHAT WAS MEASURED, deliberately. `type TI = Integer;
-                TI(i) := 5` and the Char alias BOTH already agree with FPC
-                through this same arm on the pinned compiler, so they are left
-                on it -- widening to every non-pointer alias is a bigger change
-                than the evidence supports, and it broke the suffixed spelling
-                `TS(s)[2] := 'X'` when tried (that shape is a separate, still-open
-                bug, and it stays exactly as it was rather than trading a silent
-                wrong value for a new parse error).
-
-                The cast is dropped rather than reinterpreted because for a
-                managed string through a non-pointer alias there is nothing to
-                reinterpret: `TS(s) := v` means `s := v`. Guarded on tkAssign so
-                only the whole-value target is taken and every suffixed shape
-                still reaches the walk below untouched.
-                refactor-p-one-lvalue-path-for-statements-and-expressions }
-              if (not pcharCast) and (aliasIdx >= 0) and
-                 (AliasPtrDepth[aliasIdx] = 0) and
-                 (CurTok.Kind = tkAssign) and
-                 ((ASTTk[ASTLeft[indexNode]] = Ord(tyAnsiString)) or
-                  (ASTTk[ASTLeft[indexNode]] = Ord(tyString))) and
-                 IsASTLValue(ASTLeft[indexNode]) then
-              begin
-                valNode := ASTLeft[indexNode];   { drop the AN_PTR_CAST wrapper }
-                Expect(tkAssign, ':=');
-                ParseExpr;
-                node := AllocNode(AN_ASSIGN);
-                ASTLeft[node] := valNode;
-                ASTRight[node] := CurASTNode;
-                ParseStatementAST := node;
-                Exit;
-              end;
-              { ...and the OTHER operand kind through the same string alias,
-                which is the reinterpret rather than the no-op: `type t =
-                AnsiString; var p: Pointer; t(p) := 'abc'`. The arm above tests
-                the operand for a STRING and drops the cast; a POINTER slot
-                needs the opposite, a store at the CAST's width, which is
-                exactly what the BUILT-IN spelling `AnsiString(p) := 'abc'`
-                already does two arms up through ParseCastAsLValueStore.
-
-                ONE STORE, TWO SPELLINGS, ONE OF THEM TAUGHT -- the same seam as
-                the rvalue half of this ticket, and visible in the builtin arm's
-                own guard, which excludes an alias name (`FindTypeAlias(name) <
-                0`) and hands it here. Measured before and after: `t(q) :=
-                'abc'` then `Length(AnsiString(q))` answered 1073741824 and now
-                answers 3, while `AnsiString(q) := 'abc'` answered 3 throughout.
-
-                THE TICKET SAID THE STORE WAS ALREADY CORRECT AND IT IS CORRECT
-                ONLY FOR A STRING VARIABLE SOURCE. `t(p) := s` writes the live
-                payload pointer, so `p = Pointer(s)` is TRUE and every read
-                works -- which is the shape that was measured. `t(p) := 'abc'`
-                with a LITERAL source does not, and the two differ by nothing
-                visible at the call site.
-                bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer }
-              if (not pcharCast) and (aliasIdx >= 0) and
-                 (AliasPtrDepth[aliasIdx] = 0) and
-                 (CurTok.Kind = tkAssign) and
-                 ((AliasTk[aliasIdx] = Ord(tyAnsiString)) or
-                  (AliasTk[aliasIdx] = Ord(tyString))) and
-                 (ASTTk[ASTLeft[indexNode]] = Ord(tyPointer)) and
-                 IsASTLValue(ASTLeft[indexNode]) then
-              begin
-                ParseStatementAST :=
-                  FinishCastAsLValueStore(ASTLeft[indexNode],
-                                          IntToTypeKind(AliasTk[aliasIdx]));
-                Exit;
-              end;
-              { ...and the SUFFIXED spelling of the same mistake,
-                `TS(s)[2] := 'X'`, which the guard above deliberately does not
-                take (it tests tkAssign, the whole-value target). It arrived at
-                the walk below still wrapped in AN_PTR_CAST/tyPointer, so the
-                subscript indexed a POINTER with no element type and the store
-                went nowhere: measured, `s` came back unchanged where fpc 3.2.2
-                prints `hXllo`, with no diagnostic. That silence is why this was
-                ranked above its loudly-refusing siblings.
-
-                Same remedy as the rvalue twin in pasparser_expr.inc: drop the
-                wrapper and hand the STRING to the shared walk, which reads the
-                base kind off the node and already answers tyChar for `[i]` on a
-                string. Scoped exactly like the guard above -- a non-pointer
-                alias over a managed string, and an lvalue operand.
-                bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index }
-              if (not pcharCast) and (aliasIdx >= 0) and
-                 (AliasPtrDepth[aliasIdx] = 0) and
-                 (CurTok.Kind = tkLBrack) and
-                 ((ASTTk[ASTLeft[indexNode]] = Ord(tyAnsiString)) or
-                  (ASTTk[ASTLeft[indexNode]] = Ord(tyString))) and
-                 IsASTLValue(ASTLeft[indexNode]) then
-              begin
-                valNode    := ASTLeft[indexNode];
-                castTk     := IntToTypeKind(ASTTk[valNode]);
-                castElemTk := Ord(tyChar);
-                castRec    := REC_NONE;
-              end;
-              { Handle the ^ / .field / [i] suffix chain.
-
-                This walk was the LAGGARD of the six postfix pointer walks in
-                the Pascal frontend, and it was behind on BOTH axes at once --
-                each gap reachable, and each already fixed on a sibling copy:
-
-                - The token set was [tkCaret, tkDot], with no `[`. So
-                  `PRec(raw)^.a[0] := 42` stopped at the subscript and reported
-                  `Expected: :=, but got: [`, while the identical RVALUE parsed
-                  fine. That is the SAME defect the record-name cast twin a few
-                  lines above already fixed
-                  (bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed)
-                  -- this is its alias-name sibling, which was never grepped for
-                  when that one was closed. Same remedy, deliberately: hand `.`
-                  and `[` to ParseClassRecordSelectors rather than grow a
-                  hand-rolled subscript arm here, which would have made a
-                  seventh copy of a walk we are trying to remove.
-
-                - The `^` arm typed EVERY level from the outer alias's immediate
-                  pointee and stamped no shape at all, so a second `^` never
-                  descended: `PPRec(raw)^^.b := 99` compiled clean and stored 99
-                  at the WRONG ADDRESS -- the target kept its old value and
-                  nothing was reported. The alias row has carried the whole
-                  triple (AliasPtrDepth / AliasPtrBaseTk / AliasPtrBaseRec) all
-                  along, and ResolveDerefShape has had an AN_PTR_CAST arm that
-                  reads it; this walk simply never asked. The three stamps below
-                  are exactly the ones the rvalue twin in pasparser_expr.inc
-                  writes, for the same readers.
-                refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend }
-              castElemRec := castRec;
-              ParseCastTargetSuffix(valNode, castTk, castRec,
-                                    castElemTk, castElemRec, True);
-              { THE DELEGATED WALK MAY HAVE PERFORMED THE WHOLE STORE.
-                ParseClassRecordSelectors asks PropAccessIsWrite for itself, and
-                when the target is a property it emits the SETTER call and
-                consumes the `:=` and the value with it. Both cast arms then ran
-                `Expect(tkAssign)` on a token that was no longer there, so
-                `PTC(raw)^.P := 21`, `PTC(raw)^.A[2] := 22` and
-                `PTC(raw)^[3] := 23` were all refused with `expected ':=' before
-                ';'` -- fpc accepts all three, and all three are correct through
-                the plain-variable spelling `pc^...`. Pre-dates pin v403.
-
-                The convention is the one this file already uses ~150 lines
-                below for the non-cast spellings: A CALL NODE IN TARGET POSITION
-                IS THE STATEMENT. The extra conjunct is what makes it sound
-                here, and the three cases are worth spelling out because the
-                node kind alone does not separate them:
-
-                  - a property STORE: call node, `:=` consumed -> the statement
-                  - a bare `PTC(raw)^.Proc;`: call node, no `:=` -> also the
-                    statement, and this arm used to refuse it
-                  - `PTC(raw)^.Func := 5`: call node, `:=` STILL THERE -> falls
-                    through to Expect and builds an AN_ASSIGN over the call,
-                    which is refused. MEASURED, not assumed: before this change
-                    that spelling reported `IR_UNSUPPORTED ... could not lower
-                    AST node (kind 8)` -- an internal error for a user mistake,
-                    identical on the pin -- because the single-exit guard tests
-                    the RETURNED node for being a call and here the returned
-                    node is the ASSIGN. Extended at that guard rather than here,
-                    so every branch that builds an assign over a call is
-                    covered; `o.GetV := 5` and `pc^.GetV := 5` already said
-                    "cannot assign to the result of a function call" and still
-                    do.
-
-                So the test is "did the `:=` survive", which is the same fact a
-                consumed-assignment out-parameter would carry, read off the one
-                place that cannot disagree with itself -- the token stream.
-                refactor-p-one-lvalue-path-for-statements-and-expressions }
-              if ASTNodeIsCall(valNode) and (CurTok.Kind <> tkAssign) then
-                node := valNode
-              else
-              begin
-                Expect(tkAssign, ':=');
-                ParseExpr;
-                node := AllocNode(AN_ASSIGN);
-                ASTLeft[node]  := valNode;
-                ASTRight[node] := CurASTNode;
-              end;
-            end
-            else
             begin
               if qUnit >= 0 then
                 idx := FindSymInUnit(name, qUnit)
@@ -8602,7 +8288,6 @@ begin
                 ASTRight[node] := CurASTNode;
               end;
             end;
-          end;
         end;
       end;
     end;

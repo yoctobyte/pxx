@@ -811,7 +811,6 @@ AN_DEREF Left node
 AN_DEREF Left operand
 AN_DEREF Left ptrNode
 AN_DEREF Left slotAddr
-AN_DEREF Left valNode
 AN_DYN_COPY Left ASTLeft[argsHead]
 AN_DYN_COPY Left exprNode
 AN_DYN_COPY Left node

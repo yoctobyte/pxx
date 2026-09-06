@@ -5,7 +5,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-status: working
+status: done
 owner: frankA
 created: 2026-08-24
 summary: "An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does."
@@ -765,3 +765,50 @@ positive control.
 - The pointer-alias statement arm itself, which needs the delegation guard to
   ask the same question `EnsureBuiltinPtrAlias` answers rather than
   `FindTypeAlias` alone.
+
+## 2026-09-06 (second half) — the arm the canary kept alive is dead now, and the guard is why
+
+The partial merge was partial because the **guard was narrower than the arm**,
+not because the arm could do anything the delegation could not. Widening it to
+the arm's own three entry conditions —
+
+```
+(IsRecordType(name) <> REC_NONE) or (FindTypeAlias(name) >= 0) or
+(BuiltinPtrNameElemTk(name) <> tyUnknown) or
+CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar')
+```
+
+— makes it subsumption rather than resemblance: `BuiltinPtrNameElemTk` is the
+pure predicate `EnsureBuiltinPtrAlias` is built on (its first line, and its only
+reason to return -1), so the guard decides exactly what the arm decided and mints
+nothing while deciding it.
+
+**The same canary, two answers, and the difference is one line of guard.** With
+the narrow guard it fired during the self-host and named the missing disjunct.
+With the wide guard it is silent — self-host, the 44-row target differential,
+the 57-row before/after. That is what a canary is good for and it is *all* it is
+good for: it proves REACH. The before/after is what proves the replacement is
+EQUIVALENT, and the first half of this merge is the case in point — the canary
+was silent, the arm really was dead, and the merge still landed a regression on
+a shape the differential caught (`PA(q)^.pi^`).
+
+Deleted: the pointer-alias cast-target arm (224 lines) and
+`ParseCastTargetSuffix` (95 more, last caller). `aliasIdx`, `fieldNode`,
+`indexNode`, `castRec`, `castElemTk`, `castElemRec` and `pcharCast` leave
+`ParseStatementAST`'s var block; nothing in that routine holds a cast's shape any
+more.
+
+Both string sub-arms went with it and **were already dead at `f56d42898`** —
+`FindTypeAlias >= 0` was in the guard from the first half — so `TS(s) := 'z'` and
+`t(p) := 'abc'` over a Pointer slot have been served by the expression path since
+then, with `test_a_string_alias_cast_over_a_pointer_slot`,
+`test_string_alias_cast_index` and `test_alias_cast_assign_target` green
+throughout. Their rationale lives in those tests and in
+[[bug-p-a-string-alias-cast-over-a-pointer-slot-is-a-no-op-and-reads-the-pointer]];
+the arm was the third place it had been written down.
+
+**Done.** There is one lvalue path for a cast-headed assignment target and it is
+the expression parser.
+
+## Log
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
