@@ -104,5 +104,5 @@ did — which prices it out of the objection this ticket was filed to avoid, and
 why the fleet-wide question the filer declined to answer did not need answering.
 
 ## Log
-- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 88156a7c3.
 - **The change that resolves this is `ef96b48f8` (frankS), not the resolve commit above** — verified `git merge-base --is-ancestor ef96b48f8 origin/master` TRUE. The sibling half is NOT resolved and moved to [[task-t-two-standalone-checks-are-written-and-unwired-price-them-together]] so frankA's `c1961bc63` does not die inside a closed ticket.
