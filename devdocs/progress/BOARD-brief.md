@@ -70,6 +70,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 85] [T]` regression-test-core-c-crtl-wait (unblocks 1)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
+- `[p 80] [P]` bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [T]` bug-t-the-named-rollback-target-cannot-build-the-tree-it-would-roll-back-to
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
@@ -97,6 +98,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [B]` feature-b-getfpcheapstatus-needs-always-on-heap-accounting (unblocks 1)
 - `[p 65] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
-- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
 _366 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

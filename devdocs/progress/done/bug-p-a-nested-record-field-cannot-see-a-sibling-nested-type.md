@@ -88,11 +88,15 @@ behaviour existed and was lost), and the pre-fix binary refuses to compile it.
 
 Corpus rung 6a (`generics.defaults`) advances from `:1107 unknown type:
 PSpoofInterfacedTypeSizeObject` to `:1865`. It is **still red**, on a second and
-unrelated regression in the same window — `statement is neither a call nor an
-assignment` on `PP(Self)^.__ClassRef.GetHashList(...)`, a class method reached
-through a class-reference field, in statement position. The pin compiles that,
-so it is a regression too, and it is not this one. Reproducer parked in
-`bug-p-a-class-method-through-a-class-ref-field-is-not-a-statement`.
+unrelated regression in the same window: a class method reached through a
+class-REFERENCE field is parsed as a FIELD READ. The statement spelling errors
+with `statement is neither a call nor an assignment`; the EXPRESSION spelling
+**compiles and silently yields garbage** — `r := PP(p)^.__ClassRef.Val(3)`
+printed `r=-86205216` with the method never entered, where fpc 3.2.2 and pin
+v404 both print `SIDE called n=3` and 42. The pin is correct, so it is a
+regression too, and it is not this one. Reproducer, measured cause (the parser
+returns `AN_FIELD` with the `(` unconsumed) and a bisect recipe are in
+`bug-p-a-class-method-through-a-class-ref-field-is-parsed-as-a-field-read`.
 
 **The ladder had recorded rung 6a green and nobody re-ran it** — the file's own
 standing lesson, which is why the first thing this session did with the ticket
