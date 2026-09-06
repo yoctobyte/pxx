@@ -100,7 +100,7 @@ begin
     its own twin anyway -- PyParseClassRecordSelectors -- so this is the region
     carve holding, not an exception being carved.
     bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
-  if (not PyExprMode) and (CurTok.Kind in [tkDot, tkLBrack, tkCaret]) then
+  if (not PyExprMode) and (CurTok.Kind in [tkDot, tkLBrack, tkCaret, tkLParen]) then
   begin
     ApplyCallResultPtrSuffix(callIndNode, sigPi);
     BuildIndirectCallAST := CurASTNode;
@@ -1908,11 +1908,31 @@ begin
         to it is the "one materialisation point" this ticket asked for; it is
         also why the two spellings could drift apart in the first place.
 
-        AN_CALL_IND is excluded on purpose — its IVal is a signature, not a
-        Procs[] index, so there is no return shape to read.
-        compat-pascal-index-a-function-call-result }
-      if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+        AN_CALL_IND USED TO BE EXCLUDED HERE, AND THE REASON GIVEN WAS FALSE:
+        "its IVal is a signature, not a Procs[] index, so there is no return
+        shape to read". A signature row IS a Procs[] index -- ParseProcTypeSignature
+        returns a RegisterProc('$proctype') row -- which BuildIndirectCallAST's own
+        note forty lines above this file's top already said in as many words. Two
+        comments in one file, disagreeing, and this was the one a reader would act
+        on. `r.fn()[1]` for a record field of type `function: TIntArr` answered
+        `IR_UNSUPPORTED ... kind 53` where fpc 3.2.2 prints 6; the proc-VARIABLE
+        spelling `f()[1]` was correct, because that one goes through
+        BuildIndirectCallAST and reaches the suffix handoff.
+
+        THE EXCLUSION WAS HARMLESS UNTIL AN HOUR AGO AND ONLY THEN BECAME A BUG.
+        The ProcRet* array columns were never filled on a signature row, so the
+        gate below (`ProcRetIsDynArray or ProcRetFixedArrBytes > 0`) was false for
+        every AN_CALL_IND anyway and the wrong reason cost nothing. Filling those
+        columns is what made the kind reachable -- so a comment that had been
+        false since it was written started mattering the moment an unrelated hole
+        was closed.
+
+        ASTNodeIsCall rather than a hand-written list, for the third time in this
+        commit: its own note says the test was copied five times and the copies
+        drifted, and this arm is one of the copies.
+        compat-pascal-index-a-function-call-result
+        bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+      if ASTNodeIsCall(node) and
          (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
          (ProcRetIsDynArray[ASTIVal[node]] or (ProcRetFixedArrBytes[ASTIVal[node]] > 0)) then
       begin
@@ -5341,9 +5361,14 @@ begin
         25769803781 (0x600000005 — elements 0 and 1 read as one 8-byte word)
         where the pinned compiler still said IR_UNSUPPORTED. One materialisation
         point serves all three spellings.
-        compat-pascal-index-a-function-call-result }
-      if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+
+        …and AN_CALL_IND now comes with ASTNodeIsCall rather than being excluded:
+        see the twin arm earlier in this file for why the exclusion's stated
+        reason was false and why it only started costing anything once a
+        procedural type's signature row began carrying its array columns.
+        compat-pascal-index-a-function-call-result
+        bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+      if ASTNodeIsCall(node) and
          (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
          (ProcRetIsDynArray[ASTIVal[node]] or (ProcRetFixedArrBytes[ASTIVal[node]] > 0)) then
       begin
@@ -5597,6 +5622,38 @@ begin
   remDepth := ProcRetPtrDepth[procIdx];
   ptrBaseTk := ProcRetPtrBaseTk[procIdx];
   ptrBaseRec := ProcRetPtrBaseRec[procIdx];
+
+  { CALLING WHAT THE CALL RETURNED -- `fo()(41)` for `TOuter = function: TInner`,
+    and `MkOuter()(41)`, the direct spelling of the same thing. fpc 3.2.2 answers
+    42 for both; pxx refused both with `expected ')' before '('`.
+
+    THE SUFFIX SET WAS A CLOSED-WORLD CLAIM AND `(` WAS THE MEMBER NOBODY LISTED.
+    `.`, `[` and `^` are what you can do to a returned VALUE; `(` is what you can
+    do to a returned ROUTINE. It needs no materialisation at all -- the result IS
+    the code address, so it is the callee node of one more indirect call, and
+    `f()()()` falls out because BuildIndirectCallAST comes back here.
+
+    HERE, not at the callers, and that is the whole point of this procedure: the
+    ticket recorded `MkOuter()(41)` as a DIRECT-call CONTROL that already worked,
+    and the control row is what proved it did not. One arm in the one
+    materialisation point fixes the direct and the indirect spelling together;
+    an arm at BuildIndirectCallAST would have greened the ticket's own repro and
+    left its control red, which is the shape of a one-site fix wearing a full
+    green.
+
+    ProcRetProcSig is the fact this asks, and it was already filled on a
+    procedural type's signature row -- the READER was missing, not the column. A
+    `procedure of object` result is a 16-byte {Code,Data} record, so the inner
+    call takes the method-pointer shape by the same test its callers use.
+    bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+  if (CurTok.Kind = tkLParen) and (procIdx >= 0) and (procIdx < ProcCount) and
+     (ProcRetProcSig[procIdx] >= 0) and (ProcRetProcSig[procIdx] < ProcCount) then
+  begin
+    CurASTNode := BuildIndirectCallAST(node, ProcRetProcSig[procIdx],
+                                       Procs[procIdx].RetType = tyRecord);
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    Exit;
+  end;
 
   { A METACLASS-returning function is a RECEIVER, not a pointer whose fields you
     walk: `Give.Kind`, `Give.ClassName`, `Give.Create`. The pointer walk below

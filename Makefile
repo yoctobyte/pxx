@@ -6869,6 +6869,33 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_delphi_mode_binds_a_bare_routine_name.pas $(TESTTMP)/test_delphibare26
 	@$(TESTTMP)/test_delphibare26 | diff -u test/test_delphi_mode_binds_a_bare_routine_name.expected - \
 	  || { echo 'test_delphi_mode_binds_a_bare_routine_name: FAIL - the {$$mode delphi} @-optional binding moved'; exit 1; }
+	@# A PROCEDURAL TYPE'S RETURN SHAPE. ParseProcTypeSignature parsed its return
+	@# with a bare ParseTypeKind, which answers the ELEMENT kind for an array alias
+	@# and cannot parse `array of T` at all, so the six array columns were never
+	@# filled on the signature row -- and ApplyCallResultPtrSuffix reads exactly
+	@# those. `fp(3)[2]` and `fq(4)[2]` were refused; `fo()(41)` too. fpc 3.2.2
+	@# answers 14, 12 and 42.
+	@# EVERY ROW HAS ITS DIRECT-CALL CONTROL, and one of those controls is the
+	@# reason this file is shaped the way it is: the ticket asserted `MkOuter()(41)`
+	@# already worked and it did NOT. An arm at the indirect builder greens the
+	@# ticket's own repro and leaves its control red, so the arm went into
+	@# ApplyCallResultPtrSuffix -- the one materialisation point -- instead.
+	@# ROWS G AND H ARE THE SILENT HALF: indexing was REFUSED, but `b := fq(4)`
+	@# COMPILED and answered 4310400 0 0 against fpc's 104 204 304, on pin v404 too.
+	@# A file asserting only the indexed spellings goes green with that still
+	@# broken. Every element is printed because element 0 alone passes.
+	@# ROWS L AND M ARE A THIRD BUILDER: a proc-VARIABLE call goes through
+	@# BuildIndirectCallAST and reaches the shared suffix handoff, while a record
+	@# FIELD and an array ELEMENT each build their AN_CALL_IND inline and land in
+	@# the postfix loop's index arm, which excluded AN_CALL_IND on a false stated
+	@# reason. `rc.fn()[1]` answered IR_UNSUPPORTED kind 53 while `fp(3)[1]` on the
+	@# identical signature was correct. Rows A..K are green with these broken.
+	@# ORACLE IS `fpc -Mobjfpc`: fpc 3.2.2 raises an INTERNAL COMPILER ERROR on
+	@# `fn := fo()` under -Mdelphi and compiles the identical program under
+	@# -Mobjfpc. Isolated to that one statement, not inferred from a line number.
+	./$(COMPILER) test/test_a_procedural_type_returns_an_array_or_another_routine.pas $(TESTTMP)/test_proctyperet26
+	@$(TESTTMP)/test_proctyperet26 | diff -u test/test_a_procedural_type_returns_an_array_or_another_routine.expected - \
+	  || { echo 'test_a_procedural_type_returns_an_array_or_another_routine: FAIL - a procedural type lost its return shape, or a call result stopped being callable'; exit 1; }
 	./$(COMPILER) test/test_a_distinct_type_is_a_different_type_for_overloads.pas $(TESTTMP)/test_distincttype26
 	@# .expected is fpc 3.2.2's own output, byte for byte.
 	@# ROWS C..J ARE CONTROLS AND WERE GREEN BEFORE THE FIX, and they are the

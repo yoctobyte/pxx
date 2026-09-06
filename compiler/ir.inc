@@ -12312,8 +12312,23 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                 (SymStrCap) and are handled below. }
               (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
               (not rhsIsLValue) and
-              ((ASTKind[ASTRight[node]] = AN_CALL) or
-               (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL)) and
+              { ASTNodeIsCall, not a hand-written pair. This was the SIXTH copy of
+                "which node kinds are a call" and it knew two of the five: an
+                INDIRECT call through a procedural type (`b := fq(4)` for
+                `TF3 = function(k: Integer): TA3`) fell through to the scalar
+                store and printed `4310400 0 0` where fpc prints `104 204 304` --
+                silently, and on pin v404 too. The helper's own note says it
+                exists because the test was copied five times and the copies
+                drifted; this arm is the sixth and it drifted the same way.
+                A guard built by ENUMERATING kinds goes wrong by the kind nobody
+                listed, and its author's test file is drawn from the kinds they
+                listed, so it is green by construction.
+                Only AN_CALL_IND is MEASURED here; AN_CLASS_VIRTUAL_CALL and
+                AN_INTF_CALL come with the helper rather than from a repro, and
+                all five carry a Procs[] index in ASTIVal -- a signature row IS
+                one -- which is what the three guards below already require.
+                bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+              ASTNodeIsCall(ASTRight[node]) and
               (ASTIVal[ASTRight[node]] >= 0) and
               (ASTIVal[ASTRight[node]] < ProcCount) and
               (ProcRetFixedArrBytes[ASTIVal[ASTRight[node]]] > 0) then

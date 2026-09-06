@@ -5105,6 +5105,224 @@ begin
   Result := FindUClassInUnit(mem, u);
 end;
 
+procedure ParseFuncReturnTypeShape(var retType: TTypeKind;
+                                   var retIsDynArr: Boolean;
+                                   var retDynDepth: Integer;
+                                   var retElemTk: TTypeKind;
+                                   var retElemRec: Integer;
+                                   var retFixedArrBytes: Integer;
+                                   var retArrAi: Integer;
+                                   var retEnumId: Integer;
+                                   var retSetEnumId: Integer;
+                                   var retSetElemTk: Integer;
+                                   var retStrElemTk: Integer;
+                                   var retRecId: Integer;
+                                   var retProcSig: Integer;
+                                   var retPtrElemTk: Integer;
+                                   var retPtrStrElemTk: Integer;
+                                   var retPtrElemRec: Integer;
+                                   var retPtrDepth: Integer;
+                                   var retPtrBaseTk: Integer;
+                                   var retPtrBaseRec: Integer;
+                                   var retPtrAlias: Integer);
+{ A FUNCTION'S RETURN TYPE AND EVERY FACT THE DECLARATION RECORDS ABOUT IT.
+  CurTok is on the type; on return it is past it. Every out-parameter must be
+  initialised by the caller -- this only OVERWRITES what the type says, exactly
+  as the inline version did.
+
+  Lifted whole out of ParseSubroutine 2026-09-06 rather than copied into the
+  second caller, because copying is what produced the ticket.
+  ParseProcTypeSignature parsed its return with a bare ParseTypeKind, which
+  answers the ELEMENT kind for an array alias and cannot parse `array of T` at
+  all -- so the six array columns (IsDynArray, DynDepth, FixedArrBytes, ArrAi,
+  ElemTk, ElemRec) were never filled on a procedural type's signature row, and
+  ApplyCallResultPtrSuffix reads exactly those to pick its arm. `fp(3)[2]` and
+  `fq(4)[2]` were refused with `expected ")" before "["` where fpc 3.2.2 answers
+  14 and 12. The DIRECT-call spelling of each was measured working throughout,
+  which is what says this is the signature path and not the feature.
+  bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type
+
+  THE ENUM/SET/STRING/RECORD/POINTER ARMS COME WITH IT AND ARE NOT OPTIONAL.
+  Each reads a LastType* channel that only the type just parsed leaves
+  meaningful, and each carries its own array guard because an array result
+  arrives with retType = the ELEMENT kind and is indistinguishable at that line
+  from a scalar of the element type. Taking the parse without them is how a
+  caller ends up recording an array result as an enum, which is the shape of
+  three of the four dropped fields this function has already produced. }
+var paramAi: Integer;
+begin
+  if CurTok.Kind = tkArray then
+  begin
+    { `array of T` result: a pointer-sized dynamic-array handle. retType holds
+      the element type so the result is non-aggregate; the dyn-array nature is
+      tracked separately in ProcRetIsDynArray. }
+    Next;
+    Expect(tkOf, 'of');
+    retType := ParseTypeKind;
+    retIsDynArr := True;
+    retDynDepth := 1;
+    retElemTk := retType;
+    retElemRec := LastTypeRecId;
+  end
+  else if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
+          ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
+  begin
+    { Named dynamic-array type alias as the result (e.g. TByteArray =
+      array of Byte): same handle ABI as a literal `array of T` result, so
+      Result is a resizable dyn-array local (SetLength/indexing work). }
+    paramAi := FindArrayType(CurTok.SVal);
+    retType := ParseTypeKind;            { consume the alias name }
+    retIsDynArr := True;
+    retDynDepth := ArrTypeDynDepth[paramAi];
+    if retDynDepth < 1 then retDynDepth := 1;
+    retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
+    retElemRec := ArrTypeElemRec[paramAi];
+    { The one restore that lands in LOCALS rather than the LastTypePointer*
+      channel, so it cannot use LoadPointeeFromArrType -- but it wants the
+      same six facts, and it was carrying three. retPtrDepth/BaseTk/BaseRec
+      are declared beside the others and threaded to ProcRetPtr* below; a
+      `function F: TPtrArr` returning `array of PPC` answered depth 0 over
+      tyUnknown for its elements without these.
+      bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref }
+    retPtrElemTk  := ArrTypePtrElemTk[paramAi];
+    retPtrStrElemTk := ArrTypePtrElemStrTk[paramAi];
+    retPtrElemRec := ArrTypePtrElemRec[paramAi];
+    retPtrDepth   := ArrTypePtrDepth[paramAi];
+    retPtrBaseTk  := ArrTypePtrBaseTk[paramAi];
+    retPtrBaseRec := ArrTypePtrBaseRec[paramAi];
+  end
+  else
+  begin
+    { A named FIXED-array result (`function F: TArr` where TArr =
+      array[0..2] of Integer). ParseTypeKind answers the ELEMENT kind, so
+      without recording the aggregate here the result looked like a plain
+      Integer: no hidden destination was allocated, the callee returned
+      element 0 in a register and the caller stored that one scalar —
+      `a := MkArr` gave `8 0 0` where FPC gives `8 9 10`, silently.
+      Measured against FPC, 2026-08-09.
+      bug-a-set-and-array-function-results-come-back-empty }
+    if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
+       not ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
+    begin
+      { The 32-bit pair does not carry it yet: measured, i386 and arm32 both
+        fault on the hidden-destination call for an array result even with the
+        whole path wired (arm32 faulted BEFORE this work too — the shape has
+        never worked there). Refuse with a diagnostic rather than emit a call
+        that crashes: on arm32 that replaces a SIGSEGV, and on i386 it says
+        plainly what its old "arrays not yet supported" meant.
+        bug-a-fixed-array-function-result-faults-on-i386-and-arm32 }
+      paramAi := FindArrayType(CurTok.SVal);
+      retArrAi := paramAi;
+      { ArrTypeLo/Hi are the FLATTENED bounds for an N-D alias too (the type
+        decl stores 0..prod(spans)-1), so this byte count covers both. }
+      retFixedArrBytes := (ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1) *
+                          TypeSlotSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
+    end;
+    if retArrAi >= 0 then
+    begin
+      { An array-type alias is NOT in the scalar alias table, so ParseTypeKind
+        falls through its unknown-name default and answers tyInteger. That is
+        right by accident for `array of Integer` and wrong for every other
+        element: `array[0..2] of string[8]` and `array[0..2] of TRec` both
+        returned an Integer-strided Result, so the callee's own
+        `MkR[2].a := 5` landed mid-element. Take the element type from the
+        ArrType entry, as ParseVarSection does for a variable of the alias. }
+      retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
+      LastTypeRecId := ArrTypeElemRec[retArrAi];
+      LoadPointeeFromArrType(retArrAi);
+      if (retType = tyFixedString) or (retType = tyShortString) then
+        LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
+      { NOT nested under the frozen-string guard above -- deliberately a
+        separate statement, and now indented like one. 6cf371d817 wrote it at
+        the inner level, where it read as though the frozen-string arm gated
+        it. A MANAGED string element (tyAnsiString) has a width but no
+        capacity, so it must restore the channel on a path where that arm
+        does not fire at all. Correct but misindented is one begin/end away
+        from being neither. }
+      if ArrTypeStrElemTk[retArrAi] <> 0 then
+        LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
+      Next;   { consume the alias name ParseTypeKind would have eaten }
+    end
+    else
+      retType := ParseTypeKind;
+    { Only a type just parsed by ParseTypeKind leaves a meaningful
+      LastTypeEnumId. An ARRAY result reaches here with retType = the ELEMENT
+      kind and whatever enum the last unrelated parse left behind, and the
+      RESULT of such a call is an array, not an enum value — so it gets -1
+      rather than its element's identity. }
+    if retType = tyInteger then
+    begin
+      if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
+      else retEnumId := LastTypeEnumId;
+    end;
+    { The SET result's element identity, under exactly the rule the enum arm
+      above states and for the same reason: an ARRAY result reaches here with
+      retType = the ELEMENT kind, so `function F: array of TMs` would be
+      indistinguishable at this line from `function F: TMs`. The result of the
+      first is an array and records no set element type -- that belongs to the
+      array type's own row.
+
+      THIS IS THE SIXTH CARRIER AND IT NEVER EXISTED. LastTypeSetEnumId and
+      LastTypeSetElemTk are set by ParseTypeKind for every set type and were
+      dropped on the floor here, so a set RESULT was the one place in this
+      frontend that could not answer what its elements are -- while a
+      variable, a record field, a property, a parameter and a type alias all
+      could. }
+    if retType = tySet then
+    begin
+      if (retArrAi >= 0) or retIsDynArr then
+      begin
+        retSetEnumId := -1; retSetElemTk := 0;
+      end
+      else
+      begin
+        retSetEnumId := LastTypeSetEnumId;
+        retSetElemTk := LastTypeSetElemTk;
+      end;
+    end;
+    { The managed-string RESULT's element width, under exactly the rule the
+      enum arm states above and for the same reason: an ARRAY result reaches
+      here with retType = the ELEMENT kind, so `function F: array of
+      AnsiString` is indistinguishable at this line from `function F:
+      AnsiString`. The RESULT of the first is an array, not a string, and
+      records no width -- the ELEMENTS' width is the array type's business
+      (ArrTypeStrElemTk), not the result's. Getting this exact distinction
+      wrong on the PARAMETER side broke the self-host fixedpoint earlier in
+      6c: Syms[].ElemType for an `array of AnsiString` param legitimately IS
+      tyAnsiString, and overwriting it with tyChar retyped the elements to a
+      1-byte stride. }
+    if retType = tyAnsiString then
+    begin
+      if (retArrAi >= 0) or retIsDynArr then retStrElemTk := 0
+      else if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
+      else retStrElemTk := Ord(tyChar);
+    end;
+    if (retType = tyRecord) or (retType = tyClass) then
+      retRecId := LastTypeRecId;
+    { …and the procedural SIGNATURE the same alias carries, for exactly the
+      same reason retRecId is captured here: a `procedure of object` return
+      type is a tyRecord whose call signature lives in LastTypeProcSig, and a
+      plain `procedure` return type is a tyPointer with the same. Without it
+      the implicit Result symbol is allocated from the return KIND alone and
+      comes out as a plain record/pointer var, so every consumer that asks
+      "is this lvalue a procedural value?" by testing SymProcSig >= 0 answers
+      no for Result and yes for a declared local of the identical type.
+      bug-p-result-is-not-a-method-pointer-lvalue }
+    if (retType = tyRecord) or (retType = tyPointer) then
+      retProcSig := LastTypeProcSig;
+    if retType = tyPointer then
+    begin
+      retPtrElemTk := Ord(LastTypePointerElemTk);
+      retPtrStrElemTk := LastTypePointerStrElemTk;
+      retPtrDepth := LastTypePointerDepth;
+      retPtrBaseTk := LastTypePointerBaseTk;
+      retPtrBaseRec := LastTypePointerBaseRec;
+      retPtrElemRec := LastTypePointerElemRec;
+      retPtrAlias := LastTypePointerAlias;
+    end;
+  end;
+end;
+
 function ParseProcTypeSignature: Integer;
 { `procedure(...)` / `function(...): R` — the SIGNATURE only, from the keyword
   up to (not including) any `of object`. Returns the body-less Procs[] index
@@ -5121,6 +5339,18 @@ var
   mIsFunc, mDoneArgs, mIsByRef, mSawConst, mDoneParam, mIsArr: Boolean;
   mNParams, mStartIdx, mpi, i: Integer;
   mRetType, mTk: TTypeKind;
+  { The return shape, in the same twenty locals ParseSubroutine keeps, so the
+    shared ParseFuncReturnTypeShape can fill them and every ProcRet* column is
+    written from ONE place per path rather than from whichever LastType* channel
+    happened to survive. This function had already dropped six of them.
+    bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+  mRetIsDynArr: Boolean;
+  mRetElemTk: TTypeKind;
+  mRetDynDepth, mRetElemRec, mRetFixedArrBytes, mRetArrAi: Integer;
+  mRetEnumId, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk: Integer;
+  mRetRecId, mRetProcSig: Integer;
+  mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec: Integer;
+  mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias: Integer;
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -5131,6 +5361,18 @@ begin
       Next;
       mNParams := 0;
       mRetType := tyInteger;
+      { Exactly ParseSubroutine's own initial values -- ParseFuncReturnTypeShape
+        only OVERWRITES what the type says, so a `procedure` (no return type at
+        all) must leave every column at the same neutral value a routine's does. }
+      mRetIsDynArr := False; mRetElemTk := tyUnknown; mRetElemRec := REC_NONE;
+      mRetDynDepth := 0;
+      mRetFixedArrBytes := 0; mRetArrAi := -1;
+      mRetSetEnumId := -1; mRetSetElemTk := 0;
+      mRetStrElemTk := 0; mRetEnumId := -1;
+      mRetRecId := REC_NONE; mRetProcSig := -1;
+      mRetPtrElemTk := Ord(tyUnknown); mRetPtrElemRec := REC_NONE; mRetPtrAlias := -1;
+      mRetPtrStrElemTk := 0;
+      mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
       if CurTok.Kind = tkLParen then
       begin
         Next;
@@ -5181,87 +5423,76 @@ begin
       if mIsFunc then
       begin
         Expect(tkColon, ':');
-        mRetType := ParseTypeKind;
+        ParseFuncReturnTypeShape(mRetType, mRetIsDynArr, mRetDynDepth, mRetElemTk,
+                                 mRetElemRec, mRetFixedArrBytes, mRetArrAi,
+                                 mRetEnumId, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk,
+                                 mRetRecId, mRetProcSig,
+                                 mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec,
+                                 mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias);
       end;
       mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
       Procs[mpi].BodyAddr := -1;
-      { Record the return pointer-element type on the signature (mRetType was the
-        last type parsed above, so LastTypePointerElem* still describe it). Without
-        this a `T = function(...): PAnsiChar` sig leaves ProcRetPtrElemTk at
-        tyUnknown, so IsNodePChar can't tell an indirect call through T returns
-        char* and `AnsiString(fp(...))` mis-lowers. Same dropped-field pattern as
-        the external-decl path. See bug-pascal-ansistring-cast-of-fnptr-call-result. }
-      if mIsFunc and (mRetType = tyAnsiString) then
-      begin
-        if LastTypeStrElemTk = tyWideChar then ProcRetStrElemTk[mpi] := Ord(tyWideChar)
-        else ProcRetStrElemTk[mpi] := Ord(tyChar);
-      end;
-      { …and the ENUM identity of an enum-typed result, which is the same dropped
-        field again. A call node has no symbol and no field to ask (ProcRetEnumId's
-        own note in defs.inc says so), so the callee's row is the only place it
-        can live -- and a procedural type's row did not carry it. Measured against
-        fpc 3.2.2: `Writeln(fp(1))` for `TF = function(k: Integer): TCol` printed
-        **1** where FPC prints **cGreen**, while the DIRECT call `Writeln(Pick(1))`
-        printed cGreen on both. Silent wrong OUTPUT, no diagnostic. The
-        array-result guard ParseSubroutine's copy carries is not needed here: this
-        path cannot parse an array return type at all (see the census note below).
+      { EVERY ProcRet* COLUMN, FROM THE SHARED PARSE ABOVE -- not one at a time
+        from whichever LastType* channel survived. Read the same order
+        ParseSubroutine writes them in; a column missing from this block is a
+        column a procedural type cannot answer about its own result.
 
-      …and the return RECORD/CLASS id, which is the SAME dropped field one type
-        kind over, in the function whose own note above already names two
-        instances of the pattern. `T = function(k: Integer): TR` left
-        ProcRetRecId at REC_NONE, so an indirect call through T knew it returned
-        a record and not WHICH record.
+        THE HISTORY IS THE ARGUMENT FOR WRITING IT THIS WAY. This one function
+        dropped SIX columns and each was found separately, by its own
+        silent-wrong-value bug, over five weeks:
 
-        It did not refuse -- it answered. `h.fn(8).c` resolved REC_NONE, found no
-        field, and applied `.c` at OFFSET 0: 8 where FPC prints 24, silently, and
-        `arr[0](8).c` the same. The via-a-local spelling `r := h.fn(8)` was
-        correct throughout because the DESTINATION carries the record there and
-        nothing has to ask the signature. That is why this was invisible until a
-        suffix asked the one question the row could not answer.
-        bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
-      if mIsFunc and (mRetType = tyInteger) then
-        ProcRetEnumId[mpi] := LastTypeEnumId;
-      if mIsFunc and ((mRetType = tyRecord) or (mRetType = tyClass)) then
-        ProcRetRecId[mpi] := LastTypeRecId;
-      { …and the SIGNATURE of a result that is itself procedural, so `fo()(41)`
-        is an indirect call through what `fo()` returned. Same dropped field,
-        same shape: `TOuter = function: TInner` was refused outright with
-        `expected ')' before '('` where FPC answers 42. The C frontend has filled
-        this column since it was added (ProcRetProcSig's note names the C spelling
-        `fty go(void)`); the Pascal signature path never did.
+          StrElemTk   `AnsiString(fp(...))` mis-lowered -- a PAnsiChar result
+                      left ProcRetPtrElemTk at tyUnknown so IsNodePChar could
+                      not tell an indirect call returns char*.
+                      bug-pascal-ansistring-cast-of-fnptr-call-result
+          EnumId      `Writeln(fp(1))` printed 1 where fpc prints cGreen, while
+                      the DIRECT call printed cGreen on both. A call node has no
+                      symbol and no field to ask, so the callee row is the only
+                      place the identity can live.
+          RecId       `h.fn(8).c` resolved REC_NONE, found no field, and applied
+                      `.c` at OFFSET 0: 8 where fpc prints 24. It did not
+                      refuse -- it answered. `r := h.fn(8)` was correct
+                      throughout because the DESTINATION carries the record
+                      there and nothing has to ask the signature.
+                      bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
+          ProcSig     `fo()(41)` refused outright where fpc answers 42.
+          IsDynArray/DynDepth/ElemTk/ElemRec and FixedArrBytes/ArrAi
+                      `fp(3)[2]` and `fq(4)[2]` refused with `expected ")"
+                      before "["` where fpc answers 14 and 12. These six needed
+                      the array-return PARSE this path did not have, which is
+                      why they outlived the other four: the column was not
+                      merely unwritten, the value was unobtainable.
 
-        CENSUS, run 2026-09-04 after this function's third dropped field in a row
-        turned out to be a live silent-wrong-value bug. ParseSubroutine (the
-        ordinary routine header) fills all 17 ProcRet* columns; the three
-        declaration paths here fill the same 11 and drop the same 6. Measured one
-        by one, each against its own DIRECT-call control:
+        A CENSUS FOUND THE LAST SIX, NOT A REPORT (2026-09-04, after the third
+        dropped field in a row): ParseSubroutine fills all 17, the three
+        declaration paths here filled the same 11 and dropped the same 6. The
+        one row the census cleared is worth keeping -- RecId on
+        ParseRecordMethodDecl is NOT reachable, because a record method's row is
+        filled again when its BODY goes through ParseSubroutine, and only a
+        declaration-ONLY routine (an interface method) stays unfilled. A real
+        asymmetry in the matrix that is not a defect.
 
-          EnumId            LIVE  prints the ordinal, not the enum name
-          ProcSig           LIVE  `fo()(41)` refused
-          IsDynArray/DynDepth/ElemTk/ElemRec
-                            LIVE  `fp(3)[2]` refused -- needs the array-return
-                                  parse this path does not have, so it is filed
-                                  rather than fixed here
-          FixedArrBytes/ArrAi
-                            LIVE  `fp(4)[2]` refused -- same cause, same ticket
-          RecId on ParseRecordMethodDecl
-                            NOT reachable: `v.M(8).c` already answers 24, because
-                            the METHOD BODY goes through ParseSubroutine and fills
-                            the row there. A real asymmetry that is not a defect.
-
-        bug-p-a-procedural-type-cannot-return-an-array is the remaining half. }
-      if mIsFunc and ((mRetType = tyPointer) or (mRetType = tyRecord)) then
-        ProcRetProcSig[mpi] := LastTypeProcSig;
-      if mIsFunc and (mRetType = tyPointer) then
-      begin
-        ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
-        ProcRetPtrAlias[mpi] := LastTypePointerAlias;
-        ProcRetPtrElemStrTk[mpi] := LastTypePointerStrElemTk;
-        ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
-        ProcRetPtrDepth[mpi] := LastTypePointerDepth;
-        ProcRetPtrBaseTk[mpi] := LastTypePointerBaseTk;
-        ProcRetPtrBaseRec[mpi] := LastTypePointerBaseRec;
-      end;
+        Sharing the parse is what closes the class rather than the seventh
+        instance of it. }
+      ProcRetIsDynArray[mpi] := mRetIsDynArr;
+      ProcRetDynDepth[mpi] := mRetDynDepth;
+      ProcRetFixedArrBytes[mpi] := mRetFixedArrBytes;
+      ProcRetArrAi[mpi] := mRetArrAi;
+      ProcRetElemTk[mpi] := mRetElemTk;
+      ProcRetElemRec[mpi] := mRetElemRec;
+      ProcRetSetEnumId[mpi] := mRetSetEnumId;
+      ProcRetSetElemTk[mpi] := mRetSetElemTk;
+      ProcRetStrElemTk[mpi] := mRetStrElemTk;
+      ProcRetEnumId[mpi] := mRetEnumId;
+      ProcRetRecId[mpi] := mRetRecId;
+      ProcRetProcSig[mpi] := mRetProcSig;
+      ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+      ProcRetPtrAlias[mpi] := mRetPtrAlias;
+      ProcRetPtrElemStrTk[mpi] := mRetPtrStrElemTk;
+      ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
+      ProcRetPtrDepth[mpi] := mRetPtrDepth;
+      ProcRetPtrBaseTk[mpi] := mRetPtrBaseTk;
+      ProcRetPtrBaseRec[mpi] := mRetPtrBaseRec;
       for i := 0 to mNParams-1 do
       begin
         Procs[mpi].Params[i].IsArray := mPArr[i];

@@ -1134,176 +1134,19 @@ begin
   if isFunc then
   begin
     Expect(tkColon, ':');
-    if CurTok.Kind = tkArray then
-    begin
-      { `array of T` result: a pointer-sized dynamic-array handle. retType holds
-        the element type so the result is non-aggregate; the dyn-array nature is
-        tracked separately in ProcRetIsDynArray. }
-      Next;
-      Expect(tkOf, 'of');
-      retType := ParseTypeKind;
-      retIsDynArr := True;
-      retDynDepth := 1;
-      retElemTk := retType;
-      retElemRec := LastTypeRecId;
-    end
-    else if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
-            ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
-    begin
-      { Named dynamic-array type alias as the result (e.g. TByteArray =
-        array of Byte): same handle ABI as a literal `array of T` result, so
-        Result is a resizable dyn-array local (SetLength/indexing work). }
-      paramAi := FindArrayType(CurTok.SVal);
-      retType := ParseTypeKind;            { consume the alias name }
-      retIsDynArr := True;
-      retDynDepth := ArrTypeDynDepth[paramAi];
-      if retDynDepth < 1 then retDynDepth := 1;
-      retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
-      retElemRec := ArrTypeElemRec[paramAi];
-      { The one restore that lands in LOCALS rather than the LastTypePointer*
-        channel, so it cannot use LoadPointeeFromArrType -- but it wants the
-        same six facts, and it was carrying three. retPtrDepth/BaseTk/BaseRec
-        are declared beside the others and threaded to ProcRetPtr* below; a
-        `function F: TPtrArr` returning `array of PPC` answered depth 0 over
-        tyUnknown for its elements without these.
-        bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref }
-      retPtrElemTk  := ArrTypePtrElemTk[paramAi];
-      retPtrStrElemTk := ArrTypePtrElemStrTk[paramAi];
-      retPtrElemRec := ArrTypePtrElemRec[paramAi];
-      retPtrDepth   := ArrTypePtrDepth[paramAi];
-      retPtrBaseTk  := ArrTypePtrBaseTk[paramAi];
-      retPtrBaseRec := ArrTypePtrBaseRec[paramAi];
-    end
-    else
-    begin
-      { A named FIXED-array result (`function F: TArr` where TArr =
-        array[0..2] of Integer). ParseTypeKind answers the ELEMENT kind, so
-        without recording the aggregate here the result looked like a plain
-        Integer: no hidden destination was allocated, the callee returned
-        element 0 in a register and the caller stored that one scalar —
-        `a := MkArr` gave `8 0 0` where FPC gives `8 9 10`, silently.
-        Measured against FPC, 2026-08-09.
-        bug-a-set-and-array-function-results-come-back-empty }
-      if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
-         not ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
-      begin
-        { The 32-bit pair does not carry it yet: measured, i386 and arm32 both
-          fault on the hidden-destination call for an array result even with the
-          whole path wired (arm32 faulted BEFORE this work too — the shape has
-          never worked there). Refuse with a diagnostic rather than emit a call
-          that crashes: on arm32 that replaces a SIGSEGV, and on i386 it says
-          plainly what its old "arrays not yet supported" meant.
-          bug-a-fixed-array-function-result-faults-on-i386-and-arm32 }
-        paramAi := FindArrayType(CurTok.SVal);
-        retArrAi := paramAi;
-        { ArrTypeLo/Hi are the FLATTENED bounds for an N-D alias too (the type
-          decl stores 0..prod(spans)-1), so this byte count covers both. }
-        retFixedArrBytes := (ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1) *
-                            TypeSlotSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
-      end;
-      if retArrAi >= 0 then
-      begin
-        { An array-type alias is NOT in the scalar alias table, so ParseTypeKind
-          falls through its unknown-name default and answers tyInteger. That is
-          right by accident for `array of Integer` and wrong for every other
-          element: `array[0..2] of string[8]` and `array[0..2] of TRec` both
-          returned an Integer-strided Result, so the callee's own
-          `MkR[2].a := 5` landed mid-element. Take the element type from the
-          ArrType entry, as ParseVarSection does for a variable of the alias. }
-        retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
-        LastTypeRecId := ArrTypeElemRec[retArrAi];
-        LoadPointeeFromArrType(retArrAi);
-        if (retType = tyFixedString) or (retType = tyShortString) then
-          LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
-        { NOT nested under the frozen-string guard above -- deliberately a
-          separate statement, and now indented like one. 6cf371d817 wrote it at
-          the inner level, where it read as though the frozen-string arm gated
-          it. A MANAGED string element (tyAnsiString) has a width but no
-          capacity, so it must restore the channel on a path where that arm
-          does not fire at all. Correct but misindented is one begin/end away
-          from being neither. }
-        if ArrTypeStrElemTk[retArrAi] <> 0 then
-          LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
-        Next;   { consume the alias name ParseTypeKind would have eaten }
-      end
-      else
-        retType := ParseTypeKind;
-      { Only a type just parsed by ParseTypeKind leaves a meaningful
-        LastTypeEnumId. An ARRAY result reaches here with retType = the ELEMENT
-        kind and whatever enum the last unrelated parse left behind, and the
-        RESULT of such a call is an array, not an enum value — so it gets -1
-        rather than its element's identity. }
-      if retType = tyInteger then
-      begin
-        if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
-        else retEnumId := LastTypeEnumId;
-      end;
-      { The SET result's element identity, under exactly the rule the enum arm
-        above states and for the same reason: an ARRAY result reaches here with
-        retType = the ELEMENT kind, so `function F: array of TMs` would be
-        indistinguishable at this line from `function F: TMs`. The result of the
-        first is an array and records no set element type -- that belongs to the
-        array type's own row.
-
-        THIS IS THE SIXTH CARRIER AND IT NEVER EXISTED. LastTypeSetEnumId and
-        LastTypeSetElemTk are set by ParseTypeKind for every set type and were
-        dropped on the floor here, so a set RESULT was the one place in this
-        frontend that could not answer what its elements are -- while a
-        variable, a record field, a property, a parameter and a type alias all
-        could. }
-      if retType = tySet then
-      begin
-        if (retArrAi >= 0) or retIsDynArr then
-        begin
-          retSetEnumId := -1; retSetElemTk := 0;
-        end
-        else
-        begin
-          retSetEnumId := LastTypeSetEnumId;
-          retSetElemTk := LastTypeSetElemTk;
-        end;
-      end;
-      { The managed-string RESULT's element width, under exactly the rule the
-        enum arm states above and for the same reason: an ARRAY result reaches
-        here with retType = the ELEMENT kind, so `function F: array of
-        AnsiString` is indistinguishable at this line from `function F:
-        AnsiString`. The RESULT of the first is an array, not a string, and
-        records no width -- the ELEMENTS' width is the array type's business
-        (ArrTypeStrElemTk), not the result's. Getting this exact distinction
-        wrong on the PARAMETER side broke the self-host fixedpoint earlier in
-        6c: Syms[].ElemType for an `array of AnsiString` param legitimately IS
-        tyAnsiString, and overwriting it with tyChar retyped the elements to a
-        1-byte stride. }
-      if retType = tyAnsiString then
-      begin
-        if (retArrAi >= 0) or retIsDynArr then retStrElemTk := 0
-        else if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
-        else retStrElemTk := Ord(tyChar);
-      end;
-      if (retType = tyRecord) or (retType = tyClass) then
-        retRecId := LastTypeRecId;
-      { …and the procedural SIGNATURE the same alias carries, for exactly the
-        same reason retRecId is captured here: a `procedure of object` return
-        type is a tyRecord whose call signature lives in LastTypeProcSig, and a
-        plain `procedure` return type is a tyPointer with the same. Without it
-        the implicit Result symbol is allocated from the return KIND alone and
-        comes out as a plain record/pointer var, so every consumer that asks
-        "is this lvalue a procedural value?" by testing SymProcSig >= 0 answers
-        no for Result and yes for a declared local of the identical type.
-        bug-p-result-is-not-a-method-pointer-lvalue }
-      if (retType = tyRecord) or (retType = tyPointer) then
-        retProcSig := LastTypeProcSig;
-      if retType = tyPointer then
-      begin
-        retPtrElemTk := Ord(LastTypePointerElemTk);
-        retPtrStrElemTk := LastTypePointerStrElemTk;
-        retPtrDepth := LastTypePointerDepth;
-        retPtrBaseTk := LastTypePointerBaseTk;
-        retPtrBaseRec := LastTypePointerBaseRec;
-        retPtrElemRec := LastTypePointerElemRec;
-        retPtrAlias := LastTypePointerAlias;
-      end;
-    end;
+    { The whole return-type parse -- including the array shapes ParseTypeKind
+      alone cannot see -- now lives in ParseFuncReturnTypeShape
+      (pasparser_decl.inc), so the procedural-type SIGNATURE path shares it
+      instead of going without. Lifted, not copied: this function has already
+      produced four dropped fields, which root-cause-over-microfix.md calls a
+      design flaw rather than a smell.
+      bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
+    ParseFuncReturnTypeShape(retType, retIsDynArr, retDynDepth, retElemTk,
+                             retElemRec, retFixedArrBytes, retArrAi,
+                             retEnumId, retSetEnumId, retSetElemTk, retStrElemTk,
+                             retRecId, retProcSig,
+                             retPtrElemTk, retPtrStrElemTk, retPtrElemRec,
+                             retPtrDepth, retPtrBaseTk, retPtrBaseRec, retPtrAlias);
   end;
 
   Eat(tkSemicolon);
