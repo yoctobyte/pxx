@@ -2907,6 +2907,7 @@ var
   pair1, pair2, pair3, isDownNode: Integer;
   gpi, fsym: Integer;
   faIdx: Integer;   { `for x in <named subrange type>`: that alias row, else -1 }
+  fcIdx: Integer;   { `for x in <named set constant>`: that SetConst row, else -1 }
   selfClassCi, fldIdx, fldTokIdx, selfSym: Integer;
   srcIdx, srcTokIdx: Integer;
   down, inlineVar: Boolean;
@@ -3106,6 +3107,42 @@ begin
       Next;
       Result := ParseForInOrdRangeAST(varIdx, AliasSubLo[faIdx], AliasSubHi[faIdx],
                                       IntToTypeKind(AliasTk[faIdx]));
+      Exit;
+    end;
+    { …and a named SET CONSTANT as the source. Set iteration itself was already
+      here and already correct -- a set VARIABLE and a bare `[a, b]` constructor
+      both iterate in ordinal order and match fpc 3.2.2 -- so this is not the
+      feature, it is the THIRD SPELLING of it. A named set constant lives in the
+      SetConst table and not in Syms, so the `FindSym` arm below could never see
+      one and it fell through to "not a generator, enum type, or iterable
+      variable", a message that is true and names none of the three things it
+      actually is.
+
+      The trigger is the HEAD of the source being a set constant; ParseExpr then
+      takes the whole expression, so `for c in cs + [clGreen]` comes along for
+      free and reads the mask exactly as `x in cs + [clGreen]` does. The set
+      operand is only ever the right-hand side of a generated `in`, which is why
+      any expression the `in` codegen accepts works here without a second path.
+
+      Element kind: the enum id comes from the table; otherwise the LOOP
+      VARIABLE's own type decides Char from ordinal, which is the same
+      resolution the `[...]` constructor arm above performs on the literal's
+      first element. tforin1 }
+    fcIdx := FindSetConst(CurTok.SVal);
+    if (fcIdx >= 0) and (FindSym(CurTok.SVal) < 0) then
+    begin
+      ParseExpr;
+      forcNode := CurASTNode;
+      if Syms[varIdx].TypeKind = tyAuto then
+      begin
+        Syms[varIdx].TypeKind := tyInteger;
+        SymSyncTypeRef(varIdx);
+      end;
+      if Syms[varIdx].TypeKind = tyChar then forcRec := Ord(tyChar)
+      else forcRec := Ord(tyInteger);
+      Expect(tkDo, 'do');
+      Result := BuildForInSetLoop(varIdx, SetConstEnumId[fcIdx], forcRec,
+                                  forcNode, ParseStatementAST);
       Exit;
     end;
     { iterable variable (string / array / dynarray / open-array param).

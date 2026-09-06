@@ -1,0 +1,7 @@
+var   : 0 2
+lit   : 0 2
+const : 0 2
+union : 0 1 2
+ord   : 3 5 9
+char  : b d f
+empty :

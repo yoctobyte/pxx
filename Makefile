@@ -6289,6 +6289,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_typeinfo_of_a_variable_answers_its_own_type \
 	  "$$($(TESTTMP)/test_typeinfovar26)" \
 	  "$$(cat test/test_typeinfo_of_a_variable_answers_its_own_type.expected)"
+	# A named SET CONSTANT as a for-in source -- the THIRD SPELLING of iteration
+	# that already worked for a set VARIABLE and a bare `[a,b]` constructor. A set
+	# constant lives in the SetConst table and not in Syms, so the bare-name arm
+	# could never see one. All three spellings are in the one file on purpose:
+	# the claim is that the new one behaves like the two that worked, and split
+	# across files each would print a plausible run of ordinals. No expected
+	# value is the element type's full range except the `union` row -- the scan
+	# loop walks the whole range and the `in` test filters it, so a mask that was
+	# ignored still prints ascending ordinals and is caught only by a MISSING
+	# member. `ns = [9,3,5]` is declared out of order because ordinal order is
+	# the property under test.
+	./$(COMPILER) test/test_a_named_set_constant_iterates_like_the_other_two_spellings.pas $(TESTTMP)/test_setconstin26
+	tools/expect_same.sh test_a_named_set_constant_iterates_like_the_other_two_spellings \
+	  "$$($(TESTTMP)/test_setconstin26)" \
+	  "$$(cat test/test_a_named_set_constant_iterates_like_the_other_two_spellings.expected)"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
