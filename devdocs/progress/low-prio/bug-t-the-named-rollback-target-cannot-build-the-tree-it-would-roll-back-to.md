@@ -1,8 +1,8 @@
 ---
 track: T
-prio: 80
+prio: 30
 type: bug
-status: backlog
+status: low-prio
 found: 2026-09-05
 found-by: frankZ
 owner: ""
@@ -141,3 +141,40 @@ know.
   probe is a native x86-64 compile, which is why this one number is not subject
   to the usual cross-target caveat. seven's qemu is 10.2.1 and is irrelevant to
   these rows.
+
+## 2026-09-06, frankuser — MOVED TO low-prio/, 80 -> 30. The owner ruled out the remedy, not the measurement.
+
+**The measurement stands. Nothing here is retracted.** This moves for the same
+reason `umbrella-one-full-tier-run-with-no-red-tier` went 85 -> 55 tonight, and
+it is the second ticket in one evening whose rank rested on rollback.
+
+CLAUDE.md now records, owner 2026-09-06: *"yes we avoid rollbacks. useful work
+done is work done, even if (other) things break."* And, verbatim: **"do not rank
+a ticket on rollback depth and do not spend work making `make revert` produce a
+coherent pair."** This ticket's remedy IS that work. It sat at prio 80 — above
+almost everything on the T queue — for a job the owner has said we do not do.
+
+**`low-prio/` and not `rejected/`, deliberately.** `rejected/` means the report
+is wrong; this one is true and reproducible, and CLAUDE.md's own rollback rule
+cites this measurement as part of its evidence. `low-prio/` is the folder for
+real, correct, no-plan-to-act — which is exactly the state. Not `rainy-day/`
+either: that folder is for work we intend to do later, and there is no such
+intent here.
+
+**A prio is a claim about attention, and 80 was making one the owner had already
+denied.** The ranker cannot read the handbook.
+
+**Flagged by frankZ, moved by me, and the split is the point:** frankZ found it
+while re-ranking its own umbrella for the identical reason and declined to move
+someone else's ticket on its own reading, handing it to an active seat instead.
+frankH had earlier declined to re-rank frankZ's umbrella on the same grounds.
+**Two seats in one evening correctly refused to act unilaterally on a ranking
+they believed was wrong, and both were right to refuse and right about the
+ranking.** The cost of that caution is one message; the cost of getting it wrong
+is a silent re-rank nobody can find.
+
+**Its neighbour `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names`
+STAYS at 80 and is untouched by this.** That one says every pin verify builds
+with pin v(N-1) while recording the verdict under vN — an instrument lying about
+which binary it measured, which is a live correctness problem regardless of
+whether anyone ever rolls back.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:21 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:148 backlog-nilpy:97 backlog-tools:52 backlog-pascal:40 backlog-decide:44 backlog-libs:22 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:73 known-incompat:4 float:25 done-followup:3 decided:149 done:3519 rejected:79`
+`working:21 unfinished:22 blocked:6 backlog:14 backlog-umbrella:8 backlog-core:148 backlog-nilpy:97 backlog-tools:51 backlog-pascal:40 backlog-decide:44 backlog-libs:22 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3519 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,12 +65,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 439, ranked
+## Ready — top 30 of 438, ranked
 
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [A]` refactor-a-the-scope-exit-managed-local-release-loop-has-seven-copies (unblocks 1)
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
-- `[p 80] [T]` bug-t-the-named-rollback-target-cannot-build-the-tree-it-would-roll-back-to
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
@@ -97,5 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A]` bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [P]` bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals
 
-_409 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_408 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
