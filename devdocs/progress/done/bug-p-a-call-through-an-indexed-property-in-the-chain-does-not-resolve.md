@@ -150,3 +150,17 @@ value, with an argument whose right answer is not the failure value.
 
 ## Log
 - 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6453a7ad0.
+
+### The second degenerate spelling — the one that survives avoiding the first
+
+`Fn(5)` cannot see this bug because True is both the correct answer and the
+failure value. **`not <chain>(-5)` cannot see it either, and that is worse**,
+because `not` is exactly what a test writer reaches for when the first collision
+is pointed out. The two compilers agree on `True` by different routes: pxx
+computes `not True` from the truthiness it wrongly assigned, fpc computes
+`not False` from the real call. Measured — row P5, both printing `TRUE`.
+
+**A collision with a default is one spelling. This is a collision that survives
+the natural attempt to avoid the collision**, which is why the test asserts the
+returned value directly on every row and carries two positive-argument rows so
+it cannot be read as asserting "always False".
