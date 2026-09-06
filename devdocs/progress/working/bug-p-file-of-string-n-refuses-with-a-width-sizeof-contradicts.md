@@ -3,10 +3,10 @@ slug: bug-p-file-of-string-n-refuses-with-a-width-sizeof-contradicts
 track: P
 type: bug
 prio: 40
-status: backlog
+status: working
 found: 2026-09-05
 found-by: frankD
-owner: ""
+owner: frankB
 blocked-by: []
 summary: "`Write(f, s)` to a `file of string[10]` refuses with `the variable is 24 bytes and the file's element type is 11`, and 11 is right — `SizeOf` answers 11 for every spelling of the same variable. FileIOArgSize has a capacity-aware arm for the FROZEN string ABI only, so under the managed default a shortstring falls through to TypeStorageSize and gets the descriptor width. FPC compiles the same program and writes 11 bytes per record. Every other element type blits at exactly SizeOf (measured: Char 1, LongInt 4, packed record 5, record 8), and BlockWrite on the same variable is also correct — so this is one arm, not the file layer."
 ---

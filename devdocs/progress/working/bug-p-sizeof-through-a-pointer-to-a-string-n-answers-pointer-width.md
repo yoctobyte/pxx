@@ -3,8 +3,8 @@ slug: bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width
 track: P
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-06
 found-by: frankS
 blocked-by: []

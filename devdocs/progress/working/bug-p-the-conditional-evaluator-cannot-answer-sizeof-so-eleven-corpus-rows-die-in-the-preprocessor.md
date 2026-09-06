@@ -3,8 +3,8 @@ slug: bug-p-the-conditional-evaluator-cannot-answer-sizeof-so-eleven-corpus-rows
 track: P
 type: bug
 prio: 40
-status: backlog
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-06
 found-by: frankS (measured), filed by frank-coordinator
 blocked-by: []
