@@ -1566,7 +1566,7 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+                  if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, mai)) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -1648,7 +1648,7 @@ begin
                 if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := mai;
                 if Procs[mpi].Params[slotIdx].IsRef or Procs[mpi].Params[slotIdx].IsArray then
                 begin
-                  if ByRefArgStartsExpression(ParamIsConstVariant(mpi, slotIdx)) then
+                  if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, slotIdx)) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }

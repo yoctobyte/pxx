@@ -2089,7 +2089,31 @@ begin
   if (not absorbed) and (CurTok.Kind <> tkRParen) and
      (mpi >= 0) and (mpi < ProcCount) then
   begin
-    ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
+    { AN ARITY MESSAGE FOR AN ARGUMENT THAT WAS CUT SHORT NAMES A RULE THE
+      SOURCE IS NOT BREAKING. This tail fires whenever the index-driven loop
+      above has parsed its declared number of arguments and CurTok is not `)`,
+      and there are two ways to arrive: a genuine SURPLUS, which starts at a
+      comma, and a last argument the loop stopped reading, which stops at an
+      OPERATOR. `o.Bump(a + b)` on `var r: array of LongInt` reported "wrong
+      number of parameters" for a call that passes exactly one -- the by-ref arm
+      parsed `a` as a bare lvalue and left the `+` sitting here.
+
+      The refusal itself is right and stays: a `var`/`out` parameter binds a
+      VARIABLE, and fpc 3.2.2 accepts `o.Bump(a + b)` by writing into a
+      temporary the caller never sees, which is a divergence nobody should want
+      us to copy. Only the wording was wrong.
+
+      Written in the SHARED tail rather than in the seven argument loops, for
+      the same reason the tail exists at all.
+      bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand }
+    if CurTok.Kind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod,
+                       tkAnd, tkOr, tkXor, tkShl, tkSymDiff,
+                       tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+      ErrorRecover('an argument to ' + Procs[mpi].Name
+        + ' was read as a bare variable and stops at an operator: a `var`/`out`'
+        + ' parameter binds a VARIABLE, not an expression')
+    else
+      ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
     depth := 0;
     while CurTok.Kind <> tkEOF do
     begin
@@ -2172,7 +2196,7 @@ begin
         exprNode := brkArg
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
-        if ByRefArgStartsExpression(ParamIsConstVariant(mpi, ai)) then
+        if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, ai)) then
         begin
           ParseExpr; exprNode := CurASTNode;
         end
@@ -3661,6 +3685,40 @@ begin
             (slot < Procs[pi].ParamCount) and
             (Procs[pi].Params[slot].TypeKind = tyVariant) and
             ProcParamIsConst[pi * MAX_PROC_PARAMS + slot];
+end;
+
+function ParamBindsAnExpression(pi, slot: Integer): Boolean;
+{ THE PARAMETER IS BY-REF INTERNALLY AND IS STILL NOT A VAR-BINDING TARGET, so
+  an argument that is an EXPRESSION rather than a bare lvalue may bind to it.
+  That is the whole question ByRefArgStartsExpression needs answered, and it had
+  exactly one answer -- `const Variant`. The second one is `const array of T`:
+
+    procedure TCls.P(const r: array of LongInt);
+    o.P(a + b);   -> wrong number of parameters in call to TCls.P
+
+  The method argument loops parse a by-ref/array argument as a bare LVALUE
+  unless this says otherwise, so `a` was the whole argument and the loop met `+`
+  where it wanted `,` or `)` -- an ARITY diagnostic for an expression that was
+  never read. The identical call to a FREE routine compiled, because that path
+  reaches ParseExpr. Seven copies of the loop, one of them right.
+
+  Kept as a UNION rather than by widening ParamIsConstVariant, because that
+  predicate is also called from pyparser.inc and NilPy is a separate frontend.
+
+  NOTE FOR refactor-p-a-parameters-own-kind-and-its-element-kind-are-one-field:
+  ParamIsConstVariant tests `Params[slot].TypeKind = tyVariant` without asking
+  IsArray, so it already answers True for `const a: array of Variant` -- the
+  ELEMENT kind read as the parameter's own. It is harmless there (an array
+  parameter is not a var-binding target either, so True is the answer this
+  predicate's CALLER wanted) and it is a fourth landed instance of that field
+  meaning two things. Left alone deliberately: correcting it would change
+  behaviour in pyparser.inc for no measured reason. }
+begin
+  Result := ParamIsConstVariant(pi, slot) or
+            ((pi >= 0) and (slot >= 0) and (slot < MAX_PROC_PARAMS) and
+             (slot < Procs[pi].ParamCount) and
+             Procs[pi].Params[slot].IsArray and
+             ProcParamIsConst[pi * MAX_PROC_PARAMS + slot]);
 end;
 
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean;

@@ -57,6 +57,45 @@ procedure ParseCastPostfixSuffix(var node: Integer; var tk: TTypeKind;
   { the ONE postfix `^ / .field / [i]` walker — every opener with a suffix ends here }
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
+function BracketArgIsTheWholeArgument: Boolean;
+{ CurTok is the `[` at the HEAD of an argument. True when the matching `]`
+  is immediately followed by `,` or `)` -- i.e. the bracket IS the argument
+  rather than the LEFT OPERAND of something.
+
+  WHY THIS EXISTS: the door below consumes a `[...]` as a complete argument, so
+  a `[` at the head of an argument could never be an operator's left operand.
+  Measured by frankS at 0aecf7ac8109, with the two rows that make it a door
+  problem and not a concatenation problem:
+
+    N(a + [4])     bracket NOT at the head          -> 4, correct
+    t := [0] + a   same expression, statement position -> length 4, correct
+    N([0] + a)     bracket AT the head              -> expected comma or close parenthesis
+
+  Concatenation is fine and the operands are fine; the argument door is where
+  `[0]` stops being an expression. Returning -1 hands the whole thing to the
+  ordinary expression parser, which already parses this shape -- that is what
+  the second row above proves, and it is why the fix is a REFUSAL to take the
+  door rather than a continuation built into it.
+
+  Bounded by TokCount, so a runaway `[` answers False and the normal path
+  produces the normal diagnostic.
+  bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand }
+var i, depth: Integer;
+begin
+  Result := False;
+  depth := 1;
+  i := TokPos;                        { the token AFTER CurTok's `[` }
+  while (i < TokCount) and (depth > 0) do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(depth)
+    else if Tokens[i].Kind = tkRBrack then Dec(depth);
+    Inc(i);
+  end;
+  if depth <> 0 then Exit;            { unbalanced -- not ours to decide }
+  if i >= TokCount then Exit;
+  Result := (Tokens[i].Kind = tkComma) or (Tokens[i].Kind = tkRParen);
+end;
+
 function TryParseBracketArgForSlot(procIdx, slotIdx: Integer): Integer;
 { THE ONE PLACE THAT DECIDES WHETHER A `[...]` ARGUMENT IS A LITERAL VECTOR OR
   A SET. Returns the parsed node, or -1 for "not mine, parse it normally".
@@ -85,6 +124,9 @@ function TryParseBracketArgForSlot(procIdx, slotIdx: Integer): Integer;
 begin
   Result := -1;
   if CurTok.Kind <> tkLBrack then Exit;
+  { A `[` that is the LEFT OPERAND of an operator is not an argument this door
+    can answer for -- see BracketArgIsTheWholeArgument just above. }
+  if not BracketArgIsTheWholeArgument then Exit;
   if ParamIsVarRecArray(procIdx, slotIdx) then
     Result := ParseVarRecLiteralAST
   else if ParamIsOpenArrayScalar(procIdx, slotIdx) then
@@ -3342,7 +3384,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+                if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, mai)) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -3548,7 +3590,7 @@ begin
                 mexprNode := mBrkArg
               else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
-                if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mslot)) then
+                if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, mslot)) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -3868,7 +3910,7 @@ begin
         mexprNode := xBrkArg
       else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
       begin
-        if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+        if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, mai)) then
         begin
           { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
           ParseArgExpr; mexprNode := CurASTNode;
@@ -5470,7 +5512,7 @@ begin
               aNode := cBrkArg
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
-              if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+              if ByRefArgStartsExpression(ParamBindsAnExpression(mpi, mai)) then
               begin
                 { non-ident by-ref/array arg (@obj.Method to a method-pointer
                   param, [..] literals, casts): parse as an expression }

@@ -72,15 +72,22 @@ begin
   c += [3, 4];
   WriteLn('c+=[3,4]    ', Show(c));
 
-  { A LEADING bracket is bound through a variable, not written inline in an
-    argument. `Show([0] + a)` is REFUSED -- `expected comma or close parenthesis`
-    -- because a `[` at the HEAD of an argument is consumed as the whole
-    argument and can never become an operator's left operand. `Show(a + [4])`
-    above is the same expression with the operands swapped and compiles, and
-    the statement spelling `t := [0] + a` compiles too, so this is the argument
-    door and not concatenation. Reported to the seat that owns that door; the
-    rows here bind the result first so the test asserts concatenation rather
-    than the gap. }
+  { A LEADING bracket used to be bound through a variable here because it could
+    not be written inline: `Show([0] + a)` was REFUSED -- `expected comma or
+    close parenthesis` -- since a `[` at the HEAD of an argument was consumed as
+    the whole argument and could never become an operator's left operand. The
+    rows above still bind through a variable on purpose, so that what they
+    assert is CONCATENATION and not the argument door.
+
+    THE DOOR IS FIXED (frankB, 2026-09-06) and the inline spelling is asserted in the
+    door's own fixture rather than here: the
+    door's own fixture is
+    test_a_bracket_at_the_head_of_an_argument_is_an_operators_left_operand.pas,
+    which asks every call path and carries the inline spelling. Deliberately NOT
+    added here: this file has a .expected, so a new row is a second seat editing
+    a fixture's recorded output, and the rows it already has assert the thing
+    this file is named for.
+    bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand }
   { IDENTITY ROW -- see the header. Reports only that the call compiles. }
   WriteLn('a+[] ident  ', Show(a + []));
 end.

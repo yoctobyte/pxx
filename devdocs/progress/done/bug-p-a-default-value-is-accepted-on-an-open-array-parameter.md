@@ -190,5 +190,5 @@ and one wrong refusal:
 I did not establish a shared cause for any of the three and have not claimed one.
 
 ## Log
-- 2026-09-06 — resolved by `181576cdc`. Sat in `backlog-pascal/` carrying
+- 2026-09-06 — resolved, commit 181576cdc. (That is the FIX; the close itself carried no commit until ca6b8ba0d.) Sat in `backlog-pascal/` carrying
   `status: done` — the field and the folder disagreed and nothing reads both.

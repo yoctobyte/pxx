@@ -216,7 +216,7 @@ other thirteen pass. The constructor row was measured failing (`sum=10`) on the
 pre-fix binary.
 
 ## Log
-- 2026-09-06 — resolved by `1c8a6cfd5`. The ticket carried `status: working` and
+- 2026-09-06 — resolved, commit 1c8a6cfd5. (That is the FIX; the close itself carried no commit until ca6b8ba0d.) The ticket carried `status: working` and
   a summary reading `CLOSED` for a day: the fix landed, the resolve did not, so
   the board advertised it as in-flight and the placeholder was never filled.
   Filed under its own heading rather than fixed silently — see

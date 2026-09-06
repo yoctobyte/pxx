@@ -10375,6 +10375,32 @@ test-core: $(COMPILER)
 	@# plausible number both pass; two numbers on adjacent lines disagree.
 	./$(COMPILER) test/test_a_bracket_argument_reaches_the_same_door_at_every_call_path.pas $(TESTTMP)/test_bracketdoor26
 	tools/expect_same.sh test_bracketdoor26 "$$($(TESTTMP)/test_bracketdoor26 | tail -n 2)" "$$(printf 'fails=0\nBRACKETDOOR OK')"
+	@# bug-p-a-bracket-at-the-head-of-an-argument-cannot-be-an-operators-left-operand
+	@# -- the door above consumed a `[...]` as a WHOLE argument, so a leading
+	@# bracket could never be an operator's LEFT operand: `f([0] + a)` was
+	@# `expected comma or close parenthesis` while `f(a + [4])` (the same
+	@# expression, operands swapped) and `t := [0] + a` (the same expression,
+	@# statement position) both compiled. Reported by frankS with those two rows,
+	@# which is what made it the door's problem and not concatenation's. The fix
+	@# is a REFUSAL to take the door -- the ordinary expression parser already
+	@# parses this shape -- and a second bug fell out of asserting it at every
+	@# call path: a method's CONST open-array door parsed its argument as a bare
+	@# LVALUE, so `o.M(a + b)` (no bracket anywhere) stopped at the `+` and was
+	@# reported as an ARITY error. Both fixes are asserted here; the `ctrl *` rows
+	@# are the second one and the `head *` rows are the first.
+	./$(COMPILER) test/test_a_bracket_at_the_head_of_an_argument_is_an_operators_left_operand.pas $(TESTTMP)/test_headbracket26
+	tools/expect_same.sh test_headbracket26 "$$($(TESTTMP)/test_headbracket26 | tail -n 1)" "HEADBRACKET OK"
+	@# ...AND ITS POSITIVE CONTROL, which the green file above cannot carry: its
+	@# `var writes` row passes a BARE VARIABLE, and a bare variable takes the
+	@# lvalue path whatever the gate says, so that row is green under the correct
+	@# gate and under one widened to every array parameter. This is the only
+	@# spelling whose answer changes if ProcParamIsConst is dropped from
+	@# ParamBindsAnExpression. fpc 3.2.2 COMPILES it -- it binds a temporary the
+	@# callee writes into and the caller never sees -- and we refuse on purpose.
+	! ./$(COMPILER) test/test_a_var_open_array_parameter_does_not_bind_an_expression_fail.pas $(TESTTMP)/test_varoaexpr26 > $(TESTTMP)/varoaexpr.log 2>&1 \
+	  || { echo "var-open-array: an expression bound to a var open-array parameter COMPILED"; exit 1; }
+	grep -q 'binds a VARIABLE, not an expression' $(TESTTMP)/varoaexpr.log \
+	  || { echo "var-open-array: refused, but not by the var-binding rule (an arity message here is the bug this row exists for):"; cat $(TESTTMP)/varoaexpr.log; exit 1; }
 	@# bug-p-a-default-value-is-accepted-on-an-open-array-parameter -- FOUR
 	@# PARAMETER PARSERS, ONE REFUSAL. A default on an open-array parameter cannot
 	@# mean anything: there is no array-literal syntax for it, so the value parsed
