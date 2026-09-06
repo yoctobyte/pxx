@@ -2570,9 +2570,13 @@ begin
         autoDeref := AllocNode(AN_DEREF);
         ASTLeft[autoDeref] := node;
         peRec := ResolveNodeRec(autoDeref);
+        { The third member kind, exactly as in the shared walker's copy: without
+          it `p.PA` was refused `"PA": a pointer has no members` on the ONE
+          opener that had this rule, identical on pin v404. }
         if (peRec >= REC_UCLASS_BASE) and UClsIsRecord[peRec - REC_UCLASS_BASE] and
            ((FindUField(peRec - REC_UCLASS_BASE, fieldName) >= 0) or
-            (FindUMeth(peRec - REC_UCLASS_BASE, fieldName) >= 0)) then
+            (FindUMeth(peRec - REC_UCLASS_BASE, fieldName) >= 0) or
+            (FindUProp(peRec - REC_UCLASS_BASE, fieldName) >= 0)) then
         begin
           ASTTk[autoDeref] := Ord(tyRecord);
           node := autoDeref;
@@ -4808,9 +4812,19 @@ begin
         sub := AllocNode(AN_DEREF);
         ASTLeft[sub] := node;
         w := ResolveNodeRec(sub);
+        { ...AND A PROPERTY IS THE THIRD MEMBER KIND. This list is a guard built
+          by enumeration, and an enumeration goes wrong by the item nobody
+          listed: with field and method only, `PRec(q).PA` and `pp^.PA` printed
+          the pointer value and `p.PA` -- on ParseLValueAST's copy, the arm that
+          has had this rule all along -- was REFUSED outright with `"PA": a
+          pointer has no members`. All three identical on pin v404, so the hole
+          predates both copies rather than arriving with either. Both copies
+          take the same third disjunct.
+          bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref }
         if (w >= REC_UCLASS_BASE) and UClsIsRecord[w - REC_UCLASS_BASE] and
            ((FindUField(w - REC_UCLASS_BASE, fieldName) >= 0) or
-            (FindUMeth(w - REC_UCLASS_BASE, fieldName) >= 0)) then
+            (FindUMeth(w - REC_UCLASS_BASE, fieldName) >= 0) or
+            (FindUProp(w - REC_UCLASS_BASE, fieldName) >= 0)) then
         begin
           ASTTk[sub] := Ord(tyRecord);
           node  := sub;
@@ -5775,6 +5789,29 @@ begin
       end
       else { tkDot — field of the pointed-at record }
       begin
+        { THE CALL-RESULT OPENER IS THE ONE THE SHARED WALKER'S NEW ARM CANNOT
+          REACH, in both directions, and both are this arm's doing.
+
+          `recId` starts REC_NONE and only the `^` arm above fills it from the
+          call's own elemRec, so a chain that OPENS on a dot arrived here with
+          nothing: `GetP.a`, where GetP returns a `^TRec`, delegated to nobody,
+          built an AN_FIELD over the call node and answered `IR_UNSUPPORTED ...
+          could not lower AST node (kind 8)` -- an INTERNAL error for source fpc
+          3.2.2 compiles and runs. Seeded from elemRec, which is the same value
+          the `^` arm one screen up already uses.
+
+          ...and a `.` while the value is STILL A POINTER was kept on the
+          hand-rolled builder below, exactly as the C4 cast loop kept it until
+          ad001bef0: `GetPP^.a` printed 4306192 and `.b` printed 0 where fpc
+          prints 11 and 22, because the explicit `^` spends one level and leaves
+          a `^TRec` that the builder then treated as the record. The implicit
+          deref lives in the shared walker now, so this arm hands the name over
+          rather than growing a third copy of the rule.
+
+          Every other spelling of these chains was right throughout -- `GetP^.a`,
+          `GetPP^^.a`, `p.a`, `pp^.a` -- which is what says the opener is the
+          axis. Both identical on pin v404.
+          bug-p-a-cast-to-a-pointer-to-pointer-drops-the-implicit-second-deref }
         { A METHOD or a property is not a field, and the builder below can only
           make AN_FIELD -- RequireRecMember rejects the name outright, so
           `GetP^.Doubled` and `GetP^.Bump(1)` answered
@@ -5794,8 +5831,9 @@ begin
           shared walker's own loop starts on tkDot -- same idiom as the
           pointer-alias loop in pasparser_expr.inc.
           refactor-p-three-hand-rolled-postfix-loops }
-        if (recId >= REC_UCLASS_BASE) and
-           (FindUField(recId - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+        if (tk = tyPointer) or
+           ((recId >= REC_UCLASS_BASE) and
+            (FindUField(recId - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0)) then
         begin
           node := ParseClassRecordSelectors(node, recId, tk);
           recId := ResolveNodeRec(node);

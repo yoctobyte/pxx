@@ -6983,6 +6983,8 @@ test-core: $(COMPILER)
 	  || { echo 'test_delphi_generic_of_object_anchor: FAIL - the alias anchor derailed again'; exit 1; }
 	./$(COMPILER) test/test_scopedenums.pas $(TESTTMP)/test_scopedenums26
 	tools/expect_same.sh test_scopedenums26 "$$($(TESTTMP)/test_scopedenums26)" "$$(printf '0\n2\n1\ncase-ok')"
+	./$(COMPILER) test/test_an_implicit_deref_through_every_opener.pas $(TESTTMP)/test_impderef26
+	tools/expect_same.sh test_impderef26 "$$($(TESTTMP)/test_impderef26)" "$$(cat test/test_an_implicit_deref_through_every_opener.expected)"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas $(TESTTMP)/test_virtual_call_string26
 	tools/expect_same.sh test_virtual_call_string26 "$$($(TESTTMP)/test_virtual_call_string26)" "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
