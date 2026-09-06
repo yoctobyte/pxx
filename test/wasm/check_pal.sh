@@ -59,6 +59,25 @@ trap 'rm -rf "$work"' EXIT
 # the missing declaration. Asserting parity puts the diagnosis where the cause
 # is — and catches the other direction too, a routine declared here that no
 # longer exists anywhere else.
+# AIMED BEFORE ANYTHING IS READ. Every -Fu here is "$root"-relative and used to
+# be relative to the CWD, which made this file answer a different question from
+# any directory but the repo root: the compiler ignores a -Fu naming a
+# directory that does not exist, so the override silently evaporated, the
+# default wasi PAL built cleanly, and assertion (3) reported the override as
+# BROKEN. The same slip made (2) vacuous rather than red -- it compared the
+# default build against the default build and could not fail, and the PAL
+# surface row below printed "all 0 PAL entry points declared, same set as
+# posix", because an empty set does equal an empty set.
+#
+# So: the trees must EXIST before any row is allowed to mean anything.
+for d in "$root/lib/rtl/platform/posix" "$root/lib/rtl/platform/wasi"; do
+  [ -d "$d" ] || { echo "FAIL $d is not a directory, so every -Fu in this file"
+                   echo "     names nothing and the compiler ignores it"
+                   echo "     silently. No row here can mean anything until"
+                   echo "     that is true."
+                   exit 1; }
+done
+
 ifaces() {
   awk '/^interface/,/^implementation/' "$1" \
     | tr '\n' ' ' | tr ';' '\n' \
@@ -72,7 +91,15 @@ if ! diff -u "$work/posix.i" "$work/wasi.i" > "$work/iface.diff"; then
   cat "$work/iface.diff"
   exit 1
 fi
-echo "ok  all $(wc -l < "$work/wasi.i") PAL entry points declared, same set as posix"
+n_pal=$(wc -l < "$work/wasi.i")
+# A set equals itself when both are empty, so the diff above passes loudest
+# exactly when the extraction broke. The count is the population check.
+[ "$n_pal" -gt 50 ] || { echo "FAIL only $n_pal PAL entry points were extracted, so the"
+                         echo "     set-equality above compared two (near-)empty sets and"
+                         echo "     could not have failed. The awk/grep pipeline or the"
+                         echo "     backend's interface section moved."
+                         exit 1; }
+echo "ok  all $n_pal PAL entry points declared, same set as posix"
 
 # --- selection: the default, its identity, and the override -----------------
 # (1) no -Fu at all. This is what every ordinary build does, so it is also the
@@ -90,11 +117,11 @@ head -1 "$work/cov.txt"
 # (2) COMPILING IS NOT EVIDENCE IT PICKED WASI. It could have found some third
 #     thing, or a stub, and still produced a module. Identity with the explicit
 #     build is the assertion; anything else is an inference.
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/pal_slice.pas" "$work/p_explicit.wasm" > "$work/explicit.txt" 2>&1
 if ! cmp -s "$work/p.wasm" "$work/p_explicit.wasm"; then
   echo "FAIL the default build is not the same module as an explicit"
-  echo "     -Fulib/rtl/platform/wasi build, so the default resolved to"
+  echo "     -Fu"$root"/lib/rtl/platform/wasi build, so the default resolved to"
   echo "     something else. Sizes: $(wc -c < "$work/p.wasm") vs $(wc -c < "$work/p_explicit.wasm")"
   exit 1
 fi
@@ -103,9 +130,9 @@ echo "..  merely a build that happened to succeed"
 
 # (3) The override still wins, and this is the live trap: a Makefile row that
 #     hardcodes the posix PAL is correct natively and wrong cross.
-if "$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/posix \
+if "$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/posix \
      "$here/pal_slice.pas" "$work/px.wasm" > "$work/px.txt" 2>&1; then
-  echo "FAIL an explicit -Fulib/rtl/platform/posix no longer overrides the"
+  echo "FAIL an explicit -Fu"$root"/lib/rtl/platform/posix no longer overrides the"
   echo "     default on wasm32. AddDefaultPasUnitDirs appends the target PAL"
   echo "     AFTER the user's dirs precisely so an override wins; if that"
   echo "     stopped being true, every -Fu in the tree means something else."
@@ -122,7 +149,7 @@ echo "..  — the trap a hardcoded platform flag sets for a cross build, and it"
 echo "..  reads like a compiler bug rather than a flag doing as it was told"
 
 # --- the primary assertion --------------------------------------------------
-"$root/compiler/pascal26" -Fulib/rtl/platform/posix \
+"$root/compiler/pascal26" -Fu"$root"/lib/rtl/platform/posix \
     "$here/pal_slice.pas" "$work/native" >/dev/null
 "$work/native" > "$work/native.txt"
 wasm-validate "$work/p.wasm"
@@ -162,7 +189,7 @@ begin
   Close(f);
 end.
 EOF
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$work/io.pas" "$work/io.wasm" > /dev/null 2>&1
 # Run with NO preopened directory, which is what makes this a refusal test
 # rather than a filesystem test: a WASI program given no grant can open
@@ -187,6 +214,6 @@ echo "ok  with no preopened directory, opening a file refuses with runtime"
 echo "..  error 2 (ENOENT) — the capability model's failure, not a trap"
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/pal_slice.pas" "$work" p \
-   -Fulib/rtl/platform/wasi
+   -Fu"$root"/lib/rtl/platform/wasi
 
 echo "PASS check_pal"

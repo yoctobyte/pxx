@@ -54,12 +54,12 @@ cp "$here/wasihost.js" "$work/"
 
 # The oracle. NOT piped: a pipeline's exit status is its LAST command's, so a
 # compile failure would sail through `| head` under `set -e`.
-"$root/compiler/pascal26" -Fulib/rtl/platform/posix \
+"$root/compiler/pascal26" -Fu"$root"/lib/rtl/platform/posix \
     "$here/align_slice.pas" "$work/native" > /dev/null
 (cd "$work/sand" && "$work/native") > "$work/native.txt"
 [ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output"; exit 1; }
 
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/align_slice.pas" "$work/a.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/a.wasm"
@@ -104,7 +104,7 @@ echo "ok  both u64 clock out-params were really written (a zero read is the"
 echo "..  signature of the defect, and these two are what would see it)"
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/align_slice.pas" "$work" a \
-   -Fulib/rtl/platform/wasi
+   -Fu"$root"/lib/rtl/platform/wasi
 
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure.

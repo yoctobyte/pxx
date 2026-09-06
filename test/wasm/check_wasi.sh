@@ -36,12 +36,12 @@ trap 'rm -rf "$work"' EXIT
 # renames and erases files by relative name — and the wasm run sees exactly one
 # preopened directory. Anything else would compare a program with a filesystem
 # against one without.
-"$root/compiler/pascal26" -Fulib/rtl/platform/posix \
+"$root/compiler/pascal26" -Fu"$root"/lib/rtl/platform/posix \
     "$here/wasi_slice.pas" "$work/native/prog" >/dev/null
 (cd "$work/native" && ./prog) > "$work/native.txt"
 rm -f "$work/native/prog"
 
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/wasi_slice.pas" "$work/w.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/w.wasm"
@@ -87,9 +87,9 @@ begin
   writeln(PalPlatform, ' ', PalHasFiles, ' ', PalHasSockets, ' ', PalHasThreads);
 end.
 EOF
-"$root/compiler/pascal26" -Fulib/rtl/platform/posix "$work/id.pas" \
+"$root/compiler/pascal26" -Fu"$root"/lib/rtl/platform/posix "$work/id.pas" \
     "$work/idn" >/dev/null
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$work/id.pas" "$work/id.wasm" >/dev/null 2>&1
 nat=$("$work/idn")
 was=$(node --no-warnings "$here/wasihost.js" "$work/id.wasm" "$work/sandbox")
@@ -120,6 +120,6 @@ echo "ok  with no directory granted, the same module reports no files —"
 echo "..  the capability model, not a compile-time constant"
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/wasi_slice.pas" \
-   "$work" w -Fulib/rtl/platform/wasi
+   "$work" w -Fu"$root"/lib/rtl/platform/wasi
 
 echo "PASS check_wasi"

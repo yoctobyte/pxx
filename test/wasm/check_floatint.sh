@@ -21,7 +21,7 @@ trap 'rm -rf "$work"' EXIT
 "$root/compiler/pascal26" "$here/floatint_slice.pas" "$work/prog" >/dev/null
 "$work/prog" > "$work/native.txt"
 
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/floatint_slice.pas" "$work/w.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/w.wasm"

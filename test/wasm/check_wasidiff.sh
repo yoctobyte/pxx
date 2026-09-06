@@ -53,7 +53,7 @@ printf 'SHOULD-NOT-BE-REACHABLE' > "$work/wd_outside.txt"
 
 # NOT piped: a pipeline's exit status is its LAST command's, so a compile
 # failure would sail through `| head` under `set -e`.
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/wasidiff_slice.pas" "$work/wd.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/wd.wasm"
@@ -133,7 +133,7 @@ else
 fi
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/wasidiff_slice.pas" "$work" wd \
-   -Fulib/rtl/platform/wasi
+   -Fu"$root"/lib/rtl/platform/wasi
 
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure.

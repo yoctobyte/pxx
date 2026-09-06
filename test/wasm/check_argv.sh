@@ -30,7 +30,7 @@ set -- alpha '' 'two words' "$long" omega
 "$root/compiler/pascal26" "$here/argv_slice.pas" "$work/prog" >/dev/null
 "$work/prog" "$@" > "$work/native.txt"
 
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/argv_slice.pas" "$work/w.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/w.wasm"
@@ -64,7 +64,7 @@ fi
 
 # --- what native cannot be asked: out of range, and a 300-byte argument ------
 vlong=$(printf 'x%.0s' $(seq 1 300))
-"$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
+"$root/compiler/pascal26" --target=wasm32 -Fu"$root"/lib/rtl/platform/wasi \
     "$here/argv_oob_slice.pas" "$work/oob.wasm" > "$work/oobcov.txt" 2>&1
 head -1 "$work/oobcov.txt"
 wasm-validate "$work/oob.wasm"
