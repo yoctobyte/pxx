@@ -560,3 +560,36 @@ this seat should carry when it routes:** *"tell the holder"* has no meaning for 
 and a residual left for an absent owner is a residual with no owner at all. Check the
 listing before writing *"X holds that"* — [[a-hold-ships-with-the-event-that-retires-it]]
 assumes an X that can end its own turn.
+
+## A BACKLOG COUNT THAT RISES FROM MEASUREMENT IS THE BOARD BECOMING CORRECT — and reporting it as a setback is the coordinator lying with a true number
+
+2026-09-06. The Track P campaign's headline is *drive open tickets toward zero*, reported by
+GROUP with a count. In one night the ready count went **27 → 30**, and three of the three
+were filed by a session that had just **audited green rows and found them vacuous**.
+
+I was about to report that as *"up 3, but for a good reason."* frankS put it harder and is
+right:
+
+> **Before that audit those three gaps were three GREEN corpus rows and no tickets. The board
+> was not merely SILENT about them — it was actively ASSERTING THEY WERE FINE.** The count
+> rising is the board becoming correct, and the rows it was wrong about were wrong in the
+> most expensive way available: passing a negative test with a construct we never implemented.
+
+**So the denominator moved, not just the numerator.** A campaign metric computed over a
+backlog whose errors are all in one direction — **absent tickets for defects nobody has
+measured** — is not merely noisy; it is **biased toward looking finished**, and every
+measurement pass corrects it upward. **The number going up is the only externally visible
+sign that anyone is measuring at all.**
+
+**How to report it, and this is the rule for the seat:**
+
+- **Never report a rise as a setback and never bury it as an aside.** Both readings train the
+  fleet that measuring costs the campaign, which is the exact incentive that produces a board
+  full of green rows nobody has probed.
+- **Split the count by PROVENANCE, not by size:** rows closed, rows filed **from a
+  measurement**, rows filed from triage. The middle group is the one to lead with.
+- **A campaign whose count only ever falls is not converging — it is not being audited.**
+  The rise is the receipt.
+
+Same shape as `## A "still open" list in a commit message cannot age`: a number is only as
+honest as the population it was computed over, and I own the population.
