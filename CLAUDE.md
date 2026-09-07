@@ -753,19 +753,27 @@ testing against, so the check destroys the thing it was checking. Run the
 recipe's lines into a scratch dir and omit the `mv`: measured 2026-09-07
 (`0540e3f9d`), `PXXFLAGS` is empty and `FPCFLAGS` is exactly `-O2 -Tlinux
 -Px86_64`, so that IS bootstrap's chain, and the only other thing skipped is
-`bootstrap-check`, a `which fpc` guard. **Run it with CWD at the REPO ROOT** —
-a `$(PXX_TMP)`-located binary finds no builtin beside itself (`--where` prints
-`[MISSING]`) and falls through to the CWD-relative last resort, which is how
-every bootstrap stage links the LIVE `compiler/builtin/`. **The wrong CWD is
-LOUD, and that is exactly why it costs an afternoon:** measured 2026-09-07 with
-`PXX_HOME`/`PXX_LIBPATH` unset, the same binary answers `uses: unit source not
-found: builtinheap`, rc=1, from anywhere but the root — so a mis-rooted chain
-yields NO BINARY rather than a wrong one, and there is no silent second builtin
-to fall into. But that message **reads exactly like a broken tree**, and the
-helpful reflex is to `cd` into the scratch dir, which is the one move that
-guarantees the wrong answer. Do not put a `builtin/` beside the staged binaries
-to make the error go away; that resolves against a copy and silently stops
-measuring bootstrap's chain. — and — measured
+`bootstrap-check`, a `which fpc` guard. **Run every build and every bootstrap
+measurement with the CWD at the REPO ROOT** — a `$(PXX_TMP)`-located binary
+finds no builtin beside itself (`--where` prints `[MISSING]` for every exe-dir
+path) and falls through to the **CWD-relative** last resort, which is how every
+bootstrap stage links the LIVE `compiler/builtin/`.
+  **THREE OUTCOMES, AND THE MIDDLE ONE IS THE WHOLE POINT:** no `compiler/`
+  under the CWD → **loud** failure (`uses: unit source not found: builtinheap`,
+  rc=1); **a SIBLING CHECKOUT → SILENT SUBSTITUTION**, the lookup fires and
+  compiles THAT tree's builtin units into your binary; the repo root → correct.
+  `ls -d /home/neo/*/compiler/builtin` answers **twenty** on this box, so the
+  silent arm is the COMMON one. **This paragraph asserted "the wrong CWD is
+  LOUD" for one hour on 2026-09-07 and that was a control drawn from the wrong
+  population** — a scratch dir, which has no `compiler/` and therefore cannot
+  fail any other way. **A byte-comparison does not catch the silent arm** while
+  the two trees' builtins happen to agree, which is exactly until someone
+  changes a builtin: measured, a build from a sibling root came out
+  BYTE-IDENTICAL because the two `builtinheap.pas` differed only by a named
+  constant versus its literal, and that reads as "CWD does not matter". Do not
+  put a `builtin/` beside the staged binaries to make an error go away; that
+  resolves against a copy and stops measuring bootstrap's chain.
+  — and — measured
 2026-09-01, `df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
 reverting it is revert→rebuild→restore→rebuild, and EACH REBUILD SEEDS FROM THE
 PREVIOUS LOCAL BINARY; after a few cycles, with other agents' `compiler/**` and

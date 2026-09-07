@@ -3119,6 +3119,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-asm-test-asm-emit-x64 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 31198d3674df (auto-filed by twatch) | — |
 | regression-test-asm-test-asmcore-x64 | A | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-test-x64enc | A | 70 | regression | regression: test-asm#src:test/test_x64enc.pas red at 31198d3674df (auto-filed by twatch) | — |
+| regression-test-c-abi-mixed-link-compiler-srchash | T | 70 | regression | regression: test-c-abi-mixed-link#src:tools/compiler_srchash.sh at f84be3fd43df in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard0-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard1-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at b695bcb4b192 (auto-filed by twatch) | — |
