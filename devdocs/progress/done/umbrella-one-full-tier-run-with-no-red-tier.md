@@ -7,6 +7,7 @@ blocked-by: []
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RESTORED 55 -> 85 on 2026-09-07 -- the 2026-09-06 re-rank down is kept in the body for its reasoning, but its justification is void: it retired the `green` buy by quoting CLAUDE.md calling pin_is_green a target for an operation this fleet does not perform, and on 2026-09-07 the owner set pinning to 'full green expected' (902843eb5) and named a 'green' beta 0.1 release. Grading green is now the operation, not a target for one nobody runs. The ROLLBACK half of the old argument stays dead and is not revived; this restoration rests only on those two. Cost stated plainly, as the re-rank stated its own: every blocker's inherited floor rises 55 -> 85, which is the intended effect. Now wired as a blocker of umbrella-a-stranger-can-get-a-working-compiler-from-a-release, because green is a COMPONENT of that deliverable and an umbrella cannot inherit from a goal it contains. BOTH NAMED BLOCKERS ARE DONE, so this cell is at ATTEMPT IT: seven returned from a ten-hour inode outage on 2026-09-07 and is running a tier, the first live attempt since the finding that no live host has EVER produced a clean full run. Still ends when one clean run comes back; still not a standing triage desk."
+status: done
 ---
 
 # One full tier run with no RED tier
@@ -1439,3 +1440,66 @@ reading a tier as a finding, check what landed between its tree and now** —
 `git log <tier-sha>..origin/master -- <the files the red depends on>` costs one
 command and settles it. Two of these three were caught only because somebody
 checked at ref level rather than reasoning from the clock.
+
+## 2026-09-07 — MET. `2b692bbb71b3` on seven, `full`, GREEN, 603s
+
+The goal was *"one `full` tier run with no RED in any tier judged at that sha"*,
+and this file said it *"ends when one clean run comes back"*. It has.
+
+```
+sha            2b692bbb71b3a753482955144b18fcd9d469efe7   (on origin/master)
+date           2026-09-07T17:59:11Z      host seven      tier full
+verdict        GREEN      wall 603.0     new_red []
+parent_tested  889383578da30ffa594699a7622870929d90c85f
+compiler_sha256 cd30ba1c7d5dedef49c0ce761f9653e5eeaee2c662651c0c12ad93f0a7f4c7f4
+skips 1   skip_holes 1   flaky 2
+```
+
+**Verified rather than read off the verdict**, because this file's own history is
+full of numbers that were true about something else:
+
+- **`new_red: []` is NOT vacuous here.** `parent_tested` is `889383578`, a
+  DIFFERENT sha, so there was a real baseline. The struck lines in
+  `verify-requests.tsv` warn that a self-parented run makes that field
+  meaningless and that the NDJSON row omits the key entirely — this one is
+  checked in the REPORT, which carries it.
+- **Exactly one row exists at that sha, and it is this one.** So "no RED in any
+  tier judged at that sha" is satisfied because `full` is the only tier judged
+  there — true, and worth saying plainly rather than letting it read as a
+  matrix.
+- **The sha is on origin/master.** It is one of the watcher's own
+  `publish uncommitted state` commits, which is normal — it tests near-tip.
+
+**The one hole, named because the report names it:** `skip_holes: 1` —
+`test-core#1234` needs RDRAND and seven's Westmere CPUs do not implement it, so
+the job **cannot** pass on that box. It is scored passlike and therefore
+invisible in the verdict; the report says so in a banner. **This is not a
+weakened result, it is the only result that box can produce** — CLAUDE.md
+already records that `skip_holes == 0` is unsatisfiable on seven, and holding
+this umbrella open for it would make it a gate that cannot pass, which is the
+antipattern this project names in its own rules. Two flaky jobs retried and
+passed and are listed by name.
+
+**What this does NOT cover, so no one over-quotes it:** the report's own banner
+says **-O3 is untested on this tree** — the `opt` tier is disjoint from `full`,
+and the newest sweep is 3d10h old at `cf9b14600039`. A full green is a claim
+about the default `-O` only.
+
+**The pairing is what makes it matter for the release.** `compiler_sha256` is
+`cd30ba1c7d5dedef…`, which is byte-for-byte the binary frankS measured at
+`0540e3f9d`: the fpc-3.2.2-seeded chain and the pin-derived chain produced
+identical bytes at `a049a7ec1`. So the compiler that produced this green is the
+same compiler a stranger can rebuild from FPC and check. **Green and
+reproducible-from-source are, for the first time, the same artefact.**
+
+**And it retires a standing fact.** frankZ's 2026-09-06 finding — 589 shas with
+a clean full run in the archive, **all 589 historical**, seven: *"none, ever"* —
+is no longer true. That finding was correct when made and was the reason this
+umbrella could not be closed by argument. Credit to frankZ for measuring it and
+to frank-seven for clearing the inode outage that had the box emitting
+`infra … no report (rc=1)` for ten hours the same day.
+
+Closed by the run, not by a decision. If it regresses, that is a new ticket.
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
