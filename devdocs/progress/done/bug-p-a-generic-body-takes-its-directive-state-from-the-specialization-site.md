@@ -4,7 +4,7 @@ track: P
 status: done
 summary: "FIXED 2026-09-07 at compiler b744c685f77c. A generic template's per-token directive snapshots ({$R} {$Q} {$C} {$I} {$H} {$NILCHECKS} {$SCOPEDENUMS} {$PACKRECORDS} {$PACKENUM}) did not travel through the specialization pool, so a specialized body took all nine from the SPECIALIZATION SITE. Both directions were wrong and they fail differently: a template {$R+} region instantiated under {$R-} silently dropped the check (1234 stored as 210 where fpc raises 201), and a template {$R-} region instantiated under {$R+} gained a check the source never asked for. ShiftTokParallel fills a splice gap from the token BEFORE it -- right for a synthesized token, wrong for a verbatim copy of a template token -- and the specializer overwrote only TokSrcOff/TokSrcLen afterwards. Three new pool channels carry all nine; conformance row tgeneric7 burns; fixture test_gendirstate26."
 owner: frankS
-resolved: PENDING-COMMIT
+resolved: b829cc7cc
 ---
 
 ## What was wrong
