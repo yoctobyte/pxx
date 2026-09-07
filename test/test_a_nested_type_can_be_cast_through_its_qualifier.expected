@@ -1,0 +1,15 @@
+proc  = 8
+range = 5
+enum  = 1
+array = 42
+alias = 5
+class = 1
+iproc = 8
+ienum = 1
+spec  = 8
+ispec = 8
+meth  = 501
+imeth = 501
+shadow= 502
+ishad = 502
+global= 1

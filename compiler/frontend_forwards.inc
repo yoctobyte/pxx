@@ -113,6 +113,12 @@ function ASTIsPoisoned(node: Integer): Boolean; forward;  { value came from a na
 function ParseMetaclassMemberTail(node, mcCi: Integer; var outTk: TTypeKind;
                                   var outRec: Integer; var finished: Boolean): Integer; forward;  { the ONE member-on-a-class-reference parser -- see its body }
 function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;  { NilPy twin (pyparser.inc) }
+procedure ParseFactor; forward;   { body in pasparser_expr.inc — called from
+                                  pasparser_lval.inc's ParseClassRecordSelectors, which parses
+                                  `inst.TNested(x)` by handing the bare type name back to the
+                                  factor parser's cast arms. Moved here from the top of
+                                  pasparser_expr.inc rather than duplicated: see the note below
+                                  on why a repeated forward breaks the seed just as hard. }
 procedure ParseExpr; forward;   { body in pasparser_expr.inc — called from pasparser_call.inc,
                                   which compiler.pas includes first. pxx pre-scans and does not
                                   need this; FPC does, so dropping it breaks ONLY the seed build

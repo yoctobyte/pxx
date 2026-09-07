@@ -18,7 +18,14 @@
   specs and is then wrong in both:
   devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md }
 
-procedure ParseFactor; forward;
+{ ParseFactor's forward MOVED to frontend_forwards.inc 2026-09-07: the
+  instance-qualified nested-type CAST (`inst.TNested(x)`) is parsed by
+  ParseClassRecordSelectors, which lives in pasparser_lval.inc -- included
+  BEFORE this file. FPC's seed is single-pass, so the signature has to be stated
+  there. NOT repeated here: FPC rejects a duplicated forward exactly as hard as
+  a missing one, and pxx tolerates both, so either mistake is invisible to
+  `make compiler/pascal26` and surfaces only in `make bootstrap` -- the
+  recurrence frontend_forwards.inc's own header records twice. }
 procedure NormalizeWideUnsignedLiteral(lit: Integer); forward;   { body sits with the
   other wide-literal normalisers, ~9500; ParseFactor is the CREATION site and calls it
   so one routine owns the "a decimal literal above High(Int64) is a QWord" rule. }
@@ -758,6 +765,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     ndFlat: Integer;   { flattened N-D subscript tail from ParseNDSubscriptTail, or -1 }
     ndIsND: Boolean;   { …and whether the base was N-D at all, for the partial-row case }
+    qcHops, qcNestCi: Integer; qcLast: AnsiString;   { the `TOwner.TNested(` cast strip -- see its arm }
     lenSi: Integer;   { Length(v) — the SYMBOL, when the operand is a bare identifier }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -3500,6 +3508,57 @@ begin
           CurASTNode := node;
           LastExprTk := tyInteger;
           Exit;
+        end;
+      end;
+      { `TOwner.TNested(expr)` — a TYPECAST through a class/record qualifier.
+        THE FIFTH ABSENT COPY of EatQualifiedTypePrefix, which is exactly what
+        that function's own header predicts: it lists ParseTypeKindInner, SizeOf,
+        Default and Low/High as the four sites that each failed by NOT having the
+        strip, and a cast is a fifth position nobody enumerated. `var f:
+        TPlain.TPFn` compiled, `SizeOf(TPlain.TPFn)` answered 8, and
+        `TPlain.TPFn(@Cmp)` said `class method not found (TPFn)` — the class
+        MEMBER walk's message, for a type declared three lines above. Measured on
+        a plain non-generic class and on pin v407: all seven nested kinds
+        (procedural, subrange, enum, array, record, class, plain alias) were
+        refused, so this is one absent copy and not seven gaps.
+
+        RESOLVE-THEN-FALL-THROUGH, never a cast arm of its own. Every cast
+        flavour already lives below — class, record, pointer alias, array,
+        procedural, enum, integer alias — and each carries rules a second copy
+        would have to grow again (the method-pointer operand context, the
+        array-cast address-of, the enum semantic identity). Stripping the
+        qualifier here hands the bare name to all of them at once.
+        devdocs/dev/normalise-dont-special-case.md
+
+        QualTypeOwnerCi is LEFT SET on purpose: it is the channel telling
+        FindTypeAlias which owner's rows are admissible, and a nested PROCEDURAL
+        alias is invisible without it — measured, `TPFn(@Cmp)` spelled bare from
+        outside the class is `undefined variable (TPFn)` while a nested enum and
+        a nested array resolve flat, because those live in other tables. It is
+        restored by ParseFactor, the wrapper, for the reason
+        TryConstHighLowValue's header gives one file over: this routine has
+        dozens of exits and a restore spelled per exit is the same absent-copy
+        shape as the defect itself.
+
+        The `(` test is what keeps `TFoo.ClassMethod(x)` out, and
+        ClassDeclaresTypeNamed is what keeps `TFoo.NotAType(x)` out — see its
+        header for why it is not FindNestedType. }
+      if (qUnit < 0) and (CurTok.Kind = tkIdent) and (FindSym(name) < 0) and
+         (NestedOwnerCi(name) >= 0) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) then
+      begin
+        qcNestCi := ScanNestedTypeRun(name, qcLast, qcHops);
+        { hops = 0 is the bare-name strip EatQualifiedTypePrefix falls back to,
+          and it is the ONLY case that can eat a member: the registry already
+          proved every hop it counted. }
+        if (qcHops = 0) and
+           ClassDeclaresTypeNamed(NestedOwnerCi(name), GetTokenStr(TokPos + 1)) then
+          qcHops := 1;
+        if (qcHops > 0) and (TokPos + 2 * qcHops < TokCount) and
+           (Tokens[TokPos + 2 * qcHops].Kind = tkLParen) then
+        begin
+          EatQualifiedTypePrefix(name);
+          prevTok := TokPos - 1;
         end;
       end;
       { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
@@ -8977,7 +9036,35 @@ begin
     end;
 end;
 
+procedure ParseFactorInner; forward;
+
+{ Wrapper, and it exists only to save and restore QualTypeOwnerCi -- the same
+  wrapper TryConstHighLowValue and TryFoldHighLowType each carry one file over,
+  for the reason stated in the first of those headers: the global must survive
+  INTO the lookup (it is the channel telling FindTypeAlias which owner's rows are
+  admissible) and must NOT survive OUT, because a value left behind lets a later
+  unqualified name see some class's private alias.
+
+  A WRAPPER RATHER THAN A RESTORE BEFORE EACH `Exit`. Three arms inside the core
+  set the global -- Default(), SizeOf() and the `TOwner.TNested(` cast strip --
+  and the core has dozens of exits between them. A rule spelled per exit is the
+  absent-copy shape this whole change is about, one scope down.
+
+  IT CLOSES TWO PRE-EXISTING LEAKS as well as scoping the new arm: Default()'s
+  and SizeOf()'s strips both set QualTypeOwnerCi and neither restored it, so
+  after `SizeOf(TOuter.TInner)` every later unqualified name in the expression
+  could still see TOuter's private aliases. Nothing in tree depended on it --
+  measured, quick gate and the conformance corpus are unchanged -- but it is a
+  widening, so it is named here rather than left as a silent side effect. }
 procedure ParseFactor;
+var pfSavedQTO: Integer;
+begin
+  pfSavedQTO := QualTypeOwnerCi;
+  ParseFactorInner;
+  QualTypeOwnerCi := pfSavedQTO;
+end;
+
+procedure ParseFactorInner;
 var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
     smName: AnsiString;      { the intercepted int-method name at this suffix }

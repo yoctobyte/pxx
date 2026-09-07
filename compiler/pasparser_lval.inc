@@ -591,6 +591,7 @@ var
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
   ctorSelfN, ctorSelfRec, ctorValN: Integer;   { an INSTANCE-reached constructor's receiver and its rec — the expression's value, see the ctor arm at the instance-method tail }
+  lvCastNode: Integer;   { `inst.TNested(x)` — see TryNestedTypeCastOnReceiver }
 begin
   hostCi := -1; helperRec := -1;   { no class-helper metaclass redirect yet }
   ctorSelfN := -1; ctorSelfRec := REC_NONE; ctorValN := -1;
@@ -2657,6 +2658,21 @@ begin
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
       viaProp := False;
+
+      { `inst.TNested(expr)` — the instance-qualified nested-type CAST. The
+        SIBLING call: ParseClassRecordSelectors has the same one two thousand
+        lines down, and both had to get it because either walker can be the one
+        holding a `.name` on a class receiver. See TryNestedTypeCastOnReceiver
+        for why the receiver is a scope and not a value, and why the rule is one
+        function rather than an arm in each walker.
+        bug-p-a-nested-type-can-be-declared-through-a-qualifier-but-not-cast-through-one }
+      lvCastNode := TryNestedTypeCastOnReceiver(recName, fieldName, tk);
+      if lvCastNode >= 0 then
+      begin
+        LastExprTk := tk;
+        Result := lvCastNode;
+        Exit;
+      end;
 
       { A CLASS HELPER standing in front of the receiver's own members — see
         ClassHelperRecFor. Asked once, here, where the member name is known and
@@ -5276,6 +5292,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     dpsTk, dpsRec, dpsCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     cBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
     fldSig: Integer;   { a chained member's PROCEDURAL signature — see the call arm below }
+    qcCastNode: Integer;   { `inst.TNested(x)` — see TryNestedTypeCastOnReceiver }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
     pyparser.inc), split out 2026-08-09 by
@@ -5302,6 +5319,40 @@ begin
         Error('expected field name after .');
       prevTok := TokPos - 1;
       fieldName := GetTokenStr(prevTok);
+
+      { `inst.TNested(expr)` — the INSTANCE-QUALIFIED spelling of a typecast
+        through a nested type, and the sibling of the `TOwner.TNested(expr)`
+        strip in ParseFactorCore. fgl spells it (`ilist.TCompareFunc(@Cmp)`,
+        tgeneric10.pp) and so does anything that reaches a nested comparator
+        type through the container variable rather than through its type name.
+        Without this the name fell to ordinary member lookup and answered
+        `"TCompareFunc": no such member on this record/class` — a message about
+        members, for a type.
+
+        THE RECEIVER IS A SCOPE HERE AND NOT A VALUE, which is the whole reason
+        this is an arm and not a member kind: `inst` contributes nothing but the
+        class whose types are in scope, and `node` is discarded. That is FPC's
+        reading and it is what makes the two spellings interchangeable in
+        source.
+
+        Handing the bare name back to ParseFactor rather than casting here is
+        the same resolve-then-fall-through the type-qualified arm uses: every
+        cast flavour, the method-pointer operand context, the array-cast
+        address-of and the postfix suffix walk all live there already, and this
+        walker has no cast machinery of its own to grow.
+
+        QualTypeOwnerCi is set ACROSS the call and restored after it: a nested
+        PROCEDURAL alias is invisible to a bare lookup (measured — `TPFn(@Cmp)`
+        from outside the class is `undefined variable`), and ParseFactor's own
+        wrapper saves and restores whatever it is given rather than clearing it,
+        so a value set here survives into the cast arms and no further.
+
+        FIRST in the dot branch, before every member arm, and that ordering is
+        the guard: ClassDeclaresTypeNamed already declines a name the class
+        declares as a METHOD or class var, so no member spelling can be captured
+        — and a type and a member cannot share a name in the first place. }
+      qcCastNode := TryNestedTypeCastOnReceiver(recId, fieldName, outTk);
+      if qcCastNode >= 0 then begin Result := qcCastNode; Exit; end;
 
       { A METACLASS-valued step is a RECEIVER, not something to walk into:
         `TRec(q^).cr.NewN(3)` where `cr: class of TBase`. A `class of T` field

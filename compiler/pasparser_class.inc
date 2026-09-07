@@ -233,6 +233,117 @@ begin
   if Result < 0 then Result := FindUClass(nm);
 end;
 
+function ClassDeclaresTypeNamed(ci: Integer; const nm: AnsiString): Boolean;
+{ Does class/record `ci` -- or an ancestor -- declare a TYPE called `nm`? The
+  question `TOwner.<nm>` asks when nothing has consumed the qualifier yet and
+  the answer decides whether the run is a TYPE or a MEMBER.
+
+  NOT FindNestedType, AND NOT FindNestedClassLikeCi EITHER, and that is the
+  whole reason this exists rather than a call to one of them. AddNestedType
+  exits when `ci < 0`, so a nested PROCEDURAL, subrange, enum, array or plain
+  alias type gets NO registry row at all: FindNestedType(TPlain, 'TPFn') is -1
+  for a `TPFn = function(...)` declared three lines up. FindNestedClassLikeCi
+  adds the class-name alias table and still answers -1 for those, because they
+  are not class-like. Both would compile here, read as careful, and reject the
+  entire population this predicate is about -- a guard that cannot fire.
+
+  The Alias* table is where those rows actually live, keyed by AliasOwnerCi
+  (written from ParsingClassBodyCi at registration), and the ancestor walk is
+  FindNestedType's own -- a nested type is inherited exactly as a class const
+  is. Both tables are consulted because a nested CLASS or RECORD is in the
+  registry and not in Alias*, so neither alone answers for all seven kinds.
+
+  Deliberately owner-SCOPED where FindTypeAlias is not: this is a test, not a
+  lookup. A global type of the same name is not a member of `ci`, and
+  `TFoo.Bar(x)` for a global `Bar` must stay whatever the member walk makes of
+  it rather than becoming a cast. }
+var i, c: Integer; lo: AnsiString;
+begin
+  Result := False;
+  if ci < 0 then Exit;
+  if FindNestedType(ci, nm) >= 0 then begin Result := True; Exit; end;
+  lo := ULower(nm);
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to AliasCount - 1 do
+      if (AliasOwnerCi[i] = c) and UNameMatch(AliasNOff[i], AliasNLen[i], lo) then
+      begin Result := True; Exit; end;
+    c := UClsParent[c];
+  end;
+  { TWO TABLES CARRY NO OWNER COLUMN AT ALL, so for a nested ENUM and a nested
+    named ARRAY the scoped question above cannot be asked -- EnumType* and
+    ArrType* are keyed by name and unit and nothing else. Measured: with the
+    scoped test alone, `TPlain.TPEnum(1)` and `TPlain.TPArr(raw)[0]` stayed
+    refused while the other five kinds resolved, which is exactly the
+    five-of-seven shape a per-table rule produces.
+
+    Answered UNSCOPED, and that matches what the declaration path already does:
+    FindNestedClassLikeCi's header records the same decision for the class-alias
+    table, on the ground that `var x: TOther.TP` compiles today for a TP declared
+    in TTest, so scoping the USE and not the DECLARATION would make the two
+    disagree. Adding an owner column to both tables is a separate change.
+
+    The collision it admits is `TFoo.Bar(x)` where Bar is a global enum or array
+    type AND TFoo has a member called Bar -- so the member is checked FIRST and
+    wins. Pascal forbids a class declaring two things of one name, so a real
+    nested type can never be shadowed by this test; only a global one can be
+    kept out, which is the correct answer. }
+  if (FindUMeth(ci, nm) >= 0) or (FindClassVar(ci, nm) >= 0) then Exit;
+  Result := (FindEnumType(nm) >= 0) or (FindArrayType(nm) >= 0);
+end;
+
+function TryNestedTypeCastOnReceiver(recId: Integer; const fieldName: AnsiString;
+                                     var outTk: TTypeKind): Integer;
+{ `inst.TNested(expr)` — the INSTANCE-QUALIFIED spelling of a typecast through a
+  nested type. CurTok is on `fieldName` and the caller has consumed the dot; on
+  success the whole cast (and its suffixes) is parsed and the node returned, -1
+  with nothing consumed otherwise.
+
+  THE RECEIVER IS A SCOPE HERE AND NOT A VALUE, which is what makes this an arm
+  rather than a member kind: `inst` contributes only the class whose types are in
+  scope, and the caller's receiver node is discarded. That is FPC's reading and
+  it is what makes `TOwner.TNested(x)` and `inst.TNested(x)` interchangeable in
+  source. fgl spells the second (`ilist.TCompareFunc(@Cmp)`, tgeneric10.pp).
+
+  ONE COPY BECAUSE THE MEMBER WALK HAS FOUR. ParseLValueAST and
+  ParseClassRecordSelectors both take a `.name` on a class/record receiver, and
+  the diagnostic this replaces (`"TCompareFunc": no such member on this
+  record/class`) is reachable through either. Spelling the rule per walker is
+  precisely the absent-copy shape EatQualifiedTypePrefix's header describes, one
+  file over and for the same construct.
+
+  Handing the bare name back to ParseFactor rather than casting here is the
+  resolve-then-fall-through the TYPE-qualified arm in ParseFactorCore uses: every
+  cast flavour, the method-pointer operand context, the array-cast address-of and
+  the postfix suffix walk already live there, and a member walker has no cast
+  machinery of its own to grow.
+
+  QualTypeOwnerCi is set ACROSS the call and restored after: a nested PROCEDURAL
+  alias is invisible to a bare lookup -- measured, `TPFn(@Cmp)` spelled bare from
+  outside the class is `undefined variable (TPFn)`, while a nested enum and a
+  nested array resolve flat because they live in tables with no owner column.
+  ParseFactor's own wrapper saves and restores whatever it is handed rather than
+  clearing it, so a value set here survives into the cast arms and no further.
+
+  CALL IT BEFORE EVERY MEMBER ARM, and the ordering is the guard:
+  ClassDeclaresTypeNamed declines a name the class declares as a method or class
+  var, and Pascal forbids a class declaring a type and a member of one name, so
+  no member spelling can be captured. }
+var tncSaved: Integer;
+begin
+  Result := -1;
+  if recId < REC_UCLASS_BASE then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen) then Exit;
+  if not ClassDeclaresTypeNamed(recId - REC_UCLASS_BASE, fieldName) then Exit;
+  tncSaved := QualTypeOwnerCi;
+  QualTypeOwnerCi := recId - REC_UCLASS_BASE;
+  ParseFactor;
+  QualTypeOwnerCi := tncSaved;
+  outTk := LastExprTk;
+  Result := CurASTNode;
+end;
+
 { Scan — WITHOUT consuming — the `TOuter.TInner[.TDeeper…]` qualifier run that
   starts at the current token (`nm` = the outermost spelling, CurTok = that
   identifier, Tokens[TokPos] = the '.' after it). Returns the DEEPEST nested
