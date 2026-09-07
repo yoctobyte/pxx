@@ -87,3 +87,97 @@ arriving from a second direction.
 Unchanged by this note: start with the DESCRIPTOR half. A `SetLength` hook
 written against a descriptor that does not exist yet is the same guess as a
 helper written against one.
+
+## 2026-09-07 (frankA) — the descriptor half, measured before designing: most of it already exists
+
+Claimed and read. The ticket says the descriptor is the half that decides what
+shape the helpers can have, and warns against writing a helper against a layout
+somebody else will choose. So: what is already chosen.
+
+### There IS a record layout descriptor, and a runtime that walks it
+
+`EmitLayoutRTTI` (`compiler/rtti_emit.inc`) emits one per record, `UClsRTTIOff[ci]`,
+and `TypeInfo(TRec)`'s `DataPtr` already points at it (the `TYPEINFO_REQ_CAT_RECORD`
+arm, `rtti_emit.inc:1305ff`). Format, read off the emitter:
+
+```
++0   Int32   Kind = 1 (Record)
++4   Int32   Size
++8   Int32   MemberCount
++12  member[MemberCount], 16 bytes: { Offset, Kind, ArrCount, TypeRef }
+     dyn[dCount],         20 bytes: { Kind=2, ElSize, Depth, BaseKind, BaseTypeRef }
+```
+
+And the runtime entry points the ticket describes as needing to be written
+**already exist** in `compiler/builtin/builtinheap.pas`:
+
+- `PXXRecordInitialize(recAddr, desc)` / `PXXRecordFinalize(recAddr, desc)` —
+  and their headers say exactly why: *"a record conjured from GetMem is just
+  bytes to it"*, which is this ticket's own case.
+- `PXXRecordRelease` / `PXXRetain` / `PXXRecordZeroManaged` / the `...Intf` pair.
+
+So `InitializeArray(P, TypeInfo(TFoo), N)` is close to a loop over
+`PXXRecordInitialize(P + i * Size, GetTypeData(ti))`, with `Size` already in the
+descriptor. **That is a smaller job than the ticket's summary implies, and it is
+still not the whole job**, because of what the descriptor does NOT carry.
+
+### What is missing, and the two constraints that shape it
+
+**1. The management-operator entry points are not in the descriptor at all.**
+`PXXRecordInitialize` zeroes managed members; it does not and cannot run a
+record's `class operator Initialize`, because nothing in the blob names it. That
+is the field this ticket exists to add.
+
+**2. A record with operators but NO managed fields gets NO descriptor.** Pass 1
+is guarded by `RecordHasManagedFields(ci + REC_UCLASS_BASE)`. `TFoo = record n:
+Integer; class operator Initialize; end` is exactly that shape and it is the
+shape every fixture in the management-operator family uses. The emission
+condition has to widen, or the feature is invisible on its own test cases.
+
+**3. The header is 12 bytes of Int32, so members start 4 mod 8.** A pointer slot
+cannot go at +12 on a 64-bit target. Either the header grows to 16 (members move
+to +16) or the operator pointers live at the end of the blob.
+
+### The consumer census, because a header change moves every member walk
+
+Enumerated rather than estimated. Emitter side, `compiler/rtti_emit.inc`: six
+sites — `DataPutZeros(12 + mCount*16 + dCount*20)` ×2, `mHdr := hdr + 12 + k*16`
+×2, `dynDescOff := hdr + 12 + mCount*16 + dynIdx*20` ×2. Runtime side,
+`compiler/builtin/builtinheap.pas`: `memberPtr := Int64(desc) + 12` in
+`PXXRecordZeroManaged`, `PXXRecordRetain`, `PXXRecordRetainIntf`,
+`PXXRecordReleaseIntf`, `PXXRecordRelease` and `PXXClassFinalize`. Nowhere else
+in the tree.
+
+**THE TRAP, AND IT WOULD BE SILENT.** `Int64(desc) + 12` occurs EIGHT times in
+`builtinheap.pas` and only SIX of them are this descriptor. The other two are
+`baseKind := PInt32(Int64(desc) + 12)^` in `PXXDynArrayRelease` and
+`PXXDynSetLen`, which walk the **dyn-array** descriptor (Kind = 2), where +8 is
+`Depth` and +12 is `BaseKind`. **One literal, two blobs, one file.** A blind
+`sed 's/desc) + 12/desc) + 16/'` corrupts every dynamic-array release in the RTL
+and nothing about it looks wrong. The discriminator is the assignment target
+(`memberPtr` vs `baseKind`), not the constant.
+
+Also NOT to be changed: `subDesc := Pointer(memberPtr + 12 + typeRef)` inside the
+member loop. That 12 is the offset of the member's own `TypeRef` slot and the
+reference is **self-relative**, so a header resize does not touch it.
+
+### The shape I propose, and the one I reject
+
+**Propose:** grow the header to 16 — `+12 Int32 Flags` — members at +16, and put
+the operator pointers at the END of the blob, 8-aligned, with a bit in `Flags`
+saying they are there. Twelve sites change by one constant each, the 16-byte
+member stride and the self-relative subDesc are untouched, and an old consumer
+reading `Flags` as zero behaves exactly as today.
+
+**Reject:** a new `Kind = 3` for "record with operators". It doubles the
+dispatch in precisely the six routines that must never get a record's kind
+wrong, to save a header word.
+
+### Not yet measured, and it gates the first line of code
+
+Whether `DataPutZeros`/`PatchDataI32` and the fixup pass can place an 8-aligned
+pointer at a computed tail offset, and what `AddDataPtrFix` needs to relocate a
+PROCEDURE address rather than a data address — every existing `AddDataPtrFix`
+call in this emitter points at `Data[]` or a string, not at code. That is the
+next reading, and until it is taken, the layout above is a proposal and not a
+decision.
