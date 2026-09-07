@@ -83,4 +83,4 @@ Conformance `411 pass, 0 fail, 89 skip, 50 auto-gated (of 550)`, up from 410/90.
   `EAccessViolation` from signal context. Decided territory, not a gap to take.
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 80e8957ed.
