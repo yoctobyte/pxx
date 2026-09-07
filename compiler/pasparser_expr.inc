@@ -832,6 +832,16 @@ begin
     Exit;
   end;
   LastExprTk := tyInteger;
+  { UNQUALIFIED UNTIL PROVEN OTHERWISE, and this is DEFENSIVE -- no path is
+    known that reaches a qUnit reader without passing the one assignment, and
+    none of the measurements behind this file's qualifier fixes needed it. It is
+    here because a Pascal local is not zero-initialised and qUnit is written in
+    exactly one place and read thousands of lines below, so the day an arm is
+    added or moved above that write, the failure is a scoping decision made on a
+    stack value -- which does not error and does not crash. -1 is what
+    ConsumeUnitQualifier itself returns for "not qualified", so this states the
+    existing default rather than inventing one. }
+  qUnit := -1;
   { An unqualified `Read`/`Write`/`Readln`/`Writeln` that names a METHOD of the
     enclosing class is an ORDINARY IDENTIFIER here, not the console intrinsic:
     `if Read(Buffer,Count) < Count` inside TStream.ReadBuffer is the shape, and
@@ -5268,7 +5278,20 @@ begin
         method reached from a class method has no instance to run on, and must keep
         failing. A local/param (idx >= 0), a real proc (procIdx >= 0) or a unit
         qualifier all still win. This is fpcunit's TAssert.FailEquals calling Fail. }
-      if (procIdx < 0) and (idx < 0) and (qUnit < 0) and
+      { `qUnit = -1`, NOT `qUnit < 0`, AND THAT IS THE WHOLE OF A REAL DEFECT.
+        ConsumeUnitQualifier answers -1 for unqualified, >= 0 for a named unit
+        and -2 for `System.` -- so `< 0` reads as "not unit-qualified" and
+        admits the System marker, which is the one qualifier that exists
+        precisely to REFUSE a same-named member. rtl-generics' TCompare declares
+        `class function Integer(constref ALeft, ARight: Integer)` and its UInt8
+        writes `System.Integer(ALeft)`; this arm bound the class's own method.
+        With mismatched arity that is `expected ',' before ')'` -- the parser
+        asking for the second argument -- and WITH MATCHING ARITY IT COMPILES
+        AND RETURNS THE METHOD'S VALUE, silently, which is how it reached a
+        released compiler. The sibling guards ~60 lines below spell it `= -1`
+        and carry the reason; this one did not.
+        bug-p-the-system-qualifier-is-stripped-rather-than-resolved-so-a-shadowing-member-wins }
+      if (procIdx < 0) and (idx < 0) and (qUnit = -1) and
          (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) then
       begin
         smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
@@ -8789,6 +8812,15 @@ begin
       begin
         { Implicit Self.method dispatch for methods called bare inside a class body in expression context }
         node := -1;
+        { NO qUnit GUARD HERE, and it was measured rather than assumed. The
+          static-method arm ~3500 lines above needed one -- `System.Integer(x)`
+          inside a class method bound the class's own `Integer` -- and the
+          obvious reading is that this instance arm has the same hole. It does
+          not: the same shadow written as an INSTANCE method resolves correctly
+          on this tree AND on pin v407, so nothing reaches here with qUnit = -2
+          that would be wrong to dispatch. A guard added for symmetry would be
+          one no case exercises.
+          bug-p-the-system-qualifier-is-stripped-rather-than-resolved-so-a-shadowing-member-wins }
         if (idx < 0) and (procIdx < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
         begin
           { …on the CLASS HELPER that owns this body when it declares the name,
