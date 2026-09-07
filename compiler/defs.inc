@@ -227,6 +227,33 @@ const
     fixed-size parser arrays and not of the language, a 532-name group is
     legal Pascal that pxx rejected, and machine-generated sources reach it. }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
+  { Record `=` is expanded into one comparison per scalar leaf (ir.inc,
+    RecordFieldwiseCmpLeaves). An ARRAY member is unrolled, so a record can ask
+    for arbitrarily many; above this the whole record falls back to the old
+    one-word compare, and IRRecordCmpExpandable WARNS at the site because that
+    fallback answers WRONG for records differing past the first word.
+
+    THE SWEEP FOUND NO KNEE, so this is a BUDGET and not a measured boundary,
+    and saying so is the point. Measured 2026-09-07 on x86-64 at the default
+    -O, 20 comparison sites per build to clear the 4096-byte page quantum that
+    `code=` reports in: 55 bytes of emitted code per leaf, flat from 100 leaves
+    to 1280 (51.2 / 51.2 / 51.2 / 57.6 / 55.3 B/leaf). Linear with no point
+    where it stops costing, so no element count is the "right" one -- 64 leaves
+    is ~3.5KB per comparison site, which covers the shapes that actually occur
+    (a 16-char name array, a 4x4 matrix, an array of small records) without
+    letting one `=` on `array[0..65535] of Byte` emit 3.6MB.
+
+    An earlier version of that sweep read .text out of --emit-obj objects and
+    reported 64 bytes for EVERY element count: the exported symbol was the only
+    thing emitted, so the number could not move. The rows above are from
+    executables, where it does.
+
+    Raising this is not the fix for the over-cap case. The right shape is a
+    byte-compare over any contiguous PADDING-FREE run (an array of a scalar has
+    no interior padding, which is what makes it safe there and unsafe for a
+    whole record), which is O(1) code and needs a PXXMemCmp that does not exist
+    yet. bug-a-record-equality-still-compares-one-word-when-a-member-is-an-array }
+  REC_CMP_UNROLL_MAX = 64;
   { how many RECOVERED diagnostics are printed before the compiler gives up. A
     file whose first error cascades produces noise, not information, past a
     handful. feature-a-error-does-not-halt-so-a-parse-can-be-speculative }

@@ -8600,25 +8600,59 @@ begin
     (tk = tySingle) or (tk = tyDouble) or (tk = tyAnsiString);
 end;
 
-function RecFieldCmpSpan(fi: Integer): Integer;
-{ Bytes field `fi` occupies, for the OVERLAP test below. Only ever asked about
-  fields RecCmpScalarKindOK or the record recursion already accepted, so the
-  two shapes it cannot size (an array member, a bit-field) are refused before
-  they arrive; it still answers a conservative 0 for them rather than guessing,
-  because a wrong span makes the overlap test miss a union. }
-var fk: TTypeKind;
+function RecFieldCmpElemSize(fi: Integer): Integer;
+{ One ELEMENT of field `fi`, which for an array field is what `UFldTk` holds --
+  the element kind, not the field's kind. Mirrors what ABISysVWalkRec (abi.inc)
+  already computes for the same tables rather than deriving a second answer:
+  two spellings of "how wide is this member" is how the two drift apart, and
+  that walk is the ABI oracle and has the most exercise. }
 begin
-  RecFieldCmpSpan := 0;
-  if UFldIsArray[fi] or (UFldBitWidth[fi] <> 0) then Exit;
-  fk := IntToTypeKind(UFldTk[fi]);
-  if fk = tyRecord then
-    RecFieldCmpSpan := RecSize(UFldRec_[fi])
-  else
-    RecFieldCmpSpan := TypeStorageSize(fk, REC_NONE);
+  RecFieldCmpElemSize := TypeStorageSize(IntToTypeKind(UFldTk[fi]), UFldRec_[fi]);
 end;
 
-function IRRecordIsFieldwiseComparable(recId, depth: Integer): Boolean;
-{ Can `a = b` on this record be expanded into per-field value comparisons?
+function RecFieldCmpCount(fi: Integer): Integer;
+{ How many ELEMENTS field `fi` holds: 1 for a scalar or record member, and the
+  FLAT element count for a static array -- `UFldArrLen` is the PRODUCT of the
+  dimension spans (pasparser_decl.inc multiplies `arrLen` by each `tdDimSpan`),
+  so a 2-D `array[0..2, 0..3]` answers 12 and needs no dimension walk here.
+  Read off the code that WRITES the column, not inferred from a size that
+  happened to match: a first-dimension-only count would compare 3 of 12
+  elements and answer a wrong TRUE, which is the defect this whole family is.
+
+  0 means REFUSE -- a dynamic array field is a heap handle, not inline
+  storage, and comparing handles is identity rather than content. }
+begin
+  RecFieldCmpCount := 1;
+  if not UFldIsArray[fi] then Exit;
+  if (UFldDynDepth[fi] > 0) or (UFldArrLen[fi] < 0) then
+    RecFieldCmpCount := 0
+  else
+    RecFieldCmpCount := UFldArrLen[fi];
+end;
+
+function RecFieldCmpSpan(fi: Integer): Integer;
+{ Bytes field `fi` occupies, for the OVERLAP test below. Answers a conservative
+  0 for anything it cannot size, and the overlap test treats a 0 as a refusal
+  for the whole record -- because a span that is too SHORT does not merely
+  under-compare, it makes the overlap test miss a union, and a missed union is
+  the segfault case. }
+var es: Integer;
+begin
+  RecFieldCmpSpan := 0;
+  if UFldBitWidth[fi] <> 0 then Exit;
+  es := RecFieldCmpElemSize(fi);
+  if es <= 0 then Exit;
+  RecFieldCmpSpan := es * RecFieldCmpCount(fi);
+end;
+
+function RecordFieldwiseCmpLeaves(recId, depth: Integer): Integer;
+{ How many scalar comparisons would a field-wise `a = b` on this record emit,
+  or -1 if it cannot be expanded at all?
+
+  ONE function, not a Boolean predicate beside a counter. The emitter walks the
+  same fields in the same order, and a count computed by a second walk is a
+  second chance to disagree with the first -- the caller needs both answers and
+  they must come from one traversal.
 
   A SEPARATE PASS from the emitter on purpose. The emitter appends IR nodes as
   it goes, and a refusal discovered at field 7 would leave the six it already
@@ -8640,10 +8674,10 @@ function IRRecordIsFieldwiseComparable(recId, depth: Integer): Boolean;
   Refusing is SAFE HERE and this is the only reason this function may fail
   closed: the caller falls through to the scalar IR_BINOP that has always been
   there. A refusal preserves a wrong answer; it never creates one. }
-var ci, fbase, cnt, i, j, ai, aj, spi, spj: Integer;
+var ci, fbase, cnt, i, j, ai, aj, spi, spj, n, sub, elems: Integer;
     ftk: TTypeKind;
 begin
-  IRRecordIsFieldwiseComparable := False;
+  RecordFieldwiseCmpLeaves := -1;
   if depth > 16 then Exit;
   if recId < REC_UCLASS_BASE then Exit;
   ci := recId - REC_UCLASS_BASE;
@@ -8654,18 +8688,27 @@ begin
   { A record with no fields has nothing to compare and no honest answer; leave
     it on the old path rather than inventing a constant True. }
   if cnt <= 0 then Exit;
+  n := 0;
   for i := 0 to cnt - 1 do
   begin
-    if UFldIsArray[fbase + i] then Exit;
     if UFldBitWidth[fbase + i] <> 0 then Exit;
+    elems := RecFieldCmpCount(fbase + i);
+    if elems <= 0 then Exit;              { dynamic array, or a zero-length one }
     ftk := IntToTypeKind(UFldTk[fbase + i]);
     if ftk = tyRecord then
     begin
       if UFldRec_[fbase + i] = recId then Exit;
-      if not IRRecordIsFieldwiseComparable(UFldRec_[fbase + i], depth + 1) then Exit;
+      sub := RecordFieldwiseCmpLeaves(UFldRec_[fbase + i], depth + 1);
+      if sub < 0 then Exit;
+      n := n + sub * elems;
     end
-    else if not RecCmpScalarKindOK(ftk) then
+    else if RecCmpScalarKindOK(ftk) then
+      n := n + elems
+    else
       Exit;
+    { An overflowing count is refused rather than wrapped: the cap below is a
+      code-size guard and a negative n would sail straight through it. }
+    if n < 0 then Exit;
   end;
   for i := 0 to cnt - 1 do
   begin
@@ -8678,7 +8721,7 @@ begin
       if (ai < aj + spj) and (aj < ai + spi) then Exit;   { variant part or union }
     end;
   end;
-  IRRecordIsFieldwiseComparable := True;
+  RecordFieldwiseCmpLeaves := n;
 end;
 
 function IRRecFieldwiseEqChain(recId, symA, symB, baseOff, depth: Integer): Integer;
@@ -8692,7 +8735,7 @@ function IRRecFieldwiseEqChain(recId, symA, symB, baseOff, depth: Integer): Inte
   without an arm below would reach the `else` and emit a load of the wrong
   width, which is the failure mode
   [a comment above an n-armed predicate asserts all n arms] warns about. }
-var ci, fbase, cnt, i, off, chain, cmp: Integer;
+var ci, fbase, cnt, i, e, off, elemOff, es, elems, chain, cmp: Integer;
     ftk: TTypeKind;
 begin
   ci := recId - REC_UCLASS_BASE;
@@ -8703,23 +8746,68 @@ begin
   begin
     off := baseOff + UFldOff_[fbase + i];
     ftk := IntToTypeKind(UFldTk[fbase + i]);
-    if ftk = tyRecord then
-      cmp := IRRecFieldwiseEqChain(UFldRec_[fbase + i], symA, symB, off, depth + 1)
-    else
-      cmp := IRAppend(IR_BINOP,
-        IRAppend(IR_LOAD_MEM,
-          IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symA, -1, -1, 0, Ord(tyPointer)),
-                   -1, -1, off, Ord(ftk)), -1, -1, 0, Ord(ftk)),
-        IRAppend(IR_LOAD_MEM,
-          IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symB, -1, -1, 0, Ord(tyPointer)),
-                   -1, -1, off, Ord(ftk)), -1, -1, 0, Ord(ftk)),
-        Ord(tkEq), 0, Ord(tyBoolean));
-    if chain < 0 then
-      chain := cmp
-    else
-      chain := IRAppend(IR_BINOP, chain, cmp, Ord(tkAnd), 0, Ord(tyBoolean));
+    es := RecFieldCmpElemSize(fbase + i);
+    elems := RecFieldCmpCount(fbase + i);
+    { An ARRAY member is UNROLLED, one comparison per element, at the same
+      offsets ABISysVWalkRec walks. A loop would need a counter, a label pair
+      and an early exit, which turns this from a value tree into statements
+      plus a result -- a bigger change to the caller than to this function.
+      The cost of unrolling is bounded at the decide pass instead
+      (REC_CMP_UNROLL_MAX), and a record over the cap keeps the old path. }
+    for e := 0 to elems - 1 do
+    begin
+      elemOff := off + e * es;
+      if ftk = tyRecord then
+        cmp := IRRecFieldwiseEqChain(UFldRec_[fbase + i], symA, symB, elemOff, depth + 1)
+      else
+        cmp := IRAppend(IR_BINOP,
+          IRAppend(IR_LOAD_MEM,
+            IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symA, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, elemOff, Ord(ftk)), -1, -1, 0, Ord(ftk)),
+          IRAppend(IR_LOAD_MEM,
+            IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symB, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, elemOff, Ord(ftk)), -1, -1, 0, Ord(ftk)),
+          Ord(tkEq), 0, Ord(tyBoolean));
+      if chain < 0 then
+        chain := cmp
+      else
+        chain := IRAppend(IR_BINOP, chain, cmp, Ord(tkAnd), 0, Ord(tyBoolean));
+    end;
   end;
   IRRecFieldwiseEqChain := chain;
+end;
+
+function IRRecordCmpExpandable(recId, line: Integer): Boolean;
+{ The one place the leaf count is asked, so it is also the one place that can
+  warn -- and the over-cap case NEEDS a warning, because without one the cliff
+  is invisible and it is a cliff in CORRECTNESS, not in speed.
+
+  A record of 64 scalar leaves expands; one of 65 falls back to the pre-2026-09-07
+  one-word compare and answers wrong. Nothing about the source says which side of
+  the line a record is on, and adding one element to an unrelated member moves it.
+  A silent boundary like that is worse than either answer on its own, so the site
+  says so out loud, names the record's leaf count and points at the ticket.
+
+  Not an ERROR: the over-cap program compiles today and some of them are
+  accidentally right (a first-word compare agrees with a real one whenever the
+  records differ in their first member). Turning those into a build failure to
+  protect the ones that are wrong is the trade this repo's own guidance refuses.
+
+  A side effect inside a Boolean guard, deliberately, and safe because this is
+  the LAST conjunct of the one condition that calls it: everything narrowing to
+  "two lvalue records of the same type compared with = or <>" has already been
+  tested, and a recId that is not a record answers -1 from the leaf count and
+  warns about nothing. }
+var n: Integer;
+begin
+  n := RecordFieldwiseCmpLeaves(recId, 0);
+  IRRecordCmpExpandable := (n >= 1) and (n <= REC_CMP_UNROLL_MAX);
+  if n > REC_CMP_UNROLL_MAX then
+    WarnAt(line, 'record comparison falls back to a FIRST-WORD compare: this record needs '
+                 + AIntToStr(n) + ' element comparisons and the unroll limit is '
+                 + AIntToStr(REC_CMP_UNROLL_MAX)
+                 + ' — the result is unreliable for records that differ only past the first word'
+                 + ' (bug-a-record-equality-still-compares-one-word-when-a-member-is-an-array)');
 end;
 
 function IRNodeHasRecordAddress(node: Integer): Boolean;
@@ -12480,7 +12568,7 @@ begin
               IRNodeHasRecordAddress(ASTRight[node]) and
               (AssignSideRecOf(ASTLeft[node]) >= REC_UCLASS_BASE) and
               (AssignSideRecOf(ASTLeft[node]) = AssignSideRecOf(ASTRight[node])) and
-              IRRecordIsFieldwiseComparable(AssignSideRecOf(ASTLeft[node]), 0) then
+              IRRecordCmpExpandable(AssignSideRecOf(ASTLeft[node]), ASTLine[node]) then
       begin
         { RECORD EQUALITY, FIELD BY FIELD.
 

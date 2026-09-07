@@ -27720,6 +27720,18 @@ test-record-equality-cross-target: $(COMPILER)
 	echo "test-record-equality-cross-target: $$ran targets compared"; \
 	[ $$ran -ge 5 ] || \
 	  { echo "test-record-equality-cross-target: RED -- fewer targets ran than the recipe names, so this gate measured less than it claims"; exit 1; }; \
+	: '--- the unroll cap announces itself, and only when it applies ---'; \
+	./$(COMPILER) test/record_equality_over_unroll_cap.pas $(TESTTMP)/receq_overcap > $(TESTTMP)/receq_overcap.log 2>&1 || \
+	  { echo "test-record-equality-cross-target: FAIL -- the over-cap fixture did not compile"; exit 1; }; \
+	grep -q '101 element comparisons' $(TESTTMP)/receq_overcap.log || \
+	  { echo "test-record-equality-cross-target: FAIL -- a record over REC_CMP_UNROLL_MAX compared WITHOUT warning, so the correctness cliff is silent"; \
+	    sed 's/^/    /' $(TESTTMP)/receq_overcap.log; exit 1; }; \
+	./$(COMPILER) test/record_equality_rows.pas $(TESTTMP)/receq_undercap > $(TESTTMP)/receq_undercap.log 2>&1 || \
+	  { echo "test-record-equality-cross-target: FAIL -- the under-cap fixture did not compile"; exit 1; }; \
+	grep -q 'element comparisons' $(TESTTMP)/receq_undercap.log && \
+	  { echo "test-record-equality-cross-target: FAIL -- the cap warning fired on a record that is UNDER the cap, so it says nothing about which records are affected"; \
+	    sed 's/^/    /' $(TESTTMP)/receq_undercap.log; exit 1; }; \
+	echo "test-record-equality-cross-target: unroll-cap warning fires over the cap and is silent under it"; \
 	[ $$overall -eq 0 ] || exit 1; \
 	echo "test-record-equality-cross-target: GREEN"
 

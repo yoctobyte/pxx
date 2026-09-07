@@ -26,8 +26,14 @@ type
   TFlt   = record a: Double; b: Single; end;
   TOuter = record tag: Integer; r: TFlat; end;
   PFlat  = ^TFlat;
+  TElem  = record p, q: Integer; end;
+  TArr   = record n: Integer; v: array[0..3] of Integer; end;
+  T2D    = record m: array[0..2, 0..3] of Integer; end;
+  TArec  = record e: array[0..2] of TElem; end;
+  TAstr  = record s: array[0..2] of AnsiString; end;
 var f1, f2: TFlat; n1, n2: TNest; s1, s2: TStr; d1, d2: TFlt;
     arr: array[0..2] of TFlat; pa, pb: PFlat; o1, o2: TOuter; calls: Integer;
+    q1, q2: TArr; m1, m2: T2D; e1, e2: TArec; t1, t2: TAstr; i, j: Integer;
 
 function Idx(i: Integer): Integer;
 begin
@@ -96,4 +102,38 @@ begin
   calls := 0;
                           Row('side same     ', arr[Idx(0)] = arr[Idx(1)], True);
   WriteLn('side calls     ', calls, ' want 2');
+
+  { ARRAY MEMBERS, unrolled one comparison per element. The discriminating row
+    is always the LAST element: a one-word compare sees only the first machine
+    word, which on a 32-bit target does not reach the array at all -- before
+    2026-09-07 `arr1 first` answered T on arm32 and riscv32 as well.
+    UFldArrLen is the FLAT element count, so the 2-D row's 12 cells need no
+    dimension walk; `2d  last` is what catches a first-dimension-only count,
+    which would compare 3 of 12 and answer a wrong T. }
+  q1.n := 1; q2.n := 1;
+  for i := 0 to 3 do begin q1.v[i] := 7; q2.v[i] := 7; end;
+                          Row('arr1 same     ', q1 = q2, True);
+  q2.v[3] := 9;           Row('arr1 last     ', q1 = q2, False);
+  q2.v[3] := 7; q2.v[0] := 9;
+                          Row('arr1 first    ', q1 = q2, False);
+  for i := 0 to 2 do
+    for j := 0 to 3 do begin m1.m[i, j] := i * 10 + j; m2.m[i, j] := i * 10 + j; end;
+                          Row('2d   same     ', m1 = m2, True);
+  m2.m[2, 3] := 99;       Row('2d   last     ', m1 = m2, False);
+  m2.m[2, 3] := 23; m2.m[0, 1] := 99;
+                          Row('2d   early    ', m1 = m2, False);
+  for i := 0 to 2 do
+  begin
+    e1.e[i].p := i; e1.e[i].q := i + 1;
+    e2.e[i].p := i; e2.e[i].q := i + 1;
+  end;
+                          Row('arec same     ', e1 = e2, True);
+  e2.e[2].q := 99;        Row('arec last     ', e1 = e2, False);
+  t1.s[0] := 'alpha'; t1.s[1] := 'beta';
+  t1.s[2] := 'gamma, long enough to be a heap block';
+  t2.s[0] := 'alpha'; t2.s[1] := 'beta';
+  t2.s[2] := 'gamma, long enough to be a heap bloc' + 'k';
+                          Row('astr same     ', t1 = t2, True);
+  t2.s[2] := 'gamma, long enough to be a heap blocK';
+                          Row('astr last     ', t1 = t2, False);
 end.

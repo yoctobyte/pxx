@@ -20,3 +20,13 @@ memb same      T want T
 memb tail      F want F
 side same      T want T
 side calls     2 want 2
+arr1 same      T want T
+arr1 last      F want F
+arr1 first     F want F
+2d   same      T want T
+2d   last      F want F
+2d   early     F want F
+arec same      T want T
+arec last      F want F
+astr same      T want T
+astr last      F want F
