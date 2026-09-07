@@ -621,3 +621,104 @@ An absolute `live=5` after the change is flat for an unknown reason; `live=5`
 before and `live=5` after, same corpus same bound, is flat for the right one.
 Baseline on `test/test_unnamed_managed_temps_are_released.pas` at
 `e86101766`: `allocs=375931 frees=375926 live=5`.
+
+## 2026-09-07 — x86-64 LANDED. 31.9% off the compiler binary, and my first leak check passed for the wrong reason
+
+The sweep is emitted once per body, out of line, and CALLed from the second
+return onward. `EmitProcScopeExitCleanupForTarget`, gated on `TARGET_X86_64`;
+the other six targets take the old inline path untouched. One backend, one
+commit, as planned.
+
+**Size, on the artefact and not on `code=`:** the compiler builds itself from
+**11594364 to 7895676 bytes, −3698688, −31.9%.** The padded `code=` figures for
+the same pair are 11058968 and 7360280 and **must not be quoted** — this run
+produced a clean live demonstration of why: on `fires.pas` below, the base and
+thunked binaries have **identical `code=73496B` and differ byte-for-byte**.
+Same padded length, different content. That is frank-subcoord's caveat
+(`9eb48c283`) reproducing on the first corpus I pointed it at.
+
+**Runtime:** unchanged in kind — one call/ret per return, ~2.1 ns and under 3 in
+the worst case, against a sweep that already pays ~2.98 ns per slot per return.
+See the correction above for why the 2.984 figure does not apply to the thunk.
+
+### The control that mattered, and it is the one that nearly did not run
+
+I took the pre-conversion leak baseline frank-subcoord asked for, on
+`test_unnamed_managed_temps_are_released.pas` and on the `mgd.pas` corpus. Both
+came back **exactly flat**: `allocs=375931 frees=375926 live=5` and
+`allocs=31686 frees=31680 live=6`, before and after, same bound.
+
+**Both were flat because the thunk never fired in either.** `cmp` says the
+before and after binaries for both corpora are **byte-identical** — neither
+corpus contains a procedure with two returns and three releasable slots, so
+neither compiled a single instruction differently. A flat leak count across two
+identical binaries is not a measurement of anything.
+
+This is exactly the shape frank-subcoord's own suggestion was aimed at, and the
+suggestion is what caught it: an absolute `live=5` after the change reads as a
+pass, and only having the BEFORE run on the same corpus made me ask why the two
+numbers were not merely close but character-for-character equal. The answer was
+that I had built a control out of the wrong population — the third instance this
+week of a guard drawn from a population the question is not about.
+
+So the corpus is now `fires.pas`: four managed locals, three return points,
+20000 iterations. The thunk demonstrably fires on it (the binaries differ), and
+the census is **`allocs=45116 frees=45114 live=2` before and after**, with
+`FIRES OK 213336` from both. That is flat for the right reason.
+
+### What was verified
+
+| check | result |
+| --- | --- |
+| self-host fixedpoint | `converged after 2 round(s)` — real recompute, not the stamp |
+| `tools/gate.sh quick` | GREEN, 20 rows, incl. `self-host fixedpoint` and `-O3 backend parity` |
+| leak, corpus that fires the thunk | `45116/45114/live=2` before AND after |
+| x86-64 A/B (positive control) | `identical=11 differs=28` — the change is real and visible |
+| four frontend probes (npy/c/rs/zig) | all print `aaa` |
+| six other targets, byte-identity | i386/arm32/aarch64/riscv32 38-0, wasm32 30-0, xtensa 28-0 — **0 differ anywhere** |
+| exceptions + 3 returns, 5000 unwinds | identical census, `EXC OK ok=80000 caught=5000` from both |
+| `-O0 -O1 -O2 -O3` on `fires.pas` | `FIRES OK 213336` at all four |
+
+The cross-target rows are the ones that make "one backend per commit" a claim
+rather than an intention: the thunk is gated on `TargetArch = TARGET_X86_64`, and
+the other six recompile **byte-for-byte unchanged** against the pre-change
+compiler. The x86-64 column differing on 28 of 39 built files is the other half
+-- a control that only shows identity cannot tell a correctly-gated change from
+a change that does nothing.
+
+### Two things the design gained from the seven-copy refactor landing first
+
+`ManagedSweepSlotCount` asks `ScopeExitReleaseAction` the same question the
+emitter asks, so the count that decides whether to place a thunk cannot drift
+from the code that gets placed. Against the old seven-copy tree there was no
+single predicate to ask and this would have been an eighth copy of the skip
+logic.
+
+And the threshold is on RELEASABLE slots, not on declared locals: `SXR_NONE`
+slots emit nothing, so counting symbols would have sized the thunk against work
+it never does.
+
+### Why a call, when the landing pad next door reaches its copy by a jump
+
+The pad never comes back — it re-raises. A normal return does, and each return
+runs a different epilogue tail, so the shared block has to return to its caller.
+That is also the one hazard the pad does not have: **a call has already moved
+rsp by 8 and the sweep makes calls of its own**, so the thunk opens with
+`sub rsp, 8` and closes with `add rsp, 8` to restore the mod-16 residue the
+inline sweep would have seen. All the sweep's own addressing is rbp-relative,
+which a call does not disturb.
+
+### The staleness guard, and why there is no per-body reset
+
+The three arrays are indexed by proc and validated against `Procs[p].BodyAddr`.
+A nested procedure has its own index, so an inner body can never reach an outer
+body's thunk, and a body emitted twice finds its recorded address below the new
+`BodyAddr` and rejects it. Zero means "none recorded" and BSS is zero-initialised,
+so no frontend's body emitter needs a save/restore — which is the part that would
+have been easy to get wrong in five places, and a stale address here does not
+crash, it calls into the middle of whatever body now occupies that range.
+
+### Next
+
+- The other six targets, one commit each, in the same shape.
+- Then the frame-size-gated inline nil-test at T=400.

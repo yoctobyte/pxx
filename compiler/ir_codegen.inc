@@ -15209,10 +15209,112 @@ begin
   EmitProcCleanupFramePatchSkip(skipPatch);
 end;
 
+function ManagedSweepSlotCount(retSymIdx: Integer): Integer;
+{ How many slots the scope-exit sweep would actually RELEASE for this return.
+  Not how many locals there are -- SXR_NONE slots emit nothing, so counting
+  symbols would size the thunk against work it never does.
+
+  This function exists only because the seven per-target copies of the sweep
+  were folded onto ONE classification first: it asks ScopeExitReleaseAction the
+  same question the emitter asks, so the count cannot drift from what is
+  emitted. Against the old seven-copy code there was no single predicate to ask,
+  and this would have been an eighth copy of the skip logic. }
+var i, n, a1, a2, a3: Integer;
+begin
+  n := 0;
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (not SymSkipScopeExitRelease(i)) and
+         (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+         (ScopeExitReleaseAction(i, a1, a2, a3) <> SXR_NONE) then
+        Inc(n);
+  ManagedSweepSlotCount := n;
+end;
+
+const
+  { Below this many releasable slots the sweep is smaller than the thunk that
+    would replace it. The thunk costs jmp(5) + sub(4) + add(4) + ret(1) = 14
+    bytes once, plus call(5) per return; inlining costs the sweep's own S bytes
+    per return. For the first return that can use it (the second overall) the
+    trade is S > 5*2 + 14, i.e. about 24 bytes, and one released slot is a lea
+    or a mov plus a call, so roughly 12 to 20. Three is the first count that
+    clears 24 bytes at the WORST case of two returns; every further return is
+    pure saving.
+
+    THIS NUMBER IS DERIVED FROM INSTRUCTION ENCODING SIZES, NOT SWEPT. What is
+    measured is the OUTCOME at this setting (-31.9% on the compiler's own
+    artefact); the threshold's own sensitivity is untested, and 2 or 4 may well
+    be better. Do not quote 3 as an optimum -- it is a conservative floor
+    chosen so the change cannot lose bytes on the smallest body it fires on. }
+  SWEEP_THUNK_MIN_SLOTS = 3;
+
+function ProcSweepThunkUsable(p: Integer; retSymIdx: Integer): Boolean;
+{ The recorded thunk belongs to the body being emitted RIGHT NOW, and was built
+  for this same retSymIdx. Both halves matter -- see the array declarations. }
+begin
+  ProcSweepThunkUsable :=
+    (p >= 0) and (ProcSweepThunkAddr[p] <> 0) and
+    (ProcSweepThunkAddr[p] >= Procs[p].BodyAddr) and
+    (ProcSweepThunkRetSym[p] = retSymIdx);
+end;
+
 procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer);
 { The NORMAL-return half: unchain the cleanup frame (if this proc has one),
-  then release the managed locals. One call for all six epilogue branches. }
+  then release the managed locals. One call for all six epilogue branches.
+
+  On x86-64 the release half is emitted out of line and CALLed once a body is
+  known to have more than one return -- see ProcSweepThunkAddr. The frame
+  unchain stays inline: it is two instructions and it must run before the
+  sweep on every path, including the ones that do not use the thunk.
+
+  WHY A CALL AND NOT A JUMP, given the exception landing pad next door reaches
+  its copy of this sweep by jumping. The pad never comes back -- it re-raises.
+  A normal return does, and each return then runs a DIFFERENT epilogue tail
+  (the result load differs per target and per retSymIdx), so a shared block has
+  to return to its caller. That is also why the thunk pays for `sub rsp, 8`:
+  a call has already moved rsp by 8, and the sweep makes calls of its own. }
+var skipPatch, thunkAt: Integer;
 begin
   if ProcExceptionCleanupFrameActive then EmitProcCleanupFrameLeaveForTarget;
+
+  if (TargetArch <> TARGET_X86_64) or (CurProc < 0) then
+  begin
+    EmitManagedLocalCleanupForTarget(retSymIdx);
+    Exit;
+  end;
+
+  { Already have one for this body and this result symbol: just call it. }
+  if ProcSweepThunkUsable(CurProc, retSymIdx) then
+  begin
+    EmitB($E8); EmitI32(ProcSweepThunkAddr[CurProc] - (CodeLen + 4));
+    Exit;
+  end;
+
+  { Too small to be worth a call, or this is the body's FIRST return and we do
+    not yet know there will be another. Emit inline, exactly as before. }
+  if (ManagedSweepSlotCount(retSymIdx) < SWEEP_THUNK_MIN_SLOTS) or
+     (ProcSweepFirstRet[CurProc] = 0) or
+     (ProcSweepFirstRet[CurProc] < Procs[CurProc].BodyAddr) then
+  begin
+    ProcSweepFirstRet[CurProc] := CodeLen;
+    if ProcSweepFirstRet[CurProc] = 0 then ProcSweepFirstRet[CurProc] := 1;  { 0 is the "none" sentinel }
+    EmitManagedLocalCleanupForTarget(retSymIdx);
+    Exit;
+  end;
+
+  { Second return with a sweep worth sharing: place the thunk out of line here,
+    jumped over by the fall-through, then call it. Every later return in this
+    body takes the branch at the top. The jump/pad/patch shape is the one
+    EmitProcCleanupLandingPadForTarget already uses. }
+  EmitB($E9); skipPatch := CodeLen; EmitI32(0);          { jmp over the thunk }
+  thunkAt := CodeLen;
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($08);        { sub rsp, 8  -- undo the call's push, for the sweep's own calls }
   EmitManagedLocalCleanupForTarget(retSymIdx);
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($08);        { add rsp, 8 }
+  EmitB($C3);                                            { ret }
+  Patch32(skipPatch, CodeLen - (skipPatch + 4));
+
+  ProcSweepThunkAddr[CurProc] := thunkAt;
+  ProcSweepThunkRetSym[CurProc] := retSymIdx;
+  EmitB($E8); EmitI32(thunkAt - (CodeLen + 4));
 end;

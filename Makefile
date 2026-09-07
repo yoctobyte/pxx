@@ -14435,6 +14435,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_unnamed_managed_temps_are_released.pas $(TESTTMP)/test_unnamed_temps26
 	tools/expect_same.sh test_unnamed_temps26 "$$($(TESTTMP)/test_unnamed_temps26 2>/dev/null)" "MINT OK"
 	tools/assert_no_leak.sh unnamed_managed_temps 200 $(TESTTMP)/test_unnamed_temps26
+	@# The SWEEP THUNK's own corpus. The row above cannot stand in for it: on the
+	@# commit that made the x86-64 sweep a per-procedure thunk, that program and
+	@# test_open_array_no_leak both compiled to BYTE-IDENTICAL binaries with and
+	@# without the change -- neither has a body with two returns AND three
+	@# releasable slots, so neither exercised one instruction of it. Their census
+	@# was flat because nothing was compiled differently, which is a control drawn
+	@# from the wrong population and certifies nothing. This one has four managed
+	@# locals, three returns and a raise, so the thunk and the exception landing
+	@# pad's own inline copy of the sweep are both live in one body.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_sweep_thunk.pas $(TESTTMP)/test_managed_sweep_thunk26
+	tools/expect_same.sh test_managed_sweep_thunk26 "$$($(TESTTMP)/test_managed_sweep_thunk26 2>/dev/null)" "SWEEPTHUNK OK ok=80000 caught=5000"
+	tools/assert_no_leak.sh managed_sweep_thunk 50 $(TESTTMP)/test_managed_sweep_thunk26
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \

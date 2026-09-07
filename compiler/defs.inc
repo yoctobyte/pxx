@@ -5594,6 +5594,27 @@ var
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
+  { THE PER-PROCEDURE MANAGED-LOCAL SWEEP THUNK (x86-64 only, today).
+
+    Every RETURN point inlines the whole scope-exit release sweep, so a
+    procedure with R returns and S releasable slots emits R*S releases for S
+    slots' worth of work. These three arrays let the sweep be emitted ONCE per
+    body, out of line, and CALLed from the second return onward.
+
+    THEY ARE INDEXED BY PROC AND VALIDATED AGAINST BodyAddr, which is what makes
+    them safe without a save/restore in each frontend's body emitter. A nested
+    procedure has its own index, so an inner body can never reach the outer
+    body's thunk; and if a body is ever emitted twice, the recorded address is
+    below the NEW BodyAddr and is rejected rather than called. Zero means "none
+    recorded" -- BSS is zero-initialised and no thunk can sit at code offset 0,
+    so no per-body reset pass is needed anywhere.
+
+    A stale address here would not crash: it would CALL INTO THE MIDDLE of
+    whatever body now occupies that range, which is the same failure the DCE
+    header warns about. Hence the guard is on the read, not on a reset. }
+  ProcSweepThunkAddr  : array[0..MAX_PROCS-1] of Integer;  { code offset of the out-of-line sweep, 0 = none }
+  ProcSweepThunkRetSym: array[0..MAX_PROCS-1] of Integer;  { the retSymIdx it was built for; a different one must not use it }
+  ProcSweepFirstRet   : array[0..MAX_PROCS-1] of Integer;  { code offset of this body's FIRST inline sweep, 0 = none yet }
   { THE UNWIND LANDING PAD, DECIDED AFTER LOWERING INSTEAD OF BEFORE PARSING.
 
     A proc that can be unwound past needs a landing pad or its managed locals
