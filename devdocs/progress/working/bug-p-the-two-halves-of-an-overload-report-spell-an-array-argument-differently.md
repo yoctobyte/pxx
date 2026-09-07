@@ -3,9 +3,10 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: backlog
+status: working
 tags: [diagnostics, overload, param-kind-union, corpus]
 summary: "The argument half of `no overload of X matches` prints a raw TTypeKind and the candidate half prints an IsArray-aware spelling, so a CORRECT array argument reads as a mismatch: `argument types: (Integer, Integer, record)` against `candidates: Q(Integer, class, array of record)` where argument 3 is fine and only argument 2 is wrong. 12-line repro. Matching itself is CORRECT — both sides compare element kinds — so this is the report lying, not the compiler. It is actively misleading the live reduction of pparser.pp:2670."
+owner: frankA
 ---
 
 # The two halves of an overload report spell an array argument differently

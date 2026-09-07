@@ -4,10 +4,10 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: working
 found: 2026-09-07
 found-by: frankS
-owner: unassigned
+owner: frankA
 summary: "`SetCmp(c: TCmp)` and `SetCmp(n: LongInt)` in one class: `SetCmp(4)` runs the PROCEDURAL body, not the exact LongInt one. fpc 3.2.2 picks LongInt. Measured on the pinned compiler too, so it predates the 2026-09-07 multi-candidate gate. The value reaching the procedural parameter is the integer 4 -- benign only while nobody calls through it; a call would jump to address 4."
 ---
 
