@@ -1,0 +1,10 @@
+iface param+result 21
+iface local        42
+iface self         21
+iface self named   TRUE
+iface field        21
+impl  param+result 1000000
+impl  local        2000000
+impl  self         1000000
+impl  self named   TRUE
+impl  field        1000000

@@ -2153,7 +2153,6 @@ begin
     pdefaultslen[0] := 0;
     nparams := nparams + 1;
   end;
-
   { Stackless generator: rewrite the ABI to `function(__genself: Pointer): Boolean`.
     The declared params/result describe the produced SEQUENCE; the step function
     itself takes the heap-instance pointer and returns has-next. Declared params
@@ -3473,6 +3472,22 @@ begin
         CurrentUnitIdx := tmplDeclUnit;
       end;
     end;
+    { PXXDBG=p.specunit:* -- the routine's TWO unit identities, printed side by
+      side for every specialized method body, with FindSym('Self') beside them
+      as the readout that first disagreed.
+
+      It exists because the defect it found is INVISIBLE to every other
+      instrument: `undefined variable (Self)` names a token, not a scope, and
+      the two units are both correct -- the parameters really were allocated in
+      the specializing unit and the body really does belong to the declaring
+      one. Nothing errors; a name simply stops resolving, and only printing the
+      pair together says why.
+      bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters }
+    if PxxDbgWants('p.specunit', '*') then
+      WriteLn('PXXDBG p.specunit ', name, ' body-unit=', CurrentUnitIdx,
+              ' spec-host=', SpecBodyHostUnitIdx,
+              ' param-unit=', savedBodyUnitIdx,
+              ' FindSym(Self)=', FindSym('Self'));
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     CurrentUnitIdx := savedBodyUnitIdx;
     SpecBodyHostUnitIdx := savedSpecHost;

@@ -5262,8 +5262,43 @@ function SymBindableHere(i: Integer): Boolean;
   the four copies are only correct identical -- the decl-order arm in
   particular reads five columns. }
 begin
+  { A ROUTINE'S OWN PARAMETERS AND LOCALS ARE NOT A CROSS-UNIT QUESTION, and
+    asking one about them is a category error that had a real victim.
+
+    Unit and section visibility decides which of ANOTHER unit's names this one
+    may reach. A parameter or a routine-local is reachable only from inside its
+    own routine, and IsBlockVisible (plus SymRollbackTo unhashing the chain on
+    exit) is the whole of that decision. So `DeclVisibleSect` is asked a
+    question it cannot get right, and for one population it got it wrong.
+
+    THE POPULATION: a generic method body is re-parsed AS ITS DECLARING UNIT
+    (see the note at `CurrentUnitIdx := tmplDeclUnit` in pasparser_proc.inc),
+    but its PARAMETERS and its `Result` are allocated by the header path, before
+    that switch -- so they carry the SPECIALIZING unit. When the two units are
+    different and the declaring one does not `uses` the specializing one --
+    which is the ordinary arrangement, a library unit wrapping another unit's
+    generic -- VisibilityAllows said no and a method could not see its own
+    arguments:
+
+      unit rb;  generic TG<T> = class procedure P(a: LongInt); ... end;
+      unit ra;  uses rb;  type TGL = specialize TG<LongInt>;
+      -> undefined variable (a), and undefined variable (Result), and
+         undefined variable (Self)
+
+    Measured 2026-09-07 with PXXDBG=p.specunit: `body-unit=61 param-unit=60
+    FindSym(Self)=-1`, printed before a single body token was read. Locals
+    declared INSIDE the body were fine, because they are allocated after the
+    switch -- which is why the defect reads as "Self is special" and is not.
+    It works when the specialization is written in a PROGRAM, and that is the
+    shape every probe reaches for first.
+
+    Fixing the STAMP instead was the alternative and is the weaker change: it
+    repairs one producer and leaves the invariant unstated, so the next body
+    parsed under a borrowed unit identity breaks the same way.
+    bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters }
   SymBindableHere :=
-    DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
+    ((Syms[i].Kind = skParam) or (Syms[i].Kind = skLocal) or
+     DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i))
     and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
              and (SymDeclTok[i] > CurBodyHdrTok));
 end;
