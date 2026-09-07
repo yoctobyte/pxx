@@ -487,3 +487,61 @@ one does not imply the other, which is why a careful reader gets this wrong.
 A test now guards the direction, because the next reader of `:13838` will reach
 the same conclusion and an output assertion will not stop them: every `WriteLn`
 in that program is correct with the releases removed.
+
+## 2026-09-07 — thresholds for the frame-size-gated inline nil-test, and the tension nobody had priced
+
+Measured for frank-coord-core to pick from. **The inline nil-test makes cost (2)
+WORSE, and cost (2) is this ticket's other half** — release sites are ~36% of
+`.text`. That trade had not been quantified on either side.
+
+**Byte cost, measured not assumed:** the calibrated model's per-slot span is
+**24.95 B/slot** as-is against **30.01 B/slot** inlined — **+5.06 bytes per
+site**. That matches pxx's own encoding independently: `test %rax,%rax` is 3
+bytes and a short `je` is 2.
+
+Against 349,322 release sites and an 11,046,680-byte `.text`:
+
+| threshold | sites | share | returns touched | `.text` growth |
+| --- | --- | --- | --- | --- |
+| every site | 349,322 | 100.0% | 20,479 | **+15.81%** |
+| >= 10 | 320,919 | 91.9% | 2,108 | +14.53% |
+| >= 50 | 296,728 | 84.9% | 949 | +13.43% |
+| >= 100 | 288,506 | 82.6% | 839 | +13.06% |
+| >= 200 | 223,110 | 63.9% | 366 | +10.10% |
+| >= 300 | 204,844 | 58.6% | 297 | +9.27% |
+| **>= 400** | **197,771** | **56.6%** | **278** | **+8.95%** |
+| >= 600 | 197,239 | 56.5% | 277 | +8.93% |
+
+**Cost is strictly 5 bytes per site, so coverage and size move together: every
+1% of release sites covered costs 0.158% of `.text`.** There is no efficiency
+sweet spot — the threshold is a **blast-radius** choice, not an efficiency one.
+
+**T=400 is the natural ceiling going up:** 600 gains nothing over 400 (56.5% vs
+56.6%), so above ~400 the frames run out. 278 return points carrying 56.6% is a
+small, auditable set, and the sub-threshold control population is large —
+**20,201 returns / 151,551 sites (43.4%) must come out byte-identical**, which
+is the A/B drawn from the population the change is NOT meant to touch.
+
+### The two fixes compose, and the ORDER matters
+
+A shared epilogue emits the sweep **once per procedure** instead of once per
+return. That does not merely fix cost (2) — **it collapses the inline test's own
+size cost**, because the +5 bytes would then be paid per slot rather than per
+slot per return.
+
+Concretely, on the frame measured above: `ParseFactorCore` is
+`758 x 61 + 757 x 79 = 106,041` release sites today. Behind a shared epilogue it
+is **~758**. The inline test there costs ~530,000 bytes today and ~3,800 after.
+
+**NOT MEASURED, and I tried and threw the attempt away:** the fleet-wide version
+of that ratio. Grouping release runs into procedures by address adjacency fails,
+because short in-statement temp releases interleave between a procedure's
+epilogue sweeps — the method split `ParseFactorCore`'s known 140 returns into
+groups of 4 and 5, and would have reported a confident and meaningless "1.3x".
+Caught only by checking it against the one frame whose return count is known
+independently. **So the concrete case stands and the aggregate does not.**
+
+**The implication is an ordering, not a number:** doing the shared epilogue
+first makes the inline nil-test close to free in code size, while doing the
+inline test first spends up to 15.81% of `.text` on something the shared
+epilogue would then have made cheap.
