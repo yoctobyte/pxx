@@ -21168,3 +21168,83 @@ Caught on the device, not in review — **which is the only place it was
 catchable**, and worth saying plainly: a fix that is worse than the defect and
 passes every instrument you own is not found by looking harder at the
 instruments.
+
+## THE SELF-HOST FIXEDPOINT IS A CLAIM ABOUT ONE ARM — a compiler that miscompiles only its xtensa backend still self-hosts perfectly
+
+CLAUDE.md records two scope limits on the fixedpoint: it holds at the default
+`-O` only, and it cannot see a construct `compiler.pas` never writes. **There is
+a third of the same family and it is the one that bites when you edit a
+per-target code path: the fixedpoint is compiled FOR the host, so every cross
+backend is outside its aperture entirely.**
+
+Measured 2026-09-07, converting the seven copies of the scope-exit
+managed-local release loop one backend per commit. Step 5 converted the xtensa
+arm of `EmitManagedLocalCleanupForTarget`. The conversion placed the per-symbol
+classification OUTSIDE the loop — computed once, before `i` had a value — so
+every symbol was classified by one stale answer. The damage:
+
+```
+xtensa      0 identical / 61 differ   compiler.pas exited 139 (SIGSEGV)
+x86-64     54 identical /  0 differ
+i386/arm32/aarch64/riscv32/wasm32     all identical
+make compiler/pascal26                converged after 1 round(s)
+tools/gate.sh quick                   GREEN, 19 rows PASS
+```
+
+**Both green lines are correct.** The x86-64 arm was untouched, so the compiler
+reproduces itself byte-for-byte, and every gate row that runs is a row about the
+host. `testmgr --tier quick` is a host tier. The FPC seed canary compiles for
+the host. Nothing in the ~30s loop compiles a cross target and compares the
+result to anything.
+
+So for a per-target edit the dev loop's answer is *"the arm you did not touch
+still works"*, delivered in the voice of *"the compiler still works"*. It does
+not error, it does not skip, it does not warn. It answers a different question.
+
+**The instrument that sees it is a byte-identical A/B across every target**: two
+compilers, one corpus, `cmp` each object. It needs a positive control like any
+guard — build one side `-O0` and the other at default and confirm it reports
+DIFFERS — and it needs the artefact asserted to EXIST before comparing, because
+a `cmp` of two files that were never built reports identical. That second check
+caught a whole column: xtensa refused all 61 rows (the default IDF profile emits
+externals; a complete executable needs `--platform=posix`), and the summary line
+counted them as neither pass nor fail.
+
+**Before converting a per-target code path, ask which target your gate compiles
+for.** If the answer is "the host", the gate is not evidence about the change.
+
+## FIXING A GUESS STRUCTURALLY MAKES THE CATEGORY LOOK HANDLED — and the second guess of the same kind survives one line away
+
+The fix for this is an ORDERING, not vigilance. Vigilance is what you already
+had when you made the second one.
+
+Measured 2026-09-07, same seven-backend conversion, one session, two instances:
+
+1. The rewrite script guessed how many continuation lines each condition spanned
+   and dropped that many. i386's `tyClass` condition is two lines where x86-64's
+   is three, so it ate a `begin`. The compiler then reported
+   `undefined variable (PyCallMeth1)` at a line 300 away — the signature of
+   unbalanced `begin`/`end`, which points nowhere near the edit.
+2. Fixed by finding each condition's end structurally: read forward to the line
+   that ends in `then`. **The `begin`-LOCATION was left as a guess** — "the last
+   `begin` before the chain". On i386/arm32/aarch64 that is the loop body. On
+   xtensa there is no loop body at all (the whole `if`/`else if` chain is a bare
+   statement under the skip guard), so it found the ARM's `begin`, forty lines
+   earlier, outside the loop. 0/61 identical and a segfault.
+
+Both are the same defect: **substituting a pattern that looks like the right
+place for a search that finds the actual place.** The first repair was correct
+and its correctness is what hid the second — the category *felt* closed, so the
+remaining guess one line away was never re-examined.
+
+What worked, at step 6: **ask the shape before you convert, not after the
+measurement disagrees.** riscv32 turned out to share xtensa's no-`begin` form; a
+five-line check printed that, and the wrapper that fixes it now asserts the arm
+has no loop-body `begin`, finds the chain's terminating `end;` by matching
+indentation against the chain's opening `if`, and reports "already has a begin,
+nothing to wrap" on the arms that do. It cannot silently do the wrong thing to
+the wrong shape.
+
+**When you repair a guess, enumerate the OTHER guesses in the same tool before
+you re-run it.** A structural fix to one of them raises your confidence in all
+of them, and that confidence is not evidence.
