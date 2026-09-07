@@ -15350,6 +15350,31 @@ begin
     EmitB($0C);                                          { sub/add esp, 12 }
   end
 {$endif}
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { Third link-register target, and the FIRST one where the save and the
+      alignment are two separate decisions that happen to agree. jal writes ra
+      and the sweep jals on every releasable slot (EmitCallProc's riscv32 arm
+      ends in `jalr ra, t0, 0`), so ra must be spilled -- same correctness
+      argument as arm32 and aarch64.
+
+      The SIZE is 16 for the ordinary reason: the RISC-V calling convention
+      requires sp 16-byte aligned, so the residue the inline sweep saw is
+      preserved only by a multiple of 16, and 16 is the smallest. ra needs 4
+      of those bytes; the other 12 are padding this arm does not name a use
+      for. Writing 4 or 8 here would satisfy `sw ra` and misalign sp, and
+      neither the arm32 nor the aarch64 arm can tell you that -- arm32 reached
+      16 by ADDING registers it did not need, aarch64 got 16 free from stp.
+      Do not read this constant off either of them.
+
+      Offset 12 rather than 0 matches the riscv32 prologue at symtab.inc
+      (`addi sp,sp,-16; sw ra,12(sp); sw s0,8(sp)`), which is the shape a
+      RISC-V unwinder or a human reading a disassembly expects to see. }
+    if opening then
+      begin rv32_addi(reg_sp, reg_sp, -16); rv32_sw(reg_ra, reg_sp, 12); end
+    else
+      begin rv32_lw(reg_ra, reg_sp, 12); rv32_addi(reg_sp, reg_sp, 16); end;
+  end
   else
     { NAMED, because it was an unnamed fall-through emitting the i386 encoding
       and that was correct only by accident of who gates the caller. Adding a
@@ -15384,6 +15409,15 @@ begin
       three above, which is the line it would be natural to copy. }
     EmitI32($94000000 or (((addr - CodeLen) div 4) and $03ffffff))
 {$endif}
+  else if TargetArch = TARGET_RISCV32 then
+    { Not a hand-rolled jal like the three above. riscv32's J-immediate reaches
+      +-1 MiB and its own encoder already owns that decision -- Riscv32JalReaches
+      picks jal, and falls back to auipc/jalr through reg_t0 when it does not
+      reach. A body big enough to need the fallback is exactly the body most
+      likely to have the many-return shape that earns a thunk, so open-coding
+      `jal` here would have been a range bug that only fires on large code.
+      reg_t0 is the same scratch every riscv32 call site already clobbers. }
+    EmitRiscv32CallToCode(reg_ra, addr)
   else
     Error('compiler error: no sweep-thunk call encoding for this target');
 end;
@@ -15401,6 +15435,8 @@ begin
   else if TargetArch = TARGET_AARCH64 then
     EmitI32($D65F03C0)                                   { ret (via x30) }
 {$endif}
+  else if TargetArch = TARGET_RISCV32 then
+    rv32_jalr(reg_zero, reg_ra, 0)                       { ret = jalr x0, ra, 0 }
   else
     Error('compiler error: no sweep-thunk return encoding for this target');
 end;
@@ -15423,6 +15459,7 @@ begin
 {$ifndef PXX_NO_AARCH64}
     or (TargetArch = TARGET_AARCH64)
 {$endif}
+    or (TargetArch = TARGET_RISCV32)
     ;
 end;
 
@@ -15440,12 +15477,13 @@ procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer);
 { The NORMAL-return half: unchain the cleanup frame (if this proc has one),
   then release the managed locals. One call for all six epilogue branches.
 
-  On x86-64 and i386 the release half is emitted out of line and CALLed once a
-  body is known to have more than one return -- see ProcSweepThunkAddr. Both
-  spell jmp/call/ret as E9/E8/C3 with a rel32, which is why they share this
-  code; the five other targets do not and each gets its own commit. The frame
-  unchain stays inline: it is two instructions and it must run before the
-  sweep on every path, including the ones that do not use the thunk.
+  On the targets TargetHasSweepThunk admits, the release half is emitted out of
+  line and CALLed once a body is known to have more than one return -- see
+  ProcSweepThunkAddr. Everything per-target about that lives in the four
+  helpers above (jump-over, stack adjust, call, return), so this procedure is
+  target-independent and stays that way as ports land. The frame unchain stays
+  inline: it is two instructions and it must run before the sweep on every
+  path, including the ones that do not use the thunk.
 
   WHY A CALL AND NOT A JUMP, given the exception landing pad next door reaches
   its copy of this sweep by jumping. The pad never comes back -- it re-raises.

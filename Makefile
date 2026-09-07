@@ -14520,6 +14520,28 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	@# The riscv32 arm, and it is the first one where the two controls SEPARATE.
+	@# jal writes ra, so the save is mandatory; the SIZE is 16 because RISC-V
+	@# requires sp 16-byte aligned, and ra needs only 4 of those bytes. Two
+	@# independent decisions that happen to agree on one number, which neither
+	@# arm32 nor aarch64 can teach you -- arm32 reached 16 by adding registers it
+	@# did not need, aarch64 got 16 free from stp. Both measured here:
+	@#   drop ONLY the ra save, keep the 16:   both rows HANG (rc=124), as aarch64
+	@#     does and unlike arm32's SIGSEGV -- ret via a clobbered ra loops back
+	@#     into the release stub's caller.
+	@#   save ra correctly in 8 bytes:         this row prints ALIGN MISMATCH
+	@#     lo=0 hi=8, and test_managed_sweep_thunk STILL prints
+	@#     `SWEEPTHUNK OK ok=80000 caught=5000`. The i386 blindness reproduced on
+	@#     a third target: the functional row cannot see a wrong adjustment, only
+	@#     this one can, and only the functional row sees a missing save.
+	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=riscv32 test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_riscv32 >/dev/null; \
+	  tools/expect_same.sh riscv32/test_sweep_align_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_sweep_align_riscv32)" "ALIGN OK"; \
+	  ./$(COMPILER) --target=riscv32 test/test_managed_sweep_thunk.pas $(TESTTMP)/test_managed_sweep_thunk_riscv32 >/dev/null; \
+	  tools/expect_same.sh riscv32/test_managed_sweep_thunk "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_managed_sweep_thunk_riscv32 2>/dev/null)" "SWEEPTHUNK OK ok=80000 caught=5000"; \
+	else \
+	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
+	fi
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
