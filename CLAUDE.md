@@ -439,6 +439,22 @@ part, and a peer spent a census establishing that the premise was false. **When
 you hedge, name which half you are hedging** — and count open tickets by
 FOLDER, never by a glob across all of them.
 
+**AND THE CLAUSE TO GO MEASURE IS THE QUANTIFIER, NOT THE VERB BESIDE IT.**
+Measured 2026-09-07, twice in one session by one seat, in one subject, and the
+second one reached the rules file through this seat's own hand. *"No seed
+escapes it, the pin included, EITHER WAY"* — the pinned binary run in place
+resolves its own snapshot builtin. *"A wrong CWD is LOUD, not silent — there is
+no silent second builtin to fall into"* — from any of the **twenty** sibling
+checkouts on this box the lookup fires silently. **Both measurements were real
+and in both the QUANTIFIER was the invention**: one location sampled, all
+locations asserted, with the checked half lending its credibility to the
+unchecked half. That is why it survives review — a reader who interrogates the
+verb finds it sound. **When a sentence you are about to land contains "either
+way", "anywhere else", "no X escapes", "always", "cannot", that clause is the
+one to go measure**, and a conclusion handed to you already carrying one is not
+a measurement you may build a rule on: **ask which population it was drawn
+from before you quote it, especially when it arrives labelled as a finding.**
+
 **"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET, AND IT IS HOW REAL
 BUGS GET RANKED AS REFACTORS.** Measured 2026-09-02, twice in one hour by one
 session: `refactor-a-the-const-cast-width-table-is-the-third-copy` was filed at
