@@ -4,7 +4,7 @@ prio: 70
 status: working
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. COST (2) IS NOW LANDED on all six flat-code backends, one commit each (x86-64 50e25f5f0, i386 3d7cde305, arm32 4a1a80184, aarch64 5f89103c9, riscv32 b1554c59a, xtensa Call0 dde109a7a); wasm32 is not a seventh and has its own ticket. Measured like-for-like on one instrument with TargetHasSweepThunk forced False for the control: compiler.pas release sites 349,581 -> 43,508 (8.03x), code= 11,075,352 -> 7,376,664 (-33.4%), artefact -31.9% -- and the control lands within 0.07% of the 349,322 counted independently by objdump, two instruments that fail differently. THAT DISSOLVES THE T=400 THRESHOLD rather than confirming it: at the measured +5.06 B/site the inline nil-test on EVERY site now costs +2.98% of .text against +15.97% before, i.e. a third of what the T=400 gate cost without the sharing, while covering 100% of sites instead of 56.6%. Recommendation recorded in the ticket: build the nil-test UNGATED and keep a threshold in reserve only if the built artefact's size cost comes in materially above 2.98%. What remains open is (1). (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 owner: frank-subcoord
 ---
 
@@ -924,3 +924,63 @@ mtime 04:33:19). Corroborated three ways: nothing under this checkout's
 predates it by fifty minutes, and the `cmp` precondition passed. **A path is not
 a file when every session has its own checkout** — and the near-miss was
 discarding a good measurement, not keeping a bad one.
+
+## 2026-09-07 — the sharing has LANDED on all six flat-code backends, and it makes the frame-size gate almost pointless
+
+frank-coord-core. Six commits, one backend each, as the group required:
+x86-64 `50e25f5f0`, i386 `3d7cde305`, arm32 `4a1a80184`, aarch64 `5f89103c9`,
+riscv32 `b1554c59a`, xtensa Call0 `dde109a7a`. wasm32 is not a seventh and now
+has its own ticket
+([[refactor-a-wasm32-is-the-one-target-the-shared-scope-exit-sweep-cannot-be-ported-to-as-a-port]])
+so it stops reading as pending work here.
+
+**So cost (2) is done, and the threshold table above was measured against a
+binary that no longer exists.** Re-measured on ONE instrument with ONE variable —
+the same tree, the same `-S` disassembler, `TargetHasSweepThunk` forced to
+`False` for the control build, so nothing but the sharing differs:
+
+| `compiler.pas`, x86-64 | release sites | `code=` | artefact |
+| --- | --- | --- | --- |
+| sharing OFF (control) | 349,581 | 11,075,352 | 11,612,964 |
+| sharing ON (HEAD) | **43,508** | **7,376,664** | **7,914,276** |
+| | **-87.6%, 8.03x** | **-33.4%** | **-31.9%** |
+
+**The control agrees with the table above to 0.07%** — 349,581 here against
+frank-subcoord's 349,322, and the two instruments fail differently: theirs is
+`objdump -D -b binary` counting maximal consecutive runs in a built artefact,
+this one is the compiler's own `-S` counting `call loc_0x000000aa` in a fresh
+build. Neither can produce the other's error, and the sharing-off number lands
+where the pre-thunk measurement said it would.
+
+### What that does to the threshold choice — it dissolves it
+
+At the measured **+5.06 B/site**, applying the nil-test to EVERY release site:
+
+| | sites | `.text` growth |
+| --- | --- | --- |
+| sharing OFF, every site | 349,581 | **+15.97%** (the table above said +15.81%) |
+| sharing OFF, T=400 | 197,771 | +8.95% |
+| **sharing ON, every site** | **43,508** | **+2.98%** |
+
+**Full coverage behind the thunk is a third the size cost of the T=400 gate
+without it, and covers 100% of sites instead of 56.6%.** The threshold was never
+an efficiency choice — the table above says so explicitly, cost is strictly
+linear in sites — it was a blast-radius cap on a 15.97% `.text` bill. That bill
+is now 2.98%.
+
+**So the frame-size gate should probably not be built at all**, and that is a
+change to this ticket's own design section two above, which said T=400. A gate
+costs: a threshold constant nobody can justify from a measurement, a second code
+path at every release site, and a permanent question in review about which side
+of it any given frame sits on. What it buys is 2.0 percentage points of `.text`
+(2.98% -> ~0.98%) and it gives up 43.4% of the runtime win, which is the win the
+whole ticket is about. **Recommendation: build it ungated, and keep the
+threshold in reserve as a named constant only if the ungated build's measured
+size cost comes in materially above the 2.98% predicted here.**
+
+Not yet measured, and it is the number that would overturn this: the ACTUAL
+size cost of the ungated build, rather than 43,508 x 5.06. The 5.06 B/site is
+frank-subcoord's calibrated model figure, corroborated by pxx's own encoding
+(`test %rax,%rax` is 3 bytes, a short `je` is 2) — but a `je` whose target is
+out of rel8 range is 6 bytes, not 2, and nothing here has established how often
+that happens at a release site. Build it, then read the artefact.
