@@ -887,6 +887,50 @@ end;
 
 { Read `__e.Current`: a property (getter method OR backing field) or a plain
   public field. Returns the value node. }
+{ The TTypeKind an enumerator class's `Current` yields, or tyUnknown when it
+  cannot be determined.
+
+  MIRRORS GenMakeCurrentRead's THREE ARMS IN THE SAME ORDER, deliberately: that
+  routine decides what Current READS, this one decides what it IS, and a
+  disagreement between them would pick an enumerator on one rule and lower it on
+  another. If a fourth arm is ever added there, it belongs here too -- which is
+  the whole reason this says so rather than reimplementing the lookup its own
+  way.
+
+  tyUnknown is "do not know", and every caller must treat it as "no opinion"
+  rather than as a mismatch. An enumerator whose Current this cannot read is
+  exactly the case where the old unconditional behaviour is still the best
+  available answer. }
+function EnumeratorCurrentTk(enumIdx, enumRec: Integer): TTypeKind;
+var pri, mi, i: Integer; mname: AnsiString;
+begin
+  EnumeratorCurrentTk := tyUnknown;
+  if enumIdx < 0 then Exit;
+  pri := FindUProp(enumIdx, 'Current');
+  if pri >= 0 then
+  begin
+    if UPropReadMLen[pri] > 0 then
+    begin
+      mname := '';
+      for i := 0 to UPropReadMLen[pri] - 1 do AppendChar(mname, TokChars[UPropReadMOff[pri] + i]);
+      mi := FindUMeth(enumIdx, mname);
+      if mi >= 0 then EnumeratorCurrentTk := Procs[UMthProc_[mi]].RetType;
+      Exit;
+    end
+    else if UPropReadFLen[pri] > 0 then
+    begin
+      { IntToTypeKind, NOT a bare assignment: UPropTk is declared `Integer`
+        (defs.inc) while this returns a TTypeKind. PXX accepts the narrowing
+        silently and FPC does not -- the seed canary caught exactly this line,
+        `Incompatible types: got "LongInt" expected "TTypeKind"`. }
+      EnumeratorCurrentTk := IntToTypeKind(UPropTk[pri]);
+      Exit;
+    end;
+  end;
+  if FindUField(enumIdx, 'Current') >= 0 then
+    EnumeratorCurrentTk := RecFieldType(enumRec, 'Current');
+end;
+
 function GenMakeCurrentRead(eSym, enumIdx, enumRec: Integer): Integer;
 var pri, fIdx, i, fnode: Integer; mname: AnsiString; eTk: TTypeKind;
 begin
@@ -1392,6 +1436,9 @@ var
   isString, isStaticArr: Boolean;
   contTk: TTypeKind;
   recId: Integer;
+  fiGeMi, fiGeRec, fiOpPi: Integer;   { the two enumerator candidates, when a container has both }
+  fiGeTk, fiOpTk: TTypeKind;          { ...and what each one's Current yields }
+  fiDiv: Boolean;                     { divert from GetEnumerator to the operator? }
 begin
   { set var → membership-scan over the element base-type range }
   if Syms[contSym].TypeKind = tySet then
@@ -1406,6 +1453,43 @@ begin
      and (not Syms[contSym].IsArray) and (recId >= REC_UCLASS_BASE)
      and (FindUMeth(recId - REC_UCLASS_BASE, 'GetEnumerator') >= 0) then
   begin
+    { …UNLESS AN `operator enumerator` FITS THE LOOP VARIABLE AND THIS DOES NOT.
+      A container can carry both, and fpc 3.2.2 chooses between them BY THE LOOP
+      VARIABLE'S TYPE -- tforin24 iterates one TStrings twice, once into a
+      `String` (its GetEnumerator) and once into a `TDayObject` (the operator).
+      Taking GetEnumerator unconditionally reads the other enumerator's Current
+      through the wrong type: measured 2026-09-07, a two-enumerator container
+      yielding strings and integers printed `str1 str2` then `-1411383224
+      -1411383120` where fpc prints `1 2`. Exit 0, plausible numbers -- a silent
+      wrong answer, which is why this is a diversion and not a diagnostic.
+
+      NARROW ON PURPOSE, and it can only change cases that are wrong today: it
+      fires when the loop variable's type is KNOWN, GetEnumerator's Current does
+      NOT match it, and an operator enumerator's Current DOES. tyUnknown from
+      EnumeratorCurrentTk means "cannot read it", never "mismatch", so an
+      enumerator this cannot inspect keeps the old unconditional answer. A
+      `for var x in` loop (tyAuto) has no type to match and is left alone --
+      inferring from the loop variable is what tyAuto asks the enumerator FOR,
+      so preferring on it would be circular. }
+    fiDiv   := False;
+    fiOpPi  := FindOpOverload(OPK_ENUMERATOR, Ord(Syms[contSym].TypeKind), recId);
+    if (fiOpPi >= 0) and (Syms[varIdx].TypeKind <> tyAuto) then
+    begin
+      fiGeMi  := FindUMeth(recId - REC_UCLASS_BASE, 'GetEnumerator');
+      fiGeRec := ProcRetRecId[UMthProc_[fiGeMi]];
+      fiGeTk  := EnumeratorCurrentTk(fiGeRec - REC_UCLASS_BASE, fiGeRec);
+      if (fiGeTk <> tyUnknown) and (fiGeTk <> Syms[varIdx].TypeKind) then
+      begin
+        fiOpTk := EnumeratorCurrentTk(ProcRetRecId[fiOpPi] - REC_UCLASS_BASE,
+                                      ProcRetRecId[fiOpPi]);
+        fiDiv := (fiOpTk <> tyUnknown) and (fiOpTk = Syms[varIdx].TypeKind);
+      end;
+    end;
+    if fiDiv then
+    begin
+      Result := ParseForInOpEnumeratorAST(varIdx, contSym, fiOpPi);
+      Exit;
+    end;
     Result := ParseForInEnumeratorAST(varIdx, contSym, recId - REC_UCLASS_BASE);
     Exit;
   end;
