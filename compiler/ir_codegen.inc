@@ -15330,12 +15330,27 @@ begin
     else            EmitI32($E8BD4830);                  { pop  {r4,r5,fp,lr} }
   end
 {$endif}
-  else
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then
   begin
     EmitB($83);
     if opening then EmitB($EC) else EmitB($C4);
     EmitB($0C);                                          { sub/add esp, 12 }
-  end;
+  end
+{$endif}
+  else
+    { NAMED, because it was an unnamed fall-through emitting the i386 encoding
+      and that was correct only by accident of who gates the caller. Adding a
+      target to TargetHasSweepThunk and forgetting THIS arm would have emitted
+      `83 EC 0C` -- i386 bytes -- into an aarch64, riscv32 or xtensa body,
+      silently. Three more ports are queued behind this function, so the arm
+      that does not exist yet must refuse rather than inherit i386's.
+      EmitManagedLocalCleanupForTarget makes the same point about its own final
+      `end`: an unnamed fall-through is indistinguishable from an unconsidered
+      one. }
+    Error('compiler error: no sweep-thunk stack adjustment for this target '
+          + '(TargetHasSweepThunk admitted a target this function does not '
+          + 'have an arm for)');
 end;
 
 procedure EmitSweepThunkCall(addr: Integer);
