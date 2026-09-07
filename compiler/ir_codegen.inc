@@ -15297,7 +15297,25 @@ procedure EmitSweepThunkStackAdjust(opening: Boolean);
   nothing (both callee-saved, both restored unchanged) and keeps the residue the
   inline sweep saw, which is the invariant every arm of this function holds. The
   alignment guard asserts min = max of the destructor frame's `and 15` across
-  every return in ONE body, so an 8-byte save fails it -- correctly. }
+  every return in ONE body, so an 8-byte save fails it -- correctly.
+
+  AND THE LINK-REGISTER SAVE ITSELF IS GUARDED, WHICH I FIRST CLAIMED IT WAS
+  NOT. Landing this arm I wrote that nothing in the corpus could catch a missing
+  lr save, reasoning that the thunk would "simply return to garbage" -- and I
+  wrote it in the same commit that carefully separated what was measured from
+  what was only read. It was the unmeasured half and it was wrong. Built it that
+  way on purpose afterwards, keeping the 16-byte adjustment and dropping only
+  the register list (`sub sp,sp,#16` / `add sp,sp,#16`), so the alignment stays
+  right and ONLY lr is clobbered:
+
+    test_managed_sweep_thunk   arm32   SIGSEGV (rc=139)
+    the alignment guard        arm32   SIGSEGV (rc=139)
+
+  Both rows, loudly. The sweep's first BL overwrites the thunk's return address
+  before the thunk can use it, so `bx lr` jumps into the release stub's caller
+  and the process dies immediately rather than quietly. This defect class is
+  covered on every target that reaches the sweep through a link register, which
+  is the remaining three. }
 begin
   if TargetArch = TARGET_X86_64 then
   begin
