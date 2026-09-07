@@ -15330,6 +15330,18 @@ begin
     else            EmitI32($E8BD4830);                  { pop  {r4,r5,fp,lr} }
   end
 {$endif}
+{$ifndef PXX_NO_AARCH64}
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    { Same reasoning as arm32 -- BL writes x30 and the sweep BLs on every
+      releasable slot -- but the size needs no argument here: AArch64 requires
+      sp 16-byte aligned at all times, and stp/ldp of a register PAIR is 16
+      bytes exactly. The arm32 arm had to reach 16 by adding r4/r5 to a save
+      that only needed lr; this one cannot be written wrong in that direction. }
+    if opening then EmitI32($A9BF7BFD)                   { stp x29,x30,[sp,#-16]! }
+    else            EmitI32($A8C17BFD);                  { ldp x29,x30,[sp],#16 }
+  end
+{$endif}
 {$ifndef PXX_NO_I386}
   else if TargetArch = TARGET_I386 then
   begin
@@ -15364,6 +15376,14 @@ begin
   else if TargetArch = TARGET_ARM32 then
     EmitI32($EB000000 or ((((addr - CodeLen) div 4) - 2) and $00ffffff))
 {$endif}
+{$ifndef PXX_NO_AARCH64}
+  else if TargetArch = TARGET_AARCH64 then
+    { No -2: arm32's PC reads 8 ahead of the instruction and aarch64's does not,
+      so the same-looking displacement is a DIFFERENT arithmetic. Copied from
+      ir_codegen_aarch64.inc:4128's bl CoSwitch rather than from the arm32 line
+      three above, which is the line it would be natural to copy. }
+    EmitI32($94000000 or (((addr - CodeLen) div 4) and $03ffffff))
+{$endif}
   else
     Error('compiler error: no sweep-thunk call encoding for this target');
 end;
@@ -15376,6 +15396,10 @@ begin
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then
     EmitI32($E12FFF1E)                                   { bx lr }
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+  else if TargetArch = TARGET_AARCH64 then
+    EmitI32($D65F03C0)                                   { ret (via x30) }
 {$endif}
   else
     Error('compiler error: no sweep-thunk return encoding for this target');
@@ -15395,6 +15419,9 @@ begin
     (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)
 {$ifndef PXX_NO_ARM32}
     or (TargetArch = TARGET_ARM32)
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+    or (TargetArch = TARGET_AARCH64)
 {$endif}
     ;
 end;

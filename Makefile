@@ -14494,6 +14494,20 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-arm absent, arm32 arm NOT verified ==="; \
 	fi
+	@# The aarch64 arm. No constant to get wrong here -- stp/ldp of a register
+	@# PAIR is 16 bytes by construction and AArch64 requires sp 16-aligned always,
+	@# so the arm32 8-versus-16 mistake cannot be written. What CAN be written is
+	@# forgetting x30 entirely, and that fails differently from arm32: measured,
+	@# arm32 SIGSEGVs (rc=139) and aarch64 HANGS (rc=124), because `ret` with a
+	@# clobbered x30 loops back into the release stub's caller instead of landing
+	@# somewhere unmapped. Both are caught; a hang burns the job budget rather
+	@# than failing fast, which is worth knowing before riscv32 and xtensa.
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_aarch64 >/dev/null; \
+	  tools/expect_same.sh aarch64/test_sweep_align_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_sweep_align_aarch64)" "ALIGN OK"; \
+	else \
+	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
