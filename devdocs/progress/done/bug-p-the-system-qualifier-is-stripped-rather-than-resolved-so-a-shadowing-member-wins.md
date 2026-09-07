@@ -156,9 +156,40 @@ directory this rung uses (`/tmp/generics-stage`) is gone and /tmp is reaped at
 repro, which the ticket states is byte-identical to the corpus failure. Someone
 holding rung 6a should re-drive it and move the wall number.
 
-A direct `uses Generics.Defaults` walls EARLIER than 1178 on both HEAD and the
-pin, at `FPC_FULLVERSION has no integer value here` — a different gap, not
-touched by this.
+**CORRECTED 2026-09-07, same day, and the retraction is the useful part.** This
+section originally said *"a direct `uses Generics.Defaults` walls EARLIER than
+1178 on HEAD and on the pin alike, at `FPC_FULLVERSION has no integer value
+here` — a different gap"*, and offered it as a caution. **It is true about the
+invocation I ran and false as written.** frank-optimize re-drove the rung and got
+`:2729`; I re-measured against the same tree and the discriminator is a flag of
+mine:
+
+```
+-Fu<rtl-generics/src>                              -> :2729
+-Fu<rtl-generics/src> -Fu.../3.2.2/rtl/objpas      -> :3491 FPC_FULLVERSION
+```
+
+The extra objpas path pulls a DIFFERENT unit in, and `:3491` is that unit's line.
+An instrument that lies by being correct about something else — nothing errored,
+nothing was out of range, and the wall it reported was real. **A wall number is
+meaningless without the search path it was measured on**, and I quoted one
+without it.
+
+**THE FIX CLEARED THE CORPUS WALL: `generics.defaults.pas` 1178 -> 2729**, at
+binary `c58d2b8c0b4b`, re-driven by frank-optimize and reproduced here with
+`-Fu<rtl-generics/src>` alone — no include path and no staging needed, so the
+`/tmp/generics-stage` caution above applies to the old stage and not to the
+fpcsrc tree. The new wall is `no overload of Create matches these arguments
+(record, Cardinal, record)`, unowned.
+
+**And one word in the framing around this ticket was wrong in a way worth
+keeping.** The wall moving `:2279` -> `:1178` was reported as *"not a regression,
+since pin v407 walls there too"*. *"The pin has it too"* bounds the defect's AGE;
+it does not establish that the behaviour was always there. The `qUnit < 0` guard
+was always wrong and something in that range made it REACHABLE — so the honest
+statement is **the defect is old, the exposure is new**, which is neither
+"regression" nor "long-standing". frank-optimize raised and corrected this
+themselves; it is recorded here because the reasoning outlives the ticket.
 
 ## Log
 - 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8f5d60498.
