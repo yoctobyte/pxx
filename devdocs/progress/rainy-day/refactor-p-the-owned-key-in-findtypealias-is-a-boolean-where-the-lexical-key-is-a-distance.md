@@ -70,6 +70,16 @@ count — so nothing can be encoded as "larger than any rank", and the distance
 must be a separate key compared in order, never a bonus folded into `r`. That
 mistake was made once here already and inverted the answer.
 
+## THE CODE NOW CARRIES THIS (2026-09-07, `ba2bd5b05`)
+
+frank-optimize landed the inheritance widening and rewrote the comment in the
+same commit: `compiler/symtab.inc` states the retired invariant, the `Duplicate
+identifier` measurement, the distance replacement and the sentinel trap, at the
+`owned :=` site itself. **That is the reader that matters and this ticket is no
+longer the only copy** — it exists so the deferral is findable from the ranker,
+not so the design is recoverable. If the two ever disagree, the comment wins and
+this file is the stale one.
+
 ## Why it is filed rather than done
 
 The class axis is being widened right now by frank-optimize

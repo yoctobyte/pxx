@@ -16878,6 +16878,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_gendirstate26 "$$($(TESTTMP)/test_gendirstate26)" "$$(cat test/test_a_generic_body_keeps_its_own_directive_state.expected)"
 	./$(COMPILER) -Futest/generic_xunit_params_units test/test_a_cross_unit_specialized_method_sees_its_own_parameters.pas $(TESTTMP)/test_xunitparams26
 	tools/expect_same.sh test_xunitparams26 "$$($(TESTTMP)/test_xunitparams26)" "$$(cat test/test_a_cross_unit_specialized_method_sees_its_own_parameters.expected)"
+	./$(COMPILER) test/test_two_scopes_sharing_a_type_name_are_two_specializations.pas $(TESTTMP)/test_twoscopespec26
+	tools/expect_same.sh test_twoscopespec26 "$$($(TESTTMP)/test_twoscopespec26)" "$$(cat test/test_two_scopes_sharing_a_type_name_are_two_specializations.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks
