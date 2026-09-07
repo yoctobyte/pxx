@@ -382,4 +382,4 @@ rather than left as a sentence here, because "not served" is half a finding
 until someone owns "then what?".
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c8661bcac.
