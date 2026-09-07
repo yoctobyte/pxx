@@ -4385,6 +4385,57 @@ condition to documenting why it is safe — the fix here deleted the gate entire
 premise to be true and no list of addressable node kinds to stay in sync with
 `IRLowerAddress`'s own.
 
+## A STALE MEASUREMENT — prose asserting a live state, written true, aged false by your own next commit, and afterwards indistinguishable from something that was checked
+
+Every stale-instrument tell in this file keys on **a run**. A stale binary, a
+stale tree, a stale ref, a store-local `cat-file`, a truncated `tail` — in all of
+them an instrument was RUN against the wrong thing, and the correction is to run
+it against the right one. This one involves no instrument at all at the moment it
+goes wrong, which is why none of those tells fires.
+
+**The shape.** You are mid-fix. You measure an adjacent construct, it fails, and
+you write that down — in a fixture header, a ticket, a commit message. The note
+is TRUE when you write it. Then your own change lands and closes it. The note is
+now false, it is in the artefact a reader trusts most, and **it reads exactly
+like something that was checked** — because it was, against the binary you were
+in the middle of replacing.
+
+Measured 2026-09-07, frankS, `a049a7ec1` correcting `fd522cc34`. While fixing
+"a nested type may specialize its own template" I found that
+`TI.TMinted.Create` — a minted nested type reached through the outer
+specialization's name — answered `class method not found (TMinted)`. Real, and
+I wrote *"a separate gap, still open"* into the fixture header and the ticket.
+The `NestedSpecGroup` change in that same commit closed it. Re-measured after
+the build: it compiles, runs, matches fpc. **The claim had aged between being
+written and being committed, inside one commit.**
+
+**Why it is worse than a wrong comment.** The neighbouring section here — *"A
+comment is an unverified claim, and tickets inherit it"* — is about a claim that
+was never true. That one can be caught by checking it. This one PASSES a check,
+if the check is "was this measured?", because it was. The only question that
+separates them is **"measured against which binary, and did that binary survive
+this commit?"**, and nobody asks it, because the note is about a construct you
+deliberately did not touch.
+
+**It also propagates faster than a wrong comment**, because a "still open" note
+is exactly the kind of thing the next session greps for when picking up work, and
+a false one sends them to reproduce something that already works — where they
+will find it working and have to decide whether they are wrong or the note is.
+
+**THE RULE: re-measure every "still broken" note AFTER the build that might have
+fixed it, not before.** Cheap and mechanical — a "still open" or "still fails"
+claim written during a fix is a TODO for the end of that fix, not a finding.
+Especially when the construct is adjacent to what you changed: adjacency is
+precisely what makes it likely to be swept up, and precisely why you assumed it
+would not be.
+
+**And when you find one, correct it visibly rather than deleting it.** The
+deletion loses the reason and the class; the correction is what tells the next
+reader that "measured" and "measured against the binary that still exists" are
+different claims. Both corrections for the instance above were left in place, in
+the fixture header and the ticket, saying what was measured and against what.
+
+
 ## A TICKET'S PROPOSED MECHANISM IS A HYPOTHESIS, AND A STALE REPRO HIDES THAT — when the new repro is far SIMPLER than the ticket's, the ticket's cause was scenery
 
 Measured 2026-09-05/06 (frankA). The sibling of the section above: that one is
