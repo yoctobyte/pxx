@@ -476,10 +476,10 @@
  ],
  "host": "seven",
  "infra": {
-  "count": 147,
-  "last": "2026-09-07T11:17:15Z",
+  "count": 148,
+  "last": "2026-09-07T11:20:36Z",
   "reason": "no report (rc=1)",
-  "sha": "8dc292039b0e1df7125481aca92df354efa5cfd1",
+  "sha": "c4ab087e6bfc6eeac47ea5665e68bb9536471f61",
   "since": "2026-09-07T04:47:06Z",
   "tier": "full"
  },
@@ -14667,8 +14667,8 @@
   "sha": "cf9b14600039c2f62d7251b0e05330fb74827be9"
  },
  "last_breadth_try": {
-  "date": "2026-09-07T10:28:48Z",
-  "sha": "7ead7d9984aefac00acc8f84e202d5b4f6c2ce71"
+  "date": "2026-09-07T11:17:47Z",
+  "sha": "c4ab087e6bfc6eeac47ea5665e68bb9536471f61"
  },
  "last_by_tier": {
   "full": {
