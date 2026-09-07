@@ -14905,6 +14905,22 @@ test-core: $(COMPILER)
 	# check unless the value is read back.
 	./$(COMPILER) test/test_mgmt_operators_array_field.pas $(TESTTMP)/test_mgmt_op_afld_ok26
 	$(TESTTMP)/test_mgmt_op_afld_ok26 | diff -u test/test_mgmt_operators_array_field.expected -
+	# ...and MULTI-DIMENSIONAL, symbol and field, because storage is flat
+	# row-major and the recorded extent is the FLAT count, so one loop walks any
+	# dimensionality. What changes with the dimension count is the INDEX SPACE:
+	# a synthesised single-subscript AN_INDEX over a 1-D array is read in SOURCE
+	# space (the low bound is subtracted) and over an N-D one in FLAT space
+	# (nothing is), so the two rows above and this one cover the halves of one
+	# rule and neither can be dropped.
+	#
+	# EVERY LOW BOUND IN THE FIXTURE IS NON-ZERO AND THAT IS WHAT MAKES THE ROW
+	# ABLE TO FAIL. Measured 2026-09-07 with the dimension guard removed: a
+	# 0-based `array[0..1, 0..2]` walked flat is CORRECT and matches fpc element
+	# for element, because a flat index and a dimensional index coincide at
+	# origin zero. `array[1..2, 5..7]` is the shape that separates them.
+	# .expected is fpc 3.2.2's, byte for byte.
+	./$(COMPILER) test/test_mgmt_operators_multidim_array.pas $(TESTTMP)/test_mgmt_op_md_ok26
+	$(TESTTMP)/test_mgmt_op_md_ok26 | diff -u test/test_mgmt_operators_multidim_array.expected -
 	# ...and the GLOBAL array, through WrapMainBodyManagementOps' separate call.
 	# This .expected is OURS, not fpc's: measured, fpc 3.2.2 runs nothing at all
 	# for a global array (`body 000`) while it does run Initialize for a plain
@@ -14921,10 +14937,8 @@ test-core: $(COMPILER)
 	# 3.2.2's, byte for byte; it is refused outright on the pin.
 	./$(COMPILER) test/test_mgmt_operators_copy.pas $(TESTTMP)/test_mgmt_op_copy26
 	$(TESTTMP)/test_mgmt_op_copy26 | diff -u test/test_mgmt_operators_copy.expected -
-	# ...and the six shapes that are REFUSED rather than silently skipped: a
-	# DYNAMIC array of a managed record and a MULTI-DIMENSIONAL one (two clauses
-	# of one predicate, so neither row can stand in for the other -- a 2-D array
-	# has a fixed ArrLen), the same two shapes as a record FIELD, a CLASS
+	# ...and the three shapes that are REFUSED rather than silently skipped: a
+	# DYNAMIC array of a managed record, the same as a record FIELD, a CLASS
 	# holding one in a field, and AddRef
 	# (recognised, but the by-value parameter copy is a separate slice from Copy,
 	# which IS dispatched -- measured, they are disjoint sites and neither ever
@@ -14938,14 +14952,8 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 >/dev/null 2>&1; then \
 	  echo "FAIL: a DYNAMIC array of a managed record compiled -- its extent is a runtime length the desugar cannot read"; exit 1; \
 	fi
-	if ./$(COMPILER) test/test_mgmt_operators_multidim_array_refused.pas $(TESTTMP)/test_mgmt_op_mdarr26 >/dev/null 2>&1; then \
-	  echo "FAIL: a MULTI-DIMENSIONAL array of a managed record compiled -- the synthesised loop is one-dimensional"; exit 1; \
-	fi
 	if ./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a record holding a managed record in a DYNAMIC array field compiled -- its extent is a runtime length the desugar cannot read"; exit 1; \
-	fi
-	if ./$(COMPILER) test/test_mgmt_operators_multidim_array_field_refused.pas $(TESTTMP)/test_mgmt_op_mdfld26 >/dev/null 2>&1; then \
-	  echo "FAIL: a record holding a managed record in a MULTI-DIMENSIONAL array field compiled -- the synthesised loop is one-dimensional and UFldArrLen is a FLAT count"; exit 1; \
 	fi
 	if ./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 >/dev/null 2>&1; then \
 	  echo "FAIL: a class holding a managed record in a field compiled -- fpc runs those at Create/Free, not at scope"; exit 1; \
@@ -14953,23 +14961,18 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_addref_small_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
 	  echo "FAIL: a management operator on a record passed by value at <=8 bytes compiled -- there is no address for it to act on and the callee gets a pointer where its ABI says bytes"; exit 1; \
 	fi
-	# ALL FOUR ARRAY ROWS READ THE REASON AND THE NOUN, never just the slug.
-	# The four refusals are two reasons x two nouns and they have DIFFERENT
-	# answers -- a multi-dimensional one needs nested loops in the desugar, a
-	# dynamic one runs its operators inside SetLength (measured against fpc
-	# 3.2.2) and needs a record RTTI descriptor instead. A slug-only grep lets
-	# any of the four stand in for any other and cannot tell a revert from a
-	# fix. `holding` is load-bearing in these patterns: "a DYNAMIC array" is a
-	# PREFIX of "a DYNAMIC array field", so without it the symbol row would pass
-	# on the field message.
+	# BOTH ARRAY ROWS READ THE REASON AND THE NOUN, never just the slug. They
+	# were four rows until 2026-09-07, when the multi-dimensional pair started
+	# compiling and moved to the positive block above -- the third expiry of a
+	# negative fixture in this family, and the reason none of them are ever just
+	# deleted. `holding` is load-bearing in these patterns: "a DYNAMIC array" is
+	# a PREFIX of "a DYNAMIC array field", so without it the symbol row would
+	# pass on the field message. An expected-failure row passes on ANY refusal
+	# unless it reads which.
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
 	  | grep -q "a DYNAMIC array holding"
-	./$(COMPILER) test/test_mgmt_operators_multidim_array_refused.pas $(TESTTMP)/test_mgmt_op_mdarr26 2>&1 \
-	  | grep -q "a MULTI-DIMENSIONAL array holding"
 	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
 	  | grep -q "a DYNAMIC array field holding"
-	./$(COMPILER) test/test_mgmt_operators_multidim_array_field_refused.pas $(TESTTMP)/test_mgmt_op_mdfld26 2>&1 \
-	  | grep -q "a MULTI-DIMENSIONAL array field holding"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	# Matches the SIZE wording, not just the ticket slug: the blanket
@@ -27923,16 +27926,21 @@ test-mgmt-operators-cross-target: $(COMPILER)
 	    riscv32) tgt="--target=riscv32"; run="qemu-riscv32" ;; \
 	  esac; \
 	  if ! ./$(COMPILER) $$tgt test/test_mgmt_operators_array_field.pas $(TESTTMP)/mgmtaf_$$t >/dev/null 2>&1; then \
-	    echo "test-mgmt-operators-cross-target: FAIL $$t -- the fixture did not compile"; overall=1; continue; \
+	    echo "test-mgmt-operators-cross-target: FAIL $$t -- the array-field fixture did not compile"; overall=1; continue; \
 	  fi; \
 	  got=$$($$run $(TESTTMP)/mgmtaf_$$t 2>&1); \
-	  ran=$$((ran+1)); \
 	  tools/expect_same.sh mgmt_array_field_$$t "$$got" "$$(cat test/test_mgmt_operators_array_field.expected)" || overall=1; \
+	  if ! ./$(COMPILER) $$tgt test/test_mgmt_operators_multidim_array.pas $(TESTTMP)/mgmtmda_$$t >/dev/null 2>&1; then \
+	    echo "test-mgmt-operators-cross-target: FAIL $$t -- the multi-dim fixture did not compile"; overall=1; continue; \
+	  fi; \
+	  got=$$($$run $(TESTTMP)/mgmtmda_$$t 2>&1); \
+	  ran=$$((ran+1)); \
+	  tools/expect_same.sh mgmt_multidim_$$t "$$got" "$$(cat test/test_mgmt_operators_multidim_array.expected)" || overall=1; \
 	done; \
 	echo "test-mgmt-operators-cross-target: $$ran targets compared"; \
 	[ $$ran -ge 5 ] || \
 	  { echo "test-mgmt-operators-cross-target: RED -- fewer targets ran than the recipe names, so this gate measured less than it claims"; exit 1; }; \
-	: '--- the two array-field shapes that are still refused, each reading WHICH refusal ---'; \
+	: '--- the array-field shape that is still refused, reading WHICH refusal ---'; \
 	for t in x86_64 i386 aarch64 arm32 riscv32; do \
 	  case $$t in \
 	    x86_64)  tgt="" ;; \
@@ -27941,9 +27949,6 @@ test-mgmt-operators-cross-target: $(COMPILER)
 	  ./$(COMPILER) $$tgt test/test_mgmt_operators_field_refused.pas $(TESTTMP)/mgmtdyn_$$t 2>&1 \
 	    | grep -q "a DYNAMIC array field holding" || \
 	    { echo "test-mgmt-operators-cross-target: FAIL $$t -- a DYNAMIC array field of a managed record was not refused with its own reason"; overall=1; }; \
-	  ./$(COMPILER) $$tgt test/test_mgmt_operators_multidim_array_field_refused.pas $(TESTTMP)/mgmtmd_$$t 2>&1 \
-	    | grep -q "a MULTI-DIMENSIONAL array field holding" || \
-	    { echo "test-mgmt-operators-cross-target: FAIL $$t -- a MULTI-DIMENSIONAL array field of a managed record was not refused with its own reason"; overall=1; }; \
 	done; \
 	test "$$overall" = "0" || { echo "test-mgmt-operators-cross-target: RED"; exit 1; }; \
 	echo "test-mgmt-operators-cross-target: GREEN"

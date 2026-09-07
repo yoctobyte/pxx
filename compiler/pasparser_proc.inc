@@ -424,37 +424,44 @@ end;
 
   UFldTk carries the ELEMENT kind for an array field, so it is `tyRecord` for
   `array[0..1] of TFoo` exactly as it is for a plain `TFoo` field; UFldIsArray
-  is the only thing that separates them. UFldArrLen is the FLAT element count
-  (the product of the dimension spans), which is why the NDims test is not
-  redundant with it: a 2-D `array[0..1,0..2]` has ArrLen 6 and one 1-D loop over
-  six elements would index six slots that do not exist in source index space. }
+  is the only thing that separates them.
+
+  DIMENSIONALITY IS NOT A LIMIT HERE and it used to be. Storage is flat
+  row-major, UFldArrLen is the FLAT element count (the product of the spans),
+  and the walk visits elements in that order -- which is the order fpc runs them
+  in. Measured 2026-09-07 against fpc 3.2.2: a 2-D field, a 3-D field with three
+  non-zero low bounds, and a 2-D field whose element holds its own 1-D array
+  field all match element for element. What the walk must get right is not the
+  dimension count but the INDEX SPACE, and the two differ -- see the low-bound
+  note in AppendManagedFieldOps. }
 function FldIsLoopableManagedArray(fi: Integer): Boolean;
 begin
   FldIsLoopableManagedArray :=
     UFldIsArray[fi] and (IntToTypeKind(UFldTk[fi]) = tyRecord) and
-    (UFldArrLen[fi] > 0) and (UFldArrNDims[fi] <= 1) and
+    (UFldArrLen[fi] > 0) and
     (UFldDynDepth[fi] = 0) and (UFldRec_[fi] <> REC_NONE);
 end;
 
-{ Why an array field is out of the walk's reach. Two clauses of one predicate
-  and they are NOT interchangeable: a dynamic field has no extent to read at
-  all, a multi-dimensional one has a readable FLAT extent and a 1-D loop. The
-  refusals quote different sentences so that an expected-failure row can read
-  WHICH refusal it got -- a row that greps only the ticket slug scores any
-  refusal as a pass and cannot tell a revert from a fix, which is the lesson
-  the AddRef size row already carries in the Makefile. }
+{ Why an array is out of the walk's reach.
+
+  UMF_NDIMS IS GONE as of 2026-09-07: a multi-dimensional fixed array is walked
+  flat now, measured against fpc 3.2.2 up to three dimensions with every low
+  bound non-zero. Only the dynamic case is left as a real refusal.
+
+  UMF_UNSIZED stays because the REFUSAL must be total even where the MESSAGE is
+  speculative. The walk skips any array the predicate rejects, and a silent skip
+  is the one outcome this pass exists to prevent, so the refusal is keyed on the
+  predicate rather than on `DynDepth > 0` -- which means it can in principle fire
+  for a fixed array whose recorded extent is not positive. I could not construct
+  that shape and the message says so rather than inventing a cause for it. }
 const
-  UMF_NONE   = 0;
-  UMF_DYN    = 1;   { `array of TFoo` -- extent is a runtime length }
-  UMF_NDIMS  = 2;   { `array[a..b, c..d] of TFoo` -- the loop is one-dimensional }
+  UMF_DYN     = 1;   { `array of TFoo` -- extent is a runtime length }
+  UMF_UNSIZED = 2;   { a fixed array whose recorded extent is not usable -- unconstructed }
 
 { The refusal text for one reason code, for an array SYMBOL (`what` = 'array')
   or an array FIELD (`what` = 'array field'). Spelled once so the four call
   sites cannot drift, and each arm names its OWN obstacle and its OWN follow-up
-  ticket rather than a shared "not supported yet" -- see the reason codes above.
-  The two reasons have DIFFERENT ANSWERS, which is the reason they must not
-  share a sentence: one needs nested loops in this pass, the other needs a
-  descriptor in a routine this pass never sees. }
+  ticket rather than a shared "not supported yet". }
 function UnreachableManagedArrayMsg(why: Integer; what: String): String;
 begin
   if why = UMF_DYN then
@@ -463,16 +470,15 @@ begin
       + 'Finalize is not managed yet: measured against fpc 3.2.2, those run '
       + 'inside SetLength as elements come and go, not at scope entry, so this '
       + 'desugar is the wrong place for them and a loop over Length() here '
-      + 'would initialize nothing at all. A FIXED one-dimensional ' + what
-      + ' is iterated '
+      + 'would initialize nothing at all. A FIXED ' + what
+      + ' of any dimensionality is iterated '
       + '(feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray)'
   else
     UnreachableManagedArrayMsg :=
-      'a MULTI-DIMENSIONAL ' + what + ' holding a record that declares '
-      + 'Initialize or Finalize is not managed yet: the synthesised loop is '
-      + 'one-dimensional and the recorded extent is a FLAT count, so a 1-D loop '
-      + 'over it is correct only when every low bound is zero. A FIXED '
-      + 'one-dimensional ' + what + ' is iterated '
+      'an ' + what + ' holding a record that declares Initialize or Finalize '
+      + 'has no usable element count recorded, so this pass refuses it rather '
+      + 'than skipping it silently. No source is known to reach this arm; if '
+      + 'you have hit it, that source is the finding '
       + '(feature-pascal-management-operators-nested-and-array)';
 end;
 
@@ -513,7 +519,7 @@ begin
       begin
         if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
         begin
-          if UFldDynDepth[fi] > 0 then why := UMF_DYN else why := UMF_NDIMS;
+          if UFldDynDepth[fi] > 0 then why := UMF_DYN else why := UMF_UNSIZED;
           Result := True;
           Exit;
         end;
@@ -613,7 +619,24 @@ begin
             is the element's own operator plus the element's own field walk --
             AppendManagedArrayOps builds both, so the nesting rule inside an
             element is the same one that holds anywhere else. }
-          flo := UFldArrDimLo[fi * MAX_ARR_DIMS];
+          { THE INDEX SPACE DIFFERS BY DIMENSION COUNT, and this is the one
+            fact the multi-dimensional case turns on. MEASURED 2026-09-07, not
+            derived: a synthesised single-subscript AN_INDEX over a 1-D field
+            is lowered in SOURCE index space -- the field's own low bound is
+            subtracted, so `array[2..3]` must be walked 2..3. Over an N-D field
+            nothing is subtracted and the same node is read in FLAT space, so
+            it must be walked 0..count-1. Walking an N-D field from its low
+            bound writes one element PAST the array and leaves the first
+            uninitialized: `array[1..2, 5..7]` printed `001234` against fpc's
+            `012345` and finalized a sixth element holding the neighbouring
+            scalar field.
+            A single subscript written in SOURCE selects a whole ROW
+            (BuildPartialNDRowIndex, measured: `b.f[2]` lands at element 3 of a
+            2x3), but this node never goes through that parser path -- nothing
+            fills NDInfo* or stamps ASTNDRowSubs for it -- which is why it is an
+            element index at all. }
+          if UFldArrNDims[fi] > 1 then flo := 0
+          else flo := UFldArrDimLo[fi * MAX_ARR_DIMS];
           AppendManagedArrayOps(fldNode, frec, opk,
                                 flo, flo + UFldArrLen[fi] - 1,
                                 postOrder, head, tail);
@@ -721,7 +744,7 @@ function SymIsLoopableManagedArray(idx: Integer): Boolean;
 begin
   SymIsLoopableManagedArray :=
     Syms[idx].IsArray and (Syms[idx].TypeKind = tyRecord) and
-    (Syms[idx].ArrLen > 0) and (SymArrNDims[idx] <= 1) and
+    (Syms[idx].ArrLen > 0) and
     (SymElemDynDepth[idx] = 0) and (SymTR[idx].ElemRec <> REC_NONE);
 end;
 
@@ -761,7 +784,7 @@ begin
   { The predicate writes `why` only on the path that returns True. Seeding it
     keeps a stale reason from a previous symbol out of the next symbol's
     message -- the loop below runs once per symbol and reuses the variable. }
-  umfWhy := UMF_NONE;
+  umfWhy := UMF_DYN;
   for i := loSym to hiSym do
   begin
     if wantGlobal then isTarget := Syms[i].Kind = skGlobal
@@ -795,7 +818,7 @@ begin
         if (SymElemDynDepth[i] > 0) or (Syms[i].ArrLen < 0) then
           umfWhy := UMF_DYN
         else
-          umfWhy := UMF_NDIMS;
+          umfWhy := UMF_UNSIZED;
         Error(UnreachableManagedArrayMsg(umfWhy, 'array'));
       end;
       { ...and a loopable array whose ELEMENT hides a managed field behind an
@@ -823,7 +846,11 @@ begin
     end;
     if isTarget and (i <> retSym) and SymIsLoopableManagedArray(i) then
     begin
-      alo := Syms[i].ConstVal;
+      { Same index-space rule as the FIELD side, read from the symbol table
+        instead: a 1-D array is walked in SOURCE space from Syms[].ConstVal
+        (AllocArray stores the low bound there), an N-D one in FLAT space from
+        0. Measured against fpc 3.2.2 on `array[1..2, 5..7] of TFoo`. }
+      if SymArrNDims[i] > 1 then alo := 0 else alo := Syms[i].ConstVal;
       AppendManagedArrayOps(GenMakeIdent(i, tyRecord), SymTR[i].ElemRec,
                             OPK_INITIALIZE, alo, alo + Syms[i].ArrLen - 1, True,
                             headInit, tailInit);

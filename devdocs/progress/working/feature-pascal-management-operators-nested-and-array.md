@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: frankA
 blocked-by: []
-summary: "PARTLY DONE, THIRD ARM LANDED 2026-09-07 (frankA). Reached and managed now: a managed record through a FIELD at any depth, through an ELEMENT of a FIXED one-dimensional array SYMBOL, and -- new -- through an ELEMENT of a FIXED one-dimensional array FIELD, which is the same synthesised loop with an AN_FIELD base instead of an AN_IDENT one and a low bound read from the FIELD table (UFldArrDimLo) rather than the symbol table. AppendManagedFieldOps and AppendManagedArrayOps are now mutually recursive, so a symbol array whose element holds an array field works in both directions; that row (Mix) is the one that fails if only one direction is wired. Five arms verified against fpc 3.2.2 BYTE FOR BYTE and on all five runnable targets (x86_64/i386/aarch64/arm32/riscv32), refused outright on the pin. STILL REFUSED, now with a message naming WHICH obstacle rather than one shared sentence: a DYNAMIC array (symbol or field) whose extent is a runtime length, and a MULTI-DIMENSIONAL one (symbol or field) because the synthesised loop is 1-D. THE MULTI-DIMENSIONAL FIELD REFUSAL WAS NEARLY BLESSED BY ITS OWN FIXTURE: measured 2026-09-07 by deleting the NDims test and rebuilding, a 0-based `array[0..1, 0..2] of TFoo` field FLAT-LOOPS CORRECTLY and matches fpc element for element, because UFldArrLen is the flat product and the field low bound is 0. Only a non-zero OUTER low bound discriminates -- `array[1..2, 5..7]` gave `body 001234` against fpc's `012345` and finalized a sixth element holding the neighbouring `k`, i.e. a silent write outside the array and one element never initialized. The fixture therefore declares 1..2 and 5..7; a 0-based one is a guard that cannot fail. CLASS fields left this ticket for [[feature-pascal-management-operators-on-a-class-field]]. THE ORDER RULES ARE UNCHANGED AND STILL MEASURED, NOT ASSUMED: across NESTING levels Initialize is POST-order and Finalize is PRE-order; across ARRAY ELEMENTS both run ASCENDING -- an array FIELD sits at exactly the same place in the nesting rule as a plain nested field. CORPUS: tmoperator7 is unchanged by this arm -- its array is DYNAMIC (SetLength), so it still stops here."
+summary: "FIXED ARRAYS ARE DONE 2026-09-07 (frankA); ONE ARM LEFT AND IT IS NOT THIS PASS'S. Reached and managed now: a managed record through a FIELD at any depth, through an ELEMENT of a fixed array SYMBOL, through an ELEMENT of a fixed array FIELD, and -- new -- through a MULTI-DIMENSIONAL fixed array in either position, to any dimension count. Storage is flat row-major and the recorded extent is the FLAT element count, so one loop walks any dimensionality; what changes with the dimension count is the INDEX SPACE, and that is the whole finding. MEASURED, not derived: a synthesised single-subscript AN_INDEX over a 1-D array is lowered in SOURCE space (the low bound is subtracted, so array[2..3] is walked 2..3) and over an N-D array in FLAT space (nothing is subtracted, so it is walked 0..count-1). Walking an N-D array from its own low bound writes one element PAST the array and leaves the first uninitialized -- array[1..2, 5..7] printed body 001234 against fpc's 012345 and finalized a sixth element holding the neighbouring scalar field. A 0-BASED FIXTURE CANNOT SEE ANY OF THAT: with the dimension guard removed, array[0..1, 0..2] walked flat matches fpc element for element, because a flat index and a dimensional index coincide at origin zero, so every multi-dim fixture here declares non-zero low bounds. Verified against fpc 3.2.2 byte for byte on four shapes no two of which share a mechanism (2-D symbol, 2-D field beside a scalar neighbour, 3-D field with three non-zero lows, 2-D field whose element holds its own 1-D array field), on all five runnable targets. STILL REFUSED AND DELIBERATELY NOT THIS TICKET'S WORK: a DYNAMIC array, symbol or field. Measured against fpc 3.2.2, its Initialize runs INSIDE SetLength on elements that come into existence and Finalize inside it on ones that stop, with only the survivors finalized at scope exit -- so a scope-entry loop over Length() initializes ZERO elements and never sees one created later. That arm needs [[feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]], not a desugar, and the refusal text now says so. CLASS fields left for [[feature-pascal-management-operators-on-a-class-field]]. ORDER RULES UNCHANGED AND STILL MEASURED: across NESTING levels Initialize is POST-order and Finalize PRE-order; across ARRAY ELEMENTS both run ASCENDING, in flat storage order for a multi-dimensional one. CORPUS: tmoperator7 is still not cleared -- its array is DYNAMIC."
 ---
 
 # Management operators do not reach an array element or a nested field
@@ -234,6 +234,13 @@ a 2-D array has a fixed `ArrLen` and would sail past a dynamic-only check. Both
 fixtures were re-aimed rather than deleted, because a test whose whole claim is
 "we do not support X" goes red the day someone implements X.
 
+**SUPERSEDED 2026-09-07 — see the multi-dimensional section at the end of this
+ticket.** `multidim_array_refused` and `multidim_array_field_refused` expired
+when the flat walk landed and were retired into the positive fixture
+`test_mgmt_operators_multidim_array`; `array_refused` and `field_refused` remain
+and are the DYNAMIC pair. The sentence above is kept because the reasoning in it
+is what the retirement had to answer, not because it still describes the tree.
+
 ### The corpus row does not clear, and that is the honest reading
 
 `tmoperator7` moved from line 101 to **line 117** and still stops on this
@@ -402,3 +409,64 @@ until the descriptor exists.
 **What is left in THIS ticket is therefore one shape, not two**: the
 MULTI-DIMENSIONAL fixed array, as a symbol and as a field. Its extent is fully
 known at compile time and it needs nested loops rather than a descriptor.
+
+## 2026-09-07 (frankA) — the MULTI-DIMENSIONAL arm lands, and the guard it replaces was measured wrong twice
+
+The refusal I had just written for this shape said "the synthesised loop is
+one-dimensional". **It is, and that turns out not to matter**: storage is flat
+row-major, the recorded extent is the flat element count, and fpc visits the
+elements in that same flat order. One loop is enough at any dimensionality.
+
+### What actually differs, and it is not the loop
+
+**The index space.** Measured, in this order, because each step refuted the
+model I had going into it:
+
+| shape | walked from | result |
+| --- | --- | --- |
+| 1-D field `array[2..3]` | its low bound, 2..3 | correct |
+| 2-D field `array[0..1, 0..2]` | flat 0..5 | correct — and so is walking it from its low bound, because they are the same numbers |
+| 2-D field `array[1..2, 5..7]` | its low bound, 1..6 | **wrong**: `body 001234` vs fpc `012345`, sixth element finalized over the neighbouring `k` |
+| 2-D field `array[1..2, 5..7]` | flat 0..5 | correct |
+
+So a synthesised single-subscript `AN_INDEX` is read in **source** space over a
+1-D array and in **flat** space over an N-D one. Both call sites now say that in
+a comment, because it is the kind of asymmetry that reads as an accident.
+
+Worth separating from that: a single subscript **written in source** on an N-D
+array is neither — it selects a whole ROW through `BuildPartialNDRowIndex`
+(measured: `b.f[2]` on a 2×3 lands at element 3). The desugar's node never goes
+through that parser path — nothing fills `NDInfo*` or stamps `ASTNDRowSubs` for
+it — which is why it is an element index at all.
+
+### The fixture, and why every bound in it is non-zero
+
+`test/test_mgmt_operators_multidim_array.pas`, four shapes no two of which share
+a mechanism: a 2-D array SYMBOL (symbol table, `Syms[].ConstVal`), a 2-D array
+FIELD beside a scalar neighbour (field table, `UFldArrDimLo` — and `k` is what a
+past-the-end write lands on), a 3-D FIELD with all three lows non-zero (the flat
+count is a product of three spans), and a 2-D FIELD whose element holds its own
+1-D array field (a flat walk nested inside a flat walk). `.expected` is fpc
+3.2.2's output. All five runnable targets match it.
+
+The bounds are `1..2, 5..7` and `3..4, 1..2, 7..8` rather than 0-based because a
+0-based fixture **cannot fail**: with the dimension guard removed, the 0-based
+version matched fpc element for element. That is recorded at length in
+`devdocs/dev/handbook-rationale.md`.
+
+### Two negative fixtures expired and were retired rather than deleted on sight
+
+`test_mgmt_operators_multidim_array_refused` and
+`..._multidim_array_field_refused` asserted a refusal this commit implements —
+the third and fourth expiry in this family. Their shapes were absorbed into the
+positive fixture (they are its `sym` and `fld` arms), which is why the files
+themselves are gone rather than re-aimed: there was nothing left in that class
+to aim them at. The two DYNAMIC rows remain and now read the reason and the
+noun, with `holding` in the pattern because "a DYNAMIC array" is a prefix of
+"a DYNAMIC array field".
+
+### What is left
+
+One shape: a **dynamic** array, symbol or field. It is not this pass's work —
+see the SetLength measurement above — and its refusal cites the RTTI ticket.
+Class fields are their own ticket. **Everything fixed is done.**
