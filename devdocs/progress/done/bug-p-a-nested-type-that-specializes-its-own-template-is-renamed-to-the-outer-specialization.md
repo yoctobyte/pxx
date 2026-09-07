@@ -9,7 +9,7 @@ status: done
 owner: frankS
 created: 2026-09-07
 resolved: 2026-09-07
-resolution: PENDING-COMMIT
+resolution: fd522cc34
 summary: "`generic TTest<T> = class type TTestT = specialize TTest<T>; end` -- a container naming its own node or iterator type, and the first two lines of fpc's own ugeneric99 -- did not compile: `expected '<' before ';'`. THE BOUNDARY IS THE `=`, NOT THE SELF-REFERENCE. NestedSpecGroup deliberately refuses a group preceded by `=`, because after `=` a `specialize` is a DECLARATION that must MINT a class rather than collapse to a name -- right for every template but the one being STREAMED, for which minting is the one thing impossible, since that class does not exist yet. It fell through to the verbatim copy, where the identifier arm renames the template's own name to the specialization's: `specialize TI<LongInt>`, i.e. `generic template TI not found`. With the parameter still in it the truncated parse says `expected '<' before ';'` instead -- two messages, one exclusion. FIXED by exempting a group that names the template currently being streamed; whether it COLLAPSES is still SpecializeToBuffer's decision against StreamedSpecCanonName, so the exemption recognises and does not decide. Fixture test_selfnesttype26, five rows. Moves tgeneric99.pp's wall from line 11 to line 25."
 ---
 
