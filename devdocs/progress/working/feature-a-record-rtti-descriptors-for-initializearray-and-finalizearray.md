@@ -4,8 +4,8 @@ title: "`System.InitializeArray` / `FinalizeArray` — the RTTI-driven form of a
 track: A
 prio: 40
 type: feature
-status: backlog
-owner: ""
+status: working
+owner: frankA
 found: 2026-09-06
 found-by: frankS
 blocked-by: []
