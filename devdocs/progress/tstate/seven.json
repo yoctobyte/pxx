@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-06T20:07:13Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aebcd3f19a6fb258454d1b791830e4c2c377b314",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-06T20:11:47Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +451,15 @@
    "new_red": [],
    "sha": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-07T20:06:31Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
   }
@@ -5111,7 +5111,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
-  "test-uforth#src:tools/compiler_srchash.sh": "84c41d6ee630f8061fa15e916cd2b96533f39848",
+  "test-uforth#src:tools/compiler_srchash.sh": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
   "test-uforth#src:tools/compiler_srchash.sh@1": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
   "test-uforth#src:tools/compiler_srchash.sh@10": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
   "test-uforth#src:tools/compiler_srchash.sh@11": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
@@ -14698,14 +14698,14 @@
  },
  "last": {
   "code_fp": "5666dc9dba23",
-  "date": "2026-09-07T20:01:25Z",
+  "date": "2026-09-07T20:06:31Z",
   "deadline": 4547.4,
   "sha": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 612.7
+  "wall": 215.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14755,15 +14755,15 @@
    "wall": 340.2
   },
   "slow": {
-   "code_fp": "7327e547732c",
-   "date": "2026-09-07T00:51:45Z",
+   "code_fp": "5666dc9dba23",
+   "date": "2026-09-07T20:06:31Z",
    "deadline": 4547.4,
-   "sha": "84c41d6ee630f8061fa15e916cd2b96533f39848",
+   "sha": "c2192a287e9fba9c99c83a27e96619c7bea33a80",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 211.8
+   "wall": 215.0
   }
  },
  "last_full": {
