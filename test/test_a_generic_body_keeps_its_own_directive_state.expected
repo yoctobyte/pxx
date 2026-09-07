@@ -1,0 +1,12 @@
+A R+ : range caught
+A R- : no raise 210
+A C+ : fired EAssertionFailed
+A C- : not fired
+A H- : 256
+A H+ : 8
+B R+ : range caught
+B R- : no raise 210
+B C+ : fired EAssertionFailed
+B C- : not fired
+B H- : 256
+B H+ : 8

@@ -574,6 +574,65 @@ begin
   SpecSubNamePosition := False;
 end;
 
+{ THE THREE HALVES OF THE DIRECTIVE CHANNEL, kept together because they are one
+  mechanism read in three directions: live token -> template pool, template pool
+  -> substitution buffer, substitution buffer -> live token. Nine channels, so
+  every site that wrote them out inline would be a nine-line block that has to
+  grow in lockstep -- which is exactly how the SPELLING channel came to be
+  captured at three sites and restored at one.
+
+  Why the pool needs them at all is at TemplatePackRecords in defs.inc.
+  bug-p-a-generic-body-takes-its-directive-state-from-the-specialization-site }
+procedure CaptureTemplateDirs(dst, srcTok: Integer);
+begin
+  TemplatePackRecords[dst] := TokPackRecords[srcTok];
+  TemplatePackEnum[dst]    := TokPackEnum[srcTok];
+  TemplateNChecks[dst]     := TokNChecks[srcTok];
+  TemplateQChecks[dst]     := TokQChecks[srcTok];
+  TemplateAssertions[dst]  := TokAssertions[srcTok];
+  TemplateRChecks[dst]     := TokRChecks[srcTok];
+  TemplateIChecks[dst]     := TokIChecks[srcTok];
+  TemplateScopedEnums[dst] := TokScopedEnums[srcTok];
+  TemplateHMinus[dst]      := TokHMinus[srcTok];
+end;
+
+procedure CopyTemplateDirsToSpec(dst, srcTpl: Integer);
+begin
+  SpecPackRecords[dst] := TemplatePackRecords[srcTpl];
+  SpecPackEnum[dst]    := TemplatePackEnum[srcTpl];
+  SpecNChecks[dst]     := TemplateNChecks[srcTpl];
+  SpecQChecks[dst]     := TemplateQChecks[srcTpl];
+  SpecAssertions[dst]  := TemplateAssertions[srcTpl];
+  SpecRChecks[dst]     := TemplateRChecks[srcTpl];
+  SpecIChecks[dst]     := TemplateIChecks[srcTpl];
+  SpecScopedEnums[dst] := TemplateScopedEnums[srcTpl];
+  SpecHMinus[dst]      := TemplateHMinus[srcTpl];
+end;
+
+procedure RestoreSpecDirs(dstTok, srcSpec: Integer);
+begin
+  TokPackRecords[dstTok] := SpecPackRecords[srcSpec];
+  TokPackEnum[dstTok]    := SpecPackEnum[srcSpec];
+  TokNChecks[dstTok]     := SpecNChecks[srcSpec];
+  TokQChecks[dstTok]     := SpecQChecks[srcSpec];
+  TokAssertions[dstTok]  := SpecAssertions[srcSpec];
+  TokRChecks[dstTok]     := SpecRChecks[srcSpec];
+  TokIChecks[dstTok]     := SpecIChecks[srcSpec];
+  TokScopedEnums[dstTok] := SpecScopedEnums[srcSpec];
+  TokHMinus[dstTok]      := SpecHMinus[srcSpec];
+end;
+
+{ A SYNTHETIC template token has no source of its own, so its directive state is
+  the state in force where the template is being CAPTURED -- the token the
+  parser last consumed, which is in the template's own file. That is the same
+  lexical-continuity rule ShiftTokParallel applies to a synthesized splice, read
+  from the correct file. }
+procedure CaptureSyntheticTemplateDirs(dst: Integer);
+begin
+  if TokPos > 0 then CaptureTemplateDirs(dst, TokPos - 1)
+  else CaptureTemplateDirs(dst, 0);
+end;
+
 { The SUBSTITUTION half of SpecializeStream, ending at a filled
   SpecializeTokens[0..Result-1] and touching Tokens[] not at all.
 
@@ -609,6 +668,16 @@ begin
   i := 0;
   while i < count do
   begin
+    { THE DIRECTIVE STATE TRAVELS FOR EVERY ARM, which is what makes this one
+      line and not three. The spelling channel below is cleared in the two
+      rewrite arms because the token stops saying what the template said; a
+      directive region is a property of WHERE the token sits, not of what it
+      spells, so a substituted token is still inside the template's {$R+} and
+      still outside the specialization site's. Set here, at the top, because
+      `i` is the template index in every arm and the arms advance it
+      differently afterwards.
+      bug-p-a-generic-body-takes-its-directive-state-from-the-specialization-site }
+    CopyTemplateDirsToSpec(subCount, tokStart + i);
     { A nested generic use collapses to the single alias identifier naming its
       specialization — `specialize TBase<T>` with T:=Integer becomes
       `TBase$Integer`. ParseSpecialization has already guaranteed the alias
@@ -836,6 +905,13 @@ begin
       prints their NEW text. }
     TokSrcOff[at + i] := SpecSrcOff[i];
     TokSrcLen[at + i] := SpecSrcLen[i];
+    { AND THE SIBLING CHANNEL, for the same reason one line up. ShiftTokParallel
+      filled these nine from the token before the splice, which is the
+      SPECIALIZATION SITE's directive state -- right for a synthesized token,
+      wrong for a copy of a template token that was lexed inside its own
+      {$R}/{$Q}/{$H} regions. See TemplatePackRecords in defs.inc.
+      bug-p-a-generic-body-takes-its-directive-state-from-the-specialization-site }
+    RestoreSpecDirs(at + i, i);
     Inc(i);
   end;
   Inc(TokCount, subCount);
@@ -959,6 +1035,7 @@ begin
   TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
   TemplateSrcOff[TemplateTokenCount] := TokSrcOff[cur];
   TemplateSrcLen[TemplateTokenCount] := TokSrcLen[cur];
+  CaptureTemplateDirs(TemplateTokenCount, cur);
   Inc(TemplateTokenCount);
 end;
 
@@ -1070,6 +1147,7 @@ begin
   TemplateTokens[TemplateTokenCount].SLen := Length(kw);
   TemplateSrcOff[TemplateTokenCount] := 0;
   TemplateSrcLen[TemplateTokenCount] := 0;
+  CaptureSyntheticTemplateDirs(TemplateTokenCount);
   for j := 1 to Length(kw) do
   begin
     TokChars[TokCharLen] := kw[j];
@@ -4975,6 +5053,7 @@ begin
     the window falls back to SOffset/SLen. }
   TemplateSrcOff[TemplateTokenCount] := 0;
   TemplateSrcLen[TemplateTokenCount] := 0;
+  CaptureSyntheticTemplateDirs(TemplateTokenCount);
   Inc(TemplateTokenCount);
   GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
 
@@ -4985,6 +5064,7 @@ begin
   TemplateTokens[TemplateTokenCount].SLen := Length(funcName);
   TemplateSrcOff[TemplateTokenCount] := 0;   { SYNTHETIC -- see above }
   TemplateSrcLen[TemplateTokenCount] := 0;
+  CaptureSyntheticTemplateDirs(TemplateTokenCount);
   if TokCharLen + Length(funcName) > STRING_CAP then Error('token char pool overflow');
   for j := 1 to Length(funcName) do
   begin

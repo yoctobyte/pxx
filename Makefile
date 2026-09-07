@@ -16826,6 +16826,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_enumdirect26 "$$($(TESTTMP)/test_enumdirect26)" "$$(cat test/test_the_enumerator_member_directives_name_movenext_and_current.expected)"
 	./$(COMPILER) test/test_a_nested_functions_own_result_is_not_the_enclosing_ones.pas $(TESTTMP)/test_nestownres26
 	tools/expect_same.sh test_nestownres26 "$$($(TESTTMP)/test_nestownres26)" "$$(cat test/test_a_nested_functions_own_result_is_not_the_enclosing_ones.expected)"
+	./$(COMPILER) test/test_a_generic_body_keeps_its_own_directive_state.pas $(TESTTMP)/test_gendirstate26
+	tools/expect_same.sh test_gendirstate26 "$$($(TESTTMP)/test_gendirstate26)" "$$(cat test/test_a_generic_body_keeps_its_own_directive_state.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

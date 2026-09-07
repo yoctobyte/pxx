@@ -2578,6 +2578,47 @@ var
     template's. bug-a-the-near-context-window-is-stale-after-a-token-splice }
   TemplateSrcOff     : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
   TemplateSrcLen     : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  { THE LEXICAL DIRECTIVE STATE of each pooled template token -- the same nine
+    channels ShiftTokParallel carries for Tokens[], for the reason the spelling
+    channel above exists and one concept further along.
+
+    A directive is processed in the LEX pass, so the only record of what was in
+    force at a given token is the per-token snapshot. A generic template is
+    buffered here and spliced back into Tokens[] at the SPECIALIZATION SITE,
+    where ShiftTokParallel correctly fills the gap from the token before the
+    splice -- correct for a SYNTHESIZED token, which is lexically continuous
+    with its neighbours, and wrong for a verbatim copy of a template token,
+    which is not. So a generic body took its {$R}/{$Q}/{$H}/... state from
+    wherever it happened to be instantiated.
+
+    Measured 2026-09-07: `{$R+}` around a `byte := longint` inside a generic
+    method body, specialized from a program compiled `{$R-}`, silently
+    truncated 1234 to 210 where fpc raises 201 -- and the mirror image, a
+    `{$R-}` region in the template instantiated under `{$R+}`, raised a range
+    error fpc does not. A silent wrong answer in one direction and a spurious
+    runtime error in the other. The plain (non-generic) cross-unit method is
+    correct, which is what says this is the specialization splice and not the
+    unit boundary.
+
+    ShiftTokParallel's own comment already names this class -- "a caller that
+    HAS real tokens cannot say so through this procedure, so it does not try
+    to: the specializer overwrites these slots itself" -- and had it done for
+    the spelling channel alone (95c98db70). This is the sibling arm.
+
+    PARALLEL ARRAYS, NOT A RECORD, and not by preference: a record's layout is
+    hard-coded in symtab.inc's REC_* tables and baked into the compiler binary,
+    so round 0 of the fixedpoint cannot compile a new field. See the note at
+    GenericFuncParams, where the same wall was hit and measured.
+    bug-p-a-generic-body-takes-its-directive-state-from-the-specialization-site }
+  TemplatePackRecords : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  TemplatePackEnum    : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  TemplateNChecks     : array[0..MAX_TEMPLATE_TOKENS-1] of Byte;
+  TemplateQChecks     : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  TemplateAssertions  : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  TemplateRChecks     : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  TemplateIChecks     : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  TemplateScopedEnums : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  TemplateHMinus      : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
   SpecializeTemplateName: AnsiString;
   { Active substitution set for SpecializeStream (param name -> concrete token),
     filled by each caller right before streaming. Multi-param generics
@@ -2670,6 +2711,18 @@ var
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   SpecSrcOff         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;  { see TemplateSrcOff -- the same channel, one pool further along }
   SpecSrcLen         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  { see TemplatePackRecords -- the same nine channels, one pool further along.
+    Unlike the spelling channel these are copied for a SUBSTITUTED token too:
+    the text changes, but the directive region the token sits in does not. }
+  SpecPackRecords    : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  SpecPackEnum       : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  SpecNChecks        : array[0..MAX_TEMPLATE_TOKENS-1] of Byte;
+  SpecQChecks        : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  SpecAssertions     : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  SpecRChecks        : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  SpecIChecks        : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  SpecScopedEnums    : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
+  SpecHMinus         : array[0..MAX_TEMPLATE_TOKENS-1] of Boolean;
   TemplateTokenCount : Integer;
   { Nested routines (Approach B / lambda-lifting): a nested procedure/function is
     forward-declared in place and its full body stashed here to be re-parsed as a
