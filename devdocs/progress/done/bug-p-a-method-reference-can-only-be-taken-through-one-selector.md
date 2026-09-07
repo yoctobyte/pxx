@@ -9,7 +9,7 @@ status: done
 owner: frankS
 created: 2026-09-07
 resolved: 2026-09-07
-resolution: PENDING-COMMIT
+resolution: 5af8bcfcf
 summary: "`@Form.Button.Click` -- a method reference through a chain of selectors, which is how every form wires an event -- did not compile. The `@` arms in pasparser_expr.inc are each written for depth 1: the selector walker takes every `.` it can reach, so the FINAL one became a CALL. Three messages, one cause: `@o.Inner.Foo` gave `wrong number of parameters in call to TInner.Foo`, `@g.Mk.Foo` gave `a statement cannot start with '.'`, `@TG.Create.Foo` gave `@TG.Create: unknown method` (the class-TYPE arm reads one dot and asks FindUMeth, and a CONSTRUCTOR is not in that table). FIXED by telling the walker where to stop: AtStopDotTok names the one dot it must leave in the stream, LastDotOfDesignator finds it by lookahead, and the `@` arm resolves that last name itself into the AN_METHODREF the depth-1 arm already knew how to build -- VMT slot included. Fixture test_mpchain26, six rows against the fpc 3.2.2 oracle. Burns tgeneric107.pp. NOT fixed and filed separately: the DELPHI no-`@` spelling of the same chain (tgeneric106.pp)."
 ---
 
