@@ -9,7 +9,7 @@ created: 2026-09-04
 found-by: franks-ab
 owner: ""
 blocked-by: []
-summary: "MEASURED, reproduced independently by two sessions: a threaded pxx C program shares ONE errno across all threads, where C requires it thread-local. Two threads provoking different errors and reading errno on the very next line see each other's codes 4-84 times per 200000 iterations, varying per run as a race should; the gcc/glibc oracle is 0 every time. --threadsafe does NOT fix it -- that flag selects a real thread PAL and threads genuinely run, so the one flag a reader would expect to cover this is the one that silently does not. Root: lib/crtl/include/errno.h:5 declares `extern int errno;` (an ordinary int) where glibc has `#define errno (*__errno_location())`; the tentative definition becomes a WEAK non-TLS .bss object in every pxx object file. The visible symptom is a static-link refusal (ld: TLS vs non-TLS mismatch against libc.a), but that is the LUCKY case -- it stops and names the symbol. The dynamic link tolerates the mismatch and nothing errors anywhere. CORRECTED 2026-09-07 -- THE ROOT IS ONE SHARED FS BASE, NOT A ZERO ONE, and a fix controlled on "no longer zero" passes while still broken: a probe that imports anything from the system C library measures a NON-ZERO base that is nevertheless IDENTICAL in main and child (ld.so installs a TCB for the main thread; pxx's clone stub installs none, so the child inherits it), while the same probe using a raw syscall reads 0 in both. Assert DISTINCT PER THREAD, never non-zero. CLONE_SETTLS is not in PXX_CLONE_THREAD ($350F00, decoded with residue 0) and AN_CLONE has no `tls` parameter to pass one, so the real-TLS path costs a compiler intrinsic's arity and not a constant. Earlier wording, still true of the no-libc configuration: pxx programs run with FS BASE ZERO in every thread (arch_prctl(ARCH_GET_FS) rc=0 value=0 in the main thread AND in a pthread_create'd one, against distinct non-zero values under glibc, sentinel-controlled so a failed syscall is not read as a zero base), so an fs-relative access resolves every thread to the same place and a .tbss section would only make it LOOK repaired. A per-thread TCB has to come first. There is also a cheaper path that skips ELF TLS entirely -- glibc's own header is `#define errno (*__errno_location())` and crtl's pthread.c already keeps a tid-keyed registry -- whose open question is how to find the slot without TLS (__pxx_pthread_self is not linked without --threadsafe; gettid(2) per access puts a syscall on every error path). That path closes THIS ticket and not [[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]], the general form: __thread is in cparser.inc's tolerate-by-skipping set, so thread-local storage is silently shared for every variable, not just errno. Reproduced a third time at 1b903c1dd with a third probe: 33 and 4."
+summary: "MEASURED, reproduced independently by two sessions: a threaded pxx C program shares ONE errno across all threads, where C requires it thread-local. Two threads provoking different errors and reading errno on the very next line see each other's codes 4-84 times per 200000 iterations, varying per run as a race should; the gcc/glibc oracle is 0 every time. --threadsafe does NOT fix it -- that flag selects a real thread PAL and threads genuinely run, so the one flag a reader would expect to cover this is the one that silently does not. Root: lib/crtl/include/errno.h:5 declares `extern int errno;` (an ordinary int) where glibc has `#define errno (*__errno_location())`; the tentative definition becomes a WEAK non-TLS .bss object in every pxx object file. The visible symptom is a static-link refusal (ld: TLS vs non-TLS mismatch against libc.a), but that is the LUCKY case -- it stops and names the symbol. The dynamic link tolerates the mismatch and nothing errors anywhere. CORRECTED 2026-09-07 -- THE ROOT IS ONE SHARED FS BASE, NOT A ZERO ONE, and a fix controlled on "no longer zero" passes while still broken: a probe that imports anything from the system C library measures a NON-ZERO base that is nevertheless IDENTICAL in main and child (ld.so installs a TCB for the main thread; pxx's clone stub installs none, so the child inherits it), while the same probe using a raw syscall reads 0 in both. Assert DISTINCT PER THREAD, never non-zero. CLONE_SETTLS is not in PXX_CLONE_THREAD ($350F00, decoded with residue 0) and AN_CLONE has no `tls` parameter to pass one, so the real-TLS path costs a compiler intrinsic's arity and not a constant. Earlier wording, still true of the no-libc configuration: pxx programs run with FS BASE ZERO in every thread (arch_prctl(ARCH_GET_FS) rc=0 value=0 in the main thread AND in a pthread_create'd one, against distinct non-zero values under glibc, sentinel-controlled so a failed syscall is not read as a zero base), so an fs-relative access resolves every thread to the same place and a .tbss section would only make it LOOK repaired. SUPERSEDED 2026-09-07 -- THE PER-THREAD BLOCK ALREADY EXISTS AND EVERY READING ABOVE MEASURED THE WRONG REGISTER: pxx's TLS is GS-relative. Five threads show five DISTINCT gs bases (main 0x45acb8 plus four stack-carved blocks) while fs is 0 in all of them; glibc is the mirror image. defs.inc already has TLS_SLOT_FIRST_FREE = 13 with three free slots and __pxxTlsBase already returns the calling thread's block, so the fix needs no CLONE_SETTLS, no AN_CLONE parameter, no .tbss and no gettid on the error path -- errno simply never went into the storage that exists. The real constraint is the TARGET SET: __pxxTlsBase refuses off x86-64 while --threadsafe covers four targets and this ticket's own table has i386 racing 21/26, and it fixes no FOREIGN thread on any target because one that libc created never runs the clone stub that carves the block. There is also a cheaper path that skips ELF TLS entirely -- glibc's own header is `#define errno (*__errno_location())` and crtl's pthread.c already keeps a tid-keyed registry -- whose open question is how to find the slot without TLS (__pxx_pthread_self is not linked without --threadsafe; gettid(2) per access puts a syscall on every error path). That path closes THIS ticket and not [[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]], the general form: __thread is in cparser.inc's tolerate-by-skipping set, so thread-local storage is silently shared for every variable, not just errno. Reproduced a third time at 1b903c1dd with a third probe: 33 and 4."
 ---
 
 # errno is one global, not one per thread
@@ -268,3 +268,58 @@ main thread does not have an mmap'd stack and would need its own case. Recorded
 so the option is on the table for
 [[decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]]
 rather than rediscovered.
+
+## 2026-09-07, second correction — THE PER-THREAD BLOCK ALREADY EXISTS. It is GS, and every reading so far measured FS.
+
+This ticket says *"A per-thread TCB has to come first."* On x86-64 under
+`--threadsafe`, **it is already there.** Measured, five threads, relation
+asserted (every block differs from every other) rather than any constant:
+
+```
+  main   gs=0x45acb8          <- BSS_TLS_MAIN, the static block
+  thread gs=0x7b1f496c3a80    <- carved off the top of its own mmap'd stack
+  thread gs=0x7b1f495c2a80
+  thread gs=0x7b1f494c1a80
+  thread gs=0x7b1f493c0a80
+  ALL FIVE DISTINCT
+```
+
+The same probe reports `fs=0` in every one of them, and glibc is the mirror
+image — `fs` distinct per thread, `gs=0`. **pxx's TLS is GS-relative and the
+x86-64 psABI is FS-relative** ([[decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative]]),
+so a probe that reads FS is correct about a register pxx does not use. Every
+FS reading in this ticket, mine included, is an instrument answering accurately
+about something else.
+
+**So the defect is not missing thread-local storage. It is that `errno` never
+went into the storage that exists.** `lib/crtl/include/errno.h:5` is
+`extern int errno;` — an ordinary `.bss` object — while `compiler/defs.inc`
+carries a slot map (`TLS_SLOT_SELF`, `_TID`, `_STACK_LO/_HI`, `_SIG_*`,
+`_EXC_*`, `_HEAP_MAGBUSY`) with `TLS_SLOT_FIRST_FREE = 13` and the magazine's
+tail starting at 16 — **three free slots**, and `errno` needs one.
+`__pxxTlsBase` (AN_TLSBASE, `pasparser_expr.inc:4023`) already returns the
+calling thread's block and runs inside parallel workers today.
+
+### What this changes about the fix, and the part that is still hard
+
+- **The cheap path is cheaper than recorded.** No `CLONE_SETTLS`, no new
+  `AN_CLONE` parameter, no `gettid` on the error path, no ELF `.tbss`. A slot,
+  an `__errno_location()` that adds its offset to `__pxxTlsBase`, and
+  `#define errno (*__errno_location())` in the header — which is glibc's own
+  spelling.
+- **THE REAL CONSTRAINT IS THE TARGET SET, and it was never the TCB.**
+  `__pxxTlsBase` refuses on everything but x86-64 (`ir_codegen.inc:217`): the
+  other threaded targets have a READABLE thread register (aarch64 `tpidr_el0`,
+  arm32 `tpidruro`) and no way to SET one yet. `--threadsafe` covers x86-64,
+  i386, aarch64 and arm32, and **this ticket's own table has i386 racing 21/26**.
+  So a TLS-slot errno fixes one of four threaded targets and must say so.
+- **It does not fix a FOREIGN thread on any target.** A thread created by libc
+  `pthread_create` rather than `__pxxclone` never runs the clone stub that
+  carves the block, so it inherits its creator's `gs` — measured at
+  `ir_codegen.inc:268`, five threads all reading `BSS_TLS_MAIN`. That is
+  [[bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine]] and errno
+  would land in exactly the same hole.
+
+A slot count in prose is a census with an owner elsewhere: re-read
+`TLS_SLOT_FIRST_FREE` from defs.inc before taking one. It was 12 when the
+comment above it was written.
