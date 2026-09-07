@@ -808,3 +808,57 @@ disagree.
 
 There is no flag — the thunk is unconditional on x86-64 — so the no-thunk build
 is `50e25f5f0^`.
+
+## 2026-09-07 — i386 joins the thunk, and building the constant WRONG is how I learned no test can see it
+
+Second backend, second commit. i386 shares x86-64's `E9`/`E8`/`C3` rel32
+encodings, so it shares the placement code; what it does NOT share is the stack
+compensation, and the tree warned about exactly that before I could get it
+wrong. `EmitSharedThunkPrologue` (symtab.inc:12870) already computes this
+arithmetic for the init/fini thunks and says in as many words: *"Same reasoning
+as the x86-64 arm, different arithmetic — do not copy the constant."* A `call`
+pushes 8 bytes on x86-64 and 4 on i386, so the compensation is `sub rsp,8` and
+`sub esp,12` respectively.
+
+**Verified on i386 by RUNNING it, not by cross-compiling and hoping** — this box
+executes i386 ELF, so `test_managed_sweep_thunk` ran natively: `SWEEPTHUNK OK
+ok=80000 caught=5000`, census `allocs=40103 frees=40101 live=2`, identical to
+the x86-64 run in every digit, and identical before and after the change while
+the binaries differ. Flat for the right reason, on the target that changed.
+
+Step control: x86-64 output is **byte-identical** across this commit (9-0 on the
+named files) — the commit touches i386 and only i386 — while i386 differs on 5
+of 9. Both halves, as before.
+
+### THE CONSTANT HAS NO GUARD BEHIND IT, AND I FOUND THAT BY BUILDING IT WRONG
+
+Having written the constant carefully, I asked the question this file demands
+about any value: **if the machinery did nothing, would the row still pass?** So I
+emitted the x86-64 value (8) on i386 — misaligning every call the sweep makes —
+rebuilt, and ran the test natively on i386.
+
+`SWEEPTHUNK OK ok=80000 caught=5000`. Census `allocs=40103 frees=40101 live=2`.
+**Identical in every digit, exceptions included.**
+
+So the value is correct by the SysV contract that symtab.inc:12870 and
+ir_codegen386.inc:3723 both state, and it is **not correct by measurement**. The
+suite passing is not evidence for it and I will not write that it is. Three
+independent reasons the corpus cannot reach it: the sweep's callees are
+pxx-internal release stubs; neither backend emits a memory-operand
+`movaps`/`movdqa` (the x86-64 hits are register-to-register, which has no
+alignment requirement); and the external-call path re-aligns for itself with
+`and esp,-16` instead of trusting what it was handed.
+
+**This is not hypothetical, which is why the adjustment stays.** What would reach
+it is a released interface whose `_Release` runs user code calling an external
+function with aligned SSE — and symtab.inc:16362 already records that fault mode
+verbatim for GTK/GLib callees. Keeping "the thunk body sees the stack the inline
+sweep saw" is a cheaper invariant than auditing every transitive callee forever,
+at 6 bytes once per thunk against −31.9%.
+
+Filed as `bug-a-no-probe-can-see-the-sweep-thunks-stack-alignment-constant` with
+a differential probe design that needs no inline asm (a refcounted `Destroy`
+recording `PtrUInt(@local) mod 16`, compared between a thunked and a non-thunked
+build, so there is no absolute expected value to collide with a do-nothing
+default). **The argument for doing it BEFORE the remaining five targets rather
+than after: each of those adds a constant of its own with the same blind spot.**

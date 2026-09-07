@@ -15248,6 +15248,59 @@ const
     chosen so the change cannot lose bytes on the smallest body it fires on. }
   SWEEP_THUNK_MIN_SLOTS = 3;
 
+procedure EmitSweepThunkStackAdjust(opening: Boolean);
+{ Restore the mod-16 residue the INLINE sweep would have seen, because a call
+  has already pushed a return address and the sweep makes calls of its own.
+
+  THE CONSTANT DIFFERS PER TARGET AND MUST NOT BE COPIED BETWEEN THEM: the push
+  is 8 bytes on x86-64 and 4 on i386, so the compensation is 8 and 12
+  respectively. EmitSharedThunkPrologue (symtab.inc) carries the same warning
+  about the same arithmetic -- "same reasoning as the x86-64 arm, different
+  arithmetic -- do not copy the constant" -- and it is right, so this is the
+  second place that sentence is load-bearing.
+
+  NO TEST IN THIS TREE CAN SEE THIS CONSTANT, AND I ESTABLISHED THAT BY BUILDING
+  IT WRONG. Emitting the x86-64 value (8) on i386 leaves the stack misaligned by
+  8 at every call the sweep makes, and test_managed_sweep_thunk still printed
+  `SWEEPTHUNK OK ok=80000 caught=5000` with an identical allocation census,
+  natively on i386, exceptions included. So the value here is correct by the
+  SysV contract that symtab.inc:12870 and ir_codegen386.inc:3723 both state --
+  it is not correct-by-measurement, and a passing suite is not evidence for it.
+
+  Why the corpus cannot reach it: the sweep's own callees are pxx-internal
+  release stubs, no arm of either backend emits a memory-operand movaps/movdqa,
+  and the EXTERNAL call path re-aligns for itself (`and esp,-16`) instead of
+  trusting what it was handed. What WOULD reach it is a released INTERFACE whose
+  _Release runs user code that calls an external function using aligned SSE --
+  symtab.inc:16362 records exactly that fault mode for GTK/GLib callees. That is
+  a real path, not a hypothetical one, which is why the adjustment stays rather
+  than being dropped as inert: keeping "the thunk body sees the stack the inline
+  sweep saw" is a cheaper invariant to hold than auditing every transitive
+  callee forever, and it costs 6 bytes once per thunk.
+  bug-a-no-probe-can-see-the-sweep-thunks-stack-alignment-constant }
+begin
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($48); EmitB($83);
+    if opening then EmitB($EC) else EmitB($C4);
+    EmitB($08);                                          { sub/add rsp, 8 }
+  end
+  else
+  begin
+    EmitB($83);
+    if opening then EmitB($EC) else EmitB($C4);
+    EmitB($0C);                                          { sub/add esp, 12 }
+  end;
+end;
+
+function TargetHasSweepThunk: Boolean;
+{ The two targets whose call/jmp/ret encodings this code emits literally.
+  The other five reach the sweep the old way until each gets its own commit. }
+begin
+  TargetHasSweepThunk :=
+    (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386);
+end;
+
 function ProcSweepThunkUsable(p: Integer; retSymIdx: Integer): Boolean;
 { The recorded thunk belongs to the body being emitted RIGHT NOW, and was built
   for this same retSymIdx. Both halves matter -- see the array declarations. }
@@ -15262,8 +15315,10 @@ procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer);
 { The NORMAL-return half: unchain the cleanup frame (if this proc has one),
   then release the managed locals. One call for all six epilogue branches.
 
-  On x86-64 the release half is emitted out of line and CALLed once a body is
-  known to have more than one return -- see ProcSweepThunkAddr. The frame
+  On x86-64 and i386 the release half is emitted out of line and CALLed once a
+  body is known to have more than one return -- see ProcSweepThunkAddr. Both
+  spell jmp/call/ret as E9/E8/C3 with a rel32, which is why they share this
+  code; the five other targets do not and each gets its own commit. The frame
   unchain stays inline: it is two instructions and it must run before the
   sweep on every path, including the ones that do not use the thunk.
 
@@ -15271,13 +15326,14 @@ procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer);
   its copy of this sweep by jumping. The pad never comes back -- it re-raises.
   A normal return does, and each return then runs a DIFFERENT epilogue tail
   (the result load differs per target and per retSymIdx), so a shared block has
-  to return to its caller. That is also why the thunk pays for `sub rsp, 8`:
-  a call has already moved rsp by 8, and the sweep makes calls of its own. }
+  to return to its caller. That is also why the thunk pays a stack adjust:
+  a call has already moved the stack pointer, and the sweep makes calls of its
+  own -- EmitSweepThunkStackAdjust, whose constant is per-target. }
 var skipPatch, thunkAt: Integer;
 begin
   if ProcExceptionCleanupFrameActive then EmitProcCleanupFrameLeaveForTarget;
 
-  if (TargetArch <> TARGET_X86_64) or (CurProc < 0) then
+  if (not TargetHasSweepThunk) or (CurProc < 0) then
   begin
     EmitManagedLocalCleanupForTarget(retSymIdx);
     Exit;
@@ -15308,9 +15364,9 @@ begin
     EmitProcCleanupLandingPadForTarget already uses. }
   EmitB($E9); skipPatch := CodeLen; EmitI32(0);          { jmp over the thunk }
   thunkAt := CodeLen;
-  EmitB($48); EmitB($83); EmitB($EC); EmitB($08);        { sub rsp, 8  -- undo the call's push, for the sweep's own calls }
+  EmitSweepThunkStackAdjust(True);
   EmitManagedLocalCleanupForTarget(retSymIdx);
-  EmitB($48); EmitB($83); EmitB($C4); EmitB($08);        { add rsp, 8 }
+  EmitSweepThunkStackAdjust(False);
   EmitB($C3);                                            { ret }
   Patch32(skipPatch, CodeLen - (skipPatch + 4));
 
