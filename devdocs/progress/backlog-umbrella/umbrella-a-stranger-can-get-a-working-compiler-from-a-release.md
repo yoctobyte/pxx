@@ -2,9 +2,9 @@
 slug: umbrella-a-stranger-can-get-a-working-compiler-from-a-release
 title: "A stranger downloads a release and ends up with a working compiler"
 track: T
-prio: 55
+prio: 80
 type: umbrella
-blocked-by: [feature-release-checksums-repro, decide-release-signing-key-custody, bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest, bug-t-the-documented-build-path-never-enumerates-what-it-needs]
+blocked-by: [feature-release-checksums-repro, decide-release-signing-key-custody, bug-t-the-documented-build-path-never-enumerates-what-it-needs, umbrella-one-full-tier-run-with-no-red-tier]
 created: 2026-09-06
 summary: "GOAL, not a unit of work. Owner, 2026-09-06: 'project goal, let's slowly prepare for a release.' The target is not a tag and not a document -- it is a person who has never seen this repo getting a compiler that works, from an artefact they can verify. SLOWLY is part of the instruction: this ranks steadily in the background, it does not displace development. Attach whatever an ATTEMPT breaks on; do not pre-populate it from the backlog by guessing."
 ---
@@ -143,3 +143,57 @@ per-fix gate every seat is asked to run cannot see that job**, so reds arrive in
 the full tier from changes that were green by every measure their author had.
 Any plan that reasons about the red count reaching zero has to account for a
 source of new reds that no author can see at commit time.
+
+## 2026-09-07 — PROMOTED 55 -> 80, AND "GREEN" IS NOW PART OF THE TARGET
+
+**Owner, 2026-09-07:** *"pxx needs a birthday aka a beta 0.1 'stable' aka
+'green' release."* That is not *"slowly"*, which is what 55 encoded, so the
+number moves. **Only he sets an umbrella's prio and this is his input; 80 is my
+reading of "needs" and he can move it again.** Not 85: the reds below are real
+defects that would be worth fixing with no release at all, and a beta is still
+a beta.
+
+**Two edges changed, and the second is the one that matters.**
+
+`bug-t-pin-verify-and-requested-verify-publish-a-verdict-with-no-manifest` is
+**done** and is dropped from `blocked-by`. So is `feature-release-packaging`,
+which was never listed but is done too.
+
+**`umbrella-one-full-tier-run-with-no-red-tier` is now a blocker of this
+umbrella, reversing what this file said on 2026-09-06.** The old text argued
+that wiring it would *"double-count one goal"* and that release quality should
+*"inherit from there, not from here."* That was correct when green was one
+desirable property among several. It is wrong now: the owner has named **green**
+as part of the release itself, so a clean full tier is not a neighbouring goal
+this one benefits from — **it is a component of the deliverable**, and an
+umbrella cannot inherit from a goal it contains.
+
+## What is actually left, measured 2026-09-07 rather than assumed
+
+The chain is shorter than prio 55 made it look. Of the original blockers:
+
+- **`feature-release-checksums-repro`** — steps 1-3 **landed 2026-08-31**.
+  `release.sh` publishes SHA256SUMS over the tarball, checkable before
+  extracting, negative control run; `RELEASE.md` and `docs/install` document what
+  `selfcheck.sh` proves, with the tarball explicitly NOT claimed byte-reproducible
+  because gzip records an mtime. **Only step 4 remains and no agent may do it.**
+- **`decide-release-signing-key-custody`** — the private key. **THIS IS THE ONE
+  BLOCKER ONLY THE OWNER CAN CLEAR, and it is the only thing on the critical path
+  that no amount of fleet time shortens.** An agent must not originate a
+  credential. Everything else here is machine work.
+- **`bug-t-the-documented-build-path-never-enumerates-what-it-needs`** — open,
+  prio 45, Track T. Real and small.
+- **`umbrella-one-full-tier-run-with-no-red-tier`** — both of ITS named blockers
+  are now done, which under this file's own rule means the cell is at *attempt
+  it*, not *awaiting paperwork*. seven came back from a ten-hour inode outage on
+  2026-09-07 and is running a tier now; that IS the attempt.
+
+**Already met and worth defending, unchanged:** `make bootstrap` green from fpc
+3.2.2 with the seeded binary **byte-identical** to the pin-derived one, and the
+alpine/musl container reproducing the same sha with git and make only. That is
+the release property — *a stranger who does not trust our pin can rebuild from
+FPC and compare shas* — and it is stronger than "bootstrap works".
+
+**The known untested step still stands:** the container had git and make
+installed by hand. A stranger's box may have neither.
+

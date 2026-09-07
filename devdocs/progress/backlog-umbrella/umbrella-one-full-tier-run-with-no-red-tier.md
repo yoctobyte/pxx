@@ -1,17 +1,56 @@
 ---
 slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
-prio: 55
+prio: 85
 type: umbrella
-blocked-by: [regression-test-core-c-crtl-wait, bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain]
+blocked-by: []
 created: 2026-09-01
 owner: frankZ
-summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RE-RANKED 85 -> 55 on 2026-09-06: the prio-85 justification was that a green run makes the rollback target VERIFIED rather than merely recent, and CLAUDE.md now says the fleet does not roll back at all (owner, 2026-09-06: 'we avoid rollbacks. useful work done is work done'), usable rollback depth is ZERO, and verbatim `do not rank a ticket on rollback depth`. The other stated buy -- grading a pin `green` rather than `reds(N)` -- is voided by the same rule, which calls `pin_is_green`/`pinstatus` a target for an operation this fleet does not perform. What survives is ordinary regression value, and the goal itself stays reasonable: the reds are real defects. Lowering it DOES lower what its blockers inherit -- `effective_prio` (`tools/progress.py:945`) is max(own prio, dependents), so the floor they inherit from this goal drops 85 -> 55; what it cannot do is push any blocker below the prio it earned on its own, and that is the intended effect, not a side effect. CLOSER THAN IT HAS EVER BEEN: the newest full run on seven (`c543b335fb2f`, 2026-09-06T19:55Z) is RED on THREE jobs, down from nine in eight hours, and one of those three was self-inflicted by a change that passed `gate.sh quick`, which does not run that job. Still ends when one clean run comes back; still not a standing triage desk."
+summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. RESTORED 55 -> 85 on 2026-09-07 -- the 2026-09-06 re-rank down is kept in the body for its reasoning, but its justification is void: it retired the `green` buy by quoting CLAUDE.md calling pin_is_green a target for an operation this fleet does not perform, and on 2026-09-07 the owner set pinning to 'full green expected' (902843eb5) and named a 'green' beta 0.1 release. Grading green is now the operation, not a target for one nobody runs. The ROLLBACK half of the old argument stays dead and is not revived; this restoration rests only on those two. Cost stated plainly, as the re-rank stated its own: every blocker's inherited floor rises 55 -> 85, which is the intended effect. Now wired as a blocker of umbrella-a-stranger-can-get-a-working-compiler-from-a-release, because green is a COMPONENT of that deliverable and an umbrella cannot inherit from a goal it contains. BOTH NAMED BLOCKERS ARE DONE, so this cell is at ATTEMPT IT: seven returned from a ten-hour inode outage on 2026-09-07 and is running a tier, the first live attempt since the finding that no live host has EVER produced a clean full run. Still ends when one clean run comes back; still not a standing triage desk."
 ---
 
 # One full tier run with no RED tier
 
-## 2026-09-06 — RE-RANKED 85 -> 55, and the goal is three reds away
+## 2026-09-07 — RESTORED 55 -> 85: THE RE-RANK'S OWN JUSTIFICATION IS VOID
+
+The 2026-09-06 re-rank to 55 is below, kept in full because its reasoning was
+sound against the rules as they stood. **Both of the rules it stood on changed on
+2026-09-07 and it does not survive either.**
+
+It argued that this umbrella's two stated buys were dead: a verified rollback
+target (CLAUDE.md: the fleet does not roll back, *"do not rank a ticket on
+rollback depth"*) and grading a pin `green` rather than `reds(N)` — which it
+retired by quoting CLAUDE.md calling `pin_is_green`/`pinstatus` *"a target for an
+operation this fleet does not perform."*
+
+**That sentence is now false, twice.**
+
+- **`902843eb5`, 2026-09-07** — the owner set pinning to *"full green expected"*.
+  A pin now RUNS a full tier and EXPECTS it green. Grading a pin green is not a
+  target for an operation this fleet does not perform; **it is the operation.**
+- **The owner, same day** — *"pxx needs a birthday aka a beta 0.1 'stable' aka
+  'green' release."* Green is now a component of a named deliverable, and this
+  umbrella is wired as a blocker of
+  [[umbrella-a-stranger-can-get-a-working-compiler-from-a-release]] because of it.
+
+**The rollback half stays dead** and is not being revived — this restoration
+rests entirely on the two lines above, not on recovering the old argument.
+
+**The cost, stated as plainly as the re-rank stated its own:** `effective_prio`
+is `max(own prio, eff(dependents))`, so every blocker's inherited floor rises 55
+-> 85. That is the intended effect. The re-rank said *"a ticket whose rank
+depended on the inherited 85 is supposed to fall here"* — and the converse now
+applies, which is the honest reading of a reversal rather than a quiet win.
+
+**Both named blockers are DONE** (`regression-test-core-c-crtl-wait`,
+`bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain`).
+Under CLAUDE.md that means this cell is at **attempt it**, not awaiting
+paperwork. seven returned from a ten-hour inode outage on 2026-09-07 and is
+running a tier; that is the attempt, and it is the first live one since the
+2026-09-06 finding that **no live host has ever produced a clean full run.**
+
+## 2026-09-06 — RE-RANKED 85 -> 55 (SUPERSEDED ABOVE, kept for its reasoning)
+
 
 frankH flagged the caveat and declined to re-rank on their own reading of a
 rule, which was right: it is this umbrella's own justification, so it is mine.
