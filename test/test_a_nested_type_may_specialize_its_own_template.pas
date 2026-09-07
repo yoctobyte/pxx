@@ -30,10 +30,17 @@ program test_a_nested_type_may_specialize_its_own_template;
   ROW 5 IS THE OTHER-TEMPLATE CONTROL: a nested type specializing a DIFFERENT
   template still has to MINT, and that path must not be disturbed by this. It
   worked before and must keep working, so a regression here reads as this change
-  having widened rather than aimed. It is built from INSIDE the template on
-  purpose -- reaching a minted nested type through the OUTER specialization's
-  name (`TI.TMinted.Create`) is a separate gap, still open, and routing this row
-  through it would make the control fail for a reason that is not its own.
+  having widened rather than aimed. It is built from INSIDE the template, which
+  is where a nested minted type is actually used.
+
+  A NOTE HERE SAID `TI.TMinted.Create` WAS "A SEPARATE GAP, STILL OPEN". IT IS
+  NOT, AND IT WAS THIS CHANGE THAT CLOSED IT. That was measured on the build
+  BEFORE the fix, written into this header, and was already false by the time
+  the fix compiled -- the same change made it work. Re-measured: it compiles,
+  runs, and matches fpc. Kept as a correction rather than deleted, because a
+  note claiming something is broken reads as CHECKED, and this one was checked
+  against the wrong binary. Not a stale binary -- a stale MEASUREMENT, the tree
+  moving under a note rather than under a run.
 
   DELIBERATELY ABSENT: `TOtherArg = specialize TTest<Double>` inside
   `TTest<LongInt>` -- the same template at DIFFERENT arguments. It still fails,

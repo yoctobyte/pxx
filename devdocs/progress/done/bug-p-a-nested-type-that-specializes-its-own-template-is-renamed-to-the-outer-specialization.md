@@ -90,10 +90,22 @@ different messages; the USE-position control that locates the defect at the `=`;
 and an other-template row that must keep MINTING, so a regression reads as this
 change having widened rather than aimed.
 
-That last row is built from INSIDE the template on purpose. Reaching a minted
-nested type through the OUTER specialization's name — `TI.TMinted.Create` — is a
-separate gap (`class method not found (TMinted)`), still open, and routing the
-control through it would make it fail for a reason that is not its own.
+That last row is built from INSIDE the template, which is where a nested minted
+type is actually used.
+
+**CORRECTED, and the correction is about my own measurement.** This section said
+reaching a minted nested type through the OUTER specialization's name —
+`TI.TMinted.Create` — was *"a separate gap (`class method not found (TMinted)`),
+still open"*. **It is not, and this change is what closed it.** The failure was
+real on the build BEFORE the fix, went into the fixture header and into this
+ticket, and was already false by the time the fix compiled. Re-measured at
+`cd30ba1c7d5d`: it compiles, runs, and matches fpc.
+
+Worth naming beside the stale-binary class, because it is not that one: **a
+stale MEASUREMENT — the tree moved under a note rather than under a run.** A
+claim written mid-fix ages against the very binary being changed, and afterwards
+it reads as though it had been checked. Re-measure every "still broken" note
+AFTER the build that might have fixed it.
 
 # Residual
 
