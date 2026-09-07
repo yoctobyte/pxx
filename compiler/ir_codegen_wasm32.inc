@@ -6884,6 +6884,7 @@ end;
   is what can actually be stored. }
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer);
 var i, hp, hpDyn, hpK, mek, mz, nz: Integer;
+    act, a1, a2, a3: Integer;   { the ONE classification -- ScopeExitReleaseAction, symtab.inc }
 begin
   if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
                                  which the module's own memory image zeroes }
@@ -6940,9 +6941,10 @@ begin
         the thing that tells the two apart, using what AssignStacklessSlots
         already computed. }
       if (not SymSkipScopeExitRelease(i)) and
-         (Syms[i].Kind = skLocal) and not Syms[i].IsRef and (i <> retSym) then
+         (Syms[i].Kind = skLocal) and (i <> retSym) then
       begin
-        if SymIsComInterface(i) then
+        act := ScopeExitReleaseAction(i, a1, a2, a3);
+        if act = SXR_INTF then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe).
             PXXIntfRelease is a FUNCTION, so its result has to be dropped --
@@ -6957,9 +6959,7 @@ begin
             WasmOp($1A, 'drop');
           end;
         end
-        else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-                (SymElemDynDepth[i] = 0) and
-                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+        else if act = SXR_ARRIMM then
         begin
           { STATIC array with MANAGED ELEMENTS: release every element. }
           hpK := WasmWriteHelper('PXXArrayReleaseImmediate');
@@ -6977,13 +6977,13 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXArrayReleaseImmediate');
           end;
         end
-        else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        else if act = SXR_STR then
         begin
           WasmSlotAddr(i);
           WasmMemOp($28, 'i32.load', 2, 0);     { the handle }
           WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
         end
-        else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        else if act = SXR_VAR then
         begin
           { Variant local: clear, which releases any managed payload. This is
             the row that TRAPPED rather than leaked. }
@@ -6994,8 +6994,7 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXVarClear');
           end;
         end
-        else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) then
+        else if act = SXR_OBJ then
         begin
           { NilPy-user class local: drop the binding's ref at scope exit, the
             same row ir_codegen.inc emits for x86-64 and symtab.inc's shared
@@ -7016,7 +7015,7 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXObjRelease');
           end;
         end
-        else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        else if act = SXR_PROMO then
         begin
           { Promotable-int local: release a heap-tier payload. Optional by
             profile -- WasmWriteHelper answers -1 where promocore is absent,
@@ -7028,8 +7027,7 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXPromoClear');
           end;
         end
-        else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
+        else if act = SXR_RECORD then
         begin
           { Record with managed fields. COM interface members go through their
             own pass FIRST, as on every other backend. The descriptor is reached
@@ -7053,7 +7051,7 @@ begin
             WasmCall(WasmSlotForProc(hpK), 'PXXRecordRelease');
           end;
         end
-        else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        else if act = SXR_DYNARR then
         begin
           WasmSlotAddr(i);
           WasmMemOp($28, 'i32.load', 2, 0);     { the handle }

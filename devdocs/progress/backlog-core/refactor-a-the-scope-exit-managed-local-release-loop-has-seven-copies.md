@@ -67,19 +67,48 @@ while the release half did.
 This is the case `root-cause-over-microfix.md` describes as the overhaul being
 the SMALLER job: it deletes six copies of a nine-way classification.
 
-## The trap, before anyone starts
+## The trap, before anyone starts — RESOLVED, and left here because the
+## resolution is the useful part
 
-**A green after changing this loop is not sufficient.** frankwasm applied the
-correct predicate at the correct granularity, in the shape the six right arms
-use, and REGRESSED two passing generator rows (recorded diff `0819a7f5f`). Two
-explanations were offered for that and BOTH were refuted; neither
-`f891bbe8e`'s blanket-exit precedent nor a wrong-predicate story survives
-contact with the recorded diff. **The wasm32 copy differs from the other six in
-a way nobody has named yet.** Name it before normalising it away, or the
-refactor will encode the difference as a bug.
+**This section said, until 2026-09-07, that "the wasm32 copy differs from the
+other six in a way nobody has named yet" and told the next reader to name it
+before normalising it away. That is no longer true and the correction matters
+more than the warning did**, because a stale trap misroutes exactly the person
+who takes the warning seriously.
 
-Positive control, verified at `cc18bc028`: a NilPy `yield 1; yield 2` prints
-both on native AND wasm32. Anything landed here must keep that true.
+What it was: frankwasm applied the correct predicate at the correct
+granularity, in the shape the six right arms use, and reported REGRESSING two
+passing generator rows (`0819a7f5f`). Two explanations were offered and both
+were refuted, which is what made the residual look like an unnamed structural
+difference.
+
+What it actually was: **there was no regression.** frankwasm retracted the
+causal half themselves (`7dd75f85a`) — the loop has no symbol to iterate for
+that program, so the patch was a no-op there, and the likeliest cause of the
+reading was a stale binary. The predicate landed (`8157808b2`), wasm32
+consults `SymSkipScopeExitRelease` today at `ir_codegen_wasm32.inc:6942`, and
+the ticket that carried all of this is `done`:
+[[bug-a-the-wasm32-scope-exit-release-loop-consults-neither-skip-predicate]].
+
+**The reusable part is the control, not the bug.** `yield 1; yield 2` was the
+positive control in circulation for this whole episode and it is INERT: the
+emitted module is byte-identical with and without the patch, and it prints
+correctly on both targets in every configuration. So it could not have seen
+the defect, could not have seen the fix, and could not have seen the
+regression it was cited to demonstrate. A control that passes in every
+configuration is not evidence about any of them. Use a shape that HOLDS A
+MANAGED LOCAL ACROSS A YIELD — `test/wasm/check_nilpy_generator_slot.sh` is
+that shape, and it asserts against the native oracle rather than a constant.
+
+**The one difference that was real is now named and shared**, `55e7c31c2`:
+wasm32 alone carried `not Syms[i].IsRef`. It is REDUNDANT, not merely
+unreached — `IsRef` is True only on a symbol whose `Kind` is `skParam`
+(enumerated across all eight assignment sites in the compiler), and all seven
+loops already require `skLocal`. Removing it from wasm32 and adding it to all
+seven were each byte-identical across every target. It now lives in
+`SymSkipScopeExitRelease` with that enumeration beside it, because the
+invariant it depends on is enforced nowhere and a double free is not a
+diagnostic.
 
 Coverage that already exists and will move if this does:
 `test/wasm/check_scopeexit.sh`, `check_intf.sh`, `check_outparam.sh`,
