@@ -14479,6 +14479,21 @@ test-core: $(COMPILER)
 	@# rather than left for whoever ports the next backend to discover.
 	./$(COMPILER) --target=i386 test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_i386
 	tools/expect_same.sh test_sweep_align_i386 "$$($(TESTTMP)/test_sweep_align_i386)" "ALIGN OK"
+	@# The arm32 arm, and this row is the one that EARNED the guard. arm32 does not
+	@# compensate a pushed return address -- BL puts it in lr, so the thunk must
+	@# SAVE lr or the first release inside it overwrites its own return address.
+	@# `push {fp,lr}` does that in 8 bytes and satisfies AAPCS. It also flips the
+	@# mod-16 residue, and a body's first return is always inline while the rest
+	@# call the thunk, so the two paths then disagree. Measured, not argued: with
+	@# the 8-byte save this row prints ALIGN MISMATCH lo=4 hi=12 under qemu-arm.
+	@# Pushing r4 and r5 alongside costs nothing (callee-saved, restored unchanged)
+	@# and keeps the residue the inline sweep saw.
+	@if command -v qemu-arm >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=arm32 test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_arm32 >/dev/null; \
+	  tools/expect_same.sh arm32/test_sweep_align_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_sweep_align_arm32)" "ALIGN OK"; \
+	else \
+	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-arm absent, arm32 arm NOT verified ==="; \
+	fi
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \

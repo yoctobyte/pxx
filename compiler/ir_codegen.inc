@@ -15280,7 +15280,24 @@ procedure EmitSweepThunkStackAdjust(opening: Boolean);
   So the adjustment stays for a measured reason and no longer merely a
   contractual one, and it was never inert: symtab.inc:16362 records the fault
   mode for GTK/GLib callees using aligned SSE, and a released interface's
-  _Release can call out to exactly that. }
+  _Release can call out to exactly that.
+
+  ARM32 IS NOT A DIFFERENT CONSTANT, IT IS A DIFFERENT INSTRUCTION, and the
+  reason is the link register. x86 CALL pushes the return address to the stack,
+  so the sweep's own calls cannot destroy it. arm32 BL puts it in lr, and the
+  sweep calls out on every releasable slot (EmitCallProc, a BL) -- so the FIRST
+  release inside the thunk would overwrite the thunk's own return address. The
+  save is mandatory for correctness, not for alignment.
+
+  It is 16 bytes and not 8, and that is this arm's whole subtlety. `push {fp,
+  lr}` would save lr in 8 bytes and satisfy AAPCS, which requires 8-byte
+  alignment at public interfaces -- but it FLIPS the mod-16 residue, and a
+  body's first return is always inline while the rest call the thunk, so the two
+  paths would see stacks that differ mod 16. Pushing r4 and r5 alongside costs
+  nothing (both callee-saved, both restored unchanged) and keeps the residue the
+  inline sweep saw, which is the invariant every arm of this function holds. The
+  alignment guard asserts min = max of the destructor frame's `and 15` across
+  every return in ONE body, so an 8-byte save fails it -- correctly. }
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -15288,6 +15305,13 @@ begin
     if opening then EmitB($EC) else EmitB($C4);
     EmitB($08);                                          { sub/add rsp, 8 }
   end
+{$ifndef PXX_NO_ARM32}
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    if opening then EmitI32($E92D4830)                   { push {r4,r5,fp,lr} }
+    else            EmitI32($E8BD4830);                  { pop  {r4,r5,fp,lr} }
+  end
+{$endif}
   else
   begin
     EmitB($83);
@@ -15296,12 +15320,50 @@ begin
   end;
 end;
 
+procedure EmitSweepThunkCall(addr: Integer);
+{ CALL the out-of-line sweep at a code offset in THIS body. Not IREmitCodeCall:
+  that one is for runtime stubs, records a code ref for DCE and refuses offset
+  0. This target is inside the procedure being emitted and moves with it. }
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    begin EmitB($E8); EmitI32(addr - (CodeLen + 4)); end
+{$ifndef PXX_NO_ARM32}
+  else if TargetArch = TARGET_ARM32 then
+    EmitI32($EB000000 or ((((addr - CodeLen) div 4) - 2) and $00ffffff))
+{$endif}
+  else
+    Error('compiler error: no sweep-thunk call encoding for this target');
+end;
+
+procedure EmitSweepThunkReturn;
+{ Return from the thunk to the return site that called it. }
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    EmitB($C3)                                           { ret }
+{$ifndef PXX_NO_ARM32}
+  else if TargetArch = TARGET_ARM32 then
+    EmitI32($E12FFF1E)                                   { bx lr }
+{$endif}
+  else
+    Error('compiler error: no sweep-thunk return encoding for this target');
+end;
+
 function TargetHasSweepThunk: Boolean;
-{ The two targets whose call/jmp/ret encodings this code emits literally.
-  The other five reach the sweep the old way until each gets its own commit. }
+{ The targets whose jump/call/return encodings the thunk can spell. The rest
+  reach the sweep the old way until each gets its own commit.
+
+  arm32 needed no new jump: EmitProcCleanupFrameSkipForTarget and its patch
+  sibling already emit a per-target unconditional branch for the landing pad,
+  and the thunk wants exactly that operation. Reusing them rather than growing
+  a second jump-over is the point of normalise-dont-special-case -- the second
+  path is the one that stays broken. }
 begin
   TargetHasSweepThunk :=
-    (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386);
+    (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)
+{$ifndef PXX_NO_ARM32}
+    or (TargetArch = TARGET_ARM32)
+{$endif}
+    ;
 end;
 
 function ProcSweepThunkUsable(p: Integer; retSymIdx: Integer): Boolean;
@@ -15345,7 +15407,7 @@ begin
   { Already have one for this body and this result symbol: just call it. }
   if ProcSweepThunkUsable(CurProc, retSymIdx) then
   begin
-    EmitB($E8); EmitI32(ProcSweepThunkAddr[CurProc] - (CodeLen + 4));
+    EmitSweepThunkCall(ProcSweepThunkAddr[CurProc]);
     Exit;
   end;
 
@@ -15365,15 +15427,15 @@ begin
     jumped over by the fall-through, then call it. Every later return in this
     body takes the branch at the top. The jump/pad/patch shape is the one
     EmitProcCleanupLandingPadForTarget already uses. }
-  EmitB($E9); skipPatch := CodeLen; EmitI32(0);          { jmp over the thunk }
+  EmitProcCleanupFrameSkipForTarget(skipPatch);          { jmp over the thunk }
   thunkAt := CodeLen;
   EmitSweepThunkStackAdjust(True);
   EmitManagedLocalCleanupForTarget(retSymIdx);
   EmitSweepThunkStackAdjust(False);
-  EmitB($C3);                                            { ret }
-  Patch32(skipPatch, CodeLen - (skipPatch + 4));
+  EmitSweepThunkReturn;
+  EmitProcCleanupFramePatchSkip(skipPatch);
 
   ProcSweepThunkAddr[CurProc] := thunkAt;
   ProcSweepThunkRetSym[CurProc] := retSymIdx;
-  EmitB($E8); EmitI32(thunkAt - (CodeLen + 4));
+  EmitSweepThunkCall(thunkAt);
 end;
