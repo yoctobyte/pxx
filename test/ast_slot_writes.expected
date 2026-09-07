@@ -38,7 +38,6 @@ AN_ARG Left DefaultArgValueNode(mpi, i)
 AN_ARG Left DefaultArgValueNode(mpi, k)
 AN_ARG Left DefaultArgValueNode(mpi, nextSlot)
 AN_ARG Left EParseExpr
-AN_ARG Left GenMakeIdent(contSym, Syms[contSym].TypeKind)
 AN_ARG Left GenMakeIdent(gIdx, tyPointer)
 AN_ARG Left GenMakeIdent(oSym, tyInteger)
 AN_ARG Left GenMakeIdent(symIdx, tk)

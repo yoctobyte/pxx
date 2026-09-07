@@ -990,7 +990,19 @@ end;
   comes from the operator call:
     __e := EnumOp(C);
     while __e.MoveNext do begin X := __e.Current; BODY end;  [finally Free] }
-function ParseForInOpEnumeratorAST(varIdx, contSym, opPi: Integer): Integer;
+{ Shared builder for `for X in C` where C's type has an `operator enumerator`.
+  The container arrives as an abstract value NODE, exactly as BuildForInSetLoop
+  takes its setOperand -- so the bare-variable spelling (ParseForInOpEnumeratorAST,
+  which passes an ident) and the expression spelling (the general container
+  dispatch, which passes whatever it parsed) share ONE lowering. That is the
+  "test HERE, handle THERE" rule the dyn-array and set-call arms of that dispatch
+  both state, and the reason it is stated: two arms deciding independently what
+  an enumerable container means is how one spelling of a construct stays broken
+  while its twin works.
+
+  Consumes the `do` and the body, because every sibling builder here does.
+  Fixture: test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas }
+function BuildForInOpEnumeratorLoop(varIdx, opPi, contNode: Integer): Integer;
 var
   bodyNode, enumRec, enumIdx, eSym: Integer;
   argSeq, geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
@@ -1010,7 +1022,7 @@ begin
   SymSyncTypeRef(eSym);
 
   argSeq := AllocNode(AN_ARG);
-  ASTLeft[argSeq] := GenMakeIdent(contSym, Syms[contSym].TypeKind);
+  ASTLeft[argSeq] := contNode;
   geCall := AllocNode(AN_CALL);
   ASTIVal[geCall] := opPi;
   ASTTk[geCall] := Ord(Procs[opPi].RetType);
@@ -1036,6 +1048,14 @@ begin
   end
   else
     Result := GenMakeSeq(assignE, GenMakeSeq(whileNode, -1));
+end;
+
+{ The bare-variable spelling: wrap the container symbol as an ident node and
+  hand it to the shared builder above. }
+function ParseForInOpEnumeratorAST(varIdx, contSym, opPi: Integer): Integer;
+begin
+  Result := BuildForInOpEnumeratorLoop(varIdx, opPi,
+                                       GenMakeIdent(contSym, Syms[contSym].TypeKind));
 end;
 
 { for X in <set var> do BODY iterates present members in ordinal order. Reuses
@@ -3292,6 +3312,45 @@ begin
     if forcLoop >= 0 then
     begin
       Result := forcLoop;
+      Exit;
+    end;
+
+    { ...or ANY value whose type has an `operator enumerator`. The bare-variable
+      spelling has had this since tforin5 and every other spelling of the same
+      container was refused: measured 2026-09-07 at compiler 972a7147d1a1 with
+      `operator enumerator(a: Integer): T` in scope, fpc 3.2.2 prints 7 for all
+      of `for i in v`, `for i in 7`, `for i in (7)` and `for i in Integer(7)`,
+      and pxx compiled only the first. Not an alias question and not a cast
+      question -- the container simply had to be a SYMBOL, because that is what
+      the arm above it takes.
+
+      Last of the expression arms, so it can only catch what every earlier one
+      declined -- a dyn-array, a string value and a set-valued call all have an
+      ASTTk an operator could equally be keyed on, and the built-in meaning is
+      the one that should win where both exist.
+
+      THE ORDERING IS A PRECAUTION, NOT A MEASURED SAVE, and this comment said
+      it was until the control was run. It claimed this arm running first would
+      let `operator enumerator(a: AnsiString)` displace built-in string
+      iteration. Measured 2026-09-07: with that operator in scope, `for ch in
+      s1 + s2` prints `c` (Chr(99), the operator's own F) against fpc's `a b c`
+      -- AND THE PINNED COMPILER PRINTS `c` TOO, so an earlier path already
+      prefers the operator and this arm is never reached by that program. The
+      hazard is real in shape and was attributed to the wrong arm; the actual
+      divergence is older and is filed as
+      bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin.
+
+      STILL REFUSED ABOVE THIS ARM, and not by it: a container whose first token
+      is not tkIdent never reaches the dispatch at all -- `for i in (v)`,
+      `for i in 4` and `for i in Integer(4)` die at the gate ~250 lines up while
+      `for i in Int64(4)` compiles, because Int64 lexes as tkIdent and Integer
+      does not. bug-p-a-for-in-container-must-start-with-an-identifier-token
+      Fixture: test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas }
+    forcLoop := FindOpOverload(OPK_ENUMERATOR, ASTTk[forcNode],
+                               ResolveNodeRec(forcNode));
+    if forcLoop >= 0 then
+    begin
+      Result := BuildForInOpEnumeratorLoop(varIdx, forcLoop, forcNode);
       Exit;
     end;
 

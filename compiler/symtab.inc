@@ -8991,6 +8991,41 @@ begin
   end;
 end;
 
+{ Is this EXACT five-component key already held by a DIFFERENT proc?
+
+  Deliberately NOT asked with FindOpOverload2. That function answers what a USE
+  SITE would find, and it relaxes -- it ranks and falls back, so it can return a
+  row whose key is not the one being registered, and it can miss one that is.
+  Measured 2026-09-07: tforin15 registers two rows both spelled left=(1,0)
+  right=(0,0) and FindOpOverload2 answered -1 for the second, so a duplicate
+  guard built on it printed nothing on the one program written to expose the
+  duplicate. The question here is about the TABLE, not about a lookup, so it is
+  asked of the table directly -- the same reason OpOverloadRowExists above is
+  spelled out rather than delegating.
+
+  Five components, not six: OpOverloadRowExists includes procIdx to recognise
+  ONE declaration seen twice (interface + implementation). This one excludes it
+  on purpose, because a different proc under the same key is exactly the case
+  being reported. }
+function OpOverloadKeyTakenByOther(opKind, typeKind, recId, rightTk, rightRec,
+                                   procIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and
+       (OvrlRecId[i] = recId) and (OvrlRightTk[i] = rightTk) and
+       (OvrlRightRec[i] = rightRec) and (OvrlProcIdx[i] <> procIdx) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function FindOpOverload(opKind, typeKind, recId: Integer): Integer;
 var i: Integer;
 begin

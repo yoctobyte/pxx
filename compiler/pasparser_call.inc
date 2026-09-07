@@ -24,7 +24,7 @@
   two-key table exists to remove, not one to reintroduce by resolving each side
   its own way. feature-a-operator-table-keyed-on-both-operands }
 procedure OperandTypeKindRec(const nm: AnsiString; var tk, rec: Integer);
-var ci: Integer; stk: TTypeKind;
+var ci, ai: Integer; stk: TTypeKind;
 begin
   { Record the operand's real type kind so the registration tag matches how the
     use site looks it up (a record operand carries ASTTk=tyRecord, a class
@@ -55,6 +55,35 @@ begin
       — which is how `Extended` came to register as tyDouble here while
       ParseTypeKind gave it tyExtended. }
     stk := BuiltinTypeNameTk(nm);
+  if stk = tyUnknown then
+  begin
+    { A NAMED SCALAR ALIAS -- `type TInt = Integer`, and `type Twice = type
+      Integer` with it. Last, so a builtin name can never be shadowed by an
+      alias row, and reached ONLY on the path that used to call Error outright:
+      every declaration this arm accepts was refused a line ago, so it can
+      regress nothing. Records and classes never arrive here (IsRecordType and
+      FindUClass answered above), and array types are not in this table at all
+      -- tarray18's `array of LongInt` operand is a different gap and stays one.
+
+      MEASURED 2026-09-07 at compiler 19bee89a03e6: `operator enumerator(a:
+      TInt): T` with `TInt = Integer` is accepted by fpc 3.2.2, which prints 7,
+      and pxx answered `TInt is not a supported operand type`. So this refused
+      working code, and the alias did not have to be DISTINCT for that -- the
+      operand table simply could not name one.
+
+      THE KIND IS ALL THIS CARRIES, DELIBERATELY. `Twice = type Integer` and
+      `Integer` both register under (tyInteger, REC_NONE), so two operators that
+      differ only by a distinct alias still collapse onto one row and the first
+      declared wins -- tforin15, which stays skipped. Giving the table alias
+      IDENTITY needs the use site to carry one too, and today only an AN_IDENT
+      argument does (SymAliasIdx); `Twice(1)` is a cast with no symbol behind
+      it. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct
+      settled that a channel which GUESSES is worse than one that abstains, and
+      half-plumbing this one here would be that guess. }
+    ai := FindTypeAlias(nm);
+    if (ai >= 0) and (IntToTypeKind(AliasTk[ai]) <> tyUnknown) then
+      stk := IntToTypeKind(AliasTk[ai]);
+  end;
   if stk = tyUnknown then
     Error('operator overloading: ' + nm + ' is not a supported operand type');
   tk := Ord(stk);
@@ -664,6 +693,30 @@ begin
       Error('either the result or at least one parameter must be of type '
             + qualName);
   end;
+  { A SECOND operator under a key the table ALREADY holds for a different proc.
+    FindOpOverload returns the FIRST matching row, so the second declaration is
+    dead: it compiles, it is never called, and nothing said so.
+
+    This is not new -- two identical declarations always collapsed this way --
+    but it became REACHABLE THROUGH TWO DIFFERENT SPELLINGS the moment a named
+    scalar alias could name an operand (OperandTypeKindRec, this file). With
+    `Twice = type Integer`, `operator enumerator(a: Integer)` and
+    `operator enumerator(a: Twice)` are two source lines that produce one key,
+    and tforin15 is exactly that program: it ran the Integer body and printed 1
+    where fpc prints 2. A SILENT WRONG ANSWER IS WORSE THAN THE REFUSAL IT
+    REPLACED, so the collision has to say so -- CLAUDE.md, loud beats silent.
+
+    A warning and not an Error: pxx keys operators on operand types and the
+    dialect deliberately allows what fpc refuses, so rejecting the pair would
+    turn a diagnostic gap into a compat one. Distinguishing the two rows for
+    real needs alias IDENTITY in the table AND at the use site, which
+    bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct settled is a
+    channel, not a predicate -- filed, not half-built here. }
+  if (not opAlreadyReg) and
+     OpOverloadKeyTakenByOther(opKey, opTypeKind, recId, rightTk, rightRec, procIdx) then
+    Warn('operator is already overloaded for these operand types: this ' +
+         'declaration is registered but the earlier one is what every use site ' +
+         'finds');
   if not opAlreadyReg then
     RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
   if (scalarTk2 <> tyUnknown) and (not scalarAlreadyReg) then
