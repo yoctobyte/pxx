@@ -559,10 +559,13 @@ not exist** — shards clearing in two groups reads exactly like one job flappin
 that falls out of a hypothesis.**
 
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
-SECTION.** 905KB, ~225k tokens, 237 sections — it has TRIPLED since this line
-first quoted 279KB/72, so treat any size in a pointer as a lower bound with a
-date on it. `grep '^## '` lists the sections for a few thousand tokens, which is
-cheap, not free.
+SECTION.** 1.27MB, ~317k tokens, 365 sections (measured 2026-09-07). It has more
+than QUADRUPLED since this line first quoted 279KB/72 — and the 905KB/237 figure
+that replaced it was written at `fe0c7e2cd` on 2026-09-06, itself a stale-rule
+sweep, and was **stale within a day**: 910446 bytes / 240 sections there, 1268709
+/ 365 one day later. So treat any size in a pointer as a lower bound with a date
+on it, **including this one**. `grep '^## '` lists the sections for a few
+thousand tokens, which is cheap, not free.
 
 ## "You are the coordinator"
 

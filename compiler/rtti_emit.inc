@@ -1348,7 +1348,7 @@ begin
             Inc(dCount);
         end;
       end;
-      DataPutZeros(12 + mCount * 16 + dCount * 20);
+      DataPutZeros(REC_DESC_HDR_SIZE + mCount * 16 + dCount * 20);
     end;
   end;
 
@@ -1384,7 +1384,7 @@ begin
       if mCount > 0 then
       begin
         UClsLayoutOff[ci] := DataLen;
-        DataPutZeros(12 + mCount * 16 + dCount * 20);
+        DataPutZeros(REC_DESC_HDR_SIZE + mCount * 16 + dCount * 20);
       end;
     end;
   end;
@@ -1409,7 +1409,7 @@ begin
         fi := base + i;
         if RecordDescMember(fi) then
         begin
-          mHdr := hdr + 12 + k * 16;
+          mHdr := hdr + REC_DESC_HDR_SIZE + k * 16;
           PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset }
 
           { ARRAY-NESS FIRST. UFldTk of an array field is its ELEMENT type, so
@@ -1475,7 +1475,7 @@ begin
             typeRef := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
           if mKind = 2 then
           begin
-            dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
+            dynDescOff := hdr + REC_DESC_HDR_SIZE + mCount * 16 + dynIdx * 20;
             typeRef := dynDescOff - (mHdr + 12);
 
             PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }
@@ -1577,7 +1577,7 @@ begin
           fi := base + i;
           if ClassFieldNeedsFinal(fi) then
           begin
-            mHdr := hdr + 12 + k * 16;
+            mHdr := hdr + REC_DESC_HDR_SIZE + k * 16;
             PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset (absolute in instance) }
 
             { Array-ness FIRST -- the class-layout twin of the record-layout
@@ -1624,7 +1624,7 @@ begin
               typeRef := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
             if mKind = 2 then
             begin
-              dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
+              dynDescOff := hdr + REC_DESC_HDR_SIZE + mCount * 16 + dynIdx * 20;
               typeRef := dynDescOff - (mHdr + 12);
 
               PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }

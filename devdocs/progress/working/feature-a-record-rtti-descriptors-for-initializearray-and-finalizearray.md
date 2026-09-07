@@ -181,3 +181,110 @@ PROCEDURE address rather than a data address — every existing `AddDataPtrFix`
 call in this emitter points at `Data[]` or a string, not at code. That is the
 next reading, and until it is taken, the layout above is a proposal and not a
 decision.
+
+## 2026-09-07 (frankA) — the two readings taken, and the proposed layout is WITHDRAWN
+
+Both open readings are closed. The first answers yes; the second **retires the
+header-resize proposal above and replaces it**, so read the previous section as
+history.
+
+### 1. A procedure address CAN be relocated into `Data[]`, and DCE knows
+
+Not `AddDataPtrFix` — `compiler/emit.inc:109` says in its own words that it is
+*"a data->data 8-byte pointer relocation"*. The recorder that does this is
+**`AddMethodFix(dataPos, procIdx)`** (`compiler/emit.inc:299`): *"Record a
+code-address relocation into `Data[]`: the 8-byte slot at `dataPos` is patched
+to the entry address of `Procs[procIdx]`. Every VMT slot and every RTTI method
+entry goes through here. This is the ONE append point."* It resolves in
+`elfwriter.inc:1802` as `addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr`.
+
+Two properties that matter and were checked rather than assumed:
+
+- `dce.inc:291` marks `MethodFixups[i].ProcIdx` live, so an operator reachable
+  only from a descriptor survives dead-code elimination.
+- `DropBodilessMethodFixups` nils a slot whose target has no body rather than
+  patching it to `.text - 1`, so a bodiless entry reads as nil and not as a
+  wild address.
+
+The kind-3 self-relative `typeRef` is anchored on `mHdr + 12` at all four sites
+(1479, 1531, 1628, 1671), matching the runtime's `Pointer(memberPtr + 12 +
+typeRef)`, so it is a property of the MEMBER and no header question touches it.
+
+### 2. The header resize is unsafe, and the reason is the BOOTSTRAP
+
+The proposal above — Flags at +12, members at +16 — would work fine if the
+emitter and the runtime always shipped together. **They do not.** Every
+`make compiler/pascal26` runs the OLD emitter against the NEW runtime: the seed
+binary writes stage-1's `Data[]` with its own `EmitLayoutRTTI` while linking
+stage-1's `builtinheap.pas` out of the working tree. No seed escapes it — the
+pin included, because a seed invoked as `./compiler/pascal26` resolves `bdir` to
+the live `compiler/builtin/` either way (`pasparser_proc.inc:4521`).
+
+So stage-1 would read its own descriptors from +16 when they were written at
++12, and the skew is not benign: `memberPtr` starts at `member0 + 4`, so the
+walk takes `member0.Kind` as an Offset, `member0.ArrCount` as a Kind and
+`member0.TypeRef` — a self-relative delta — as the **array count**, then loops
+that many times calling `PXXStrDecRef` on `recAddr + garbage`. In a compiler,
+with no diagnostic.
+
+**Measured, not reasoned** (2026-09-07, a counter behind an env gate in
+`EmitLayoutRTTI`): compiling `compiler/compiler.pas` emits **19 record layout
+descriptors**, 1–3 members each. Stage-1 walks them. The window is real.
+
+### The replacement: a new MEMBER kind, not a header field
+
+Announce the operators as a **member entry with a new `Kind` and `ArrCount` 0**,
+its `TypeRef` self-relative to the operator table at the tail of the blob.
+
+This is not the `Kind = 3` rejected above: that was the **blob's** kind at +0,
+where a second value really would double the dispatch in the six walks. This is
+the **member's** kind at member+4, a field that already carries seven values and
+is plainly the format's extension point.
+
+It has no bootstrap window at all. `ArrCount = 0` makes the entry inert in every
+one of the six walks — each is `while j < arrayCount` around a `case kind of`
+with no `else` arm, so the body never executes — which means an old runtime
+walking a new blob does nothing with it and a new runtime walking an old blob
+never sees one. **Both directions safe**, which is what a self-hosting build
+requires and what a header field cannot give.
+
+`PXXRecordZeroManaged` computes `subDesc := Pointer(memberPtr + 12 + typeRef)`
+*before* the kind test, unconditionally — checked, and it never dereferences it
+except under `kind = 3`, so a tail-pointing `TypeRef` is safe there too.
+
+### Landed now, as the part that is verifiable on its own
+
+`PENDING-COMMIT`:
+
+- The descriptor format is **written down**, once, at `REC_DESC_HDR_SIZE` in
+  `compiler/defs.inc`. It had no written form at all: the shape lived in twelve
+  offset expressions split across the writer and the reader. The bootstrap
+  finding above is recorded there as the rule for extending it.
+- The six header uses in `builtinheap.pas` are now spelled `PXX_REC_DESC_HDR`,
+  so they no longer share a spelling with the two dyn-array `BaseKind` reads —
+  the "one literal, two blobs, one file" trap is now a difference you can see.
+- A `test-core` row asserts the writer's and the reader's constants agree, with
+  two presence rows in front of it, because a grep matching nothing returns the
+  empty string on both sides and would "agree".
+- `test/test_record_desc_subdesc_anchors.pas` covers the two **self-relative**
+  anchors (a kind-3 nested record, and a kind-2 member whose baseKind is 3).
+  Nothing did: the existing descriptor rows use a variant member and a promo
+  member, neither of which has a sub-descriptor.
+
+**The values are unchanged and the proof is byte-identity** —
+`sha256(compiler/pascal26)` is `a359aa9be0373666` before and after all twelve
+substitutions, so the spelling change provably emits the same compiler.
+
+**The control for the new fixture**, because its printed counts cannot see the
+defect it is for: with `MemberCount` emitted as zero behind an env gate, the
+counts stayed byte-identical at `1000/1000` and the census went from `live=8` to
+`live=9392`. The leak row is the assertion that reads the descriptor; the value
+row is not.
+
+### What is still not measured
+
+Whether `DataPutZeros` and the tail-offset arithmetic can place an **8-aligned**
+pointer table after a `dCount * 20` region — the blob is currently 4-aligned
+throughout and nothing in it is a pointer today. `AddMethodFix` patches an
+8-byte slot; whether it requires the slot to be aligned, or the ELF writer only
+needs it in range, is the next reading and it gates the emitter change.

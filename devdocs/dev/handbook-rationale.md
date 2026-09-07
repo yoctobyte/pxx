@@ -751,12 +751,69 @@ Both array shapes are kept above deliberately. The summary of this section is
 "use a non-zero low bound", and the summary loses the reason: the 0-based shape
 is not merely weaker, it is **indistinguishable from correct**.
 
+## In a self-hosting compiler, an internal data format is a BOOTSTRAP interface
+
+Measured 2026-09-07 (frankA), designing the record-operator half of
+`feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray`.
+
+The record layout descriptor has a writer (`compiler/rtti_emit.inc`) and a
+reader (`compiler/builtin/builtinheap.pas`). Both are in this tree; both change
+in the same commit. That makes a format change look like a purely internal
+refactor, and the design note for that ticket proposed one — grow the header
+from 12 bytes to 16 to make room for a Flags word.
+
+**It would have been a wild write inside the compiler, with no diagnostic.**
+`make compiler/pascal26` does not run one era against itself. It runs the
+**OLD emitter against the NEW runtime**: the seed binary writes stage-1's
+`Data[]` with its own emitter while linking stage-1's runtime out of the working
+tree. No seed escapes that — the pin included, because a seed invoked as
+`./compiler/pascal26` resolves its builtin dir to the live `compiler/builtin/`
+either way. So stage-1 reads its own descriptors from the new offset while they
+were written at the old one, and the skew lands mid-record: the walk takes one
+member field as another, ends up using a self-relative delta as an **array
+count**, and loops that many times releasing strings at computed garbage
+addresses. Compiling `compiler/compiler.pas` emits 19 such descriptors, so
+stage-1 walks them every build.
+
+**The general rule.** In a self-hosting toolchain, any format shared between the
+compiler and its runtime — descriptors, VMT layouts, ABI records, stamp files,
+serialized caches — is versioned by the BUILD, not by the commit. Every change
+to one must be compatible in **both** directions, because every build has one
+era on each side. "The writer and the reader change together" is true of the
+source and false of the binaries.
+
+**The shape that satisfies it is an extension point that defaults to inert**,
+not a version field. The replacement here is a new MEMBER KIND with element
+count zero: every consumer loop is `while j < count` around a `case kind of`
+with no `else`, so an old runtime walking a new blob does nothing with it and a
+new runtime walking an old blob never sees one. A header field cannot do that —
+reading it at all requires already agreeing where the header ends.
+
+**And the failure would not have been loud.** A format skew inside a compiler
+produces a compiler that mostly works: it corrupts memory during its own record
+teardown and then emits the next stage. `make` would report `converged`. This is
+the same class as *"a self-hosting gate cannot see a bootstrap-only break"* and
+it is worse, because here the break is in the stage that PRODUCES the artefact
+you would be inspecting.
+
+**Ask it as a question before any format edit:** *which binary wrote the bytes
+this code is about to read, and was it built from these sources?* In a
+self-hosting build the honest answer is "no, and it never will be".
+
 ## Debugging — measure, do not reason
 
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
-SECTION, do not read the file.** It is **279KB (~70k tokens) across 72
-sections**; `grep '^## ' devdocs/dev/debugging-playbook.md` lists them and costs
-nothing. The failure mode is not reaching for the tools — not failing to read
+SECTION, do not read the file.** Measured 2026-09-07: **1.27MB (~317k tokens)
+across 365 sections**. This line said *279KB across 72 sections* from the day it
+was written until that measurement, so **treat any size quoted in a pointer as a
+lower bound with a date on it, this one included** — the file has more than
+QUADRUPLED and nothing about the stale figure looked wrong. CLAUDE.md's copy of
+the same number was corrected on 2026-09-06 to 905KB/237 and was stale within a
+day (910446 bytes / 240 sections at `fe0c7e2cd`, 1268709 / 365 one day later):
+this file grows faster than a hand-correction cycle, so the number is a floor,
+never a size.
+`grep '^## ' devdocs/dev/debugging-playbook.md` lists the sections and costs
+almost nothing. The failure mode is not reaching for the tools — not failing to read
 the book.
 
 The rule they are built on: **the expensive bugs here do not crash, they produce

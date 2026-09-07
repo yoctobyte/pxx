@@ -1812,6 +1812,77 @@ const
   TYPEDATA_SIZE = 80;
   TYPEDATA_DIM_SIZE = 16;   { one {Lo,Hi} pair in the DimsPtr table }
 
+{ THE RECORD LAYOUT DESCRIPTOR -- the blob EmitLayoutRTTI writes and
+  PXXRecordZeroManaged / PXXRecordRetain / PXXRecordRetainIntf /
+  PXXRecordReleaseIntf / PXXRecordRelease / PXXClassFinalize walk. It had no
+  written-down format at all until 2026-09-07: the shape lived in twelve offset
+  expressions split across compiler/rtti_emit.inc (the writer) and
+  compiler/builtin/builtinheap.pas (the reader).
+
+    +0   Int32  Kind        1 = record-format layout (a CLASS's descriptor uses
+                            the identical format, so PXXRecordRelease consumes
+                            both; kind 2 at this offset is the DYN-ARRAY
+                            descriptor, a DIFFERENT blob -- see the trap below)
+    +4   Int32  Size        SizeOf the record / instance
+    +8   Int32  MemberCount
+    +12  member[MemberCount], 16 bytes each:
+           +0  Int32 Offset      of the field within the record/instance
+           +4  Int32 Kind        1 string, 2 dyn array, 3 nested record,
+                                 4 COM interface, 5 variant, 6 NilPy
+                                 class-typed field, 7 promotable int (which
+                                 overloads TypeRef to carry its slot SIZE,
+                                 because that width is per-target)
+           +8  Int32 ArrCount    fixed-array element count, else 0
+           +12 Int32 TypeRef     SELF-RELATIVE to THIS SLOT (member+12), not to
+                                 the blob, so the reader spells it
+                                 `Pointer(memberPtr + 12 + typeRef)`
+    then dyn[] for the kind-2 members, 20 bytes each:
+           +0  Int32 Kind = 2   +4 ElSize   +8 Depth   +12 BaseKind
+           +16 Int32 BaseTypeRef  self-relative to dynDescOff + 16
+
+  THE TRAP, AND IT WOULD BE SILENT. `Int64(desc) + 12` occurred eight times in
+  builtinheap.pas and only six of them were this header size. The other two are
+  `baseKind := PInt32(Int64(desc) + 12)^` in PXXDynArrayRelease and
+  PXXDynSetLen, walking the DYN-ARRAY descriptor above, where 12 is BaseKind's
+  own offset. One literal, two blobs, one file: a blind sed over it corrupts
+  every dynamic-array release in the RTL and nothing about it looks wrong. The
+  discriminator is the assignment target (memberPtr vs baseKind), never the
+  constant -- which is why the six header uses are now spelled
+  PXX_REC_DESC_HDR and the two BaseKind ones are still 12.
+
+  EXTENDING IT: ADD A MEMBER KIND, DO NOT GROW THE HEADER. The obvious way to
+  announce something new -- e.g. the record-operator pointers of
+  feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray -- is
+  a Flags word at +12 with the payload at the end of the blob. Do not.
+
+  THE DESCRIPTOR IS A BOOTSTRAP INTERFACE, not merely a compiler/runtime one.
+  Every `make compiler/pascal26` runs the OLD emitter against the NEW runtime:
+  the seed binary writes stage-1's Data[] with ITS OWN EmitLayoutRTTI while
+  linking stage-1's builtinheap.pas out of the working tree. No seed escapes
+  that -- the pin included, since a seed run as ./compiler/pascal26 resolves
+  bdir to the live compiler/builtin/ either way.
+
+  So a header resize leaves stage-1 reading its own descriptors from +16 while
+  they were written at +12, and the failure is not a 4-byte skew that lands
+  somewhere harmless: memberPtr starts at member0+4, so the walk takes
+  member0.Kind as an Offset, member0.ArrCount as a Kind and member0.TypeRef --
+  a self-relative delta -- as the ARRAY COUNT, then loops that many times
+  calling PXXStrDecRef on recAddr + garbage. In a compiler, with no diagnostic.
+  Measured 2026-09-07 with a counter in EmitLayoutRTTI: compiling
+  compiler/compiler.pas emits 19 record layout descriptors, 1 to 3 members
+  each, so stage-1 walks them and the window is not theoretical.
+
+  A NEW MEMBER KIND has no such window. ArrCount = 0 makes the entry inert in
+  all six walks -- every one is `while j < arrayCount` over a `case kind of`
+  with no else arm -- so an old runtime walking a new blob does nothing with it
+  and a new runtime walking an old blob never sees one. Both directions safe,
+  which is exactly what a self-hosting build requires. }
+  REC_DESC_HDR_SIZE = 12;   { the same number as PXX_REC_DESC_HDR in
+                              compiler/builtin/builtinheap.pas -- two copies
+                              because a builtin unit cannot use the compiler's
+                              constants; asserted equal by the Makefile row
+                              `record descriptor header size agrees` }
+
   SYS_READ  = 0;
   SYS_WRITE = 1;
   SYS_OPEN  = 2;

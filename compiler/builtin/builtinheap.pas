@@ -331,6 +331,21 @@ const
     quietly restoring the leak this was written to fix. }
   PROMO_TAG_HEAP = 1;
 
+  { Header size of the RECORD LAYOUT DESCRIPTOR -- the blob the six walks below
+    consume. The format is written down once, in compiler/defs.inc beside
+    REC_DESC_HDR_SIZE, which MUST hold the same number: the writer is in the
+    compiler and the reader is here, a builtin unit that cannot `use` the
+    compiler's own constants, so the two copies are checked by the Makefile row
+    `record layout descriptor header size` instead of by the type system.
+
+    Spelled as a constant because the literal it replaces means two different
+    things in this one file: `Int64(desc) + 12` is this header size at the six
+    member walks, and is BaseKind's own offset in the DYN-ARRAY descriptor
+    (kind 2) that PXXDynArrayRelease and PXXDynSetLen walk. A blind
+    sed over the literal corrupts every dynamic-array release in the RTL and
+    nothing about it looks wrong. }
+  PXX_REC_DESC_HDR = 12;
+
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
@@ -3433,7 +3448,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -4202,7 +4217,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
 
   i := 0;
   while i < memberCount do
@@ -4282,7 +4297,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -4325,7 +4340,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -4364,7 +4379,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
 
   i := 0;
   while i < memberCount do
@@ -4501,7 +4516,7 @@ begin
   if desc = nil then Exit;
 
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin

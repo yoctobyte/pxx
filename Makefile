@@ -9046,6 +9046,27 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
 	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
 	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
+	@# The record layout descriptor's HEADER SIZE lives in two files -- the writer
+	@# is the compiler (REC_DESC_HDR_SIZE, compiler/defs.inc, where the format is
+	@# written down) and the reader is a builtin unit that cannot `use` the
+	@# compiler's constants (PXX_REC_DESC_HDR, compiler/builtin/builtinheap.pas).
+	@# Nothing in the language ties them together, and a disagreement is silent:
+	@# the walk starts inside member[0] and takes its TypeRef as an array count.
+	@# The count rows are not decoration -- a grep that matches NOTHING returns
+	@# the empty string on both sides and would "agree", which is the failure this
+	@# row would be least able to notice.
+	tools/expect_same.sh rec_desc_hdr_writer_present "$$(grep -cE '^  REC_DESC_HDR_SIZE = [0-9]+;' compiler/defs.inc)" "1"
+	tools/expect_same.sh rec_desc_hdr_reader_present "$$(grep -cE '^  PXX_REC_DESC_HDR = [0-9]+;' compiler/builtin/builtinheap.pas)" "1"
+	tools/expect_same.sh rec_desc_hdr_agrees "$$(grep -oE '^  REC_DESC_HDR_SIZE = [0-9]+' compiler/defs.inc | grep -oE '[0-9]+$$')" "$$(grep -oE '^  PXX_REC_DESC_HDR = [0-9]+' compiler/builtin/builtinheap.pas | grep -oE '[0-9]+$$')"
+	@# THE TWO SELF-RELATIVE ANCHORS. A nested managed record member's TypeRef is
+	@# relative to memberPtr + 12 and a dyn-of-record member's BaseTypeRef to
+	@# dynDescOff + 16; the rows above reach neither, because a variant member and
+	@# a promo member have no sub-descriptor. The leak bound is the assertion that
+	@# can see a wrong anchor -- the printed counts cannot, and the fixture header
+	@# records the control that established that.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_desc_subdesc_anchors.pas $(TESTTMP)/test_rdsa26
+	tools/expect_same.sh test_rdsa26 "$$($(TESTTMP)/test_rdsa26)" "$$(printf 'nested-record 1000\ndyn-of-record 1000')"
+	tools/assert_no_leak.sh record_desc_subdesc_anchors 50 $(TESTTMP)/test_rdsa26
 	@# A FRESH dyn-array call result as a Copy()/`+` operand had no owner: three
 	@# spills in ir.inc kept a RAW POINTER to it. The integer rows are the ones
 	@# that matter -- IRParkManagedDyn handed the handle back with IR_LOAD_SYM,
