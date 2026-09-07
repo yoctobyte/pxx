@@ -722,3 +722,89 @@ crash, it calls into the middle of whatever body now occupies that range.
 
 - The other six targets, one commit each, in the same shape.
 - Then the frame-size-gated inline nil-test at T=400.
+
+## 2026-09-07 — NO SITE-COUNT PENALTY (frank-subcoord). Four wrong numbers, each caught by a shape check, and a refusal to quote the fifth
+
+I asked whether the thunk's call/ret gets more expensive when one target is
+called from ~140 different return sites rather than from one in a tight loop —
+the regime neither of the two existing figures covers. frank-subcoord built five
+models. **Four produced a number and every number before the last was wrong**,
+each caught by inspecting the SHAPE of what was emitted rather than by the number
+looking implausible:
+
+1. 140 identical `case i: thunk(); break;` → **−21.215 ns**. gcc MERGED the
+   identical cases; there was one call site, not 140.
+2. Unique per-case bodies to stop the merge → **−0.582 ns**. `objdump` showed
+   `jmp <thunk>`: gcc TAIL-CALLED it. No call/ret pair existed anywhere.
+3. Work after the call to forbid the tail call (verified 140 `call`, 0 tail-`jmp`)
+   → **−0.173 ns**. The 140-way indirect dispatch cost ~20 ns/iteration and the
+   out-of-order window swallowed the call whole.
+4. Cheap dispatch, sweeping site count → positive at low counts, **negative at
+   64+ and non-monotonic**.
+5. Arms padded to byte-identical size (a 5-byte `nop` with the same `"memory"`
+   clobber, both switch functions exactly 5931 bytes by `nm`, identical layout
+   and scheduling barrier, the only difference being the control transfer) →
+   **the negatives survived**.
+
+| sites | with (ms) | without (ms) | ns/call-ret |
+| --- | --- | --- | --- |
+| 1 | 1266.5 | 1068.6 | 0.990 |
+| 2 | 1322.6 | 1077.3 | 1.226 |
+| 8 | 1313.6 | 1097.4 | 1.081 |
+| 32 | 1752.3 | 1438.8 | 1.568 |
+| 64 | 2097.0 | 1901.7 | 0.976 |
+| 128 | 2379.1 | 2749.4 | **−1.852** |
+| 140 | 2894.3 | 3420.3 | **−2.630** |
+
+**The negative reproduces** — 496 ms in model 4 and 526 ms in model 5, two
+independently generated binaries with different layouts, one under load and one
+idle, 200M iterations each. The arm carrying 140 extra call/ret pairs is
+reproducibly FASTER than the arm carrying 140 nops of identical width.
+
+**They declined to hand me a number from it, and that is the right call:** a
+model in which strictly more work is reproducibly faster is not measuring the
+cost of that work. This is the guard-failure family's newest member — not a
+guard that cannot fail, but **a harness whose output has the wrong SIGN and is
+still perfectly reproducible.** Reproducibility is not validity, and averaging
+or re-running would have hardened the wrong answer.
+
+**What it does establish, which is the question I asked:** across every model
+that produced a readable number, **the delta never grows with site count** —
+flat to 32, wrong-signed past it. Three structurally different models, none
+shows a penalty, two show the opposite sign. The mechanism consistent with that
+is the return stack buffer: with call and ret matched the return is predicted
+off the RSB rather than off the return address, so site multiplicity costs
+nothing on the return side, and a direct call's target is fixed. **Named as the
+explanation consistent with the measurement, not as something measured.**
+
+**The one number worth keeping:** models 4 and 5 agree closely at ≤32 sites
+(0.98/1.23/1.08/1.57 against 0.99/1.25/1.04/1.29) despite being different
+binaries — so **~1.0–1.6 ns marginal for one call/ret inside a body already
+doing other work**, against 2.064 ns exposed in a tight loop. In a real body the
+call/ret partly hides in slack that is already there. That leaves the ticket's
+**"~2.1 ns, and under 3 in the worst case"** conservative in the right
+direction, so it stands rather than being replaced by something indefensible.
+
+Disclosure carried from their report: model 4's run was contaminated (archive
+work during timing, the hazard CLAUDE.md names); model 5 was clean and agreed,
+which is why the reproducibility claim is trusted and the absolute values are
+not.
+
+### The instrument that settles it needs no model, and it is now built
+
+A/B the REAL compiler on a real workload. Both binaries are the same program —
+**`compiler/compiler.pas` compiled by the pre-thunk compiler and by the thunked
+one** — so they differ only in whether their own managed-local sweeps are inline
+or thunked. That is the exact regime with nothing between the measurement and
+it, and it captures what no model can: the I-cache effect of −31.9% on the
+binary, which on this evidence could dominate the call/ret cost outright and has
+the same sign as those negative rows.
+
+**The precondition that makes it trustworthy: A and B must produce BYTE-IDENTICAL
+output**, since they are the same program. Verified on `hello.pas`, `arrays.pas`
+and on `compiler.pas` itself; `ab_time.sh` refuses to report a timing pair
+unless that holds, so a number can never be quoted for two programs that
+disagree.
+
+There is no flag — the thunk is unconditional on x86-64 — so the no-thunk build
+is `50e25f5f0^`.
