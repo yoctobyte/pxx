@@ -590,8 +590,10 @@ var
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
+  ctorSelfN, ctorSelfRec, ctorValN: Integer;   { an INSTANCE-reached constructor's receiver and its rec — the expression's value, see the ctor arm at the instance-method tail }
 begin
   hostCi := -1; helperRec := -1;   { no class-helper metaclass redirect yet }
+  ctorSelfN := -1; ctorSelfRec := REC_NONE; ctorValN := -1;
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is here
     rather than at the ~50 call sites so that every caller stays untouched. }
   if PyExprMode then
@@ -3513,6 +3515,7 @@ begin
           ASTLeft[mselfArg] := node;
           ASTLeft[mcallNode] := mselfArg;
           mlastArg := mselfArg;
+          ctorSelfN := node; ctorSelfRec := recName;   { before `node` becomes the call }
           if CurTok.Kind = tkLParen then
           begin
             Next;
@@ -3704,6 +3707,51 @@ begin
             obj.M1.M2. The result's record (ProcRetRecId) drives field
             resolution; IR lowering materializes a record result temp. }
           node := mcallNode;
+          { A CONSTRUCTOR reached through an already-constructed INSTANCE
+            (`R.Create(...)`, `C.Create(...)`): FPC re-runs the ctor on that
+            instance and the expression's VALUE is the instance. A ctor's proc
+            carries NO return type -- ParseRecordMethodDecl sets `isFunc :=
+            False` for `isCtor` -- so `Procs[mpi].RetType` below is tyInteger,
+            and reading it raw is what typed the whole expression Integer. The
+            metaclass arm (~6080) and the type-name arm (~1735) both override
+            this by hand; this one did not, and record and class were broken
+            IDENTICALLY, which is what pointed here rather than at either type's
+            own path.
+
+            Measured 2026-09-07 against fpc 3.2.2, four spellings:
+              `R.Create(false);`            correct even before this -- a
+                                            statement never asks for the value
+              `R2 := R.Create(false);`      printed 20 20 against fpc's 10 20.
+                                            A SILENT WRONG VALUE.
+              `Writeln(R.Create(false).X)`  IR_UNSUPPORTED (AST kind 8)
+              `Show(R.Create(false))`       "no overload of Show matches ...
+                                            argument types: (Integer)" -- a
+                                            diagnostic naming the CALLEE for a
+                                            defect in the ARGUMENT
+
+            `(call, receiver)` as an AN_COMMA, and the receiver is a FRESH
+            AN_IDENT rather than `ctorSelfN` itself: the original is already
+            hanging off mselfArg, and putting one node in the tree twice would
+            evaluate the receiver twice. Restricted to an AN_IDENT receiver for
+            the same reason -- that is the only shape a fresh copy reproduces
+            exactly, and FPC accepts nothing but an lvalue here anyway. A
+            non-AN_IDENT receiver keeps the old behaviour, which refuses rather
+            than answering wrongly.
+            bug-p-a-constructor-reached-through-an-instance-is-typed-integer-so-its-value-is-wrong }
+          if (mmi >= 0) and UMthIsCtor[mmi] and (ctorSelfN >= 0) and
+             (ASTKind[ctorSelfN] = AN_IDENT) then
+          begin
+            ctorValN := AllocNode(AN_IDENT);
+            ASTIVal[ctorValN] := ASTIVal[ctorSelfN];
+            ASTTk[ctorValN]   := ASTTk[ctorSelfN];
+            node := AllocNode(AN_COMMA);
+            ASTLeft[node]  := mcallNode;
+            ASTRight[node] := ctorValN;
+            ASTTk[node]    := ASTTk[ctorSelfN];
+            tk       := TTypeKind(ASTTk[ctorSelfN]);
+            recName  := ctorSelfRec;
+            Continue;
+          end;
           tk := Procs[mpi].RetType;
           recName := ProcRetRecId[mpi];
           Continue;

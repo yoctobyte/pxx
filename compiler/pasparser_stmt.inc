@@ -8768,7 +8768,41 @@ begin
                    receiver produced before this line existed. Neither kind can
                    be a real lvalue, so widening is safe; the cost is that the
                    next desugaring pays the same debugging. }
-                 (ASTKind[valNode] = AN_SEQ) then
+                 (ASTKind[valNode] = AN_SEQ) or
+                 { ...and an INSTANCE-reached constructor used as a value
+                   (`R.Create(false)`) desugars to `(call, receiver)`, so the
+                   statement spelling `R.Create(false);` -- which is the COMMON
+                   one and was correct for as long as the expression was typed
+                   Integer -- arrives here as an AN_COMMA. This is the door the
+                   paragraph above predicted, hit by the very next desugaring:
+                   the ctor arm went in, every value spelling started working,
+                   and the STATEMENT spelling regressed to
+                   `expected ':=' before ';'`. Guarded now by the fixture's
+                   row 1, which is FIRST because the statement form was the one
+                   spelling already working and is therefore the row a change
+                   here is most likely to break and least likely to be aimed at.
+
+                   Narrow on purpose: a bare `AN_COMMA` is NOT safe to widen to,
+                   because the dyn-array materialisations build one too
+                   (`(tmp := value, tmp[i])`) and theirs CAN be an assignment
+                   target. Those all have an AN_ASSIGN on the left; only the ctor
+                   desugaring puts a CALL there. }
+                 ((ASTKind[valNode] = AN_COMMA) and (ASTLeft[valNode] >= 0) and
+                  ASTNodeIsCall(ASTLeft[valNode])) or
+                 { ...and a CONSTRUCTION discarded as a statement.
+                   `TMyObject.Create(nil);` with no destination is legal FPC --
+                   it constructs and drops the reference, which leaks, and the
+                   leak is the programmer's business and not a parse error.
+                   BuildMetaclassNew hands back AN_METACLASS_NEW, which is not
+                   one of ASTNodeIsCall's five kinds (it is a construction, not
+                   a routine call), so this too fell to `Expect(':=')` and was
+                   reported as `expected ':=' before ';'`. Second kind added
+                   through this door in one change, which is the rate the
+                   paragraph above is warning about. Safe by the same test that
+                   paragraph states: a construction can never be an assignment
+                   TARGET.
+                   fpc-testsuite texception10.pp }
+                 (ASTKind[valNode] = AN_METACLASS_NEW) then
                 node := valNode
               else if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
               begin

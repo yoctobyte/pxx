@@ -792,6 +792,7 @@ AN_COMMA Right callN
 AN_COMMA Right chMid
 AN_COMMA Right chSeq
 AN_COMMA Right condNode
+AN_COMMA Right ctorValN
 AN_COMMA Right idx
 AN_COMMA Right innerComma
 AN_COMMA Right node

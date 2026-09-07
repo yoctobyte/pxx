@@ -3225,6 +3225,41 @@ begin
     { `obj as IFoo` is an interface lvalue: the address of its fat-pointer temp. }
     Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
+  else if ASTKind[node] = AN_COMMA then
+    { `(a, b)` in an ADDRESS position: run `a` for its effects, then take the
+      address of `b`. The value-position twin of this is the AN_COMMA arm of
+      IRLowerAST and it says exactly the same thing; this reader simply never
+      had one, so a comma reached the IR_UNSUPPORTED tail below.
+
+      REACHED BY A CONSTRUCTOR CALLED THROUGH AN INSTANCE. `R.Create(False)`
+      desugars to `(call, receiver)`, because FPC's value for that expression is
+      the receiver -- so `R.Create(False).X` asks this routine for the address of
+      a comma and got `frontend could not lower AST node (kind 68)`, while
+      `R2 := R.Create(False)` on the line above was already correct. That split
+      -- assignment fine, member access refused -- is the SAME shape the arm
+      below documents for kinds 53, 58 and 88, and it has now happened four
+      times: the address really was being produced correctly every time and only
+      this reader could not see the node shape.
+
+      The dyn-array materialisations build an AN_COMMA too and never needed
+      this, which is why it stayed missing: they call ParseClassRecordSelectors
+      on the temp and wrap AFTERWARDS (pasparser_lval.inc ~5207), so their comma
+      is always the OUTERMOST node and no selector is ever applied to it. The
+      ctor desugaring continues the selector loop instead, so it is the first
+      construction to present the shape.
+
+      WIDENING A REFUSAL IS THE RISK HERE, and this file has the incident: an
+      AN_INDEX built over an AN_COMMA -- `a value with no address` -- SEGFAULTED
+      where it had previously been refused (pasparser_lval.inc ~6205). This arm
+      cannot do that, and the reason is that it INVENTS NO ADDRESS: it asks
+      IRLowerAddress for the Right operand's address recursively, so an operand
+      that has none still falls to the IR_UNSUPPORTED tail below and still
+      refuses. The only thing that changes is that a comma stops hiding an
+      operand this routine could already handle. }
+  begin
+    IRDiscardValue(ASTLeft[node], IRLowerAST(ASTLeft[node]));
+    Result := IRLowerAddress(ASTRight[node]);
+  end
   else if ASTNodeIsCall(node) and
           ((ASTTk[node] = Ord(tyRecord)) or (ASTTk[node] = Ord(tyVariant)) or
            (ASTTk[node] = Ord(tyAnsiString)) or
