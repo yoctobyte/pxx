@@ -424,7 +424,7 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (46)
+## backlog-pascal (47)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -441,6 +441,7 @@ _none_
 | bug-p-a-shadowed-soft-intrinsic-is-closed-without-consulting-the-arguments | P | 30 | bug | SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape -- including shapes it could never bind. Fixed for the bare-name dyn-array Delete/Insert case (DynArrayReopensIntrinsic, pasparser_stmt.inc); the general answer, and the non-bare spellings `Delete(obj.Items, i, 1)` / `Insert(x, p^.list, i)`, are still closed. Sixteen call sites share the predicate. | — |
 | bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse | P | 45 | bug | A specialization in a routine-local `type` section desyncs the parse | — |
 | bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide | P | 50 | bug | A specialization's concrete argument is keyed by its SPELLING, so two scopes' types of one name collide into a single specialization | — |
+| bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses | P | 55 | bug | When two units each specialize the other's generic through mutually recursive implementation-section `uses`, the specialized method bodies are spliced somewhere the parser will not accept a method implementation: `expected 'begin' before '.'`, near `; end ; class procedure TSomeGeneric1LongInt >>> . Test ;`. Reduced to 30 lines, two units, no corpus. Was hidden behind bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters until 2026-09-07; that fix moved the wall here and did not reach it. The conformance row is tgeneric91.pp. | — |
 | bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow | P | 55 | bug | A string literal bound to a PWideChar is emitted narrow, and only the cast surface refuses | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token | P | 40 | bug | Once any nested routine has been lambda-lifted, every LATER syntax error in the file reports the right LINE with the wrong token and the wrong `near:` window. Nine-line repro: `if q 2 then` on line 18 is reported as `pascal26:18: error: expected 'then' before 'q'` with `near: procedure TC . Later ; var >>> q : Integer` -- line 15's tokens. Without the nested routine the identical error reads `before '2'` with the right window. So CurTok (which supplies the line) and TokPos (which supplies both the name and the window) are out of step after a lift. WHICH of the two moved is NOT established and must not be guessed: this diagnostic cost a session an hour by sending it to a routine 128 lines from the actual defect, and a ticket that names the wrong mechanism would cost the next one the same. | — |
@@ -638,7 +639,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (46)
+## rainy-day (47)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -688,6 +689,7 @@ _none_
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 | meta-fpc-error-reporting-parity-cluster | U | 10 | meta | Parking lot for the whole FPC error-REPORTING parity cluster: the SEGV default, stack overflow's 202, --mimic-fpc not implying the --fpc-*-errors flags, tier-2 catchable EAccessViolation, and the per-arch gap. All low prio by the recorded principle that a strict flag governs compilation, not death. NOT in scope: emitted nil checks, which are language-level catchability and stay ranked. | — |
+| refactor-p-the-owned-key-in-findtypealias-is-a-boolean-where-the-lexical-key-is-a-distance | P | 30 | refactor | FindTypeAlias ranks candidates on three keys in order -- lexical hop (a DISTANCE), class ownership (a BOOLEAN), uses rank. The Boolean is sound only while AliasVisibleHere admits rows from at most one class, which symtab.inc:408 states as an invariant. Any widening of the class axis retires that sentence and the key silently degrades to first-row-wins, which is declaration order, which is the BASE class. NOT A DEFECT TODAY and not one after the inheritance widening either: fpc refuses the only program that can observe it (`Duplicate identifier \"TSel\"` -- a derived class may not re-declare a base's nested type name). Recorded because the replacement is known and belongs somewhere a reader will find it: `owned` becomes hops up UClsParent, mirroring what ScopeHopsToProc already does for the lexical key one position over. | — |
 
 ## low-prio (74)
 
@@ -969,9 +971,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3536)
+## done (3537)
 
-3536 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3537 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1143,6 +1145,7 @@ _none_
 - [p 55] [N] bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
+- [p 55] [P] bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses
 - [p 55] [P] bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow
 - [p 55] [P] bug-p-routine-local-name-scoping-is-implemented-in-one-of-three-tables
 - [p 55] [P] bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results

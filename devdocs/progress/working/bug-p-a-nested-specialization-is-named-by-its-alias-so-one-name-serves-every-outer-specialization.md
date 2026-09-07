@@ -274,3 +274,42 @@ trees, before touching the mint.
 inheritance at all. `TIntegerStack = specialize TAdvStack<Integer>` is an ALIAS,
 so fpc prints the specialization's own name and pxx prints the alias's. Same
 root, and the row is not burnable until this is decided.
+
+## The "two scopes share a spelling" hazard is MEASURED AND RETIRED (2026-09-07)
+
+This ticket's key is a NAME, so the standing worry beside it has been that two
+different types sharing one spelling in two scopes would dedup to a single
+specialization. frank-coordinator flagged it as the same failure surface one
+layer up from a live collision in `FindTypeAlias`. **It does not fire, and the
+measurement is the point rather than the reassurance.**
+
+A routine-local `TRec` (4 bytes) and a unit-level `TRec` (16 bytes), both
+specializing one template in one program:
+
+| | inner | outer |
+| --- | --- | --- |
+| fpc 3.2.2 | 4 | 16 |
+| pxx, compiler `4fcc6478fb08` | 4 | 16 |
+
+Two specializations, correctly distinct, from one spelling. So the name key is
+not collapsing them in the shape that reaches it — the lexical scope reaches the
+mint before the name does.
+
+**And the shape that would test it harder cannot be run: it dies earlier.** Put
+a METHOD on the template and the same program stops before any dedup happens:
+
+```
+pascal26:9: error: expected ':' before '.'
+  near: LongInt ; end ; function TB$87 >>> . Size :
+```
+
+A routine-local specialization's method body is spliced where the parser will
+not take a method implementation — the same class of anchor defect as
+[[bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses]],
+and nothing to do with naming. **So what is left of the hazard is behind a parse
+wall, not behind the key**, and re-opening it needs that wall gone first. Worth
+stating in that order: a hypothesis retired by a green needs the green's reach
+named beside it, and the reach here is "fields-only templates".
+
+The fields-only row above is the useful residue. It is not a fixture yet; adding
+one costs nothing and would stop this question being re-asked a third time.
