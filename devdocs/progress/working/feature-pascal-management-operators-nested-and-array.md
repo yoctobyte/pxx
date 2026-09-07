@@ -7,7 +7,7 @@ type: feature
 status: working
 owner: frankA
 blocked-by: []
-summary: "PARTLY DONE 2026-09-06 (frankA): a managed record reached through a FIELD at any depth, and through an ELEMENT of a FIXED one-dimensional array, are both initialized and finalized now -- local and global. STILL REFUSED, each with its own fixture naming why: a DYNAMIC array (its extent is a runtime length the desugar cannot read), a MULTI-DIMENSIONAL one (the synthesised loop is 1-D), a record holding a managed record behind an ARRAY field, and a CLASS field. THE CLASS CASE IS NOT THIS DESUGAR'S JOB and the ticket said it was; it has been carved out as [[feature-pascal-management-operators-on-a-class-field]] and this ticket no longer claims it: measured, fpc runs a class field's Initialize inside Create and its Finalize inside Free, so a scope-bound try/finally would finalize a live heap object at every scope exit and never run for one that outlives the scope -- it belongs on the constructor and destructor paths. THE ORDER IS NOT UNIFORM AND THIS TICKET HAD ONE OF THE TWO RULES WRONG: across NESTING levels Initialize is POST-order and Finalize is PRE-order, but ACROSS ARRAY ELEMENTS both run ASCENDING -- fpc does not reverse an array on the way out. The Symptom section above claimed `fin 3 / fin 0`, i.e. descending, and that is refuted by fpc 3.2.2's own output in test_mgmt_operators_array.expected. THE GLOBAL ARRAY DIVERGES FROM FPC IN BOTH DIRECTIONS AND DELIBERATELY: measured, fpc runs NOTHING for a global array (`body 000`) while it does run Initialize for a plain global record, so its omission is about the array and leaves a declared invariant that never runs; we initialize, and we finalize, the latter being the already-chosen position for the non-array case. CORPUS: tmoperator7 advanced from line 101 to line 117 and still stops on this ticket -- its array is DYNAMIC (SetLength), so the fixed-array arm that landed cannot clear that row. tmoperator4's TA/TB are CLASSES, so it is the class row, and the record nested-field arm had no corpus row at all. Refused rather than skipped, by design -- a declared invariant that simply never runs is a plausible wrong value far from the cause."
+summary: "PARTLY DONE, THIRD ARM LANDED 2026-09-07 (frankA). Reached and managed now: a managed record through a FIELD at any depth, through an ELEMENT of a FIXED one-dimensional array SYMBOL, and -- new -- through an ELEMENT of a FIXED one-dimensional array FIELD, which is the same synthesised loop with an AN_FIELD base instead of an AN_IDENT one and a low bound read from the FIELD table (UFldArrDimLo) rather than the symbol table. AppendManagedFieldOps and AppendManagedArrayOps are now mutually recursive, so a symbol array whose element holds an array field works in both directions; that row (Mix) is the one that fails if only one direction is wired. Five arms verified against fpc 3.2.2 BYTE FOR BYTE and on all five runnable targets (x86_64/i386/aarch64/arm32/riscv32), refused outright on the pin. STILL REFUSED, now with a message naming WHICH obstacle rather than one shared sentence: a DYNAMIC array (symbol or field) whose extent is a runtime length, and a MULTI-DIMENSIONAL one (symbol or field) because the synthesised loop is 1-D. THE MULTI-DIMENSIONAL FIELD REFUSAL WAS NEARLY BLESSED BY ITS OWN FIXTURE: measured 2026-09-07 by deleting the NDims test and rebuilding, a 0-based `array[0..1, 0..2] of TFoo` field FLAT-LOOPS CORRECTLY and matches fpc element for element, because UFldArrLen is the flat product and the field low bound is 0. Only a non-zero OUTER low bound discriminates -- `array[1..2, 5..7]` gave `body 001234` against fpc's `012345` and finalized a sixth element holding the neighbouring `k`, i.e. a silent write outside the array and one element never initialized. The fixture therefore declares 1..2 and 5..7; a 0-based one is a guard that cannot fail. CLASS fields left this ticket for [[feature-pascal-management-operators-on-a-class-field]]. THE ORDER RULES ARE UNCHANGED AND STILL MEASURED, NOT ASSUMED: across NESTING levels Initialize is POST-order and Finalize is PRE-order; across ARRAY ELEMENTS both run ASCENDING -- an array FIELD sits at exactly the same place in the nesting rule as a plain nested field. CORPUS: tmoperator7 is unchanged by this arm -- its array is DYNAMIC (SetLength), so it still stops here."
 ---
 
 # Management operators do not reach an array element or a nested field
@@ -250,3 +250,110 @@ operators run at `Create`/`Free`, and everything `WrapManagementOpsRange` emits
 is scope-bound by construction. What stays here is the ARRAY family — dynamic
 and multi-dimensional — plus the array-field-inside-a-record shape, all three of
 which are the same missing loop rather than a different lifetime.
+
+## 2026-09-07 (frankA) — the ARRAY FIELD arm lands, and the guard that nearly certified itself
+
+`arr: array[0..1] of TFoo` **inside** a record is managed now, at any depth, and
+so is the mutual case — an array SYMBOL whose element holds an array FIELD.
+
+### What changed, and why it is one mechanism and not a second one
+
+`AppendManagedArrayOps` took a **symbol index** and built its own
+`GenMakeIdent`. It now takes a **base NODE** and clones it, so the identical
+procedure serves an `AN_IDENT` base (the array symbol) and an `AN_FIELD` base
+(the array field). `AppendManagedFieldOps` calls it for a loopable array field;
+`AppendManagedArrayOps` already called `AppendManagedFieldOps` for the element's
+own fields. The two are therefore **mutually recursive** and one is
+forward-declared. That is the whole change on the emission side.
+
+The low bound comes from the **field** table — `UFldArrDimLo[fi*MAX_ARR_DIMS]` —
+not from `Syms[].ConstVal`, and it is the SOURCE index: `f: array[2..3] of TFoo`
+runs 2..3, because an `AN_INDEX` under an `AN_FIELD` base is lowered against
+that field's own `RecFieldArrLo` (`ir.inc`, the `{$R+}` field-array branch names
+the same table).
+
+`FldIsLoopableManagedArray` is the field-table mirror of
+`SymIsLoopableManagedArray` and is asked in **exactly two places** — the refusal
+and the walk. That is the same reason the symbol-side predicate exists: a shape
+the refusal lets through and the walk skips is a declared `Initialize` that
+silently never runs, and the disagreement is silent in only one direction.
+
+### The order was measured again rather than carried over
+
+An array FIELD sits at the same place in the pre/post-order rule as a plain
+nested field, and its elements run ascending in both directions. fpc 3.2.2 on a
+record with its own operator and an `array[2..3] of TFoo` field:
+
+    init Foo 2 / init Foo 3 / init Baz        <- elements ascend, then self
+    fin  Baz   / fin  Foo 2 / fin  Foo 3      <- self, then elements ascending
+
+### THE PART WORTH READING: the multi-dimensional refusal nearly certified itself
+
+I wrote the multi-dim field fixture with `array[0..1, 0..2]`, asserted in its
+header that deleting the `UFldArrNDims <= 1` test would turn it into an
+out-of-bounds write, and then — because a guard I add has to SHOW its necessity
+— deleted the test and rebuilt.
+
+**The 0-based version compiled, ran, and matched fpc 3.2.2 element for
+element.** `UFldArrLen` is the FLAT count (6 for `[0..1, 0..2]`) and the field's
+low bound is 0, so a 1-D loop over 0..5 addresses exactly the six elements. The
+flat loop is *correct* there.
+
+It is wrong the moment the OUTER dimension starts anywhere but zero. Same
+poisoned compiler, `array[1..2, 5..7]`:
+
+| | fpc 3.2.2 | pxx with the NDims test removed |
+| --- | --- | --- |
+| body | `012345` | `001234` |
+| last finalize | `fin 5` | `fin 9` — the neighbouring `k` field |
+
+So the guard is load-bearing, and **the fixture I first wrote could not have
+shown it**: it would have gone on passing after the removal and certified it.
+The committed fixture declares `array[1..2, 5..7]` and its header says why.
+
+This is the "choose a probe whose right answer differs from the default" rule
+arriving through a new door — here the *default* is not a type's zero, it is the
+**zero low bound**, which makes a flat index and a dimensional index coincide.
+Any assertion about multi-dimensional indexing written on a 0-based array is
+measuring nothing.
+
+### The refusals now name which obstacle
+
+`RecContainsUnreachableManagedField` returns a reason (`UMF_DYN` / `UMF_NDIMS`)
+and `UnreachableManagedFieldMsg` spells the two sentences once. Both refusals
+cite this ticket, so a Makefile row grepping only the slug would let either
+stand in for the other and could not tell "the dynamic arm regressed" from "the
+multi-dimensional arm regressed" — an expected-failure row passes on ANY refusal
+unless it reads which. The two `test-core` rows grep the reason.
+
+### Verification, and what does NOT back it
+
+- **fpc 3.2.2 is the oracle**, and `test/test_mgmt_operators_array_field.expected`
+  IS its output. Five arms: array field in a plain record; array field beside an
+  own operator with a non-zero low bound; an array field one nesting level down;
+  an array field whose ELEMENT is itself a nested managed record; and the mutual
+  recursion (an array symbol whose element holds an array field).
+- **The fixture is its own positive control.** Every arm prints back the `n`
+  that `Initialize` is the only writer of. The defect class here is *a declared
+  invariant that never runs*, which passes every value check unless the value is
+  read back — the same shape as a leak passing an `expect_same` row.
+- **The before-baseline is a refusal**: the pinned compiler rejects the fixture
+  outright, so no arm of it can be a coincidence of the new build.
+- **All five runnable targets** — x86_64, i386, aarch64, arm32, riscv32 —
+  produce the same text as fpc. Wired as `test-mgmt-operators-cross-target` and
+  enrolled in Track T's `full` tier.
+- **NO tstate verdict backs any of this.** Seven has produced sixteen
+  `infra … no report (rc=1)` rows in the last forty commits, on both the native
+  and full rungs, so breadth is down and a quiet tstate here is not a pass. The
+  fpc oracle, the five-target run and the pinned control are the whole evidence.
+- The three fixed-array `tmoperator` corpus rows are **not** advanced by this:
+  tmoperator7's array is dynamic.
+
+### What is left in this ticket
+
+Exactly two shapes, and they are two clauses of one predicate rather than one
+problem: a **dynamic** array (no extent to read — needs the loop built against
+`Length()`), and a **multi-dimensional** one (a readable flat extent and a 1-D
+loop — needs either N nested loops or a flat loop that indexes flat, which the
+low-bound measurement above says is not the same thing). Both apply to a SYMBOL
+and to a FIELD, and all four have a fixture.

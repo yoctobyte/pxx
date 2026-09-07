@@ -1,0 +1,36 @@
+init Foo 0
+init Foo 1
+bodyPlain 01 7
+fin  Foo 0
+fin  Foo 1
+init Foo 2
+init Foo 3
+init Baz 4
+bodyBaz 23
+fin  Baz
+fin  Foo 2
+fin  Foo 3
+init Foo 5
+init Foo 6
+bodyDeep 56
+fin  Foo 5
+fin  Foo 6
+init Foo 7
+init Bar 8
+init Foo 9
+init Bar 10
+bodyWrap 79
+fin  Bar
+fin  Foo 7
+fin  Bar
+fin  Foo 9
+init Foo 11
+init Foo 12
+init Foo 13
+init Foo 14
+bodyMix 11121314
+fin  Foo 11
+fin  Foo 12
+fin  Foo 13
+fin  Foo 14
+done

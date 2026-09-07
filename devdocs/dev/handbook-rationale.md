@@ -702,6 +702,55 @@ The *property* is checkable today, because `skip_holes` is in every
 a run that MUST classify not-proof-grade, asserted — and the positive control is
 free: **a `quick`-tier run can never qualify by definition.**
 
+### The collision can be in the PROBE'S DATA, one level below where "choose a probe whose right answer differs from the default" points
+
+CLAUDE.md's rule names three defaults that swallow a correct answer: a type's
+zero, a `sizeof(int)`, a pointer width. Both of its worked examples are TYPE
+defaults — `sizeof(*s.fp)` answering 4 when 4 is also `TypeStorageSize(tyUnknown)`,
+so the `int` spelling cannot tell a recorded answer from a blank one.
+
+**The same failure happens with no type involved, and the existing rule does not
+point at it.** Measured 2026-09-07 (frankA), landing management operators for a
+fixed array FIELD:
+
+I kept the refusal for a MULTI-DIMENSIONAL array field, wrote a fixture whose
+header asserted that removing the `UFldArrNDims <= 1` test would produce an
+out-of-bounds write, and then removed the test and rebuilt — a positive control,
+drawn from the right population, aimed at the right defect class, exactly as
+every rule in this file asks for.
+
+**The fixture compiled, ran, and matched fpc 3.2.2 element for element.** The
+field table records `UFldArrLen` as the FLAT element count — the product of the
+dimension spans — so a 1-D loop over `array[0..1, 0..2] of TFoo` runs 0..5 and
+addresses precisely the six elements. **A flat index and a dimensional index
+coincide when the low bound is zero.** The control passed and would have
+certified the removal.
+
+`array[1..2, 5..7]` separates them at once, same poisoned compiler:
+
+| | fpc 3.2.2 | NDims test removed |
+| --- | --- | --- |
+| body | `012345` | `001234` |
+| last finalize | `fin 5` | `fin 9` — the neighbouring `k` field |
+
+A write outside the array and one element never initialized, and the program
+still exits 0, so `rc=0` would have certified it too.
+
+**The general form:** anything whose correctness depends on a BASE BEING
+SUBTRACTED has an origin at which the wrong arithmetic and the right arithmetic
+agree — an index, an offset, a 1-based column, a zero-length prefix — and **zero
+is the origin everybody writes in a test.** The collision is not in the expected
+VALUE, it is in the fixture's DATA, which is why a well-built control still
+passes.
+
+So ask the fourth question alongside the three already here: *if the code did
+the naive flat thing instead, would this fixture print anything different?* If
+not, move the bounds off zero before believing the guard.
+
+Both array shapes are kept above deliberately. The summary of this section is
+"use a non-zero low bound", and the summary loses the reason: the 0-based shape
+is not merely weaker, it is **indistinguishable from correct**.
+
 ## Debugging — measure, do not reason
 
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE

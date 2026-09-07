@@ -413,20 +413,83 @@ begin
     end;
 end;
 
+{ True iff a record FIELD is the shape the synthesised loop can iterate: one
+  dimension, a FIXED extent recorded here, record ELEMENTS rather than
+  dynamic-array handles. The field-table mirror of SymIsLoopableManagedArray,
+  and it exists for the same reason that one does -- the refusal below and the
+  emission in AppendManagedFieldOps must agree on the SAME predicate. A shape
+  the refusal lets through and the walk skips is a declared Initialize that
+  silently never runs, which is the defect this whole pass refuses rather than
+  compiles.
+
+  UFldTk carries the ELEMENT kind for an array field, so it is `tyRecord` for
+  `array[0..1] of TFoo` exactly as it is for a plain `TFoo` field; UFldIsArray
+  is the only thing that separates them. UFldArrLen is the FLAT element count
+  (the product of the dimension spans), which is why the NDims test is not
+  redundant with it: a 2-D `array[0..1,0..2]` has ArrLen 6 and one 1-D loop over
+  six elements would index six slots that do not exist in source index space. }
+function FldIsLoopableManagedArray(fi: Integer): Boolean;
+begin
+  FldIsLoopableManagedArray :=
+    UFldIsArray[fi] and (IntToTypeKind(UFldTk[fi]) = tyRecord) and
+    (UFldArrLen[fi] > 0) and (UFldArrNDims[fi] <= 1) and
+    (UFldDynDepth[fi] = 0) and (UFldRec_[fi] <> REC_NONE);
+end;
+
+{ Why an array field is out of the walk's reach. Two clauses of one predicate
+  and they are NOT interchangeable: a dynamic field has no extent to read at
+  all, a multi-dimensional one has a readable FLAT extent and a 1-D loop. The
+  refusals quote different sentences so that an expected-failure row can read
+  WHICH refusal it got -- a row that greps only the ticket slug scores any
+  refusal as a pass and cannot tell a revert from a fix, which is the lesson
+  the AddRef size row already carries in the Makefile. }
+const
+  UMF_NONE   = 0;
+  UMF_DYN    = 1;   { `array of TFoo` -- extent is a runtime length }
+  UMF_NDIMS  = 2;   { `array[a..b, c..d] of TFoo` -- the loop is one-dimensional }
+
+{ The refusal text for one reason code. Spelled once so the two call sites
+  cannot drift, and each arm names its OWN obstacle rather than a shared
+  "not supported yet" -- see the reason codes above. }
+function UnreachableManagedFieldMsg(why: Integer): String;
+begin
+  if why = UMF_DYN then
+    UnreachableManagedFieldMsg :=
+      'a DYNAMIC array field holding a record that declares Initialize or '
+      + 'Finalize is not managed yet: its extent is a runtime length and the '
+      + 'synthesised loop has no bound to read. A FIXED one-dimensional array '
+      + 'field is iterated '
+      + '(feature-pascal-management-operators-nested-and-array)'
+  else
+    UnreachableManagedFieldMsg :=
+      'a MULTI-DIMENSIONAL array field holding a record that declares '
+      + 'Initialize or Finalize is not managed yet: the synthesised loop is '
+      + 'one-dimensional and this field''s extent is a flat count. A FIXED '
+      + 'one-dimensional array field is iterated '
+      + '(feature-pascal-management-operators-nested-and-array)';
+end;
+
 { Does `recId` contain a managed field the FIELD WALK below cannot reach?
 
-  The walk descends plain record-typed fields. It does not descend an ARRAY
-  field -- `arr: array[0..1] of TFoo` inside a record needs the same synthesised
-  loop the array-of-record symbol case needs, and that is the other arm of
-  feature-pascal-management-operators-nested-and-array. Those stay REFUSED
+  The walk descends plain record-typed fields, and since 2026-09-07 it also
+  iterates a FIXED ONE-DIMENSIONAL array field -- `arr: array[0..1] of TFoo`
+  inside a record gets the same synthesised loop the array-of-record SYMBOL
+  case gets. What is still out of reach is the array shape that has no bounds
+  this pass can read: a DYNAMIC array field (its extent is a runtime length)
+  and a MULTI-DIMENSIONAL one (the synthesised loop is 1-D). Those stay REFUSED
   rather than silently skipped, which is this pass's whole convention: a
   declared invariant that never runs is a plausible wrong value far from the
   cause.
 
   UFldTk carries the ELEMENT kind for an array field, so `tyRecord` alone does
-  not separate the two; UFldIsArray is what does. }
-function RecContainsUnreachableManagedField(recId, depth: Integer): Boolean;
-var ci, i, base, cnt, frec: Integer;
+  not separate an array field from a plain one; UFldIsArray is what does, and
+  FldIsLoopableManagedArray is what says whether the walk can iterate it. That
+  predicate is asked HERE and in AppendManagedFieldOps and nowhere else -- the
+  two must not drift apart, because the disagreement is silent in exactly one
+  direction. }
+function RecContainsUnreachableManagedField(recId, depth: Integer;
+                                           var why: Integer): Boolean;
+var ci, i, fi, base, cnt, frec: Integer;
 begin
   Result := False;
   if (recId < REC_UCLASS_BASE) or (depth > 8) then Exit;
@@ -434,23 +497,30 @@ begin
   base := UClsFBase[ci];
   cnt := UClsFCount[ci];
   for i := 0 to cnt - 1 do
-    if IntToTypeKind(UFldTk[base + i]) = tyRecord then
+  begin
+    fi := base + i;
+    if IntToTypeKind(UFldTk[fi]) = tyRecord then
     begin
-      frec := UFldRec_[base + i];
-      if UFldIsArray[base + i] then
+      frec := UFldRec_[fi];
+      if UFldIsArray[fi] and (not FldIsLoopableManagedArray(fi)) then
       begin
         if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
         begin
+          if UFldDynDepth[fi] > 0 then why := UMF_DYN else why := UMF_NDIMS;
           Result := True;
           Exit;
         end;
       end
-      else if RecContainsUnreachableManagedField(frec, depth + 1) then
+      else if RecContainsUnreachableManagedField(frec, depth + 1, why) then
       begin
+        { A loopable array field is reachable at THIS level, but its ELEMENT is
+          a record like any other and may itself hide an unreachable field --
+          and so may a plain record field. One recursion serves both. }
         Result := True;
         Exit;
       end;
     end;
+  end;
 end;
 
 { Append one management-operator call for `argNode` to a seq chain. The two
@@ -463,6 +533,13 @@ begin
   if head = -1 then head := newSeq else ASTRight[tail] := newSeq;
   tail := newSeq;
 end;
+
+{ Mutually recursive with AppendManagedFieldOps: a record can hold an array of
+  records, and each of those elements can hold a record, with no fixed
+  alternation. The recursion terminates on the depth cap the field walk already
+  carries. }
+procedure AppendManagedArrayOps(baseNode, recId, opk, lo, hi: Integer;
+                                postOrder: Boolean; var head, tail: Integer); forward;
 
 { Walk the managed fields of `recId` under `baseNode` and append their calls.
 
@@ -486,42 +563,71 @@ end;
   occurrences aliasing one node"). Sharing it would put one node under two
   parents.
 
-  Array fields are skipped here and refused by the caller -- see
-  RecContainsUnreachableManagedField. }
+  A FIXED ONE-DIMENSIONAL array field is iterated by AppendManagedArrayOps
+  under this field's own path -- the same loop the array-of-record SYMBOL case
+  gets, with an AN_FIELD base instead of an AN_IDENT one. Its low bound comes
+  from the FIELD table (UFldArrDimLo), not from the symbol table, and it is the
+  SOURCE index: `f: array[2..3] of TFoo` runs 2..3, because the AN_INDEX node
+  under an AN_FIELD base is lowered against the field's own RecFieldArrLo.
+  ORDER measured against fpc 3.2.2, not assumed: the array field sits at the
+  same place in the pre/post-order rule as a plain nested field, and its
+  ELEMENTS run ASCENDING in both directions. For a record with its own operator
+  and an `array[2..3] of TFoo` field, 3.2.2 gives `init Foo 2, init Foo 3, init
+  Baz` and `fin Baz, fin Foo 2, fin Foo 3`.
+  Dynamic and multi-dimensional array fields are still skipped here and refused
+  by the caller -- see RecContainsUnreachableManagedField, which asks the same
+  FldIsLoopableManagedArray predicate this walk does. }
 procedure AppendManagedFieldOps(baseNode, recId, depth, opk: Integer;
                                 postOrder: Boolean; var head, tail: Integer);
-var ci, i, base, cnt, frec, fldNode, opIdx: Integer;
+var ci, i, fi, base, cnt, frec, fldNode, opIdx, flo: Integer;
 begin
   if (recId < REC_UCLASS_BASE) or (depth > 8) then Exit;
   ci := recId - REC_UCLASS_BASE;
   base := UClsFBase[ci];
   cnt := UClsFCount[ci];
   for i := 0 to cnt - 1 do
-    if (IntToTypeKind(UFldTk[base + i]) = tyRecord) and
-       (not UFldIsArray[base + i]) and
-       (UFldRec_[base + i] <> REC_NONE) then
+  begin
+    fi := base + i;
+    if (IntToTypeKind(UFldTk[fi]) = tyRecord) and
+       (UFldRec_[fi] <> REC_NONE) and
+       ((not UFldIsArray[fi]) or FldIsLoopableManagedArray(fi)) then
     begin
-      frec := UFldRec_[base + i];
+      frec := UFldRec_[fi];
       if RecHasScopeManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
       begin
         fldNode := AllocNode(AN_FIELD);
         ASTLeft[fldNode] := CloneAST(baseNode);
-        ASTSOffset[fldNode] := UFldNOff[base + i];
-        ASTSLen[fldNode] := UFldNLen[base + i];
+        ASTSOffset[fldNode] := UFldNOff[fi];
+        ASTSLen[fldNode] := UFldNLen[fi];
         ASTTk[fldNode] := Ord(tyRecord);
-        opIdx := FindOpOverload(opk, Ord(tyRecord), frec);
-        if postOrder then
+        if UFldIsArray[fi] then
         begin
-          AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
-          if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
+          { An ARRAY field: one synthesised loop over its elements, whose body
+            is the element's own operator plus the element's own field walk --
+            AppendManagedArrayOps builds both, so the nesting rule inside an
+            element is the same one that holds anywhere else. }
+          flo := UFldArrDimLo[fi * MAX_ARR_DIMS];
+          AppendManagedArrayOps(fldNode, frec, opk,
+                                flo, flo + UFldArrLen[fi] - 1,
+                                postOrder, head, tail);
         end
         else
         begin
-          if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
-          AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
+          opIdx := FindOpOverload(opk, Ord(tyRecord), frec);
+          if postOrder then
+          begin
+            AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
+            if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
+          end
+          else
+          begin
+            if opIdx >= 0 then AppendManagedOpCall(opIdx, CloneAST(fldNode), head, tail);
+            AppendManagedFieldOps(fldNode, frec, depth + 1, opk, postOrder, head, tail);
+          end;
         end;
       end;
     end;
+  end;
 end;
 
 { Append one statement to a management-operator seq chain. }
@@ -556,7 +662,7 @@ end;
   is the condition test, so a `Continue` in a user body would skip a bottom
   increment and spin forever. That hazard cannot arise here: the body is
   synthesised operator calls and contains no user statement to `Continue` from. }
-procedure AppendManagedArrayOps(symIdx, recId, opk, lo, hi: Integer;
+procedure AppendManagedArrayOps(baseNode, recId, opk, lo, hi: Integer;
                                 postOrder: Boolean; var head, tail: Integer);
 var kSym, condN, idxN, incN, whileN, opIdx: Integer;
     bHead, bTail: Integer;
@@ -564,7 +670,11 @@ begin
   bHead := -1; bTail := -1;
   kSym := AllocVar('', tyInteger);
   idxN := AllocNode(AN_INDEX);
-  ASTLeft[idxN]  := GenMakeIdent(symIdx, tyRecord);
+  { `baseNode` is the ARRAY-valued node -- an AN_IDENT for an array SYMBOL, an
+    AN_FIELD for an array FIELD. It is cloned in because the caller keeps
+    ownership of its own node; a shared one would sit under two parents, which
+    is the aliasing CloneAST exists for. }
+  ASTLeft[idxN]  := CloneAST(baseNode);
   ASTRight[idxN] := GenMakeIdent(kSym, tyInteger);
   ASTTk[idxN]    := Ord(tyRecord);
   opIdx := FindOpOverload(opk, Ord(tyRecord), recId);
@@ -636,11 +746,15 @@ end;
 function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
                                bodyNode: Integer): Integer;
 var i, ip, fp, headInit, tailInit, headFin, tailFin, tryNode: Integer;
-    mrec, alo: Integer;
+    mrec, alo, umfWhy: Integer;
     isTarget: Boolean;
 begin
   Result := bodyNode;
   headInit := -1; tailInit := -1; headFin := -1; tailFin := -1;
+  { The predicate writes `why` only on the path that returns True. Seeding it
+    keeps a stale reason from a previous symbol out of the next symbol's
+    message -- the loop below runs once per symbol and reuses the variable. }
+  umfWhy := UMF_NONE;
   for i := loSym to hiSym do
   begin
     if wantGlobal then isTarget := Syms[i].Kind = skGlobal
@@ -666,11 +780,11 @@ begin
               + 'of a record declaring only those compiles '
               + '(feature-pascal-management-operators-nested-and-array)');
       { ...and a loopable array whose ELEMENT hides a managed field behind an
-        array field keeps the refusal the element's own shape would get. }
+        array field the walk cannot iterate keeps the refusal the element's own
+        shape would get. }
       if SymIsLoopableManagedArray(i) and
-         RecContainsUnreachableManagedField(mrec, 0) then
-        Error('a field of a record with a management operator is not managed yet '
-              + '(feature-pascal-management-operators-nested-and-array)');
+         RecContainsUnreachableManagedField(mrec, 0, umfWhy) then
+        Error(UnreachableManagedFieldMsg(umfWhy));
       { A CLASS field is still refused, and it is not the same shape at all: a
         class instance's lifetime is not scope-bound. Measured against fpc
         3.2.2 -- for `c: TCls` whose field is a managed record, fpc runs the
@@ -681,21 +795,21 @@ begin
       if (Syms[i].TypeKind = tyClass) and RecContainsManagementOp(mrec, 0) then
         Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
-      { ...and an ARRAY field at any depth needs the same synthesised loop the
-        array SYMBOL above needs, so it keeps the same refusal. }
+      { ...and a DYNAMIC or MULTI-DIMENSIONAL array field at any depth needs
+        bounds this pass cannot read, exactly as the array SYMBOL above does,
+        so it keeps the same refusal. A fixed 1-D one is iterated by the walk. }
       if (Syms[i].TypeKind = tyRecord) and (not Syms[i].IsArray) and
-         RecContainsUnreachableManagedField(mrec, 0) then
-        Error('a field of a record with a management operator is not managed yet '
-              + '(feature-pascal-management-operators-nested-and-array)');
+         RecContainsUnreachableManagedField(mrec, 0, umfWhy) then
+        Error(UnreachableManagedFieldMsg(umfWhy));
     end;
     if isTarget and (i <> retSym) and SymIsLoopableManagedArray(i) then
     begin
       alo := Syms[i].ConstVal;
-      AppendManagedArrayOps(i, SymTR[i].ElemRec, OPK_INITIALIZE,
-                            alo, alo + Syms[i].ArrLen - 1, True,
+      AppendManagedArrayOps(GenMakeIdent(i, tyRecord), SymTR[i].ElemRec,
+                            OPK_INITIALIZE, alo, alo + Syms[i].ArrLen - 1, True,
                             headInit, tailInit);
-      AppendManagedArrayOps(i, SymTR[i].ElemRec, OPK_FINALIZE,
-                            alo, alo + Syms[i].ArrLen - 1, False,
+      AppendManagedArrayOps(GenMakeIdent(i, tyRecord), SymTR[i].ElemRec,
+                            OPK_FINALIZE, alo, alo + Syms[i].ArrLen - 1, False,
                             headFin, tailFin);
     end;
     if isTarget and (Syms[i].TypeKind = tyRecord) and

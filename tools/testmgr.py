@@ -237,6 +237,12 @@ TIERS = {
         "test-record-layout-cross-frontend",     # one aggregate, three frontends, per target
         "test-record-equality-cross-target",     # `=`/`<>` on records, five targets, one expected block
         "test-skeleton-frontends-cross-target",  # nine skeleton drivers x four cross targets
+        # Same question one level down: does a LANGUAGE RULE mean the same thing
+        # on every target. The management-operator desugar is in the parser and
+        # shared by every backend, which is exactly what makes a native green
+        # read as a cleared target -- the synthesised loop lowers an AN_INDEX
+        # over an AN_FIELD base and the element stride is a per-target size.
+        "test-mgmt-operators-cross-target",      # Initialize/Finalize through an array field, five targets
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
         # XTENSA — full only, and it could not have gone anywhere else. It
         # drives tools/run_target.sh, so it classes `qemu`, and `limited`'s one

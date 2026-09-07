@@ -893,9 +893,9 @@ AN_IF Right pairN
 AN_IF Right pairNode
 AN_INCDEC Left CurASTNode
 AN_INCDEC Left lv
+AN_INDEX Left CloneAST(baseNode)
 AN_INDEX Left CloneAST(target)
 AN_INDEX Left GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk)
-AN_INDEX Left GenMakeIdent(symIdx, tyRecord)
 AN_INDEX Left RMakeIdent(arrSym)
 AN_INDEX Left RMakeIdent(symIdx)
 AN_INDEX Left baseFld
