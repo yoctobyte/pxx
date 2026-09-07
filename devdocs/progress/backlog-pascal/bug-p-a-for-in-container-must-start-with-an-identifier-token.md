@@ -1,7 +1,7 @@
 ---
 slug: bug-p-a-for-in-container-must-start-with-an-identifier-token
 track: P
-prio: 30
+prio: 40
 type: bug
 blocked-by: []
 status: open
@@ -53,6 +53,27 @@ mistaken for a container. Establish what it was protecting before deleting it
 rather than after: if the answer is "nothing any more", say so in the commit,
 because a one-line deletion with no recorded reason is what makes the next
 reader restore it.
+
+## Re-ranked 30 -> 40 (frankS, 2026-09-07, on frank-coord-core's argument)
+
+Filed at 30 on volume -- little real code writes `for i in (v)`. The better axis
+is that **the discriminator is a lexical accident, so the observable is
+ARBITRARY rather than merely wrong**: `Int64(4)` compiles and `Integer(4)` does
+not, for no reason visible in the source, so a user cannot form a rule from it
+and cannot predict which spelling of their own cast will build. That is worth
+more than its frequency.
+
+Not higher than 40, for the reason CLAUDE.md gives for ranking loud above
+silent: this refuses to build, so nobody gets a wrong answer from it, and the
+workaround is to name the value. Its sibling
+[[bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin]]
+stays the one to take first -- that one is silent.
+
+**Kept as `type: bug`, not `compat`.** CLAUDE.md files "FPC accepts a form we
+reject" as compat, and this qualifies on its face. But the finding is not that
+we lack a dialect feature -- we HAVE this one, and accept it through one
+spelling while refusing an equivalent one. The inconsistency is inside our own
+rule, which is a bug in it.
 
 Found while fixing
 `test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas`, whose
