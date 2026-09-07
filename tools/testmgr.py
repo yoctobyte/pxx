@@ -222,6 +222,21 @@ TIERS = {
         # columns come from one compiler and would agree by construction.
         "test-record-abi-mixed-link",
         "test-float-determinism", "test-emit-obj",
+        # THREE CROSS-TARGET GATES THAT WERE IN NO TIER AT ALL until 2026-09-07,
+        # each written BECAUSE a whole defect class is invisible on the 64-bit
+        # dev host, and each therefore run only when somebody typed it. Same
+        # enrolment hole test-nilpy and test-uforth were in, twice documented in
+        # comments above and recurring anyway -- a comment is not a check
+        # (bug-t-25-of-56-make-test-targets-are-reachable-from-no-tier).
+        #
+        # FULL, not limited: two of them run qemu, and `limited` promises a box
+        # without qemu can run it. The layout one is compile-only and could sit
+        # in limited; kept beside its siblings because the three answer one
+        # question -- does an aggregate mean the same thing on every target --
+        # and splitting them puts half the answer on a different cadence.
+        "test-record-layout-cross-frontend",     # one aggregate, three frontends, per target
+        "test-record-equality-cross-target",     # `=`/`<>` on records, five targets, one expected block
+        "test-skeleton-frontends-cross-target",  # nine skeleton drivers x four cross targets
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
         # XTENSA — full only, and it could not have gone anywhere else. It
         # drives tools/run_target.sh, so it classes `qemu`, and `limited`'s one

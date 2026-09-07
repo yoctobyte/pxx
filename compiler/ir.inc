@@ -8568,6 +8568,171 @@ begin
                          (FindOpOverload(OPK_FINALIZE, Ord(tyRecord), recId) >= 0);
 end;
 
+function RecCmpScalarKindOK(tk: TTypeKind): Boolean;
+{ Field kinds a plain `IR_LOAD_MEM` + `IR_BINOP(tkEq)` pair compares by VALUE.
+
+  An ALLOWLIST, and the direction matters: a kind nobody listed falls out of
+  IRRecordIsFieldwiseComparable, which makes the whole record fall through to
+  the pre-2026-09-07 one-word compare -- wrong, but exactly as wrong as it was
+  yesterday. An allowlist that failed open would turn a new type kind into a
+  new silent wrong answer, which is the shape
+  [a guard that enumerates kinds fails by the kind nobody listed] describes.
+
+  Deliberately absent, each for its own reason, not by oversight:
+    tyString and the frozen kinds -- an inline length prefix plus bytes, so a
+      scalar load reads the prefix and compares that.
+    tyExtended -- 10 bytes, x87 load/store; no single IR_BINOP shape.
+    tySet -- IR_SET_CMP is a different node, not IR_BINOP.
+    tyVariant, tyPromoInt32/64 -- tagged slots; equality is a runtime question.
+    tyRecord -- handled by RECURSION at the caller, not here.
+    tyUnknown, tyAuto -- nothing is known about the storage.
+
+  tyAnsiString IS here: an IR_LOAD_MEM of a field is a borrow, so
+  IRNodeOwnsManagedStr answers False and the backends' string compare emits no
+  release for it (IRStrCmpOwnsOperand). That is what makes a string member
+  compare by CONTENT and not by handle. }
+begin
+  RecCmpScalarKindOK :=
+    (tk = tyInteger) or (tk = tyBoolean) or (tk = tyChar) or (tk = tyClass) or
+    (tk = tyInt8) or (tk = tyUInt8) or (tk = tyInt16) or (tk = tyUInt16) or
+    (tk = tyInt32) or (tk = tyUInt32) or (tk = tyInt64) or (tk = tyUInt64) or
+    (tk = tyNativeInt) or (tk = tyNativeUInt) or (tk = tyPointer) or
+    (tk = tySingle) or (tk = tyDouble) or (tk = tyAnsiString);
+end;
+
+function RecFieldCmpSpan(fi: Integer): Integer;
+{ Bytes field `fi` occupies, for the OVERLAP test below. Only ever asked about
+  fields RecCmpScalarKindOK or the record recursion already accepted, so the
+  two shapes it cannot size (an array member, a bit-field) are refused before
+  they arrive; it still answers a conservative 0 for them rather than guessing,
+  because a wrong span makes the overlap test miss a union. }
+var fk: TTypeKind;
+begin
+  RecFieldCmpSpan := 0;
+  if UFldIsArray[fi] or (UFldBitWidth[fi] <> 0) then Exit;
+  fk := IntToTypeKind(UFldTk[fi]);
+  if fk = tyRecord then
+    RecFieldCmpSpan := RecSize(UFldRec_[fi])
+  else
+    RecFieldCmpSpan := TypeStorageSize(fk, REC_NONE);
+end;
+
+function IRRecordIsFieldwiseComparable(recId, depth: Integer): Boolean;
+{ Can `a = b` on this record be expanded into per-field value comparisons?
+
+  A SEPARATE PASS from the emitter on purpose. The emitter appends IR nodes as
+  it goes, and a refusal discovered at field 7 would leave the six it already
+  built orphaned in the IR list -- harmless (they are value nodes, and the
+  walker only emits statement kinds) but visible in every PXXDBG=a.ir dump as
+  code that runs nowhere. Deciding first costs one extra walk of a table that
+  is already in memory.
+
+  THE OVERLAP TEST IS THE ONE THAT IS NOT OBVIOUS. A variant record's `case`
+  parts, and a C union, are ordinary UFld entries at the SAME offset. A
+  field-wise walk over them is not merely redundant: `record case Boolean of
+  0: (s: AnsiString); 1: (n: Int64) end` would compare the same eight bytes
+  once as a heap handle -- dereferencing whatever the Int64 arm stored -- and
+  once as an integer. That is a segfault reachable from a correct-looking
+  program, so overlap refuses the whole record. It falls out of the offsets
+  rather than needing a variant-part column, which means it covers the C
+  frontend's unions for free and cannot be out of date with respect to one.
+
+  Refusing is SAFE HERE and this is the only reason this function may fail
+  closed: the caller falls through to the scalar IR_BINOP that has always been
+  there. A refusal preserves a wrong answer; it never creates one. }
+var ci, fbase, cnt, i, j, ai, aj, spi, spj: Integer;
+    ftk: TTypeKind;
+begin
+  IRRecordIsFieldwiseComparable := False;
+  if depth > 16 then Exit;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if ci >= MAX_UCLASS then Exit;
+  if not UClsIsRecord[ci] then Exit;
+  fbase := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  { A record with no fields has nothing to compare and no honest answer; leave
+    it on the old path rather than inventing a constant True. }
+  if cnt <= 0 then Exit;
+  for i := 0 to cnt - 1 do
+  begin
+    if UFldIsArray[fbase + i] then Exit;
+    if UFldBitWidth[fbase + i] <> 0 then Exit;
+    ftk := IntToTypeKind(UFldTk[fbase + i]);
+    if ftk = tyRecord then
+    begin
+      if UFldRec_[fbase + i] = recId then Exit;
+      if not IRRecordIsFieldwiseComparable(UFldRec_[fbase + i], depth + 1) then Exit;
+    end
+    else if not RecCmpScalarKindOK(ftk) then
+      Exit;
+  end;
+  for i := 0 to cnt - 1 do
+  begin
+    ai := UFldOff_[fbase + i]; spi := RecFieldCmpSpan(fbase + i);
+    if spi <= 0 then Exit;
+    for j := i + 1 to cnt - 1 do
+    begin
+      aj := UFldOff_[fbase + j]; spj := RecFieldCmpSpan(fbase + j);
+      if spj <= 0 then Exit;
+      if (ai < aj + spj) and (aj < ai + spi) then Exit;   { variant part or union }
+    end;
+  end;
+  IRRecordIsFieldwiseComparable := True;
+end;
+
+function IRRecFieldwiseEqChain(recId, symA, symB, baseOff, depth: Integer): Integer;
+{ Emit `(a.f1 = b.f1) and (a.f2 = b.f2) and ...` for one record, recursing into
+  nested record members with the offset carried down. `symA`/`symB` are scratch
+  POINTER symbols already holding the two operand addresses.
+
+  Only ever called after IRRecordIsFieldwiseComparable said yes, so every field
+  here is one of the two accepted shapes and there is no refusal path. Stated
+  because the two functions have to stay in step: a kind added to the allowlist
+  without an arm below would reach the `else` and emit a load of the wrong
+  width, which is the failure mode
+  [a comment above an n-armed predicate asserts all n arms] warns about. }
+var ci, fbase, cnt, i, off, chain, cmp: Integer;
+    ftk: TTypeKind;
+begin
+  ci := recId - REC_UCLASS_BASE;
+  fbase := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  chain := -1;
+  for i := 0 to cnt - 1 do
+  begin
+    off := baseOff + UFldOff_[fbase + i];
+    ftk := IntToTypeKind(UFldTk[fbase + i]);
+    if ftk = tyRecord then
+      cmp := IRRecFieldwiseEqChain(UFldRec_[fbase + i], symA, symB, off, depth + 1)
+    else
+      cmp := IRAppend(IR_BINOP,
+        IRAppend(IR_LOAD_MEM,
+          IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symA, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, off, Ord(ftk)), -1, -1, 0, Ord(ftk)),
+        IRAppend(IR_LOAD_MEM,
+          IRAppend(IR_FIELD, IRAppend(IR_LOAD_SYM, symB, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, off, Ord(ftk)), -1, -1, 0, Ord(ftk)),
+        Ord(tkEq), 0, Ord(tyBoolean));
+    if chain < 0 then
+      chain := cmp
+    else
+      chain := IRAppend(IR_BINOP, chain, cmp, Ord(tkAnd), 0, Ord(tyBoolean));
+  end;
+  IRRecFieldwiseEqChain := chain;
+end;
+
+function IRNodeHasRecordAddress(node: Integer): Boolean;
+{ Is this operand an lvalue IRLowerAddress can point at? The four shapes
+  AssignSideRecOf already answers a record id for, and no others -- a record
+  returned BY A CALL has no address until IRAppendCall has built its hidden
+  destination temp, and reaching for one here would lower the call twice. }
+begin
+  IRNodeHasRecordAddress := (node >= 0) and
+    ((ASTKind[node] = AN_IDENT) or (ASTKind[node] = AN_FIELD) or
+     (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF));
+end;
+
 function ArgTempTakesManagementOps(cpi, pathIdx: Integer;
                                    byValueCopy: Boolean): Boolean;
 { Does this argument temp represent a BY-VALUE PARAMETER, i.e. the one event
@@ -8942,6 +9107,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
+    recCmpId, recCmpSymA, recCmpSymB: Integer;   { field-wise record equality — see the tkEq/tkNeq record arm }
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     foldOff, foldK, foldSym: Integer;
@@ -12305,6 +12471,79 @@ begin
         left := IRIntfInstanceWord(ASTLeft[node]);
         right := IRIntfInstanceWord(ASTRight[node]);
         Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+      end
+      else if (not CProgramMode) and
+              ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+              (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and
+              (IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord) and
+              IRNodeHasRecordAddress(ASTLeft[node]) and
+              IRNodeHasRecordAddress(ASTRight[node]) and
+              (AssignSideRecOf(ASTLeft[node]) >= REC_UCLASS_BASE) and
+              (AssignSideRecOf(ASTLeft[node]) = AssignSideRecOf(ASTRight[node])) and
+              IRRecordIsFieldwiseComparable(AssignSideRecOf(ASTLeft[node]), 0) then
+      begin
+        { RECORD EQUALITY, FIELD BY FIELD.
+
+          Everything below this arm compared ONE MACHINE WORD. Two records with
+          the same first field and a different last one answered EQUAL on
+          x86-64, aarch64, arm32 and riscv32; on i386, where a record over 8
+          bytes is not in a register at all, a record was never equal even to a
+          byte-identical copy of itself. Rows 1, 3 and 4 of any equality probe
+          are right by accident on the four working targets -- a first-word
+          compare and a real one agree on all three -- so only
+          same-first-field/different-last-field measures anything.
+
+          WHY NOT A BYTE COMPARE, which is the shape the ticket proposed first
+          and the shape `IR_COPY_REC` would have mirrored: pxx leaves record
+          PADDING undefined, so two records with identical field values differ
+          in exactly their padding bytes. Measured 2026-09-07 over
+          `record b: Byte; y: Int64 end` as locals in a frame a returned call
+          had filled with a pattern -- 7 differing bytes of 16 on x86-64,
+          aarch64, arm32 and riscv32, 3 of 12 on i386, each equal to that
+          target's padding size exactly, with a byte-zeroed control at 0. A
+          memcmp answers NOT EQUAL there, which is the same silent wrong value
+          pointing the other way. The asymmetry that hides it: `c := a` goes
+          through IR_COPY_REC, which copies RecSize bytes INCLUDING padding, so
+          a copy-constructed record IS byte-identical to its source and the
+          case everyone writes first would have passed.
+
+          ZERO BACKEND WORK, which is what makes this a fix rather than the
+          six-way change the ticket was filed as. The expansion emits only
+          IR_FIELD / IR_LOAD_MEM / IR_BINOP, which every backend has had since
+          the beginning, and it routes an AnsiString member to the string
+          compare for free.
+
+          THE ADDRESSES ARE PARKED IN SCRATCH SYMBOLS FIRST, not re-lowered per
+          field. `arr[F()] = b` would otherwise call F once per member: a value
+          node referenced by two parents is emitted by BOTH of them, side
+          effects and all, which is the same mechanism IRKindIsStatement's
+          comment records costing us IR_ATOMIC and IR_VIRTUAL_CALL.
+
+          C IS EXCLUDED, matching the two sibling record arms above and for
+          their reason: the C frontend tags struct pointer and array arithmetic
+          operands tyRecord legitimately, so `p == q` over `struct S *` could
+          reach this arm and be expanded into a field-wise compare of the
+          POINTER SLOTS. Nothing is lost by excluding it -- C has no `==` on
+          struct values at all. Measured before adding the guard: the four
+          pointer comparisons in a probe already answered correctly, because
+          those particular nodes come through tagged tyPointer. That is one
+          shape agreeing, not the population, and the guard costs nothing.
+
+          NOT UNIVERSAL, and the refusals fall back to the old one-word compare
+          rather than to an error -- see IRRecordIsFieldwiseComparable. An array
+          member, a bit-field, a set/variant/frozen-string/Extended member, and
+          any record whose fields OVERLAP (a variant part, a C union) all keep
+          yesterday's answer. Refusing preserves a wrong answer; it never makes
+          a new one.
+          bug-a-a-record-equality-compares-only-the-first-eight-bytes-on-every-target }
+        recCmpId := AssignSideRecOf(ASTLeft[node]);
+        recCmpSymA := AllocVar('', tyPointer);
+        recCmpSymB := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, recCmpSymA, IRLowerAddress(ASTLeft[node]), -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, recCmpSymB, IRLowerAddress(ASTRight[node]), -1, 0, Ord(tyPointer));
+        Result := IRRecFieldwiseEqChain(recCmpId, recCmpSymA, recCmpSymB, 0, 0);
+        if Integer(ASTIVal[node]) = Ord(tkNeq) then
+          Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
       end
       else if (ASTIVal[node] <> Ord(tkIn)) and
               ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or

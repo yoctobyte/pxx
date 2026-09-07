@@ -2,8 +2,15 @@
 //
 // Measuring before building was worth more than the building here.
 // `#[derive(Copy)]` needs nothing -- a whole-record assignment already copies.
-// `#[derive(PartialEq)]` needs nothing -- the shared record comparison already
-// answers field-wise, and a test written two rungs earlier already proved it.
+// `#[derive(PartialEq)]` needs nothing -- the shared record comparison answers
+// field-wise.
+//
+// THAT SECOND SENTENCE WAS FALSE WHEN IT WAS WRITTEN, and this test could not
+// see it. Until 2026-09-07 the shared comparison compared ONE MACHINE WORD, so
+// `a == c` here was right only because `c` differs in its FIRST field. The row
+// that measures anything is `tail`, below: same `f`, different `r`. It answered
+// `true` on x86-64/aarch64/arm32/riscv32 and the whole test was green.
+// bug-a-a-record-equality-compares-only-the-first-eight-bytes-on-every-target
 // What was actually missing was older and dumber: an enum VARIANT could not
 // appear in an expression AT ALL. `let c: Color = Color::White` worked and
 // `c == Color::White` was a parse error, because a literal is always N stores
@@ -58,6 +65,12 @@ fn main() {
     let b: Pos = a.clone();
     let c: Pos = Pos { f: 9, r: 9 };
     println!("clone {} {} eq {} ne {}", b.f, b.r, a == b, a == c);
+
+    // THE DISCRIMINATING ROW: same first field, different last. A one-word
+    // compare answers `true` here and a field-wise one answers `false`; every
+    // other pairing above agrees under both.
+    let d: Pos = Pos { f: 1, r: 9 };
+    println!("tail {} {}", a == d, a != d);
 
     // an ARRAY of enum values -- each element is its own materialization
     let arr: [Piece; 3] = [Piece::Pawn, Piece::Knight, Piece::King];

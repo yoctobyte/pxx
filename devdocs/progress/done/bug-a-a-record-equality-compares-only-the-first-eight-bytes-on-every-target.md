@@ -2,7 +2,7 @@
 track: A
 prio: 75
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankA
@@ -138,3 +138,111 @@ today's compiler on all five; taken above, so the reading exists before the fix.
 Add an equal-records row beside it as the control that the fix did not simply
 invert the answer, and a `TMethod`-shaped 8-byte row so the case the
 fallthrough was protecting stays covered.
+
+## Fixed 2026-09-07 — field-wise, in one place, zero backends
+
+`ir.inc`'s BINOP lowering grew an arm for `=`/`<>` over two lvalue record
+operands of the same record id: the two addresses are parked in scratch pointer
+symbols, then the record's fields are expanded into
+`(a.f1 = b.f1) and (a.f2 = b.f2) and ...`, recursing into nested record members
+with the offset carried down. Three helpers beside it:
+`RecCmpScalarKindOK` (the field-kind allowlist), `IRRecordIsFieldwiseComparable`
+(the decide pass) and `IRRecFieldwiseEqChain` (the emitter).
+
+**No backend changed.** The expansion emits `IR_FIELD` / `IR_LOAD_MEM` /
+`IR_BINOP`, all of which every backend has always handled — which is what turned
+"it is six backends" into one arm.
+
+**The addresses are parked, not re-lowered per field.** A value node referenced
+by two parents is emitted by BOTH, side effects included, so
+`arr[F()] = b` would otherwise call `F` once per member. Same mechanism
+`IRKindIsStatement`'s comment records costing us `IR_ATOMIC` and
+`IR_VIRTUAL_CALL`.
+
+### Measured, on the compiler built from this change
+
+The ticket's own table, all four rows, all five targets — 40 of 40 cells
+correct, i386 included. Then the wider shapes: a nested record (differing in
+the inner member, in the tail, and in the head), a record with an `AnsiString`
+member (two independently built heap strings with equal content compare EQUAL,
+and a one-character difference in the LAST character compares unequal — so it
+is content and not handle, and it is not a first-word compare), and a record of
+`Double` + `Single` differing only in the `Single`. All correct on x86-64, i386,
+aarch64, arm32 and riscv32.
+
+**Positive control, taken against the pin v407 binary** (`095ef4811a5b`), which
+predates the change: it fails 6 rows on x86-64/aarch64/arm32/riscv32 and 5 on
+i386. `test_rust_derive.rs`'s new `tail` row reads `tail true false` there and
+`tail false true` here — `derive(PartialEq)` was the live wrong-answer path and
+now is not.
+
+**Managed-string members neither leak nor over-release.** 300000 comparisons of
+a record with an `AnsiString` member: the alloc census moves not at all
+(`allocs=1 frees=0` before and after the loop), and under `-dPXX_HEAP_DEBUG`
+both strings still read back intact afterwards. An `IR_LOAD_MEM` of a field is a
+borrow, so `IRNodeOwnsManagedStr` answers False and the backends' string compare
+emits no release for it.
+
+### The residual, which is enumerated and not "probably fine"
+
+`IRRecordIsFieldwiseComparable` refuses — and a refusal falls back to the OLD
+one-word compare, never to an error, so it preserves a wrong answer and never
+creates one:
+
+- an **array** member, fixed or dynamic
+- a **bit-field** member (C)
+- a member of kind `tyString`/frozen, `tyExtended`, `tySet`, `tyVariant`,
+  `tyPromoInt32/64`, `tyAuto`, `tyUnknown`
+- **any record whose two fields OVERLAP** — a variant record's `case` parts, or
+  a C union. That test falls out of the offsets rather than needing a
+  variant-part column, so it covers the C frontend's unions for free. It is not
+  merely redundancy being avoided: `record case Boolean of 0: (s: AnsiString);
+  1: (n: Int64) end` would compare the same eight bytes once as a heap handle,
+  dereferencing whatever the `Int64` arm stored, and once as an integer — a
+  segfault reachable from a correct-looking program.
+- a record with **no fields**, which has no honest answer
+
+The array case is the one worth doing next and it is the largest remaining
+population; it needs an element stride and a decision about the unroll cap.
+Filed as `bug-a-record-equality-still-compares-one-word-when-a-member-is-an-array`
+rather than left in this one's body.
+
+### The method-pointer case, checked against the oracle and NOT a defect
+
+The exemption this arm replaced was justified as *"a method-pointer compare is a
+legitimate record `=`"*, so the obvious worry was that field-wise expansion
+changes it. It does not, for two reasons worth writing down so nobody re-derives
+them:
+
+A `procedure(…) of object` variable is a PROCVAR, not `tyRecord`, so it never
+reaches the new arm at all — measured identical on x86-64, i386, aarch64, arm32
+and riscv32 before and after, and identical to pin v407.
+
+And the answer it gives is CORRECT. Two method pointers bound to the same method
+of DIFFERENT instances compare EQUAL — which looks wrong, and fpc 3.2.2 answers
+exactly the same on the same source. Procvar `=` compares the code pointer only;
+the instance half is reached through `TMethod(m).Data`. `SizeOf(TNotify)` is
+`2 * SizeOf(Pointer)` on every target, so the storage is there and the operator
+deliberately does not look at it. **I had written "want F" in the probe and the
+oracle is what stopped a wrong ticket** — the probe's own premise (the two
+instances are distinct) was asserted in the same run, so the reading is not a
+constructor returning one object twice.
+
+### Which frontends reach the arm today
+
+Pascal and Rust. Measured, not assumed: NilPy has no record-value `==` spelling
+(`a == b` on two instances is a class comparison, and a struct-shaped compare is
+written field by field), and the Zig skeleton compiles `a == b` over two structs
+to a body with nothing in it — `procs=2`, no `@import`, so it is not a consumer
+of this path yet either. The arm is shared and the other frontends inherit it
+the moment they grow the spelling; nothing about it is Pascal-specific.
+
+### Gate
+
+`test-record-equality-cross-target` — five targets, one expected block,
+`test/record_equality_rows.pas` + `.expected`. Enrolled in testmgr.py's `full`
+tier, along with two sibling cross-target gates that were in no tier at all
+(`bug-t-25-of-56-make-test-targets-are-reachable-from-no-tier`).
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

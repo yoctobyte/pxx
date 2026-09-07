@@ -10328,7 +10328,7 @@ test-core: $(COMPILER)
 	# The `dbg`/`deep` lines are derive(Debug): before it, `{:?}` on a struct
 	# printed its FIRST FIELD -- a plausible wrong value in real output.
 	./$(COMPILER) test/test_rust_derive.rs $(TESTTMP)/test_rust_derive26
-	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\narr 1 3 0\nknights 1\nnest 1\ndbg Pos { f: 1, r: 2 }\ndeep Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 }\nscal 5 "hi" true '"'"'q'"'"'\nvia Pos { f: 1, r: 2 }')"
+	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\ntail false true\narr 1 3 0\nknights 1\nnest 1\ndbg Pos { f: 1, r: 2 }\ndeep Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 }\nscal 5 "hi" true '"'"'q'"'"'\nvia Pos { f: 1, r: 2 }')"
 	@echo '--- rust: impl Trait for Type, and fmt::Display rerouted ---'
 	# The trait-impl path had NEVER RUN: both parsers compared a tkFor token
 	# against the string 'for' via GetTokenStr, which is empty for a keyword,
@@ -27680,6 +27680,48 @@ test-record-layout-cross-frontend: $(COMPILER)
 	  { echo "test-record-layout-cross-frontend: RED -- fewer pairs compared than the recipe asks for, so this gate measured less than it claims"; exit 1; }; \
 	test "$$overall" = "0" || { echo "test-record-layout-cross-frontend: RED"; exit 1; }; \
 	echo "test-record-layout-cross-frontend: GREEN"
+
+.PHONY: test-record-equality-cross-target
+test-record-equality-cross-target: $(COMPILER)
+	@# RECORD `=` AND `<>` ON EVERY TARGET WE CAN RUN, compared WHOLE against one
+	@# expected block. Record equality is a language question, not a width one, so
+	@# every target must produce identical text -- which is why this row carries a
+	@# fixed expectation and not a relation. The widths that DO differ per target
+	@# are what test-record-layout-cross-frontend measures, one row up.
+	@#
+	@# THE FIXTURE IS ITS OWN POSITIVE CONTROL and that is deliberate: `flat tail`
+	@# (same first field, different last) answered T on x86-64/aarch64/arm32/
+	@# riscv32 before 2026-09-07, and `flat same` answered F on i386, so the block
+	@# cannot pass on a compiler that compares one machine word. Verified against
+	@# the pin v407 binary, which fails 6 rows on four targets and 5 on i386.
+	@# Without those rows the file would be green on the broken compiler: `same`,
+	@# `firstdiff` and `bothdiff` agree under a one-word compare and a real one.
+	@#
+	@# A COMPILE FAILURE IS A FAILING ROW, NOT A SKIP. Every target in the list
+	@# builds this fixture today; if one stops, that is the finding. The floor is
+	@# the EXACT count for the same reason -- a floor of "at least a few" cannot
+	@# fail when a target silently drops out of the loop.
+	@overall=0; ran=0; \
+	for t in x86_64 i386 aarch64 arm32 riscv32; do \
+	  case $$t in \
+	    x86_64)  tgt=""; run="" ;; \
+	    i386)    tgt="--target=i386"; run="" ;; \
+	    aarch64) tgt="--target=aarch64"; run="qemu-aarch64" ;; \
+	    arm32)   tgt="--target=arm32"; run="qemu-arm" ;; \
+	    riscv32) tgt="--target=riscv32"; run="qemu-riscv32" ;; \
+	  esac; \
+	  if ! ./$(COMPILER) $$tgt test/record_equality_rows.pas $(TESTTMP)/receq_$$t >/dev/null 2>&1; then \
+	    echo "test-record-equality-cross-target: FAIL $$t -- the fixture did not compile"; overall=1; continue; \
+	  fi; \
+	  got=$$($$run $(TESTTMP)/receq_$$t 2>&1); \
+	  ran=$$((ran+1)); \
+	  tools/expect_same.sh record_equality_$$t "$$got" "$$(cat test/record_equality_rows.expected)" || overall=1; \
+	done; \
+	echo "test-record-equality-cross-target: $$ran targets compared"; \
+	[ $$ran -ge 5 ] || \
+	  { echo "test-record-equality-cross-target: RED -- fewer targets ran than the recipe names, so this gate measured less than it claims"; exit 1; }; \
+	[ $$overall -eq 0 ] || exit 1; \
+	echo "test-record-equality-cross-target: GREEN"
 
 .PHONY: test-packrecords-c-gcc-oracle
 test-packrecords-c-gcc-oracle: $(COMPILER)
