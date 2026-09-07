@@ -17355,6 +17355,49 @@ being true is exactly what made nobody look** — the gap between *"is this
 verified"* and *"what would this be if it were false, and go look at THAT"*. For a
 citation, false means **points somewhere else**, and that never errors.
 
+### THE INVERSE DISCIPLINE, AND THE ORDERING THAT SURVIVES IT: CONTENT FIRST, POINTER WHEN IT EXISTS
+
+The rule above says a stale citation multiplies. The obvious defence — do not
+write a citation you have not resolved — has a cost nobody states, and it
+collides head-on with *"a residual named in a commit message has no reader."*
+**A design note you are told to put in the code often points at a ticket that
+is not on origin yet**, because the peer who filed it is holding their push
+behind a measurement, which is itself correct discipline. Both rules are right
+and they fire at the same moment.
+
+Worked, 2026-09-07, `ba2bd5b05` then `2556d652a`. A seat landed a visibility
+fix whose companion finding lived in a peer's ticket. It checked, the slug was
+not on origin — the peer was holding the push behind a `--tier limited` run —
+and it **deliberately omitted the citation**, having shipped one ghost citation
+earlier the same session and caught it by re-grepping. A coordinator then told
+it the design note would "die in a message." Both were half right.
+
+**The ordering that satisfies both: put the CONTENT in the code comment now,
+and the POINTER in when it resolves.** The content is what a reader needs and
+it has no dependency on anyone's push; the slug is a convenience that becomes a
+lie if written early. `2556d652a` was the second half — comment-only, added the
+citation once the ticket reached origin, and carried across the part of the
+peer's note that had been missing.
+
+**Two things this ordering buys that neither rule alone does.**
+
+- **The interval is covered.** Between the fix landing and the ticket landing,
+  the next reader of that function sees the reasoning rather than a dangling
+  slug or nothing at all. That interval is exactly as long as somebody else's
+  test run and nobody controls it.
+- **The second pass is where the note gets COMPLETED, not just cited.** Going
+  back to add a pointer means re-reading the peer's note against the code, and
+  that is when the missing half surfaced: the new key must stay a **separate
+  key compared in order** and never be folded into the existing rank — a
+  mistake already made once in that same function, where it inverted the
+  answer. A citation added blind at commit time would not have found it.
+
+**So the test for a design note is not "did I cite it" but "would a reader who
+never finds the ticket still be able to act on this?"** If yes, the pointer is
+an optimisation and may safely wait. If no, the note is not in the code yet,
+whatever the comment says.
+
+
 ## A CENSUS OVER THE CORPUS YOU HAVE IS A CENSUS OVER THE HABITS OF THE CODE THAT CORPUS IS MADE OF
 
 frankB, 2026-09-06, correcting a comment they had written and pushed. The comment
