@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog
+status: done
 tags: [cross-target, wasm32, managed-locals, root-cause]
 summary: "One concept — release a frame's managed locals at scope exit — is implemented seven times: symtab.inc EmitManagedLocalCleanup (x86-64), five hand-written arms in ir_codegen.inc (i386/arm32/aarch64/xtensa/riscv32), and WasmEmitManagedLocals in ir_codegen_wasm32.inc. Measured 2026-09-06: the five register arms are decision-for-decision identical and the wasm32 copy was missing a whole row (fixed, d58828d8c) and still consults neither skip predicate. CLAUDE.md's rule is that three mechanisms for one concept is a design flaw; this is seven, and the copy that drifts is never the one anyone measures."
 ---
@@ -169,3 +169,97 @@ convention: **a distinction that only exists in prose gets violated by the next
 writer.** That is the whole argument for this ticket. Seven copies stayed in
 sync by hand for as long as someone kept re-syncing them, and the copy that
 drifted — wasm32, missing an entire arm — is the one nobody was measuring.
+
+## Resolution — all seven copies are one classification
+
+Landed one backend per commit, as the plan above required. Every step is an
+ancestor of origin/master, verified with `merge-base --is-ancestor`:
+
+| step | copy | commit |
+| --- | --- | --- |
+| 1 | x86-64 + the SXR constants | `491035cfe` |
+| 2 | i386 | `8f61a1974` |
+| 3 | arm32 | `e8d8ad082` |
+| 4 | aarch64 | `736a3177a` |
+| 5 | xtensa | `925e80f1e` |
+| 6 | riscv32 | `6e5bed1ab` |
+| 7a | the by-ref skip, asked once | `55e7c31c2` |
+| 7b | wasm32 | `687701433` |
+
+`EmitManagedLocalCleanupForTarget` now dispatches emission per target and asks
+`ScopeExitReleaseAction` for the classification. Seven decision chains became
+one; the emission stayed per-target, which is the part that genuinely is.
+
+### DID THE OTHER SIX GAIN A SKIP THEY DID NOT HAVE? No — and it is structural, not just measured
+
+Asked by frankA, and it is the right question to ask of a behaviour change
+wearing a refactor's commit verb. wasm32 carried `not Syms[i].IsRef` and the
+other six did not, so step 7a either names that difference or normalises it away
+by accident.
+
+**The answer is that the term was REDUNDANT, not merely unreached.** `IsRef` is
+True only on a symbol whose `Kind` is `skParam` — eight assignment sites in the
+whole compiler, enumerated in `55e7c31c2`, five of them setting False. Every one
+of the seven loops already requires `Kind = skLocal`, which excludes `skParam`.
+So the guard could not fire on any target, before or after.
+
+Both directions were measured and both are byte-identical:
+
+```
+removing it from wasm32   95 identical, 0 differ
+adding it to all seven    0 differ — x86_64 54, i386 51, arm32 51,
+                          aarch64 51, riscv32 54, xtensa 53, wasm32 95
+```
+
+Deleting it would have been byte-identical too, and that is not what was done:
+the invariant it rests on is enforced NOWHERE, so if a frontend ever gives a
+local a borrowed slot, six of seven backends would release storage they do not
+own — silently, because a double free is not a diagnostic. One predicate to
+change beats seven to remember, which is this ticket's whole argument.
+
+### The control, at every step
+
+A **byte-identical A/B**, not a green: the previous step's compiler and this
+step's compiler compile the same corpus for all seven targets and every object
+must `cmp` equal. Final tally across the group: `identical=314 differs=0
+both-refused=113`. The harness asserts the artefact EXISTS before comparing,
+because a `cmp` of two files that were never built reports identical and means
+nothing.
+
+Two things that A/B cannot see, run beside it:
+
+- **`tools/assert_no_leak.sh`**, because a leak passes every value assertion by
+  construction — the releases could vanish entirely and the corpus would still
+  print correct answers. `allocs=31686 frees=31680 live=6` against a bound of
+  200, identical at every step.
+- **A one-line probe from each frontend the quick tier does not cover** — NilPy,
+  C, Rust, Zig — because the self-host fixedpoint proves nothing about a
+  construct `compiler.pas` never writes. Under a second each, and the only thing
+  here that would have caught a marshalling change.
+
+### What it enabled, and what it cost
+
+The thunk (`50e25f5f0`, `3d7cde305`) is only writable because the classification
+is one function: `ManagedSweepSlotCount` asks `ScopeExitReleaseAction` the same
+question the emitter asks, so the count cannot drift from what is emitted.
+Against the seven-copy code it would have been an eighth copy of the skip logic.
+That is **-31.9%** off the compiler's own artefact and **-2.04%/-2.51%**
+wall-clock (`89a218380`, frank-subcoord).
+
+One thing this did NOT establish, recorded because a later reader will want it:
+`e86101766` measured that the sweep **cannot** skip unnamed temps. ~98% of swept
+slots are compiler-minted temps, so that was the attractive optimisation, and it
+is unsafe — `:13838`'s "does not outlive the statement" is about the temp's
+VALUE, while the release loop needs a claim about OWNERSHIP of what it
+references.
+
+### No tstate verdict covers this
+
+Breadth is down: seventeen `infra … no report (rc=1)` rows on seven in the last
+sixty commits, against zero in the 177 before that. So no cross-target verdict
+has seen any of these shas, and the byte-identical A/B plus the per-frontend
+probes are the whole of the evidence rather than a supplement to a tier run.
+Said explicitly because a reader would otherwise assume T covered it.
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
