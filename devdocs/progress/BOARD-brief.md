@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:25 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:149 backlog-nilpy:97 backlog-tools:53 backlog-pascal:42 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3534 rejected:79`
+`working:24 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:149 backlog-nilpy:97 backlog-tools:53 backlog-pascal:44 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3535 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization` [P] — owner: frankS
-- `bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
@@ -69,7 +68,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 443, ranked
+## Ready — top 30 of 445, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
@@ -102,4 +101,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [U]` decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative (unblocks 1)
 
-_413 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_415 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

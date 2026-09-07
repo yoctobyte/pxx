@@ -1,8 +1,8 @@
 ---
 prio: 65
 track: P
-status: working
-summary: "CAUSE FOUND 2026-09-07, and it is NOT what this ticket assumed. The class-typed hidden parameter in position 2 is NOT ExpStack -- it is `Result`. A nested FUNCTION's OWN `Result` is captured as if it were the ENCLOSING function's, snapshotting the enclosing type: PeekOper is declared (OpStackTop:Integer, Result:CLASS, OpStack:array) because DoParseExpression returns TPasExpr, while the sibling call in PopOper resolves the `Result` actual in POPOPER's scope, where it is PopOper's own TToken. Integer vs class, exactly the reported mismatch. Measured with a new PXXDBG p.lift probe printing each lift descriptor; reduced to 26 lines. A SECOND DEFECT SHARES THE CAUSE: `Outer := 99` inside a nested FUNCTION is rewritten to the token `Result`, which then binds to the NESTED function's own result -- pxx says `cannot assign Integer to AnsiString` where fpc assigns 99. Two variables spelled `Result`, i.e. a sentinel collision, so neither can be fixed alone: excluding `Result` from capture without giving the enclosing one its own spelling turns today's loud type error into a silent mis-assignment."
+status: done
+summary: "FIXED 2026-09-07. A nested FUNCTION's OWN `Result` was captured as if it were the ENCLOSING function's, snapshotting the enclosing type: PeekOper was declared (OpStackTop:Integer, Result:CLASS, OpStack:array) because DoParseExpression returns TPasExpr, while the sibling call in PopOper resolved the `Result` actual in POPOPER's scope, where it is PopOper's own TToken. Cause found with a new PXXDBG p.lift probe, reduced to 26 lines. The fix is one condition in ParseNestedRoutine's free-variable scan: when the nested routine is a FUNCTION, `Result` is an OWN name and is not captured -- a nested PROCEDURE, which has no result, still captures it. fcl-passrc's pparser.pp now compiles clean (3.5s, 1806 procs) where the pin refuses it. Regression assertion test_nestownres26. The two other Result-spelling defects this ticket had bundled in are MEASURED UNCHANGED by the fix and are filed separately.""
 owner: frankS
 ---
 
@@ -247,3 +247,74 @@ routine, so each name means one thing:
   `Result := 42` is visible in the enclosing function afterwards (measured).
 - nested FUNCTION — `Result` is its own and must not be captured; the enclosing
   NAME still refers to the enclosing result and needs the distinct spelling.
+
+
+## FIXED — `14d483f74974`, and the "must be fixed together" claim was wrong
+
+`ParseNestedRoutine`'s free-variable scan, `compiler/pasparser_decl.inc`, one
+condition ahead of the capture logic:
+
+```pascal
+if (Tokens[nestedStart].Kind = tkFunction) and CaseEqual(nm, 'Result') then
+begin
+  Inc(i); Continue;
+end;
+```
+
+`nestedStart` is the `procedure`/`function` token itself, so the discriminator
+costs nothing and is exact. A nested PROCEDURE is untouched: it has no result of
+its own, so its `Result` really is the enclosing function's and fpc confirms the
+write survives the enclosing return.
+
+**AND THE CAPTURED PARAMETER WAS DEAD.** Inside the lifted body the function's
+own result shadows a parameter of the same name, so nothing ever read it —
+measured before and after: a nested function's `Result := 7` leaves the
+enclosing result untouched either way. This is a REMOVAL, not a behaviour swap,
+which is the whole reason it can land alone.
+
+### The section above headed "Why they must be fixed together" is RETRACTED
+
+It reasoned that dropping the capture would turn defect 2 (`Outer := 99` in a
+nested FUNCTION) from a loud type error into a silent mis-assignment. **It does
+not, and the reason is the shadowing above** — `Outer := 99` was rewritten to
+the token `Result`, which already bound to the nested function's own result and
+never to the dead parameter. Measured on both compilers with the same 15-line
+program:
+
+| | |
+| --- | --- |
+| pin v407 | `pascal26:6: error: incompatible types: cannot assign Integer to AnsiString` |
+| HEAD `14d483f74974` | *identical, byte for byte* |
+
+A prediction about a behaviour change, refuted by running it. Filed as
+[[bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results]]
+(prio 55), which now carries the correct account of why it is not a one-liner:
+the enclosing result needs its own spelling, and after this change there is no
+lifted parameter to aim the rewrite at either.
+
+A THIRD defect surfaced while building the fixture and is unrelated to capture:
+`Outer.FV := 33` in ANY nested routine is read as a recursive CALL and spins
+until it segfaults, because the enclosing-name rewrite is gated on the next
+token being `:=`. Also identical on the pin.
+[[bug-p-a-qualified-enclosing-function-name-in-a-nested-routine-recurses]] (prio 60).
+
+## Verified
+
+- **The corpus wall is gone.** `program X; uses pparser;` against
+  `/usr/share/fpcsrc/3.2.2/packages/fcl-passrc/src` compiles clean at
+  `14d483f74974` — 3.5s, `code=1031960B procs=1806`. The pinned compiler on the
+  same command still prints `no overload of PeekOper$62727 matches these
+  arguments / (Integer, Integer, record) / PeekOper$62727(Integer, class, array
+  of record)`, this ticket's error exactly. Positive control, right population.
+- **`test_nestownres26`** —
+  `test/test_a_nested_functions_own_result_is_not_the_enclosing_ones.pas`, five
+  rows identical to fpc 3.2.2. **The enclosing function returns a CLASS and the
+  nested ones return LongInt on purpose**: make the two result types agree and
+  the spurious capture becomes type-compatible and nothing can disagree with it,
+  which is why every earlier reduction compiled cleanly. The pin refuses this
+  file with the ticket's own error message.
+- **`test_nestres26`** (the enclosing-name rewrite's existing control, including
+  `Recurse := Recurse(k - 1) + 1`) unchanged and green.
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

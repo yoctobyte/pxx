@@ -9719,6 +9719,43 @@ begin
         TokSrcOff[i] := 0; TokSrcLen[i] := 0;   { synthesized spelling; see ShiftTokParallel }
         nm := 'Result';
       end;
+      { A NESTED **FUNCTION**'S `Result` IS ITS OWN, AND CAPTURING IT NAMES THE
+        WRONG VARIABLE AT EVERY SIBLING CALL SITE.
+
+        A nested PROCEDURE has no result, so its `Result` really is the
+        enclosing function's and must still be captured -- measured against fpc
+        3.2.2: a nested procedure's `Result := 42` is still there when the
+        enclosing function returns. A nested FUNCTION is the opposite case and
+        was treated the same.
+
+        WHAT IT COST. The capture is snapshotted with the ENCLOSING result's
+        type, so fcl-passrc's `PeekOper: TToken`, nested in
+        `DoParseExpression: TPasExpr`, was lifted as
+        `PeekOper$62727(OpStackTop: Integer, Result: CLASS, OpStack: array)`.
+        Actuals are spliced at each call site AS NAMES and resolved in THAT
+        scope, so the sibling call `Result := PeekOper` inside `PopOper` passed
+        PopOper's own TToken -- `(Integer, Integer, record)` against
+        `(Integer, class, array of record)`, and the unit would not compile.
+
+        AND THE PARAMETER WAS DEAD ANYWAY: inside the lifted body the function's
+        own result shadows a parameter of the same name, so nothing ever read
+        it. Measured -- a nested function's `Result := 7` leaves the enclosing
+        result untouched, both before and after this change. That is why
+        dropping the capture is a removal and not a behaviour swap.
+
+        UNCHANGED, DELIBERATELY: the enclosing function's NAME written inside a
+        nested FUNCTION (`Outer := 99`) is rewritten to the token `Result` a few
+        lines above and therefore binds to that function's own result. It did
+        before this line existed too -- the capture param was already shadowed --
+        so this is neither fixed nor made worse here. Filed separately as
+        bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results.
+        Fixing it means giving the enclosing result its own spelling, which is a
+        different change from this one.
+        bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals }
+      if (Tokens[nestedStart].Kind = tkFunction) and CaseEqual(nm, 'Result') then
+      begin
+        Inc(i); Continue;
+      end;
       if CaseEqual(nm, 'Self') then
       begin
         needSelf := True;
