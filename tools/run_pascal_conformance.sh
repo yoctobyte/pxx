@@ -193,11 +193,32 @@ bump_fail() {  # bump_fail TAG
   fi
 }
 
+# tag_of REASON [STATUS] -> the classification a skip reason leads with.
+# ONE CLASSIFIER, TWO CONSUMERS: the per-test report and the summary tally. They
+# were about to be two greps and that is how the counts drift -- see the tally
+# comment at the bottom of this file for the measurement that made it a function.
+tag_of() {
+  case "$1" in
+    wontfix:*)         printf 'wontfix' ;;
+    gap:*)             printf 'gap' ;;
+    decided:*)         printf 'decided' ;;
+    accepts-invalid:*) printf 'accepts-invalid' ;;
+    *)
+      _l="$(printf '%s' "$1" | sed -n 's/^\([a-z][a-z-]\{0,19\}\):.*/\1/p')"
+      if [ -n "$_l" ]; then printf 'UNKNOWN-TAG:%s' "$_l"
+      elif [ "${2:-}" = skip ]; then printf 'untriaged'
+      else printf '-'
+      fi ;;
+  esac
+}
+
 emit() {  # emit STATUS NAME REASON
   [ -n "$REPORT" ] || return 0
   _st="$1"; _nm="$2"; _rs="$3"; _tag="-"
   # FOUR TAGS ARE IN USE AND THIS KNEW TWO. Measured 2026-09-06: pxx.skip
-  # carries gap (86), wontfix (22), decided (5) and accepts-invalid (2). The
+  # carries gap (86), wontfix (22), decided (5) and accepts-invalid (2) -- a
+  # dated reading, not a live one; the runner PRINTS the current tally now
+  # (see the summary at the bottom), so do not refresh these numbers here. The
   # file's own header documents only the first two, so the last seven rows were
   # reported to the dashboard as "untriaged" -- i.e. as rows nobody had judged --
   # with their tag still glued to the front of the reason text. A tag the tool
@@ -212,20 +233,11 @@ emit() {  # emit STATUS NAME REASON
   # a leading lowercase word of <=20 chars followed by a colon, so a reason
   # beginning "note: ..." is caught as an unknown tag and looked at, while
   # prose containing a colon later in the line is untouched.
-  case "$_rs" in
-    wontfix:*)         _tag="wontfix";         _rs="$(printf '%s' "$_rs" | sed 's/^wontfix:[ \t]*//')" ;;
-    gap:*)             _tag="gap";             _rs="$(printf '%s' "$_rs" | sed 's/^gap:[ \t]*//')" ;;
-    decided:*)         _tag="decided";         _rs="$(printf '%s' "$_rs" | sed 's/^decided:[ \t]*//')" ;;
-    accepts-invalid:*) _tag="accepts-invalid"; _rs="$(printf '%s' "$_rs" | sed 's/^accepts-invalid:[ \t]*//')" ;;
-    *)
-      _lead="$(printf '%s' "$_rs" | sed -n 's/^\([a-z][a-z-]\{0,19\}\):.*/\1/p')"
-      if [ -n "$_lead" ]; then
-        _tag="UNKNOWN-TAG:$_lead"
-        _rs="$(printf '%s' "$_rs" | sed "s/^$_lead:[ \t]*//")"
-      elif [ "$_st" = skip ]; then
-        _tag="untriaged"
-      fi
-      ;;
+  _tag="$(tag_of "$_rs" "$_st")"
+  case "$_tag" in
+    -|untriaged) ;;
+    UNKNOWN-TAG:*) _rs="$(printf '%s' "$_rs" | sed "s/^${_tag#UNKNOWN-TAG:}:[ \t]*//")" ;;
+    *)             _rs="$(printf '%s' "$_rs" | sed "s/^$_tag:[ \t]*//")" ;;
   esac
   # strip stray tabs from reason so the TSV stays 5-column
   _rs="$(printf '%s' "$_rs" | tr '\t' ' ')"
@@ -261,6 +273,7 @@ finish_diagmap() {
 }
 
 pass=0; fail=0; skip=0; auto=0; failed=""; idx=-1
+sk_gap=0; sk_wontfix=0; sk_decided=0; sk_ai=0; sk_other=0   # skip breakdown by tag_of
 retried=0; stale=0; stillgap=0; stale_list=""; retrying=0   # --retry-skips tallies (set -u is on)
 
 for name in $(list_tests); do
@@ -341,6 +354,13 @@ EOF
       retried=$((retried+1))
     else
       skip=$((skip+1))
+      case "$(tag_of "$reason" skip)" in
+        gap)             sk_gap=$((sk_gap+1)) ;;
+        wontfix)         sk_wontfix=$((sk_wontfix+1)) ;;
+        decided)         sk_decided=$((sk_decided+1)) ;;
+        accepts-invalid) sk_ai=$((sk_ai+1)) ;;
+        *)               sk_other=$((sk_other+1)) ;;
+      esac
       emit skip "$name" "$reason"
       echo "SKIP $name — $reason"
       continue
@@ -488,6 +508,21 @@ if [ "${RETRY_SKIPS:-0}" = "1" ]; then
 fi
 finish_diagmap
 echo "$LABEL: $pass pass, $fail fail, $skip skip, $auto auto-gated (of $((pass+fail+skip+auto)))"
+# THE SKIP BREAKDOWN IS PRINTED BY THE RUNNER BECAUSE EVERY SESSION THAT WANTED
+# IT REACHED FOR grep -c INSTEAD, AND grep -c 'gap:' IS WRONG ON THIS FILE.
+# Measured 2026-09-07 (frankS): it answers 61 where the real count is 54 -- it
+# matches this file's own two-line LEGEND in the pxx.skip header and five
+# decided:/wontfix: rows whose PROSE says the word "gap:" while explaining what
+# used to be one. An instrument correct about something else: it never errors,
+# and the number is quotable, so it travelled into three of my own commit
+# messages and into a peer's relay before anyone parsed the field. The tally
+# below cannot drift from the per-test report because both call tag_of, and it
+# cross-checks itself: the four buckets plus other MUST equal $skip, and the
+# runner says so out loud rather than trusting that they do.
+if [ "$((sk_gap+sk_wontfix+sk_decided+sk_ai+sk_other))" != "$skip" ]; then
+  echo "$LABEL: INTERNAL: skip tally $((sk_gap+sk_wontfix+sk_decided+sk_ai+sk_other)) != skip $skip" >&2
+fi
+echo "$LABEL: skips by tag: $sk_gap gap, $sk_wontfix wontfix, $sk_decided decided, $sk_ai accepts-invalid, $sk_other untagged/unknown"
 if [ "$fail" != "0" ]; then
   echo "$LABEL: FAILURES:$failed"
   exit 1

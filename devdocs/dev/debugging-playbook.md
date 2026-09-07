@@ -12943,9 +12943,16 @@ cast NODE is.
 
 ## THE FPC SEED CANARY, THE LIVE CASE, WITH THE IDENTIFIER AND THE LINE
 
-CLAUDE.md says to gate BEFORE committing because `gate.sh quick`'s FPC seed canary only
-arms while `compiler/**` has **uncommitted** changes. Here is that rule being paid for,
-2026-09-06 (frankB):
+**THE ARMING RULE IN THIS SECTION'S OPENING LINE WENT STALE AND IS CORRECTED BELOW; the
+measurement is untouched and still the best single argument for the canary.** It read
+"CLAUDE.md says to gate BEFORE committing because the FPC seed canary only arms while
+`compiler/**` has **uncommitted** changes." That has not been true since the merge-base
+arming landed: `tools/gate.sh` arms against `git merge-base origin/master HEAD`, which
+covers **committed-but-unpushed**, and arms a second way when origin/master's `compiler/`
+has moved past the last sha this clone proved. The gate's own comment calls the old rule
+*"a footgun worth not copying"*, and CLAUDE.md now says the same. Gate before or after the
+commit; what still holds is that a clean tree is no reason to skip, and that FPC being
+absent is a SKIP and never a pass. Here is the canary being paid for, 2026-09-06 (frankB):
 
 ```
 self-host:   converged after 1 round(s)      <- clean
@@ -12962,6 +12969,79 @@ correctly and only one of them is telling you the file is wrong.
 Nothing else in the loop can see this class — not the fixedpoint, not `--tier quick` — and
 the canary sees it only while the change is uncommitted. That is the entire argument for
 gating dirty, in one measured line.
+
+## THE CANARY'S DEFECT CLASS HAS A NAME: **WIDENING AN INTERFACE** — and one half of it is a SILENT NARROWING that no other instrument here can see
+
+Two seed-canary REDs in one session, 2026-09-07 (frankS), on a Track P change. Both were
+one-line fixes. Both had a green repro, a green fixture, a green 550-file conformance
+corpus and a green `make compiler/pascal26` self-host fixedpoint on either side of them.
+**Neither was reachable by anything except the canary.** What makes them worth a section
+is not the two bugs — it is that they are the same bug, and it has a trigger you can watch
+for:
+
+> **Both were introduced while WIDENING AN INTERFACE.** One a parameter list, one a return
+> type. That is where pxx's prescan-and-be-lax posture diverges most from a strict
+> single-pass compiler, which is exactly what the FPC seed is.
+
+**RED #1 — a forward declaration updated in one of two places.**
+
+```
+pyforwards.inc: TryScalarNamedCast(castTk: TTypeKind; semId, castCap: Integer)   <- updated
+pyforwards.inc: TryScalarNamedCast(castTk: TTypeKind; semId: Integer)            <- missed
+```
+```
+FPC: Wrong number of parameters specified for call to "TryScalarNamedCast"
+     Found declaration: TryScalarNamedCast(TTypeKind;LongInt)
+```
+
+pxx prescans headers, so it resolves the call against the definition and never looks at the
+stale forward. This is the same family as the section above — declaration order, single-pass
+versus prescan — and it is the *expected* half.
+
+**RED #2 is the one to actually remember, because it is not a declaration-order bug at
+all.**
+
+```pascal
+function EnumeratorCurrentTk(...): TTypeKind;
+...
+  EnumeratorCurrentTk := UPropTk[pri];     { UPropTk is an array of Integer }
+```
+```
+FPC: Incompatible types: got "LongInt" expected "TTypeKind"
+```
+
+**PXX ASSIGNS AN `Integer` COLUMN TO A TYPED-ENUM RESULT AND SAYS NOTHING.** The fix is
+`IntToTypeKind(UPropTk[pri])`, which is what every other reader of that column already
+does. Take the general form seriously:
+
+> **An integer column assigned to a typed-enum result, narrowed without a word, is a
+> generator of exactly the class this repo calls expensive: a plausible wrong value, far
+> from the cause.** It does not crash. It produces a `TTypeKind` whose ordinal happens to
+> be whatever the parallel array held, and every consumer downstream reasons correctly
+> about a type that was never inferred.
+
+The tables in `defs.inc` are full of `array of Integer` columns that shadow a typed enum
+(`UPropTk`, `AliasTk`, `ASTTk`'s neighbours, the `Ord(...)`-keyed operator rows). Every one
+of them is a place where a `:=` compiles clean under pxx and means nothing. **The seed
+canary is the only instrument in this repo that objects**, and it objects only while the
+change is in your clone and unpushed.
+
+**So the practical rule, and it costs one gate:**
+
+- Touching a parameter list, a return type, or a forward declaration in `compiler/**`?
+  **Run `gate.sh quick` on that change specifically**, not on the batch. It arms against
+  the merge-base, so committed-but-unpushed is covered, and each commit is gated before it
+  is pushed rather than four at once.
+- **Grep for the SIBLING forward.** `pyforwards.inc` holds two of some routines on purpose;
+  a widening that updates one is invisible until FPC reads the file top to bottom.
+- **When you read an `Integer` column into anything typed, convert explicitly** — the
+  converter already exists next to the column. A bare `:=` there is not shorter, it is
+  unchecked.
+
+**And the reason this is a canary section rather than a Track P section:** everything that
+found these two was generic. A backend port adding a per-target arm, a frontend threading a
+new parameter, a table gaining a column — all three are interface widenings, and all three
+have the same two failure shapes.
 
 ## THE SECOND INSTANCE OF THE KEY RULE, AND IT IS WHY THE GENERAL FORM IS THE KEEPER
 
