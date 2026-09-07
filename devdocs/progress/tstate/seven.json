@@ -14758,6 +14758,11 @@
   "verdict": "RED",
   "wall": 714.5
  },
+ "last_idle_tier_try": {
+  "date": "2026-09-07T16:33:22Z",
+  "sha": "925dcb29d13d840521b96efb7a79fb23eef60d0c",
+  "tier": "full"
+ },
  "last_opt": {
   "date": "2026-09-04T07:51:24Z",
   "sha": "cf9b14600039c2f62d7251b0e05330fb74827be9"
