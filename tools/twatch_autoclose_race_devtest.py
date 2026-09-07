@@ -24,7 +24,14 @@ What discriminates is evidence already in the record: the closing green was
 itself FLAKY (the race fired while we watched), or the stub is a REPEAT variant
 (`-2`, `-3` — stub_slug_for_filing opens those only when a resolved predecessor
 exists, so the suffix IS the record that this job went red, was closed, and came
-back). Neither needs new state.
+back), or the green is AT THE SAME SHA as the red, where no tree change
+separates the two answers. None needs new state.
+
+The same-sha arm was added 2026-09-07 after
+test-threads#src:test/test_threadsafe_class_finalize_race.pas was closed by a
+full-tier green at 918842a5fd43 that the native tier had called RED at that
+same sha ten minutes earlier. It was red again four minutes later and stayed
+red. The close annotation printed both shas and nothing compared them.
 
 Run: tools/twatch_autoclose_race_devtest.py   (exit 0 = pass)
 """
@@ -94,6 +101,48 @@ def t_a_repeat_stub_never_closes_on_one_green():
     return "repeat stubs are refused"
 
 
+def t_a_green_at_the_reds_own_sha_never_closes():
+    """The arm that catches the finalize-race case (2026-09-06).
+
+    A green at the SAME sha as the red has no tree change behind it, so it
+    cannot be a fix. This is free: close_stub_tickets already holds both."""
+    why = tw.one_green_cannot_close("regression-j", "regression-j", rec(),
+                                    "918842a5fd43", "918842a5fd43")
+    assert why, (
+        "a stub was closed by a green AT THE SAME SHA the red was found at. "
+        "Nothing about the tree changed between the two runs, so the job "
+        "returned two different answers about one tree — that is "
+        "nondeterminism, not a fix")
+    assert "same sha" in why.lower(), \
+        "the reason does not name what was observed: %r" % why
+    return "a same-sha green is refused"
+
+
+def t_the_sha_arm_ignores_abbreviation_width():
+    """`bad` is stored full-length and the report sha is too, but the
+    annotation prints 12 — comparing raw would miss a real match."""
+    full = "918842a5fd4324bf93b3d2eeb84f7840a5844d22"
+    assert tw.one_green_cannot_close("regression-j", "regression-j", rec(),
+                                     full, "918842a5fd43"), \
+        "a full sha did not match its own 12-char abbreviation"
+    assert tw.one_green_cannot_close("regression-j", "regression-j", rec(),
+                                     "918842a5fd43", full), \
+        "a 12-char abbreviation did not match its own full sha"
+    return "the sha arm compares at 12 chars either way round"
+
+
+def t_a_green_at_a_later_sha_still_closes():
+    """The rule must stay useful: a genuine fix lands at a LATER sha, and
+    that is the case auto-close exists for."""
+    assert tw.one_green_cannot_close("regression-j", "regression-j", rec(),
+                                     "e678b743d3bb", "918842a5fd43") is None, \
+        "a green at a later sha no longer closes — auto-close is now inert"
+    assert tw.one_green_cannot_close("regression-j", "regression-j", rec(),
+                                     None, None) is None, \
+        "a caller that passes no shas (older call shape) now refuses to close"
+    return "a later-sha green still closes"
+
+
 def t_the_retry_classes_arm_still_applies():
     for cls in sorted(tm.RUN_RETRY_CLASSES):
         assert tw.one_green_cannot_close("regression-j", "regression-j",
@@ -139,6 +188,9 @@ def t_the_incident_is_covered_and_the_class_rule_alone_would_miss_it():
 TESTS = [t_a_deterministic_first_stub_still_closes,
          t_a_flaky_green_never_closes,
          t_a_repeat_stub_never_closes_on_one_green,
+         t_a_green_at_the_reds_own_sha_never_closes,
+         t_the_sha_arm_ignores_abbreviation_width,
+         t_a_green_at_a_later_sha_still_closes,
          t_the_retry_classes_arm_still_applies,
          t_the_duplicated_class_set_has_not_drifted,
          t_the_incident_is_covered_and_the_class_rule_alone_would_miss_it]

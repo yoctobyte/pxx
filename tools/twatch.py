@@ -5035,8 +5035,38 @@ STUB_MARKER = "auto-filed by twatch"
 # Refusing is NOT silent and NOT a leak: the ticket is annotated with the green
 # and the reason, so whoever closes it by hand has the evidence rather than an
 # older ticket that simply stopped moving.
-def one_green_cannot_close(base, slug, job_rec):
+# A THIRD free discriminator, added 2026-09-07 after the incident below:
+#
+#   * the closing green is AT THE SAME SHA the red was found at. Nothing about
+#     the tree changed between the two observations, so the transition cannot
+#     be a fix -- it is one job reporting two different answers about one tree,
+#     which is the definition of nondeterminism. It costs nothing:
+#     close_stub_tickets already holds both shas and already writes them into
+#     the annotation.
+#
+# It happened: test-threads#src:test/test_threadsafe_class_finalize_race.pas
+# went NEW-RED in the native tier at 918842a5fd43 (2026-09-06T12:52Z) and was
+# reported FIXED in the full tier at THE SAME SHA ten minutes later, which
+# auto-closed it. It was red again four minutes after that and has been red in
+# every report since, in both tiers. None of the three arms above could fire:
+# it was a first stub (not a repeat), it classes `unit` (not a retry class),
+# and the closing run did not retry (not flaky). The close annotation stated
+# the contradiction in its own words -- "passes at 918842a5fd43 (tier full);
+# it was red at 918842a5fd43" -- and nothing read it back.
+#
+# The cost was not the paperwork. The false green also became a `last good`
+# bound: the reopen stub `-2` recorded last good `918842a5fd43`, a sha that had
+# been red ten minutes earlier, and the 2-commit range that produced contains
+# no buildable file at all -- so the bound EXCLUDED the only commit in the real
+# untested window that touched the allocator. A wrong close does not just lose
+# a ticket, it aims the next bisect away from the bug.
+def one_green_cannot_close(base, slug, job_rec, sha=None, bad=None):
     """Why a single green must not auto-close this stub, or None if it may."""
+    if sha and bad and sha[:12] == bad[:12]:
+        return ("the green is at the SAME sha the red was found at (`%s`), so "
+                "no tree change separates them — the job returned two "
+                "different answers about one tree, which is nondeterminism "
+                "rather than evidence of a fix" % sha[:12])
     if job_rec and job_rec.get("flaky"):
         return ("the job FAILED and passed on a retry in this very run, so "
                 "this green is the race firing rather than evidence against it")
@@ -5131,7 +5161,8 @@ def close_stub_tickets(clone, host, closed, sha, report):
         job_rec = next((j for j in report["jobs"]
                         if (j.get("sel") or j.get("name")) == r.get("job")
                         or j.get("name") == r.get("job")), None)
-        why_not = one_green_cannot_close(base, slug, job_rec)
+        why_not = one_green_cannot_close(base, slug, job_rec,
+                                         sha, r.get("bad"))
         if why_not:
             if sha[:12] in body:
                 print("twatch: %s stays open (%s) — already annotated at %s"
