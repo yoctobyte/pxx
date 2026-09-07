@@ -94,4 +94,4 @@ tier — a day later here. `gate.sh quick`'s `this push wires the tests it adds`
 row covers new test FILES, not new assertions inside an existing one. Naming it
 rather than leaving it implied: **Track T, unfiled**, and the cheap version is a
 row that recomputes each count from the program rather than asserting a literal.
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b2af9952b.
