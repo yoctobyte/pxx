@@ -476,6 +476,14 @@
   }
  ],
  "host": "seven",
+ "infra": {
+  "count": 1,
+  "last": "2026-09-07T01:33:12Z",
+  "reason": "no report (rc=1)",
+  "sha": "594cfda54ef21093605d1db119857e59ad8bd822",
+  "since": "2026-09-07T01:33:12Z",
+  "tier": "full"
+ },
  "job_last_pass": {
   "demos#00": "f84be3fd43df284d88b1636929c5ec547bffc4da",
   "fpc-bootstrap#src:compiler/compiler.pas": "594cfda54ef21093605d1db119857e59ad8bd822",
