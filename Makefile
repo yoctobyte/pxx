@@ -6133,6 +6133,19 @@ test-core: $(COMPILER)
 	  || { echo 'test_method_overload_arg_typecheck_fails_multi: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_overload_arg_typecheck_ok_multi.pas $(TESTTMP)/test_movlok26
 	tools/expect_same.sh test_movlok26 "$$($(TESTTMP)/test_movlok26)" "$$(cat test/test_method_overload_arg_typecheck_ok_multi.expected)"
+	# The RANKING half of the same machinery: an integer argument against a
+	# same-arity overload whose other parameter is not a number. OverloadArgRank's
+	# widening arm asked TypeIsOrdinal, which admits tyPointer and tyBoolean, so
+	# the integer scored a PREFERRED conversion against six non-numeric parameter
+	# spellings, tied with the real widening onto LongInt, and declaration order
+	# decided. Every pair below declares the non-integer one FIRST, because with
+	# the integer overload first the tie resolves to it by accident and the bug is
+	# invisible; the three control blocks (order reversed, an exact LongInt
+	# argument, a Char argument) must stay identical. Positive control against the
+	# PINNED compiler: six rows differ there, all three controls match.
+	# .expected is fpc 3.2.2's, byte for byte.
+	./$(COMPILER) test/test_overload_int_arg_prefers_the_integer_overload.pas $(TESTTMP)/test_ovlint26
+	tools/expect_same.sh test_ovlint26 "$$($(TESTTMP)/test_ovlint26)" "$$(cat test/test_overload_int_arg_prefers_the_integer_overload.expected)"
 	# type. Same family as the two rows above and the same architectural gap:
 	# TypesCompatible sees two KINDS. It grants tyPointer <- tyString for a real
 	# reason (a Pascal string marshals to a const char*, so a C binding needs no

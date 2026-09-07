@@ -1,0 +1,15 @@
+-- Integer argument, non-integer parameter declared first
+int 65
+int 65
+int 65
+int 65
+int 65
+int 65
+-- control: declaration order reversed
+int 65
+-- control: an exact LongInt argument already won
+int 65
+int 65
+-- control: a Char argument still prefers the string overload
+string A
+done

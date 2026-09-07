@@ -4,7 +4,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: working
+status: done
 found: 2026-09-07
 found-by: frankS
 owner: frankA
@@ -67,3 +67,6 @@ the multi-candidate path. The row is deliberately ABSENT from
 `test/test_method_overload_arg_typecheck_ok_multi.pas` with a comment saying
 why: recording today's wrong answer as expected output would turn that fixture
 RED the day this is fixed.
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

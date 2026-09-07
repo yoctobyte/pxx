@@ -2,6 +2,7 @@ fmt 2
 fmt n 7
 cmp nil
 cmp set
+cmp n 4
 raw
 raw
 raw str lit

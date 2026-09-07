@@ -59,14 +59,16 @@ begin
   Fmt(7);               { and the scalar sibling still resolves }
   SetCmp(nil);          { nil into a procedural parameter }
   SetCmp(@MyCmp);       { a routine as a value }
-  { `SetCmp(4)` is NOT here, and its absence is deliberate. pxx binds an integer
-    literal to the PROCEDURAL overload rather than to the exact LongInt one --
-    measured on the PINNED compiler too, so it predates this gate and is not
-    what this file is about. Filed as
-    bug-p-an-integer-argument-binds-a-procedural-overload-over-an-exact-integer-one.
-    Putting the wrong answer in a .expected would make this fixture go RED the
-    day someone fixes it, which is the opposite of what a regression test is
-    for. }
+  SetCmp(4);            { ...and an INTEGER now reaches the LongInt overload }
+  { That row was deliberately ABSENT until 2026-09-07, because pxx bound the
+    integer to the PROCEDURAL overload -- on the pinned compiler too, so it
+    predated this gate and was not what this file is about. Recording the wrong
+    answer in a .expected would have made this fixture go RED the day someone
+    fixed it. It is fixed: OverloadArgRank's widening arm asked TypeIsOrdinal,
+    which admits tyPointer, so an integer scored a "preferred conversion"
+    against a procedural parameter and TIED with the real widening onto LongInt;
+    declaration order then decided. It asks TypeIsMachineInt now.
+    bug-p-an-integer-argument-binds-a-procedural-overload-over-an-exact-integer-one }
   Raw(d);               { untyped var takes a Double }
   Raw(r);               { ...and a LongInt }
   Raw('lit');           { while the string sibling still wins for a literal }

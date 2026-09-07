@@ -2148,9 +2148,47 @@ begin
      (TypeIsFrozenString(aTk) or (aTk = tyAnsiString) or (aTk = tyChar)) then
   begin Result := 1; Exit; end;
 
-  { numeric widening between non-character ordinals }
-  if TypeIsOrdinal(pTk) and TypeIsOrdinal(aTk) and
-     (pTk <> tyChar) and (aTk <> tyChar) then
+  { numeric widening between INTEGERS -- TypeIsMachineInt, which is the
+    predicate that owns this set and says so in its own comment: "Boolean, Char,
+    Pointer, Bool8 and UCS4Char are ordinals that do not take part in
+    integer-vs-float overload ranking".
+
+    THIS ARM USED TO ASK TypeIsOrdinal, WHICH ADMITS tyPointer AND tyBoolean,
+    so an integer argument scored a "preferred conversion" against a parameter
+    that is not a number at all. It then TIED with the genuine widening onto the
+    integer overload, and the tie is broken by declaration order -- so whichever
+    was written first won. Measured 2026-09-07 against fpc 3.2.2, one overload
+    pair per row, the non-integer parameter declared FIRST and an `Integer`
+    argument; fpc answers the LongInt overload on every row:
+
+      param    pxx before   pxx after
+      Pointer  Pointer      LongInt
+      TCmp     TCmp         LongInt      (a procedural type is stored tyPointer)
+      PChar    PChar        LongInt
+      Boolean  Boolean      LongInt
+      WideChar WideChar     LongInt
+      UCS4Char UCS4Char     LongInt
+
+    THE TICKET REPORTED ONE ROW. It named the procedural parameter and guessed
+    at a third refinement beside the class-identity and pointer-element ones
+    below; the mechanism is one line above them and covers six spellings, of
+    which `Pointer` is the one real code hits. Swapping the declaration order
+    flipped the answer, which is what said "tie", and a LongInt argument (an
+    exact match, rank 0) already won -- so the defect needed an argument whose
+    integer kind is not the parameter's.
+
+    THE Boolean ROW ALSO MAKES THE RANKER AGREE WITH THE TYPE CHECKER. It is the
+    one pair here that TypesCompatible refuses outright (`(pType <> tyBoolean)
+    or (aType = tyBoolean)`, the fpjson CreateJSON(Boolean) incident), so it now
+    falls to rank 3 and the candidate is removed -- the same answer the
+    NON-overloaded path has always given. Measured: `procedure P(x: Boolean)`
+    called with an Integer is refused today when it is the only candidate, and
+    was SELECTED when a sibling made it an overload. The other five stay
+    selectable at rank 2 (TypesCompatible says yes for any ordinal pair whose
+    parameter is not Boolean), so nothing that compiles loses its only
+    candidate; they simply stop beating an exact or widening match.
+    bug-p-an-integer-argument-binds-a-procedural-overload-over-an-exact-integer-one }
+  if TypeIsMachineInt(pTk) and TypeIsMachineInt(aTk) then
   begin Result := 1; Exit; end;
 
   if TypesCompatible(pTk, aTk) then begin Result := 2; Exit; end;
