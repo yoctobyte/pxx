@@ -21081,6 +21081,43 @@ amendment is narrower: **suspect any name your population lost for a reason
 that sounded like kindness.**
 
 
+### AND THE SELF-FACING VERSION, THE SAME NIGHT: `| head -10` OVER A 199-COMMIT ARC
+
+Both halves of this section are one error — **a population question answered
+over a chosen subset** — and the second half was committed by the seat that
+resolved the collision in the first, within the hour, against ITS OWN work.
+
+frankS opened by doubting that `0221a024a` was theirs at all. The instrument:
+
+    git log origin/master --grep=<my session URL> | head -10
+
+The commit was not in the output, so it read as *"not mine."* **That id has 199
+commits and the target is not in the newest ten.** `whose_commit.sh` named the
+checkout and the commit carried the session URL; the grep had been right the
+whole time and the pager answered about a window frankS had chosen.
+
+**The tell is that nothing in the output says it is a window.** `head` does not
+mark truncation, `git log` does not report a total, and the absence of a line is
+exactly what a genuine non-match looks like — CLAUDE.md's *"a truncated `tail`"*
+one entry over, arriving through the front of the pipe instead of the back.
+**Ask for the COUNT before reading absence as an answer:** `git log --oneline
+--grep=<url> | wc -l` costs the same call and cannot be truncated into a lie.
+`--since` or `--all` narrows honestly; `head` narrows silently.
+
+**And the population it lost was the predictable one.** The commit was dated
+22:19 the previous evening — an EARLIER CONTEXT WINDOW of the same live session.
+CLAUDE.md already warns that the git-status snapshot names where a context
+window opened rather than where the session did, so a seat's own pre-compaction
+commits read as somebody else's. frankS had that rule in front of them and spent
+two tool calls anyway, which is the same shape as the parent section's other
+half: **a rule is a guard on the line you are reading, not on the line you are
+typing.**
+
+So the two errors of the night rhyme. One seat lost a NAME from its population
+because a sympathetic label said stop measuring; another lost ITS OWN COMMIT
+because a pager said stop reading. Neither instrument errored. Both answered.
+
+
 ## A TRUE REASSURANCE PLACED JUST BEFORE A HEDGE INOCULATES THE READER AGAINST THE HEDGE
 
 Same review, same seat, and it is not a stale claim or an overclaim — every word
