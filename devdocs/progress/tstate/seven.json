@@ -476,12 +476,12 @@
  ],
  "host": "seven",
  "infra": {
-  "count": 110,
-  "last": "2026-09-07T09:59:12Z",
+  "count": 111,
+  "last": "2026-09-07T10:02:17Z",
   "reason": "no report (rc=1)",
-  "sha": "1738a026905469810c79382a5810156ba5feee3c",
+  "sha": "bd2ba542318a9a0b34cce35d6bb438de2b5bd43f",
   "since": "2026-09-07T04:47:06Z",
-  "tier": "full"
+  "tier": "native"
  },
  "job_last_pass": {
   "demos#00": "f84be3fd43df284d88b1636929c5ec547bffc4da",
