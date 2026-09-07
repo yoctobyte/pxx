@@ -924,7 +924,26 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   filled in two, so it never got a turn. It is 6h now
   (`/etc/tmpfiles.d/tmp.conf`), which is what makes walking away safe — **a loop
   writing per-iteration artefacts should still clean up after ITSELF, inside the
-  loop, which is not the same thing as deleting the directory.** Write scratch under it, or under the session scratchpad, and
+  loop, which is not the same thing as deleting the directory.**
+  **AND THE RESOURCE THAT RUNS OUT IS NOT ALWAYS THE ONE YOU MEASURE — SEVEN
+  DIED ON INODES AT 9% FULL.** Measured 2026-09-07; it took the breadth
+  instrument down for ten hours. `df -h /tmp` said 4.1G of 47G used, **9%**,
+  while `df -i` said **8 free inodes of 1,048,576, 100%**. seven's `/tmp` IS a
+  tmpfs, so the 94G sentence above is about PLEXUS and does not travel. testmgr
+  builds its scratch there, every `mkdir`/`open(O_CREAT)` returned ENOSPC, and
+  the tier died before running a single job — ~290 commits of `infra ... no
+  report (rc=1)` at ~28/hour, each one testing the previous one's commit. The
+  producer was ~40 families of temp dirs that devtests and twatch helpers never
+  remove (`tstate-at.*` alone: 163,491 inodes in 241 directories over ~31 hours,
+  `twatch.py:7613` calling `tempfile.mkdtemp` when the caller passes no `dst`) —
+  no single runaway, which is why it arrives as a CLIFF and not a slope.
+  **A disk guard that reads only bytes is a guard that CANNOT FAIL for this
+  outage:** `shutil.disk_usage` and `f_bavail` both read healthy at the moment
+  of failure. Record `f_favail` beside `f_bavail`, or the check reports a green
+  box during the exact event it was added for. **Ask which resource is binding
+  on THAT host before quoting a percentage** — and cleaning up per-iteration
+  inside the loop matters more on a tmpfs, where the reaper's window and the
+  inode ceiling are two different limits. Write scratch under it, or under the session scratchpad, and
   walk away. If cleanup genuinely matters, it belongs in a **committed script**
   with a `trap ... EXIT` — reviewed once, run as a unit — which is what
   `tools/*.sh` already do and why they never trip this. If you must delete
