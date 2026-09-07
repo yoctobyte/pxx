@@ -16882,6 +16882,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_twoscopespec26 "$$($(TESTTMP)/test_twoscopespec26)" "$$(cat test/test_two_scopes_sharing_a_type_name_are_two_specializations.expected)"
 	./$(COMPILER) test/test_a_generic_method_takes_its_own_specialization_as_a_parameter.pas $(TESTTMP)/test_genselfparam26
 	tools/expect_same.sh test_genselfparam26 "$$($(TESTTMP)/test_genselfparam26)" "$$(cat test/test_a_generic_method_takes_its_own_specialization_as_a_parameter.expected)"
+	./$(COMPILER) test/test_a_method_pointer_can_be_taken_through_a_chain_of_selectors.pas $(TESTTMP)/test_mpchain26
+	tools/expect_same.sh test_mpchain26 "$$($(TESTTMP)/test_mpchain26)" "$$(cat test/test_a_method_pointer_can_be_taken_through_a_chain_of_selectors.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

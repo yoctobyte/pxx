@@ -5900,6 +5900,25 @@ var
                            Python precedence (below comparison) via PyParseBoolExpr; suppressed
                            in Pascal RTL units pulled in by .npy programs }
 
+  { THE ONE TOKEN ParseClassRecordSelectors MUST NOT WALK THROUGH, or -1.
+
+    `@a.b.Foo` needs the chain `a.b` parsed as a VALUE and `Foo` taken as a
+    method REFERENCE, and the selector walker has no way to be told that: it
+    consumes every `.` it can reach and the final one becomes a CALL. Setting
+    this to the index of the last `.` in the designator stops the walk one
+    selector short, which is the whole of the mechanism -- the `@` arm then
+    resolves that last name itself and builds the AN_METHODREF.
+
+    An ABSOLUTE token index and not a depth or a countdown, deliberately: a
+    nested parse inside the chain (`@o.Items[i + 1].Ev`) runs the same walker
+    over DIFFERENT tokens, and an absolute index can never collide with one of
+    them, because the stop dot is at the outer level by construction. A flag or
+    a counter would need saving and restoring at every nested entry, which is
+    the shape this kind of parser state gets wrong.
+
+    -1 = no stop, which is every path but the one `@` arm. }
+  AtStopDotTok : Integer;
+
   BLabelLineNums : array[0..255] of Int64;
   BLabelCodePoss : array[0..255] of Integer;
   BLabelCount    : Integer;

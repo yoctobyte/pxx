@@ -117,6 +117,56 @@ begin
                        IsMethodNameKind(Tokens[idx].Kind);
 end;
 
+{ The index of the LAST `.` in the designator that starts at token `startIdent`,
+  or -1 if it has none.
+
+  For `@a.b.Foo` the `@` arm has to parse `a.b` as a VALUE and take `Foo` as a
+  method REFERENCE, and it cannot know where the value ends without looking:
+  the designator may carry subscripts and call parens (`@o.Items[i + 1].Ev`).
+  So this walks the same three postfix openers ParseClassRecordSelectors does --
+  `.` name, `[ ... ]`, `( ... )` -- and stops at the first token that opens
+  none of them. What it returns is fed to AtStopDotTok.
+
+  A LOOKAHEAD AND NOT A PARSE: it does not resolve a single name, so it cannot
+  be wrong about types, only about extent. Brackets and parens are counted
+  together because the tail is being SKIPPED rather than understood, and a
+  program in which they interleave wrongly is refused by the real parse a
+  moment later. }
+function LastDotOfDesignator(startIdent: Integer): Integer;
+var p, depth: Integer;
+begin
+  LastDotOfDesignator := -1;
+  if not IsMethodNameTokAt(startIdent) then Exit;
+  p := startIdent + 1;
+  while p < TokCount do
+  begin
+    if Tokens[p].Kind = tkDot then
+    begin
+      if not IsMethodNameTokAt(p + 1) then Exit;
+      LastDotOfDesignator := p;
+      p := p + 2;
+    end
+    else if (Tokens[p].Kind = tkLBrack) or (Tokens[p].Kind = tkLParen) then
+    begin
+      depth := 0;
+      while p < TokCount do
+      begin
+        if (Tokens[p].Kind = tkLBrack) or (Tokens[p].Kind = tkLParen) then
+          Inc(depth)
+        else if (Tokens[p].Kind = tkRBrack) or (Tokens[p].Kind = tkRParen) then
+        begin
+          Dec(depth);
+          if depth <= 0 then begin Inc(p); Break; end;
+        end
+        else if Tokens[p].Kind = tkEOF then Exit;
+        Inc(p);
+      end;
+      if depth > 0 then Exit;
+    end
+    else Exit;
+  end;
+end;
+
 function IsDeclNameTok: Boolean;
 begin
   if IsMemberNameTok then

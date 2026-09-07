@@ -766,6 +766,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
+    atLastDot, atChainCi: Integer;   { `@a.b.Foo`: where the value stops, and the class it lands on }
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
@@ -1162,6 +1163,80 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
       begin
         ci := Syms[idx].RecName - REC_UCLASS_BASE;
+        { A METHOD REFERENCE COULD ONLY BE TAKEN THROUGH EXACTLY ONE DOT, and
+          every arm below is written for that depth. `@o.Inner.Foo` -- wire an
+          event to a method of a nested object, which is what every form does --
+          walked the whole chain and CALLED Foo, reporting `wrong number of
+          parameters in call to TInner.Foo`; `@g.Mk.Foo` died at
+          `a statement cannot start with '.'`. Same cause, and the error text
+          depends on where the truncated parse happens to stop, which is why
+          this reads as unrelated bugs.
+
+          THE VALUE AND THE REFERENCE END AT DIFFERENT PLACES and the walker
+          could not be told so: it takes every `.` it can reach. So the last dot
+          is found by lookahead and handed to it as AtStopDotTok, the chain
+          before it is parsed as an ordinary value, and the name after it is
+          resolved HERE -- which is where the existing single-dot arm already
+          knows how to build an AN_METHODREF, VMT slot and all.
+
+          Gated on the last dot not being the FIRST one, so every depth-1
+          designator keeps the arms below untouched: the population this opens
+          is exactly the designators that could not compile at all today.
+
+          NOT a method after the stop? Then it is a field or a property and the
+          answer is an address, so the walk is simply resumed with no stop and
+          the AN_ADDR taken over the whole chain -- the same result the arm
+          below would have produced, reached one selector later. }
+        atLastDot := LastDotOfDesignator(TokPos - 1);
+        if (atLastDot > TokPos) and IsMethodNameTokAt(atLastDot + 1) then
+        begin
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := idx;
+          ASTTk[valNode] := Ord(tyClass);
+          Next;            { consume obj name; CurTok is the first '.' }
+          tk := tyClass;
+          AtStopDotTok := atLastDot;
+          node := ParseClassRecordSelectors(valNode, Syms[idx].RecName, tk);
+          AtStopDotTok := -1;
+          mmi := -1;
+          atChainCi := -1;
+          { The walk must have stopped exactly where it was told to. If it did
+            not -- a shape the lookahead measured but the parser reads
+            differently -- there is no method name to resolve and the fallback
+            below is the honest answer. }
+          if (TokPos - 1 = atLastDot) and (CurTok.Kind = tkDot) then
+          begin
+            atChainCi := ResolveNodeRec(node);
+            if (atChainCi >= REC_UCLASS_BASE) and
+               (not UClsIsRecord[atChainCi - REC_UCLASS_BASE]) then
+              mmi := FindUMeth(atChainCi - REC_UCLASS_BASE,
+                               GetTokenStr(atLastDot + 1));
+          end;
+          if mmi >= 0 then
+          begin
+            Next;            { consume the stop '.'  (CurTok = method name) }
+            valNode := AllocNode(AN_METHODREF);
+            ASTIVal[valNode] := UMthProc_[mmi];
+            ASTLeft[valNode] := node;
+            ASTRight[valNode] := UMthVirSlot[mmi];   { VMT slot, as the one-dot arm }
+            ASTTk[valNode] := Ord(tyPointer);
+            Next;            { consume method name }
+            CurASTNode := valNode;
+            LastExprTk := tyPointer;
+            Exit;
+          end;
+          if CurTok.Kind in [tkDot, tkLBrack] then
+          begin
+            tk := IntToTypeKind(ASTTk[node]);
+            node := ParseClassRecordSelectors(node, ResolveNodeRec(node), tk);
+          end;
+          valNode := AllocNode(AN_ADDR);
+          ASTLeft[valNode] := node;
+          ASTTk[valNode] := Ord(tyPointer);
+          CurASTNode := valNode;
+          LastExprTk := tyPointer;
+          Exit;
+        end;
         { A MEMBER IS NOT ONLY A METHOD OR A FIELD, AND THIS ARM KNEW TWO OF THE
           THREE. It asked FindUMeth, then FindUField, then raised
           `@obj.method: unknown method or field` -- so `@o.Items[0].Ev`, whose
@@ -1310,6 +1385,63 @@ begin
               (FindUClass(name) >= 0) then
       begin
         ci := FindUClass(name);
+        { THE CLASS-TYPE SIBLING OF THE MULTI-DOT ARM ABOVE, and it needs a
+          different value parser rather than a different method resolution.
+          `@TG.Create.Foo` -- construct, then bind one of the instance's methods
+          -- reported `@TG.Create: unknown method`, because this arm reads
+          exactly one dot and asks FindUMeth, and a CONSTRUCTOR is not in that
+          table. The name in the message is the honest report of a parse that
+          stopped two tokens early.
+
+          The value half here is `TG.Create`, an ordinary factor, so it is
+          parsed by the ordinary factor path rather than by a fourth hand-rolled
+          walk: rewind nothing, set the stop, recurse. What comes back is an
+          instance, and from there this is the same resolution the arm above
+          does. Only the multi-dot case takes this door; `@TClass.Method` keeps
+          the AN_PROCADDR arm below, which is a different node kind for a
+          different question (a raw code address, no Data half). }
+        atLastDot := LastDotOfDesignator(TokPos - 1);
+        if (atLastDot > TokPos) and IsMethodNameTokAt(atLastDot + 1) then
+        begin
+          AtStopDotTok := atLastDot;
+          ParseFactor;
+          AtStopDotTok := -1;
+          node := CurASTNode;
+          mmi := -1;
+          atChainCi := -1;
+          if (TokPos - 1 = atLastDot) and (CurTok.Kind = tkDot) then
+          begin
+            atChainCi := ResolveNodeRec(node);
+            if (atChainCi >= REC_UCLASS_BASE) and
+               (not UClsIsRecord[atChainCi - REC_UCLASS_BASE]) then
+              mmi := FindUMeth(atChainCi - REC_UCLASS_BASE,
+                               GetTokenStr(atLastDot + 1));
+          end;
+          if mmi >= 0 then
+          begin
+            Next;            { consume the stop '.'  (CurTok = method name) }
+            valNode := AllocNode(AN_METHODREF);
+            ASTIVal[valNode] := UMthProc_[mmi];
+            ASTLeft[valNode] := node;
+            ASTRight[valNode] := UMthVirSlot[mmi];
+            ASTTk[valNode] := Ord(tyPointer);
+            Next;            { consume method name }
+            CurASTNode := valNode;
+            LastExprTk := tyPointer;
+            Exit;
+          end;
+          if CurTok.Kind in [tkDot, tkLBrack] then
+          begin
+            tk := IntToTypeKind(ASTTk[node]);
+            node := ParseClassRecordSelectors(node, ResolveNodeRec(node), tk);
+          end;
+          valNode := AllocNode(AN_ADDR);
+          ASTLeft[valNode] := node;
+          ASTTk[valNode] := Ord(tyPointer);
+          CurASTNode := valNode;
+          LastExprTk := tyPointer;
+          Exit;
+        end;
         Next;            { consume class name (CurTok = '.') }
         Next;            { consume '.' (CurTok = method name) }
         { A method may be NAMED after a type keyword (generics.defaults'

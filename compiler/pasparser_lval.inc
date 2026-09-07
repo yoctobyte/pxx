@@ -5289,7 +5289,11 @@ begin
     Exit;
   end;
   tk := IntToTypeKind(ASTTk[node]);
-  while CurTok.Kind in [tkDot, tkLBrack] do
+  { CurTok is Tokens[TokPos - 1], so that is the dot's own index. AtStopDotTok
+    names the one dot this walk must leave in the stream -- see its declaration
+    in defs.inc; it is -1 on every path but the `@a.b.Foo` arm. }
+  while (CurTok.Kind in [tkDot, tkLBrack]) and
+        ((AtStopDotTok < 0) or (TokPos - 1 <> AtStopDotTok)) do
   begin
     if CurTok.Kind = tkDot then
     begin

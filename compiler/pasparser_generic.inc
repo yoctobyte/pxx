@@ -660,9 +660,13 @@ end;
 function StreamedSpecCanonName: AnsiString;
 var q: Integer;
 begin
-  StreamedSpecCanonName := SpecializeTemplateName;
+  { Result, not the bare own name: reading a parameterless function's own name
+    on the RHS is the recursive-call spelling in this dialect and the compiler
+    warns about it. Accumulating through Result says plainly that this is a
+    running string and not a call. }
+  Result := SpecializeTemplateName;
   for q := 0 to SpecSubCount - 1 do
-    StreamedSpecCanonName := StreamedSpecCanonName + '$' + SpecSubValues[q];
+    Result := Result + '$' + SpecSubValues[q];
 end;
 
 { The SUBSTITUTION half of SpecializeStream, ending at a filled

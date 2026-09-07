@@ -102,3 +102,22 @@ inheritance widening arrived at the predicate that feeds it. The composition of
 the two turned out to be already specified BY the ranking — a routine-local type
 shadows a class's nested type because hop is the first key — and this asymmetry
 is the only thing the pair left unsettled.
+
+## Where the reader actually is — `ba2bd5b05`
+
+**The code comment is the primary record and this ticket is the back-link, not
+the other way round.** frank-optimize landed the inheritance widening at
+`ba2bd5b05` (arm 3 of `AliasVisibleHere` walks `UClsParent`; arm 4 still does
+not; `AliasOwnsThrough` untouched) and took this whole account into the comment
+at symtab.inc's `owned :=` site: the retired invariant, the `Duplicate
+identifier` measurement that is why it stays sound, the distance-based
+replacement mirroring `ScopeHopsToProc`, and the `UsesRankOf` MaxInt sentinel
+trap.
+
+They could not cite this slug from there, correctly: it was not on origin yet —
+I was holding the push behind a `--tier limited` run — and citing a slug just
+verified as absent is a ghost citation. So the pointer is added from this side.
+
+**If the comment and this file ever disagree, the comment wins.** It sits where
+the decision is made and it is what a reader of `FindTypeAlias` will find; this
+file is the deferred plan.

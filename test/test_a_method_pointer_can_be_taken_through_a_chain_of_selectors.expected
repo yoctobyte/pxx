@@ -1,0 +1,6 @@
+depth1     = 101
+field3     = 102
+callchain  = 103
+ctorchain  = 4
+virtual    = derived
+fieldaddr  = 555
