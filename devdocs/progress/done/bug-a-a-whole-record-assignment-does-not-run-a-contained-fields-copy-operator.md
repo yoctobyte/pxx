@@ -3,8 +3,8 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "SITE (1) FIXED 2026-09-07, SITE (2) STILL OPEN. The contained-field case is lowered by IRRecCopyWithHoles (ir.inc, beside IRRecCopyOpCall): the copy is PUNCHED -- one IR_COPY_REC per byte range BETWEEN the operator fields, plus one operator call per field in declaration order -- because fpc DELEGATES a contained Copy field entirely and the operator sees the destination's OLD value, so no bulk copy may precede it. Pinned by test_mgmt_operators_copy_contained (test-core), .expected is fpc 3.2.2's byte for byte, four rows differ on the pre-change compiler and two controls do not. TWO NAMED RESIDUALS: site (2) below, and a record mixing an ARC field with an operator field, which is REFUSED (IR_COPY_REC_MANAGED is a fused retain-release-copy that cannot be handed a byte range) and keeps today's answer. ORIGINAL MEASUREMENT 2026-09-06 at 70fdf89165e1. Assigning a record that CONTAINS a field whose type declares `class operator Copy` did not run that field's Copy: `h2 := h1` where `THolder = record f: TFoo; k: Integer; end` and TFoo has Copy -- fpc 3.2.2 prints `Copy src.id=42`, pxx prints nothing and does a byte copy. ASYMMETRIC WITH THE OTHER TWO OPERATORS ON THE SAME SHAPE: Initialize and Finalize DO propagate into the field (both print twice, for h1.f and h2.f, under both compilers) because the scope desugar walks the field table and builds a field path; Copy is hooked at the IR assignment lowering instead, asks FindOpOverload(OPK_COPY, tyRecord, THolder), gets -1 because THolder itself declares nothing, and falls through to IR_COPY_REC. THE VALUE LOOKS CORRECT (42) so no expect_same row can see it -- Copy exists to do something OTHER than a byte copy (duplicate a handle, bump a refcount, deep-copy a buffer), so the two records silently SHARE whatever the field owned. RESOLVES THE `NOT ESTABLISHED` LINE in feature-pascal-management-operators-copy-and-addref: the two hooked assignment arms are NOT the whole population. Found by censusing 14 copy shapes against fpc; the other 13 agree (rows 1-8, 11, 14 fire in both; the dynamic-array rows are refused by feature-pascal-management-operators-nested-and-array and could not be measured). SECOND SITE, INDEPENDENT OF THE FIRST: a whole-STATIC-array assign `d := s` drops the element's OWN Copy (fpc fires twice, pxx never) while the controls `two := one` and `d[0] := s[0]` BOTH fire -- so the operator is dispatchable and the per-element path reaches it, and the whole-array assign is a block copy that never enters that path. Two sites, two mechanisms, only one nesting; a fix for either leaves the other. STATIC->DYNAMIC IS THE OPPOSITE AND IS CORRECT: it routes through the array constructor, which already dispatched operators before frankS's static-to-dynamic copy landed, and it FIRES, byte-identical to fpc. THE DISCRIMINATOR IS WHICH OPERATORS THE RECORD DECLARES, and it is why two sessions measured "the same" construct and disagreed: `var d: array of TR` is REFUSED when TR declares Initialize or Finalize and COMPILES when it declares only Copy or only AddRef. The diagnostic says "a record with a management operator", naming four operators where the rule uses two -- a Copy-only record satisfies that wording and compiles anyway. THE ASYMMETRY THAT CREATES SITE (1): the guard asks whether the ELEMENT record declares Initialize/Finalize, and a record that merely CONTAINS such a field declares none of its own, so it passes a refusal meant to be conservative and then silently skips the field. VERIFIED CORRECT, NOT A THIRD SITE: `b := a` between two dynamic arrays runs no operator in either compiler -- a reference copy, nothing to hook. ALL ROWS OF THAT CENSUS PRODUCE BYTE-IDENTICAL VALUES on both compilers, so no expect_same fixture over those programs can fail -- the committed fixture discriminates only because its operator PRINTS and deliberately leaves one field alone."
-status: working
+summary: "BOTH SITES FIXED 2026-09-07. (1) The contained-field case is lowered by IRRecCopyWithHoles (ir.inc, beside IRRecCopyOpCall): the copy is PUNCHED -- one IR_COPY_REC per byte range BETWEEN the operator fields, plus one operator call per field in declaration order -- because fpc DELEGATES a contained Copy field entirely and the operator sees the destination's OLD value, so no bulk copy may precede it. (2) A whole static-ARRAY assignment is UNROLLED by IRArrayElemCopyOps, one operator call per element ascending, wired into ALL THREE arms that copy a run of records as one block -- the variable arm (`d := s`), the field arm (`rec.arr := other.arr`) and the whole-ROW store into a dyn array of a static-array type (`d[0] := r`), of which only the first was in the report; there is no runtime helper to loop through because what runs per element is a USER procedure and the layout descriptor carries no operators, so it is bounded by REC_COPY_UNROLL_MAX (64) and WARNS over the cap -- the fallback is the byte copy, i.e. the defect, so the cliff is not silent. Cap swept: 63 fires 63, 64 fires 64, 65 warns and fires none. `rec := other` where rec has an ARRAY FIELD of a Copy record needed no work of its own -- RecCollectCopyHoles descends through fixed arrays, so the element was never the missing case, the array ASSIGNMENT was. Pinned by test_mgmt_operators_copy_contained and test_mgmt_operators_copy_array (both in test-core), .expected is fpc 3.2.2's byte for byte, four rows each differ on the pre-change compiler while every control does not. ONE RESIDUAL, split out with its own ticket: a record mixing an ARC field with an operator field is REFUSED (IR_COPY_REC_MANAGED is a fused retain-release-copy that cannot be handed a byte range) and keeps today's answer -- bug-a-a-record-mixing-an-arc-field-with-a-copy-operator-field-skips-the-operator. ORIGINAL MEASUREMENT 2026-09-06 at 70fdf89165e1. Assigning a record that CONTAINS a field whose type declares `class operator Copy` did not run that field's Copy: `h2 := h1` where `THolder = record f: TFoo; k: Integer; end` and TFoo has Copy -- fpc 3.2.2 prints `Copy src.id=42`, pxx prints nothing and does a byte copy. ASYMMETRIC WITH THE OTHER TWO OPERATORS ON THE SAME SHAPE: Initialize and Finalize DO propagate into the field (both print twice, for h1.f and h2.f, under both compilers) because the scope desugar walks the field table and builds a field path; Copy is hooked at the IR assignment lowering instead, asks FindOpOverload(OPK_COPY, tyRecord, THolder), gets -1 because THolder itself declares nothing, and falls through to IR_COPY_REC. THE VALUE LOOKS CORRECT (42) so no expect_same row can see it -- Copy exists to do something OTHER than a byte copy (duplicate a handle, bump a refcount, deep-copy a buffer), so the two records silently SHARE whatever the field owned. RESOLVES THE `NOT ESTABLISHED` LINE in feature-pascal-management-operators-copy-and-addref: the two hooked assignment arms are NOT the whole population. Found by censusing 14 copy shapes against fpc; the other 13 agree (rows 1-8, 11, 14 fire in both; the dynamic-array rows are refused by feature-pascal-management-operators-nested-and-array and could not be measured). SECOND SITE, INDEPENDENT OF THE FIRST: a whole-STATIC-array assign `d := s` drops the element's OWN Copy (fpc fires twice, pxx never) while the controls `two := one` and `d[0] := s[0]` BOTH fire -- so the operator is dispatchable and the per-element path reaches it, and the whole-array assign is a block copy that never enters that path. Two sites, two mechanisms, only one nesting; a fix for either leaves the other. STATIC->DYNAMIC IS THE OPPOSITE AND IS CORRECT: it routes through the array constructor, which already dispatched operators before frankS's static-to-dynamic copy landed, and it FIRES, byte-identical to fpc. THE DISCRIMINATOR IS WHICH OPERATORS THE RECORD DECLARES, and it is why two sessions measured "the same" construct and disagreed: `var d: array of TR` is REFUSED when TR declares Initialize or Finalize and COMPILES when it declares only Copy or only AddRef. The diagnostic says "a record with a management operator", naming four operators where the rule uses two -- a Copy-only record satisfies that wording and compiles anyway. THE ASYMMETRY THAT CREATES SITE (1): the guard asks whether the ELEMENT record declares Initialize/Finalize, and a record that merely CONTAINS such a field declares none of its own, so it passes a refusal meant to be conservative and then silently skips the field. VERIFIED CORRECT, NOT A THIRD SITE: `b := a` between two dynamic arrays runs no operator in either compiler -- a reference copy, nothing to hook. ALL ROWS OF THAT CENSUS PRODUCE BYTE-IDENTICAL VALUES on both compilers, so no expect_same fixture over those programs can fail -- the committed fixture discriminates only because its operator PRINTS and deliberately leaves one field alone."
+status: done
 owner: frankA
 ---
 
@@ -311,3 +311,75 @@ The refusal is `RecordHasManagedFields(recId)` at the top of
 whose only managed member sits inside the operator field is refused too, because
 `RecordHasManagedFields` recurses. Conservative in the direction that preserves
 today's behaviour rather than inventing a new one.
+
+## SITE (2) IS FIXED TOO — the array is unrolled, one operator call per element
+
+2026-09-07, same session, immediately after site (1). `IRArrayElemCopyOps`
+(`compiler/ir.inc`), wired into **all three** arms that copy a run of records as
+one block: the array VARIABLE one (`d := s`), the array FIELD one
+(`rec.arr := other.arr`), and the whole-ROW store into a dynamic array of a
+static-array type (`d[0] := r` for `d: array of TRow`).
+
+**The third arm needed FINDING, not deriving.** The ticket named one shape and
+`normalise-dont-special-case`'s rule — grep for the sibling before closing —
+turned up two more. Only the first was in the report.
+
+**Measured first, five rows, fpc 3.2.2** — and the element turned out not to be a
+new case at all:
+
+| row | fpc | pxx before | pxx after |
+| --- | --- | --- | --- |
+| `array of TR`, TR declares Copy | per element, ascending, delegated | never | matches |
+| `array of TH`, TH merely CONTAINS one | gaps copied, hole delegated | never | matches |
+| `rec.arr := other.arr` | same, other fields untouched | never | matches |
+| `rec := other`, rec having an array field of TR | fires | **already correct** | matches |
+| `d[0] := r`, `d: array of TRow` | per element | never | matches |
+
+The fourth row is the control that says the record walk was already right: site
+(1)'s `RecCollectCopyHoles` descends through fixed arrays, so a Copy field
+reached through an array MEMBER was covered the moment site (1) landed. What was
+missing was only the array ASSIGNMENT, which is one block copy.
+
+**UNROLLED, WITH A WARNED CAP.** There is no runtime helper to loop through the
+way `IRManagedArrayCopy` has for ARC: what runs per element is a USER procedure,
+and the layout descriptor carries no operators. So the elements are unrolled,
+bounded by `REC_COPY_UNROLL_MAX` (64) operator calls, and over the cap the copy
+falls back to the byte copy **with a warning at the site** — the fallback is the
+defect, so the cliff must not be silent. The same trade `IRRecordCmpExpandable`
+makes for record equality.
+
+**The cap was swept rather than assumed:**
+
+```
+n=63  fired=63     no warning
+n=64  fired=64     no warning
+n=65  fired=0      warning: ... needs 65 Copy-operator calls and the unroll limit is 64
+```
+
+`test/test_mgmt_operators_copy_array.pas` + `.expected` (fpc's, byte for byte)
+carries the five rows and both of this ticket's own controls; the pinned
+compiler differs on 32 lines and matches on both controls.
+
+**The row-store row reaches its array through a POINTER, deliberately.**
+`d[0][0].id` is refused today — `no default property available: TR has no
+default indexed property` — which is a separate gap and not this ticket's. The
+choice was between writing the row awkwardly and leaving a diverging arm
+unpinned; the awkward version is in the fixture with that reason beside it.
+`test/test_mgmt_operators_copy_array_over_cap.pas` exists only for the Makefile
+to assert the warning — **its output is deliberately not pinned**, because the
+over-cap output IS the wrong answer and a fixture holding it would go red the
+day someone raises the cap.
+
+### ONE RESIDUAL LEFT, AND IT HAS ITS OWN TICKET NOW
+
+The ARC-mixed shape — a record (or an array element) holding an `AnsiString` or
+a dynamic array **alongside** an operator field — is still refused and keeps
+today's answer. `IR_COPY_REC_MANAGED` is a fused retain-release-copy across six
+backends: it takes a record id and walks that record's descriptor, so it cannot
+be handed a byte range. Split out as
+[[bug-a-a-record-mixing-an-arc-field-with-a-copy-operator-field-skips-the-operator]]
+rather than left as a sentence here, because "not served" is half a finding
+until someone owns "then what?".
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

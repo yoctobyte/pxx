@@ -2224,3 +2224,23 @@ Two things filed rather than fixed, neither Track D's:
   value check cannot see this defect at all -- .expected is fpc's byte for byte, and four of
   its rows differ on the pinned compiler while both controls do not.
   bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator
+
+2026-09-07 | frankA | compiler/ir.inc compiler/defs.inc Makefile, plus two new mgmt-operator copy-array fixtures |
+  The SECOND site of the same ticket: a whole static-ARRAY assignment now runs the element's
+  `class operator Copy` -- ALL THREE arms that copy a run of records as one block: the variable
+  one (`d := s`), the FIELD one (`rec.arr := other.arr`) and the whole-ROW store into a dyn array
+  of a static-array type (`d[0] := r`). Only the first was in the report; the other two came from
+  grepping for the sibling before closing, and both diverged from fpc. A block copy enters no
+  per-element path, which is why this needed its own hook and not a widening of the record walk. Measured against fpc 3.2.2 first, four
+  rows; the fourth (`rec := other` where rec has an ARRAY FIELD of a Copy record) was ALREADY
+  correct after this morning's record fix, because RecCollectCopyHoles descends through fixed
+  arrays -- so the element was never the missing case, the array ASSIGNMENT was. UNROLLED, not
+  looped: what runs per element is a USER procedure and the layout descriptor carries no
+  operators, so there is no runtime helper to call the way IRManagedArrayCopy has for ARC.
+  Bounded by REC_COPY_UNROLL_MAX (64) and WARNED over it, because the fallback is the byte copy
+  -- i.e. the defect -- and a silent correctness cliff is worse than either answer. Cap swept
+  rather than assumed: 63 fires 63, 64 fires 64, 65 warns and fires none. The over-cap fixture's
+  OUTPUT is deliberately not pinned; the Makefile greps the warning, paired with the under-cap
+  fixture, which must stay silent. One residual split out with its own ticket rather than left
+  as a sentence: bug-a-a-record-mixing-an-arc-field-with-a-copy-operator-field-skips-the-operator.
+  bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator

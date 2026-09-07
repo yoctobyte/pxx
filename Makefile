@@ -14970,6 +14970,27 @@ test-core: $(COMPILER)
 	# bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator
 	./$(COMPILER) test/test_mgmt_operators_copy_contained.pas $(TESTTMP)/test_mgmt_op_copyc26
 	$(TESTTMP)/test_mgmt_op_copyc26 | diff -u test/test_mgmt_operators_copy_contained.expected -
+	# ...and the SECOND site, which is a second MECHANISM: a whole static-ARRAY
+	# assignment is one block copy and never enters the per-element assign path,
+	# so even a non-nested element with its own Copy was skipped. Both controls
+	# (`two := one`, `d[0] := s[0]`) are inside the fixture, so a red row here
+	# means the array path and not a missing overload. Same discriminating
+	# column: `pad`, which the operator deliberately does not assign.
+	# Positive control against the PINNED compiler: four rows differ, both
+	# controls identical. .expected is fpc 3.2.2's, byte for byte.
+	./$(COMPILER) test/test_mgmt_operators_copy_array.pas $(TESTTMP)/test_mgmt_op_copya26
+	$(TESTTMP)/test_mgmt_op_copya26 | diff -u test/test_mgmt_operators_copy_array.expected -
+	# The unroll cap announces itself, and only when it applies. Over
+	# REC_COPY_UNROLL_MAX operator calls the array copy falls back to the BYTE
+	# copy -- which is the defect, so the cliff must not be silent. Measured by
+	# sweeping the limit: 64 elements fire all 64, 65 warn and fire none.
+	./$(COMPILER) test/test_mgmt_operators_copy_array_over_cap.pas $(TESTTMP)/test_mgmt_op_copyoc26 > $(TESTTMP)/test_mgmt_op_copyoc.log 2>&1 || \
+	  { echo "test_mgmt_operators_copy_array_over_cap: FAIL -- the over-cap fixture did not compile"; sed 's/^/    /' $(TESTTMP)/test_mgmt_op_copyoc.log; exit 1; }
+	grep -q 'Copy-operator calls and the unroll limit' $(TESTTMP)/test_mgmt_op_copyoc.log || \
+	  { echo "test_mgmt_operators_copy_array_over_cap: FAIL -- an array over REC_COPY_UNROLL_MAX took the byte copy WITHOUT warning, so the correctness cliff is silent"; sed 's/^/    /' $(TESTTMP)/test_mgmt_op_copyoc.log; exit 1; }
+	./$(COMPILER) test/test_mgmt_operators_copy_array.pas $(TESTTMP)/test_mgmt_op_copyuc26 > $(TESTTMP)/test_mgmt_op_copyuc.log 2>&1
+	grep -q 'Copy-operator calls and the unroll limit' $(TESTTMP)/test_mgmt_op_copyuc.log && \
+	  { echo "test_mgmt_operators_copy_array_over_cap: FAIL -- the cap warning fired on an array UNDER the cap, so it says nothing about which arrays are affected"; sed 's/^/    /' $(TESTTMP)/test_mgmt_op_copyuc.log; exit 1; } || true
 	# ...and the three shapes that are REFUSED rather than silently skipped: a
 	# DYNAMIC array of a managed record, the same as a record FIELD, a CLASS
 	# holding one in a field, and AddRef

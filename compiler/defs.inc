@@ -238,6 +238,21 @@ const
     falls back to yesterday's single bulk move.
     bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator }
   REC_COPY_HOLE_MAX = 256;
+  { The same operator, reached through a whole-ARRAY assignment, which is a
+    SECOND site and a second mechanism: `d := s` is one block copy and never
+    enters the per-element assign path, so even a non-nested element with its
+    own Copy is skipped. There is no runtime helper to loop through -- what runs
+    per element is a USER procedure and the layout descriptor carries no
+    operators -- so the elements are UNROLLED, and this caps the number of
+    operator calls one assignment may expand to.
+
+    OVER THE CAP THE COPY FALLS BACK TO THE BYTE COPY, which is the defect this
+    exists to fix, so IRArrayElemCopyOps WARNS at the site rather than letting
+    the cliff be silent -- the same trade REC_CMP_UNROLL_MAX's site makes.
+    A BUDGET, not a measured boundary: 64 matches REC_CMP_UNROLL_MAX, whose own
+    sweep found no knee.
+    bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator }
+  REC_COPY_UNROLL_MAX = 64;
   { Record `=` is expanded into one comparison per scalar leaf (ir.inc,
     RecordFieldwiseCmpLeaves). An ARRAY member is unrolled, so a record can ask
     for arbitrarily many; above this the whole record falls back to the old

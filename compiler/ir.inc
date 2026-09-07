@@ -8538,6 +8538,38 @@ begin
     -1, -1, off, Ord(tyRecord));
 end;
 
+function IRRecCopyHolesAt(symD, symS, baseOff, total: Integer): Integer;
+{ Emit one record instance's worth of gap copies and operator calls, for the
+  holes ALREADY collected in RecCopyHole*, at `baseOff` bytes into the two
+  addresses parked in `symD`/`symS`. `total` is the record's size.
+
+  Split out from IRRecCopyWithHoles so the ARRAY case can walk the record once
+  and emit it per element at a different base, rather than re-collecting the
+  holes (and re-parking the addresses) count times. }
+var i, off, gap, last: Integer;
+begin
+  last := -1;
+  off := 0;
+  for i := 0 to RecCopyHoleCount - 1 do
+  begin
+    gap := RecCopyHoleOff[i] - off;
+    if gap > 0 then
+      last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, baseOff + off),
+                       IRRecHoleAddr(symS, baseOff + off), -1, gap, Ord(tyRecord));
+    last := IRRecCopyOpCall(RecCopyHoleRec[i],
+                            IRRecHoleAddr(symD, baseOff + RecCopyHoleOff[i]),
+                            IRRecHoleAddr(symS, baseOff + RecCopyHoleOff[i]));
+    off := RecCopyHoleOff[i] + RecCopyHoleSize[i];
+  end;
+  { The tail, trailing padding included -- IR_COPY_REC has always copied a
+    record's padding and nothing reads it. }
+  gap := total - off;
+  if gap > 0 then
+    last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, baseOff + off),
+                     IRRecHoleAddr(symS, baseOff + off), -1, gap, Ord(tyRecord));
+  IRRecCopyHolesAt := last;
+end;
+
 function IRRecCopyWithHoles(recId, dstAddr, srcAddr: Integer): Integer;
 { A record whose type declares no Copy of its own but CONTAINS a field that
   does. Emits the byte ranges BETWEEN those fields as ordinary IR_COPY_REC, one
@@ -8578,7 +8610,7 @@ function IRRecCopyWithHoles(recId, dstAddr, srcAddr: Integer): Integer;
   EVERY REFUSAL RETURNS BEFORE A SINGLE NODE IS APPENDED, which is what makes
   the caller's `if < 0 then fall back` shape legal: `dstAddr` and `srcAddr` are
   still unreferenced, so the fallback IR_COPY_REC can take them. }
-var symD, symS, i, off, gap, last, total: Integer;
+var symD, symS, total: Integer;
 begin
   IRRecCopyWithHoles := -1;
   if recId = REC_NONE then Exit;
@@ -8594,27 +8626,96 @@ begin
   symS := AllocVar('', tyPointer);
   IRAppend(IR_STORE_SYM, symD, dstAddr, -1, 0, Ord(tyPointer));
   IRAppend(IR_STORE_SYM, symS, srcAddr, -1, 0, Ord(tyPointer));
+  IRRecCopyWithHoles := IRRecCopyHolesAt(symD, symS, 0, total);
+end;
+
+function IRArrayElemCopyOps(dstAST, srcAST, count, elemSize, elemRecId,
+                            line: Integer): Integer;
+{ A whole STATIC-ARRAY assignment (`d := s`, `rec.arr := other.arr`) whose
+  ELEMENT type declares `class operator Copy`, or contains a field that does.
+  Returns the last node, or -1 when the shape is one this cannot serve and the
+  caller must keep its plain IR_COPY_REC.
+
+  This is the SECOND of the two sites the ticket separates, and it is a second
+  MECHANISM rather than a second spelling: a whole-array assignment is one block
+  copy and never enters the per-element assign path at all, so an element with
+  its OWN Copy is skipped even though nothing about it is nested. The controls
+  that made that readable are in the ticket -- `two := one` and `d[0] := s[0]`
+  both fired throughout.
+
+  MEASURED against fpc 3.2.2 before writing it, four rows, and each element is
+  handled exactly as the scalar case is:
+    array of TR    (TR has Copy)          -> one call per element, ASCENDING,
+                                             delegated entirely (dst keeps its
+                                             own `pad`, and sees its OLD value)
+    array of TH    (TH merely CONTAINS)   -> gaps copied, hole delegated
+    rec.arr := other.arr                  -> same, and the record's other
+                                             fields are NOT touched
+    rec := other, rec having an array field of TR
+                                          -> already correct: the record walk
+                                             descends through fixed arrays
+  So the element is not a new case; the ARRAY is. What this adds is the loop.
+
+  UNROLLED, AND THE CAP IS A REAL CLIFF -- hence the warning. There is no
+  runtime helper to loop through the way IRManagedArrayCopy has for ARC, because
+  the thing to call per element is a USER procedure and the layout descriptor
+  carries no operators. Emitting a counted loop here would mean labels and a
+  branch in a function that returns a value node. So the elements are unrolled,
+  bounded by REC_COPY_UNROLL_MAX operator calls, and over the cap the copy falls
+  back to the byte copy -- which is TODAY's answer and is wrong in exactly the
+  way this function exists to fix. A silent boundary like that is worse than
+  either answer, so the site says so out loud, the same trade
+  IRRecordCmpExpandable makes for record equality.
+
+  REFUSES THE ARC CASE, for IRRecCopyWithHoles's reason, and the caller routes
+  it to IRManagedArrayCopy anyway. }
+var symD, symS, e, last, perElem: Integer;
+    ownCopy: Boolean;
+begin
+  IRArrayElemCopyOps := -1;
+  if (elemRecId = REC_NONE) or (elemRecId < REC_UCLASS_BASE) then Exit;
+  if (count < 1) or (elemSize <= 0) then Exit;
+  if RecordHasManagedFields(elemRecId) then Exit;
+
+  ownCopy := RecHasOwnCopyOp(elemRecId);
+  if ownCopy then
+    { an OWN Copy REPLACES the element's whole copy, so one call and no gaps }
+    perElem := 1
+  else
+  begin
+    RecCopyHoleCount := 0;
+    if not RecCollectCopyHoles(elemRecId, 0, 0) then Exit;
+    if RecCopyHoleCount = 0 then Exit;
+    perElem := RecCopyHoleCount;
+  end;
+
+  if count * perElem > REC_COPY_UNROLL_MAX then
+  begin
+    WarnAt(line, 'whole-array assignment falls back to a BYTE COPY: this array needs '
+                 + AIntToStr(count * perElem) + ' Copy-operator calls and the unroll limit is '
+                 + AIntToStr(REC_COPY_UNROLL_MAX)
+                 + ' — the element''s class operator Copy will not run'
+                 + ' (bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator)');
+    Exit;
+  end;
+
+  symD := AllocVar('', tyPointer);
+  symS := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, symD, IRLowerDestAddress(dstAST), -1, 0, Ord(tyPointer));
+  IRAppend(IR_STORE_SYM, symS, IRLowerAddress(srcAST), -1, 0, Ord(tyPointer));
 
   last := -1;
-  off := 0;
-  for i := 0 to RecCopyHoleCount - 1 do
-  begin
-    gap := RecCopyHoleOff[i] - off;
-    if gap > 0 then
-      last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, off),
-                       IRRecHoleAddr(symS, off), -1, gap, Ord(tyRecord));
-    last := IRRecCopyOpCall(RecCopyHoleRec[i],
-                            IRRecHoleAddr(symD, RecCopyHoleOff[i]),
-                            IRRecHoleAddr(symS, RecCopyHoleOff[i]));
-    off := RecCopyHoleOff[i] + RecCopyHoleSize[i];
-  end;
-  { The tail, trailing padding included -- IR_COPY_REC has always copied a
-    record's padding and nothing reads it. }
-  gap := total - off;
-  if gap > 0 then
-    last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, off),
-                     IRRecHoleAddr(symS, off), -1, gap, Ord(tyRecord));
-  IRRecCopyWithHoles := last;
+  for e := 0 to count - 1 do
+    if ownCopy then
+      last := IRRecCopyOpCall(elemRecId,
+                IRRecHoleAddr(symD, e * elemSize),
+                IRRecHoleAddr(symS, e * elemSize))
+    else
+      { RecCopyHole* was filled ONCE above and nothing below writes it --
+        IRRecCopyOpCall does not touch it -- so the walk is not repeated per
+        element. }
+      last := IRRecCopyHolesAt(symD, symS, e * elemSize, elemSize);
+  IRArrayElemCopyOps := last;
 end;
 function IRRecUnaryOpCall(recId, opKind, addr: Integer): Integer;
 { Emit a call to a ONE-OPERAND management operator -- `class operator
@@ -14221,16 +14322,29 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           used to take the raw byte copy, so both arrays held the same counted
           references and nilling one dangled the other. }
         waBaseKind := ManagedElemKind(Ord(Syms[i].ElemType), Syms[i].ElemRecName);
-        if waBaseKind = 0 then
-        begin
-          leftAddr := IRLowerDestAddress(ASTLeft[node]);
-          right := IRLowerAddress(ASTRight[node]);
-          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                             Syms[i].ArrLen * elemSize, Ord(tyRecord));
-        end
+        { The element's own `class operator Copy`, or a Copy-operator field
+          inside it, runs once per element -- a block copy enters no per-element
+          path, which is why this had to be hooked here and not in the record
+          arm. Refuses (and keeps the byte copy) for a managed element, and the
+          ARC branch below is where that shape belongs. }
+        if Syms[i].ElemType = tyRecord then
+          Result := IRArrayElemCopyOps(ASTLeft[node], ASTRight[node],
+                      Syms[i].ArrLen, elemSize, Syms[i].ElemRecName, ASTLine[node])
         else
-          Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
-                      Syms[i].ArrLen, elemSize, waBaseKind, Syms[i].ElemRecName);
+          Result := -1;
+        if Result < 0 then
+        begin
+          if waBaseKind = 0 then
+          begin
+            leftAddr := IRLowerDestAddress(ASTLeft[node]);
+            right := IRLowerAddress(ASTRight[node]);
+            Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                               Syms[i].ArrLen * elemSize, Ord(tyRecord));
+          end
+          else
+            Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
+                        Syms[i].ArrLen, elemSize, waBaseKind, Syms[i].ElemRecName);
+        end;
       end
       else if (ASTKind[ASTLeft[node]] = AN_FIELD) and rhsIsLValue and
               (faFldRecIdxHelper(ASTLeft[node], faFldRec, faFldIdx)) and
@@ -14253,16 +14367,26 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           elemSize := FrozenStrSlotSize(IntToTypeKind(UFldTk[faFldIdx]), UFldStrCap[faFldIdx])
         else elemSize := TypeSlotSize(IntToTypeKind(UFldTk[faFldIdx]));
         waBaseKind := ManagedElemKind(UFldTk[faFldIdx], UFldRec_[faFldIdx]);
-        if waBaseKind = 0 then
-        begin
-          leftAddr := IRLowerDestAddress(ASTLeft[node]);
-          right := IRLowerAddress(ASTRight[node]);
-          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                             UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
-        end
+        { the sibling of the variable arm above, and it needs the same hook --
+          `rec.arr := other.arr` is the same block copy through a field }
+        if UFldTk[faFldIdx] = Ord(tyRecord) then
+          Result := IRArrayElemCopyOps(ASTLeft[node], ASTRight[node],
+                      UFldArrLen[faFldIdx], elemSize, UFldRec_[faFldIdx], ASTLine[node])
         else
-          Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
-                      UFldArrLen[faFldIdx], elemSize, waBaseKind, UFldRec_[faFldIdx]);
+          Result := -1;
+        if Result < 0 then
+        begin
+          if waBaseKind = 0 then
+          begin
+            leftAddr := IRLowerDestAddress(ASTLeft[node]);
+            right := IRLowerAddress(ASTRight[node]);
+            Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                               UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
+          end
+          else
+            Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
+                        UFldArrLen[faFldIdx], elemSize, waBaseKind, UFldRec_[faFldIdx]);
+        end;
       end
       else if (ASTKind[ASTLeft[node]] = AN_INDEX) and
               (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
@@ -14278,10 +14402,26 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           AN_INDEX base, not AN_IDENT, so it keeps the scalar path. }
         i := ASTIVal[ASTLeft[ASTLeft[node]]];
         elemSize := TypeStorageSize(Syms[i].ElemType, Syms[i].ElemRecName);
-        leftAddr := IRLowerDestAddress(ASTLeft[node]);
-        right := IRLowerAddress(ASTRight[node]);
-        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                           SymDynElemRowLen[i] * elemSize, Ord(tyRecord));
+        { The THIRD arm that copies a run of records as one block, and it needed
+          finding rather than deriving: it is a whole-ROW store, not a whole
+          array or a whole field, so neither of the two arms above covers it.
+          Measured -- fpc fires the element's Copy twice for `d[0] := r` where
+          `d: array of TRow` and TRow is `array[0..1] of TR`, and pxx fired none.
+          A probe for it has to reach the row through a POINTER: `d[0][0].id`
+          is refused today with `TR has no default indexed property`, a separate
+          gap that is not this ticket's. }
+        if Syms[i].ElemType = tyRecord then
+          Result := IRArrayElemCopyOps(ASTLeft[node], ASTRight[node],
+                      SymDynElemRowLen[i], elemSize, Syms[i].ElemRecName, ASTLine[node])
+        else
+          Result := -1;
+        if Result < 0 then
+        begin
+          leftAddr := IRLowerDestAddress(ASTLeft[node]);
+          right := IRLowerAddress(ASTRight[node]);
+          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                             SymDynElemRowLen[i] * elemSize, Ord(tyRecord));
+        end;
       end
       else if CProgramMode and (ASTKind[ASTLeft[node]] = AN_FIELD) and
               (RecFieldBitWidth(ResolveNodeRec(ASTLeft[ASTLeft[node]]),

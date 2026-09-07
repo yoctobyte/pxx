@@ -1,0 +1,26 @@
+-- control: two := one
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+-- control: d[0] := s[0]
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+-- array of TR: d := s
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+  Copy src.id=2 dst.id-on-entry=8 dst.pad-on-entry=888
+   [0].id=1 [0].pad=777 [1].id=2 [1].pad=888
+-- array of TH: d := s
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+  Copy src.id=2 dst.id-on-entry=8 dst.pad-on-entry=888
+   [0] lead=10 f.id=1 f.pad=777 k=20
+   [1] lead=30 f.id=2 f.pad=888 k=40
+-- field: b.arr := a.arr
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+  Copy src.id=2 dst.id-on-entry=8 dst.pad-on-entry=888
+   [0].id=1 [0].pad=777 [1].id=2 [1].pad=888 tail=9
+-- whole record: b := a
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+  Copy src.id=2 dst.id-on-entry=8 dst.pad-on-entry=888
+   [0].id=1 [0].pad=777 [1].id=2 [1].pad=888 tail=5
+-- row store: d[0] := r
+  Copy src.id=1 dst.id-on-entry=7 dst.pad-on-entry=777
+  Copy src.id=2 dst.id-on-entry=8 dst.pad-on-entry=888
+   [0].id=1 [0].pad=777 [1].id=2 [1].pad=888
+done
