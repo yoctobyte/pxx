@@ -14542,6 +14542,42 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
 	fi
+	@# The xtensa arm, which is Call0 ONLY -- TargetHasSweepThunk reads XtensaABI,
+	@# not TargetArch, and windowed keeps the inline sweep for two independent
+	@# reasons stated at that function. Call0's call0 writes a0 and the ordinary
+	@# prologue has already spilled a0, so a0 is dead through the body and live
+	@# only inside the thunk: arm32's lr and riscv32's ra exactly. Controls, both
+	@# measured:
+	@#   drop ONLY the a0 save, keep the 16:  both rows HANG (rc=124), as aarch64
+	@#     and riscv32 do.
+	@#   save a0 correctly in 8 bytes:        this row prints ALIGN MISMATCH
+	@#     lo=0 hi=8 while test_managed_sweep_thunk still prints its exact
+	@#     expected output. Third target with that split, second in a row.
+	@# And one control this target has that no other does: CALL0 encodes a WORD
+	@# offset, xtensa has 3-byte instructions, and EncodeXtensaCall0 REFUSES a
+	@# misaligned entry rather than truncating it. The first build of this arm was
+	@# rejected with `call0 target 215783 is not 4-aligned`, which is why the thunk
+	@# entry goes through SweepThunkEntryHere -- pad and read in one operation,
+	@# the shape SetProcBodyAddrHere already argued for.
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_xtensa >/dev/null; \
+	  tools/expect_same.sh xtensa/test_sweep_align_xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/test_sweep_align_xtensa)" "ALIGN OK"; \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_sweep_thunk.pas $(TESTTMP)/test_managed_sweep_thunk_xtensa >/dev/null; \
+	  tools/expect_same.sh xtensa/test_managed_sweep_thunk "$$(tools/run_target.sh xtensa $(TESTTMP)/test_managed_sweep_thunk_xtensa 2>/dev/null)" "SWEEPTHUNK OK ok=80000 caught=5000"; \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_xtensaw >/dev/null; \
+	  tools/expect_same.sh xtensa-windowed/test_sweep_align "$$(tools/run_target.sh xtensa $(TESTTMP)/test_sweep_align_xtensaw)" "ALIGN OK"; \
+	else \
+	  echo "=== test_sweep_thunk_preserves_stack_alignment: qemu-xtensa absent, xtensa arms NOT verified ==="; \
+	fi
+	@# THE WINDOWED ROW ABOVE IS A LIVENESS ROW AND NOT A THUNK-ABSENCE ROW, and
+	@# saying so is the point: it proves windowed still returns the right answer,
+	@# never that no thunk was placed there. If TargetHasSweepThunk started
+	@# admitting windowed, sp would move under a body whose window spill area
+	@# lives at [sp-16] and this row might well still print ALIGN OK. What
+	@# established the absence is the byte-identity A/B in the landing commit --
+	@# 28 sources, 0 differ under --xtensa-abi=windowed against the previous
+	@# compiler -- and that measurement does not run again here. One notch weaker,
+	@# said rather than left for the next reader to assume.
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \

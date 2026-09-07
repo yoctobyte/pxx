@@ -15375,6 +15375,29 @@ begin
     else
       begin rv32_lw(reg_ra, reg_sp, 12); rv32_addi(reg_sp, reg_sp, 16); end;
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { Call0 ONLY -- TargetHasSweepThunk refuses windowed, and the reason is
+      there rather than here because it is a reason not to have an arm at all.
+
+      Call0's `call0` writes a0, the sweep call0s on every releasable slot, and
+      the ordinary prologue has already spilled a0 to its own frame, so a0 is
+      dead through the body and live only for the duration of this thunk --
+      exactly arm32's lr and riscv32's ra. 16 bytes for the ABI's stack
+      alignment, a0 in 4 of them, same split as riscv32; offset 12 matches the
+      Call0 prologue's own a0 slot so a disassembly reads the same way in both
+      places. }
+    if opening then
+      begin
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+        xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+      end
+    else
+      begin
+        xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+      end;
+  end
   else
     { NAMED, because it was an unnamed fall-through emitting the i386 encoding
       and that was correct only by accident of who gates the caller. Adding a
@@ -15418,6 +15441,14 @@ begin
       `jal` here would have been a range bug that only fires on large code.
       reg_t0 is the same scratch every riscv32 call site already clobbers. }
     EmitRiscv32CallToCode(reg_ra, addr)
+  else if TargetArch = TARGET_XTENSA then
+    { Call0 only (TargetHasSweepThunk refuses windowed). Its own encoder owns
+      the reach decision, as riscv32's does: EmitXtensaCallToCode picks call0
+      when XtensaCallReaches and a long call otherwise. The long form scratches
+      a9/a10, which are free at a return point -- the result load has not
+      happened yet, and the inline sweep already reaches the same helpers
+      through the same path. }
+    EmitXtensaCallToCode(addr)
   else
     Error('compiler error: no sweep-thunk call encoding for this target');
 end;
@@ -15437,6 +15468,8 @@ begin
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
     rv32_jalr(reg_zero, reg_ra, 0)                       { ret = jalr x0, ra, 0 }
+  else if TargetArch = TARGET_XTENSA then
+    xtensa_ret                                           { ret (jx a0) -- NOT retw }
   else
     Error('compiler error: no sweep-thunk return encoding for this target');
 end;
@@ -15449,7 +15482,30 @@ function TargetHasSweepThunk: Boolean;
   sibling already emit a per-target unconditional branch for the landing pad,
   and the thunk wants exactly that operation. Reusing them rather than growing
   a second jump-over is the point of normalise-dont-special-case -- the second
-  path is the one that stays broken. }
+  path is the one that stays broken.
+
+  XTENSA IS ADMITTED FOR Call0 AND REFUSED FOR WINDOWED, and that is a property
+  of the ABI rather than of the target -- which is why the condition reads
+  XtensaABI and not TargetArch alone. Two independent walls, either one enough:
+
+    Windowed keeps sp CONSTANT for the whole body on purpose. The caller's
+    register-window spill area lives at [sp-16], so `entry` sets sp once and
+    `retw` returns without restoring it (symtab.inc says so at the prologue and
+    again at the epilogue). A thunk that adjusts sp desyncs that area; a thunk
+    that does not adjust sp has nowhere to spill the return address.
+
+    And there is no return address to spill INTO a register either. Windowed's
+    a0 is the live return address of the current window, maintained by
+    entry/retw and never written by the body, because every windowed call in
+    this backend is a `call8`. Entering a thunk with `call0` would overwrite it.
+    Entering with `call8` would rotate the window, so the thunk would not see
+    the a7 frame pointer the sweep addresses every slot through -- and giving
+    the thunk its own `entry`/`retw` makes it a real function with a real frame,
+    which is a different change with a different correctness argument.
+
+  So windowed keeps the inline sweep, correctly and not merely for now. Said
+  here rather than in EmitSweepThunkStackAdjust, because it is a reason not to
+  have an arm at all rather than a reason for one arm's constants. }
 begin
   TargetHasSweepThunk :=
     (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)
@@ -15460,7 +15516,30 @@ begin
     or (TargetArch = TARGET_AARCH64)
 {$endif}
     or (TargetArch = TARGET_RISCV32)
+    or ((TargetArch = TARGET_XTENSA) and (XtensaABI <> XTENSA_ABI_WINDOWED))
     ;
+end;
+
+function SweepThunkEntryHere: Integer;
+{ Pad to the target's CALL-ENTRY alignment, then read CodeLen -- one operation,
+  in that order, because reading CodeLen first records the address the padding
+  is about to move.
+
+  Deliberately the same shape as SetProcBodyAddrHere (symtab.inc), which exists
+  because twenty sites had to pad a proc entry on xtensa and only three did.
+  This is the twenty-first such site and it arrived exactly as that comment
+  predicted -- CALL0 encodes a WORD offset, xtensa has 3-byte instructions, so a
+  thunk placed at whatever CodeLen happened to be is 4-aligned three times in
+  four. It is NOT a silent bug: EncodeXtensaCall0 refuses rather than
+  truncating, and it refused on the first build of this arm with
+  `call0 target 215783 is not 4-aligned`. The guard that made a whole frontend
+  unbuildable for xtensa is the guard that caught this in one compile.
+
+  No-op on every other target. }
+begin
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+  SweepThunkEntryHere := CodeLen;
 end;
 
 function ProcSweepThunkUsable(p: Integer; retSymIdx: Integer): Boolean;
@@ -15526,7 +15605,7 @@ begin
     body takes the branch at the top. The jump/pad/patch shape is the one
     EmitProcCleanupLandingPadForTarget already uses. }
   EmitProcCleanupFrameSkipForTarget(skipPatch);          { jmp over the thunk }
-  thunkAt := CodeLen;
+  thunkAt := SweepThunkEntryHere;                        { pads, THEN reads }
   EmitSweepThunkStackAdjust(True);
   EmitManagedLocalCleanupForTarget(retSymIdx);
   EmitSweepThunkStackAdjust(False);
