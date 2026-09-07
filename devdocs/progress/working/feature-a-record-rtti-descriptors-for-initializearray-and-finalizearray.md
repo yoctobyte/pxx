@@ -333,3 +333,54 @@ compiler that was corrupting its own memory while emitting the artefact.
 
 This is a second, independent reason the extension must be a new member kind
 rather than a header field, and it is the one that outranks the first.
+
+## 2026-09-07 (frankA) — the alignment reading, taken; it removes the last unknown
+
+The section above named this as gating the emitter change: whether an 8-aligned
+pointer can be placed at a computed tail offset, and whether `AddMethodFix`
+needs its slot aligned. Four readings, and the answer changes the shape.
+
+**1. Emission has no alignment requirement at all.** `PatchDataU64`
+(`elfwriter.inc:65`) stores byte-at-a-time into `Data[]`, so a code slot can sit
+at any offset as far as the writer is concerned.
+
+**2. A code slot in `Data[]` is 8 BYTES ON EVERY TARGET, 32-bit included.** The
+i386/arm32 writer says so in its own words (`elfwriter.inc:2833`): *".rela.data:
+data->data pointers and data->code method slots. **Slots are 8 bytes wide
+(layout shared with 64-bit targets)**; the reloc patches the low word, the high
+word stays zero."* So an operator entry is 8 bytes everywhere and the runtime
+reads it as `PMachineWord(slot)^` — the full word on 64-bit, the low word on
+32-bit, which is the same byte on every little-endian target we have. No
+per-target width branch is needed and none should be written.
+
+**3. The tail offset is NOT reliably 8-aligned, so the proposed shape was
+wrong.** `12 + mCount*16 + dCount*20` is `(4 + 4*dCount) mod 8` — 8-aligned only
+when `dCount` is odd — and the blob's own base is a bare `UClsRTTIOff[ci] :=
+DataLen` with no padding, so even a corrected tail offset would not land on an
+aligned absolute address.
+
+**4. But aligning a blob is a one-liner and already the house idiom.**
+`while (DataLen mod 8) <> 0 do DataPutB(0);` appears in `emit.inc` (twice),
+`elfwriter.inc`, `resources_emit.inc` and `ir.inc`.
+
+### What this changes
+
+**Do not put the operator table at the tail of the descriptor.** Emit it as its
+OWN blob, 8-aligned at its own emission point, and point the operator member's
+`TypeRef` at it self-relatively — exactly the mechanism a kind-2 member already
+uses for its dyn descriptor and a kind-3 member for its sub-descriptor.
+
+That is strictly better than the tail, and not only for alignment:
+
+- the tail arithmetic disappears, so nothing has to agree about
+  `12 + m*16 + d*20` a second time;
+- alignment becomes a local decision at one emission point instead of a property
+  of every member and dyn count that precedes it;
+- it reuses a referencing mechanism the runtime already implements and the new
+  `test_record_desc_subdesc_anchors.pas` row already covers.
+
+**Nothing is now unmeasured.** `AddMethodFix` relocates a procedure address into
+`Data[]` and DCE keeps the target alive; a slot is 8 bytes on every target;
+alignment is free at the emission point; and the announcement is a new member
+kind, which is the only shape the bootstrap admits. The emitter change is
+unblocked.
