@@ -426,3 +426,64 @@ reading harder: build with temps excluded from the release sweep and run
 `tools/assert_no_leak.sh` over a corpus that actually mints them. That is the one
 instrument that can see this failure class. Flat live bytes means the claim is
 real; live bytes scaling with iterations means a bigger bug than this ticket.
+
+## 2026-09-07 — TEMPS CANNOT BE DROPPED FROM THE SWEEP. Measured by building it.
+
+frank-coord-core, running the experiment the section above names. **The
+direction is dead, and it is dead by measurement rather than by reading the
+comment more carefully.**
+
+One refinement to how that experiment was framed: the section above says
+*"live bytes scaling with iterations means a bigger bug than this ticket"*.
+It scaled, and it is NOT a bug — the leak is CAUSED by the experimental
+change, not revealed by it. The tree is correct today; what the scaling
+refutes is the proposed optimisation. Worth stating because someone reading
+that line and this table together would otherwise go looking for a defect
+that is not there.
+
+Built exactly the change — unnamed locals excluded via `SymSkipScopeExitRelease`,
+which after the seven-copy refactor is one line covering all seven backends —
+and ran a program that mints temps rather than declaring them
+(`test/test_unnamed_managed_temps_are_released.pas`, wired as a census row):
+
+| iterations | temps SWEPT | temps SKIPPED |
+| --- | --- | --- |
+| 20 000 | `live=5` | `live=75189` |
+| 80 000 | `live=3` | `live=309011` |
+
+**4.11x the leak for 4x the work — proportional, which is the signature of a
+per-call leak and not of a fixed residue.** ~3.8 of the ~19 temps that body
+mints per iteration hold the ONLY reference at scope exit. Allocation totals are
+identical in both columns (375931 / 1545047), so nothing about what the program
+allocates changed; only what it gives back did.
+
+The experiment was reverted and the restored compiler is byte-identical to the
+pre-experiment binary, so nothing here is in the tree except the test.
+
+### Why the comment reads like permission and is not
+
+`ir_codegen.inc:13838` — *"an unnamed temp does not outlive the statement that
+minted it"* — is TRUE, and it is a claim about the temp's **VALUE**. That is
+exactly what entitles the ZERO-INIT pass beside it to re-scan: re-zeroing
+something already dead is harmless. The release loop needs a different claim,
+about **OWNERSHIP of what the temp REFERENCES**. The two are not the same and
+one does not imply the other, which is why a careful reader gets this wrong.
+
+### What it means for the two candidate fixes
+
+- **`98.4% temps` is not an opportunity, it is a warning.** The sweep is ~98%
+  temps and ~98% of it is load-bearing. Any fix that skips slots must prove
+  ownership per slot, not lifetime per statement.
+- **It moves against the inline nil-test's transferability, mildly.** The 1.667
+  ns/slot was measured on an all-nil frame, on the reasoning that temps are
+  already nil at the epilogue so the branch predicts perfectly. A meaningful
+  share of them are NOT nil — they hold the last reference. How that maps from
+  allocations to SLOTS is not established here and should not be guessed; it is
+  a smaller effect than the 56%, and it is the direction that costs rather than
+  the one that flatters.
+- **Per-path liveness over user locals is still 10 of 619** and still not worth
+  building on its own.
+
+A test now guards the direction, because the next reader of `:13838` will reach
+the same conclusion and an output assertion will not stop them: every `WriteLn`
+in that program is correct with the releases removed.

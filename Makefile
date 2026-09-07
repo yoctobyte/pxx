@@ -14421,6 +14421,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_oamfr26 "$$($(TESTTMP)/test_oamfr26)" "$$(printf 'const sum=8 high=1\nafter var: aa/bb ccc/d n=01\nafter partial: ONLY0 ccc/d\ndyn sum=19\nbig sum=12288 high=4095\nloop t=4000 aa/bb ccc/d')"
 	./$(COMPILER) test/test_open_array_ctor_stmt.pas $(TESTTMP)/test_open_array_ctor_stmt26
 	tools/expect_same.sh test_open_array_ctor_stmt26 "$$($(TESTTMP)/test_open_array_ctor_stmt26)" "$$(printf '3\n1 2 3 \n\nhi 5')"
+	@# THE SWEEP MUST RELEASE UNNAMED COMPILER TEMPS, and the reason this is a
+	@# CENSUS row rather than an expect_same one is the whole point: a leak does
+	@# not corrupt, so `MINT OK` prints correctly with the releases removed.
+	@# ir_codegen.inc:13838 says an unnamed temp does not outlive the statement
+	@# that minted it -- true, about its VALUE, which is what lets the ZERO-INIT
+	@# pass re-scan. The release loop needs a claim about OWNERSHIP of what the
+	@# temp REFERENCES, and one does not imply the other. Building exactly that
+	@# change measured live=75189 at 20000 iterations and live=309011 at 80000
+	@# (4.11x for 4x the work) against live=5 unmodified -- proportional, the
+	@# signature of a per-call leak. ~98% of the sweep is temps
+	@# (609 of 619 in ParseFactorCore) and ~98% of it is load-bearing.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_unnamed_managed_temps_are_released.pas $(TESTTMP)/test_unnamed_temps26
+	tools/expect_same.sh test_unnamed_temps26 "$$($(TESTTMP)/test_unnamed_temps26 2>/dev/null)" "MINT OK"
+	tools/assert_no_leak.sh unnamed_managed_temps 200 $(TESTTMP)/test_unnamed_temps26
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
