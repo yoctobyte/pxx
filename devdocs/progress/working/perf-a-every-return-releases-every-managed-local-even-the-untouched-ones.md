@@ -4,7 +4,7 @@ prio: 70
 status: working
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 owner: frank-subcoord
 ---
 
@@ -862,3 +862,65 @@ recording `PtrUInt(@local) mod 16`, compared between a thunked and a non-thunked
 build, so there is no absolute expected value to collide with a do-nothing
 default). **The argument for doing it BEFORE the remaining five targets rather
 than after: each of those adds a constant of its own with the same blind spot.**
+
+## 2026-09-07 — WHOLE-PROGRAM A/B: the thunked build is 2.0-2.5% FASTER, and that is the size win, not a free call/ret
+
+The model-free number, run by frank-subcoord on frank-coord-core's pair. **No
+model sits between this and the question** — the two binaries are the SAME
+PROGRAM, `compiler/compiler.pas` at `50e25f5f0`, differing only in whether their
+own managed-local sweeps are inline or thunked:
+
+```
+  A  11594364 bytes  sha256 228fe7725379ad42   compiled by the PRE-thunk compiler (sweeps inline)
+  B   7895676 bytes  sha256 19bee89a03e635cf   compiled by the THUNKED compiler
+```
+
+Two runs, min-of-7, interleaved, on a verified-quiet box:
+
+```
+  run 1   inline 17.130s   thunk 16.780s   -0.350s   -2.04%
+  run 2   inline 17.140s   thunk 16.710s   -0.430s   -2.51%
+```
+
+A's minimum reproduces to **0.01s** across two independent runs. Five of B's
+seven samples fall below A's fastest, so the sign is not in doubt.
+
+**THE AIMING, which is what makes it quotable.** `ab_time.sh` compiles the
+workload with both binaries and `cmp`s the output BEFORE it times anything,
+exiting 2 rather than reporting a pair for two programs that disagree. Since A
+and B are the same program, any disagreement means something moved underneath
+the run. It also warms the page cache for both before the first sample, which
+matters because they differ in size by 3.7MB.
+
+**WHY NOT `cc_base` VS `cc_thunk` DIRECTLY** (frank-coord-core's design, and the
+confound I would not have separated): timing the pre-thunk compiler against the
+thunked one conflates three things with the same sign — the I-cache effect, the
+fact that the thunked compiler EMITS FEWER BYTES and so does less work per
+compile, and the call/ret cost. Same-source/two-builds removes the second.
+
+**WHAT THIS LICENSES, AND WHAT IT DOES NOT.** It licenses exactly one
+comparison: *on a real 17-second workload, the footprint win exceeds the
+call/ret cost, net -2.0 to -2.5%.* It is **not** evidence that the call/ret is
+free — that cost is inside the figure. A later measurement of the call/ret in
+isolation returning a POSITIVE number is consistent with everything here.
+
+**Directionally consistent with the unattributed negative one section up.** The
+size-matched site-count model went negative at 128 and 140 sites and was refused
+on the grounds that a negative cost is not physical for a call/ret. A footprint
+effect outrunning the call/ret cost is a mechanism that produces that sign.
+Recorded as consistent-with, **not** as the explanation: the model still has an
+effect nobody has attributed, and one real-world number agreeing with its sign
+does not retire that.
+
+**A FALSE ALARM WORTH RECORDING, because it nearly cost a clean run.** Mid-run,
+a peer reported having rewritten `compiler/ir_codegen.inc` nine seconds in and
+asked for the measurement to be discarded — the `/bin/sh`-reads-incrementally
+hazard, correctly identified. The reasoning was valid at every step and the
+referent was a different tree: their sync moved
+`/home/neo/frank-coord-core/compiler/ir_codegen.inc` (inode 2114238, mtime
+05:23:43) while the workload was `/home/neo/frank-subcoord/…` (inode 1728186,
+mtime 04:33:19). Corroborated three ways: nothing under this checkout's
+`compiler/` has an mtime after the run started, the reflog's last ref move
+predates it by fifty minutes, and the `cmp` precondition passed. **A path is not
+a file when every session has its own checkout** — and the near-miss was
+discarding a good measurement, not keeping a bad one.
