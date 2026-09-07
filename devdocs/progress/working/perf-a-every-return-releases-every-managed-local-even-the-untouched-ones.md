@@ -580,9 +580,22 @@ Cost accounting, so it is not assumed:
 
 - **Code:** `ParseFactorCore` goes from 106,041 release sites to ~758 plus one
   call per return. That is the whole of cost (2).
-- **Runtime:** one extra call/ret per RETURN — 2.984 ns measured — against a
-  sweep that already pays 2.984 ns per SLOT per return. On a 757-slot frame
-  that is one part in 757. It does not fix cost (1) and does not claim to.
+- **Runtime:** one extra call/ret per RETURN — **~2.1 ns, and under 3 in the
+  worst case** — against a sweep that already pays ~2.98 ns per SLOT per
+  return. On a 757-slot frame that is one part in 757 either way. It does not
+  fix cost (1) and does not claim to.
+
+  **The 2.984 figure does NOT apply here and this draft quoted it wrongly for
+  an hour.** That number was measured in the sweep's own regime: 532 DISTINCT
+  call sites strung across a ~12KB straight-line body, where the front end is
+  the bottleneck. A thunk is the opposite regime — one target, called
+  repeatedly, hot in i-cache, perfectly predicted — and measured directly
+  (200M iterations, min of 7 interleaved, empty noinline callee against a
+  compiler barrier) it is **2.064 ns**. frank-subcoord caught their own number
+  being reused outside the regime that produced it. The honest range is 2.06 to
+  2.98 and nearer the low end: the thunk is called from ~140 different return
+  sites so return addresses vary, but pushes and pops stay matched so the
+  return-stack buffer handles it. Quote the range, not either endpoint.
 - **wasm32 is untouched**: it already shares, measured at 0.062 B/slot/return.
 
 ### How it lands, and the control
@@ -602,3 +615,9 @@ construction — the whole point is that the bytes change. So per step:
 The leak instrument is not optional here for the reason this ticket already
 carries: a sweep that is emitted once and then never CALLED prints every correct
 answer.
+
+**And it is run BEFORE each conversion on the same corpus, not only after.**
+An absolute `live=5` after the change is flat for an unknown reason; `live=5`
+before and `live=5` after, same corpus same bound, is flat for the right one.
+Baseline on `test/test_unnamed_managed_temps_are_released.pas` at
+`e86101766`: `allocs=375931 frees=375926 live=5`.
