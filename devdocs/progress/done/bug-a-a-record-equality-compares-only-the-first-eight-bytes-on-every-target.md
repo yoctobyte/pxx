@@ -245,4 +245,4 @@ tier, along with two sibling cross-target gates that were in no tier at all
 (`bug-t-25-of-56-make-test-targets-are-reachable-from-no-tier`).
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f1f145693.
