@@ -1502,4 +1502,4 @@ to frank-seven for clearing the inode outage that had the box emitting
 Closed by the run, not by a decision. If it regresses, that is a new ticket.
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit cc900f037.
