@@ -1858,9 +1858,15 @@ const
   THE DESCRIPTOR IS A BOOTSTRAP INTERFACE, not merely a compiler/runtime one.
   Every `make compiler/pascal26` runs the OLD emitter against the NEW runtime:
   the seed binary writes stage-1's Data[] with ITS OWN EmitLayoutRTTI while
-  linking stage-1's builtinheap.pas out of the working tree. No seed escapes
-  that -- the pin included, since a seed run as ./compiler/pascal26 resolves
-  bdir to the live compiler/builtin/ either way.
+  linking stage-1's builtinheap.pas out of the working tree.
+
+  Seeding from the PIN is not an escape, and the reason is WHERE the seed goes,
+  not what the pinned binary does. Run in place, `stable_linux_amd64/default/
+  pinned` resolves its own snapshot builtin (measured with `--where`), which is
+  why the `pinned builds live lib/rtl` gate row is a coherent pair. But seeding
+  means COPYING it to compiler/pascal26 -- the recovery line in the
+  $(COMPILER_STAMP) recipe spells that out -- and from there its bdir is the
+  live compiler/builtin/ like any other seed.
 
   So a header resize leaves stage-1 reading its own descriptors from +16 while
   they were written at +12, and the failure is not a 4-byte skew that lands
@@ -1871,6 +1877,24 @@ const
   Measured 2026-09-07 with a counter in EmitLayoutRTTI: compiling
   compiler/compiler.pas emits 19 record layout descriptors, 1 to 3 members
   each, so stage-1 walks them and the window is not theoretical.
+
+  AND THE FPC BOOTSTRAP CHAIN DOES NOT HIT IT, WHICH IS THE WORST PART.
+  `make bootstrap` is fpc -> FPC_COMPILER -> BUILD_COMPILER -> VERIFY_COMPILER,
+  and every one of those carries the NEW emitter; each also links the LIVE
+  compiler/builtin/, because a $(PXX_TMP)-located binary finds no builtin dir
+  beside itself and falls through to the CWD-relative last resort in
+  ParseUsesUnitBody, with make's CWD at the repo root. Measured: that binary
+  compiles from the repo root and answers `unit source not found: builtinheap`
+  from anywhere else.
+
+  So under a header change the FPC chain is coherent at every stage and the
+  locally-seeded chain is not -- and BOTH pass their own checks. `bootstrap`
+  runs `cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)` and it matches; the local loop
+  prints `converged`; both binaries self-reproduce. The ONE instrument that
+  would see it is the release property the two chains exist to compare -- that
+  a bootstrap from fpc 3.2.2 is byte-identical to the pin-derived binary. A
+  format skew lives exactly in the gap between them, and it would arrive as a
+  release-blocking sha difference with nothing else red.
 
   A NEW MEMBER KIND has no such window. ArrCount = 0 makes the entry inert in
   all six walks -- every one is `while j < arrayCount` over a `case kind of`

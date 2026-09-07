@@ -288,3 +288,48 @@ pointer table after a `dCount * 20` region — the blob is currently 4-aligned
 throughout and nothing in it is a pointer today. `AddMethodFix` patches an
 8-byte slot; whether it requires the slot to be aligned, or the ELF writer only
 needs it in range, is the next reading and it gates the emitter change.
+
+## 2026-09-07 (frankA) — a correction to the section above, and the release consequence
+
+**Correction first.** The section above says *"no seed escapes it — the pin
+included, because a seed invoked as `./compiler/pascal26` resolves `bdir` to the
+live `compiler/builtin/` either way."* The **"either way" was not measured and is
+wrong.** Run in place, `stable_linux_amd64/default/pinned --where` reports
+`stable_linux_amd64/default/builtin/` — its own snapshot — which is precisely
+why the `pinned builds live lib/rtl` gate row is a coherent pair.
+
+The conclusion survives on a different fact: **seeding from the pin means
+COPYING it to `compiler/pascal26`** (the recovery line in the
+`$(COMPILER_STAMP)` recipe spells that out), and from there its `bdir` is the
+live tree like any other seed. So the pin is no escape *because of where a seed
+goes*, not because of what the pinned binary does. Landed at `30ed522b3` with
+the over-broad wording; corrected here and in both copies in the tree.
+
+### The FPC bootstrap chain does NOT hit it, and that is the release problem
+
+`make bootstrap` is `fpc → FPC_COMPILER → BUILD_COMPILER → VERIFY_COMPILER`.
+Every stage carries the **new** emitter. Every stage also links the **live**
+`compiler/builtin/`: a `$(PXX_TMP)`-located binary finds no builtin dir beside
+itself — `--where` prints `[MISSING]` for it — and falls through to the
+CWD-relative last resort in `ParseUsesUnitBody`, with make's CWD at the repo
+root. Measured with its own control: that binary compiles from the repo root and
+answers `unit source not found: builtinheap` from anywhere else.
+
+So under a header change:
+
+| chain | emitter | runtime | coherent? | its own check |
+| --- | --- | --- | --- | --- |
+| `make bootstrap` (fpc-seeded) | new | new | **yes** | `cmp BUILD VERIFY` passes |
+| `make compiler/pascal26` (locally seeded) | old | new | **no** | prints `converged` |
+
+**Both pass their own checks and both binaries self-reproduce.** The single
+instrument that would see the difference is the property the two chains exist to
+compare — *a bootstrap from fpc 3.2.2 is byte-identical to the pin-derived
+binary*. That is the release's anti-impersonation claim: a stranger who does not
+trust our pin can rebuild from FPC and compare shas. A descriptor-format skew
+lives exactly in the gap between the two chains, so it would arrive as a
+**release-blocking sha difference with nothing else red**, produced by a
+compiler that was corrupting its own memory while emitting the artefact.
+
+This is a second, independent reason the extension must be a new member kind
+rather than a header field, and it is the one that outranks the first.

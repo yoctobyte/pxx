@@ -766,14 +766,42 @@ from 12 bytes to 16 to make room for a Flags word.
 `make compiler/pascal26` does not run one era against itself. It runs the
 **OLD emitter against the NEW runtime**: the seed binary writes stage-1's
 `Data[]` with its own emitter while linking stage-1's runtime out of the working
-tree. No seed escapes that — the pin included, because a seed invoked as
-`./compiler/pascal26` resolves its builtin dir to the live `compiler/builtin/`
-either way. So stage-1 reads its own descriptors from the new offset while they
-were written at the old one, and the skew lands mid-record: the walk takes one
-member field as another, ends up using a self-relative delta as an **array
-count**, and loops that many times releasing strings at computed garbage
-addresses. Compiling `compiler/compiler.pas` emits 19 such descriptors, so
-stage-1 walks them every build.
+tree. So stage-1 reads its own descriptors from the new offset while they were
+written at the old one, and the skew lands mid-record: the walk takes one member
+field as another, ends up using a self-relative delta as an **array count**, and
+loops that many times releasing strings at computed garbage addresses. Compiling
+`compiler/compiler.pas` emits 19 such descriptors, so stage-1 walks them every
+build.
+
+**Seeding from the pin is not an escape, but the first version of this section
+said so for the wrong reason and overstated it.** Measured with `--where`: the
+pinned binary run in place resolves its OWN snapshot builtin, not the live tree
+— which is exactly why the `pinned builds live lib/rtl` gate row is a coherent
+pair rather than a counterexample. What removes the escape is *where the seed
+goes*: seeding means copying the pin to `compiler/pascal26`, and from there its
+builtin dir is the live one like any other seed. The conclusion survived; the
+sentence "no seed escapes it, the pin included, **either way**" did not, and the
+"either way" was the unmeasured half.
+
+**AND THE FPC BOOTSTRAP CHAIN DOES NOT HIT IT AT ALL — which is what makes this
+a release problem and not merely a build one.** `make bootstrap` is
+`fpc → FPC_COMPILER → BUILD_COMPILER → VERIFY_COMPILER`, and every stage carries
+the NEW emitter; every stage also links the LIVE `compiler/builtin/`, because a
+`$(PXX_TMP)`-located binary finds no builtin beside itself and falls through to
+the CWD-relative last resort, with make's CWD at the repo root. Measured, with
+its own control: that binary compiles from the repo root and answers
+`unit source not found: builtinheap` from anywhere else.
+
+So a format skew makes the FPC chain coherent at every stage and the locally
+seeded chain incoherent — **and both pass their own checks.** `bootstrap` runs
+`cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)` and it matches. The local loop prints
+`converged`. Both binaries self-reproduce. The one instrument that can see it is
+the property the two chains exist to compare — *a bootstrap from fpc 3.2.2 is
+byte-identical to the pin-derived binary*, which is the strongest
+anti-impersonation claim a release has, because a stranger who does not trust
+the pin can rebuild and compare shas. A format skew lives exactly in the gap
+between the two chains and would surface as a release-blocking sha difference
+with nothing else red.
 
 **The general rule.** In a self-hosting toolchain, any format shared between the
 compiler and its runtime — descriptors, VMT layouts, ABI records, stamp files,
