@@ -47,3 +47,39 @@ recipes at once, and a sweeping edit to `Makefile` is the change most likely to
 collide with whatever lane is mid-overhaul.
 
 [[regression-test-core-test-sizeof-user-name-shadows-builtin]]
+
+## A SECOND DATED INSTANCE, and it is a COUNT rather than a transcript (frank-subcoord, 2026-09-07)
+
+`lib_sysutils_delphi_exceptions.pas` gained assertions. The recipe judges it with
+
+```make
+tools/expect_same.sh lib_sysutils_delphi_exc.1 "$$(/tmp/lib_sysutils_delphi_exc | grep -c '=ok')" "21"
+```
+
+so the program printed **25** `=ok` lines against a literal `21` in the Makefile.
+Fixed at `b2af9952b`. Same failure as `2ba37ba91`: **the .pas was self-consistent
+and complete from inside itself, and the number it is judged by is in a file the
+author never opened.** Seen again from the other side an hour later — a full tier
+run at `594cfda54ef2` (a sha predating the fix) reported it as its ONLY red,
+which is the reproduction behaving correctly and is how the instance was
+re-noticed.
+
+**Why this instance is worth adding rather than just incrementing a count: it is
+not a transcript.** The ticket's proposal is a `.expected` file holding expected
+OUTPUT, and this row asserts a **derived scalar** — `grep -c` of a marker. A
+`.expected` file still fixes it (the count moves beside the .pas, so adding a row
+and updating the expectation are the same edit in the same directory), but a
+proposal written only around transcripts could easily be implemented in a way
+that leaves count-shaped rows in the recipe. **Both shapes have the identical
+coupling and the fix must cover both.**
+
+A third shape exists in the same family and is worth naming while the pattern is
+in view: an expectation that is a COUNT is strictly worse than one that is a
+transcript, because a count cannot say WHICH row appeared or vanished. `21` vs
+`25` tells you four assertions moved and nothing about which, whereas a
+transcript diff names them. So where a row can reasonably be a transcript,
+that is the better target for this work, not merely the easier one.
+
+**Frequency, since prioritisation needs it:** two instances in 18 days that we
+know of (`2ba37ba91`, 18h of native RED; `b2af9952b`), both found by a red rather
+than by review, and both invisible to the author at the moment of the edit.
