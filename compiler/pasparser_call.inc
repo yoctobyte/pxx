@@ -3202,7 +3202,7 @@ var
   nBr, brOnly: Integer;
   rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
-  ok, okBr, vetoed: Boolean;
+  ok, okBr, vetoed, okAny: Boolean;
   lo, name2: AnsiString;
 begin
   Result := -1;
@@ -3486,7 +3486,24 @@ begin
     it is whether its arguments are possible. Rank 3 is `not TypesCompatible`,
     the same predicate the free-call path rejects on, so this is reaching the
     shared answer rather than inventing a stricter one. }
-  if nCand = 1 then
+  { ...AND THE CASE WHERE THE RANKER COULD NOT ACCEPT ANY OF THEM, which used to
+    fall out of the bottom of this function into `FindUMethArity` -- the FIRST
+    name match whose arity fits, i.e. a guess. Measured 2026-09-07: `TT` with
+    `Take(LongInt)` and `Take(string)`, called with a record, ran the LongInt
+    body and printed the record's first field as an integer; a Double and a
+    TObject reached the same body as 0. fpc 3.2.2 refuses all three. Every
+    candidate scored rank 3 (`not TypesCompatible`), so `best` stayed -1 and the
+    blind fallback bound the call anyway -- the checking was already done and
+    then discarded.
+
+    THE FIX IS NOT "REFUSE WHEN best < 0". That is the unsound gate the
+    allowlist below was written to avoid: rank is a KIND pair and four classes of
+    legal call cannot be judged from one. It is to run the SAME check this gate
+    already runs for a single candidate, over all of them, and refuse only when
+    every candidate rejects the arguments through the shared predicate with the
+    channels filled. When one accepts, the answer is exactly what it was before.
+    bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body }
+  if (nCand = 1) or (best < 0) then
   begin
     { An ALLOWLIST, and deliberately a narrow one.
 
@@ -3522,7 +3539,19 @@ begin
       run the free path's own populate-and-match, which means extracting that
       population out of pasparser_lval.inc into a helper both callers share.
       That is the real fix and it is a refactor, not this. }
-    pi := UMthProc_[cand[0]];
+    { ONE CANDIDATE OR ALL OF THEM, same body. With nCand = 1 this loop runs
+      once over cand[0] and is exactly what it was. The channels are GLOBAL, so
+      each candidate fills, asks and clears within its own iteration -- a fill
+      left standing for the next candidate is the defect PyParseVariadicMinMax
+      was filed for, one scope out. Stops at the first candidate that accepts:
+      the QUESTION here is "are these arguments possible at all", not "which
+      overload wins", and answering the second from this probe would override a
+      ranking that has already run. }
+    okAny := False;
+    c := 0;
+    while (c < nCand) and not okAny do
+    begin
+    pi := UMthProc_[cand[c]];
 
     { THE ARGUMENT-MATCH SIDE CHANNELS, filled here so this gate can reach the
       free path's own answer instead of re-deriving a weaker one from kinds.
@@ -3629,7 +3658,10 @@ begin
     MatchArgScalarValid := False;
     MatchArgArrayValid := False;
     MatchArgElemValid := False;
-    if not ok then
+      if ok then okAny := True;
+      c := c + 1;
+    end;   { candidate loop }
+    if not okAny then
     begin
       { THE ARGUMENT TYPES, because the METHOD probe never populates
         OverloadReport and the FREE path does. Both sites print the same

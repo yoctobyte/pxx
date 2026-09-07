@@ -6112,6 +6112,18 @@ test-core: $(COMPILER)
 	  | grep -q 'no overload of M matches these arguments' \
 	  || { echo 'test_method_arg_typecheck_fails_str: FAIL - expected a compile error naming the method'; exit 1; }
 	# A STRING LITERAL must not bind a pointer whose pointee is an unrelated
+	# ...and the MULTI-candidate sibling: two overloads, an argument fitting
+	# NEITHER. That case fell out of the bottom of FindUMethOverloadAhead into
+	# FindUMethArity -- a guess -- after the ranker had already judged every
+	# candidate impossible. Negative half first (must not compile, fpc refuses
+	# the same three lines), then the positive half, which is where the risk is:
+	# the four classes the single-candidate gate had to be walked back for, each
+	# given a same-arity sibling so only the new path can decide them.
+	@./$(COMPILER) test/test_method_overload_arg_typecheck_fails_multi.pas $(TESTTMP)/test_movlfail26 2>&1 \
+	  | grep -q 'no overload of Take matches these arguments' \
+	  || { echo 'test_method_overload_arg_typecheck_fails_multi: FAIL - expected a compile error naming the method'; exit 1; }
+	./$(COMPILER) test/test_method_overload_arg_typecheck_ok_multi.pas $(TESTTMP)/test_movlok26
+	tools/expect_same.sh test_movlok26 "$$($(TESTTMP)/test_movlok26)" "$$(cat test/test_method_overload_arg_typecheck_ok_multi.expected)"
 	# type. Same family as the two rows above and the same architectural gap:
 	# TypesCompatible sees two KINDS. It grants tyPointer <- tyString for a real
 	# reason (a Pascal string marshals to a const char*, so a C binding needs no

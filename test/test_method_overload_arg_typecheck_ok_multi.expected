@@ -1,0 +1,7 @@
+fmt 2
+fmt n 7
+cmp nil
+cmp set
+raw
+raw
+raw str lit
