@@ -476,8 +476,8 @@
  ],
  "host": "seven",
  "infra": {
-  "count": 1,
-  "last": "2026-09-07T03:38:20Z",
+  "count": 2,
+  "last": "2026-09-07T03:50:42Z",
   "reason": "no report (rc=1)",
   "sha": "663ab5565e2d174693e8592f3a5ec9f196d255e6",
   "since": "2026-09-07T03:38:20Z",
