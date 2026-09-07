@@ -75,6 +75,7 @@ def build(root):
     git("push", "-q", "origin", "HEAD:master", cwd=clone)
     c = tw.Clone.__new__(tw.Clone)
     c.path, c.branch, c.remote = clone, "master", None
+    c.host = None
     return c
 
 
@@ -118,9 +119,77 @@ def t_mixed_publishes_nothing(c):
     return "nothing published, dev edit intact, falls through to pause"
 
 
+def diverge(c):
+    """Commit a CHANGE to both tracked files and return the previous sha.
+
+    Checking out the sha you are already on never conflicts, whatever is dirty
+    -- git only refuses when the checkout would overwrite a local change. So a
+    genuine reproduction needs a target whose content for that path differs.
+    """
+    base = git("rev-parse", "HEAD", cwd=c.path).stdout.strip()
+    write(c.path, TS, '{"host": "plexus", "gen": 2}')
+    write(c.path, SRC, "the platonic source, revised")
+    git("add", "-A", cwd=c.path)
+    git("commit", "-qm", "second", cwd=c.path)
+    return base
+
+
+def t_checkout_survives_a_write_made_after_the_heal(c):
+    """The 2026-09-07 wedge: dirt appears BETWEEN the heal and the checkout.
+
+    publish_own_writes() runs at the top of the cycle; note_idle_tier_try()
+    then writes seven.json and only then does the cycle check out the sha. git
+    refuses to move the worktree over it, identically every cycle -- so the
+    "self-heals on the next cycle" promise does not hold for this shape, and
+    the box goes dark instead of pausing."""
+    base = diverge(c)
+    c.publish_own_writes("plexus")          # top of cycle: tree is clean
+    write(c.path, TS, '{"last_idle_tier_try": {"date": "later"}}')
+    assert dirty(c), "setup failed: the post-heal write did not dirty the tree"
+    c.host = "plexus"
+    c.checkout(base)                        # must not raise
+    assert dirty(c) == "", "still dirty after checkout: %r" % dirty(c)
+    return "our own post-heal write is published and the checkout proceeds"
+
+
+def t_checkout_still_refuses_a_dev_edit(c):
+    """The tolerance must not become a bulldozer: a human's edit still stops
+    the checkout, and is still intact afterwards."""
+    base = diverge(c)
+    write(c.path, SRC, "a dev edit, mid-run")
+    c.host = "plexus"
+    try:
+        c.checkout(base)
+        raise AssertionError("checkout ran over a dev edit")
+    except RuntimeError:
+        pass                                # git refused, which is correct
+    assert SRC in dirty(c), "the dev edit was destroyed: %r" % dirty(c)
+    return "a dev edit still refuses, and survives"
+
+
+def t_checkout_without_a_host_keeps_the_old_behaviour(c):
+    """Devtests and one-shot tools construct a Clone without a host. They must
+    get the strict checkout, not a silent publish to origin."""
+    base = diverge(c)
+    write(c.path, TS, '{"whatever": 1}')
+    before = dirty(c)
+    c.host = None
+    try:
+        c.checkout(base)
+        raise AssertionError("checkout published tstate dirt with no host set")
+    except RuntimeError:
+        pass
+    assert dirty(c) == before, "tree altered without a host: %r" % dirty(c)
+    return "no host set: strict, publishes nothing"
+
+
 def main():
     rc = 0
-    for fn in (t_publishes_own, t_leaves_source_alone, t_mixed_publishes_nothing):
+    for fn in (t_publishes_own, t_leaves_source_alone,
+               t_mixed_publishes_nothing,
+               t_checkout_survives_a_write_made_after_the_heal,
+               t_checkout_still_refuses_a_dev_edit,
+               t_checkout_without_a_host_keeps_the_old_behaviour):
         root = tempfile.mkdtemp(prefix="devtest-wedge-")
         try:
             note = fn(build(root))

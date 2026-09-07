@@ -390,6 +390,10 @@ class Clone:
         self.path = path
         self.remote = remote
         self.branch = branch
+        # Set by main() once the host name is resolved. checkout() needs it to
+        # publish our own tstate dirt; None means "don't", so every non-main
+        # caller (devtests, one-shot tools) keeps the old strict behaviour.
+        self.host = None
         if not os.path.isdir(os.path.join(path, ".git")):
             if not remote:
                 sys.exit("twatch: no clone at %s and no --remote to create it" % path)
@@ -657,6 +661,39 @@ class Clone:
         return sh(["git", "rev-parse", "origin/%s" % self.branch], cwd=self.path)
 
     def checkout(self, sha):
+        """Detached checkout, retried once after publishing our own tstate dirt.
+
+        publish_own_writes() ended the "paused waiting for a commit only the
+        paused daemon could make" deadlock, but it is POSITIONAL: it runs at the
+        top of the cycle, so it only covers a save_state() that happened BEFORE
+        it. note_idle_tier_try() writes seven.json after that heal and before
+        this checkout -- deliberately, so an attempt that never lands still
+        leaves a trace -- and git then refuses to move the worktree over it.
+
+        That recurs at the same point of every cycle, so it does NOT self-heal
+        the way publish_own_writes' docstring promises. seven wedged twice on
+        2026-09-07: each time it burned the 10-failure budget, then eleven
+        systemd restarts each refusing the now-dirty tree, then `Active: failed`
+        -- dark, with a last log line that reads like operator error. The second
+        cost 70 minutes and killed the cycle after the first clean full tier any
+        live host had ever produced.
+
+        So fix the SHAPE rather than the fourth call site. The invariant
+        publish_own_writes claims -- our own tstate writes never stop the daemon
+        -- is restored by making the operation they block tolerate them. It
+        stays narrow because publish_own_writes is narrow: tracked, modified,
+        under tstate/, and nothing else dirty. A human's edit still raises
+        exactly as before, and a second failure is re-raised untouched, so this
+        can turn a wedge into a retry but never into a loop.
+        """
+        try:
+            sh(["git", "checkout", "--quiet", "--detach", sha], cwd=self.path)
+            return
+        except RuntimeError:
+            if not self.host or not self.publish_own_writes(self.host):
+                raise
+            print("twatch: checkout was blocked by our own tstate write — "
+                  "published it, retrying once", flush=True)
         sh(["git", "checkout", "--quiet", "--detach", sha], cwd=self.path)
 
     def commits_between(self, good, bad):
@@ -8746,6 +8783,7 @@ def main():
     BRANCH = args.branch or CONF.get("branch") or "master"
     clone = Clone(clone_path, args.remote, BRANCH)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
+    clone.host = host
     # Stamped ONCE, here, and never recomputed: the point is to record what this
     # process loaded, so re-reading the file later would answer the question the
     # stamp exists to make answerable.
