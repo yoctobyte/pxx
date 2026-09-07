@@ -21012,6 +21012,75 @@ answer "does X collide with anything" if the other declarer is a builtin, a
 generated file, or a vendored tree. State the two sides before choosing the
 glob.
 
+### AND THE CHEAPEST WAY TO EXCLUDE A SEAT FROM THE POPULATION IS TO BELIEVE IT IS BLOCKED
+
+2026-09-06/07, the same night, and it is the rule above with the exclusion
+arriving as a *courtesy* rather than as a filter.
+
+A fleet stand-down listed one seat as *"stuck on a dialog only the owner can
+clear — treat as already idle."* That sentence is not a claim anyone doubted:
+it is exactly the shape CLAUDE.md warns about, a seat sitting on the
+dangerous-`rm` prompt, and the fleet had two real instances of it inside a
+week. The coordinator relayed it verbatim to three seats and dropped that name
+from its own collision map, because **a blocked seat has no topic.**
+
+It was false. The seat read its own transcript on request and reported no user
+rejection, no denial-by-policy, no hook decline — it had been working the whole
+time, heads-down in a measure-fix-measure loop, holding a verified uncommitted
+fix.
+
+**What the exclusion cost, measured at origin after a pull:**
+
+    compiler/symtab.inc:286   function AliasVisibleHere        <- seat 1, uncommitted
+    compiler/symtab.inc:303     (AliasOwnerCi[a] = MethImplOwnerCi)   <- the line under edit
+    compiler/symtab.inc:305   end
+    compiler/symtab.inc:307   function ScopeReachesProc        <- seat 2, landed 22:19
+    compiler/symtab.inc:354   function FindTypeAlias           <- seat 2 rewired this
+    compiler/symtab.inc:376     ... and AliasVisibleHere(i) ...        <- seat 1 feeds it
+
+Two seats extending "which type alias is visible from here" along two different
+chains — one by class inheritance, one by lexical routine nesting — **21 lines
+apart, with one landing inside the other's caller.** Both diffs apply cleanly.
+The seat doing the inheritance walk had even written *"a different chain from
+the lexical one, deliberately not folded into it"*: it was being careful about
+a chain it knew existed, while another seat built one and wired it into its
+consumer.
+
+**The reason this is worth its own subsection is the direction of the error.**
+Every failure mode in the parent section is a census that under-counts by
+accident. This one under-counts because the excluded seat was described in
+*sympathetic* terms — blocked, stalled, waiting on the owner. Nobody re-checks
+a name they have already filed as a casualty, and **"treat as already idle" is
+an instruction to stop measuring**, delivered as consideration for a peer.
+
+**Three practical consequences.**
+
+1. **A seat reported blocked by a THIRD party is a claim about a transcript
+   nobody read.** CLAUDE.md already says a pane is not a session and a peer's
+   self-report is its belief; the missing case is a peer's report about a
+   *different* peer, which has neither instrument behind it. Ask the seat.
+   It costs one message and it is the only thing that separates the states.
+
+2. **There is a THIRD look-alike, and the seat named it better than the rule
+   does: *"not blocked, not ended-turn, just long."*** CLAUDE.md gives two
+   causes for "no commits in N hours" — blocked, and ended its turn — and says
+   the discriminator is an unanswered turn. A seat deep in a measure-fix-measure
+   loop has neither an unanswered turn nor a finished one. From outside it is
+   the same silence as both, and it is the state most likely to be doing the
+   most valuable work at the moment it is written off.
+
+3. **A green measured before the other seat landed is correct about a different
+   tree.** The uncommitted fix here was verified against a `FindTypeAlias` that
+   may not yet have consulted the function landed at 22:19. That is not the
+   stale-binary case and does not present as one: PUSH -> LET THE PULL SETTLE ->
+   REBUILD -> MEASURE, then re-run the repro, is the whole remedy and the
+   rebuild is the step that gets dropped.
+
+The parent rule says suspect your population before you suspect the claim. The
+amendment is narrower: **suspect any name your population lost for a reason
+that sounded like kindness.**
+
+
 ## A TRUE REASSURANCE PLACED JUST BEFORE A HEDGE INOCULATES THE READER AGAINST THE HEDGE
 
 Same review, same seat, and it is not a stale claim or an overclaim — every word
