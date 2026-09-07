@@ -16663,6 +16663,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_recctorovl26 "$$($(TESTTMP)/test_recctorovl26)" "$$(cat test/test_record_constructor_overload.expected)"
 	./$(COMPILER) test/test_instance_reached_constructor_value.pas $(TESTTMP)/test_instctorval26
 	tools/expect_same.sh test_instctorval26 "$$($(TESTTMP)/test_instctorval26)" "$$(cat test/test_instance_reached_constructor_value.expected)"
+	./$(COMPILER) -Futest/units test/test_specialization_does_not_rename_after_a_dot.pas $(TESTTMP)/test_specdotname26
+	tools/expect_same.sh test_specdotname26 "$$($(TESTTMP)/test_specdotname26)" "$$(cat test/test_specialization_does_not_rename_after_a_dot.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

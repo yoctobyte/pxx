@@ -695,6 +695,53 @@ begin
       begin
         { leave the token exactly as it is: names the non-generic sibling }
       end
+      { ...and the SECOND position where the template's own name cannot mean
+        this specialization: immediately after a `.`, when what precedes the dot
+        is a VALUE or a UNIT rather than the class a method is being defined on.
+
+        Measured 2026-09-07 at compiler 6e1557edb6cb against fpc 3.2.2. Both
+        rows are a REFUSAL of legal code, not a wrong value:
+
+          generic function Test<T>(aArg: T): LongInt;
+          begin Result := aArg.Test; end;        { Test is a FIELD }
+
+        gave `"Test_TTestGlobal": no such member on this record/class`, and the
+        identical program with the field renamed `Fld` printed 42 -- the rename
+        being the only difference is what makes it the lookup and not the
+        record. The unit-qualified row is the same defect wearing the other hat:
+        `P: uspecdotname.TBox` inside `generic TBox<T>`, where the other unit's
+        plain record was rewritten to this specialization and its field vanished.
+
+        THE THIRD READING IS THE ONE THAT MATTERS, and this guard shipped
+        without it for one build. A generic method's IMPLEMENTATION HEADER also
+        puts the template name after a dot --
+
+          generic class function TTest.Add<T>(aLeft, aRight: T): T;
+
+        -- and there the name IS the routine being defined and MUST be
+        rewritten. Dropping it cost `unresolved forward: TTest.Add_LongInt` on
+        FOUR corpus rows (tgenfunc3, tgenfunc4, tgenfunc9, tgenfunc12) while
+        `gate.sh quick` stayed GREEN, because nothing in the quick tier declares
+        a generic method out of line. The conformance corpus is the only
+        population that could see it.
+
+        So the test is not "is there a dot" but WHAT THE DOT JOINS, and a header
+        is what the two preceding tokens say: `function`/`procedure` then the
+        class name. `Result := aArg.Test` has `:=` in that slot and `P:
+        uother.TBox` has `:`; neither is a header.
+
+        A qualified TYPE cannot be the third reading either, checked rather than
+        assumed: fpc refuses `specialize ugq.TBox<T>` outright -- `Type
+        identifier expected` / `Syntax error, "<" expected but "." found`.
+        bug-p-a-generic-routines-specialization-renames-a-field-of-the-same-name }
+      else if CaseEqual(s, SpecializeTemplateName) and (i >= 1) and
+              (TemplateTokens[tokStart + i - 1].Kind = tkDot) and
+              not ((i >= 3) and
+                   ((TemplateTokens[tokStart + i - 3].Kind = tkFunction) or
+                    (TemplateTokens[tokStart + i - 3].Kind = tkProcedure))) then
+      begin
+        { leave the token exactly as it is: a member name or a unit qualifier }
+      end
       else if CaseEqual(s, SpecializeTemplateName) then
       begin
         SpecializeTokens[subCount].SOffset := TokCharLen;
