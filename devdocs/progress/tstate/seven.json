@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-06T21:10:25Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c842de35ad057f94612a459314a26995c37b2fab",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-06T21:14:33Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +451,20 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-07T21:29:24Z",
+   "fixed": [],
+   "new_red": [
+    "optdiff#shard0/12",
+    "optdiff#shard10/12",
+    "optdiff#shard2/12",
+    "optdiff#shard5/12"
+   ],
+   "sha": "285208414d3f332c0b13f2a084e671fbad114be7",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "seven",
@@ -678,17 +683,17 @@
   "lib-test#src:test/test_tlist_notify.pas": "285208414d3f332c0b13f2a084e671fbad114be7",
   "lib-test#src:tools/crtl_reachability.py": "285208414d3f332c0b13f2a084e671fbad114be7",
   "optdiff#shard0/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard1/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "optdiff#shard1/12": "285208414d3f332c0b13f2a084e671fbad114be7",
   "optdiff#shard10/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard11/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "optdiff#shard11/12": "285208414d3f332c0b13f2a084e671fbad114be7",
   "optdiff#shard2/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard3/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard4/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "optdiff#shard3/12": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "optdiff#shard4/12": "285208414d3f332c0b13f2a084e671fbad114be7",
   "optdiff#shard5/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard6/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard7/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard8/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard9/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "optdiff#shard6/12": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "optdiff#shard7/12": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "optdiff#shard8/12": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "optdiff#shard9/12": "285208414d3f332c0b13f2a084e671fbad114be7",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "285208414d3f332c0b13f2a084e671fbad114be7",
   "size-canary#src:tools/size_canary.py": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-aarch64#src:compiler/.pascal26.fixedpoint": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -4682,11 +4687,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-nilpy#src:tools/compiler_srchash.sh": "285208414d3f332c0b13f2a084e671fbad114be7",
-  "test-opt#src:compiler/compiler.pas@1": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "test-opt#src:compiler/compiler.pas@2": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "test-opt#src:compiler/compiler.pas@3": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "test-opt#src:test/test_atomic64.pas": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "test-opt#src:tools/compiler_srchash.sh": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "test-opt#src:compiler/compiler.pas@1": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "test-opt#src:compiler/compiler.pas@2": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "test-opt#src:compiler/compiler.pas@3": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "test-opt#src:test/test_atomic64.pas": "285208414d3f332c0b13f2a084e671fbad114be7",
+  "test-opt#src:tools/compiler_srchash.sh": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-pascal-conformance#shard0/6": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-pascal-conformance#shard1/6": "285208414d3f332c0b13f2a084e671fbad114be7",
   "test-pascal-conformance#shard2/6": "285208414d3f332c0b13f2a084e671fbad114be7",
@@ -5309,6 +5314,12 @@
   "test-zlib#src:tools/compiler_srchash.sh": "285208414d3f332c0b13f2a084e671fbad114be7",
   "tools-devtest#00": "285208414d3f332c0b13f2a084e671fbad114be7",
   "tools-devtest-sh#00": "285208414d3f332c0b13f2a084e671fbad114be7"
+ },
+ "job_reason": {
+  "optdiff#shard0/12": "OPT DIFF -O3: test/test_double_to_integer_lvalue_rounds.pas (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_field_get_by_name.pas | optdiff skip TIMEOUT-O0: devtest_tls_native_seam.pas test_emit_obj.pas test_halt_from_worker_thread.pas | optdiff skip BUILD-FAIL: c_obj_fnptr_a.c case_sensitive_unit.pas kwarg_overload_unit.pas lib_synapse_tls_loopback.pas shadow_b.pas strhelperprobe.pas test_a_call_\u2026",
+  "optdiff#shard10/12": "OPT DIFF -O3: test/c_crtl_glob.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_rtti_kind_numbering.pas | optdiff skip TIMEOUT-O0: c_unsigned_const_guard_folds.c test_qplus_narrowing_store.pas | optdiff skip BUILD-FAIL: c_ir_unsupported_reports_the_real_line.c c_obj_data_only.c c_obj_runtime_state_a.c c_pasunit_ansistring_result_fail.c c_unclosed_unsized_2d_init_fail.c c_undeclared_in_file_scope_init_\u2026",
+  "optdiff#shard2/12": "OPT DIFF -O3: test/c_crtl_glob_no_leak.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_thread_writeln_interleave.pas | optdiff skip TIMEOUT-O0: test_target_name_in_external_refusal.pas | optdiff skip BUILD-FAIL: aoc_ovl_unit_fmt.pas c_cpp_macro_arg_shapes.c c_pasunit_two_overloads_fail.c cabi_bridge.c cabi_intra.c csqlite_layout_probe.c cxtensa_obj.c isas_b325_base.pas lib_klondike.pas library_export\u2026",
+  "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti.pas test_rtti_method_reflection_b254.pas | optdiff skip TIMEOUT-O0: test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: c_obj_data_dup_a.c c_obj_data_import.c c_obj_import_pascal.pas c_pas\u2026"
  },
  "job_tier": {
   "demos#00": "full",
@@ -10352,14 +10363,14 @@
   "lib-test#src:test/test_tcomponent.pas": "pass",
   "lib-test#src:test/test_tlist_notify.pas": "pass",
   "lib-test#src:tools/crtl_reachability.py": "pass",
-  "optdiff#shard0/12": "pass",
+  "optdiff#shard0/12": "fail",
   "optdiff#shard1/12": "pass",
-  "optdiff#shard10/12": "pass",
+  "optdiff#shard10/12": "fail",
   "optdiff#shard11/12": "pass",
-  "optdiff#shard2/12": "pass",
+  "optdiff#shard2/12": "fail",
   "optdiff#shard3/12": "pass",
   "optdiff#shard4/12": "pass",
-  "optdiff#shard5/12": "pass",
+  "optdiff#shard5/12": "fail",
   "optdiff#shard6/12": "pass",
   "optdiff#shard7/12": "pass",
   "optdiff#shard8/12": "pass",
@@ -14708,14 +14719,14 @@
  },
  "last": {
   "code_fp": "5666dc9dba23",
-  "date": "2026-09-07T21:05:34Z",
+  "date": "2026-09-07T21:29:24Z",
   "deadline": 4547.4,
   "sha": "285208414d3f332c0b13f2a084e671fbad114be7",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 212.0
+  "verdict": "RED",
+  "wall": 1416.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14754,15 +14765,15 @@
    "wall": 188.9
   },
   "opt": {
-   "code_fp": "065bb7eaf0d5",
-   "date": "2026-09-04T07:51:19Z",
-   "deadline": 7200.0,
-   "sha": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+   "code_fp": "5666dc9dba23",
+   "date": "2026-09-07T21:29:24Z",
+   "deadline": 4547.4,
+   "sha": "285208414d3f332c0b13f2a084e671fbad114be7",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 340.2
+   "verdict": "RED",
+   "wall": 1416.6
   },
   "slow": {
    "code_fp": "5666dc9dba23",
