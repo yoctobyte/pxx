@@ -31682,7 +31682,7 @@ endif
 	# deliberately at Error(), which halts there and raises here (our domain by
 	# the error-handling ruling; see devdocs/dev/pascal-dialect-divergences.md).
 	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_delphi_exceptions.pas $(TESTTMP)/lib_sysutils_delphi_exc
-	tools/expect_same.sh lib_sysutils_delphi_exc.1 "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" "21"
+	tools/expect_same.sh lib_sysutils_delphi_exc.1 "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" "25"
 	tools/expect_same.sh lib_sysutils_delphi_exc.2 "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" "SYSUTILS-DELPHI-EXC OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
