@@ -283,6 +283,39 @@ begin
   end;
 end;
 
+function AliasOwnsThroughInherit(owner, scope: Integer): Boolean;
+{ Is `owner` `scope` itself, or any class `scope` INHERITS from?
+
+  A SECOND chain, and deliberately not folded into AliasOwnsThrough: that one
+  walks UClsEnclosingCi (where a type is DECLARED), this one walks UClsParent
+  (what a class DESCENDS from). They are different questions and a type can be
+  reachable by one and not the other, so one walk cannot answer both.
+
+  This exists for the out-of-line method body. `TSel` declared in `TBase` and
+  used inside `TDer.Look`'s body -- rtl-generics spells exactly this, and it is
+  the wall corpus rung 6a hits at generics.defaults:2279
+  (`unknown type: TSelectMethod`, owned by TComparerService, used from
+  THashService<T>.LookupEqualityComparer). The DERIVED CLASS BODY and the
+  QUALIFIED `TDer.TSel` spellings already resolved it; only the implementation
+  scope did not, which is what says this belongs on the MethImplOwnerCi arm and
+  nowhere else.
+
+  Same bound and same reason as AliasOwnsThrough: a class cannot descend from
+  itself, and the counter is belt-and-braces against a malformed table. }
+var i, guard: Integer;
+begin
+  AliasOwnsThroughInherit := False;
+  if scope < 0 then Exit;
+  i := scope;
+  guard := 0;
+  while (i >= 0) and (guard <= MAX_UCLASS) do
+  begin
+    if owner = i then begin AliasOwnsThroughInherit := True; Exit; end;
+    i := UClsParent[i];
+    Inc(guard);
+  end;
+end;
+
 function AliasVisibleHere(a: Integer): Boolean;
 begin
   { ONLY arm 2 walks. Arms 1 and 2 were both approximations of "somewhere in the
@@ -297,10 +330,19 @@ begin
     the caller asked, and would over-accept.
 
     Recorded because folding them in looks like the natural next simplification
-    and is wrong: I wrote it that way first. }
+    and is wrong: I wrote it that way first.
+
+    ARM 3 NOW WALKS, BUT A DIFFERENT CHAIN. An out-of-line body is still not
+    lexically inside anything -- that part stands -- but it IS inside a class
+    that has ancestors, and a base class's nested type is visible to a derived
+    class's methods. So arm 3 walks UClsParent (inheritance) and never
+    UClsEnclosingCi (lexical). Arm 4 still does not walk at all, for frankB's
+    reason above, and neither arm was widened to the other's chain: measured,
+    the derived-BODY and qualified `TDer.TSel` spellings already resolved
+    without it and only the implementation scope was blind. }
   AliasVisibleHere := (AliasOwnerCi[a] < 0) or
                       AliasOwnsThrough(AliasOwnerCi[a], ParsingClassBodyCi) or
-                      (AliasOwnerCi[a] = MethImplOwnerCi) or
+                      AliasOwnsThroughInherit(AliasOwnerCi[a], MethImplOwnerCi) or
                       (AliasOwnerCi[a] = QualTypeOwnerCi);
 end;
 
@@ -378,9 +420,31 @@ begin
     begin
       r := UsesRankOf(CurrentUnitIdx, AliasUnitIdx[i]);
       { An alias declared in the class body we are inside SHADOWS a unit-level
-        one of the same name -- the ordinary inner-scope rule. AliasVisibleHere
-        has already excluded every OTHER class's rows, so any owned row still
-        here is owned by the scope we are in.
+        one of the same name -- the ordinary inner-scope rule.
+
+        THE OLD JUSTIFICATION HERE NO LONGER HOLDS AND IS REPLACED RATHER THAN
+        TRIMMED, because a stale invariant is what the next reader would build
+        on. It used to say AliasVisibleHere "has already excluded every OTHER
+        class's rows, so any owned row still here is owned by the scope we are
+        in". That was true while its arm 3 was an exact comparison against
+        MethImplOwnerCi; since arm 3 walks UClsParent, a BASE class's rows
+        survive alongside the derived class's, and `owned` is no longer a clean
+        two-way split.
+
+        Sound anyway, and deliberately left as a Boolean: the only program that
+        could observe the difference is one where a derived class re-declares a
+        base's nested type name, and **fpc refuses that outright** --
+        `Duplicate identifier "TSel"`. So the ambiguous case is unreachable in
+        correct code rather than merely unlikely. Two same-spelled rows at equal
+        hop would tie on `owned`, fall through to `r`, tie there too (both
+        classes are normally in one unit), and the tie keeps the FIRST row --
+        the base. Measured with frankS, who owns the `hop` key next door.
+
+        If a reachable case ever turns up, the sound form is the one the lexical
+        axis already uses one key over: make `owned` a DISTANCE in UClsParent
+        hops rather than a flag. Mind the sentinel trap recorded above --
+        UsesRankOf returns MaxInt for the current unit, so nothing can be
+        "larger than any rank".
 
         TWO KEYS, COMPARED IN ORDER, and NOT a bonus added to the rank. Adding
         one is what this first did and it inverted the answer: UsesRankOf

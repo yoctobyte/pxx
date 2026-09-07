@@ -5171,6 +5171,15 @@ test-threads: $(COMPILER)
 	# with `dereferenced value is not a pointer`.
 	./$(COMPILER) test/test_forward_double_pointer_alias_order.pas $(TESTTMP)/test_fwd_ptr_order_26
 	tools/expect_same.sh test_fwd_ptr_order_26 "$$($(TESTTMP)/test_fwd_ptr_order_26 | tail -1)" "FWDPTRORDER OK"
+	# A type nested in a BASE class, named from a DERIVED class's METHOD
+	# IMPLEMENTATION. AliasVisibleHere arm 3 compared the owner to
+	# MethImplOwnerCi exactly, so every descendant got `unknown type`. Walks
+	# UClsParent -- a DIFFERENT chain from the lexical UClsEnclosingCi one the
+	# nested_alias_chain test covers; neither replaces the other. Row B is a
+	# plain ordinal so this cannot read as a method-pointer bug; row C is two
+	# parent hops. Pin v407 refuses row B.
+	./$(COMPILER) test/test_base_nested_type_visible_in_derived_method.pas $(TESTTMP)/test_base_nested_26
+	tools/expect_same.sh test_base_nested_26 "$$($(TESTTMP)/test_base_nested_26 | tail -1)" "BASENESTED OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
 	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"
