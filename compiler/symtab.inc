@@ -444,7 +444,12 @@ begin
         axis already uses one key over: make `owned` a DISTANCE in UClsParent
         hops rather than a flag. Mind the sentinel trap recorded above --
         UsesRankOf returns MaxInt for the current unit, so nothing can be
-        "larger than any rank".
+        "larger than any rank", and the distance must stay a SEPARATE key
+        compared in order rather than folded into `r`; that mistake was already
+        made once in this function and inverted the answer. Written up in full,
+        with the degradation and the fpc measurement, at
+        refactor-p-the-owned-key-in-findtypealias-is-a-boolean-where-the-lexical-key-is-a-distance
+        (rainy-day/, frankS).
 
         TWO KEYS, COMPARED IN ORDER, and NOT a bonus added to the rank. Adding
         one is what this first did and it inverted the answer: UsesRankOf
