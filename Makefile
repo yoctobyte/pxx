@@ -14908,19 +14908,23 @@ test-core: $(COMPILER)
 	if ./$(COMPILER) test/test_mgmt_operators_addref_small_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
 	  echo "FAIL: a management operator on a record passed by value at <=8 bytes compiled -- there is no address for it to act on and the callee gets a pointer where its ABI says bytes"; exit 1; \
 	fi
+	# ALL FOUR ARRAY ROWS READ THE REASON AND THE NOUN, never just the slug.
+	# The four refusals are two reasons x two nouns and they have DIFFERENT
+	# answers -- a multi-dimensional one needs nested loops in the desugar, a
+	# dynamic one runs its operators inside SetLength (measured against fpc
+	# 3.2.2) and needs a record RTTI descriptor instead. A slug-only grep lets
+	# any of the four stand in for any other and cannot tell a revert from a
+	# fix. `holding` is load-bearing in these patterns: "a DYNAMIC array" is a
+	# PREFIX of "a DYNAMIC array field", so without it the symbol row would pass
+	# on the field message.
 	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
-	  | grep -q "feature-pascal-management-operators-nested-and-array"
+	  | grep -q "a DYNAMIC array holding"
 	./$(COMPILER) test/test_mgmt_operators_multidim_array_refused.pas $(TESTTMP)/test_mgmt_op_mdarr26 2>&1 \
-	  | grep -q "feature-pascal-management-operators-nested-and-array"
-	# The two FIELD rows read the reason, not just the slug. Both refusals cite
-	# the same ticket, so a slug-only grep would let either one stand in for the
-	# other and the pair could not tell "the dynamic arm regressed" from "the
-	# multi-dimensional arm regressed" -- an expected-failure row passes on ANY
-	# refusal unless it reads which. Same lesson as the AddRef size row below.
+	  | grep -q "a MULTI-DIMENSIONAL array holding"
 	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
-	  | grep -q "a DYNAMIC array field"
+	  | grep -q "a DYNAMIC array field holding"
 	./$(COMPILER) test/test_mgmt_operators_multidim_array_field_refused.pas $(TESTTMP)/test_mgmt_op_mdfld26 2>&1 \
-	  | grep -q "a MULTI-DIMENSIONAL array field"
+	  | grep -q "a MULTI-DIMENSIONAL array field holding"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	# Matches the SIZE wording, not just the ticket slug: the blanket
@@ -27888,10 +27892,10 @@ test-mgmt-operators-cross-target: $(COMPILER)
 	    *)       tgt="--target=$$t" ;; \
 	  esac; \
 	  ./$(COMPILER) $$tgt test/test_mgmt_operators_field_refused.pas $(TESTTMP)/mgmtdyn_$$t 2>&1 \
-	    | grep -q "a DYNAMIC array field" || \
+	    | grep -q "a DYNAMIC array field holding" || \
 	    { echo "test-mgmt-operators-cross-target: FAIL $$t -- a DYNAMIC array field of a managed record was not refused with its own reason"; overall=1; }; \
 	  ./$(COMPILER) $$tgt test/test_mgmt_operators_multidim_array_field_refused.pas $(TESTTMP)/mgmtmd_$$t 2>&1 \
-	    | grep -q "a MULTI-DIMENSIONAL array field" || \
+	    | grep -q "a MULTI-DIMENSIONAL array field holding" || \
 	    { echo "test-mgmt-operators-cross-target: FAIL $$t -- a MULTI-DIMENSIONAL array field of a managed record was not refused with its own reason"; overall=1; }; \
 	done; \
 	test "$$overall" = "0" || { echo "test-mgmt-operators-cross-target: RED"; exit 1; }; \

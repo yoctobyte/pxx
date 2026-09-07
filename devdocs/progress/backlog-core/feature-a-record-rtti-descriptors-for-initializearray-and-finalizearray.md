@@ -63,3 +63,27 @@ it that nobody has run.
 `make compiler/pascal26` (self-host fixedpoint), the three corpus rows diffed
 against fpc 3.2.2 **including exit codes** (they `Halt(n)` with distinct n per
 assertion, so an exit code names the row that failed), and `tools/gate.sh quick`.
+
+## 2026-09-07 (frankA) — a FOURTH consumer, and it is not a corpus row
+
+`SetLength` on a dynamic array of a record declaring Initialize/Finalize needs
+this descriptor, and it is the reason
+[[feature-pascal-management-operators-nested-and-array]] cannot close its
+dynamic arm in the parser.
+
+Measured against fpc 3.2.2 (`var d: array of TFoo`, SetLength 3 -> 5 -> 2):
+Initialize runs INSIDE `SetLength` on the elements that come into existence,
+Finalize runs INSIDE `SetLength` on the elements that stop existing, and the
+survivors are finalized at scope exit. A scope-entry loop over `Length(d)`
+initializes zero elements and never sees one created later.
+
+That makes the demand for this ticket broader than the three `tmoperator` rows:
+**every dynamic array of a managed record in any program**, not a testsuite
+shape. `SetLength` holds a pointer and an element size and nothing else, so the
+grow/shrink paths are exactly the "handed a pointer and a descriptor" case the
+summary above already names as unreachable by desugaring — the same argument,
+arriving from a second direction.
+
+Unchanged by this note: start with the DESCRIPTOR half. A `SetLength` hook
+written against a descriptor that does not exist yet is the same guess as a
+helper written against one.

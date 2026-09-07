@@ -357,3 +357,48 @@ problem: a **dynamic** array (no extent to read — needs the loop built against
 loop — needs either N nested loops or a flat loop that indexes flat, which the
 low-bound measurement above says is not the same thing). Both apply to a SYMBOL
 and to a FIELD, and all four have a fixture.
+
+## 2026-09-07 (frankA) — MEASURED: the dynamic arm does not belong in this pass at all
+
+This ticket's refusal message and its Sketch both say the dynamic case needs
+"the loop built against `Length()`". **That is wrong, and it is wrong in a way
+that would have produced a plausible half-working feature.** Measured against
+fpc 3.2.2, `var d: array of TFoo` with `SetLength` 3 -> 5 -> 2:
+
+```
+declared
+  init 0 / init 1 / init 2        <- INSIDE SetLength(d, 3)
+after SetLength 3 -> 012
+  init 3 / init 4                 <- INSIDE SetLength(d, 5), NEW elements only
+after SetLength 5 -> 01234
+  fin  2 / fin  3 / fin  4        <- INSIDE SetLength(d, 2), REMOVED elements
+after SetLength 2
+leaving P
+  fin  0 / fin  1                 <- at scope exit, the SURVIVORS
+done
+```
+
+Three separate events, and only the last one is a scope event:
+
+1. **Grow** — `Initialize` on the elements that came into existence.
+2. **Shrink** — `Finalize` on the elements that stopped existing.
+3. **Scope exit** — `Finalize` on whatever is still live.
+
+A scope-entry loop over `Length(d)` initializes **zero** elements (a dynamic
+array is empty at declaration) and never runs for any element created later, so
+it would be a declared invariant that never runs — the exact defect this pass
+exists to refuse. Building only half of it, the scope-exit finalize, is worse
+than refusing: elements would be finalized that were never initialized.
+
+**So the dynamic arm's home is `SetLength`, not this desugar** — and `SetLength`
+is a runtime routine holding a pointer and an element size, with no idea what
+record it is looking at. That is precisely the descriptor
+[[feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray]]
+exists to emit, and this is a FOURTH consumer for it beyond that ticket's three
+corpus rows. The refusal text and the Sketch are corrected above; the refusal
+itself stays exactly as it is, because refusing remains the right answer here
+until the descriptor exists.
+
+**What is left in THIS ticket is therefore one shape, not two**: the
+MULTI-DIMENSIONAL fixed array, as a symbol and as a field. Its extent is fully
+known at compile time and it needs nested loops rather than a descriptor.

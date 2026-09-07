@@ -448,24 +448,31 @@ const
   UMF_DYN    = 1;   { `array of TFoo` -- extent is a runtime length }
   UMF_NDIMS  = 2;   { `array[a..b, c..d] of TFoo` -- the loop is one-dimensional }
 
-{ The refusal text for one reason code. Spelled once so the two call sites
-  cannot drift, and each arm names its OWN obstacle rather than a shared
-  "not supported yet" -- see the reason codes above. }
-function UnreachableManagedFieldMsg(why: Integer): String;
+{ The refusal text for one reason code, for an array SYMBOL (`what` = 'array')
+  or an array FIELD (`what` = 'array field'). Spelled once so the four call
+  sites cannot drift, and each arm names its OWN obstacle and its OWN follow-up
+  ticket rather than a shared "not supported yet" -- see the reason codes above.
+  The two reasons have DIFFERENT ANSWERS, which is the reason they must not
+  share a sentence: one needs nested loops in this pass, the other needs a
+  descriptor in a routine this pass never sees. }
+function UnreachableManagedArrayMsg(why: Integer; what: String): String;
 begin
   if why = UMF_DYN then
-    UnreachableManagedFieldMsg :=
-      'a DYNAMIC array field holding a record that declares Initialize or '
-      + 'Finalize is not managed yet: its extent is a runtime length and the '
-      + 'synthesised loop has no bound to read. A FIXED one-dimensional array '
-      + 'field is iterated '
-      + '(feature-pascal-management-operators-nested-and-array)'
+    UnreachableManagedArrayMsg :=
+      'a DYNAMIC ' + what + ' holding a record that declares Initialize or '
+      + 'Finalize is not managed yet: measured against fpc 3.2.2, those run '
+      + 'inside SetLength as elements come and go, not at scope entry, so this '
+      + 'desugar is the wrong place for them and a loop over Length() here '
+      + 'would initialize nothing at all. A FIXED one-dimensional ' + what
+      + ' is iterated '
+      + '(feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray)'
   else
-    UnreachableManagedFieldMsg :=
-      'a MULTI-DIMENSIONAL array field holding a record that declares '
+    UnreachableManagedArrayMsg :=
+      'a MULTI-DIMENSIONAL ' + what + ' holding a record that declares '
       + 'Initialize or Finalize is not managed yet: the synthesised loop is '
-      + 'one-dimensional and this field''s extent is a flat count. A FIXED '
-      + 'one-dimensional array field is iterated '
+      + 'one-dimensional and the recorded extent is a FLAT count, so a 1-D loop '
+      + 'over it is correct only when every low bound is zero. A FIXED '
+      + 'one-dimensional ' + what + ' is iterated '
       + '(feature-pascal-management-operators-nested-and-array)';
 end;
 
@@ -768,23 +775,35 @@ begin
        (Syms[i].TypeKind in [tyRecord, tyClass]) then
     begin
       { A fixed one-dimensional array of a managed record is a synthesised loop
-        now; a DYNAMIC or MULTI-DIMENSIONAL one still is not, because neither
-        has bounds this pass can read -- a dynamic array's extent is a runtime
-        length and the desugar would have to call Length(). }
+        now; a DYNAMIC or MULTI-DIMENSIONAL one still is not, and the two are
+        refused for DIFFERENT reasons that the shared message used to blur.
+        A multi-dimensional array has a perfectly readable extent and needs
+        nested loops. A dynamic one is not this pass's job at all: measured
+        against fpc 3.2.2, Initialize runs inside SetLength on the elements
+        that come into existence and Finalize inside it on the ones that stop,
+        with only the survivors finalized at scope exit -- so a scope-entry
+        loop over Length() initializes ZERO elements and never sees one created
+        later. That half needs a record RTTI descriptor SetLength can consult
+        (feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray). }
       if Syms[i].IsArray and (not SymIsLoopableManagedArray(i)) and
          (RecHasScopeManagementOp(mrec) or RecContainsManagementOp(mrec, 0)) then
-        Error('a dynamic or multi-dimensional array of a record declaring '
-              + 'Initialize or Finalize is not supported yet: those two need a '
-              + 'synthesised per-element loop and this array has no bounds the '
-              + 'desugar can read. Copy and AddRef are unaffected and an array '
-              + 'of a record declaring only those compiles '
-              + '(feature-pascal-management-operators-nested-and-array)');
+      begin
+        { Which of the two it is, asked the same way the FIELD side asks it.
+          A dynamic array carries ArrLen -1 (or an open-array parameter's 1000
+          placeholder) and a nonzero element dyn depth; anything else that got
+          here is multi-dimensional. }
+        if (SymElemDynDepth[i] > 0) or (Syms[i].ArrLen < 0) then
+          umfWhy := UMF_DYN
+        else
+          umfWhy := UMF_NDIMS;
+        Error(UnreachableManagedArrayMsg(umfWhy, 'array'));
+      end;
       { ...and a loopable array whose ELEMENT hides a managed field behind an
         array field the walk cannot iterate keeps the refusal the element's own
         shape would get. }
       if SymIsLoopableManagedArray(i) and
          RecContainsUnreachableManagedField(mrec, 0, umfWhy) then
-        Error(UnreachableManagedFieldMsg(umfWhy));
+        Error(UnreachableManagedArrayMsg(umfWhy, 'array field'));
       { A CLASS field is still refused, and it is not the same shape at all: a
         class instance's lifetime is not scope-bound. Measured against fpc
         3.2.2 -- for `c: TCls` whose field is a managed record, fpc runs the
@@ -800,7 +819,7 @@ begin
         so it keeps the same refusal. A fixed 1-D one is iterated by the walk. }
       if (Syms[i].TypeKind = tyRecord) and (not Syms[i].IsArray) and
          RecContainsUnreachableManagedField(mrec, 0, umfWhy) then
-        Error(UnreachableManagedFieldMsg(umfWhy));
+        Error(UnreachableManagedArrayMsg(umfWhy, 'array field'));
     end;
     if isTarget and (i <> retSym) and SymIsLoopableManagedArray(i) then
     begin
