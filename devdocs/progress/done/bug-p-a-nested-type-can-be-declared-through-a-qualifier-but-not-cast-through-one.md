@@ -158,4 +158,4 @@ run for run (not read off the exit code: tgeneric16 is the standing reminder).
   row in tree depends on it. Noted so the next reader does not re-measure it.
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8d87d3e8e.
