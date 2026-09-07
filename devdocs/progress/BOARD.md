@@ -428,7 +428,6 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-p-a-bare-inherited-does-not-forward-arguments | P | 40 | bug | A bare `inherited;` does not forward the caller's arguments | — |
-| bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body | P | 70 | bug | A bare method-overload call accepts any argument type and runs the first body | — |
 | bug-p-a-constant-expression-that-overflows-int64-stays-signed | P | 40 | bug | A constant EXPRESSION whose value lands between High(Int64) and High(QWord) keeps tyInt64, so `if (high(int64)+100) > 0` takes the NEGATIVE arm where fpc 3.2.2 takes the positive one — a silent wrong branch on a constant the programmer wrote out in full. The LITERAL half of this is fixed (10e670503: a decimal literal above High(Int64) is tagged tyUInt64 at its creation site); the FOLD half is not, because pxx has no signed/unsigned tag on constant arithmetic at all — ConstEval returns a bare Int64 and the expression path types `tyInt64 + tyInteger` as tyInt64 by kind. Blocks `toperator6.pp`, whose whole subject is that promotion: it declares `operator :=(qword)` beside `operator :=(int64)` and `value := high(int64)+100` must select the QWord one. Second, smaller half in the same area: conversion-operator ranking reads a literal's STATIC kind, not its by-value kind, so `b := 200` picks the Int64 overload where fpc picks the Byte one. | — |
 | bug-p-a-conversion-operators-destination-string-capacity-has-no-carrier | P | 45 | bug | A conversion operator's destination string capacity has no carrier | — |
 | bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles | P | 45 | bug | The current wall on the FPC compiler-source march, and the first one this session that did NOT reduce. `cclasses` / `comphook` / `finput` / `cfileutl` stop at `cclasses.pas:2909 dereferenced value is not a pointer` — `Entry := @Entry^^.Next` inside `THashSet.Lookup`, where `Entry: PPHashSetItem` and the three types are declared forward (`PPHashSetItem = ^PHashSetItem` above `PHashSetItem = ^THashSetItem` above the record). A hand-written reduction with those exact declarations, that exact routine body and a class field of the same type COMPILES AND RUNS, so the discriminator is something else in the unit and the reduction is the work. Two separate small shapes DO fail and are recorded below; neither produces this diagnostic, so neither is established as the cause. | — |
@@ -446,6 +445,7 @@ _none_
 | bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name | P | 45 | bug | An alias in a used unit loses to a same-named class row from another unit | — |
 | bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section | P | 40 | bug | An imported generic routine is spliced before the program's own type section | — |
 | bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten | P | 45 | bug | An inline `specialize` used before the generic routine's BODY is not rewritten | — |
+| bug-p-an-integer-argument-binds-a-procedural-overload-over-an-exact-integer-one | P | 45 | bug | `SetCmp(c: TCmp)` and `SetCmp(n: LongInt)` in one class: `SetCmp(4)` runs the PROCEDURAL body, not the exact LongInt one. fpc 3.2.2 picks LongInt. Measured on the pinned compiler too, so it predates the 2026-09-07 multi-candidate gate. The value reaching the procedural parameter is the integer 4 -- benign only while nobody calls through it; a call would jump to address 4. | — |
 | bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid | P | 60 | bug | An interface name in a var initialiser stores the GUID's ADDRESS, not the GUID | — |
 | bug-p-declared-cannot-see-a-used-units-declarations | P | 50 | bug | `{$if declared(X)}` cannot see a used unit's declarations, and answers False rather than refusing | — |
 | bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin | P | 30 | bug | With `operator enumerator(a: AnsiString)` in scope, `for ch in s` runs the OPERATOR; fpc 3.2.2 iterates the string's characters. Measured on the PINNED compiler as well as HEAD, so it predates the for-in expression work that turned it up. Silent: both spellings compile and produce a plausible wrong value. The rule to adopt is fpc's -- a built-in iteration meaning wins over a user operator on the same type -- but the fix must move the SYMBOL arm and the EXPRESSION arm together or the two spellings diverge. | — |
@@ -965,9 +965,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3533)
+## done (3534)
 
-3533 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3534 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1061,7 +1061,6 @@ _none_
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- [p 70] [P] bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash
 - [p 70] [T] regression-test-core-c-cross-time-and-exit-through-the-pal
@@ -1201,6 +1200,7 @@ _none_
 - [p 45] [P] bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse
 - [p 45] [P] bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name
 - [p 45] [P] bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten
+- [p 45] [P] bug-p-an-integer-argument-binds-a-procedural-overload-over-an-exact-integer-one
 - [p 45] [S] bug-s-c-on-the-esp-profile-cannot-reach-crtl
 - [p 45] [T] bug-t-25-of-56-make-test-targets-are-reachable-from-no-tier
 - [p 45] [T] bug-t-a-gate-red-does-not-say-whether-it-is-yours-or-the-trees

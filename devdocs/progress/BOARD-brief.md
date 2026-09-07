@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:24 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:149 backlog-nilpy:97 backlog-tools:53 backlog-pascal:43 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3533 rejected:79`
+`working:24 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:149 backlog-nilpy:97 backlog-tools:53 backlog-pascal:43 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3534 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- `[p 70] [P]` bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
@@ -100,5 +99,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
+- `[p 62] [N]` feature-nilpy-enum-class
 
 _414 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
