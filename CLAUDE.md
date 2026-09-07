@@ -745,7 +745,15 @@ stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, a
 sync that pulled someone else's `compiler/**`, **`make bootstrap`** — it ends in
 `mv $(BUILD_COMPILER) $(COMPILER)`, so it REPLACES your binary, and it is the
 only route where the replacement is *legitimate*, so nothing looks wrong
-afterwards; record the sha first and reseed from the pin after — and — measured
+afterwards; record the sha first and reseed from the pin after. **And if what
+you are checking is the RELEASE property, do not run the target at all** — an
+fpc-seeded binary byte-identical to the pin-derived one is release-blocking
+evidence, and `make bootstrap` leaves your checkout on the very chain you were
+testing against, so the check destroys the thing it was checking. Run the
+recipe's lines into a scratch dir and omit the `mv`: measured 2026-09-07
+(`0540e3f9d`), `PXXFLAGS` is empty and `FPCFLAGS` is exactly `-O2 -Tlinux
+-Px86_64`, so that IS bootstrap's chain, and the only other thing skipped is
+`bootstrap-check`, a `which fpc` guard. — and — measured
 2026-09-01, `df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
 reverting it is revert→rebuild→restore→rebuild, and EACH REBUILD SEEDS FROM THE
 PREVIOUS LOCAL BINARY; after a few cycles, with other agents' `compiler/**` and
