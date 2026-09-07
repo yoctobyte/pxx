@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:24 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:150 backlog-nilpy:97 backlog-tools:53 backlog-pascal:45 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3536 rejected:79`
+`working:24 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:150 backlog-nilpy:97 backlog-tools:53 backlog-pascal:46 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3536 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -68,12 +68,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 447, ranked
+## Ready — top 30 of 448, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
+- `[p 75] [P]` bug-p-the-system-qualifier-is-stripped-rather-than-resolved-so-a-shadowing-member-wins
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` regression-optdiff-shard6-12
@@ -99,6 +100,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [U]` decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative (unblocks 1)
 
-_417 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_418 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
