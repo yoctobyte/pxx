@@ -323,3 +323,102 @@ calling thread's block and runs inside parallel workers today.
 A slot count in prose is a census with an owner elsewhere: re-read
 `TLS_SLOT_FIRST_FREE` from defs.inc before taking one. It was 12 when the
 comment above it was written.
+
+## 2026-09-07 — THE GROUP, MEASURED INDEPENDENTLY (frank-subcoord). One cause, four symptoms, and the existing test cannot see it
+
+Taken as the entry point to a group rather than alone. **Three open A tickets
+state one root cause in their own words** — and three summaries agreeing is not
+three measurements, so I reproduced it rather than citing them.
+
+### The measurement, two-armed so it cannot be silently broken
+
+`--threadsafe`, compiler `19bee89a03e635cf`. Arm P is the positive control in
+the same binary on the same run: if BOTH arms had come back identical, the
+honest reading is a broken probe, not a universal defect.
+
+```
+main              4369368
+pxx    thread 0   128824687176320     arm P: PalThreadCreate (runs the clone stub)
+pxx    thread 1   128824683494016
+pxx    thread 2   128824682441344
+pxx    thread 3   128824681388672
+foreign thread 0  4369368             arm F: libc pthread_create
+foreign thread 1  4369368
+foreign thread 2  4369368
+foreign thread 3  4369368
+
+arm P (control, MUST be 0): colliding pairs = 0
+arm F (subject)           : colliding pairs = 6
+arm F equal to MAIN base  : 4 of 4
+```
+
+**A thread libc created reads the MAIN thread's block.** Every `gs:` slot it
+touches is the creator's.
+
+**THE ASSERTION IS DISTINCTNESS, NEVER NON-ZERO.** A foreign thread INHERITS a
+valid base, so the failing value is non-zero and dereferences fine — the
+expected value collides with the failure value, and this ticket already records
+a fix whose "no longer zero" control passed while it was still broken.
+
+### The existing test passes while this is live, and that is a wrong-population control
+
+`test/test_tls_base.pas` exists to assert "blocks genuinely distinct per thread"
+and covers three phases — **0** main, **A** clone-stub, **B** manual arch_prctl.
+Neither it nor `test_glibc_tls_coexist.pas` contains `pthread_create`. **Every
+thread it tests is one pxx created**, which is exactly the population that
+works. The control is drawn from the wrong population, so it cannot fail for the
+case DOSBox, SDL and every threaded C library produce.
+
+### A FOURTH symptom, not yet ticketed: the signal slots
+
+`bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads` was
+fixed by moving `TLS_SLOT_SIG_CODE/_ADDR/_CTX/_NUM` into the per-thread block
+(75875 wrong answers in 400000 deliveries -> 0). `defs.inc:900` explains why
+those four are deliberately NOT bounds-validated: a `SA_ONSTACK` handler runs
+with rsp on the sigaltstack, so a bounds check would answer "not my block" on
+every delivery — and the justification given is *"the writer and the reader here
+are the same thread with the same base, so they always agree"*.
+
+**That premise is false for a foreign thread**, by the same argument this
+ticket's siblings make: it holds the creator's base. `StatusSlotTlsIndex`
+(`exception_emit.inc:24`) maps both the SIG and the EXC families to `gs:` slots
+and its own comment says *"Decided entirely at EMISSION. No runtime branch
+exists anywhere downstream."* So two libc threads taking signals share all four
+slots and the race that fix removed is live again for them.
+
+**Labelled honestly: the two premises are measured (bases shared, above; no
+runtime ownership branch, read at `exception_emit.inc:24-42`), the RACE itself
+is not.** It needs the original ticket's probe re-pointed at libc threads.
+
+### What the group actually costs, which reorders the fix
+
+The ownership test that would catch all of this **already exists and is
+inheritance-proof**: compare the reader's own `rsp` against `TLS_SLOT_STACK_LO/
+_HI`, because a block copies byte-for-byte across clone but a stack cannot
+(`defs.inc:858-877`). It is emitted at two sites (`ir_codegen.inc:1248`, `:3460`)
+and **both are tid sites whose fallback is a `gettid` syscall — they RECOMPUTE a
+value.**
+
+`errno` and `EXC_TOP` cannot do that: they need per-thread **storage**, not a
+recomputable value. And `EXC_TOP` is touched on every `try` entry and exit,
+where the emitter's own comment records refusing even a single `mov rax, gs:[0]`
+on cost grounds — so a four-instruction bounds check per access is not available
+there either.
+
+**So the three consumers sort into three different fixes, and "apply the
+existing check everywhere" is not one of them:**
+
+| consumer | needs | status |
+| --- | --- | --- |
+| I/O lock, owner tid | a recomputable VALUE | done — bounds check, gettid fallback |
+| heap magazine | mutual exclusion only | done — `ba2682d2f` made a shared magazine correct |
+| errno, EXC_*, SIG_* | per-thread STORAGE | **open — this is the real design question** |
+
+That last row is the group. Giving a foreign thread a real block pays once at
+thread entry instead of per access, which is the only option the hot path
+tolerates — and the heap ticket already called it *"the better answer ... a
+design question, not a bug fix."*
+
+Probe kept at `scratchpad/tls/probe_foreign_tls.pas`; it is a FAILING test today
+so it cannot land in `test/` as a green gate, and it is the natural phase C of
+`test_tls_base.pas` once the storage question is settled.
