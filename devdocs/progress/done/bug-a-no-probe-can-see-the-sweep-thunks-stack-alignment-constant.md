@@ -4,11 +4,17 @@ title: No probe can see the sweep thunk's stack-alignment constant — building 
 type: bug
 track: A
 prio: 30
-status: open
+status: done
 owner: frank-coord-core
 ---
 
 ## Summary
+
+**RESOLVED the same day it was filed, by building the probe it describes.**
+`test/test_sweep_thunk_preserves_stack_alignment.pas` now fails when either
+constant is wrong: 4 against 12 on x86-64, 8 against 12 on i386. See the
+resolution at the bottom, including the fact that the FIRST version of that
+probe was itself blind.
 
 The managed-local sweep thunk (`EmitSweepThunkStackAdjust`, ir_codegen.inc)
 compensates for the return address a `call` pushes, so the sweep's own calls see
@@ -67,3 +73,45 @@ Both arms landed unverified in this respect. x86-64 at `50e25f5f0`, i386 in the
 commit that files this. The five remaining targets will each add a constant of
 their own with the same blind spot unless this probe exists first — **which is
 the argument for doing it before them, not after.**
+
+
+## Resolution
+
+Built the probe this ticket specifies, and it works: an interface local's
+release is the one path in the sweep that runs USER code
+(`SXR_INTF -> PXXIntfRelease -> _Release -> Destroy`), so the destructor's frame
+inherits the alignment the sweep ran with, and `PtrUInt(@local) and 15` reads it
+with no inline asm.
+
+**THE FIRST VERSION OF THE PROBE WAS ITSELF BLIND, AND ONLY THE POSITIVE CONTROL
+CAUGHT IT.** It compared a three-return procedure against a one-return one and
+read the recorded residue after each loop. Both loops ran `1 to 30`; `30 mod 3`
+is 0, which selects the three-return procedure's FIRST return — and a body's
+first return is always emitted inline. So both readings came from inline sweeps,
+they agreed trivially, and the test printed `ALIGN OK` against a deliberately
+broken compiler **on both targets**. Sampling the final iteration meant the arm
+under test was never the arm measured.
+
+That is this ticket's own defect one level up: a guard whose expected value is
+produced by the path it is not testing. It was found the same way as the
+original — by running it against a build known to be wrong — which is the
+argument for making the deliberately-broken build a routine step and not a
+flourish.
+
+**The fix removes the dependence on which path the last iteration took:** record
+min and max of the residue over EVERY destructor call, and assert they are
+equal. One three-return body already contains both arms, so the cross-procedure
+control is not needed at all. No absolute expected value appears anywhere, so
+there is nothing for a do-nothing default to collide with, and the row needs no
+per-target constant — it is correct on any target that gets a thunk.
+
+Controls, both directions, both targets:
+
+| build | x86-64 | i386 |
+| --- | --- | --- |
+| correct constants | `ALIGN OK` | `ALIGN OK` |
+| compensation wrong | `ALIGN MISMATCH lo=4 hi=12` | `ALIGN MISMATCH lo=8 hi=12` |
+
+Wired into `test-core`, which is tier-enrolled. The five remaining targets now
+each land against a guard that already exists, which was the reason for doing
+this before them rather than after.

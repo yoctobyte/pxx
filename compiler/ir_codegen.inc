@@ -15259,25 +15259,28 @@ procedure EmitSweepThunkStackAdjust(opening: Boolean);
   arithmetic -- do not copy the constant" -- and it is right, so this is the
   second place that sentence is load-bearing.
 
-  NO TEST IN THIS TREE CAN SEE THIS CONSTANT, AND I ESTABLISHED THAT BY BUILDING
-  IT WRONG. Emitting the x86-64 value (8) on i386 leaves the stack misaligned by
-  8 at every call the sweep makes, and test_managed_sweep_thunk still printed
+  FOR ONE COMMIT THIS CONSTANT HAD NO GUARD, AND THAT WAS FOUND BY BUILDING IT
+  WRONG RATHER THAN BY REVIEW. Emitting the x86-64 value (8) on i386 misaligns
+  every call the sweep makes, and test_managed_sweep_thunk still printed
   `SWEEPTHUNK OK ok=80000 caught=5000` with an identical allocation census,
-  natively on i386, exceptions included. So the value here is correct by the
-  SysV contract that symtab.inc:12870 and ir_codegen386.inc:3723 both state --
-  it is not correct-by-measurement, and a passing suite is not evidence for it.
+  natively on i386, exceptions included. Nothing in the corpus could reach it:
+  the sweep's callees are pxx-internal release stubs, no arm of either backend
+  emits a MEMORY-OPERAND movaps/movdqa (the x86-64 hits are register-to-register
+  and have no alignment requirement), and the EXTERNAL call path re-aligns for
+  itself (`and esp,-16`) instead of trusting what it was handed.
 
-  Why the corpus cannot reach it: the sweep's own callees are pxx-internal
-  release stubs, no arm of either backend emits a memory-operand movaps/movdqa,
-  and the EXTERNAL call path re-aligns for itself (`and esp,-16`) instead of
-  trusting what it was handed. What WOULD reach it is a released INTERFACE whose
-  _Release runs user code that calls an external function using aligned SSE --
-  symtab.inc:16362 records exactly that fault mode for GTK/GLib callees. That is
-  a real path, not a hypothetical one, which is why the adjustment stays rather
-  than being dropped as inert: keeping "the thunk body sees the stack the inline
-  sweep saw" is a cheaper invariant to hold than auditing every transitive
-  callee forever, and it costs 6 bytes once per thunk.
-  bug-a-no-probe-can-see-the-sweep-thunks-stack-alignment-constant }
+  IT IS GUARDED NOW: test_sweep_thunk_preserves_stack_alignment.pas reaches this
+  through the one path that runs USER code inside the sweep -- an interface
+  local's release goes SXR_INTF -> PXXIntfRelease -> _Release -> Destroy -- and
+  reads the alignment by taking the address of a local, no inline asm. It
+  compares min against max over every return in ONE body, which covers both arms
+  because a body's first return is inline and the rest call the thunk. Change
+  either constant and it fails: 4 against 12 on x86-64, 8 against 12 on i386.
+
+  So the adjustment stays for a measured reason and no longer merely a
+  contractual one, and it was never inert: symtab.inc:16362 records the fault
+  mode for GTK/GLib callees using aligned SSE, and a released interface's
+  _Release can call out to exactly that. }
 begin
   if TargetArch = TARGET_X86_64 then
   begin

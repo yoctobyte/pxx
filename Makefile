@@ -14447,6 +14447,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_sweep_thunk.pas $(TESTTMP)/test_managed_sweep_thunk26
 	tools/expect_same.sh test_managed_sweep_thunk26 "$$($(TESTTMP)/test_managed_sweep_thunk26 2>/dev/null)" "SWEEPTHUNK OK ok=80000 caught=5000"
 	tools/assert_no_leak.sh managed_sweep_thunk 50 $(TESTTMP)/test_managed_sweep_thunk26
+	@# And the guard for the thunk's stack-alignment compensation, which the row
+	@# above CANNOT see: building that constant wrong (the x86-64 value emitted
+	@# on i386) left test_managed_sweep_thunk printing its exact expected output
+	@# and an identical census, natively, with exceptions. This one reaches it
+	@# through the only path that runs USER code inside the sweep -- an interface
+	@# local's release reaches _Release and then Destroy -- and asserts a
+	@# RELATION (min = max of the frame residue over every return in one body,
+	@# whose first return is inline and whose rest call the thunk) so it carries
+	@# no per-target constant. Positive-controlled both ways: 4 vs 12 on x86-64
+	@# with the compensation wrong, 8 vs 12 on i386.
+	./$(COMPILER) test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align26
+	tools/expect_same.sh test_sweep_align26 "$$($(TESTTMP)/test_sweep_align26)" "ALIGN OK"
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
