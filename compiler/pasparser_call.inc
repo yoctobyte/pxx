@@ -669,7 +669,8 @@ begin
   if ((opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT)) and (not opAlreadyReg) then
   begin
     dupPi := FindOpConvRanked(opKey, opTypeKind, recId,
-                              Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx], 0);
+                              Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx],
+                              ProcRetStrCap[procIdx], 0);
     if dupPi >= 0 then
       Error('duplicate conversion operator: this source type already converts to this result type');
   end;
@@ -712,7 +713,22 @@ begin
     real needs alias IDENTITY in the table AND at the use site, which
     bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct settled is a
     channel, not a predicate -- filed, not half-built here. }
+  { NOT FOR CONVERSION OPERATORS, and that exclusion is the whole population
+    question. `:=`/Implicit/Explicit are identified by their RESULT type as well
+    as their operands -- `Explicit(TTest): String[80]` and `: String[90]` are two
+    different conversions -- and the Ovrl* key does not carry a result type, so
+    every legitimate pair of them looks like a collision here. They have their
+    own guard (the duplicate-conversion check above, which reads the result and
+    its capacity) and their own destination-aware lookup (FindOpConvRanked), so
+    the earlier row is NOT what their use sites find.
+
+    Measured 2026-09-07, after this warning was written without the exclusion:
+    it fired on the TString80/TString90 pair in the same program where both
+    casts correctly reached their own operator. A warning that fires on working
+    code is worse than none -- it trains the reader to ignore the one case it
+    exists for. }
   if (not opAlreadyReg) and
+     (opKey <> Ord(tkAssign)) and (opKey <> OPK_EXPLICIT) and
      OpOverloadKeyTakenByOther(opKey, opTypeKind, recId, rightTk, rightRec, procIdx) then
     Warn('operator is already overloaded for these operand types: this ' +
          'declaration is registered but the earlier one is what every use site ' +

@@ -9096,7 +9096,7 @@ begin
     OpConvSourceRank := 1;
 end;
 
-function OpConvResultMatches(pi, dstTk, dstRec: Integer): Boolean;
+function OpConvResultMatches(pi, dstTk, dstRec, dstCap: Integer): Boolean;
 { Does conversion operator `pi` produce the DESTINATION type?
 
   dstTk = Ord(tyUnknown) is the wildcard: "any destination", which is what a
@@ -9123,10 +9123,73 @@ begin
     that converts to a completely different record }
   if (dstRec <> REC_NONE) and (ProcRetRecId[pi] <> REC_NONE) and
      (ProcRetRecId[pi] <> dstRec) then Exit;
+  { …and a FROZEN-STRING destination is only the same type when the declared
+    CAPACITY matches too. The kind test above deliberately makes every frozen
+    kind equal (toperator93 needs that -- one `string[N]` is tyString as a var
+    and tyFixedString as an operator return), which left String[80], String[90]
+    and ShortString as ONE result type: `class operator Explicit(...): TString80`
+    and `: TString90` were refused as a duplicate pair that fpc 3.2.2 compiles,
+    sending each cast to its own operator.
+
+    BOTH SIDES MUST BE KNOWN, and 0 abstains rather than guessing. 0 is "no
+    declared N" -- a plain ShortString, or a row nothing wrote -- and the two are
+    indistinguishable here, so treating 0 as a capacity would refuse the
+    ShortString overload against every sized one. Abstaining keeps exactly
+    today's answer wherever the capacity is unknown, which is what makes this
+    additive: it can only SPLIT types the old rule merged, never merge ones it
+    separated. }
+  if (dstCap <> 0) and (ProcRetStrCap[pi] <> 0) and
+     TypeIsFrozenString(Procs[pi].RetType) and
+     (ProcRetStrCap[pi] <> dstCap) and
+     (ProcRetStrCap[pi] <> DEFAULT_STR_CAP) then Exit;
   OpConvResultMatches := True;
 end;
 
-function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, maxRank: Integer): Integer;
+function OpConvDestCapNorm(dstTk, dstCap: Integer): Integer;
+{ Normalise a frozen-string DESTINATION's capacity for conversion lookup: 0 on a
+  frozen-string destination means "the kind default", not "unknown" -- SymSubHi
+  says so in its own comment -- and DEFAULT_STR_CAP is exactly what a bare
+  `ShortString` operator RESULT records. Leaving the two spelled differently
+  makes them fail to match each other.
+
+  Measured 2026-09-07: with `Implicit(...): String[80]` and `: ShortString` both
+  declared, `ss := t` for a plain `ss: ShortString` picked the String[80] one --
+  not by a rule, but because dstCap 0 expressed no preference and it was
+  declared first. Declaration order deciding an overload is the arbitrary
+  observable this whole column exists to remove. }
+begin
+  if (dstCap = 0) and TypeIsFrozenString(IntToTypeKind(dstTk)) then
+    OpConvDestCapNorm := DEFAULT_STR_CAP
+  else
+    OpConvDestCapNorm := dstCap;
+end;
+
+function OpConvResultCapRank(pi, dstCap: Integer): Integer;
+{ 0 = this operator's result capacity IS the destination's; 1 = it is the
+  generic one and merely acceptable. A PREFERENCE, never an exclusion, and it is
+  read as a SECONDARY key so maxRank keeps meaning exactly what it meant before
+  -- "how far may the SOURCE widen".
+
+  WHY A RANK AND NOT A FILTER, measured 2026-09-07 and it cost a segfault to
+  learn: a bare `ShortString` result does NOT record capacity 0. It records
+  DEFAULT_STR_CAP, so an "abstain when either side is 0" rule never engages for
+  it, and excluding on a capacity mismatch threw away the generic fallback that
+  every unmatched destination needs. `s40 := TString40(t)` with only a
+  ShortString conversion declared then found no operator, fell through to a raw
+  record-to-string store and SEGFAULTED, where the PINNED compiler printed the
+  conversion and fpc 3.2.2 uses its ShortString overload for exactly this. The
+  0-means-unknown convention that works for ProcParamStrCap does not hold on the
+  return side, because a result type is always written and a parameter's N need
+  not be. }
+begin
+  OpConvResultCapRank := 0;
+  if dstCap = 0 then Exit;
+  if not TypeIsFrozenString(Procs[pi].RetType) then Exit;
+  if ProcRetStrCap[pi] = dstCap then Exit;
+  OpConvResultCapRank := 1;
+end;
+
+function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRank: Integer): Integer;
 { CONVERSION-operator lookup: `operator :=` / `class operator Implicit`, and
   their OPK_EXPLICIT twin. Keyed on the destination as well as the source, and
   matching the source by ASSIGNMENT COMPATIBILITY rather than exact type kind.
@@ -9149,21 +9212,56 @@ function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, maxRank: Integer)
   source to the same destination are ambiguous; QWord and Int64 to one
   destination are not, and constexp.pas declares exactly that pair). Use
   OPCONV_RANK_MAX for a use site. }
-var i, pi, bestPi, bestRank, r: Integer;
+var i, pi, bestPi, bestRank, bestCapRank, r, cr: Integer;
 begin
-  bestPi := -1; bestRank := 99;
+  { CAPACITY SPLITS EXPLICIT CASTS ONLY, and this is a rule about the language
+    rather than a concession to a test row.
+
+    An EXPLICIT cast writes its destination type at the use site, so `TString80(t)`
+    and `TString90(t)` are two different requests and fpc 3.2.2 answers them with
+    two different operators. An IMPLICIT assignment does not: measured
+    2026-09-07, fpc sends every one of them to the GENERIC ShortString
+    conversion, and where no generic is declared it REFUSES the assignment
+    outright rather than choosing among the sized ones -- toperator92 and
+    toperator95 are exactly that program and exactly that refusal
+    (`Incompatible types: got "TTest" expected "TString80"`, raised at the
+    store, not at the declaration).
+
+    So there is nothing for capacity to decide on the implicit path, and letting
+    it decide there costs the duplicate-conversion diagnostic that makes those
+    two rows refuse: with the sized pair split, both declarations register, the
+    wildcard store-permission check above says a conversion exists, the rewrite
+    then matches none of them and the store goes through RAW. Accepted-invalid,
+    and silent -- the same fall-through shape that segfaulted earlier in this
+    change. Normalised only where it is consulted, so the implicit path sees 0
+    and behaves exactly as it did before this column existed. }
+  if opKey = OPK_EXPLICIT then
+    dstCap := OpConvDestCapNorm(dstTk, dstCap)
+  else
+    dstCap := 0;
+  bestPi := -1; bestRank := 99; bestCapRank := 99;
   i := 0;
   while i < OvrlCount do
   begin
     if (OvrlOpKind[i] = opKey) and (OvrlRecId[i] = srcRec) then
     begin
       pi := OvrlProcIdx[i];
-      if OpConvResultMatches(pi, dstTk, dstRec) then
+      if OpConvResultMatches(pi, dstTk, dstRec, dstCap) then
       begin
         r := OpConvSourceRank(OvrlTypeKind[i], srcTk);
-        if (r >= 0) and (r <= maxRank) and (r < bestRank) then
+        { The result CAPACITY is a SECOND key, compared only when the source
+          ranks tie, and deliberately NOT folded into r: maxRank is a cap on how
+          far the SOURCE may widen, the duplicate check passes 0 meaning "exact
+          source kind", and mixing a result-side penalty into that number would
+          silently redefine what the caller asked for. Two keys compared in
+          order, which is the shape FindTypeAlias above settled on after adding
+          one as a bonus inverted its answer. }
+        cr := OpConvResultCapRank(pi, dstCap);
+        if (r >= 0) and (r <= maxRank) and
+           ((r < bestRank) or ((r = bestRank) and (cr < bestCapRank))) then
         begin
           bestRank := r;
+          bestCapRank := cr;
           bestPi := pi;
         end;
       end;
@@ -9173,12 +9271,12 @@ begin
   FindOpConvRanked := bestPi;
 end;
 
-function FindOpConvToDest(srcTk, srcRec, dstTk, dstRec: Integer): Integer;
+function FindOpConvToDest(srcTk, srcRec, dstTk, dstRec, dstCap: Integer): Integer;
 { The use-site form: an IMPLICIT conversion, source widened as far as
   assignment compatibility goes. }
 begin
   FindOpConvToDest := FindOpConvRanked(Ord(tkAssign), srcTk, srcRec,
-                                       dstTk, dstRec, OPCONV_RANK_MAX);
+                                       dstTk, dstRec, dstCap, OPCONV_RANK_MAX);
 end;
 
 { UNARY-operator lookup: `-a` / `not a` on a record or class operand.
@@ -12664,7 +12762,7 @@ begin
   SetLength(ProcIram, n);  SetLength(ProcIsInterrupt, n);  SetLength(ProcBodyEnd, n);
   SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
-  SetLength(ProcRetStrElemTk, n);
+  SetLength(ProcRetStrElemTk, n);  SetLength(ProcRetStrCap, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);  SetLength(ProcRetPtrAlias, n);
   SetLength(ProcRetPtrElemStrTk, n);
   SetLength(ProcRetSemId, n);
@@ -12738,6 +12836,7 @@ begin
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemStrTk[ProcCount] := 0;   { the POINTEE's width, same recycled-slot rule }
   ProcRetStrElemTk[ProcCount]  := 0;
+  ProcRetStrCap[ProcCount]     := 0;
   ProcRetSemId[ProcCount]     := -1;
   ProcRetSetEnumId[ProcCount]  := -1;
   ProcRetSetElemTk[ProcCount]  := 0;

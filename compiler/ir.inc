@@ -329,9 +329,9 @@ var tk: TTypeKind;
 begin
   AssignHasConversionOperator := True;
   if AssignSideKind(srcNode, tk) and
-     (FindOpConvToDest(Ord(tk), AssignSideRecOf(srcNode), Ord(tyUnknown), REC_NONE) >= 0) then Exit;
+     (FindOpConvToDest(Ord(tk), AssignSideRecOf(srcNode), Ord(tyUnknown), REC_NONE, 0) >= 0) then Exit;
   if AssignSideKind(dstNode, tk) and
-     (FindOpConvToDest(Ord(tk), AssignSideRecOf(dstNode), Ord(tyUnknown), REC_NONE) >= 0) then Exit;
+     (FindOpConvToDest(Ord(tk), AssignSideRecOf(dstNode), Ord(tyUnknown), REC_NONE, 0) >= 0) then Exit;
   AssignHasConversionOperator := False;
 end;
 
@@ -13466,9 +13466,22 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           carries the frozen-string equivalence this site used to spell out
           inline (toperator93: `string[N]` is tyString in a var declaration and
           tyFixedString as an operator return type). }
+        { NO DESTINATION CAPACITY ON THE IMPLICIT PATH, and passing one here
+          would be inert anyway: FindOpConvRanked discards dstCap for every key
+          except OPK_EXPLICIT, on the rule stated at that line -- fpc 3.2.2
+          resolves EVERY implicit assignment to the generic conversion and
+          refuses outright when there is none, so capacity has nothing to decide
+          here. The 0 is written explicitly rather than left to that discard, so
+          this call site says what it means on its own.
+
+          Also measured on the way past, and worth not repeating: the obvious
+          reader for an lvalue's capacity, FrozenStrCapOfDeref, answers about
+          `p^` and returns nothing for a plain identifier. Wiring it here made
+          the path LOOK destination-aware while declaration order actually
+          decided which conversion ran. }
         varIdx := FindOpConvToDest(ASTTk[ASTRight[node]],
                                    ResolveNodeRec(ASTRight[node]),
-                                   Ord(lhsTk), ResolveNodeRec(ASTLeft[node]));
+                                   Ord(lhsTk), ResolveNodeRec(ASTLeft[node]), 0);
         if varIdx >= 0 then
         begin
           leftAddr := AllocNode(AN_ARG);

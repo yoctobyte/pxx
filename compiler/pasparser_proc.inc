@@ -833,6 +833,7 @@ var
   retPtrElemTk, retPtrElemRec, retPtrAlias : Integer;
   retPtrStrElemTk : Integer;   { ...and that pointee's element width when it is a managed string }
   retStrElemTk : Integer;   { managed-string result: element width ord, 0 = not one }
+  retStrCap    : Integer;   { frozen-string result: declared capacity N, 0 = none }
   retSem : Integer;   { enum-typed result: its enum index, else -1 }
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
   retDynDepth : Integer;   { `array of` levels of a dyn-array result }
@@ -1094,6 +1095,7 @@ begin
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE; retPtrAlias := -1;
   retPtrStrElemTk := 0;
   retStrElemTk := 0;
+  retStrCap := 0;
   retSem := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
@@ -1499,7 +1501,7 @@ begin
       bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type }
     ParseFuncReturnTypeShape(retType, retIsDynArr, retDynDepth, retElemTk,
                              retElemRec, retFixedArrBytes, retArrAi,
-                             retSem, retSetEnumId, retSetElemTk, retStrElemTk,
+                             retSem, retSetEnumId, retSetElemTk, retStrElemTk, retStrCap,
                              retRecId, retProcSig,
                              retPtrElemTk, retPtrStrElemTk, retPtrElemRec,
                              retPtrDepth, retPtrBaseTk, retPtrBaseRec, retPtrAlias);
@@ -1693,6 +1695,7 @@ begin
     ProcRetPtrAlias[procIdx] := retPtrAlias;
     ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
     ProcRetStrElemTk[procIdx] := retStrElemTk;
+    ProcRetStrCap[procIdx] := retStrCap;
     ProcRetSemId[procIdx] := retSem;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
     ProcRetPtrDepth[procIdx] := retPtrDepth;
@@ -2257,6 +2260,7 @@ begin
       ProcRetPtrAlias[procIdx] := retPtrAlias;
       ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
       ProcRetStrElemTk[procIdx] := retStrElemTk;
+      ProcRetStrCap[procIdx] := retStrCap;
       ProcRetSemId[procIdx] := retSem;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
       ProcRetPtrDepth[procIdx] := retPtrDepth;
@@ -2313,6 +2317,7 @@ begin
   ProcRetPtrAlias[procIdx] := retPtrAlias;
   ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
   ProcRetStrElemTk[procIdx] := retStrElemTk;
+  ProcRetStrCap[procIdx] := retStrCap;
   ProcRetSemId[procIdx] := retSem;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
   ProcRetPtrDepth[procIdx] := retPtrDepth;

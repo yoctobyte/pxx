@@ -7099,7 +7099,7 @@ begin
             aliasEtid := AliasSemId[aliasIdx] - 1
           else if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
             aliasEtid := FindEnumType(name);
-          if TryScalarNamedCast(IntToTypeKind(AliasTk[aliasIdx]), aliasEtid) then Exit;
+          if TryScalarNamedCast(IntToTypeKind(AliasTk[aliasIdx]), aliasEtid, AliasStrCap[aliasIdx]) then Exit;
           if strAliasIdx then
           begin
             { INDEXED string-alias cast — `TAlias(s)[1]`, and the `[1]` was being
@@ -7455,7 +7455,7 @@ begin
               LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
               Exit;
             end;
-            if TryScalarNamedCast(castTk, castSem) then Exit;
+            if TryScalarNamedCast(castTk, castSem, 0) then Exit;
             { ...and on a promotable int, `Pointer(n)` IS `@n`, so make it one.
               Punning the operand worked for a LOCAL, whose rvalue already is
               its slot address, and CRASHED for a by-ref PARAMETER, whose cell
@@ -9354,7 +9354,7 @@ begin
   VariantCastToTemp := vcNd;
 end;
 
-function TryScalarNamedCast(castTk: TTypeKind; semId: Integer): Boolean;
+function TryScalarNamedCast(castTk: TTypeKind; semId, castCap: Integer): Boolean;
 { THE SHARED CONSTRUCTION HALF OF A NAMED-TYPE SCALAR CAST — the arms that must
   mean the same thing however the type NAME was recognised.
 
@@ -9403,7 +9403,7 @@ begin
     TryScalarNamedCast := True;
     Exit;
   end;
-  scTmp := TryExplicitOpCast(CurASTNode, castTk);
+  scTmp := TryExplicitOpCast(CurASTNode, castTk, castCap);
   if scTmp >= 0 then
   begin
     CurASTNode := scTmp;
@@ -9468,7 +9468,7 @@ begin
   end;
 end;
 
-function TryExplicitOpCast(n: Integer; castTk: TTypeKind): Integer;
+function TryExplicitOpCast(n: Integer; castTk: TTypeKind; castCap: Integer): Integer;
 { `operator Explicit(a: TFoo): Integer` — a value cast of a RECORD or CLASS
   operand that has a matching Explicit overload is the conversion CALL, not a
   reinterpret. Answers -1 for every other operand and whenever no overload
@@ -9487,9 +9487,29 @@ begin
   if n < 0 then Exit;
   if (IntToTypeKind(ASTTk[n]) <> tyRecord) and
      (IntToTypeKind(ASTTk[n]) <> tyClass) then Exit;
-  eoSci := FindOpOverload(OPK_EXPLICIT, ASTTk[n], ResolveNodeRec(n));
+  { DESTINATION-AWARE, and it has to be: FindOpOverload keys on the SOURCE only,
+    so it returned whichever `Explicit` was declared first and the RetType test
+    below then rejected it -- with several conversions from one record, only the
+    first was reachable and the rest were dead. That was invisible while the
+    declaration of the second one was refused outright; making the pair legal
+    (ProcRetStrCap) is what would have turned it into a silent wrong cast, so
+    the two changes belong in one commit. }
+  eoSci := FindOpConvRanked(OPK_EXPLICIT, ASTTk[n], ResolveNodeRec(n),
+                            Ord(castTk), REC_NONE, castCap, OPCONV_RANK_MAX);
   if eoSci < 0 then Exit;
-  if Procs[eoSci].RetType <> castTk then Exit;
+  { NO SECOND, STRICTER RESULT TEST HERE. The lookup has already matched the
+    destination, and it does so with the frozen-string equivalence
+    OpConvResultMatches states (one `string[N]` is tyString in a var declaration
+    and tyFixedString as an operator return). A `Procs[eoSci].RetType <> castTk`
+    guard on top of it disagreed with that rule and REJECTED what the lookup had
+    accepted -- and the fall-through is not a diagnostic, it is a raw cast of a
+    record to a string.
+
+    MEASURED 2026-09-07, and this is why the test is gone rather than relaxed:
+    toperator91 line 84, `s40 := TString40(t)` with no String[40] conversion
+    declared, took the ShortString operator from the lookup, failed the strict
+    test, fell through and SEGFAULTED. fpc prints `ShortString Implicit` there.
+    Two rules for one question, and the redundant one was the wrong one. }
   eoArg := AllocNode(AN_ARG);
   ASTLeft[eoArg] := n;
   eoNd := AllocNode(AN_CALL);

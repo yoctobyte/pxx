@@ -4873,6 +4873,7 @@ var
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;   { ...and the depth + ultimate base beside it: feature-a-typeref-migrate-consumers }
   retStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
+  retStrCap: Integer;      { frozen-string RETURN: declared capacity N, 0 = none }
   retPtrElemTk, retPtrElemRec, retPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -5054,6 +5055,7 @@ begin
   retPtrStrElemTk := 0;
   retPtrElemRec := REC_NONE;
   retStrElemTk := 0;
+  retStrCap := 0;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
   if isFunc then
   begin
@@ -5071,6 +5073,17 @@ begin
       if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
       else retStrElemTk := Ord(tyChar);
     end;
+    { The FROZEN-string result's declared capacity. Read here and not beside the
+      element width above, because the two describe different kinds: a
+      `string[N]` result is tyShortString/tyFixedString, never tyAnsiString, so
+      it never enters that arm. ParseTypeKind resets LastTypeStrCap on entry,
+      which makes the line immediately after it the only window where the value
+      describes the type just parsed. This path is ParseRecordMethodDecl's OWN
+      return parse, not the shared ParseFuncReturnTypeShape -- record method
+      declarations track no array returns at all (no retIsDynArr here), which is
+      why this reads LastTypeStrCap unguarded where the shared one must exclude
+      an array result first. }
+    retStrCap := LastTypeStrCap;
     retPtrElemTk := Ord(LastTypePointerElemTk);
     retPtrAlias := LastTypePointerAlias;
     retPtrStrElemTk := LastTypePointerStrElemTk;
@@ -5157,6 +5170,7 @@ begin
   Procs[mpi].BodyAddr := -1;
   if isFunc and (retTk = tyAnsiString) then
     ProcRetStrElemTk[mpi] := retStrElemTk;
+  if isFunc then ProcRetStrCap[mpi] := retStrCap;
   if isFunc and (retTk = tyPointer) then
   begin
     ProcRetPtrElemTk[mpi] := retPtrElemTk;
@@ -5970,6 +5984,7 @@ procedure ParseFuncReturnTypeShape(var retType: TTypeKind;
                                    var retSetEnumId: Integer;
                                    var retSetElemTk: Integer;
                                    var retStrElemTk: Integer;
+                                   var retStrCap: Integer;
                                    var retRecId: Integer;
                                    var retProcSig: Integer;
                                    var retPtrElemTk: Integer;
@@ -6005,6 +6020,7 @@ procedure ParseFuncReturnTypeShape(var retType: TTypeKind;
   three of the four dropped fields this function has already produced. }
 var paramAi: Integer;
 begin
+  retStrCap := 0;
   if CurTok.Kind = tkArray then
   begin
     { `array of T` result: a pointer-sized dynamic-array handle. retType holds
@@ -6154,6 +6170,14 @@ begin
       else if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
       else retStrElemTk := Ord(tyChar);
     end;
+    { …and the FROZEN-string result's declared capacity, under the SAME array
+      rule the width above states -- `function F: array of String[8]` reaches
+      this line with retType = the ELEMENT kind, and 8 is the ELEMENTS' capacity
+      (ArrTypeElemStrCap), not the result's. A different kind from the width
+      beside it: `string[N]` is tyShortString/tyFixedString and never
+      tyAnsiString, so it cannot ride in that arm. }
+    if (retArrAi < 0) and (not retIsDynArr) then
+      retStrCap := LastTypeStrCap;
     if (retType = tyRecord) or (retType = tyClass) then
       retRecId := LastTypeRecId;
     { …and the procedural SIGNATURE the same alias carries, for exactly the
@@ -6228,7 +6252,7 @@ var
   mRetIsDynArr: Boolean;
   mRetElemTk: TTypeKind;
   mRetDynDepth, mRetElemRec, mRetFixedArrBytes, mRetArrAi: Integer;
-  mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk: Integer;
+  mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk, mRetStrCap: Integer;
   mRetRecId, mRetProcSig: Integer;
   mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec: Integer;
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias: Integer;
@@ -6266,7 +6290,7 @@ begin
       mRetDynDepth := 0;
       mRetFixedArrBytes := 0; mRetArrAi := -1;
       mRetSetEnumId := -1; mRetSetElemTk := 0;
-      mRetStrElemTk := 0; mRetSem := -1;
+      mRetStrElemTk := 0; mRetStrCap := 0; mRetSem := -1;
       mRetRecId := REC_NONE; mRetProcSig := -1;
       mRetPtrElemTk := Ord(tyUnknown); mRetPtrElemRec := REC_NONE; mRetPtrAlias := -1;
       mRetPtrStrElemTk := 0;
@@ -6364,7 +6388,7 @@ begin
         Expect(tkColon, ':');
         ParseFuncReturnTypeShape(mRetType, mRetIsDynArr, mRetDynDepth, mRetElemTk,
                                  mRetElemRec, mRetFixedArrBytes, mRetArrAi,
-                                 mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk,
+                                 mRetSem, mRetSetEnumId, mRetSetElemTk, mRetStrElemTk, mRetStrCap,
                                  mRetRecId, mRetProcSig,
                                  mRetPtrElemTk, mRetPtrStrElemTk, mRetPtrElemRec,
                                  mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec, mRetPtrAlias);
@@ -6422,6 +6446,7 @@ begin
       ProcRetSetEnumId[mpi] := mRetSetEnumId;
       ProcRetSetElemTk[mpi] := mRetSetElemTk;
       ProcRetStrElemTk[mpi] := mRetStrElemTk;
+      ProcRetStrCap[mpi] := mRetStrCap;
       ProcRetSemId[mpi] := mRetSem;
       ProcRetRecId[mpi] := mRetRecId;
       ProcRetProcSig[mpi] := mRetProcSig;
@@ -6927,6 +6952,7 @@ var
   mRetSem: Integer;     { …and its ENUM identity (ProcRetSemId), for a DECL-ONLY method that no body will ever fill }
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
+  mRetStrCap: Integer;      { frozen-string RETURN: declared capacity N, 0 = none }
   mRetPtrElemTk, mRetPtrElemRec, mRetPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -7270,6 +7296,7 @@ begin
           mRetPtrStrElemTk := 0;
           mRetPtrElemRec := REC_NONE;
           mRetStrElemTk := 0;
+          mRetStrCap := 0;
           mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
           if mIsFunc then
           begin
@@ -7290,6 +7317,7 @@ begin
               if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
               else mRetStrElemTk := Ord(tyChar);
             end;
+            mRetStrCap := LastTypeStrCap;
             mRetPtrElemTk := Ord(LastTypePointerElemTk);
             mRetPtrAlias := LastTypePointerAlias;
             mRetPtrStrElemTk := LastTypePointerStrElemTk;
@@ -7329,6 +7357,7 @@ begin
           if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
           if mIsFunc and (mRetType = tyAnsiString) then
             ProcRetStrElemTk[mpi] := mRetStrElemTk;
+            ProcRetStrCap[mpi] := mRetStrCap;
           if mIsFunc and (mRetType = tyPointer) then
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
@@ -8033,6 +8062,7 @@ begin
             mRetPtrStrElemTk := 0;
             mRetPtrElemRec := REC_NONE;
             mRetStrElemTk := 0;
+            mRetStrCap := 0;
             mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
             if mIsFunc then
             begin
@@ -8045,6 +8075,7 @@ begin
                 if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
                 else mRetStrElemTk := Ord(tyChar);
               end;
+              mRetStrCap := LastTypeStrCap;
               mRetPtrElemTk := Ord(LastTypePointerElemTk);
               mRetPtrAlias := LastTypePointerAlias;
               mRetPtrStrElemTk := LastTypePointerStrElemTk;
@@ -8172,6 +8203,7 @@ begin
               if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
               if mIsFunc and (mRetType = tyAnsiString) then
                 ProcRetStrElemTk[mpi] := mRetStrElemTk;
+                ProcRetStrCap[mpi] := mRetStrCap;
               if mIsFunc and (mRetType = tyPointer) then
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
