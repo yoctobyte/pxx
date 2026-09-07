@@ -124,6 +124,8 @@ byte-wise compare unsafe for a whole record and safe over that run. The right
 shape for large arrays is a byte-compare over any contiguous padding-free run —
 O(1) code, no cap — and it needs a `PXXMemCmp` that does not exist
 (`builtinheap.pas` has `PXXMemMove`, `PXXMemZero` and `PXXMemCopy` only).
+Filed as `feature-a-a-byte-compare-over-padding-free-runs-would-retire-the-record-compare-unroll-cap`
+so it is ranked rather than buried in a resolved ticket's body.
 Still refused, unchanged: dynamic-array members (a handle, not inline storage),
 bit-fields, `tySet` / `tyVariant` / frozen-string / `tyExtended` members, and
 any record whose fields overlap.
