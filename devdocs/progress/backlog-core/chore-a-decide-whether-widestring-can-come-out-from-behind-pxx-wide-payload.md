@@ -4,11 +4,12 @@ title: "WideString's element width is still behind {$define PXX_WIDE_PAYLOAD} �
 track: A
 prio: 25
 type: chore
+blocked-by: [bug-a-a-case-of-string-on-a-widestring-matches-nothing-under-pxx-wide-payload]
 status: backlog
 owner: ""
 created: 2026-08-30
 found-by: frankwasm
-summary: "Declaring `w: WideString` gives UTF-8 bytes by default and UTF-16 units only under {$define PXX_WIDE_PAYLOAD} — a live behavioural difference (Length 5 / w[4]=195 vs 4 / 233 for 'café'). The gate is DELIBERATE, left in place when feature-unicodestring-model closed, and this ticket exists so the next reader can tell that from forgotten. Retiring it is a measurement, not a decision."
+summary: "Declaring `w: WideString` gives UTF-8 bytes by default and UTF-16 units only under {$define PXX_WIDE_PAYLOAD} — a live behavioural difference (Length 5 / w[4]=195 vs 4 / 233 for 'café'). The gate is DELIBERATE, left in place when feature-unicodestring-model closed, and this ticket exists so the next reader can tell that from forgotten. Retiring it is a measurement, not a decision. STEP 1 IS DONE (frankS, 2026-09-07): forcing the define across the conformance corpus gives 406 pass / 5 fail against 411 / 0, all five one mechanism, filed as bug-a-a-case-of-string-on-a-widestring-matches-nothing-under-pxx-wide-payload -- so the gate STAYS behind it. Steps 2 and 4 (lib/**, examples/**, non-ASCII data) are still unrun and the step-4 fpc oracle does not work as written."
 ---
 
 # The gate, and why it is still there
@@ -177,3 +178,64 @@ is now fixed (`MatchParamExact` and the registration check both read
 `ProcParamStrElemTk`; `test_overload_widestring_and_ansistring_are_two_overloads`
 carries the define for exactly the reason this ticket exists). So when the sweep
 runs, the overload machinery is no longer a confounder.
+
+---
+
+## STEP 1 HAS AN ANSWER (frankS, 2026-09-07, compiler 19bee89a03e6)
+
+`-dPXX_WIDE_PAYLOAD` works on the command line, and the conformance runner takes
+the compiler as its first positional — so a two-line wrapper forces the define
+across the whole corpus without editing the runner (which would be touching the
+instrument mid-measurement). Wrapper's own positive control: a
+`{$ifdef PXX_WIDE_PAYLOAD}` probe prints 0 bare and 1 through the wrapper.
+
+**Result: 406 pass, 5 fail, 89 skip, 50 auto-gated (of 550), against a 411 / 0 /
+89 baseline at the same binary.**
+
+    FAIL tcase0.pp  — exit 12 (want 0)
+    FAIL tcase12.pp — exit 1  (want 0)
+    FAIL tcase13.pp — exit 1  (want 0)
+    FAIL tcase28.pp — exit 1  (want 0)
+    FAIL tcase29.pp — exit 1  (want 0)
+
+All five are RUNTIME failures, not compile errors, and all five are the same
+family. `tcase0.pp` declares `ws: widestring; us: unicodestring` and cases on
+them: exit 0 today, exit 12 — its own failure halt — under the define. That is
+step 2's target exactly: *code that declares WideString and then treats it as
+bytes*.
+
+### What this decides, and what it does not
+
+By this ticket's own rule — *"if it finds a handful, they are ordinary bug
+tickets and this stays open behind them"* — **the gate stays**, and the `tcase*`
+family is the blocker to file behind it.
+
+**It does NOT clear the ticket, and step 3's warning is why.** The corpus is
+overwhelmingly ASCII, and on ASCII a UTF-8 byte count and a UTF-16 unit count
+are the same number — so the 406 GREEN rows are not evidence that the define is
+safe for them. A red here is informative (those five really do change
+behaviour); a green here is not. **Steps 2 and 4 over `lib/**` and `examples/**`
+with non-ASCII data are still unrun.**
+
+### The oracle in step 4 needs re-examining before anyone leans on it
+
+Measured: `uses cwstring` with `w := 'caf' + #$C3 + #$A9` gives fpc
+`Length=5, w[4]=195` — i.e. byte-for-byte, the same answer as pxx's DEFAULT and
+not the define's. That is the behaviour this ticket already warns about
+(*"converts byte-for-byte regardless of {$codepage utf8} or -FcUTF8, so stock
+FPC will report divergences that are not divergences"*), so it is consistent —
+but it means the cwstring recipe as written did not give a converting manager
+here, and whoever runs step 4 needs to establish one that does before treating
+fpc as an oracle. **pxx cannot run the comparison program at all**: `uses
+cwstring` is `unit source not found`, so the differential needs a different
+shape than "same source, two compilers".
+
+### What blocks the rows
+
+`tover1.pp` passes under the define and cannot pass without it — without it
+`widestring` IS `ansistring`, so its two overloads are genuinely one signature
+(pxx says so: `duplicate definition of 'test_string' with the same parameter
+types`) and selection cannot distinguish them. `tstring11.pp` needs the define
+AND an open-array conversion. `tstring10.pp` needs the define AND
+`punicodechar`, which is undefined even under it. So this gate is the shared
+root of three `gap:` rows, and none of the three can burn while it stands.
