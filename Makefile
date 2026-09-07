@@ -16746,6 +16746,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_forinpick26 "$$($(TESTTMP)/test_forinpick26)" "$$(cat test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.expected)"
 	./$(COMPILER) test/test_for_in_lowers_class_record_and_interface_enumerators_alike.pas $(TESTTMP)/test_foringrid26
 	tools/expect_same.sh test_foringrid26 "$$($(TESTTMP)/test_foringrid26)" "$$(cat test/test_for_in_lowers_class_record_and_interface_enumerators_alike.expected)"
+	./$(COMPILER) test/test_the_enumerator_member_directives_name_movenext_and_current.pas $(TESTTMP)/test_enumdirect26
+	tools/expect_same.sh test_enumdirect26 "$$($(TESTTMP)/test_enumdirect26)" "$$(cat test/test_the_enumerator_member_directives_name_movenext_and_current.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

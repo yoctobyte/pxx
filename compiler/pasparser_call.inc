@@ -1980,6 +1980,36 @@ begin
   Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
 end;
 
+{ `enumerator MoveNext;` / `enumerator Current;` -- an FPC MEMBER DIRECTIVE that
+  nominates which member plays which half of the for-in protocol, so a type can
+  spell its enumerator `StepForward`/`Value` and still be iterable.
+
+  Returns 1 for MoveNext, 2 for Current, 0 for "not this". TWO WORDS, and the
+  second is the role rather than free text: FPC defines exactly these two, so an
+  `enumerator Frobnicate;` is a typo and must NOT be silently eaten -- it is
+  reported where it stands.
+
+  Guarded exactly like the one-word directives beside it: `enumerator` is not a
+  reserved word (a field, method or variable may be called that), so the shape is
+  only a directive when an identifier and a ';' follow. Anything else and this
+  declines without consuming a token, and the member loop's own error reports the
+  position. }
+function EatEnumeratorMemberDirective: Integer;
+begin
+  Result := 0;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not CaseEqual(CurTok.SVal, 'enumerator') then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkIdent) then Exit;
+  if (TokPos + 1 >= TokCount) or (Tokens[TokPos + 1].Kind <> tkSemicolon) then Exit;
+  Next;                                   { past `enumerator` -- now on the role }
+  if CaseEqual(CurTok.SVal, 'MoveNext') then Result := 1
+  else if CaseEqual(CurTok.SVal, 'Current') then Result := 2
+  else
+    Error('enumerator directive: expected MoveNext or Current, got ' + CurTok.SVal);
+  Next;
+  Eat(tkSemicolon);
+end;
+
 function EatIntfMethodDirective: Boolean;
 { One directive on an INTERFACE method signature, plus its trailing ';'.
   An interface method is abstract and virtual by definition, so the dispatch

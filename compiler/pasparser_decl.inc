@@ -4899,6 +4899,7 @@ var
   rmDefIsStr, rmDefIsFloat, rmDefIsSet: Boolean;
   curTk, retTk: TTypeKind;
   rmSawStatic: Boolean;
+  rmEnumRole: Integer;   { `enumerator MoveNext` on this record method: 1, 2 or 0 }
   rmClassCtorDtor: Boolean;   { `class constructor`/`class destructor` in a record -- inherently static, see the check below }
   rmMandatory: Integer;
 begin
@@ -5227,6 +5228,16 @@ begin
   end;
 
   AddUMeth(ci, mnOff, mnLen, mpi);
+  { `enumerator MoveNext;` -- THE THIRD ARM. A record parses its methods here and
+    not in the class member loop, so wiring the class arm alone left
+    `function Step: Boolean; enumerator MoveNext;` failing on a RECORD with
+    `expected ':' before MoveNext` while the identical class compiled. Found by
+    writing the fixture rather than by reading: three declaration parsers is one
+    more than anybody remembers. }
+  rmEnumRole := EatEnumeratorMemberDirective;
+  if rmEnumRole = 1 then UClsEnumMoveNextM[ci] := UMthCount - 1
+  else if rmEnumRole = 2 then
+    Error('enumerator Current: expected on a property, not a method');
   UMthIsStatic[UMthCount - 1] := RecordMethodClassPrefix;
   UMthIsCtor[UMthCount - 1] := isCtor;
   UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
@@ -5611,6 +5622,7 @@ var
   fSem: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
   opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
   savedPCB: Integer;  { ParsingClassBodyCi around this body -- see below }
+  recEnumRole: Integer;   { `enumerator Current` on the record property just parsed: 1, 2 or 0 }
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -5804,6 +5816,16 @@ begin
     if CurTok.Kind = tkProperty then
     begin
       ParseRecordPropertyDecl(ci);
+      { `enumerator Current;` -- THE FOURTH AND LAST declaration site. A record
+        has its own property parser as well as its own method parser, so the four
+        are: interface method, interface property, class member loop (both), and
+        this pair. Each was found by a probe that failed after the previous one
+        was wired; none of them by reading. }
+      recEnumRole := EatEnumeratorMemberDirective;
+      if recEnumRole = 1 then
+        Error('enumerator MoveNext: expected on a method, not a property')
+      else if recEnumRole = 2 then
+        UClsEnumCurrentP[ci] := UPropCount - 1;
       continue;
     end;
     { `class function` / `class procedure` in a record: consume the prefix and treat it as
@@ -6953,6 +6975,7 @@ var
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
   mRetStrCap: Integer;      { frozen-string RETURN: declared capacity N, 0 = none }
+  mEnumRole: Integer;       { `enumerator MoveNext` / `enumerator Current` on the member just parsed: 1, 2 or 0 }
   mRetPtrElemTk, mRetPtrElemRec, mRetPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -7216,6 +7239,14 @@ begin
           if CurTok.Kind = tkProperty then
           begin
             ParsePropertyDecl(ci, 0, False);   { an interface has no class properties }
+            { `enumerator Current;` TRAILS the property's own ';', so it is read
+              here rather than inside ParsePropertyDecl -- the property parser
+              ends at its terminator and this is a separate directive after it. }
+            mEnumRole := EatEnumeratorMemberDirective;
+            if mEnumRole = 1 then
+              Error('enumerator MoveNext: expected on a method, not a property')
+            else if mEnumRole = 2 then
+              UClsEnumCurrentP[ci] := UPropCount - 1;
             continue;
           end;
           mIsFunc := CurTok.Kind = tkFunction;
@@ -7328,6 +7359,15 @@ begin
           end;
           Eat(tkSemicolon);
           while EatIntfMethodDirective do ;
+          { `enumerator MoveNext;` -- recorded now, applied after AddUMeth below,
+            because the row it names does not exist until the signature is fully
+            registered. Read after the ordinary directives so `overload;
+            enumerator MoveNext;` works in either order. }
+          mEnumRole := EatEnumeratorMemberDirective;
+          while EatIntfMethodDirective do ;
+          if mEnumRole = 0 then mEnumRole := EatEnumeratorMemberDirective;
+          if mEnumRole = 2 then
+            Error('enumerator Current: expected on a property, not a method');
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
           begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPDynA[i] := mPDynA[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
@@ -7357,7 +7397,18 @@ begin
           if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
           if mIsFunc and (mRetType = tyAnsiString) then
             ProcRetStrElemTk[mpi] := mRetStrElemTk;
-            ProcRetStrCap[mpi] := mRetStrCap;
+          { OUTSIDE the `if` ABOVE, DELIBERATELY, AND IT USED TO LOOK LIKE IT WAS
+            INSIDE IT. Every other declaration path writes ProcRetStrCap
+            unconditionally beside ProcRetStrElemTk (pasparser_proc.inc has three
+            such pairs, ParseRecordMethodDecl a fourth); only this arm guards the
+            ELEMENT WIDTH, because AnsiString and WideString share one TTypeKind
+            and a decl that records no width says NARROW. Capacity has no such
+            sentinel collision -- mRetStrCap is reset to 0 per member and a
+            non-string return simply carries 0. The line was written under an
+            unbraced `if` and indented as though guarded, which is a lie the
+            compiler does not check and the next person to add a line here would
+            have inherited. Same value, stated on purpose. }
+          ProcRetStrCap[mpi] := mRetStrCap;
           if mIsFunc and (mRetType = tyPointer) then
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
@@ -7409,6 +7460,7 @@ begin
           { slot = method position within this interface (IMT index) }
           UMthVirSlot[UMthCount-1] := UClsMCount[ci] - 1;
           UMthIsStatic[UMthCount-1] := False;
+          if mEnumRole = 1 then UClsEnumMoveNextM[ci] := UMthCount - 1;
         end;
         Expect(tkEnd, 'end');
         Eat(tkSemicolon);
@@ -8203,7 +8255,10 @@ begin
               if mIsFunc and SemKindMatches(mRetType, mRetSem) then ProcRetSemId[mpi] := mRetSem;
               if mIsFunc and (mRetType = tyAnsiString) then
                 ProcRetStrElemTk[mpi] := mRetStrElemTk;
-                ProcRetStrCap[mpi] := mRetStrCap;
+              { Unguarded on purpose -- the twin of this pair a thousand lines up
+                carries the reasoning. Both were written under an unbraced `if`
+                and indented as though guarded. }
+              ProcRetStrCap[mpi] := mRetStrCap;
               if mIsFunc and (mRetType = tyPointer) then
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
@@ -8309,6 +8364,17 @@ begin
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
+            { `enumerator MoveNext;` on a CLASS or RECORD method -- the sibling of
+              the interface arm, and it had to be read HERE rather than at the top
+              of the member loop: a class body has FIELDS, so an unconsumed
+              `enumerator` is taken as a field name and the loop answers
+              `expected ':' before 'MoveNext'`. The directive belongs to the
+              method just registered, and this is the first point where that
+              method has a row to point at. }
+            mEnumRole := EatEnumeratorMemberDirective;
+            if mEnumRole = 1 then UClsEnumMoveNextM[ci] := mmi
+            else if mEnumRole = 2 then
+              Error('enumerator Current: expected on a property, not a method');
             { No `overload` and no `override` => this declaration HIDES every
               inherited method of the name. A CONSTRUCTOR is excluded: FPC
               treats constructors as always overloaded across a hierarchy
@@ -8403,7 +8469,14 @@ begin
             end;
           end
           else if CurTok.Kind = tkProperty then
-            ParsePropertyDecl(ci, curPublished, sawClassProp)
+          begin
+            ParsePropertyDecl(ci, curPublished, sawClassProp);
+            mEnumRole := EatEnumeratorMemberDirective;
+            if mEnumRole = 1 then
+              Error('enumerator MoveNext: expected on a method, not a property')
+            else if mEnumRole = 2 then
+              UClsEnumCurrentP[ci] := UPropCount - 1;
+          end
           else if CurTok.Kind = tkIdent then
           begin
             ParseFieldDeclInto(ci, curFieldOff, classAlign, False, False, False,

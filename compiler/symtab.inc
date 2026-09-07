@@ -2194,6 +2194,8 @@ begin
   UClsSealed[UClsCount] := False;
   UClsAbstractCls[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
+  UClsEnumMoveNextM[UClsCount] := -1;   { no `enumerator MoveNext` directive }
+  UClsEnumCurrentP[UClsCount] := -1;    { no `enumerator Current` directive }
   UClsEnclosingCi[UClsCount] := -1;   { unit level until a body parser says otherwise }
   UClsHelperTk[UClsCount] := -1;
   UClsHelperRec[UClsCount] := REC_NONE;

@@ -865,6 +865,42 @@ end;
 
 { ===== Structural enumerator for-in (Slice B) =====
   A zero-extra-arg method call C.M (self only). Handles virtual dispatch. }
+{ WHICH MEMBER PLAYS EACH HALF OF THE for-in PROTOCOL, for this enumerator.
+
+  By default the literal names -- MoveNext and Current -- but FPC lets a type
+  NOMINATE any method and any property with the member directives
+  `enumerator MoveNext;` / `enumerator Current;`, which is how tforin9's
+  IMyIterator spells them StepForward and Value.
+
+  TWO RESOLVERS AND EVERY READER GOES THROUGH ONE OF THEM, for the reason the
+  directive exists: a type carrying the directive very often ALSO has no member
+  of the literal name, so a caller that asks by name gets -1 and reports the
+  enumerator as malformed. Both the check and the lowering must ask the same
+  question, or a loop is accepted by one rule and lowered by another. }
+function EnumeratorMoveNextMeth(enumIdx: Integer): Integer;
+begin
+  if enumIdx < 0 then begin EnumeratorMoveNextMeth := -1; Exit; end;
+  EnumeratorMoveNextMeth := UClsEnumMoveNextM[enumIdx];
+  if EnumeratorMoveNextMeth < 0 then
+    EnumeratorMoveNextMeth := FindUMeth(enumIdx, 'MoveNext');
+end;
+
+function EnumeratorCurrentProp(enumIdx: Integer): Integer;
+begin
+  if enumIdx < 0 then begin EnumeratorCurrentProp := -1; Exit; end;
+  EnumeratorCurrentProp := UClsEnumCurrentP[enumIdx];
+  if EnumeratorCurrentProp < 0 then
+    EnumeratorCurrentProp := FindUProp(enumIdx, 'Current');
+end;
+
+{ The call builder GenMakeMethodCall0 delegates to, split out so a caller that
+  has already RESOLVED the member (the enumerator's MoveNext, which may not be
+  called MoveNext) does not have to round-trip through a name it does not have. }
+function GenMakeMethodCallM(instNode, classIdx, mmi: Integer): Integer;
+begin
+  GenMakeMethodCallM := MakeAccessorCall(classIdx, mmi, UMthProc_[mmi], instNode, -1);
+end;
+
 function GenMakeMethodCall0(instNode, classIdx: Integer; const methName: AnsiString): Integer;
 var mmi: Integer;
 begin
@@ -886,7 +922,7 @@ begin
     which is what localised it to the lowering rather than to interface
     dispatch. Delegating instead of growing a third arm here is the point: the
     second path is the one that stays broken. }
-  Result := MakeAccessorCall(classIdx, mmi, UMthProc_[mmi], instNode, -1);
+  Result := GenMakeMethodCallM(instNode, classIdx, mmi);
 end;
 
 { What KIND the `__e` temp must have for an enumerator of this UCls entry.
@@ -947,7 +983,7 @@ var pri, mi, i: Integer; mname: AnsiString;
 begin
   EnumeratorCurrentTk := tyUnknown;
   if enumIdx < 0 then Exit;
-  pri := FindUProp(enumIdx, 'Current');
+  pri := EnumeratorCurrentProp(enumIdx);
   if pri >= 0 then
   begin
     if UPropReadMLen[pri] > 0 then
@@ -979,7 +1015,7 @@ begin
     pointer — read its Current field/getter through the matching receiver kind so
     an AN_FIELD over a record takes @eSym+off rather than dereferencing a pointer. }
   eTk := Syms[eSym].TypeKind;
-  pri := FindUProp(enumIdx, 'Current');
+  pri := EnumeratorCurrentProp(enumIdx);
   if pri >= 0 then
   begin
     if UPropReadMLen[pri] > 0 then
@@ -1017,7 +1053,7 @@ end;
   Duck-typed on the three names; no base class required. }
 function ParseForInEnumeratorAST(varIdx, contSym, contClassIdx: Integer): Integer;
 var
-  bodyNode, gepi, enumRec, enumIdx, eSym: Integer;
+  bodyNode, gepi, enumRec, enumIdx, eSym, mnMi: Integer;
   geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
   freeCall, tryNode: Integer;
   contTk, eTk: TTypeKind;
@@ -1048,7 +1084,9 @@ begin
   geCall := GenMakeMethodCall0(GenMakeIdent(contSym, contTk), contClassIdx, 'GetEnumerator');
   assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
-  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'MoveNext');
+  mnMi := EnumeratorMoveNextMeth(enumIdx);
+  if mnMi < 0 then Error('for-in: enumerator has no MoveNext (nor an `enumerator MoveNext` directive)');
+  mnCall := GenMakeMethodCallM(GenMakeIdent(eSym, eTk), enumIdx, mnMi);
 
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
@@ -1093,7 +1131,7 @@ end;
   Fixture: test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas }
 function BuildForInOpEnumeratorLoop(varIdx, opPi, contNode: Integer): Integer;
 var
-  bodyNode, enumRec, enumIdx, eSym: Integer;
+  bodyNode, enumRec, enumIdx, eSym, mnMi: Integer;
   argSeq, geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
   freeCall, tryNode: Integer;
   eTk: TTypeKind;
@@ -1125,7 +1163,9 @@ begin
   ASTLeft[geCall] := argSeq;
   assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
-  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'MoveNext');
+  mnMi := EnumeratorMoveNextMeth(enumIdx);
+  if mnMi < 0 then Error('for-in: enumerator has no MoveNext (nor an `enumerator MoveNext` directive)');
+  mnCall := GenMakeMethodCallM(GenMakeIdent(eSym, eTk), enumIdx, mnMi);
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
 

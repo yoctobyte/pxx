@@ -6316,6 +6316,18 @@ var
     not see the `TFacClass` declared two lines above it.
     bug-p-a-nested-record-field-cannot-see-a-sibling-nested-type }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
+  { The `enumerator MoveNext` / `enumerator Current` MEMBER DIRECTIVES (FPC):
+    a type may nominate any method to play MoveNext and any property to play
+    Current, so `function StepForward: Boolean; enumerator MoveNext;` makes
+    StepForward the one for-in calls. Two rows because they name DIFFERENT
+    member tables -- a UMth index and a UProp index -- and -1 means "no
+    directive, use the literal name", which is what every existing type has.
+    Read ONLY through EnumeratorMoveNextMeth / the Current arm of
+    GenMakeCurrentRead, so the name and the directive cannot disagree about
+    which member the loop calls. tforin9 (an interface declaring its own
+    enumerator protocol) is what these are for. }
+  UClsEnumMoveNextM : array[0..MAX_UCLASS-1] of Integer;
+  UClsEnumCurrentP  : array[0..MAX_UCLASS-1] of Integer;
   UClsHelperTk : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER: Ord(target TTypeKind), -1 = not a helper }
   UClsHelperRec : array[0..MAX_UCLASS-1] of Integer; { helper target's rec id (REC_NONE for scalars/strings) }
   { Class-name aliases (`TOptionList = TList;`) — FindUClass resolves the alias
