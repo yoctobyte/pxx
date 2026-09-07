@@ -8,7 +8,7 @@ created: 2026-09-07
 found-by: frankuser
 tags: [twatch, autoticket, autoclose, falsifiability, races]
 blocked-by: []
-summary: "The watcher auto-closed regression-test-threads-test-threadsafe-class-finalize-race on a full-tier green at 918842a5fd43 -- the same sha the native tier had called RED ten minutes earlier. No tree change separated the two answers, so the green was nondeterminism, not a repair. The job was red again four minutes later and stayed red in both tiers; Track A later found the cause (3bb71fd79, fixed by 35328fd10) and measured it 0/30 before, 30/30 after. None of the three arms of one_green_cannot_close could fire: first stub, class `unit`, no retry in the closing run. Fixed by a fourth arm comparing the closing sha against the red's own sha (762a86705)."
+summary: "The watcher auto-closed regression-test-threads-test-threadsafe-class-finalize-race on a full-tier green at 918842a5fd43 -- the same sha the native tier had called RED ten minutes earlier. No tree change separated the two answers, so the green was nondeterminism, not a repair. The job was red again four minutes later and stayed red in both tiers; Track A later found the cause (3bb71fd79, fixed by 35328fd10) and measured it 0/30 before, 30/30 after. None of the three arms of one_green_cannot_close could fire: first stub, class `unit`, no retry in the closing run. Fixed by a fourth arm comparing the closing sha against the red's own sha (aeb405739)."
 ---
 
 # What happened
@@ -49,7 +49,7 @@ the next bisect away from the bug.
 
 # Fix
 
-`762a86705`. Fourth arm in `one_green_cannot_close`, compared at 12 chars so a
+`aeb405739`. Fourth arm in `one_green_cannot_close`, compared at 12 chars so a
 full sha matches its own abbreviation either way round; call site passes `sha`
 and `r.get("bad")`, which were already in scope. Three guards added to
 `tools/twatch_autoclose_race_devtest.py`, two of which assert the rule stays
@@ -66,7 +66,8 @@ contradiction in its own record.
 
 ## Log
 - 2026-09-07 — found by frankuser (plexus) from the archive, verified on seven
-  against the reports and the ticket pair, fixed by `762a86705` the same day.
+  against the reports and the ticket pair, fixed by `aeb405739` the same day.
   Track A had independently recorded the same-sha reasoning and the bad range on
   `regression-...-finalize-race-2` (`1fc59d487`); this ticket is the mechanism
   half, that one is the defect half.
+- 2026-09-07 — corrected the fix sha in this ticket. The first value written here was a PRE-PUSH `git log -1`, and `sync.sh` rebases nearly every push, so the id it printed never reached origin and resolves for nobody but the box that wrote it. Cite the sha read back from `origin/master` AFTER the push. Caught by frankuser, who could not resolve it in their own object store.

@@ -79,7 +79,7 @@ self-resolving. In this path it never resolves.
 
 # Fix
 
-`88a290623`, taking the first of the three options below. `Clone.checkout()`
+`36bf8ca4f`, taking the first of the three options below. `Clone.checkout()`
 catches the refusal and, if `publish_own_writes()` can account for every dirty
 path, publishes and retries **once**; a second failure re-raises untouched, so
 this turns a wedge into a retry and never into a loop. With no host set
@@ -115,4 +115,5 @@ alert. Whatever else changes, the daemon exiting for good should be loud.
 - 2026-09-07 — it recurred exactly as predicted 70 minutes later, killing the
   cycle straight after the GREEN full tier at `2b692bbb71b3` (the first clean
   full run any live host has produced). Recovery without the fix buys one cycle,
-  so the fix is the recovery. Closed by `88a290623`.
+  so the fix is the recovery. Closed by `36bf8ca4f`.
+- 2026-09-07 — corrected the fix sha in this ticket. The first value written here was a PRE-PUSH `git log -1`, and `sync.sh` rebases nearly every push, so the id it printed never reached origin and resolves for nobody but the box that wrote it. Cite the sha read back from `origin/master` AFTER the push. Caught by frankuser, who could not resolve it in their own object store.
