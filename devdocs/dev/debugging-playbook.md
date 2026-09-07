@@ -4875,6 +4875,66 @@ I am accusing inside it or outside it?** An exculpation needs the SUSPECTED
 INPUT held fixed. Holding something else fixed, however rigorously, answers a
 different question — and answers it correctly, which is why it convinces.
 
+## A PIN COMPARISON BRACKETS A DEFECT, IT DOES NOT ORIGINATE ONE — "the pin has it too" answers *is this older than the pin*, never *was it always there*
+
+The two sections above are about a pin giving the wrong answer. This one is
+about a pin giving a **true answer to a narrower question than the one asked**,
+which is worse, because nothing looks wrong.
+
+Measured 2026-09-07. Corpus rung 6a's wall moved backwards, `:2279` -> `:1178`.
+A wall moving backwards reads as a regression, so I checked the obvious thing:
+pin v407 walls at `:1178` too. I reported **"not a regression"** to two sessions
+and both recorded it.
+
+**That inference does not follow.** The pin having the defect establishes the
+defect is **older than the pin**. It says nothing about whether the defect was
+**always** there — and the pin is cut from a moving tree, so "older than the
+pin" can be minutes old. I had converted a *bound on the age* into a *verdict on
+the origin*.
+
+**The disproof was already in my own transcript.** The same source, same flags:
+
+| tree | result |
+| --- | --- |
+| `8599ec75c` | compiled **past** 1178, walled at `:2279`, then `:2729` |
+| `46a6fc9bf` (after a pull) | walled at `:1178` |
+
+**Compilation is sequential, so reporting an error at 2729 proves 1178 was
+passed.** That is a positive control drawn from exactly the right population,
+and it was sitting in the scrollback while I ran a one-command check instead.
+
+### Why this one gets reached for
+
+A pin comparison is **one command and always available**. That is the whole
+attraction, and it is the same pull as every other low-latency instrument in
+this file. The difference is that it does not fail, error, or return nothing —
+it silently substitutes a narrower question and answers it correctly.
+
+### The true statement is usually neither word
+
+The fix (frankS, `8f5d60498`) showed what actually happened: a guard spelled
+`qUnit < 0` — which READS as "not unit-qualified" and MEANS "unqualified OR
+System-qualified" — had **always** been wrong, and what changed in the window is
+that traffic began **reaching** it. Two sibling guards sixty lines below spell
+it `= -1` and carry the reason.
+
+> **The defect is old; the exposure is new.**
+
+"Regression" and "long-standing" both flatten that, and **a pin comparison makes
+the second one available without evidence** — which is exactly why it is the one
+that gets said.
+
+### The rule
+
+To claim *"it was always there"* you need a build from **before** the suspected
+window — the historical-sha recipe, not a one-command check. To claim
+*"regression"* you need a build that **passed**. A pin gives you neither; it
+gives you one bracket, and a bracket is not a birthday.
+
+And when a defect is latent-but-unreached, **neither claim is true**, so reach
+for the two-part sentence before reaching for either word.
+
+
 ## "Ruled out" and "could not look" must never print the same
 
 The sharpest version of this file's refrain, and it cost six days. A ticket
