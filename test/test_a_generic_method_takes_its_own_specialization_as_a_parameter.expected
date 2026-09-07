@@ -1,0 +1,5 @@
+alias  int  = 10
+alias  same = TRUE
+alias  str  = one
+inline int64= 1000000
+inline same = TRUE

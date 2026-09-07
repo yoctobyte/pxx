@@ -633,6 +633,38 @@ begin
   else CaptureTemplateDirs(dst, 0);
 end;
 
+{ The canonical key of the specialization currently being STREAMED --
+  `TemplateName$arg1$arg2...`, built from the substitution set in force. The
+  same minting NestedSpecAlias uses, so the two cannot disagree about a name,
+  which is the reason that function exists at all.
+
+  IT ANSWERS "DOES THIS GROUP NAME THE CLASS WE ARE BUILDING?", a question the
+  old test could not ask. `CaseEqual(aliasNm, specName)` compares the CANONICAL
+  name against the USER'S ALIAS, so it matched only when the user had not named
+  the specialization -- and every alias-declared one is the case where it fails:
+
+      generic TList<_T> = class
+        procedure Assign(Source: specialize TList<_T>);
+      end;
+      type TMyIntList = specialize TList<integer>;   { l2.Assign(l1) }
+
+  The parameter's group substitutes to `TList$integer`, the class being built is
+  called `TMyIntList`, the names differ, and the group falls through UNCOLLAPSED
+  -- so the stream carries a literal `specialize TList<integer>` that mints a
+  SECOND class. `l2.Assign(l1)` then has a TMyIntList argument against a
+  TList$integer parameter: `no overload of Assign matches these arguments`,
+  `argument types: (class)`. Measured 2026-09-07; spelled inline
+  (`var l1: specialize TList<integer>`) the identical program compiles and runs,
+  which is what says the defect is the NAME and not the mechanism.
+  bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization }
+function StreamedSpecCanonName: AnsiString;
+var q: Integer;
+begin
+  StreamedSpecCanonName := SpecializeTemplateName;
+  for q := 0 to SpecSubCount - 1 do
+    StreamedSpecCanonName := StreamedSpecCanonName + '$' + SpecSubValues[q];
+end;
+
 { The SUBSTITUTION half of SpecializeStream, ending at a filled
   SpecializeTokens[0..Result-1] and touching Tokens[] not at all.
 
@@ -719,6 +751,11 @@ begin
     if gEnd >= 0 then
     begin
       aliasNm := NestedSpecAlias(tokStart, i, gEnd);
+      { A group naming THIS specialization collapses to the name the class is
+        actually being built under, whatever the user called it -- see
+        StreamedSpecCanonName. Tested FIRST so a self-reference can never be
+        answered by a same-named row minted for an earlier specialization. }
+      if CaseEqual(aliasNm, StreamedSpecCanonName) then aliasNm := specName;
       if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) then
       begin
         SpecializeTokens[subCount].Kind := tkIdent;

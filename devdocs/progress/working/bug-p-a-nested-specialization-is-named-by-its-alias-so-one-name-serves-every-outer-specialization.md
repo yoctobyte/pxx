@@ -313,3 +313,70 @@ named beside it, and the reach here is "fields-only templates".
 
 The fields-only row above is the useful residue. It is not a fixture yet; adding
 one costs nothing and would stop this question being re-asked a third time.
+
+## 2026-09-07 — the SELF-REFERENCE half is fixed; the IDENTITY half is not
+
+Landed: a generic method may now take its own specialization as a parameter,
+which is the case `tgeneric11.pp` has been skip-listed for.
+
+```pascal
+generic TList<_T> = class
+  procedure Assign(Source: specialize TList<_T>);   { names its OWN specialization }
+end;
+type TMyIntList = specialize TList<Integer>;
+...  l2.Assign(l1);   ->  no overload of Assign matches these arguments
+                          argument types: (class)
+```
+
+**The cause is this ticket's cause, reached from the other side.** In
+`SpecializeToBuffer`, a `specialize`-group inside the template body is collapsed
+to the class under construction when its name matches. The test was
+`CaseEqual(aliasNm, specName)` — and those two names are drawn from DIFFERENT
+namings. `NestedSpecAlias` substitutes `_T`->`Integer` and yields the CANONICAL
+key `TList$Integer`; `specName` is whatever the user wrote, here `TMyIntList`.
+So the test could only succeed when the user had NOT named the specialization,
+and **every alias-declared one is exactly the case where it fails.** The group
+fell through uncollapsed, the stream carried a literal `specialize TList<Integer>`
+that minted a SECOND class, and the argument and the parameter were then two
+unrelated classes — the same "one specialization, two classes" this ticket is
+about, only produced inside one template body instead of across two aliases.
+
+The fix computes the name the class is ACTUALLY being built under —
+`StreamedSpecCanonName`, `SpecializeTemplateName` + `$` + each `SpecSubValues[q]`
+— and tests that FIRST, so a self-reference can never be answered by a same-named
+row minted for an earlier specialization:
+
+```pascal
+aliasNm := NestedSpecAlias(tokStart, i, gEnd);
+if CaseEqual(aliasNm, StreamedSpecCanonName) then aliasNm := specName;
+if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) then ...
+```
+
+**The discriminator that says it was the NAME and not the mechanism:** spell the
+variables inline — `var l1, l2: specialize TList<Integer>` — and the identical
+program compiles and runs on the compiler that refuses the aliased one, because
+then the user's name IS the canonical one. Both spellings are rows in the
+fixture, `test/test_a_generic_method_takes_its_own_specialization_as_a_parameter.pas`,
+whose last two rows are the positive control: two specializations of one template
+with DIFFERENT type arguments and different values, both read back, so a collapse
+that leaked would hand the AnsiString list an Integer one. Equal arguments would
+have made a leak invisible. Positive control on pin v407: the fixture fails there
+with the exact reported error.
+
+**What is NOT fixed, measured today at compiler `a7537a942c75`.**
+
+- The two-alias identity row is UNCHANGED: `a1 is TIntBox2` still answers FALSE
+  where fpc answers TRUE. This fix claims nothing about it and the row was
+  re-measured rather than assumed.
+- **`tgeneric16.pp` still diverges and its row STAYS.** It compiles and runs
+  `rc=0`, which is the trap its own skip reason warns about; diffed against the
+  fpc oracle line by line, exactly one line differs and it is the one the reason
+  names — fpc `TAdvStack<System.LongInt>`, pxx `TIntegerStack`. That is this
+  ticket's headline defect, untouched: an alias-declared specialization is still
+  minted, and still names ITSELF, under the alias.
+
+So the remaining work is the one the summary already states — route
+`ParseSpecialization`'s `specName` through the canonical key and register the
+alias with `RegisterUClassAlias`. `StreamedSpecCanonName` is a second, local
+computation of that same key; when the routing lands, it should collapse into it
+rather than survive beside it.
