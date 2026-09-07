@@ -866,23 +866,64 @@ end;
 { ===== Structural enumerator for-in (Slice B) =====
   A zero-extra-arg method call C.M (self only). Handles virtual dispatch. }
 function GenMakeMethodCall0(instNode, classIdx: Integer; const methName: AnsiString): Integer;
-var mmi, mpi, selfArg: Integer;
+var mmi: Integer;
 begin
   mmi := FindUMeth(classIdx, methName);
   if mmi < 0 then Error('for-in: enumerator missing method ' + methName);
-  mpi := UMthProc_[mmi];
-  if UMthVirSlot[mmi] >= 0 then
-  begin
-    Result := AllocNode(AN_VIRTUAL_CALL);
-    ASTRight[Result] := UMthVirSlot[mmi];
-  end
+  { ONE DISPATCHER FOR "CALL A ZERO-ARG METHOD ON A RECEIVER", NOT TWO. This
+    built the AN_CALL / AN_VIRTUAL_CALL pair itself, which is exactly
+    MakeAccessorCall's body minus one case -- THE INTERFACE CASE. An interface
+    receiver needs AN_INTF_CALL, with the interface value in ASTRight and NO
+    Self at the head of the args.
+    WHY THE COPY CRASHED, AND IT IS NOT A SIZE PROBLEM: UMthVirSlot means TWO
+    DIFFERENT THINGS. For a class method it is a vtable index; for an interface
+    method it is an IMT slot, which MakeAccessorCall parks in ASTSOffset and
+    AN_INTF_CALL resolves against the IMT recovered from the instance. Emitting
+    an AN_VIRTUAL_CALL for an interface method therefore indexed the INSTANCE'S
+    VTABLE with an IMT slot number and called whatever was there. Measured
+    2026-09-07: a for-in whose GetEnumerator returns an interface compiled clean
+    and SEGFAULTED, while the same loop written out by hand ran correctly --
+    which is what localised it to the lowering rather than to interface
+    dispatch. Delegating instead of growing a third arm here is the point: the
+    second path is the one that stays broken. }
+  Result := MakeAccessorCall(classIdx, mmi, UMthProc_[mmi], instNode, -1);
+end;
+
+{ What KIND the `__e` temp must have for an enumerator of this UCls entry.
+  Three shapes and they are not interchangeable:
+    class      -> tyClass,  a bare pointer;
+    record     -> tyRecord, an embedded VALUE (advancedrecords, tforin25 -- a
+                  stale temp pointer made the loop run zero times);
+    interface  -> tyRecord over the interface's own UCls entry, which is
+                  precisely what ParseTypeKind hands a plain `var e: IMyIter`.
+                  MEASURED, because the comments in this compiler disagree with
+                  each other about it: an interface VALUE is ONE POINTER, the
+                  instance. `SizeOf` of an interface variable is 8 on x86-64
+                  under both pxx and fpc 3.2.2, UClsSize_ is set to
+                  TARGET_PTR_SIZE at the interface's own parse site, and
+                  AN_INTF_CALL recovers the IMT per call via PXXIntfIMTOf. The
+                  "16-byte fat pointer {IMT, instance}" wording that appears in
+                  roughly two dozen comments across compiler/** -- including one
+                  line above the AN_INTF_CALL lowering that immediately
+                  contradicts it -- describes a representation the code does not
+                  have. Do not propagate it; this comment did, before the
+                  measurement.
+  ONE ANSWER FOR EVERY CALLER. The GetEnumerator builder knew two of the three
+  and the `operator enumerator` builder knew none -- it hardcoded tyClass at
+  five sites -- so the record shape was fixed in one path and still broken in
+  its twin, which is the exact failure normalise-dont-special-case.md names.
+
+  BOTH THIS AND THE DISPATCHER FIX ARE LOAD-BEARING, established by A/B and not
+  by reading: with the dispatcher corrected but the interface arm removed from
+  here, the six-shape fixture still SEGFAULTS at its first interface row;
+  restoring this arm returns all twelve rows. Neither change alone is the fix,
+  which is worth knowing before anyone simplifies one of them away. }
+function EnumeratorTempKind(enumIdx: Integer): TTypeKind;
+begin
+  if UClsIsRecord[enumIdx] or UClsIsInterface[enumIdx] then
+    EnumeratorTempKind := tyRecord
   else
-    Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := mpi;
-  ASTTk[Result] := Ord(Procs[mpi].RetType);
-  selfArg := AllocNode(AN_ARG);
-  ASTLeft[selfArg] := instNode;
-  ASTLeft[Result] := selfArg;
+    EnumeratorTempKind := tyClass;
 end;
 
 { Read `__e.Current`: a property (getter method OR backing field) or a plain
@@ -989,7 +1030,7 @@ begin
   contTk := Syms[contSym].TypeKind;
   gepi := UMthProc_[FindUMeth(contClassIdx, 'GetEnumerator')];
   enumRec := ProcRetRecId[gepi];
-  if enumRec < REC_UCLASS_BASE then Error('for-in: GetEnumerator must return a class/record');
+  if enumRec < REC_UCLASS_BASE then Error('for-in: GetEnumerator must return a class, record or interface');
   enumIdx := enumRec - REC_UCLASS_BASE;
 
   { A record enumerator (FPC advancedrecords: GetEnumerator returns a record by
@@ -997,7 +1038,7 @@ begin
     record-copy and `__e.MoveNext` / `__e.Current` take @__e as Self. Modelling it
     as tyClass (a pointer) made MoveNext mutate/read through a stale temp pointer,
     so the loop ran zero times (tforin25). A real class enumerator stays tyClass. }
-  if UClsIsRecord[enumIdx] then eTk := tyRecord else eTk := tyClass;
+  eTk := EnumeratorTempKind(enumIdx);
 
   if eTk = tyRecord then LastTypeRecId := enumRec;   { AllocVar sizes tyRecord by RecSize(LastTypeRecId) }
   eSym := AllocVar('', eTk);
@@ -1019,7 +1060,11 @@ begin
 
   if FindUMeth(enumIdx, 'Free') >= 0 then
   begin
-    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'Free');
+    { eTk, not a hardcoded tyClass: identical on the only shape that reaches
+      here today (a class enumerator declaring Free), and correct if a record or
+      interface enumerator ever declares one. A receiver kind disagreeing with
+      its symbol's kind is the bug this file just fixed twice. }
+    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'Free');
     tryNode := AllocNode(AN_TRY_FINALLY);
     ASTLeft[tryNode] := whileNode;
     ASTRight[tryNode] := freeCall;
@@ -1051,6 +1096,7 @@ var
   bodyNode, enumRec, enumIdx, eSym: Integer;
   argSeq, geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
   freeCall, tryNode: Integer;
+  eTk: TTypeKind;
 begin
   if Syms[varIdx].TypeKind = tyAuto then
     Error('for var .. in <operator enumerator>: declare the loop variable explicitly');
@@ -1058,10 +1104,16 @@ begin
   bodyNode := ParseStatementAST;
 
   enumRec := ProcRetRecId[opPi];
-  if enumRec < REC_UCLASS_BASE then Error('for-in: operator enumerator must return a class/record');
+  if enumRec < REC_UCLASS_BASE then Error('for-in: operator enumerator must return a class, record or interface');
   enumIdx := enumRec - REC_UCLASS_BASE;
 
-  eSym := AllocVar('', tyClass);
+  { THE SAME THREE ENUMERATOR SHAPES AS THE GetEnumerator BUILDER. This path
+    hardcoded tyClass, so an `operator enumerator` returning a record hit
+    tforin25's stale-pointer bug (fixed in the twin, never here) and one
+    returning an interface read the IMT word as an instance. }
+  eTk := EnumeratorTempKind(enumIdx);
+  if eTk = tyRecord then LastTypeRecId := enumRec;   { AllocVar sizes tyRecord by RecSize }
+  eSym := AllocVar('', eTk);
   Syms[eSym].RecName := enumRec;
   SymSyncTypeRef(eSym);
 
@@ -1071,9 +1123,9 @@ begin
   ASTIVal[geCall] := opPi;
   ASTTk[geCall] := Ord(Procs[opPi].RetType);
   ASTLeft[geCall] := argSeq;
-  assignE := GenMakeAssign(GenMakeIdent(eSym, tyClass), geCall);
+  assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
-  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'MoveNext');
+  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'MoveNext');
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
 
@@ -1084,7 +1136,11 @@ begin
 
   if FindUMeth(enumIdx, 'Free') >= 0 then
   begin
-    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'Free');
+    { eTk, not a hardcoded tyClass: identical on the only shape that reaches
+      here today (a class enumerator declaring Free), and correct if a record or
+      interface enumerator ever declares one. A receiver kind disagreeing with
+      its symbol's kind is the bug this file just fixed twice. }
+    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'Free');
     tryNode := AllocNode(AN_TRY_FINALLY);
     ASTLeft[tryNode] := whileNode;
     ASTRight[tryNode] := freeCall;
