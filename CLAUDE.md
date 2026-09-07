@@ -753,7 +753,19 @@ testing against, so the check destroys the thing it was checking. Run the
 recipe's lines into a scratch dir and omit the `mv`: measured 2026-09-07
 (`0540e3f9d`), `PXXFLAGS` is empty and `FPCFLAGS` is exactly `-O2 -Tlinux
 -Px86_64`, so that IS bootstrap's chain, and the only other thing skipped is
-`bootstrap-check`, a `which fpc` guard. — and — measured
+`bootstrap-check`, a `which fpc` guard. **Run it with CWD at the REPO ROOT** —
+a `$(PXX_TMP)`-located binary finds no builtin beside itself (`--where` prints
+`[MISSING]`) and falls through to the CWD-relative last resort, which is how
+every bootstrap stage links the LIVE `compiler/builtin/`. **The wrong CWD is
+LOUD, and that is exactly why it costs an afternoon:** measured 2026-09-07 with
+`PXX_HOME`/`PXX_LIBPATH` unset, the same binary answers `uses: unit source not
+found: builtinheap`, rc=1, from anywhere but the root — so a mis-rooted chain
+yields NO BINARY rather than a wrong one, and there is no silent second builtin
+to fall into. But that message **reads exactly like a broken tree**, and the
+helpful reflex is to `cd` into the scratch dir, which is the one move that
+guarantees the wrong answer. Do not put a `builtin/` beside the staged binaries
+to make the error go away; that resolves against a copy and silently stops
+measuring bootstrap's chain. — and — measured
 2026-09-01, `df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
 reverting it is revert→rebuild→restore→rebuild, and EACH REBUILD SEEDS FROM THE
 PREVIOUS LOCAL BINARY; after a few cycles, with other agents' `compiler/**` and
