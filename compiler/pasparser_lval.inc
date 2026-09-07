@@ -7904,12 +7904,37 @@ function TryElideVariadicBrackets(const name: AnsiString; qUnit: Integer;
   that is too loose costs a rejected retry, never a wrong bind. }
 var i, vi, cand, prevNode, tailHead, newArg, k, n: Integer;
     savedHead, savedLast, savedRight, savedN: Integer;
+    savedReport: AnsiString;
     tryTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
 begin
   Result := -1;
   { No builtinheap unit means no TVarRec to build, and the declaration site
     (pasparser_proc.inc) has already refused the parameter. }
   if (TVarRecId = REC_NONE) or (nArgs >= MAX_PROC_PARAMS) then Exit;
+
+  { THE RETRY IS SPECULATIVE, SO ITS DIAGNOSTIC MUST BE TOO. Every retry below
+    goes through the real resolver, and MatchProcCall writes OverloadReport as
+    a side effect on the way out -- so a retry that FAILS leaves the caller's
+    `no overload of Q matches these arguments` describing the list this
+    function invented, not the one the programmer wrote. Restored on the
+    failure path for exactly the reason the argument chain itself is rolled
+    back; the success path never reaches an error.
+
+    Measured 2026-09-07 on `Q(n, n, ar)` against
+    `Q(a: Integer; c: TCls; r: TArrR)`: the report's third argument read
+    `record` where the method half read `array of record`, because the reported
+    channels described an AN_VARREC_ARRAY this function had spliced in. The
+    two halves of the report were consistent with each other all along --
+    each was correct about a DIFFERENT argument list.
+
+    Note the candidate scan below is deliberately loose (ParamIsVarRecArrayAt
+    answers for ANY open array of a record, so a plain `array of TR` parameter
+    is scanned too). That costs a rejected retry and never a wrong bind, which
+    is its stated contract -- but the rejected retry is exactly what was
+    overwriting the diagnostic, so the looseness was free only until something
+    downstream of it was read.
+    bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently }
+  savedReport := OverloadReport;
 
   for vi := nArgs downto 0 do
   begin
@@ -7963,6 +7988,7 @@ begin
     argsHead := savedHead; lastArg := savedLast; nArgs := savedN;
     if prevNode >= 0 then ASTRight[prevNode] := savedRight;
   end;
+  OverloadReport := savedReport;
   Result := -1;
 end;
 

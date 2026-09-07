@@ -6146,6 +6146,23 @@ test-core: $(COMPILER)
 	# .expected is fpc 3.2.2's, byte for byte.
 	./$(COMPILER) test/test_overload_int_arg_prefers_the_integer_overload.pas $(TESTTMP)/test_ovlint26
 	tools/expect_same.sh test_ovlint26 "$$($(TESTTMP)/test_ovlint26)" "$$(cat test/test_overload_int_arg_prefers_the_integer_overload.expected)"
+	# The overload REPORT, both halves of it. An array argument carries its
+	# ELEMENT kind in argTypes[], exactly as an array parameter does in Params[],
+	# so one report spelled the same array `record` beside `array of record` --
+	# three mismatches shown where there is one. Negative fixtures: what is
+	# asserted is the diagnostic, and both spellings must be the SAME string.
+	# Two files because the two printers are different code AND because the
+	# method half halts where the free half recovers.
+	# The free half also carries the root cause: its `array of TR` parameter is
+	# what ParamIsVarRecArrayAt answers `array of const` to, so the variadic
+	# bracket-elision fallback fires, fails, and used to leave OverloadReport
+	# describing the argument list IT had invented.
+	@./$(COMPILER) test/test_an_overload_report_spells_an_array_argument_the_same_at_a_method_call.pas $(TESTTMP)/test_ovlrepm26 2>&1 \
+	  | grep -q 'argument types: (Integer, Integer, array of record)' \
+	  || { echo 'test_an_overload_report_..._at_a_method_call: FAIL - array argument not spelled as an array'; exit 1; }
+	@./$(COMPILER) test/test_an_overload_report_spells_an_array_argument_the_same_at_a_free_call.pas $(TESTTMP)/test_ovlrepf26 2>&1 \
+	  | grep -q 'argument types: (Integer, Integer, array of record)' \
+	  || { echo 'test_an_overload_report_..._at_a_free_call: FAIL - array argument not spelled as an array'; exit 1; }
 	# type. Same family as the two rows above and the same architectural gap:
 	# TypesCompatible sees two KINDS. It grants tyPointer <- tyString for a real
 	# reason (a Pascal string marshals to a const char*, so a C binding needs no

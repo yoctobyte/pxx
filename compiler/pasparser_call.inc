@@ -3723,10 +3723,26 @@ begin
       rep := '';
       AppendChar(rep, Chr(10));
       rep := rep + '  argument types: (';
+      { REFILL THE CHANNELS BY ARGUMENT INDEX BEFORE SPELLING. The candidate
+        loop above fills them by PARAMETER slot pj (Params[0] is Self) and
+        invalidates them at the end of every candidate's iteration, so by the
+        time this printer runs there is nothing valid to read -- which is why
+        this half spelled an array argument as its bare ELEMENT kind while the
+        free path's candidate list spelled the parameter `array of record`.
+        Refilling through the shared FillMatchArgChannelsAt rather than asking
+        the node here keeps ONE place that knows what each channel means; a
+        second derivation is the arm that would stay broken.
+        Safe in this window for the reason the fill above documents: from the
+        rewind to the end of this function nothing parses. Not cleared
+        afterwards because Error halts. }
+      for j := 0 to nExplicitArgs - 1 do
+        if j < MAX_PROC_PARAMS then
+          FillMatchArgChannelsAt(j, argNode[j], argTk[j]);
+      MatchArgArrayValid := True;
       for j := 0 to nExplicitArgs - 1 do
       begin
         if j > 0 then rep := rep + ', ';
-        rep := rep + TypeKindSpelling(argTk[j]);
+        rep := rep + ArgSpellingForReport(j, argTk[j]);
       end;
       rep := rep + ')';
       Error('no overload of ' + name + ' matches these arguments' + rep);

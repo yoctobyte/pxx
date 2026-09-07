@@ -12273,6 +12273,53 @@ begin
   end;
 end;
 
+function ArgSpellingForReport(j: Integer; tk: TTypeKind): AnsiString;
+{ How an ARGUMENT should be spelled in an overload report -- the MIRROR of
+  ParamSpellingForReport, and it exists because that function was written for
+  one half of a double case and the other half kept the bare kind.
+
+  `argTypes[j]` carries the ELEMENT kind for an array argument, exactly as
+  Params[j].TypeKind does for an array parameter, so the two halves of one
+  report spelled the same array two different ways:
+
+    argument types: (Integer, Integer, record)
+    candidates:
+      Q(Integer, class, array of record)
+
+  Argument 3 there MATCHES. Only argument 2 is wrong. The report showed three
+  mismatches where there is one, and it was actively misreading a live
+  reduction (pparser.pp:2670) -- somebody chasing a bad argument that does not
+  exist. Matching itself was correct throughout: both sides compare element
+  kinds, so the comparison is consistent and only the rendering disagreed.
+
+  THE CHANNEL ALREADY EXISTED, which is the part worth recording, because the
+  ticket said otherwise: it read `MatchProcCall`'s signature, found no companion
+  array-ness, and concluded the fix was a signature change threading `argIsArray`
+  through six call sites across two frontends. MatchArgArray and
+  MatchArgDynDepth are filled from the AST node for every call (the single entry
+  in pasparser_lval.inc, indexed by ARGUMENT slot on the free path) and are live
+  for the whole of MatchProcCall. A stated obstacle can be about a different
+  instrument than the one you have.
+
+  GATED ON MatchArgArrayValid, so a caller that did not fill the channels gets
+  the old bare spelling rather than a stale one -- a report is exactly where a
+  channel read out of its window would be least noticed.
+  bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently }
+var d, dep: Integer;
+begin
+  ArgSpellingForReport := TypeKindSpelling(tk);
+  if not MatchArgArrayValid then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if not MatchArgArray[j] then Exit;
+  { ProcParamDynDepth's twin: 0 means "an array, depth not certain", which
+    spells as one nesting -- the same floor ParamSpellingForReport applies so
+    an open-array parameter and a depth-0 argument read alike. }
+  dep := MatchArgDynDepth[j];
+  if dep < 1 then dep := 1;
+  for d := 1 to dep do
+    ArgSpellingForReport := 'array of ' + ArgSpellingForReport;
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
@@ -12796,7 +12843,7 @@ begin
     for j := 0 to nArgs-1 do
     begin
       if j > 0 then OverloadReport := OverloadReport + ', ';
-      OverloadReport := OverloadReport + TypeKindSpelling(argTypes[j]);
+      OverloadReport := OverloadReport + ArgSpellingForReport(j, argTypes[j]);
     end;
     OverloadReport := OverloadReport + ')' + nl + '  candidates:';
     i := ProcChainHead(name);
