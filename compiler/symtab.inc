@@ -9377,6 +9377,86 @@ begin
   FindOpConvRanked := bestPi;
 end;
 
+
+function RecHasOwnCopyOp(recId: Integer): Boolean;
+{ Does this record type ITSELF declare `class operator Copy`? Asked separately
+  from "does it CONTAIN one", because at an assignment the two mean opposite
+  things: an OWN Copy REPLACES the whole copy (IRRecCopyOpCall's reading 1),
+  while a CONTAINED one delegates only its own field and leaves the rest of the
+  record to be moved normally. }
+begin
+  RecHasOwnCopyOp := (recId <> REC_NONE) and
+                     (FindOpOverload(OPK_COPY, Ord(tyRecord), recId) >= 0);
+end;
+
+function RecCollectCopyHoles(recId, baseOff, depth: Integer): Boolean;
+{ Append to RecCopyHoleOff/Size/Rec every field of `recId` -- at any depth and
+  through FIXED arrays -- whose own type declares Copy. Those are the fields a
+  record assignment must DELEGATE rather than move, so the bytes between them
+  are what the assignment may still bulk-copy.
+
+  Returns False when the walk cannot be trusted, and the caller must then fall
+  back to the single bulk copy it would have emitted anyway:
+
+    * more than REC_COPY_HOLE_MAX such fields;
+    * fields that OVERLAP or run backwards -- a variant part, or a C union --
+      where "the bytes between the holes" is not a well-defined set.
+      RecordFieldwiseCmpLeaves refuses the same shape for the same reason.
+
+  Refusing preserves yesterday's answer; it never produces a new wrong one.
+
+  A field whose type declares Copy is NOT descended into: the operator owns that
+  field entirely, including anything nested inside it. A DYNAMIC array field is
+  skipped -- assigning one is a reference copy with no per-element copy for an
+  operator to hook, measured against fpc 3.2.2 (`b := a` between two dynamic
+  arrays runs no operator in either compiler).
+
+  The CALLER resets RecCopyHoleCount; this only appends, so that it can recurse. }
+var ci, base, cnt, i, fi, fr, off, es, elems, e: Integer;
+begin
+  RecCollectCopyHoles := False;
+  if depth > 64 then Exit;
+  if recId < REC_UCLASS_BASE then begin RecCollectCopyHoles := True; Exit; end;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then begin RecCollectCopyHoles := True; Exit; end;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+  begin
+    fi := base + i;
+    if IntToTypeKind(UFldTk[fi]) = tyRecord then
+    begin
+      fr := UFldRec_[fi];
+      { A dyn-array field holds a handle; the elements are never copied here. }
+      if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then fr := REC_NONE;
+      if fr <> REC_NONE then
+      begin
+        es := RecSize(fr);
+        if UFldIsArray[fi] then elems := UFldArrLen[fi] else elems := 1;
+        if elems < 1 then elems := 1;
+        for e := 0 to elems - 1 do
+        begin
+          off := baseOff + UFldOff_[fi] + e * es;
+          if RecHasOwnCopyOp(fr) then
+          begin
+            if RecCopyHoleCount >= REC_COPY_HOLE_MAX then Exit;
+            if RecCopyHoleCount > 0 then
+              if off < RecCopyHoleOff[RecCopyHoleCount - 1] +
+                       RecCopyHoleSize[RecCopyHoleCount - 1] then Exit;
+            RecCopyHoleOff[RecCopyHoleCount] := off;
+            RecCopyHoleSize[RecCopyHoleCount] := es;
+            RecCopyHoleRec[RecCopyHoleCount] := fr;
+            Inc(RecCopyHoleCount);
+          end
+          else
+            if not RecCollectCopyHoles(fr, off, depth + 1) then Exit;
+        end;
+      end;
+    end;
+  end;
+  RecCollectCopyHoles := True;
+end;
+
 function FindOpConvToDest(srcTk, srcRec, dstTk, dstRec, dstCap: Integer): Integer;
 { The use-site form: an IMPLICIT conversion, source widened as far as
   assignment compatibility goes. }

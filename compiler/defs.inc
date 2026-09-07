@@ -227,6 +227,17 @@ const
     fixed-size parser arrays and not of the language, a 532-name group is
     legal Pascal that pxx rejected, and machine-generated sources reach it. }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
+
+  { A record assignment where a CONTAINED field's type declares
+    `class operator Copy` cannot be one bulk move: fpc 3.2.2 delegates that
+    field entirely to the operator and copies everything else, and the operator
+    sees the DESTINATION'S OLD VALUE on entry (measured -- a Copy body that
+    assigns nothing leaves dst's own bytes, not the source's). So the copy is
+    emitted as the byte ranges BETWEEN those fields plus one operator call each,
+    and this caps how many such fields one record may have before the emitter
+    falls back to yesterday's single bulk move.
+    bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator }
+  REC_COPY_HOLE_MAX = 256;
   { Record `=` is expanded into one comparison per scalar leaf (ir.inc,
     RecordFieldwiseCmpLeaves). An ARRAY member is unrolled, so a record can ask
     for arbitrarily many; above this the whole record falls back to the old
@@ -3053,6 +3064,16 @@ var
   { RTTI emission state }
   UClsRTTIOff        : array[0..MAX_UCLASS-1] of Integer; { Data[] off of class RTTI hdr, -1 if none }
   UClsLayoutOff      : array[0..MAX_UCLASS-1] of Integer; { Data[] off of a CLASS's managed-field layout descriptor (record-desc format + member kind 4 = COM interface), -1 if none; backlinked at [VMT-16] for PXXClassFinalize }
+  { Filled by RecCollectCopyHoles: the absolute byte offsets, within one record
+    being assigned, of the fields whose type declares `class operator Copy`, in
+    declaration order, plus each one's record id. Globals rather than a
+    parameter because the walk is recursive and the subset has no local dynamic
+    arrays; a single assignment is lowered at a time and the collector rewrites
+    the arrays from index 0 on every call. }
+  RecCopyHoleOff     : array[0..REC_COPY_HOLE_MAX-1] of Integer;
+  RecCopyHoleSize    : array[0..REC_COPY_HOLE_MAX-1] of Integer;
+  RecCopyHoleRec     : array[0..REC_COPY_HOLE_MAX-1] of Integer;
+  RecCopyHoleCount   : Integer;
   RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
   RTTIRegistryCount  : Integer;
   DumpRTTI           : Boolean;

@@ -1,0 +1,21 @@
+-- holder: h2 := h1
+  A.Copy src.id=1 dst.id-on-entry=9
+   lead=11 f.id=1 f.pad=999 k=22
+-- multi: m2 := m1
+  A.Copy src.id=1 dst.id-on-entry=7
+  B.Copy src.id=3 dst.id-on-entry=9
+   a.id=1 a.pad=777 k=2 b.id=3 b.pad=999
+-- nested: o2 := o1
+  A.Copy src.id=10 dst.id-on-entry=70
+  B.Copy src.id=30 dst.id-on-entry=90
+   a.id=10 a.pad=170 k=20 b.id=30 b.pad=190 z=40
+-- array field: f2 := f1
+  A.Copy src.id=100 dst.id-on-entry=700
+  A.Copy src.id=200 dst.id-on-entry=800
+   [0].id=100 [0].pad=1700 [1].id=200 [1].pad=1800 k=300
+-- shadow: s2 := s1
+  Shadow.Copy src.k=2 dst.k-on-entry=8
+   f.id=7 f.pad=777 k=8
+-- control: p2 := p1 (no operator anywhere)
+   x=1 y=2 k=3
+done

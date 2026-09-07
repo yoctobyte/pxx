@@ -14958,6 +14958,18 @@ test-core: $(COMPILER)
 	# 3.2.2's, byte for byte; it is refused outright on the pin.
 	./$(COMPILER) test/test_mgmt_operators_copy.pas $(TESTTMP)/test_mgmt_op_copy26
 	$(TESTTMP)/test_mgmt_op_copy26 | diff -u test/test_mgmt_operators_copy.expected -
+	# ...and the CONTAINED case: the record itself declares no operator, a FIELD
+	# of it does. The copy is punched around that field -- gaps as IR_COPY_REC,
+	# one operator call per hole, in declaration order and ascending through a
+	# fixed array. The operator leaves `pad` alone deliberately, so `pad` is the
+	# column that discriminates: 999 (the operator ran) vs 111 (the bytes
+	# arrived). Verified as a positive control against the PINNED compiler:
+	# four rows differ there, the two controls (an outer Copy shadowing the
+	# contained one; a record with no operator anywhere) are identical.
+	# .expected is fpc 3.2.2's, byte for byte.
+	# bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator
+	./$(COMPILER) test/test_mgmt_operators_copy_contained.pas $(TESTTMP)/test_mgmt_op_copyc26
+	$(TESTTMP)/test_mgmt_op_copyc26 | diff -u test/test_mgmt_operators_copy_contained.expected -
 	# ...and the three shapes that are REFUSED rather than silently skipped: a
 	# DYNAMIC array of a managed record, the same as a record FIELD, a CLASS
 	# holding one in a field, and AddRef

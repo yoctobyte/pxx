@@ -8523,6 +8523,99 @@ begin
   IRRecCopyOpCall := callN;
 end;
 
+
+function IRRecHoleAddr(sym, off: Integer): Integer;
+{ The address of the byte at `off` inside the record whose ADDRESS is parked in
+  the scratch pointer symbol `sym`. Load the symbol (the address value), then
+  IR_FIELD adds the constant -- the same two-node shape IRRecFieldwiseEqChain
+  builds, and IR_FIELD's own codegen on every backend is exactly `base + imm`.
+  Tagged tyRecord because that is what is AT the offset; the tag is read only by
+  the string oracles (wasm32's WasmStrTypeOf, ir_codegen.inc's two sites) and
+  tyRecord is not a string kind for any of them. }
+begin
+  IRRecHoleAddr := IRAppend(IR_FIELD,
+    IRAppend(IR_LOAD_SYM, sym, -1, -1, 0, Ord(tyPointer)),
+    -1, -1, off, Ord(tyRecord));
+end;
+
+function IRRecCopyWithHoles(recId, dstAddr, srcAddr: Integer): Integer;
+{ A record whose type declares no Copy of its own but CONTAINS a field that
+  does. Emits the byte ranges BETWEEN those fields as ordinary IR_COPY_REC, one
+  per gap, plus one operator call per contained field -- returns the last node,
+  or -1 when the shape is one this cannot serve and the caller must fall back.
+
+  WHY THE COPY IS PUNCHED RATHER THAN FOLLOWED BY THE CALLS. Measured against
+  fpc 3.2.2 before this was written: a contained Copy field is DELEGATED
+  ENTIRELY. With a no-op operator body, `h2 := h1` left `h2.f` holding h2's own
+  values, and printing `dst.id` on ENTRY to the operator showed the destination
+  still holding its OLD value -- so fpc does not bulk-copy and then notify. The
+  operator sees an un-overwritten destination, exactly as IRRecCopyOpCall
+  records for the whole-record case (reading 2). A bulk copy first would be
+  observably wrong for any operator that reads `dst`, and silently right for the
+  ones that do not, which is the worse of the two failure modes.
+
+  ORDER IS DECLARATION ORDER, also measured (`A.Copy` before `B.Copy`), and an
+  array field runs its operator once per element ASCENDING. RecCollectCopyHoles
+  produces the holes in that order and refuses any walk where the offsets do not
+  ascend, so emitting them in index order is the measured order.
+
+  THE ARC CASE IS NOT SERVED YET, and the refusal is by RecordHasManagedFields.
+  IR_COPY_REC_MANAGED is a FUSED retain-release-copy across six backends: it
+  takes a record id and walks that record's descriptor, so it cannot be handed a
+  byte range. Punching it would mean either a second descriptor kind or an
+  unrolled per-field ARC sequence here, and neither belongs in the same change
+  as the plain case. A record mixing an AnsiString with a Copy-operator field
+  therefore keeps today's answer -- the operator does not fire -- which is the
+  named residual on
+  bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator
+  and is measured there, not assumed.
+
+  THE ADDRESSES ARE PARKED IN SCRATCH SYMBOLS, for IRRecFieldwiseEqChain's
+  reason and not merely by imitation: this references each address once per gap
+  and once per hole, and a value node with two parents is emitted by BOTH of
+  them. `f(x)^ := g(y)^` would otherwise call f and g once per range.
+
+  EVERY REFUSAL RETURNS BEFORE A SINGLE NODE IS APPENDED, which is what makes
+  the caller's `if < 0 then fall back` shape legal: `dstAddr` and `srcAddr` are
+  still unreferenced, so the fallback IR_COPY_REC can take them. }
+var symD, symS, i, off, gap, last, total: Integer;
+begin
+  IRRecCopyWithHoles := -1;
+  if recId = REC_NONE then Exit;
+  if recId < REC_UCLASS_BASE then Exit;
+  if RecordHasManagedFields(recId) then Exit;
+  RecCopyHoleCount := 0;
+  if not RecCollectCopyHoles(recId, 0, 0) then Exit;
+  if RecCopyHoleCount = 0 then Exit;
+  total := RecSize(recId);
+  if total <= 0 then Exit;
+
+  symD := AllocVar('', tyPointer);
+  symS := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, symD, dstAddr, -1, 0, Ord(tyPointer));
+  IRAppend(IR_STORE_SYM, symS, srcAddr, -1, 0, Ord(tyPointer));
+
+  last := -1;
+  off := 0;
+  for i := 0 to RecCopyHoleCount - 1 do
+  begin
+    gap := RecCopyHoleOff[i] - off;
+    if gap > 0 then
+      last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, off),
+                       IRRecHoleAddr(symS, off), -1, gap, Ord(tyRecord));
+    last := IRRecCopyOpCall(RecCopyHoleRec[i],
+                            IRRecHoleAddr(symD, RecCopyHoleOff[i]),
+                            IRRecHoleAddr(symS, RecCopyHoleOff[i]));
+    off := RecCopyHoleOff[i] + RecCopyHoleSize[i];
+  end;
+  { The tail, trailing padding included -- IR_COPY_REC has always copied a
+    record's padding and nothing reads it. }
+  gap := total - off;
+  if gap > 0 then
+    last := IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, off),
+                     IRRecHoleAddr(symS, off), -1, gap, Ord(tyRecord));
+  IRRecCopyWithHoles := last;
+end;
 function IRRecUnaryOpCall(recId, opKind, addr: Integer): Integer;
 { Emit a call to a ONE-OPERAND management operator -- `class operator
   AddRef(var a: TFoo)` or `Finalize(var a: TFoo)` -- on the record at `addr`.
@@ -14272,6 +14365,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         { `class operator Copy` REPLACES the copy: when one is declared, no bytes
           move here at all. Measured against fpc 3.2.2 -- see IRRecCopyOpCall. }
         Result := IRRecCopyOpCall(ResolveNodeRec(ASTLeft[node]), leftAddr, right);
+        { No Copy of its own, but a CONTAINED field may declare one -- then the
+          copy is punched around that field and the operator runs for it. }
+        if Result < 0 then
+          Result := IRRecCopyWithHoles(ResolveNodeRec(ASTLeft[node]), leftAddr, right);
         if Result < 0 then
         begin
           if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
@@ -14695,6 +14792,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                 the old parallel field directly. }
               { `class operator Copy` replaces the copy -- see IRRecCopyOpCall }
               last := IRRecCopyOpCall(SymTR[varIdx].RecId, leftAddr, right);
+              if last < 0 then
+                last := IRRecCopyWithHoles(SymTR[varIdx].RecId, leftAddr, right);
               if last < 0 then
               begin
                 if RecordHasManagedFields(SymTR[varIdx].RecId) then
