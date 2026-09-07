@@ -76,3 +76,36 @@ Found while diagnosing seven's `no report (rc=1)` streak of 2026-09-07, where a
 disk/inode hypothesis was raised, was the leading explanation for the fulls, and
 **could not be tested from the archive by anyone not on the box.** The streak
 itself is not this ticket.
+
+# CONFIRMED on seven, 2026-09-07 — and it was inodes
+
+This ticket's hypothesis was right, including the part it hedged on. The cause
+of seven's streak was `/tmp` **inode** exhaustion:
+
+```
+$ df -h /tmp                          $ df -i /tmp
+tmpfs  47G  4.1G  43G   9% /tmp       tmpfs  1048576  1048568  8  100% /tmp
+```
+
+Eight free inodes out of 1,048,576, with the filesystem **9% full by bytes**.
+`testmgr` could not create its scratch directory, died before running a job, and
+the watcher wrote `no report (rc=1)`. The streak was ~290 commits over ten
+hours, not 13 — it kept going all night, each run testing the tstate commit the
+previous run had pushed.
+
+**Settling it took `df -i`, and `df -h` actively pointed the wrong way.** That
+sharpens the fix this ticket asks for: a `shutil.disk_usage` or an `f_bavail`
+alone would have reported a healthy box during the outage it was added to catch.
+The row needs **`f_favail` as well as `f_bavail`** — free inodes and free bytes —
+and `hosts.json` should carry both totals, for the same reason the ticket gives
+about `mem_total_kb`: a fingerprint detailed enough to look complete is read as
+having considered what it omits.
+
+The producer side is now its own ticket:
+`bug-t-devtest-and-twatch-helpers-leak-tmpdirs-until-tmp-runs-out-of-inodes`
+(prio 80) — ~40 families of never-cleaned temp dirs, `tstate-at.*` alone holding
+163,491 inodes in 241 directories. Telemetry makes this visible; only that one
+stops it recurring.
+
+Remediation applied the same day: 30,976 stale entries removed, `/tmp` inodes
+1,048,568 → 834, and the tier ran again.
