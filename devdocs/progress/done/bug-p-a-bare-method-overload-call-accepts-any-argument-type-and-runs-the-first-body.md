@@ -65,4 +65,4 @@ that one is a refusal that should have succeeded; this one is an acceptance
 that should have been refused. They meet in the same probe.
 
 ## Log
-- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f37a3b255.
