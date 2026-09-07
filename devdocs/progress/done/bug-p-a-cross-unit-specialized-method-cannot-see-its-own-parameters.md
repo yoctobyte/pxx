@@ -4,7 +4,7 @@ track: P
 status: done
 summary: "FIXED 2026-09-07 at compiler 4fcc6478fb08. A generic method body is re-parsed AS ITS DECLARING UNIT (deliberately, so a template reaches its own unit's private helpers), but its PARAMETERS, its Result and its Self are allocated by the header path BEFORE that switch and therefore carry the SPECIALIZING unit. When a UNIT specializes another UNIT's template -- a library wrapping a generic, the ordinary direction -- the declaring unit does not `uses` the specializing one, so the cross-unit visibility test refused the method its own arguments: `undefined variable (a)`, `undefined variable (Result)`, `undefined variable (Self)`. Fixed in SymBindableHere: a routine's own parameters and locals are exempt from unit/section visibility, which is a question that cannot apply to them -- IsBlockVisible is their whole scope. Fixture test_xunitparams26; new PXXDBG channel p.specunit."
 owner: frankS
-resolved: PENDING-COMMIT
+resolved: 69c1bab93
 ---
 
 ## What was wrong
