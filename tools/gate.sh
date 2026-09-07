@@ -556,6 +556,21 @@ step "live lib/rtl builds at HEAD" "$LOGDIR/head-rtl-canary.log" \
 # origin ref`, `compiler/ unchanged`. Those say NOT APPLICABLE. These said
 # NOT PRESENT and were read as the same thing.
 # Reported by frankuser on the census arm; the other six are the same shape.
+# THE `ok:` LINE MUST MEAN A FILE. It did not: the verb, the byte counts and
+# the exit status were all computed from the in-memory image, so a compile to an
+# unwritable path printed `ok: ... [code=249624B ...]` and exited 0 having
+# written nothing. Every harness in this repo greps one of those three, and they
+# are one reading wearing three faces. Both directions are asserted inside the
+# checker -- refusing everything would also make the bad path fail.
+if [ -f tools/ok_line_means_a_file.sh ]; then
+  step "the ok: line means a file reached the disk" "$LOGDIR/ok-line-artefact.log" \
+       sh tools/ok_line_means_a_file.sh "$PWD/compiler/pascal26"          || RC=1
+else
+  say "  FAIL  the ok: line means a file — tools/ok_line_means_a_file.sh is MISSING"
+  echo "        It is TRACKED, so its absence is a broken tree, not a configuration."
+  RC=1
+fi
+
 if [ -f tools/rel8_literal_span_check.py ]; then
   step "rel8 literal-jump spans" "$LOGDIR/rel8-literal-span.log" \
        python3 tools/rel8_literal_span_check.py --selftest .        || RC=1

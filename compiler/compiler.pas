@@ -893,6 +893,63 @@ begin
   WriteLn('The full option list lives in docs/; these are the ones worth remembering.');
 end;
 
+{ THE `ok:` LINE IS THE ONE INSTRUMENT EVERY HARNESS AND EVERY AGENT TRUSTS,
+  AND UNTIL 2026-09-07 IT WAS COMPUTED ENTIRELY FROM THE IN-MEMORY IMAGE.
+  `pascal26 src.pas /nonexistent-dir/out` printed
+  `ok: /nonexistent-dir/out  [code=249624B ...]` and exited 0 having written
+  nothing at all. The verb, the four byte counts and the exit status are three
+  signals that agree because ALL THREE are read off Code[]/Data[] before the
+  write -- one reading wearing three faces, which is exactly the corroboration
+  CLAUDE.md says does not count, since a second source only counts if it FAILS
+  DIFFERENTLY.
+
+  It cost the finder a false regression in the hour they found it: a reaped
+  scratch directory turned every compile into a silent no-op that still printed
+  `ok:`, and the missing binary then presented as a test FAILING rather than as
+  a build that never happened.
+
+  The asymmetry is the tell and it was already half-written: main() probes its
+  INPUT with sysopen and refuses when it cannot be read (`cannot read input
+  file`). Nothing made the same statement about the output. This closes that.
+
+  DELIBERATELY MINIMAL -- it asserts the artefact EXISTS and is NON-EMPTY, not
+  that its length matches CodeLen. There is no lseek/fstat in the sysopen family
+  the compiler carries, and reading an 11MB image back to check a number would
+  put a second full read in every build. Existence-and-non-empty catches the
+  reported defect (no file), the empty-file case, and any writer that silently
+  no-ops; a short WRITE would still pass and is not claimed. }
+function OutputArtefactLanded(const path: AnsiString): Boolean;
+var fd, got: Integer; probe: array[0..0] of Byte;
+begin
+  OutputArtefactLanded := False;
+  fd := sysopen(path, 0);            { O_RDONLY }
+  if fd < 0 then Exit;
+  probe[0] := 0;
+  got := sysread(fd, probe, 1);
+  sysclose(fd);
+  OutputArtefactLanded := got > 0;
+end;
+
+{ Refuse in the writer's own voice: name the path, and say the one thing the
+  caller cannot see -- that the compile itself was fine. Halt(1) so a harness
+  reading rc gets the same answer as a harness reading the text. }
+procedure RequireOutputArtefact(const path: AnsiString);
+begin
+  { `-o /dev/null` means "tell me whether it COMPILES" and is a legitimate
+    idiom -- gcc has it, and a user asking for it is not asking for an
+    artefact. The write genuinely succeeded; the kernel discarded it. Reading
+    it back yields 0 bytes, which is indistinguishable from a failed write by
+    the test below, so the discard sink is named rather than inferred. This is
+    an exception the OS defines, not one this design introduces: nothing else
+    in the filesystem answers "I accepted your bytes and kept none". }
+  if path = '/dev/null' then Exit;
+  if OutputArtefactLanded(path) then Exit;
+  writeln(StdErr, 'pascal26: error: compiled successfully but wrote no output file: ', path);
+  writeln(StdErr, '  the code was generated; the artefact is not on disk or is empty.');
+  writeln(StdErr, '  usual cause: a missing or unwritable directory in that path.');
+  Halt(1);
+end;
+
 { ===== Main ===== }
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
@@ -2641,6 +2698,7 @@ begin
   if EmitAsmTextMode then
   begin
     WriteDisassemblyX64(outFile + '.s');
+    RequireOutputArtefact(outFile + '.s');
     writeln('ok: ', outFile + '.s', '  [-S disassembly]');
   end;
 
@@ -2691,6 +2749,7 @@ begin
             ' keep=', DbgWholeArrKeep, ' refuse=', DbgWholeArrRefuse);
   DerefWalkReport;
   TokPoolReport;
+  RequireOutputArtefact(outFile);
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,']');
 end.

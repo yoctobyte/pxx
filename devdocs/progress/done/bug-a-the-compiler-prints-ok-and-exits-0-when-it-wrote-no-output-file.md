@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: bug
-status: backlog
+status: done
 found: 2026-09-06
 found-by: frankZ
 owner: ""
@@ -61,3 +61,6 @@ be REJECTED, asserted, or this ticket's own fix cannot be shown to work.
 Related: `bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised`
 is the same family one level up — an instrument that answers a different
 question without erroring.
+
+## Log
+- 2026-09-07 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
