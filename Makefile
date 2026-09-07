@@ -14459,6 +14459,26 @@ test-core: $(COMPILER)
 	@# with the compensation wrong, 8 vs 12 on i386.
 	./$(COMPILER) test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align26
 	tools/expect_same.sh test_sweep_align26 "$$($(TESTTMP)/test_sweep_align26)" "ALIGN OK"
+	@# ...and the PRECONDITION, because the row above asserts that the destructor
+	@# RAN (gSeen=30) and never that a THUNK WAS PLACED. If SWEEP_THUNK_MIN_SLOTS
+	@# moves, or the slot accounting under Thunked shifts, every return emits its
+	@# sweep inline, all thirty residues agree trivially, and ALIGN OK is printed
+	@# for a reason unrelated to the constant it guards -- this ticket's own defect
+	@# one level out. The tell is a RELATION so the row carries no per-target
+	@# constant: a `ret` reached over an rsp adjustment is a thunk epilogue, a
+	@# `ret` reached over `leave` is the procedure's own return.
+	./$(COMPILER) -S test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_s26
+	tools/assert_sweep_thunk_placed.sh $(TESTTMP)/test_sweep_align_s26.s Thunked present
+	tools/assert_sweep_thunk_placed.sh $(TESTTMP)/test_sweep_align_s26.s TProbe.Tag absent
+	@# The i386 arm. Its compensation constant is 12 against x86-64's 8, and until
+	@# now it had NO automated guard at all: the controls in the ticket were run by
+	@# hand once, and only the x86-64 row was wired, so the value was held by a
+	@# measurement that would never run again. i386 binaries execute natively here.
+	@# This asserts the RESULT only -- `-S` is x86-64 only, so the precondition
+	@# above cannot be checked for i386, and this row is one notch weaker. Said
+	@# rather than left for whoever ports the next backend to discover.
+	./$(COMPILER) --target=i386 test/test_sweep_thunk_preserves_stack_alignment.pas $(TESTTMP)/test_sweep_align_i386
+	tools/expect_same.sh test_sweep_align_i386 "$$($(TESTTMP)/test_sweep_align_i386)" "ALIGN OK"
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
 	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \

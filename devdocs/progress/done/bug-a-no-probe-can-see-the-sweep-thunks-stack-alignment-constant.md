@@ -115,3 +115,73 @@ Controls, both directions, both targets:
 Wired into `test-core`, which is tier-enrolled. The five remaining targets now
 each land against a guard that already exists, which was the reason for doing
 this before them rather than after.
+
+## Amendment, same day — the guard was aimed, and nothing was ASSERTING that
+
+The resolution above is correct and was incomplete in a way its own positive
+controls could not show.
+
+`test_sweep_thunk_preserves_stack_alignment` asserts `gSeen = 30` — the
+destructor really ran — and then that `gLo = gHi`. Both are right. Neither
+asserts that a **thunk was placed**. If `SWEEP_THUNK_MIN_SLOTS` ever moves, or
+the slot accounting shifts under `Thunked`, every return emits its sweep inline,
+all thirty residues agree trivially, and the row prints `ALIGN OK` for a reason
+that has nothing to do with the constant it exists to guard. **That is this
+ticket's own defect one level further out**, and the controls cannot see it: a
+control run today proves the guard discriminates today.
+
+Verified by disassembly that a thunk IS currently placed in `Thunked` — and the
+first pass of that check said the opposite. I matched `sub rsp, 0x0*8` against a
+disassembler that emits a bare decimal `sub rsp, 8`. **An instrument lying by
+being correct about a literal string**, inside an hour of writing that class into
+this ticket. The rule did not protect me; the second source did.
+
+**Wired the precondition** as `tools/assert_sweep_thunk_placed.sh`, asserting on
+the `-S` output that `Thunked` contains a thunk and that a known-thunkless
+procedure in the same file does not. It carries no per-target constant, because
+the tell is a relation:
+
+```
+thunk epilogue     add rsp, N ; ret      (N = 8 on x86-64, 12 on i386)
+procedure return   leave      ; ret
+```
+
+so "a `ret` reached over a stack adjustment rather than over `leave`" names the
+thunk on any target that gets one. Controlled in five directions, all verified
+against real assembly: `Thunked present` and `TProbe.Tag absent` pass;
+`Thunked absent`, `TProbe.Tag present` and a **missing** procedure all fail. The
+last one was a hole I nearly shipped — the `absent` arm counts zero for a
+procedure that no longer exists, so a renamed control would have passed
+vacuously, certifying a subject that is gone.
+
+### Two residuals this leaves, stated rather than closed
+
+**The i386 constant still has no automated guard.** The controls in the
+resolution above were hand-run once. Only the x86-64 row is in `test-core`, so
+the value 12 is guarded by a measurement that will never run again. i386 binaries
+execute natively on this box and there is ample precedent for `--target=i386`
+rows, so the row is cheap and is being added.
+
+**The thunk-placement precondition is x86-64 only, and not by choice.** `-S`
+refuses on any other target — correctly; textual emit really is x86-64 only —
+so the i386 row can assert the RESULT (`ALIGN OK`) but not the PRECONDITION.
+The i386 guard is therefore one notch weaker than the x86-64 one, and will stay
+that way until `-S` grows an i386 path. Recorded here rather than left for
+whoever ports the next backend to discover.
+
+### The i386 row's control, RE-DERIVED rather than cited
+
+The controls in the resolution above were hand-run at an earlier tree, and a
+control that ran once is a claim about the past. Re-derived by building it wrong
+again at `f74ddb135d27`, with the i386 compensation emitting the x86-64 value:
+
+```
+i386    ALIGN MISMATCH lo=8 hi=12    expect_same rc=1    <- the row fails
+x86-64  ALIGN OK                     expect_same rc=0    <- unaffected
+```
+
+**The break is i386-only and only the i386 row moved**, which is the part worth
+having: it shows the two rows are independent rather than the new one mirroring
+the old. Restored with `git checkout HEAD --`, and the rebuild returned the
+identical fixedpoint sha `f74ddb135d27`, so the revert-rebuild-restore-rebuild
+cycle left no seed drift.
