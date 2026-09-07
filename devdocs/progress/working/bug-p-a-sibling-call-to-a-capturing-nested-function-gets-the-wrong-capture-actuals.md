@@ -1,8 +1,9 @@
 ---
 prio: 65
 track: P
-status: open
-summary: "fcl-passrc rung 7's LAST remaining error on `pparser.pp` -- the unit went 3 -> 1 when frank-coord-core's `86852f93a` closed the `.Name`-on-a-dynamic-array-element cause (which was two of the three, one defect counted twice). `Result:=PeekOper;` at `pparser.pp:2670` -- a SIBLING call between two nested routines of `TPasParser.DoParseExpression`, both capturing -- reports `no overload of PeekOper$62727 matches these arguments / argument types: (Integer, Integer, record) / candidates: PeekOper$62727(Integer, class, array of record)`. **ARGUMENT 3 IS FINE AND ARGUMENT 2 IS THE WHOLE MISMATCH -- SETTLED by frank-coord-core 2026-09-06, do not reduce this believing two arguments are bad.** The `record` vs `array of record` asymmetry is a RENDERING defect, not a typing one: the candidate side is spelled IsArray-aware by `ParamSpellingForReport` and the argument side is not, so a perfectly matching array argument reads as a mismatch. Matching itself is correct -- both sides hold the ELEMENT kind and compare consistently. Filed separately as [[bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently]]. WHAT IS STILL UNEXPLAINED IS ONE THING, NOT TWO: the candidate has THREE hidden parameters where `PeekOper` reads only TWO free variables (`OpStackTop: Integer`, `OpStack: array of TOpStackItem`), with a `class` in position 2 that matches no name in its body -- the only class-typed local of the enclosing method is `ExpStack: TFPList`, which `PeekOper` never mentions but its SIBLING `PopExp` does. NOT the own-name-read defect: [[bug-p-a-nested-functions-bare-own-name-read-is-compiled-as-a-recursive-call]] was found while reducing this one, is fixed, and does NOT move this wall."
+status: working
+summary: "CAUSE FOUND 2026-09-07, and it is NOT what this ticket assumed. The class-typed hidden parameter in position 2 is NOT ExpStack -- it is `Result`. A nested FUNCTION's OWN `Result` is captured as if it were the ENCLOSING function's, snapshotting the enclosing type: PeekOper is declared (OpStackTop:Integer, Result:CLASS, OpStack:array) because DoParseExpression returns TPasExpr, while the sibling call in PopOper resolves the `Result` actual in POPOPER's scope, where it is PopOper's own TToken. Integer vs class, exactly the reported mismatch. Measured with a new PXXDBG p.lift probe printing each lift descriptor; reduced to 26 lines. A SECOND DEFECT SHARES THE CAUSE: `Outer := 99` inside a nested FUNCTION is rewritten to the token `Result`, which then binds to the NESTED function's own result -- pxx says `cannot assign Integer to AnsiString` where fpc assigns 99. Two variables spelled `Result`, i.e. a sentinel collision, so neither can be fixed alone: excluding `Result` from capture without giving the enclosing one its own spelling turns today's loud type error into a silent mis-assignment."
+owner: frankS
 ---
 
 ## The construct
@@ -146,3 +147,103 @@ array-of-class fell into the SCALAR arm and its element rec id went to
 
 Measured at binary `6950458c2da2`: `:2670` alone, 9.6s. **Count causes, not
 errors** — this rung has now over-reported that way twice.
+
+
+## CAUSE, measured 2026-09-07 at compiler `10b68db9ca4a`
+
+**This ticket's standing hypothesis was wrong and is retracted here.** It read
+that the `class` in position 2 "matches no name in its body -- the only
+class-typed local of the enclosing method is `ExpStack: TFPList`, which
+`PeekOper` never mentions but its SIBLING `PopExp` does." It is not `ExpStack`.
+It is **`Result`**.
+
+Added `PXXDBG p.lift`, which prints every lift descriptor as recorded — the
+routine, whether it takes Self, and each captured name with its kind:
+
+```
+PXXDBG p.lift PopExp$62710   self=FALSE caps=2 : ExpStack(6) Result(6)
+PXXDBG p.lift PushOper$62717 self=TRUE  caps=2 : OpStackTop(1) OpStack(5)
+PXXDBG p.lift PeekOper$62727 self=FALSE caps=3 : OpStackTop(1) Result(6) OpStack(5)
+PXXDBG p.lift PopOper$62734  self=FALSE caps=3 : Result(6) OpStackTop(1) OpStack(5)
+```
+
+`PeekOper` reads two free variables and has **three** captures. The third is
+`Result`, kind 6 = class — `DoParseExpression` returns `TPasExpr`. `PeekOper`'s
+own result is a `TToken`.
+
+So the declaration is `PeekOper(OpStackTop: Integer, Result: CLASS, OpStack:
+array)`, and the sibling call inside `PopOper` resolves the `Result` actual in
+**PopOper's** scope, where `Result` is PopOper's own `TToken` — an Integer.
+`(Integer, Integer, record)` against `(Integer, class, array of record)`, which
+is the reported mismatch exactly, with argument 2 the only real one, as this
+ticket already established for a different reason.
+
+## Reduced — 26 lines, no corpus
+
+```pascal
+type TBox = class FV: LongInt; end;
+function Outer: TBox;                 { enclosing returns a CLASS }
+var top: LongInt;
+  function PeekIt: LongInt;
+  begin
+    if top >= 0 then Result := top else Result := -1;   { its OWN Result }
+  end;
+  function PopIt: LongInt;
+  begin
+    Result := PeekIt;                                   { the SIBLING call }
+    Dec(top);
+  end;
+begin top := 3; Result := TBox.Create; Result.FV := PopIt; end;
+```
+
+```
+pascal26:18: error: no overload of PeekIt$23 matches these arguments
+  argument types: (LongInt, LongInt)
+  candidates:  PeekIt$23(LongInt, class)
+PXXDBG p.lift PeekIt$23 self=FALSE caps=2 : top(11) Result(6)
+```
+
+**WHY EVERY EARLIER REDUCTION FAILED, and it is a named trap.** Make the nested
+functions return the same type as the enclosing one and the program compiles and
+prints the right answer — the spurious capture is still there, but its type
+matches, so nothing can fail. That is
+*"choose a probe whose right answer differs from the default"*: the wrong
+capture and the right one are indistinguishable whenever the two result types
+agree, and the obvious small reduction makes them agree.
+
+## The SECOND defect, same cause
+
+```pascal
+function Outer: LongInt;
+  function Inner: string;
+  begin
+    Outer := 99;         { the ENCLOSING function's name, in a nested FUNCTION }
+    Result := 'inner';   { and its own Result }
+  end;
+```
+
+| | |
+| --- | --- |
+| fpc 3.2.2 | runs; `outer Result = 99` |
+| pxx | `pascal26:7: error: incompatible types: cannot assign Integer to AnsiString` |
+
+`ParseNestedRoutine` rewrites the enclosing function's name to the token
+`Result` — correct for a nested PROCEDURE, which has no result of its own, and
+wrong for a nested FUNCTION, where that token now means something else.
+
+## Why they must be fixed together
+
+**Two different variables are spelled `Result`.** Excluding `Result` from the
+capture set of a nested FUNCTION fixes the first defect and makes the second one
+WORSE: `Outer := 99` would stop being a type error and start silently writing
+`Inner`'s own result whenever the two types happen to agree. Trading a loud
+wrong answer for a quiet one.
+
+The fix is to give the enclosing result its own spelling inside a nested
+routine, so each name means one thing:
+
+- nested PROCEDURE — no result of its own, so `Result` and the enclosing name
+  both mean the enclosing result. fpc confirms: a nested procedure's
+  `Result := 42` is visible in the enclosing function afterwards (measured).
+- nested FUNCTION — `Result` is its own and must not be captured; the enclosing
+  NAME still refers to the enclosing result and needs the distinct spelling.

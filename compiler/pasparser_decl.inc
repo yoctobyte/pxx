@@ -9865,6 +9865,18 @@ begin
   LiftSelfCi[descIdx] := ci;
   LiftCapStart[descIdx] := LiftCapTot;
   LiftCapCount[descIdx] := capCount;
+  { PXXDBG p.lift -- the lift descriptor as RECORDED, which is the half of
+    bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals
+    that no reduction reproduced. Prints the routine, whether it takes Self, and
+    every captured name with its kind, so the DECLARED hidden parameter list can
+    be compared against the actuals a sibling call passes. }
+  if PxxDbgWants('p.lift', '*') then
+  begin
+    Write('PXXDBG p.lift ', mangled, ' self=', needSelf, ' caps=', capCount, ' :');
+    for k := 0 to capCount - 1 do
+      Write(' ', capNm[k], '(', Ord(capTk[k]), ')');
+    WriteLn;
+  end;
   for k := 0 to capCount - 1 do
   begin
     LiftCapName[LiftCapTot]   := capNm[k];
