@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:22 unfinished:22 blocked:6 backlog:12 backlog-umbrella:8 backlog-core:151 backlog-nilpy:97 backlog-tools:50 backlog-pascal:41 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3528 rejected:79`
+`working:23 unfinished:22 blocked:6 backlog:13 backlog-umbrella:8 backlog-core:150 backlog-nilpy:97 backlog-tools:50 backlog-pascal:41 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:46 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3528 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -28,6 +28,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-management-operators-copy-and-addref` [P] — owner: frankA
 - `feature-pascal-management-operators-nested-and-array` [P] — owner: frankA
 - `feature-tls-provider-abstraction` [B] — owner: frankH
+- `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A] — owner: frank-subcoord
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
@@ -77,9 +78,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-bare-method-overload-call-accepts-any-argument-type-and-runs-the-first-body
-- `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-lib-test-lib-sysutils-delphi-exceptions
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2

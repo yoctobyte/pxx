@@ -209,12 +209,23 @@ const
   MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
   MAX_CPREP_MACROS = 32768;
   CPREP_MACRO_HASH_SIZE = 16384;   { power of two; ~half-full at MAX macros }
-  MAX_DECL_NAMES = 1024;  { comma-separated names in one var declaration line.
+  MAX_DECL_NAMES = 1024;  { comma-separated names in ONE var declaration group.
     Pascal has no such limit; this bound exists only because the two parsers
-    collect the group into fixed-size local arrays. 256 was reachable by real
-    code -- ParseFactorCore in this very tree has 532 managed locals, and a
-    generated fixture declaring 532 on one line was rejected (2026-09-06).
-    Cost of the bump: 12KB of parser stack per declaration group, not per name. }
+    collect the group into fixed-size local arrays. Cost of the bump: 12KB of
+    parser stack per declaration GROUP, not per name.
+
+    CORRECTED 2026-09-07. This comment used to justify the bump with
+    "ParseFactorCore has 532 managed locals", taken from a perf ticket without
+    checking what that number counted. Measured since: ParseFactorCore declares
+    206 local NAMES (149 Integer, 20 Boolean, 19 TTypeKind, 14 AnsiString,
+    3 Int64, 1 array), spread over ~110 declaration groups -- so no group of
+    its comes anywhere near even the old 256, and it was never evidence for
+    this constant. The 757 slots its epilogue releases are mostly compiler-
+    minted unnamed temps, which are not declarations at all.
+
+    The bump stands on the argument that does hold: the cap is an artefact of
+    fixed-size parser arrays and not of the language, a 532-name group is
+    legal Pascal that pxx rejected, and machine-generated sources reach it. }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   { how many RECOVERED diagnostics are printed before the compiler gives up. A
     file whose first error cascades produces noise, not information, past a

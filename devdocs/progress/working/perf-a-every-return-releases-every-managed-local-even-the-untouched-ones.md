@@ -1,10 +1,11 @@
 ---
 track: A
 prio: 70
-status: backlog
+status: working
 type: perf
 blocked-by: []
 summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+owner: frank-subcoord
 ---
 
 # Every return releases every managed local, including untouched ones
@@ -298,3 +299,83 @@ it.
 Both are the vacuous-green shape this ticket's own `check_pal(2)` note describes,
 met twice in one measurement. Use **artefact size** (or the wasm code section),
 never `code=`, for anything per-slot.
+
+## 2026-09-07 — cost (1) is a question about COMPILER-MINTED TEMPS, not about user locals
+
+The ticket's liveness argument has been weighed against an unmeasured assumption:
+that the swept slots are the locals a programmer wrote. **In the worst frame,
+98.2% of them are not.**
+
+### The frame, identified without symbols
+
+Release call sites in `compiler/pascal26` come in maximal consecutive runs, one
+run per return. Reading them off the binary (`objdump -D -b binary
+-m i386:x86-64 --adjust-vma=0x400000`, because the ELF writer emits no section
+headers):
+
+- **349,322** release sites in **20,479** runs, up from the ticket's 308,112.
+- The largest ordinary frame: **757/758 slots x 140 returns**. (The +-1 pair is
+  one procedure; a couple of returns release one slot fewer.)
+
+That frame is `ParseFactorCore`, identified from an **independent** source
+rather than assumed: its body carries **138 `Exit` statements plus a
+fall-through**, against the 140 returns measured in the binary. It was 532 when
+this ticket was filed; it is 757 now.
+
+### What those 757 slots actually are
+
+`ParseFactorCore` declares **206 local names** in its `var` block. By type:
+149 `Integer`, 20 `Boolean`, 19 `TTypeKind`, **14 `AnsiString`**, 3 `Int64`,
+1 array of `TTypeKind`. Only the AnsiStrings are managed.
+
+**So 14 of the 757 released slots are named in the source. The other ~743 are
+compiler-minted unnamed temps** — `ir_codegen.inc:13808` calls them "the HIDDEN
+MANAGED LOCALS this body's parse/lowering minted ... every other unnamed local
+created after the prologue's EmitManagedLocalsZeroInit already ran".
+
+**Stated as the bound it is:** 757 is measured from the binary and 14 from the
+source; **743 is a subtraction, not a count.** It assumes every release site
+corresponds to a scalar `tyAnsiString` slot, which is what this ticket's own
+mechanism section says the loop emits.
+
+### Why that changes which fix is worth building
+
+**Per-path liveness over the locals a programmer wrote would address 14 of 757
+slots — 1.8% of the sweep in the worst frame.** The win is in the temps, and
+the compiler already knows two things about them that it does not use here:
+
+1. **It can identify them exactly**, with no new analysis — the zero-init pass
+   beside this one already selects on `Syms[i].Kind = skLocal` and
+   `Syms[i].Name = ''` (`ir_codegen.inc:13841`).
+2. **It has already written down their live range:** *"an unnamed temp does not
+   outlive the statement that minted it"* (`:13838`).
+
+**NOT CLAIMED, and it is the correctness question for whoever implements:** that
+those temps can simply be dropped from the scope-exit sweep. That comment
+justifies re-scanning for ZEROING; whether anything releases a temp within its
+statement is unverified here, and skipping the release without that is a leak —
+which, per this file's own note on assertion classes, **no output assertion
+would catch.**
+
+### The cost is concentrated, which makes a narrow fix worth more than a broad one
+
+| frames of >= N slots | release sites | share of all | returns |
+| --- | --- | --- | --- |
+| 400 | 197,771 | **56.6%** | 278 |
+| 100 | 288,506 | 82.6% | 839 |
+| 50 | 296,728 | 84.9% | 949 |
+| 10 | 320,919 | 91.9% | 2,108 |
+
+Median run length is **1**; mean 17.1; max 1,515. **Over half of every release
+site in the compiler is emitted at 278 return points.** A fix that only helped
+frames above a few hundred slots would still take most of the cost, and a
+per-procedure opt-in would be cheap to validate.
+
+### What this does not settle
+
+Body-wide, not per-path (frank-coord-core's caveat, and it is the right one):
+`SymWrittenInProtectedSpan`-shaped counting answers "is this symbol written
+anywhere in the body", and IR index ranges follow lowering order rather than
+control flow. That is a strict UPPER bound on the per-path count. Here the bound
+already decides the direction — 14 named slots is small however you count the
+paths — but it does not decide the temps, which is where the work now is.
