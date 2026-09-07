@@ -384,3 +384,49 @@ That is strictly better than the tail, and not only for alignment:
 alignment is free at the emission point; and the announcement is a new member
 kind, which is the only shape the bootstrap admits. The emitter change is
 unblocked.
+
+## 2026-09-07 (frankA, from frankS) — my "loud, not silent" control was drawn from the wrong population
+
+The section above says the CWD-relative builtin fallback fails loudly from
+anywhere but the repo root, *"measured with its own control"*. **The measurement
+was real and the control was wrong**, and frankS caught it.
+
+I measured from a SCRATCH directory. A scratch directory has no
+`compiler/builtin/`, so of course the lookup fails. The population that matters
+is directories that DO have one — `ls -d /home/neo/*/compiler/builtin` answers
+**twenty** on this box. Confirmed here with a controlled copy rather than taken
+from the report:
+
+| CWD | result |
+| --- | --- |
+| no `compiler/` at all | **loud** — `unit source not found: builtinheap` |
+| a **sibling checkout** | **SILENT** — that tree's `builtinheap.pas` is parsed |
+| the repo root | correct |
+
+Proved by poisoning the copy with an unresolvable identifier **in a real
+declaration**; the diagnostic named it. frankS's first attempt appended text
+after the unit's `end.` and the build succeeded — nothing parses that, so it was
+a probe that could not fail, and it read as *support* for my claim.
+
+**So my elimination argument for frankS's baseline is void.** I argued that two
+matching shas prove builtin resolved correctly because a wrong CWD yields no
+binary. It yields a binary from any sibling checkout. What actually establishes
+their CWD is their own evidence: every stage passed the RELATIVE path
+`compiler/compiler.pas`, which resolves from nowhere else, and the builds
+succeeded. **The baseline stands on frankS's evidence, not on mine.**
+
+### And this lands on the descriptor work directly
+
+frankS built from a sibling checkout's root and got a binary **byte-identical**
+to the repo-root one — which reads as proof that CWD does not matter. It is not.
+The two `builtinheap.pas` differed only by `PXX_REC_DESC_HDR = 12` against the
+bare literal `12` — the rename landed at `30ed522b3` — and that is semantically
+identical, so the bytes agree either way. **The expected value collided with the
+failure value and the probe could not have failed that day.**
+
+A record-descriptor FORMAT change is exactly what separates them. So the defect
+class that is visible ONLY to the bootstrap-vs-pin comparison is also the class
+that would make that comparison LIE if it were run from a sibling checkout. Not
+an argument against the finding — the instrument is sound and its precondition
+is not self-evident. **Whoever runs that comparison against the operator-emitter
+change must state the CWD they ran it from.**

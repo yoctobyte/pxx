@@ -1882,10 +1882,23 @@ const
   `make bootstrap` is fpc -> FPC_COMPILER -> BUILD_COMPILER -> VERIFY_COMPILER,
   and every one of those carries the NEW emitter; each also links the LIVE
   compiler/builtin/, because a $(PXX_TMP)-located binary finds no builtin dir
-  beside itself and falls through to the CWD-relative last resort in
-  ParseUsesUnitBody, with make's CWD at the repo root. Measured: that binary
-  compiles from the repo root and answers `unit source not found: builtinheap`
-  from anywhere else.
+  beside itself (--where prints [MISSING] for it) and falls through to the
+  CWD-RELATIVE last resort in ParseUsesUnitBody. For `make` that CWD is the repo
+  root, which is what makes "the live tree" true.
+
+  THAT IS A PRECONDITION, NOT A PROPERTY THAT ANNOUNCES ITS OWN VIOLATION, and
+  this comment claimed otherwise for one commit. `compiler/builtin/` relative to
+  the CWD resolves against whatever tree the CWD sits in, and there are twenty
+  directories on this box with one. Measured three ways (the middle row is the
+  one that matters and the one a scratch-dir probe cannot see):
+
+    no compiler/ at all   LOUD -- `unit source not found: builtinheap`
+    a SIBLING checkout    SILENT -- that tree's builtinheap is parsed instead
+    the repo root         correct
+
+  The silent row was proved by poisoning a copy with an unresolvable identifier
+  in a real declaration and watching the error name it; appending text after the
+  unit's `end.` does NOT prove it, because nothing parses that.
 
   So under a header change the FPC chain is coherent at every stage and the
   locally-seeded chain is not -- and BOTH pass their own checks. `bootstrap`

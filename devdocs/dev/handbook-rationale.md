@@ -788,9 +788,41 @@ a release problem and not merely a build one.** `make bootstrap` is
 `fpc → FPC_COMPILER → BUILD_COMPILER → VERIFY_COMPILER`, and every stage carries
 the NEW emitter; every stage also links the LIVE `compiler/builtin/`, because a
 `$(PXX_TMP)`-located binary finds no builtin beside itself and falls through to
-the CWD-relative last resort, with make's CWD at the repo root. Measured, with
-its own control: that binary compiles from the repo root and answers
-`unit source not found: builtinheap` from anywhere else.
+the **CWD-relative** last resort. For `make` that CWD is the repo root, which is
+what makes "the live tree" true.
+
+**That is a precondition, and I first wrote it as a property that announces its
+own violation.** I measured the failure from a scratch directory — *"a wrong CWD
+is loud, `unit source not found: builtinheap`"* — and that control was drawn
+from the wrong population, which is the one thing this file warns about most.
+A scratch directory has no `compiler/builtin/`; the population that matters is
+directories that DO, and `ls -d /home/neo/*/compiler/builtin` answers **twenty**
+on this box. frankS caught it and measured the middle row. Confirmed here with a
+controlled copy:
+
+| CWD | result |
+| --- | --- |
+| no `compiler/` at all | **loud** — `unit source not found: builtinheap` |
+| a **sibling checkout** | **SILENT** — that tree's `builtinheap.pas` is parsed |
+| the repo root | correct |
+
+Proved by poisoning the copy with an unresolvable identifier **in a real
+declaration** and watching the diagnostic name it. frankS's first attempt
+appended garbage after the unit's `end.`, the build succeeded, and that read as
+support for the loudness claim — nothing parses text after `end.`, so it was a
+probe that could not fail.
+
+**And the byte-identity that seems to settle it is where this bites hardest.**
+frankS built from a sibling checkout's root and got a binary byte-identical to
+the repo-root one, which reads as proof that CWD does not matter. It is not: the
+two `builtinheap.pas` differed only by a named constant standing in for the
+literal it replaced — semantically identical, so the bytes agreed either way.
+**The expected value collided with the failure value, and the probe could not
+have failed that day.** A record-descriptor FORMAT change is exactly what would
+separate them — so the defect class that is visible *only* to the bootstrap-vs-pin
+comparison is also the class that would make that comparison LIE if it were run
+from a sibling checkout. The instrument is sound; its precondition is not
+self-evident.
 
 So a format skew makes the FPC chain coherent at every stage and the locally
 seeded chain incoherent — **and both pass their own checks.** `bootstrap` runs
