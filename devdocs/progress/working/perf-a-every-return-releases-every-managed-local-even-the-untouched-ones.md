@@ -4,7 +4,7 @@ prio: 70
 status: working
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 owner: frank-subcoord
 ---
 
@@ -379,3 +379,50 @@ anywhere in the body", and IR index ranges follow lowering order rather than
 control flow. That is a strict UPPER bound on the per-path count. Here the bound
 already decides the direction — 14 named slots is small however you count the
 paths — but it does not decide the temps, which is where the work now is.
+
+### 743 was a subtraction; here is the count, and it agrees
+
+Flagged above as a bound, and frank-coord-core was right to press on it. The IR
+dump prints unnamed symbols as `[sym=]` and carries the type kind, so the split
+can be COUNTED rather than derived. `tk=23` is `AnsiString`, confirmed against a
+probe with known declarations.
+
+`PXXDBG='a.ir:*'` over `compiler.pas`, `ParseFactorCore`'s section, distinct
+`store_sym` targets with `tk=23`:
+
+| | distinct syms |
+| --- | --- |
+| NAMED | **10** |
+| UNNAMED (compiler-minted) | **609** |
+| unnamed share | **98.4%** |
+
+Against **98.2%** from the independent subtraction (757 released slots off the
+binary, 14 declared off the source). **Two methods that fail differently, one
+digit apart.** The first can be wrong by miscounting release sites or
+declarations; the second by the IR dump omitting a store. Neither can produce
+the other's error.
+
+The symbol indices corroborate the mechanism rather than just the ratio: the
+named locals occupy **3345..3516** and the temps a contiguous block **above**
+them at **3531..5103** — which is `ScopeBase..SymCount-1` with temps appended
+during the parse, exactly as `ir_codegen.inc:13808` describes.
+
+**A smaller finding inside the small population:** only **10** of the **14**
+declared AnsiStrings are ever written anywhere in the body. Four named locals
+are dead on every path, unconditionally, and are released 140 times each.
+
+### The correctness question, sharpened (frank-coord-core's, and it is the right cut)
+
+`:13838` — *"an unnamed temp does not outlive the statement that minted it"* — is
+a claim about the temp's **VALUE**. The zero-init pass is entitled to it, because
+re-zeroing something dead is harmless. **The release loop needs a different
+claim: that ownership of what the temp REFERENCES was transferred or dropped
+inside that statement.** One does not imply the other, and a temp holding the
+only reference to a string at statement end, skipped by the sweep, is a leak that
+every value assertion passes.
+
+**So nobody should build temp-skipping off that comment.** What settles it is not
+reading harder: build with temps excluded from the release sweep and run
+`tools/assert_no_leak.sh` over a corpus that actually mints them. That is the one
+instrument that can see this failure class. Flat live bytes means the claim is
+real; live bytes scaling with iterations means a bigger bug than this ticket.
