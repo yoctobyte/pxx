@@ -545,3 +545,60 @@ independently. **So the concrete case stands and the aggregate does not.**
 first makes the inline nil-test close to free in code size, while doing the
 inline test first spends up to 15.81% of `.text` on something the shared
 epilogue would then have made cheap.
+
+## 2026-09-07 — the design I am building, and why the ordering flipped
+
+frank-coord-core, taking the emitter work. **frank-subcoord's threshold table
+changed the order and the argument is theirs:** cost is strictly linear in
+sites, so there is no efficiency sweet spot in the inline nil-test — every 1% of
+coverage costs 0.158% of `.text`, and the threshold is purely a blast-radius
+choice. Meanwhile a shared epilogue makes the inline test's own +5.06 B/site
+collapse from *per slot per return* to *per slot*: in `ParseFactorCore`, ~530KB
+becomes ~3.8KB. **Doing the sharing first makes the nil-test nearly free; doing
+the nil-test first spends up to 15.81% of `.text` on something the sharing would
+have made cheap.** So the sharing goes first.
+
+### NOT "funnel every return through one epilogue" — a per-procedure thunk
+
+Every early `Exit` calls `EmitProcEpilog` inline today (`ir_codegen386.inc:5614`,
+`_arm32:4768`, `_aarch64:5017`, `_riscv32:3761`, and the Pascal/C frontends'
+own sites), which is why 20,479 returns emit 349,322 release sites. Restructuring
+all of that into one exit point is a control-flow change across six backends.
+
+The contained version: **emit the sweep ONCE per procedure, out of line, and
+`call` it from each return.** `EmitProcScopeExitCleanupForTarget` becomes the
+call; the body moves to a thunk.
+
+**The shape already exists in this file and does not have to be invented.**
+`EmitProcCleanupLandingPadForTarget` is exactly a per-procedure out-of-line
+block with a patched jump around it, and
+`EmitProcCleanupFrameSkipForTarget` already dispatches that patched
+unconditional jump across all six register targets. The thunk is the same
+shape with a `call` instead of a fall-through.
+
+Cost accounting, so it is not assumed:
+
+- **Code:** `ParseFactorCore` goes from 106,041 release sites to ~758 plus one
+  call per return. That is the whole of cost (2).
+- **Runtime:** one extra call/ret per RETURN — 2.984 ns measured — against a
+  sweep that already pays 2.984 ns per SLOT per return. On a 757-slot frame
+  that is one part in 757. It does not fix cost (1) and does not claim to.
+- **wasm32 is untouched**: it already shares, measured at 0.062 B/slot/return.
+
+### How it lands, and the control
+
+One backend per commit, the method the seven-copy refactor established. The
+difference: on the target being converted, byte-identity is NOT available by
+construction — the whole point is that the bytes change. So per step:
+
+- the **six other targets** stay byte-identical, which bounds the blast radius
+  to the arm actually touched. If a sub-threshold object moves, the step is
+  wrong rather than interesting.
+- the **converted target** needs behaviour: `PXX_ALLOW_FULL_SUITE=1` rather than
+  quick, `tools/assert_no_leak.sh` over a temp-minting corpus (a sweep reached
+  by `call` that fails to run is a leak, and no output assertion sees it), and
+  the four frontend probes.
+
+The leak instrument is not optional here for the reason this ticket already
+carries: a sweep that is emitted once and then never CALLED prints every correct
+answer.
