@@ -308,10 +308,43 @@ begin
   if TemplateTokens[ts + i].Kind <> tkIdent then Exit;
   if not CaseEqual(GetTokenStrFromRaw(TemplateTokens[ts + i].SOffset,
                                      TemplateTokens[ts + i].SLen), 'specialize') then Exit;
-  if (i > 0) and (TemplateTokens[ts + i - 1].Kind = tkEq) then Exit;
   if TemplateTokens[ts + i + 1].Kind <> tkIdent then Exit;
   if TemplateTokens[ts + i + 2].Kind <> tkLt then Exit;
   nm := GetTokenStrFromRaw(TemplateTokens[ts + i + 1].SOffset, TemplateTokens[ts + i + 1].SLen);
+  { AFTER `=` THIS IS A DECLARATION, NOT A USE -- `TEnumSpec = specialize
+    TEnum<T>` must MINT a class, so it is left for the deferral machinery and
+    not collapsed to a name here. That is right for every template but ONE.
+
+    A group naming the template CURRENTLY BEING STREAMED is a self-reference,
+    and minting for it is the one thing that cannot be done: the class does not
+    exist yet. `generic TTest<T> = class type TTestT = specialize TTest<T>; end`
+    is what fpc's own tgeneric99 opens with, and it fell through to the verbatim
+    copy -- where the identifier arm renames the template's own name to the
+    specialization's, producing `specialize TI<LongInt>` and
+    `generic template TI not found`. With the parameter still in it the truncated
+    parse reads `expected '<' before ';'` instead; two messages, one exclusion.
+
+    THE BOUNDARY SAYS IT IS THE `=` AND NOT THE SELF-REFERENCE: the identical
+    self-reference in a USE position (`Nxt: specialize TTest<T>;`) compiled and
+    ran correctly throughout, on this tree and on pin v407. And a template
+    carrying such a nested type but never specialized parses fine, so nothing
+    here is a capture-time problem.
+
+    Recognising the group is all this does; whether it COLLAPSES is still
+    SpecializeToBuffer's decision, which compares the group's canonical name
+    against StreamedSpecCanonName. So `TOtherArg = specialize TTest<Double>`
+    inside `TTest<LongInt>` -- the same template, a DIFFERENT argument -- is not
+    a self-reference, does not collapse, and still fails. NOT A RESIDUAL AND NOT
+    FILED: measured 2026-09-07, fpc 3.2.2 REFUSES that program too (`Syntax
+    error, "identifier" expected but ";" found`), so a nested type may name its
+    own template only at its own arguments. Ours is a differing diagnostic on
+    code the language does not accept, which is deferred, not a gap. The check
+    stays exact rather than being widened to the template NAME, because widening
+    it would accept what fpc refuses AND collapse two different specializations
+    to one class.
+    bug-p-a-nested-type-that-specializes-its-own-template-is-renamed-to-the-outer-specialization }
+  if (i > 0) and (TemplateTokens[ts + i - 1].Kind = tkEq) and
+     (not CaseEqual(nm, SpecializeTemplateName)) then Exit;
   ti := -1;
   for k := 0 to TemplateCount - 1 do
     if CaseEqual(Templates[k].Name, nm) then ti := k;

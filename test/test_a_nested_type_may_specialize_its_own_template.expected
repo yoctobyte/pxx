@@ -1,0 +1,5 @@
+own value  = 7
+use posn   = 9
+decl param = 11
+decl concr = 13
+other tmpl = 17
