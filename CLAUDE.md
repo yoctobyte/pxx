@@ -190,11 +190,48 @@ one-line logbook pointer.
   `stabilize`.** A pin blocks every other lane and the human while it runs.
   `stabilize` alone does NOT move B's ground; only `make pin` does, then commit
   `stable_linux_amd64/**`.
+- **SUPERSEDED 2026-09-07 — "FULL GREEN EXPECTED" (owner): a pin RUNS a full
+  tier and EXPECTS it green.** His words, set alongside cutting the fleet to two
+  seats and naming Track P the priority: *"as far for pinning, let's get back to
+  'full green expected'. so, we're no longer burning tokens fast, just back to
+  slower workflow with hopefully less overhead."* **Read the two bullets below as
+  the reasoning that produced the OLD rule, not as the rule.** They are measured
+  and dated and they stay — what changed is the CALIBRATION, not the evidence.
+  **What changes, and it is one thing:** the old rule let a pin go out on `quick
+  GREEN, full tier NOT RUN` — v407 was pinned exactly that way on 2026-09-06 and
+  that was correct then. It is not correct now. Run the full tier, expect green,
+  **fix a red rather than grading past it.**
+  **What does NOT change, and it is what will be re-litigated first: NEVER WAIT
+  FOR A PIN.** That is the owner's own rule, said four times, and "full green
+  expected" is not a licence to hold a seat until green arrives. An expectation
+  that cannot be met **escalates to him**; it does not become an indefinite hold.
+  If the full tier cannot run at all, say so and stop — do not pin blind, and do
+  not sit.
+  **The fixedpoint still gates; everything else still grades.** That distinction
+  is untouched. "Full green expected" raises the bar on the rows that grade; it
+  promotes none of them to a gate.
+  **A SNAPSHOT ROW THAT A REVIEWED `--update` CLEARS IS PAPERWORK, NOT A RED.**
+  Measured 2026-09-07: `tools/ast_slot_overloads.py` — wired into `gate.sh`,
+  which is what arms before a pin — reds on any NEW AST slot write site, whether
+  or not the site is legitimate, and `test/ast_slot_writes.expected` was touched
+  **33 times, 20 of them in two days, five on 09-07 alone**, almost all Track P,
+  which is now the priority. Its own failure message prescribes the remedy: check
+  `ASTLeftIsChild`/`ASTRightIsChild` in `ast_arena.inc`, then re-run with
+  `--update`. Review the diff, update, pin. Treating this class as blocking would
+  stall a pin several times a day for bookkeeping — the stalled-worker failure
+  mode wearing a green-looking justification.
+  **The calibration, so a later reader knows what would make this stale:** the
+  old rule was written for a fast fleet, where waiting cost 19 days with no pin
+  (v354, 08-19, was the last green one). This one is written for **two seats and
+  a slow cadence**, where the tree is usually green anyway and fewer sessions are
+  standing on the result. **If the fleet goes wide again, revisit THIS bullet** —
+  not the two below it.
 - **PINS ARE NOT RELEASES, AND STAYING IN SYNC WITH `lib/rtl` IS A PRIMARY
   PURPOSE OF PINNING** (owner, 2026-09-06): *"yes staying in sync with the rtl is
   a primary purpose of pinning. this is also why we have to pin on regular
   intervals, even if there are reds. pins are not releases."* **Pin on a regular
-  cadence, reds included.** The pin and `lib/rtl` are ONE artefact and the pair
+  cadence, reds included.** (SUPERSEDED 2026-09-07 — full green expected.)
+  The pin and `lib/rtl` are ONE artefact and the pair
   is only coherent within one era — each new builtin mints a cliff, roughly one
   a fortnight — so the way to have a coherent pair is to mint one OFTEN, not to
   make `make revert` cleverer. Measured 2026-09-05: usable rollback depth is
@@ -246,10 +283,14 @@ one-line logbook pointer.
   blessed a fixedpoint the sources do not define — **both binaries self-reproduce
   and print green**, so nothing downstream could have seen it.
   Not a red tier, not a red count, not a shadow verdict. A pin is
-  GRADED, never gated: `green` (a full tier at that tree, no RED) or
+  GRADED, never gated (SUPERSEDED 2026-09-07 for the TIER — a full tier is now
+  run and expected green; the grading VOCABULARY below still stands and is what
+  gets recorded): `green` (a full tier at that tree, no RED) or
   `reds(N)` with the manifest, recorded AT PIN TIME. Rollback prefers a green
   pin and falls back to the most recent, so recovery is never empty.
-  **A red is a reason to pin SOONER, not later** — the pin in place is red too,
+  **A red is a reason to pin SOONER, not later** (SUPERSEDED 2026-09-07: fix it,
+  then pin — but do not WAIT on it either; escalate) — the pin in place is red
+  too,
   and refusing on reds is an argument for never leaving a red pin. It held for
   19 days: v354 (08-19) was the last green one, while v398 shipped a compiler
   that could not build C for i386 or arm32 and every `$(PXX_STABLE)` consumer
@@ -832,8 +873,20 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   indistinguishable at a glance from the serious version, and it arrives right
   after a successful landing — when the tree feels settled precisely because you
   just settled it. **Residual, for a sweep of hours:** a restart does
-  not wait for it. `git commit` alone does not move the tree — only the pull
-  does — so commit locally and push when it ends; the exposure is the sweep's
+  not wait for it — so the pull is not the only hazard. **`git commit` MOVES THE
+  TREE for anything comparing the live tree against a pre-run stamp, and this
+  rule said the opposite until 2026-09-07.** It does not change a file's
+  CONTENT, which is why it feels safe and why the wrong version survived here for
+  days; it changes the tree's IDENTITY, and `testmgr` reads that. Measured twice
+  in one day, both seats following this line in good faith. frankS's native tier
+  printed `WARNING the source tree MOVED during this run (c23e8d1e4253+7926ccfb
+  -> c4ff2882da99+e3b0c442)` with its own gloss: *"a mid-run rebuild is harmless
+  — the binary is snapshotted — but a pull or commit is not."* The warning only
+  bites a RED, so a green run survives it and a red one is unattributable.
+  **The certain shape is to start the tier from an already-clean tree.** Staging
+  and holding (`git add`, no commit) is frankS's proposal and looks right, since
+  staging does not move the commit — but it is NOT measured, so do not quote it
+  as safe. The exposure is the sweep's
   length and there is no fully safe option, only a bounded one. A sweep reading
   a `git archive HEAD` snapshot instead of the tree would close it — untested,
   and it silently omits untracked files and the compiler binary.
