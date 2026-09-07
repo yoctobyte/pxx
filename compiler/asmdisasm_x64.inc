@@ -919,8 +919,22 @@ var
   fd, pos, consumed, i, brTarget, textEnd: Integer;
   line, labelText: AnsiString;
 begin
+  { Refuse at DRIVER level, not through Error(). Error() is the parser's, so it
+    decorates with a source position and the "an unterminated comment or string
+    literal is the usual cause" hint -- and this runs long after parsing, so the
+    position names whatever the lexer last held (builtinheap.pas:2, a unit the
+    user did not write) and the hint sends them hunting a comment in a file that
+    compiles fine without -S. Measured 2026-09-07: the refusal was CORRECT and
+    arrived wearing a parse error, with a garbage `near: >>> ase  Address: 0x 0`
+    fragment underneath it. Driver-level refusals here are writeln+Halt, the way
+    `unknown option:` reports (compiler.pas:1912); this is one of those. }
   if TargetArch <> TARGET_X86_64 then
-    Error('-S: textual emit mode is x86-64 only');
+  begin
+    writeln(StdErr, 'pascal26: error: -S: textual emit mode is x86-64 only');
+    writeln(StdErr, '  the compile itself is unaffected -- rerun without -S, or');
+    writeln(StdErr, '  with the default target, to get an artefact.');
+    Halt(1);
+  end;
 
   { Stop at the ELF writer's page filler rather than disassembling it -- the
     filler is zero bytes, not instructions, and decoding it appends a `db 00`
