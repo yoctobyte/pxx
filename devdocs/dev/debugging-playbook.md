@@ -4385,6 +4385,66 @@ condition to documenting why it is safe — the fix here deleted the gate entire
 premise to be true and no list of addressable node kinds to stay in sync with
 `IRLowerAddress`'s own.
 
+## A "WRONG CWD FAILS LOUDLY" CONTROL DRAWN FROM AN EMPTY DIRECTORY — the population that matters is directories that DO have the thing, and this box has twenty
+
+A `$(PXX_TMP)`-located pxx binary finds no builtin beside itself (`--where`
+prints `[MISSING]` for every exe-dir path, `builtin/` included) and falls through
+to a **CWD-relative** last resort. Whether that is dangerous was measured twice,
+by two sessions, and the two got opposite answers from controls drawn from
+different populations.
+
+**The loud reading, and why it is drawn from the wrong population.** Run such a
+binary from a scratch directory and it fails hard: `uses: unit source not found:
+builtinheap`, no binary produced. True, reproduced, and it supports the
+conclusion *"there is no silent second builtin to fall into"* — which is false.
+A scratch directory has no `compiler/builtin/`. **The population that matters is
+directories that DO**, and on this machine `ls -d /home/neo/*/compiler/builtin`
+answers **twenty**.
+
+**The silent reading, proved by making the difference one the compiler must
+consume.** A first probe appended garbage to a scratch copy of
+`builtinheap.pas` and the build SUCCEEDED — inconclusive, because the text went
+after the unit's `end.` and was never parsed. Putting an unresolvable identifier
+into a real declaration instead:
+
+```
+$ cd <fake root with compiler/builtin/>
+$ <tmp>/build /home/neo/frankS/compiler/compiler.pas out
+pascal26:347: error: not a constant
+  in: compiler/builtin/builtinheap.pas
+```
+
+**The error names a RELATIVE path**, and the file it names is the scratch copy.
+The CWD-relative lookup fires whenever the CWD has that directory, and a sibling
+checkout is exactly such a directory.
+
+**AND THE SHA COMPARISON COULD NOT SEE IT, for the reason this file already names
+one section over.** Building from another checkout's root produced a binary
+byte-identical to the one built from the repo root, which reads as proof that
+CWD does not matter. It is not: the two trees' `builtinheap.pas` DIFFER on disk,
+and the only difference is `PXX_REC_DESC_HDR = 12` in one and the literal `12` in
+the other — a named constant replacing a literal, **semantically identical, so
+the bytes agree either way**. The expected value collided with the failure value.
+Had that sibling been mid-way through the record-descriptor FORMAT change its
+owner was actually working on, the bytes would have differed and the comparison
+would silently have been about the wrong tree.
+
+**So the guard could not fail on the day it was run, and the thing that would
+have made it fail is the very defect class the comparison exists to catch.**
+
+**The rule.** When a binary resolves anything CWD-relative, "what happens from
+the wrong directory" has at least three answers and only one of them is loud:
+
+| CWD | result |
+| --- | --- |
+| no `compiler/` at all | loud failure, no binary |
+| a sibling checkout | **silent substitution** of that tree's units |
+| the repo root | correct |
+
+Before concluding "a wrong CWD is loud", enumerate the directories that contain
+the thing being resolved — not the one directory you happened to try.
+
+
 ## A STALE MEASUREMENT — prose asserting a live state, written true, aged false by your own next commit, and afterwards indistinguishable from something that was checked
 
 Every stale-instrument tell in this file keys on **a run**. A stale binary, a
