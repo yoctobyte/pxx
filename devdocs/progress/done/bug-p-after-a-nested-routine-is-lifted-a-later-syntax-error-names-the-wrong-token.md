@@ -202,6 +202,27 @@ Not claimed: a directive-state instance for this site. The lift's shift is
 one is 2, and a `{$R+}`-after-an-operator probe traps correctly in both
 compilers. Same mechanism, same fix, only the spelling half measured here.
 
-The remaining three hits are `rparser.inc` (two) and `zparser.inc` (one) —
-Tracks R and Z, both experimental. Not examined, not fixed, recorded so the
-next reader of this section has the list.
+### The remaining three hits — measured, and LATENT rather than live
+
+Tracks R and Z, both experimental. Examined rather than left as a list, because
+"not examined" in a closing section is how the next reader inherits a guess.
+
+- **`rparser.inc:3677`** — a compaction pass that STRIPS `pub` tokens from the
+  whole stream before parsing, moving `Tokens[]` down by a variable stride and
+  the parallel arrays not at all. It is the real one of the three by shape, and
+  it does not fire today: probed with `struct P { pub a: i64, pub b: i64 }` and a
+  deliberate expression error after it, against the same file with `pub`
+  removed, and **both windows are identical** — because the Rust lexer does not
+  populate `TokSrcOff`/`TokSrcLen` in the first place (the `near:` window prints
+  no punctuation in either case, which is the pre-`RecordTokSpan` shape).
+  **Shifting an empty channel is a no-op**, so the site is latent: it becomes
+  live the day `rlexer` records spans, and whoever does that owns this.
+  Note the stride is variable, so it needs the parallel arrays compacted inside
+  the same loop — `ShiftTokParallel` does not apply.
+- **`rparser.inc:5619` and `zparser.inc:1914`** — APPENDS of a specialized
+  generic function body at `TokCount`, not moves. The destination channels are
+  untouched capacity, so `TokSrcLen` is 0 and `WriteTokenContext` falls back to
+  the raw token's own `SOffset`/`SLen`, which is correct for these. Same
+  deliberate answer the Pascal specializer's splice documents. No defect.
+
+Neither track's gate was run for this; nothing in either was changed.
