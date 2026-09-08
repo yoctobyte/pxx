@@ -1,0 +1,6 @@
+dot   = 33
+brack = 44
+caret = 55
+rmw   = 66
+read  = 70 70
+bare  = 88

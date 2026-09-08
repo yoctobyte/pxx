@@ -4496,6 +4496,59 @@ different claims. Both corrections for the instance above were left in place, in
 the fixture header and the ticket, saying what was measured and against what.
 
 
+## A COMMENT THAT ASSERTS A MEASUREMENT, WHERE THE TABLE UNDER TEST HOLDS ONLY SOME OF THE CASES THE PROBE CAN SPELL — and the cases a reader reaches for first are the ones that miss it
+
+Sibling of the stale-measurement section above, and a harder one, because
+nothing about it ever goes stale: it was false when it was written, it stayed
+false, and it read as checked for as long as it stood.
+
+`compiler/symtab.inc`'s `AliasVisibleHere` carried, in prose:
+
+> measured, the derived-BODY and qualified `TDer.TSel` spellings already
+> resolved without it and only the implementation scope was blind
+
+Re-measured 2026-09-07 at HEAD **and identically on pin v407**: `FAmt: TAmt`
+inside a derived class body and `var q: TDer.TAmt` both answer `unknown type`.
+Not a regression, not a drift — the sentence never described this compiler.
+
+**WHY IT SURVIVED, AND THIS IS THE TRANSFERABLE PART.** The question is "can a
+derived class see a base class's nested type", and Pascal spells a nested type
+seven ways. `AliasVisibleHere` governs **three** of them. A nested RECORD and a
+nested CLASS are UClass **registry** rows, and `FindNestedType` has walked
+`UClsParent` since it was written. A nested ENUM lives in `EnumType*`, which has
+**no owner column at all** and was therefore never scoped in the first place.
+Only a plain alias, a subrange and a procedural type are in `Alias*`.
+
+And a nested record and a nested class are exactly what a reader writes when
+probing this question. The three kinds that come to hand are the three that
+never touch the table under test; they resolved, three of six passed, and
+"already resolved" is what that looks like from the outside.
+
+**The probe was drawn from the wrong population and there was no way to see it
+from the probe.** Nothing errored. Nothing was ambiguous. The rows that passed
+were correct — about a different mechanism. This is
+`devdocs/dev/../CLAUDE.md`'s "every instrument that lies, lies by being CORRECT
+ABOUT SOMETHING ELSE", in the one place it is hardest to notice: a case list
+that looks like one feature and is three tables.
+
+### What to do instead
+
+- **Before believing "kind K works, so the mechanism works", ask which TABLE
+  kind K goes through.** One construct in the source language is routinely
+  several tables in the compiler, and the split is invisible in the spelling.
+- **Name the kind on every row of the fixture.** `test_a_base_class_nested_type_is_visible_to_its_derived_class.pas`
+  does, for this reason: a row labelled only "nested type" cannot tell the next
+  reader that six of its fifteen rows never exercise the code they appear to.
+- **Count the kinds the LANGUAGE has, not the ones your probe has.** Seven here;
+  a probe with two was 100% green on the two it chose.
+- **A comment asserting a measurement is a claim with no owner and no date.**
+  If it is worth writing, write what was measured, when, and against which
+  compiler — and if you cannot, write the mechanism instead of the result.
+
+The correction landed at `24ea941a1` and replaced the sentence rather than
+trimming it, for the reason `FindTypeAlias`'s own header states one screen up in
+the same file: a stale invariant is what the next reader builds on.
+
 ## A TICKET'S PROPOSED MECHANISM IS A HYPOTHESIS, AND A STALE REPRO HIDES THAT — when the new repro is far SIMPLER than the ticket's, the ticket's cause was scenery
 
 Measured 2026-09-05/06 (frankA). The sibling of the section above: that one is

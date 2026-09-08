@@ -9709,8 +9709,37 @@ begin
         result-var write, detected by NOT being followed by :="). Widening it
         would rewrite a recursion into a result read.
         bug-p-a-nested-routine-cannot-assign-the-enclosing-functions-result }
+      { ...AND A SELECTOR IS THE OTHER SPELLING OF THE SAME THING. `Outer.FV :=
+        33` from a nested routine answers NO to the `:=` test above -- the next
+        token is a `.` -- so it fell through to the ordinary identifier path and
+        was emitted as a recursive CALL to Outer. No diagnostic, unbounded
+        recursion, SIGSEGV, and the crash frame names Outer and nothing about the
+        nested routine.
+
+        A SELECTOR IS ENOUGH ON ITS OWN, AND I FIRST WROTE THIS THE CAUTIOUS WAY
+        AND MEASURED IT WRONG. The careful-looking rule is "walk the selector
+        chain and rewrite only if it ends at `:=`", on the reasoning that a
+        qualified name on the RIGHT must be a call. fpc 3.2.2 says otherwise, in
+        two rows: `Outer.FV := Outer.FV + 6` from 60 gives 66, not an unbounded
+        recursion, and a nested `gRead := Outer.FV` guarded by a depth counter
+        reads the CURRENT result rather than re-entering Outer. So under fpc the
+        function's name carrying a selector is the RESULT VARIABLE in either
+        position, and only a BARE name has the two readings the `:=` test exists
+        to separate. `(` is not in the set, so `Outer(x).F` stays a call.
+
+        NESTED PROCEDURE ONLY, AND THAT LIMIT IS NOT CAUTION -- IT IS THE OTHER
+        TICKET. The rewrite's target is the token `Result`, which inside a nested
+        FUNCTION names THAT function's result and not the enclosing one. Widening
+        this to a nested function would swap an unbounded recursion for a SILENT
+        write to the wrong variable, which is strictly worse. The enclosing
+        result needs a distinct spelling first:
+        bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results
+        A nested function keeps today's behaviour, deliberately and visibly.
+        bug-p-a-qualified-enclosing-function-name-in-a-nested-routine-recurses }
       if (CurProc >= 0) and (i + 1 < TokCount) and
-         (Tokens[i + 1].Kind = tkAssign) and
+         ((Tokens[i + 1].Kind = tkAssign) or
+          ((Tokens[nestedStart].Kind <> tkFunction) and
+           (Tokens[i + 1].Kind in [tkDot, tkLBrack, tkCaret]))) and
          CaseEqual(nm, UnqualifiedRoutineName(Procs[CurProc].Name)) and
          (FindSym('Result') >= 0) then
       begin
