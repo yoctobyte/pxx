@@ -257,7 +257,7 @@ pass	tgeneric12.pp	tgeneric	-
 pass	tgeneric13.pp	tgeneric	-	
 skip	tgeneric14.pp	tgeneric	wontfix	dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
 pass	tgeneric15.pp	tgeneric	-	
-skip	tgeneric16.pp	tgeneric	gap	THE SPELLING IS ALL THAT IS LEFT -- reason corrected 2026-09-08 at dffc987ce33e, and the 2026-09-06 version was right about a defect that is now fixed. One divergent line: `TIntegerStack` where fpc prints `TAdvStack<System.LongInt>`. pxx mints a class per ALIAS name instead of under a canonical Template$Args key, so ClassName reports the alias. THE IDENTITY HALF IS CLOSED and this row must not be read as still carrying it: two aliases of ONE specialization are one class since cd2d264c72df (`a1 is TIntBox2` answers TRUE, matching fpc), and a nested specialization no longer leaks between outer specializations since 630c8d31c (the UClass alias table gained the owning-class column its sibling always had). What remains is whether a specialization's ClassName has to match fpc's canonical spelling at all -- an open question, not a measured defect, since both compilers report their own class identity truthfully. bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization owns the residual
+pass	tgeneric16.pp	tgeneric	-	
 pass	tgeneric17.pp	tgeneric	-	
 pass	tgeneric18.pp	tgeneric	-	
 pass	tgeneric19.pp	tgeneric	-	
