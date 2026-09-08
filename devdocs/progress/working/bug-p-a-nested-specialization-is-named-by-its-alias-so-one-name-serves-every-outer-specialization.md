@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-06
-summary: "`TEnumSpec = specialize TEnum<T>` inside a generic class is minted under the ALIAS name, so `specialize TList<Integer>` and `specialize TList<String>` in one program both mint a class called `TEnumSpec`: `duplicate definition of 'TEnumSpec.GetCurrent'; the later body wins`. On real fgl (two TFPGList instantiations) that is three warnings and the program still runs; on a two-line reduction it is a hard `incompatible types: cannot assign Integer to AnsiString` and legal code is refused. Pre-existing -- pin v404 warns identically. MECHANISM CORRECTED 2026-09-06 BY MEASUREMENT: not ScanRangeForNestedSpecs and not NestedSpecKnown, which are not on this path -- the mint trace is EMPTY. The rename that would fix it ALREADY EXISTS and already computes the right names (`TI$TEnumSpec`, `TS$TEnumSpec`); it is unreachable behind two gates, HoistUsed being settable only from NestedSpecArg (a nested name used as a type ARGUMENT, never as a return/field/var type) and EmitHoistedDecls being called only from the DEFERRAL arm. Parked: lifting either gate renames every nested type in every generic class, fgl and rtl-generics included, so it wants a full tier. TOP-LEVEL HALF ADDED 2026-09-06 at 4142d4f20747, and it is a WRONG VALUE in fifteen lines rather than a warning on fgl: `TIntBox = specialize TBox<Integer>` and `TIntBox2 = specialize TBox<Integer>` are ONE type in Pascal and TWO classes here, so `a1 is TIntBox2` answers FALSE where fpc 3.2.2 answers TRUE -- while `a2 := a1` is accepted by both, which is the combination that hides it. AND THE CANONICAL KEY ALREADY EXISTS AND IS ALREADY CORRECT: an INLINE `specialize TBox<Int64>` mints `TBox$Int64` and two of them share identity properly; only the ALIAS spelling mints under the alias name. So the fix is to route ParseSpecialization's `specName` through the existing key and register the alias with RegisterUClassAlias -- not to invent a keying. Explains tgeneric16.pp's one remaining divergent line, whose skip reason blamed inheritance and is about aliasing."
+summary: "TOP-LEVEL HALF FIXED 2026-09-08 at cd2d264c72df; the NESTED half, which is this ticket's title, is OPEN. Fixed: two aliases of ONE specialization (`TIntBox` and `TIntBox2`, both `= specialize TBox<Integer>`) were two classes, so `a1 is TIntBox2` answered FALSE where fpc says TRUE and `a1 as TIntBox2` was a hard Runtime error 219 -- while `a2 := a1` was accepted by BOTH compilers, which is the combination that hid it. NOT fixed by routing the mint through the canonical key (this ticket's own proposal, which renames every alias-bound specialization in fgl and rtl-generics and stays parked for that): when an EQUIVALENT specialization is already declared and visible, the new name is registered as a UCLASS ALIAS of that class and nothing is minted. Deliberately not a second Specializations[] row -- BufferGenericMethod walks that table once per matching row and would re-create the duplicate-method warning this ticket opens with. Equivalence is d98d297de's: same template BY INDEX, same arity, same argument spellings AND same SpecArgIdentity, asked only of rows this scope can see. ClassName measured all three ways -- fpc prints `TBox<System.LongInt>` for both aliases, pin v407 printed `TIntBox`/`TIntBox2` (the defect), pxx now prints `TIntBox` for both: fpc's SHAPE, not fpc's spelling, and the first alias's name is unchanged, which the canonical-key rename would not have managed. STILL OPEN, re-measured at cd2d264c72df and not assumed: `TEnumSpec = specialize TEnum<T>` inside a generic class is still minted under the ALIAS, so `specialize TList7<Integer>` and `specialize TList7<String>` still mint two classes called TEnumSpec and tnest8 still stops at `incompatible types: cannot assign Integer to AnsiString`. The two outer specializations pass DIFFERENT arguments, so the collapse never applies there -- that half genuinely needs the canonical key, which CollectHoistCandidates already computes (`TI$TEnumSpec`, `TS$TEnumSpec`) behind the two gates recorded below. tgeneric16.pp's one divergent line is that half and its skip row stays."
 ---
 
 # The shape
@@ -275,7 +275,26 @@ inheritance at all. `TIntegerStack = specialize TAdvStack<Integer>` is an ALIAS,
 so fpc prints the specialization's own name and pxx prints the alias's. Same
 root, and the row is not burnable until this is decided.
 
-## The "two scopes share a spelling" hazard is MEASURED AND RETIRED (2026-09-07)
+## The "two scopes share a spelling" hazard is NOT retired — CORRECTED 2026-09-08
+
+**The section below says this hazard does not fire and it was wrong.** Measured
+today: two ROUTINE scopes each declaring `type TRec` and
+`TBoxRec = specialize TBox<TRec>` collapsed into ONE specialization, and
+`ib.f.s` answered `"s": no such member` against the outer record. Fixed at
+`d98d297de` under
+`bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide`.
+
+**The measurement below was real; its REACH was the invention.** It paired a
+routine-local `TRec` against a UNIT-LEVEL one — two different tables and two
+different owner columns — and read as a statement about any two scopes. The
+shape that fires needs the SAME KIND of scope on both sides and the SAME ALIAS
+NAME as well: renaming the inner alias, or the inner type, makes it pass. That
+is three names to hold still at once, which is why sampling one pair retired it.
+
+The original section follows unchanged, because the pin-era numbers in it are
+still true of what they measured.
+
+## The "two scopes share a spelling" hazard is MEASURED AND RETIRED (2026-09-07) — SUPERSEDED, see above
 
 This ticket's key is a NAME, so the standing worry beside it has been that two
 different types sharing one spelling in two scopes would dedup to a single
@@ -380,3 +399,79 @@ So the remaining work is the one the summary already states — route
 alias with `RegisterUClassAlias`. `StreamedSpecCanonName` is a second, local
 computation of that same key; when the routing lands, it should collapse into it
 rather than survive beside it.
+
+## 2026-09-08 — THE TOP-LEVEL HALF IS FIXED. The NESTED half is not, and it is the one this ticket is named for.
+
+Landed at compiler `cd2d264c72df`. `TIntBox` and `TIntBox2`, both
+`= specialize TBox<Integer>`, are now ONE class.
+
+**Not by routing the mint through the canonical key.** That is what this ticket
+proposed, and it is the change that renames every alias-bound specialization in
+fgl and rtl-generics — the reason it was parked, and the reason is still good.
+The smaller move is the one the defect actually asks for: when a specialization
+EQUIVALENT to this one is already declared and visible here, register the new
+name as a **UClass alias** of that class and mint nothing. The alias table is
+where a plain `TOptionList = TList;` already lands and `FindUClass` resolves
+through it, so var decls, `X.Create`, casts and `is`/`as` all reach the one
+class.
+
+**Registered as an ALIAS and deliberately NOT as a second `Specializations[]`
+row.** `BufferGenericMethod` walks that table and streams each buffered method
+body once per matching row, so a duplicate row would emit `TIntBox2.Foo` beside
+`TIntBox.Foo` — which is the `duplicate definition …; the later body wins`
+warning this ticket opens with. The bug would have been re-created by the fix.
+
+**Equivalence is `d98d297de`'s, not a new one:** same template BY INDEX, same
+arity, same argument spellings AND same `SpecArgIdentity`, asked only of rows
+this scope can see (`DeclVisibleSect` + `ScopeReachesProc`). So two routines'
+own `TRec` still mint two specializations; only genuinely equal ones collapse.
+
+### The defect was worse than "answers FALSE" — measured on pin v407
+
+```
+assign  7          <- accepted by BOTH compilers, which is what hid it
+is-same FALSE      <- fpc: TRUE
+as-same Runtime error 219 (invalid typecast)
+```
+
+The `as` cast is a hard runtime abort, not a wrong boolean. The assignment
+`a2 := a1` is accepted either way, so any probe built around passing values
+around prints the same thing on a broken compiler as on a correct one.
+
+### ClassName, which is what parked this — measured, all three
+
+|  | first alias | second alias |
+| --- | --- | --- |
+| fpc 3.2.2 | `TBox<System.LongInt>` | `TBox<System.LongInt>` |
+| pin v407 | `TIntBox` | `TIntBox2` |
+| pxx `cd2d264c72df` | `TIntBox` | `TIntBox` |
+
+**fpc's SHAPE, not fpc's spelling** — one type has one `ClassName`, which is the
+property, and the canonical-key rename this ticket proposed would have changed
+the FIRST alias's name too. Nothing here does. The fixture asserts the RELATION
+(`a1.ClassName = a2.ClassName`) and not the name, so it carries no divergence
+that is not this ticket's.
+
+### What is NOT fixed
+
+The **nested** half, which is this ticket's title and its `unest7`/`tnest8`
+repro: `TEnumSpec = specialize TEnum<T>` inside a generic class is still minted
+under the ALIAS, so two outer specializations still mint two classes called
+`TEnumSpec` and `tnest8` still stops at
+`incompatible types: cannot assign Integer to AnsiString`. Re-measured at
+`cd2d264c72df`, not assumed. The two outer specializations pass DIFFERENT
+arguments (`Integer`, `String`), so the collapse above never applies — that half
+genuinely needs the canonical key, and `CollectHoistCandidates` already computes
+it (`TI$TEnumSpec`, `TS$TEnumSpec`) behind the two gates recorded above.
+`tgeneric16.pp`'s one divergent line is that half and its skip row stays.
+
+### Fixture
+
+`test/test_two_aliases_of_one_specialization_are_one_class.pas`
+(`test_alias1class26`), differential against fpc 3.2.2, seven rows. Row 4 is the
+positive control and is drawn from the population the fix changes: collapsing
+two aliases is only correct while the ARGUMENTS agree, and a collapse that
+ignored them answers TRUE there. It goes through `TObject` because fpc refuses
+`a1 is TStrBox` at COMPILE time — "Class or Object types TBox<System.LongInt>
+and TBox<System.ShortString> are not related" — so the row that must print FALSE
+has no oracle written directly.

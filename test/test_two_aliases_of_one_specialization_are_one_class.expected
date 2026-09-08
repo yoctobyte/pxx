@@ -1,0 +1,7 @@
+assign 7
+is-same TRUE
+as-same 7
+is-other FALSE
+method 14 14
+distinct TRUE abab
+onename TRUE

@@ -3915,6 +3915,7 @@ var
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx, nIns: Integer;
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
+  eqSi, eqCi: Integer;   { an equivalent specialization already declared under another name }
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
   qPath: AnsiString;     { non-empty while the current argument is a dotted name }
@@ -4124,6 +4125,66 @@ begin
     if dup then
     begin
       if DebugTrace then writeln('SPEC ', specName, ' = ', templateName, ' (already declared)');
+      NSpecCount := 0;
+      QNeedCount := 0;
+      Next;
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  { AN EQUIVALENT SPECIALIZATION UNDER ANOTHER NAME IS THE SAME TYPE, AND MUST
+    BE THE SAME CLASS.
+
+    `TIntBox = specialize TBox<Integer>` and `TIntBox2 = specialize TBox<Integer>`
+    are ONE type in Pascal. Minting a second class for the second alias made them
+    two, so `a1 is TIntBox2` answered FALSE where fpc 3.2.2 answers TRUE -- while
+    `a2 := a1` was accepted by BOTH compilers, which is the combination that hides
+    it: the assignment agrees and only the identity test disagrees.
+    bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization
+
+    Registered as a UCLASS ALIAS and NOT as a second Specializations[] row, and
+    the difference is not bookkeeping: BufferGenericMethod walks that table and
+    streams each buffered method body once per matching row, so a duplicate row
+    would emit `TIntBox2.Foo` beside `TIntBox.Foo` -- which is the
+    `duplicate definition ...; the later body wins` warning this is fixing.
+    The alias table is where a plain `TOptionList = TList;` already lands, and
+    FindUClass resolves through it, so var decls, X.Create, casts and is/as all
+    reach the one class.
+
+    THE EQUALITY IS THE ONE THIS FILE NOW USES EVERYWHERE: same template BY
+    INDEX (a name is not an identity -- two files may each declare a `TBox<T>`),
+    same arity, same argument spellings AND same SpecArgIdentity, so two scopes'
+    own `TRec` are still two specializations. And it is asked only of rows this
+    scope can actually SEE, by the same two predicates FindSpecialization
+    applies: a row in a unit's implementation, or in another routine, is not an
+    answer here. }
+  eqSi := -1;
+  for k := 0 to SpecializationCount - 1 do
+    if (SpecTemplateIdx[k] = ti) and (SpecNParams[k] = nc) and
+       (not CaseEqual(Specializations[k].Name, specName)) and
+       DeclVisibleSect(SpecUnitIdx[k], SpecDeclImpl[k], IMPLTAB_SPEC, k) and
+       ScopeReachesProc(SpecOwnerProc[k]) then
+    begin
+      dup := True;
+      for i := 0 to nc - 1 do
+        if (not CaseEqual(SpecConcreteNames[k * MAX_TEMPLATE_PARAMS + i], cNames[i])) or
+           (SpecConcreteIds[k * MAX_TEMPLATE_PARAMS + i] <> SpecArgIdentity(cNames[i])) then
+          dup := False;
+      if dup then eqSi := k;
+    end;
+  if eqSi >= 0 then
+  begin
+    eqCi := FindUClass(Specializations[eqSi].Name);
+    { `>= 0` and not an assert: a row whose class is not declared here is one
+      whose declaration was deferred or lives where this scope cannot reach it,
+      and minting normally is the right answer for both. }
+    if eqCi >= 0 then
+    begin
+      if DebugTrace then
+        writeln('SPEC ', specName, ' = ', templateName, ' (alias of ',
+                Specializations[eqSi].Name, ')');
+      RegisterUClassAlias(TokCharsAppend(specName), Length(specName), eqCi);
       NSpecCount := 0;
       QNeedCount := 0;
       Next;
