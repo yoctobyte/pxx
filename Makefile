@@ -16944,6 +16944,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_liftsighdr26 "$$($(TESTTMP)/test_liftsighdr26)" "$$(cat test/test_a_lifted_nested_routines_signature_sees_the_enclosing_local_type.expected)"
 	./$(COMPILER) -Futest/units test/test_a_class_body_alias_does_not_leak_to_the_unit.pas $(TESTTMP)/test_clsaliasown26
 	tools/expect_same.sh test_clsaliasown26 "$$($(TESTTMP)/test_clsaliasown26)" "$$(cat test/test_a_class_body_alias_does_not_leak_to_the_unit.expected)"
+	./$(COMPILER) -Futest/units test/test_an_alias_in_a_used_unit_ranks_with_the_class_rows.pas $(TESTTMP)/test_aliasrank26
+	tools/expect_same.sh test_aliasrank26 "$$($(TESTTMP)/test_aliasrank26)" "$$(cat test/test_an_alias_in_a_used_unit_ranks_with_the_class_rows.expected)"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of

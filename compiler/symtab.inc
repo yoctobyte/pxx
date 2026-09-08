@@ -1953,6 +1953,40 @@ begin
     end;
     Inc(i);
   end;
+  { …AND THE ALIAS ROWS RANK IN THE SAME SCAN AS THE CLASS ROWS.
+
+    They used to be reachable only AFTER this scan failed, so an alias in a used
+    unit could never be seen while ANY unit anywhere declared a real class of
+    that name -- the scan always succeeded and the alias was never asked. A unit
+    writing `IInterface = IMine;` lost to builtinheap's IInterface class row, and
+    the program's `var v: IInterface` bound to the builtin: `no overload of Take
+    matches these arguments / argument types: (record)`, against a candidate
+    also printing `(record)`, which is the diagnostic that hides it.
+
+    The sibling fix (a current-scope alias preference above) could not reach
+    this: a unit's alias has to be RANKED against foreign class rows rather than
+    preferred outright, and preferring it outright would let any used unit's
+    alias beat the current unit's own class.
+
+    STRICTLY GREATER, so a tie keeps the class row and the ordinary case moves
+    nothing. Ambient rows rank equal, so builtinheap keeps every name no unit
+    re-declares at a higher rank.
+    bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name }
+  i := 0;
+  while i < UClsAliasCount do
+  begin
+    if (UClsAliasCi[i] >= 0) and
+       UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) and
+       ClassOwnerVisibleHere(UClsAliasOwnerCi[i]) then
+    begin
+      r := UsesRankOf(CurrentUnitIdx, UClsAliasUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then
+      begin
+        Result := UClsAliasCi[i]; bestRank := r;
+      end;
+    end;
+    Inc(i);
+  end;
   if Result >= 0 then Exit;
   { class-name alias (`TOptionList = TList;`) — resolve to the target row }
   Result := FindUClassAliasCi(lo);
