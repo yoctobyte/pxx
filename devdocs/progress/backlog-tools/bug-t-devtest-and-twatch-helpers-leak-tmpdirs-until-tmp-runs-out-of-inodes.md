@@ -135,3 +135,36 @@ hours, so the ceiling falls around 2026-09-10 late** unless a producer is fixed.
 
 Recorded because a prediction nobody re-measures is indistinguishable from one
 that was wrong. Bytes at this reading: 5% — still reassuring, still irrelevant.
+
+## CORRECTION 2026-09-08 16:15Z — the driver is TIER RUNS, not wall-clock hours
+
+The section above quoted **~11,170 inodes/hour** and put the ceiling "around
+2026-09-10 late". **The per-hour framing is wrong** and a third reading falsifies
+it directly:
+
+```
+13:14Z  ->  443118 used
+16:15Z  ->  443118 used     (identical, three hours later)
+```
+
+Zero drift across 3h01m, because **no tier ran in that window** — seven's last
+run row is 11:52Z (opt), the watcher is `active` with 20h uptime and NRestarts=0,
+and a `ps`-based scan finds no `testmgr` process. `/tmp/testmgr-*` went 42 -> 41
+over the same period: the 6h reaper removed one and nothing created any.
+
+So the two earlier readings did not measure a rate against the clock; they
+measured **however many tier runs happened to fall between them**. Consumption
+is per-run — ~9,070 inodes per `testmgr-*` dir, ~678 per `tstate-at.*` — so the
+correct denominator is the watcher's sampling cadence, which varies with how
+fast the tree moves and goes to zero on a quiet tree.
+
+**What this does and does not change.** The ceiling is still real and still
+approached monotonically, because nothing frees these; what moves is the DATE,
+which is now a function of fleet activity rather than of the calendar. A busy day
+reaches it sooner than 09-10 and a quiet weekend never does. **Do not quote a
+date from this ticket** — quote free inodes (605,458 at this reading) divided by
+the ~10k-per-run figure: roughly **60 more tier runs**, whenever those occur.
+
+Recorded because the per-hour number was relayed to the owner before this
+reading existed, and a prediction with the wrong denominator fails in the
+direction that looks like safety on exactly the quiet days when nobody checks.
