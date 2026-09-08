@@ -5378,6 +5378,19 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# The enclosing function's BARE parameterless name read from inside a nested
+	# routine: the RESULT VARIABLE in objfpc, a recursive CALL in delphi. Both
+	# files or neither -- the objfpc one is the fix (it failed before it, calls=2
+	# against fpc's 1) and the delphi one guards the repair that fixes objfpc by
+	# breaking delphi (it goes red when the mode test is dropped; measured).
+	# The counter is the assertion: both readings return the same 40, so a row
+	# checking only the value passes either way. .expected is fpc 3.2.2's own
+	# output, generated rather than written.
+	# bug-p-a-bare-enclosing-function-name-read-in-a-nested-routine-recurses
+	./$(COMPILER) test/test_nested_bare_enclosing_name_objfpc.pas $(TESTTMP)/test_nested_bare_objfpc26
+	$(TESTTMP)/test_nested_bare_objfpc26 | diff -u test/test_nested_bare_enclosing_name_objfpc.expected -
+	./$(COMPILER) test/test_nested_bare_enclosing_name_delphi.pas $(TESTTMP)/test_nested_bare_delphi26
+	$(TESTTMP)/test_nested_bare_delphi26 | diff -u test/test_nested_bare_enclosing_name_delphi.expected -
 	# hasattr through an UNTYPED PARAMETER -- duck typing's load-bearing
 	# primitive on the one receiver shape whose type is a run-time fact. Here
 	# rather than in test-nilpy for the same reason as the class-base test

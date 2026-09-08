@@ -429,11 +429,10 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (38)
+## backlog-pascal (37)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-p-a-bare-enclosing-function-name-read-in-a-nested-routine-recurses | P | 40 | bug | Inside a NESTED routine, `Inner := F` -- the enclosing function's name, bare, parameterless, in a READ position -- compiles to a recursive CALL to F. fpc 3.2.2 reads the enclosing function's RESULT VARIABLE and does not call anything. Measured with a call counter so the two readings cannot be confused: fpc `calls=1`, pxx `calls=2`, pin v407 `calls=2` (so it predates the 2026-09-07 nested-result work and is untouched by it). The WRITE spellings are all correct now -- `F := x`, `F.FV := x`, `F[i] := x`, `F^ := x` from a nested procedure or function -- so this is the last position where the enclosing name does not mean the result. NOT a trivial widening of the same rewrite: rewriting a bare READ unconditionally would silently stop a genuine parameterless recursive call from a nested routine, so the fix has to decide what `F` with no parentheses means, and that is a dialect decision more than a parser one. | — |
 | bug-p-a-bare-inherited-does-not-forward-arguments | P | 40 | bug | A bare `inherited;` does not forward the caller's arguments | — |
 | bug-p-a-constant-expression-that-overflows-int64-stays-signed | P | 40 | bug | A constant EXPRESSION whose value lands between High(Int64) and High(QWord) keeps tyInt64, so `if (high(int64)+100) > 0` takes the NEGATIVE arm where fpc 3.2.2 takes the positive one — a silent wrong branch on a constant the programmer wrote out in full. The LITERAL half of this is fixed (10e670503: a decimal literal above High(Int64) is tagged tyUInt64 at its creation site); the FOLD half is not, because pxx has no signed/unsigned tag on constant arithmetic at all — ConstEval returns a bare Int64 and the expression path types `tyInt64 + tyInteger` as tyInt64 by kind. Blocks `toperator6.pp`, whose whole subject is that promotion: it declares `operator :=(qword)` beside `operator :=(int64)` and `value := high(int64)+100` must select the QWord one. Second, smaller half in the same area: conversion-operator ranking reads a literal's STATIC kind, not its by-value kind, so `b := 200` picks the Int64 overload where fpc picks the Byte one. | — |
 | bug-p-a-conversion-operators-destination-string-capacity-has-no-carrier | P | 45 | bug | A conversion operator's destination string capacity has no carrier | — |
@@ -967,9 +966,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3565)
+## done (3566)
 
-3565 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3566 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1266,7 +1265,6 @@ _none_
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
-- [p 40] [P] bug-p-a-bare-enclosing-function-name-read-in-a-nested-routine-recurses
 - [p 40] [P] bug-p-a-bare-inherited-does-not-forward-arguments
 - [p 40] [P] bug-p-a-constant-expression-that-overflows-int64-stays-signed
 - [p 40] [P] bug-p-a-for-in-container-must-start-with-an-identifier-token

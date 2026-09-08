@@ -9526,7 +9526,7 @@ var
   nestedStart, nameTokIdx, hdrEnd, bodyBegin, finalCur, cur, depth, i, j, remCount: Integer;
   parenOpen, parenClose: Integer;
   ci, descIdx: Integer;
-  needSelf, beforeColon, isOwnName, found: Boolean;
+  needSelf, beforeColon, isOwnName, found, bareRead: Boolean;
   nsOff, nsLen, selfOff, mOff, mLen: Integer;
   ownN: array[0..127] of AnsiString;
   ownCount: Integer;
@@ -9804,8 +9804,58 @@ begin
         bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results
         A nested function keeps today's behaviour, deliberately and visibly.
         bug-p-a-qualified-enclosing-function-name-in-a-nested-routine-recurses }
+      { A BARE READ IS THE THIRD SPELLING, AND IT IS THE ONE THAT DEPENDS ON THE
+        MODE -- which is how both paragraphs above can be right about `:=` being
+        the discriminator and still leave this hole open.
+
+        Measured 2026-09-08 against fpc 3.2.2 in BOTH modes, with a CALL COUNTER
+        rather than a returned value, because the two readings produce the same
+        number at most depths:
+
+          Inner := F      bare read, nested    objfpc: result var  delphi: CALL
+          Outer.FV := 33  qualified            objfpc: result var  delphi: result var
+          F;              bare, statement      objfpc: ILLEGAL     delphi: ILLEGAL
+
+        So "widening it would rewrite a recursion into a result read", directly
+        above, is TRUE IN DELPHI MODE ONLY. In objfpc there is no competing
+        recursive-call reading to protect: fpc rejects a bare `F;` outright
+        (`Illegal expression`) in both modes, so no legal program spells a
+        recursive call that way from a nested routine. pxx keeps accepting it --
+        accepting what fpc rejects is not a defect -- and nothing has to be given
+        up to close this.
+
+        THE DIALECT DECISION WAS ALREADY MADE, IN THE SIBLING PATH. The own-body
+        read in ParseFactorCore has keyed on `not DelphiMode` since the paramless
+        flip and reproduces BOTH fpc cells exactly, warning under
+        --warn-self-result. This site never consulted the mode at all, so it took
+        the Delphi reading in objfpc too: one concept, two paths, and the second
+        path stayed broken. The ticket read that as an open dialect question and
+        it is not one -- it is the sibling's answer, not applied here.
+        bug-p-a-bare-enclosing-function-name-read-in-a-nested-routine-recurses
+
+        NO EXCLUSIONS, AND I WROTE TWO BEFORE MEASURING EITHER. Both are worth
+        recording because both looked like prudence:
+
+        `@F` -- "obviously" wants the ROUTINE's address, so rewriting under it
+        would take the address of the result variable instead. fpc 3.2.2 says
+        the opposite and says it unambiguously: inside a nested routine
+        `p := @G; PLongInt(p)^ := 99` makes G return 99. `@` of a bare
+        enclosing name IS the address of the result variable there, because the
+        name is the result variable in EVERY position but a call's `(`. The
+        exception would have been a divergence dressed as caution.
+
+        `r.F := 7` with a field named like the enclosing function -- already
+        impossible here: the tkIdent arm at the top of this scan skips any
+        identifier following a dot before `nm` is read. Measured too (both
+        compilers: r.F=7, calls=1). It would have been a condition that can
+        never be false.
+
+        So the rule is uniform and stays uniform: in objfpc, not followed by
+        `(`, it is the result variable. One test, no special cases. }
+      bareRead := (not DelphiMode) and (i + 1 < TokCount) and
+                  (Tokens[i + 1].Kind <> tkLParen);
       if (CurProc >= 0) and (i + 1 < TokCount) and
-         (Tokens[i + 1].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
+         ((Tokens[i + 1].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) or bareRead) and
          CaseEqual(nm, UnqualifiedRoutineName(Procs[CurProc].Name)) and
          (FindSym('Result') >= 0) then
       begin
