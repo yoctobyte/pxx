@@ -922,6 +922,7 @@ begin
     EnumeratorCurrentProp := FindUProp(enumIdx, 'Current');
 end;
 
+
 { The call builder GenMakeMethodCall0 delegates to, split out so a caller that
   has already RESOLVED the member (the enumerator's MoveNext, which may not be
   called MoveNext) does not have to round-trip through a name it does not have. }
@@ -1035,6 +1036,55 @@ begin
   end;
   if FindUField(enumIdx, 'Current') >= 0 then
     EnumeratorCurrentTk := RecFieldType(enumRec, 'Current');
+end;
+
+function EnumeratorOpBeatsBuiltin(varIdx, opPi, builtinTk: Integer): Boolean;
+{ THE for-in PRECEDENCE RULE, STATED ONCE. Does the user `operator enumerator`
+  win over the built-in iteration meaning this container also has?
+
+  Measured 2026-09-08 over five container families against fpc 3.2.2, because
+  the obvious rule -- "a built-in meaning beats a user operator on the same
+  type" -- is FALSE and was drawn from the one family where it cannot be told
+  apart from the real one. fpc runs the OPERATOR for sets, for static and
+  dynamic arrays, and even over a class's own GetEnumerator. What decides is not
+  the container at all:
+
+    for ch in s   (s: AnsiString, ch: Char)     -> builtin, `a b`
+    for i  in s   (the SAME s, i: Integer)      -> OPERATOR, 99
+    for e  in st  (st: set of 0..7, e: 0..7)    -> builtin, `1 2`
+    for i  in st  (the SAME st, i: Integer)     -> OPERATOR, 88
+
+  Two containers, four answers, and the container is constant down each column.
+  So: RANK THE CANDIDATES BY WHETHER THEIR Current TYPE MATCHES THE LOOP
+  VARIABLE, AND GIVE THE TIE TO THE OPERATOR. That one sentence produces every
+  row, the array and GetEnumerator ties included.
+
+  `builtinTk` is the element type the built-in meaning would yield -- tyChar for
+  a string, the element kind for a set, GetEnumerator's Current for a class.
+  Ord(tyUnknown) means the caller has no built-in candidate to weigh, and then
+  the operator wins by default, which is the answer those callers already gave.
+
+  tyAuto is left alone deliberately: `for var x in` has no type to rank against,
+  and inferring one from the loop variable is what tyAuto asks the ENUMERATOR
+  for, so preferring on it would be circular. That exception is not new -- it
+  is lifted verbatim out of the GetEnumerator arm below, which already carried
+  one direction of this rule with its own copy of the reasoning.
+  bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin }
+var eobVarTk, eobOpTk: Integer;
+    eobOpMatch, eobBuiltinMatch: Boolean;
+begin
+  EnumeratorOpBeatsBuiltin := True;          { the TIE goes to the operator }
+  if (varIdx < 0) or (varIdx >= SymCount) or (opPi < 0) then Exit;
+  eobVarTk := Ord(Syms[varIdx].TypeKind);
+  if eobVarTk = Ord(tyAuto) then Exit;
+  eobOpTk := Ord(EnumeratorCurrentTk(ProcRetRecId[opPi] - REC_UCLASS_BASE,
+                                     ProcRetRecId[opPi]));
+  { tyUnknown is "cannot read it", never "mismatch" -- an enumerator this cannot
+    inspect must keep the unconditional answer rather than lose a comparison it
+    never entered. }
+  eobOpMatch      := (eobOpTk   <> Ord(tyUnknown)) and (eobOpTk   = eobVarTk);
+  eobBuiltinMatch := (builtinTk <> Ord(tyUnknown)) and (builtinTk = eobVarTk);
+  if eobBuiltinMatch and (not eobOpMatch) then EnumeratorOpBeatsBuiltin := False;
 end;
 
 function GenMakeCurrentRead(eSym, enumIdx, enumRec: Integer): Integer;
@@ -1598,17 +1648,17 @@ begin
       so preferring on it would be circular. }
     fiDiv   := False;
     fiOpPi  := FindOpOverload(OPK_ENUMERATOR, Ord(Syms[contSym].TypeKind), recId);
-    if (fiOpPi >= 0) and (Syms[varIdx].TypeKind <> tyAuto) then
+    if fiOpPi >= 0 then
     begin
       fiGeMi  := FindUMeth(recId - REC_UCLASS_BASE, 'GetEnumerator');
       fiGeRec := ProcRetRecId[UMthProc_[fiGeMi]];
       fiGeTk  := EnumeratorCurrentTk(fiGeRec - REC_UCLASS_BASE, fiGeRec);
-      if (fiGeTk <> tyUnknown) and (fiGeTk <> Syms[varIdx].TypeKind) then
-      begin
-        fiOpTk := EnumeratorCurrentTk(ProcRetRecId[fiOpPi] - REC_UCLASS_BASE,
-                                      ProcRetRecId[fiOpPi]);
-        fiDiv := (fiOpTk <> tyUnknown) and (fiOpTk = Syms[varIdx].TypeKind);
-      end;
+      { The hand-rolled comparison this replaces was one DIRECTION of the rule:
+        it diverted on a mismatch and kept GetEnumerator on a TIE. fpc gives the
+        tie to the operator -- measured, a class whose GetEnumerator and whose
+        operator both yield Integer runs the OPERATOR. EnumeratorOpBeatsBuiltin
+        carries both directions and the tyAuto exception this arm invented. }
+      fiDiv := EnumeratorOpBeatsBuiltin(varIdx, fiOpPi, Ord(fiGeTk));
     end;
     if fiDiv then
     begin
@@ -1629,6 +1679,27 @@ begin
     else
       elemTk := FindOpOverload(OPK_ENUMERATOR, Ord(Syms[contSym].TypeKind),
                                Syms[contSym].RecName);
+    { A STRING HAS A BUILT-IN ITERATION MEANING AND THIS ARM RAN AHEAD OF IT
+      UNCONDITIONALLY, which is the silent half of this defect: declaring one
+      `operator enumerator(a: AnsiString)` anywhere a unit can see it turned
+      every `for ch in <string>` in range into a call to it, printing a
+      plausible string. The built-in yields Char, so the rule weighs the
+      operator's Current against the loop variable and Char against it, and the
+      answer follows the loop variable rather than the declaration.
+
+      Ord(tyUnknown) for every other container: there is no built-in candidate
+      RESOLVED at this point to weigh against, so the operator keeps the
+      unconditional answer it already had. Not a claim that those containers
+      have no built-in meaning -- a set does -- only that this arm does not know
+      it yet, and a rule that guesses is worse than one that abstains. The set
+      arm is a separate landing and a separate defect: its lookup misses here
+      entirely.
+      bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin }
+    if (elemTk >= 0) and
+       (TypeIsFrozenString(Syms[contSym].TypeKind) or
+        (Syms[contSym].TypeKind = tyAnsiString)) and
+       (not EnumeratorOpBeatsBuiltin(varIdx, elemTk, Ord(tyChar))) then
+      elemTk := -1;
     if elemTk >= 0 then
     begin
       Result := ParseForInOpEnumeratorAST(varIdx, contSym, elemTk);

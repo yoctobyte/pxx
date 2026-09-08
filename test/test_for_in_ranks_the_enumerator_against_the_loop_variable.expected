@@ -1,0 +1,6 @@
+str-char      a b 
+str-char-expr a b c 
+short-char    d e 
+str-int       99 
+set-elem      1 2 
+getenum-tie   44 

@@ -16999,6 +16999,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_mnarity_op26 "$$(grep -c 'enumerator has no parameterless MoveNext' $(TESTTMP)/test_mnarity_op.log)" "1"
 	! ./$(COMPILER) test/test_a_for_in_enumerator_needs_a_parameterless_movenext_getenumerator.pas $(TESTTMP)/test_mnarity_ge26 > $(TESTTMP)/test_mnarity_ge.log 2>&1
 	tools/expect_same.sh test_mnarity_ge26 "$$(grep -c 'enumerator has no parameterless MoveNext' $(TESTTMP)/test_mnarity_ge.log)" "1"
+	# which enumerator a for-in takes is ranked against the LOOP VARIABLE, not
+	# decided by the container: the same string answers characters for a Char
+	# variable and runs the operator for an Integer one, and a TIE (a class whose
+	# GetEnumerator and whose operator both yield Integer) goes to the operator.
+	# Both spellings of the string container, because they must move together.
+	./$(COMPILER) test/test_for_in_ranks_the_enumerator_against_the_loop_variable.pas $(TESTTMP)/test_forinrank26
+	tools/expect_same.sh test_forinrank26 "$$($(TESTTMP)/test_forinrank26)" "$$(cat test/test_for_in_ranks_the_enumerator_against_the_loop_variable.expected)"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of
