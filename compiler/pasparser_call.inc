@@ -1725,6 +1725,9 @@ end;
   argument list, i.e. a real call, and is left alone. }
 function TryParseParenlessMethodRef: Integer;
 var rsym, rci, rmmi, opNode, refNode: Integer;
+    atLastDot, chainCi, savedCur: Integer;
+    trialTok, trialProc, trialSym, trialFrame, trialAst: Integer;
+    savedTk, chainTk: TTypeKind;
 begin
   Result := -1;
   if not DelphiMode then Exit;
@@ -1776,6 +1779,117 @@ begin
   end;
 
   if Tokens[TokPos].Kind <> tkDot then Exit;
+
+  { A CHAINED RECEIVER IS THE FIFTH SPELLING, AND IT IS THE ONE THAT NEEDS A
+    REWIND. `TG.F := TG.Create.Foo` -- construct, then bind one of the
+    instance's methods -- answered `wrong number of parameters in call to
+    TG.Foo`: every arm below resolves the receiver from a SINGLE identifier
+    (a symbol, a class name, a metaclass variable), and a chain is a fourth
+    thing, an EXPRESSION whose type is a class. The depth-1 row works, so the
+    defect is the receiver's shape and not the parenless form.
+
+    THE `@` SPELLING OF THIS EXACT CHAIN WAS FIXED A DAY EARLIER and could
+    simply recurse: `@` commits the arm the moment it is seen, so its sibling
+    site says "rewind nothing, set the stop, recurse". This arm is a TRIAL --
+    it must leave the stream untouched when the shape turns out to be a call --
+    so the same three lines need the marks around them. Same lookahead
+    (LastDotOfDesignator), same stop (AtStopDotTok), same resolution
+    (ResolveNodeRec + FindUMeth); only the failure path differs.
+
+    GATED ON THE LAST DOT BEING DEEPER THAN THE FIRST, so every depth-1
+    designator reaches the arms below untouched and this opens exactly the
+    population that could not compile at all. It also has to run BEFORE them:
+    for `g.Mk.Foo` the depth-1 arm would find `Mk`, commit to `g.Mk` as the
+    reference, and leave `.Foo` stranded -- which is how the `@` twin of this
+    shape used to die on `a statement cannot start with '.'`.
+
+    A `(` after the method name is an argument list, i.e. a real call, and is
+    excluded here as it is below -- the check has to move with the name it is
+    about, which at this depth is at atLastDot + 1 rather than TokPos + 1. }
+  atLastDot := LastDotOfDesignator(TokPos - 1);
+  if (atLastDot > TokPos) and IsMethodNameTokAt(atLastDot + 1) and
+     ((atLastDot + 2 >= TokCount) or (Tokens[atLastDot + 2].Kind <> tkLParen)) then
+  begin
+    trialTok   := TokPos;
+    trialProc  := ProcCount;
+    trialSym   := SymCount;
+    trialFrame := FrameSize;
+    trialAst   := ASTNodeCount;
+    savedCur   := CurASTNode;
+    savedTk    := LastExprTk;
+    { TWO ROUTES TO THE RECEIVER, AND THE SPLIT IS NOT MINE -- it is the one the
+      `@` arms already carry, for a reason measured here again today. Only
+      ParseClassRecordSelectors consults AtStopDotTok; ParseLValueAST, which is
+      where ParseFactor sends a SYMBOL-rooted designator, has its own selector
+      handling and walks straight past the stop. So `TG.Create.Foo` (class-name
+      root, ParseFactor's other route) worked from the first build and
+      `g.Mk.Foo` did not -- and neither did `g.Inner.Foo`, which is the probe
+      that named the symbol ROOT rather than the method-call LINK as the
+      discriminator.
+
+      Hand-building the receiver node and calling the selector walker directly
+      is what the `@` arm at the head of ParseFactorCore does, for exactly this
+      reason. Copying it makes four sites that encode one fact about which
+      walker honours the stop; unifying them means teaching ParseLValueAST the
+      flag, which is safe by construction (AtStopDotTok is -1 on every other
+      path) and is too wide to fold into this fix.
+      refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers }
+    AtStopDotTok := atLastDot;
+    rsym := FindSym(CurTok.SVal);
+    if (rsym >= 0) and (Syms[rsym].RecName >= REC_UCLASS_BASE) and
+       (not UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE]) then
+    begin
+      opNode := AllocNode(AN_IDENT);
+      ASTIVal[opNode] := rsym;
+      ASTTk[opNode] := Ord(tyClass);
+      Next;                { receiver name; CurTok = the first '.' }
+      chainTk := tyClass;
+      CurASTNode := ParseClassRecordSelectors(opNode, Syms[rsym].RecName, chainTk);
+    end
+    else
+      ParseFactor;
+    AtStopDotTok := -1;
+    rmmi   := -1;
+    chainCi := -1;
+    { The walk must have stopped exactly where the lookahead said it would; if
+      it did not, there is no method name to resolve and the rewind is the
+      honest answer rather than a guess about what it read instead. }
+    if (TokPos - 1 = atLastDot) and (CurTok.Kind = tkDot) then
+    begin
+      chainCi := ResolveNodeRec(CurASTNode);
+      if (chainCi >= REC_UCLASS_BASE) and
+         (not UClsIsRecord[chainCi - REC_UCLASS_BASE]) then
+        rmmi := FindUMeth(chainCi - REC_UCLASS_BASE, GetTokenStr(atLastDot + 1));
+    end;
+    if (rmmi >= 0) and (not MethodResultSatisfiesTarget(rmmi)) then
+    begin
+      { committed }
+      opNode := CurASTNode;
+      Next;   { the stop '.'; CurTok = method name }
+      refNode := AllocNode(AN_METHODREF);
+      ASTIVal[refNode] := UMthProc_[rmmi];
+      ASTLeft[refNode] := opNode;
+      ASTRight[refNode] := UMthVirSlot[rmmi];
+      ASTTk[refNode] := Ord(tyRecord);
+      Next;   { consume method name }
+      Result := refNode;
+      Exit;
+    end;
+    { NOT a reference: rewind the four tables a trial parse dirties and the
+      token stream with them, then leave. The caller's ordinary designator
+      parse is the correct reading and must see the stream as it was.
+      SymCount is the one that moves most and the one an inherited rollback
+      list omitted at the other trial site in this compiler. }
+    ProcRollbackTo(trialProc);
+    SymRollbackTo(trialSym);
+    FrameSize    := trialFrame;
+    ASTNodeCount := trialAst;
+    CurASTNode   := savedCur;
+    LastExprTk   := savedTk;
+    TokPos := trialTok - 1; Next;
+    Exit;
+  end;
+
   if Tokens[TokPos + 1].Kind <> tkIdent then Exit;
   if Tokens[TokPos + 2].Kind = tkLParen then Exit;   { an argument list: a CALL }
 

@@ -5378,6 +5378,17 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# Delphi mode, parenless method reference with a CHAINED receiver:
+	# `TG.F := TG.Create.Foo`. The receiver used to have to be one identifier, so
+	# the depth-1 spelling worked and a chain reported `wrong number of
+	# parameters in call to TG.Foo`. Row 3 is the load-bearing one -- the same
+	# token shape that IS a call, which only works if the failed trial put back
+	# TokPos, ProcCount, SymCount, FrameSize and the AST arena. Burns
+	# tgeneric106.pp from pxx.skip, whose objfpc twin tgeneric107 burned with the
+	# `@` spelling a day earlier. .expected is fpc 3.2.2's own output.
+	# bug-p-a-delphi-parenless-method-reference-cannot-have-a-chained-receiver
+	./$(COMPILER) test/test_delphi_parenless_methodref_chained_receiver.pas $(TESTTMP)/test_delphi_chainref26
+	$(TESTTMP)/test_delphi_chainref26 | diff -u test/test_delphi_parenless_methodref_chained_receiver.expected -
 	# The enclosing function's BARE parameterless name read from inside a nested
 	# routine: the RESULT VARIABLE in objfpc, a recursive CALL in delphi. Both
 	# files or neither -- the objfpc one is the fix (it failed before it, calls=2
