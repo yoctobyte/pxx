@@ -38,3 +38,6 @@ pascal26: error: compiled successfully but wrote no output file: /tmp/testmgr-sc
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-08 — auto-closed by the seven watcher: `test-emit-obj#src:test/c_obj_data_dup_a.c` passes at d0e253df7e7a (tier full); it was red at 1b59d1bbc364. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
