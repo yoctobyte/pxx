@@ -427,6 +427,61 @@ begin
     end;
 end;
 
+procedure StashTokParallel(dst, src: Integer);
+{ Copy token `src`'s THIRTEEN parallel channels into PendNest slot `dst`, and
+  UnstashTokParallel copies them back onto a token index at the flush.
+
+  THE NESTED-ROUTINE STASH IS THE THIRD TOKEN MOVER AND IT WAS NOT IN THIS
+  FILE'S AUDIT. ShiftTokParallel covers a splice WITHIN Tokens[]; a lift copies
+  a run OUT to PendNestTok, deletes it, and appends it back at TokCount much
+  later, and it carried the TRawToken alone. The two spelling channels were the
+  loud half -- every syntax error after a lift named the wrong token and drew
+  the window eleven tokens early. The seven directive states were the quiet
+  half, and it is not cosmetic: measured 2026-09-08, `{$R+}` was NOT in force
+  inside a lifted nested routine's body, so `b[9]` on a `1..3` array stored and
+  the program continued where fpc 3.2.2 raises Runtime error 201.
+
+  Same list as EnsureTokCapacity's and ShiftTokParallel's, third copy, and the
+  three sit in one file for that reason: a new parallel array must be added to
+  all three or it desynchronises at whichever one was missed. }
+begin
+  PendNestPackRecords[dst] := TokPackRecords[src];
+  PendNestQChecks[dst]     := TokQChecks[src];
+  PendNestAssertions[dst]  := TokAssertions[src];
+  PendNestRChecks[dst]     := TokRChecks[src];
+  PendNestIChecks[dst]     := TokIChecks[src];
+  PendNestNChecks[dst]     := TokNChecks[src];
+  PendNestScopedEnums[dst] := TokScopedEnums[src];
+  PendNestPackEnum[dst]    := TokPackEnum[src];
+  PendNestHMinus[dst]      := TokHMinus[src];
+  PendNestSrcOff[dst]      := TokSrcOff[src];
+  PendNestSrcLen[dst]      := TokSrcLen[src];
+  PendNestCAttrFlags[dst]  := CAttrFlags[src];
+  PendNestCAttrAlign[dst]  := CAttrAlignValues[src];
+end;
+
+procedure UnstashTokParallel(dst, src: Integer);
+{ The inverse of StashTokParallel: PendNest slot `src` onto token index `dst`.
+  The spelling channels are carried VERBATIM and not zeroed -- these are real
+  tokens the programmer wrote, moved rather than synthesized, so they have a
+  source range and it is the whole point of restoring them. See the note in
+  ShiftTokParallel about why its own gap-fill zeroes instead. }
+begin
+  TokPackRecords[dst]   := PendNestPackRecords[src];
+  TokQChecks[dst]       := PendNestQChecks[src];
+  TokAssertions[dst]    := PendNestAssertions[src];
+  TokRChecks[dst]       := PendNestRChecks[src];
+  TokIChecks[dst]       := PendNestIChecks[src];
+  TokNChecks[dst]       := PendNestNChecks[src];
+  TokScopedEnums[dst]   := PendNestScopedEnums[src];
+  TokPackEnum[dst]      := PendNestPackEnum[src];
+  TokHMinus[dst]        := PendNestHMinus[src];
+  TokSrcOff[dst]        := PendNestSrcOff[src];
+  TokSrcLen[dst]        := PendNestSrcLen[src];
+  CAttrFlags[dst]       := PendNestCAttrFlags[src];
+  CAttrAlignValues[dst] := PendNestCAttrAlign[src];
+end;
+
 procedure RecordTokSpan(idx, startPos, endPos: Integer);
 { Record token `idx`'s SOURCE SPELLING -- Source[startPos..endPos-1] -- into
   TokSrcOff/TokSrcLen. THE one implementation, called by every frontend's lexer.

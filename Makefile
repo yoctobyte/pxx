@@ -16944,6 +16944,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_liftsighdr26 "$$($(TESTTMP)/test_liftsighdr26)" "$$(cat test/test_a_lifted_nested_routines_signature_sees_the_enclosing_local_type.expected)"
 	./$(COMPILER) -Futest/units test/test_a_class_body_alias_does_not_leak_to_the_unit.pas $(TESTTMP)/test_clsaliasown26
 	tools/expect_same.sh test_clsaliasown26 "$$($(TESTTMP)/test_clsaliasown26)" "$$(cat test/test_a_class_body_alias_does_not_leak_to_the_unit.expected)"
+	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
+	# in force inside its body ({$$R-} arm is the control), and a later syntax error
+	# names the token it is actually at. The runtime row cannot be a byte copy of
+	# the fpc oracle -- fpc prints `Runtime error 201 at $$...` and we print our own
+	# text -- so the CLAIM is the trap and the exit code, which both compilers agree on.
+	./$(COMPILER) test/test_a_lifted_nested_routine_keeps_its_token_channels.pas $(TESTTMP)/test_liftchan26
+	tools/expect_same.sh test_liftchan26 "$$($(TESTTMP)/test_liftchan26 || echo "exit=$$?")" "$$(printf 'unchecked 20\nbefore-checked\nRuntime error 201 (range check error)\nexit=201')"
+	! ./$(COMPILER) test/test_a_lifted_nested_routine_keeps_its_token_channels_diag.pas $(TESTTMP)/test_liftchandiag26 > $(TESTTMP)/test_liftchandiag.log 2>&1
+	grep -q "expected 'then' before '2'" $(TESTTMP)/test_liftchandiag.log
+	grep -q "if q >>> 2 then" $(TESTTMP)/test_liftchandiag.log
 	./$(COMPILER) test/test_a_routine_local_type_keys_its_own_specialization.pas $(TESTTMP)/test_speckeyid26
 	tools/expect_same.sh test_speckeyid26 "$$($(TESTTMP)/test_speckeyid26)" "$$(cat test/test_a_routine_local_type_keys_its_own_specialization.expected)"
 	./$(COMPILER) test/test_two_aliases_of_one_specialization_are_one_class.pas $(TESTTMP)/test_alias1class26

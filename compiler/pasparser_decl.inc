@@ -10339,6 +10339,11 @@ begin
   for i := nestedStart to finalCur - 1 do
   begin
     PendNestTok[PendNestCount] := Tokens[i];
+    { …and the thirteen channels beside it. The TRawToken alone was carried, so
+      the appended copy inherited whatever sat at the destination indices: the
+      wrong source spelling for every later diagnostic, and the wrong {$R+}/{$Q+}
+      state for the body itself. See StashTokParallel. }
+    StashTokParallel(PendNestCount, i);
     Inc(PendNestCount);
   end;
 
@@ -10350,9 +10355,26 @@ begin
   Tokens[hdrEnd + 2].Kind := tkSemicolon;
   Tokens[hdrEnd + 2].IVal := 0; Tokens[hdrEnd + 2].Line := Tokens[nestedStart].Line;
   Tokens[hdrEnd + 2].SOffset := 0; Tokens[hdrEnd + 2].SLen := 0;
+  { …and the two synthesized tokens own no source range. Their TRawToken spans
+    are cleared above; the PARALLEL channels at those indices still held the
+    body tokens they displaced, which is the same defect one array over. }
+  TokSrcOff[hdrEnd + 1] := 0; TokSrcLen[hdrEnd + 1] := 0;
+  TokSrcOff[hdrEnd + 2] := 0; TokSrcLen[hdrEnd + 2] := 0;
   remCount := finalCur - (hdrEnd + 3);
   if remCount > 0 then
   begin
+    { THE THIRTEEN PARALLEL ARRAYS MOVE WITH Tokens[], and this loop moved only
+      Tokens[]. It is a hand-written remove rather than a RemoveTokens call --
+      which is where ShiftTokParallel would have come from for free -- so every
+      token after a lifted nested routine read its SPELLING from the slot the
+      deleted body used to occupy. That is why a later syntax error in the file
+      named a token remCount positions early and drew its `near:` window there:
+      `if q 2 then` was reported as `expected 'then' before 'q'` over a window
+      from a routine three declarations up.
+      Called before the move with the OLD TokCount in place, which is
+      ShiftTokParallel's stated contract.
+      bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token }
+    ShiftTokParallel(hdrEnd + 3, -remCount);
     for i := finalCur to TokCount - 1 do
       Tokens[i - remCount] := Tokens[i];
     TokCount := TokCount - remCount;
@@ -10390,6 +10412,7 @@ begin
   begin
     EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount] := PendNestTok[i];
+    UnstashTokParallel(TokCount, i);   { the thirteen channels; see StashTokParallel }
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   end;
   { One DeclItem span per stashed routine (boundaries recorded at stash time), so

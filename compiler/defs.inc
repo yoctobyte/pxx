@@ -2892,6 +2892,31 @@ var
     fresh top-level routine once the enclosing routine finishes. See
     ParseNestedRoutine / FlushPendingNestedProcs in pasparser_decl.inc. }
   PendNestTok        : array[0..MAX_NESTED_TOKENS-1] of TRawToken;
+  { …and the THIRTEEN token-parallel channels, which the stash carried none of.
+    The stash/flush is a THIRD token mover beside InsertTokens and RemoveTokens
+    and it was never added to ShiftTokParallel's audit, so a lifted body was
+    re-parsed against whatever sat at the appended indices: the two spelling
+    channels (a later syntax error named the wrong token) and, silently, the
+    seven directive states -- MEASURED 2026-09-08, `{$R+}` was NOT in force
+    inside a lifted nested routine, so an out-of-range store wrote and the
+    program carried on where fpc 3.2.2 raises Runtime error 201.
+    StashTokParallel / UnstashTokParallel in lexer.inc hold this list; it is the
+    same list as EnsureTokCapacity's and ShiftTokParallel's and a new parallel
+    array must be added to all three.
+    bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token }
+  PendNestPackRecords : array[0..MAX_NESTED_TOKENS-1] of Integer;
+  PendNestQChecks     : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestAssertions  : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestRChecks     : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestIChecks     : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestNChecks     : array[0..MAX_NESTED_TOKENS-1] of Byte;
+  PendNestScopedEnums : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestPackEnum    : array[0..MAX_NESTED_TOKENS-1] of Integer;
+  PendNestHMinus      : array[0..MAX_NESTED_TOKENS-1] of Boolean;
+  PendNestSrcOff      : array[0..MAX_NESTED_TOKENS-1] of Integer;
+  PendNestSrcLen      : array[0..MAX_NESTED_TOKENS-1] of Integer;
+  PendNestCAttrFlags  : array[0..MAX_NESTED_TOKENS-1] of Byte;
+  PendNestCAttrAlign  : array[0..MAX_NESTED_TOKENS-1] of Integer;
   PendNestCount      : Integer;
   { Per-routine boundaries within PendNestTok: a single enclosing body may stash
     several nested routines back to back, so the flush records each as its own

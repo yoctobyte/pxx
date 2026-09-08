@@ -429,7 +429,7 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (40)
+## backlog-pascal (39)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -449,7 +449,6 @@ _none_
 | bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses | P | 55 | bug | When two units each specialize the other's generic through mutually recursive implementation-section `uses`, the specialized method bodies are spliced somewhere the parser will not accept a method implementation: `expected 'begin' before '.'`, near `; end ; class procedure TSomeGeneric1LongInt >>> . Test ;`. Reduced to 30 lines, two units, no corpus. Was hidden behind bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters until 2026-09-07; that fix moved the wall here and did not reach it. The conformance row is tgeneric91.pp. | — |
 | bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow | P | 55 | bug | A string literal bound to a PWideChar is emitted narrow, and only the cast surface refuses | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
-| bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token | P | 40 | bug | Once any nested routine has been lambda-lifted, every LATER syntax error in the file reports the right LINE with the wrong token and the wrong `near:` window. Nine-line repro: `if q 2 then` on line 18 is reported as `pascal26:18: error: expected 'then' before 'q'` with `near: procedure TC . Later ; var >>> q : Integer` -- line 15's tokens. Without the nested routine the identical error reads `before '2'` with the right window. So CurTok (which supplies the line) and TokPos (which supplies both the name and the window) are out of step after a lift. WHICH of the two moved is NOT established and must not be guessed: this diagnostic cost a session an hour by sending it to a routine 128 lines from the actual defect, and a ticket that names the wrong mechanism would cost the next one the same. | — |
 | bug-p-an-alias-in-a-used-unit-loses-to-a-class-row-of-the-same-name | P | 45 | bug | An alias in a used unit loses to a same-named class row from another unit | — |
 | bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid | P | 60 | bug | An interface name in a var initialiser stores the GUID's ADDRESS, not the GUID | — |
 | bug-p-declared-cannot-see-a-used-units-declarations | P | 50 | bug | `{$if declared(X)}` cannot see a used unit's declarations, and answers False rather than refusing | — |
@@ -969,9 +968,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3558)
+## done (3559)
 
-3558 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3559 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1275,7 +1274,6 @@ _none_
 - [p 40] [P] bug-p-a-for-in-container-must-start-with-an-identifier-token
 - [p 40] [P] bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
-- [p 40] [P] bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token
 - [p 40] [P] bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list
 - [p 40] [T] bug-t-a-restart-converts-owned-scratch-into-unowned-scratch-and-nothing-observes-it
 - [p 40] [T] bug-t-pasmith-returns-only-integer-kinds-so-optfuzz-is-blind-to-the-return-type-axis
