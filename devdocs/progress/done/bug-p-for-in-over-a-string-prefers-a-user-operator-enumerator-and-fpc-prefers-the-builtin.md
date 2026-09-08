@@ -264,4 +264,4 @@ does not miss; it is never asked.
   (`set-int` and `set-longint` go red at HEAD).
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 10585d43f.
