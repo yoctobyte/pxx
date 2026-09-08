@@ -629,6 +629,21 @@ autonomously, and said why in the commit. So the transcript has three things
 that read alike — a user rejection, a denial-by-policy, and a guardrail the
 agent may lift itself — and only the first two are a session being stuck.
 
+**AND READ *WHEN*, BECAUSE A TRANSCRIPT GREP COUNTS YOUR OWN QUERY AND ANSWERS
+ABOUT THE WHOLE SESSION.** Measured 2026-09-08 on this seat's own transcript:
+`grep -c "The user doesn't want to proceed with this tool use"` said **16** where
+the truth was **5**. The phrase is in the command text of every search for it and
+in the output of every earlier one — **a grep for a denial cannot tell a denial
+from a search for one, and the search is in the file by the time you read it.**
+The discriminator is `is_error: true` on a `tool_result` block, never the string;
+frankS reached the same place independently the same day and its own count was
+inflated 4x. **And the AGE is the bigger trap: all five of mine were real and the
+newest was SIX DAYS OLD**, in a session that had been working fine throughout —
+so "is there a refusal in your transcript" answers YES for a seat that is not
+stuck and never was. Ask whether the newest denial falls AFTER the last
+successful tool call. Anything else is a question about the session's history
+wearing the shape of a question about its state.
+
 **"NO COMMITS IN N HOURS" HAS TWO CAUSES THAT LOOK IDENTICAL — blocked, and
 ENDED ITS TURN.** Commit count cannot separate them and neither can the tree;
 the discriminator is whether the session has an **unanswered turn**, which it
