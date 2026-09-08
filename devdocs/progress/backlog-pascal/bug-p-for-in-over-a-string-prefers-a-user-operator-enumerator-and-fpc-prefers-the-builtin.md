@@ -128,9 +128,16 @@ Not "pxx prefers the operator": pxx prefers the operator where fpc takes the
 builtin (all three string rows) **and** takes the builtin where fpc prefers the
 operator (`set-sym`). The set rows also reproduce the two-arms divergence this
 ticket predicted, live today — `for i in st` answers `1 2` and `for i in st + [4]`
-answers `88`, one program, two spellings, because the symbol arm's operator
-lookup is keyed on `Syms[contSym].RecName` and misses for a set while the
-expression arm at `pasparser_stmt.inc:3529` keys on `ASTTk` and hits.
+answers `88`, one program, two spellings.
+
+**The two answers are measured; the mechanism below is READ, not measured.** The
+symbol arm (`pasparser_stmt.inc:1593`) asks
+`FindOpOverload(OPK_ENUMERATOR, Ord(TypeKind), Syms[contSym].RecName)` for a
+non-string container and the expression arm (`:3529`) asks
+`FindOpOverload(OPK_ENUMERATOR, ASTTk[forcNode], ResolveNodeRec(forcNode))`, so
+the two keys differ in their second component and only the symbol one can miss
+on it. That is consistent with what the rows show and is not the same as having
+watched the lookup fail — check it with a probe before writing it into the fix.
 
 ### Half the rule is already in the tree, in the arm that got it right
 
