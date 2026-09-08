@@ -6741,6 +6741,10 @@ begin
     end;
   end;
   PreScanPass := False;
+  { The unit's half of the same flush ParseProgram does -- see
+    FlushPendingFuncSpecializations. Before afterImpTok is read, so the token it
+    records is the one after the splice. }
+  FlushPendingFuncSpecializations;
   afterImpTok := TokPos - 1;   { the unit's terminating `end` }
 
   { ===== Body pass (pass 2) =====

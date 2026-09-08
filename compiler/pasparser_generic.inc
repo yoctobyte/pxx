@@ -4610,6 +4610,26 @@ begin
     end;
 end;
 
+function PendFuncQueued(const nm: AnsiString; nValParams: Integer): Boolean;
+{ Is a body for this mangled name and parameter count already WAITING to be
+  parsed? SpecFuncAlreadyEmitted asks Procs[], which is the right question while
+  bodies are spliced immediately and the wrong one once they are queued: nothing
+  is registered until the flush, so two sweeps that both reach one use -- a local
+  template's own sweep and SpecializeImportedGenericFuncUses' re-sweep of the
+  same stream -- would each queue it and the second parse would be a duplicate
+  routine. Asked on the PAIR for the same reason SpecFuncAlreadyEmitted is:
+  siblings share a mangled name and are told apart by their arity. }
+var i: Integer;
+begin
+  PendFuncQueued := False;
+  for i := 0 to PendFuncCount - 1 do
+    if CaseEqual(PendFuncName[i], nm) and (PendFuncNValPar[i] = nValParams) then
+    begin
+      PendFuncQueued := True;
+      Exit;
+    end;
+end;
+
 procedure SpecializeInlineGenericFuncUses(gfi: Integer);
 const MAX_INLINE_SPECS = 64;
 var i, k, q, j, nSpec, nArg, base, sweepEnd, sg: Integer;
@@ -4882,28 +4902,87 @@ begin
         PAIR and not on the name, because with siblings the name alone is
         exactly what cannot tell those apart from a sibling's body. }
       if SpecFuncAlreadyEmitted(specNames[k], GenericFuncNValParams[sg]) then Continue;
-      SpecializeTemplateName := GenericFuncs[sg].Name;
+      { ...and against the QUEUE as well, which the disk guard above cannot see.
+        Two sweeps of one stream (a local template, then the imported re-sweep)
+        both reach this line before either body has been parsed, so a check that
+        only asks Procs[] answers "not yet" twice and queues the same body twice.
+        The second parse is then a duplicate routine. }
+      if PendFuncQueued(specNames[k], GenericFuncNValParams[sg]) then Continue;
+      { QUEUED, NOT SPLICED HERE -- this is the whole fix. TokPos is the
+        TEMPLATE's own declaration position (or the `uses` clause, for an
+        imported one), and a concrete body spliced there can only see types
+        declared ABOVE it. FlushPendingFuncSpecializations empties this where the
+        declaration section ENDS, which is the first point every top-level type
+        of the compilation unit exists.
+        bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section }
+      if PendFuncCount >= MAX_PENDING_SPECS then
+        Error('too many pending generic-routine specializations');
+      PendFuncGfi[PendFuncCount]     := sg;
+      PendFuncName[PendFuncCount]    := specNames[k];
+      PendFuncNValPar[PendFuncCount] := GenericFuncNValParams[sg];
+      PendFuncNSub[PendFuncCount]    := specNArgs[k];
       { The substitution set, one entry per type parameter. The engine has always
         been MAX_TEMPLATE_PARAMS wide -- this site simply never filled more than
-        slot 0. }
-      SpecSubCount := specNArgs[k];
-      for q := 0 to SpecSubCount - 1 do
+        slot 0. Copied into the queue rather than left in the SpecSub* globals:
+        the flush happens much later and every other specialization in between
+        overwrites them. }
+      for q := 0 to specNArgs[k] - 1 do
       begin
-        SpecSubNames[q]  := GenericFuncParams[sg * MAX_TEMPLATE_PARAMS + q];
-        SpecSubValues[q] := specArgs[k * MAX_TEMPLATE_PARAMS + q];
-        SpecSubKinds[q]  := specArgKinds[k * MAX_TEMPLATE_PARAMS + q];
+        PendFuncSubNm[PendFuncCount * MAX_TEMPLATE_PARAMS + q]  :=
+          GenericFuncParams[sg * MAX_TEMPLATE_PARAMS + q];
+        PendFuncSubVal[PendFuncCount * MAX_TEMPLATE_PARAMS + q] :=
+          specArgs[k * MAX_TEMPLATE_PARAMS + q];
+        PendFuncSubKd[PendFuncCount * MAX_TEMPLATE_PARAMS + q]  :=
+          specArgKinds[k * MAX_TEMPLATE_PARAMS + q];
       end;
-      { SpecializeStream splices at TokPos, and CurTok is holding the token AT
-        TokPos-1 — so step back, splice in front of it, and the `Next` below reads
-        the first spliced token. When ParseSubroutine finishes, CurTok is back on
-        the token it was holding, which is what the caller expects. }
-      Dec(TokPos);
-      SpecializeStream(GenericFuncs[sg].TokStart, GenericFuncs[sg].TokCount,
-                       specNames[k]);
-      Next;
-      ParseSubroutine;
+      Inc(PendFuncCount);
     end;
   end;
+end;
+
+{ Splice and parse every generic-routine specialization body queued by
+  SpecializeInlineGenericFuncUses, at the CURRENT position.
+
+  Called where a compilation unit's declaration section ends -- ParseProgram just
+  before `afterDeclTok`, ParseUnit just before `afterImpTok` -- because that is
+  the first token at which every top-level type of that section is declared, and
+  the concrete body's whole problem is that it names one of them.
+
+  SPLICING HERE MOVES NO RECORDED INDEX, which is why it is safe at a point the
+  pre-scan has already walked: every DeclItem span was recorded BEHIND this
+  token, and pass 2 has not started (Pass2Active is False), so nothing that
+  AdjustPass2Spans exists for is live yet. That is the same reasoning
+  SpecializeStreamAt's own note gives from the other side.
+
+  A `while` over a count that the loop body can GROW, deliberately: parsing one
+  concrete body can register another specialization -- a generic routine that
+  calls a second one -- and a `for` snapshots the bound. }
+procedure FlushPendingFuncSpecializations;
+var p, q: Integer;
+begin
+  p := 0;
+  while p < PendFuncCount do
+  begin
+    SpecializeTemplateName := GenericFuncs[PendFuncGfi[p]].Name;
+    SpecSubCount := PendFuncNSub[p];
+    for q := 0 to SpecSubCount - 1 do
+    begin
+      SpecSubNames[q]  := PendFuncSubNm[p * MAX_TEMPLATE_PARAMS + q];
+      SpecSubValues[q] := PendFuncSubVal[p * MAX_TEMPLATE_PARAMS + q];
+      SpecSubKinds[q]  := PendFuncSubKd[p * MAX_TEMPLATE_PARAMS + q];
+    end;
+    { SpecializeStream splices at TokPos, and CurTok is holding the token AT
+      TokPos-1 — so step back, splice in front of it, and the `Next` below reads
+      the first spliced token. When ParseSubroutine finishes, CurTok is back on
+      the token it was holding, which is what the caller expects. }
+    Dec(TokPos);
+    SpecializeStream(GenericFuncs[PendFuncGfi[p]].TokStart,
+                     GenericFuncs[PendFuncGfi[p]].TokCount, PendFuncName[p]);
+    Next;
+    ParseSubroutine;
+    Inc(p);
+  end;
+  PendFuncCount := 0;
 end;
 
 procedure SpecializeImportedGenericFuncUses;

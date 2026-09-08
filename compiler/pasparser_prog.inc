@@ -1946,6 +1946,14 @@ begin
     `o.Equals(x)` on a static TObject sees the member.
     feature-a-tobject-root-method-vmt-slots }
   EnsureTObjectRootMethods;
+  { Every generic-ROUTINE specialization body queued during pass 1, spliced HERE
+    rather than at the template's own position -- this is the first token at
+    which every top-level type of the program is declared, which is exactly what
+    the concrete body needs and what the old splice position could not give it.
+    Before afterDeclTok is read, so the `begin` this records is the one after the
+    splice. See FlushPendingFuncSpecializations.
+    bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section }
+  FlushPendingFuncSpecializations;
   afterDeclTok := TokPos - 1;   { the program-body `begin` (re-read after pass 2) }
 
   { ===== Body pass (pass 2) =====

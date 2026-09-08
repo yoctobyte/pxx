@@ -3085,6 +3085,25 @@ var
   PendingSpecTi    : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecIdx   : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecCount : Integer;
+  { GENERIC-ROUTINE specializations awaiting their body, the routine-side twin of
+    PendingSpec* above -- and it exists for the same reason, one section further
+    out. SpecializeInlineGenericFuncUses used to splice the concrete body at
+    TokPos, which is the TEMPLATE's own declaration position, so the substituted
+    type argument had to be declared BEFORE the template. That is a real
+    constraint FPC does not have and it bites three ways: an imported template
+    specialized on a type the PROGRAM declares (tgenfunc19.pp), a LOCAL template
+    declared above the type it is specialized on, and a routine-local type
+    argument, which is never in scope at top level at all (tgenfunc10.pp).
+    Queued here and flushed where the declaration section ENDS instead.
+    bug-p-an-imported-generic-routine-is-spliced-before-the-programs-own-type-section }
+  PendFuncGfi      : array[0..MAX_PENDING_SPECS-1] of Integer;   { GenericFuncs[] index }
+  PendFuncName     : array[0..MAX_PENDING_SPECS-1] of AnsiString;
+  PendFuncNSub     : array[0..MAX_PENDING_SPECS-1] of Integer;
+  PendFuncNValPar  : array[0..MAX_PENDING_SPECS-1] of Integer;
+  PendFuncSubNm    : array[0..MAX_PENDING_SPECS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  PendFuncSubVal   : array[0..MAX_PENDING_SPECS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  PendFuncSubKd    : array[0..MAX_PENDING_SPECS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+  PendFuncCount    : Integer;
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
