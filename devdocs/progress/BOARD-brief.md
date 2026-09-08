@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:27 unfinished:22 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:54 backlog-pascal:33 backlog-decide:44 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3570 rejected:79`
+`working:26 unfinished:22 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:54 backlog-pascal:33 backlog-decide:44 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3571 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization` [P] — owner: frankS
 - `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
-- `bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord

@@ -12226,6 +12226,26 @@ begin
                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
 end;
 
+function SameExactTypeKind(a, b: TTypeKind): Boolean;
+{ Are these two kinds the SAME TYPE, for a comparison whose semantics is an
+  EXACT match? Only one pair differs from `a = b`: `Integer` and `LongInt` are
+  one type -- both 4-byte signed, FPC declares one as the other's alias -- and
+  they carry distinct kinds here (tyInteger / tyInt32), so a bare comparison
+  discriminates on the SPELLING. See MatchParamExact below for what that cost
+  once (bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching).
+
+  Extracted when the second exact-match site appeared -- for-in enumerator
+  precedence, which asks whether an `operator enumerator`'s Current type IS the
+  loop variable's. It reproduced the closed bug exactly: `for l in st` with
+  `l: longint` took the built-in where FPC runs the operator, while the same
+  loop spelled `integer` ran it. Two copies is the point to name the rule
+  rather than to write it twice. }
+begin
+  Result := (a = b) or
+            ((a = tyInteger) and (b = tyInt32)) or
+            ((a = tyInt32) and (b = tyInteger));
+end;
+
 function MatchParamExact(i, j: Integer; argTk: TTypeKind): Boolean;
 { Exact-match test for argument j against parameter j of candidate i. `Integer` and `LongInt` are the SAME type
   -- both 4-byte signed, and FPC declares one as the other's alias -- but they
@@ -12245,9 +12265,7 @@ function MatchParamExact(i, j: Integer; argTk: TTypeKind): Boolean;
 var paramTk: TTypeKind;
 begin
   paramTk := Procs[i].Params[j].TypeKind;
-  Result := (paramTk = argTk) or
-            ((paramTk = tyInteger) and (argTk = tyInt32)) or
-            ((paramTk = tyInt32) and (argTk = tyInteger));
+  Result := SameExactTypeKind(paramTk, argTk);
   { A DISTINCT TYPE (`type TMyB = type byte`) and its base are the SAME KIND and
     different types, so the exact phase would otherwise take whichever candidate
     came first in the chain -- declaration order again, the same failure the

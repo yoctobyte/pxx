@@ -13,10 +13,25 @@ program test_for_in_ranks_the_enumerator_against_the_loop_variable;
     for e  in st  (e: TElem)     -> builtin, the members
     for i  in st  (i: Integer)   -> the OPERATOR          [see the note below]
 
-  So: rank the candidates by whether their Current type matches the loop
-  variable, and give the TIE to the operator. `getenum` is the tie -- a class
-  whose own GetEnumerator and whose operator both yield Integer -- and fpc takes
-  the operator there, which is the half pxx had backwards.
+  So: THE OPERATOR RUNS ONLY WHEN ITS Current TYPE IS EXACTLY THE LOOP
+  VARIABLE'S. A container that HAS a built-in meaning otherwise keeps it, and a
+  genuine tie -- neither candidate matching -- goes to the BUILT-IN.
+
+  `getenum` is not a counterexample and was once read as one: there BOTH
+  candidates yield Integer and the loop variable IS Integer, so the operator
+  wins by matching exactly rather than by winning a tie.
+
+  THE width ROWS ARE WHAT RULE OUT A LADDER, and they are the reason this is
+  spelled "exactly" and not "compatibly". One `set of 0..7`, one operator
+  returning Integer, only the loop variable's type moving: byte, word and even
+  INT64 keep the built-in, and only `longint` -- which IS Integer -- runs the
+  operator. Nothing about width, bounds or signedness survives that; int64 is
+  wider than the element and still loses. `longint` also earns its row twice
+  over: Integer and LongInt are one FPC type carried here as two kinds
+  (tyInteger / tyInt32), so a bare kind comparison discriminates on the
+  SPELLING -- the closed
+  bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching,
+  reproducing itself at a second exact-match site.
 
   BOTH SPELLINGS OF THE STRING CONTAINER, deliberately: a bare variable and an
   expression. They must move together or one spelling stays wrong, and they do
@@ -24,12 +39,12 @@ program test_for_in_ranks_the_enumerator_against_the_loop_variable;
   expression into a hidden string symbol and re-enters ParseForInVarAST, so the
   SYMBOL arm decides both. The expression arm further down never sees it.
 
-  NOT IN THIS FIXTURE, and measured rather than assumed: `for i in st` with an
-  Integer loop variable over a set still answers the builtin here where fpc runs
-  the operator. That is not the ranking rule -- it is the symbol arm's operator
-  LOOKUP missing for a set container, which is a separate defect with its own
-  landing. Its expression twin (`st + [4]`) already answers the operator, so the
-  two spellings currently disagree; pinning either here would pin half a bug.
+  BOTH SPELLINGS OF THE SET CONTAINER too, and that pair had to be chased: a
+  set RETURNS EARLY out of the symbol arm into the membership scan, so it was
+  the one container the ranking never reached, and `for i in st` answered the
+  built-in while its expression twin `st + [4]` already answered the operator.
+  The ranking therefore happens AT that early exit -- the last point a set can
+  be ranked at all -- and the two spellings agree here by measurement.
 
   Oracle: fpc 3.2.2 -Mobjfpc.
   bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin }
@@ -63,6 +78,7 @@ operator enumerator(a: TCol): TEnum;        begin Result := MkE(44); end;
 
 var
   ch: Char; i: Integer; e: TElem;
+  b: Byte; w: Word; q: Int64; l: LongInt;
   s1, s2: AnsiString; ss: TShort; st: TSet; c: TCol;
 begin
   s1 := 'ab'; s2 := 'c'; ss := 'de'; st := [1, 2]; c := TCol.Create;
@@ -72,5 +88,11 @@ begin
   Write('short-char    '); for ch in ss      do Write(ch, ' '); WriteLn;
   Write('str-int       '); for i  in s1      do Write(i, ' ');  WriteLn;
   Write('set-elem      '); for e  in st      do Write(e, ' ');  WriteLn;
+  Write('set-int       '); for i  in st      do Write(i, ' ');  WriteLn;
+  Write('set-int-expr  '); for i  in st + [4] do Write(i, ' ');  WriteLn;
+  Write('set-byte      '); for b  in st      do Write(b, ' ');  WriteLn;
+  Write('set-word      '); for w  in st      do Write(w, ' ');  WriteLn;
+  Write('set-int64     '); for q  in st      do Write(q, ' ');  WriteLn;
+  Write('set-longint   '); for l  in st      do Write(l, ' ');  WriteLn;
   Write('getenum-tie   '); for i  in c       do Write(i, ' ');  WriteLn;
 end.

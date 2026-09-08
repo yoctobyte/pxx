@@ -3,4 +3,10 @@ str-char-expr a b c
 short-char    d e 
 str-int       99 
 set-elem      1 2 
+set-int       88 
+set-int-expr  88 
+set-byte      1 2 
+set-word      1 2 
+set-int64     1 2 
+set-longint   88 
 getenum-tie   44 

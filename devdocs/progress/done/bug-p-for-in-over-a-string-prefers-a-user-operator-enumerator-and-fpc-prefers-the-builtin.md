@@ -4,11 +4,11 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankS
 created: 2026-09-07
 found-by: frankS
-summary: "With `operator enumerator(a: AnsiString)` in scope, `for ch in s` runs the OPERATOR; fpc 3.2.2 iterates the string's characters. Silent: both spellings compile and produce a plausible wrong value. REVISED 2026-09-08 — the rule this ticket originally proposed (a built-in iteration meaning wins over a user operator on the same type) is FALSE and was drawn from the one family where it cannot be told apart from the real rule. Measured over five container families: fpc runs the OPERATOR for sets, static arrays, dyn arrays and even over a class's own GetEnumerator, and the SAME container answers differently when only the loop variable's type changes — `for ch in s` (Char) takes the builtin, `for i in s` (Integer) takes the operator, and a set answers builtin for a `0..7` loop variable and operator for an `Integer` one. fpc ranks candidates by whether the enumerator's Current type matches the LOOP VARIABLE, and on a tie the user operator wins. pxx is inverted in BOTH directions (operator where fpc takes the builtin on every string row; builtin where fpc takes the operator on set-symbol) and its symbol and expression arms already disagree with each other on sets today. Half the rule is already implemented in the GetEnumerator arm at pasparser_stmt.inc:1571 and needs lifting out, not inventing."
+summary: "RESOLVED 2026-09-08. With `operator enumerator(a: AnsiString)` in scope, `for ch in s` ran the OPERATOR where fpc 3.2.2 iterates the string's characters — silent, both spellings compiling to a plausible wrong value. The rule is NOT the container's: fpc runs the operator for sets, static and dyn arrays and even over a class's own GetEnumerator, and the SAME container answers differently when only the loop variable's type changes. Measured over five container families and a ten-row width sweep: THE OPERATOR RUNS ONLY WHEN ITS `Current` TYPE IS EXACTLY THE LOOP VARIABLE'S, a container with a built-in meaning otherwise keeps it, and a genuine tie goes to the BUILT-IN. This ticket twice proposed a weaker rule — first `builtin beats operator`, then `rank both, tie to the operator` — and both were drawn from corpora that could not tell them apart from the real one; `for e in st` with the element type as loop variable is the row that separates them, and `Int64` keeping the built-in while `LongInt` does not is the row that rules out a compatibility ladder. Landed as `EnumeratorOpBeatsBuiltin`, read by all three arms including the set's early exit into the membership scan, plus `SameExactTypeKind` naming the Integer/LongInt identity that `MatchParamExact` held the only copy of."
 ---
 
 # for-in over a string prefers a user `operator enumerator`; fpc prefers the builtin
@@ -186,3 +186,82 @@ loop variable) and once across candidate OPERANDS within the operator table.
 **Grow one ranked lookup, not two**, and take the operand ladder from
 `OpConvSourceRank` rather than re-deriving it — its header already carries the
 fpc measurement that produced it.
+
+## 2026-09-08 (frankS) — RESOLVED, and the rule is stronger than this ticket proposed
+
+The rule landed is **the operator runs only when its `Current` type is EXACTLY
+the loop variable's**; a container that has a built-in meaning otherwise keeps
+it, and a genuine tie — neither candidate matching — goes to the **built-in**.
+
+That is not what the revised summary above said. It said "rank both, and on a
+tie the user operator wins", and the tie half was **wrong**. It came from the
+GetEnumerator row, which was read as a tie and is not one: there both
+candidates yield `Integer` and the loop variable IS `Integer`, so the operator
+wins by matching exactly. Nothing in the corpus that produced the revision
+could tell those two rules apart — every row had at least one exact match.
+
+### The row that separated them, and it was a regression I nearly shipped
+
+`for e in st` with `e: TElem` (`= 0..7`) over `set of TElem`. Under
+"tie → operator" it answered the operator; fpc answers the members, `1 2`.
+The first landing of the set arm produced exactly that regression, and it was
+caught only because the control probe for the set work happened to use the
+element type as its loop variable.
+
+### The width sweep is what rules out a ladder
+
+One `set of 0..7`, one `operator enumerator` returning `Current: Integer`, only
+the loop variable's declared type moving. fpc 3.2.2:
+
+| `0..7` | `0..15` | `1..3` | Byte | ShortInt | Word | SmallInt | Cardinal | Int64 | LongInt |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `1 2` | `1 2` | `1 2` | `1 2` | `1 2` | `1 2` | `1 2` | `1 2` | `1 2` | **88** |
+
+Nine built-ins and one operator, and the one is `LongInt` — which IS `Integer`,
+which is exactly what this operator's `Current` is. **`Int64` losing is the row
+that kills a ladder**: it is wider than the element and still keeps the
+built-in. Not bounds, not width, not signedness — an exact kind match or the
+operator does not run.
+
+So the residual recorded below — "`FindOpOverload` matches its key exactly
+while fpc picks by assignment compatibility, and `OpConvSourceRank` already
+holds that ladder; grow ONE ranked lookup, not two" — **is not needed for this
+axis and would have made it wrong.** A ladder would have handed `Int64` and
+`Cardinal` to the operator. The conversion-operator ladder stays where it is,
+serving conversion operators.
+
+### `longint` earned its row twice over
+
+`for l in st` with `l: longint` took the built-in where the identical loop
+spelled `integer` ran the operator. That is the *closed*
+`bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching`
+reproducing itself at a second exact-match site: FPC declares one as the
+other's alias, and pxx carries them as two kinds (`tyInteger` / `tyInt32`), so
+a bare kind comparison discriminates on the SPELLING.
+
+Rather than a second copy of that equivalence, it is now named once —
+`SameExactTypeKind` in `symtab.inc` — and `MatchParamExact`, which held the
+only copy, routes through it. Two sites is where the rule gets a name.
+
+### Where the ranking had to go for a set, which is not where it looks
+
+A set **returns early** out of `ParseForInVarAST` into the membership scan, so
+it was the one container the ranking never reached — `for i in st` answered the
+built-in while its expression twin `st + [4]` already answered the operator,
+and the two spellings disagreed. The rank therefore happens **at that early
+exit**, the last point a set can be ranked at all. The first hypothesis here
+was wrong and is recorded because it is the plausible one: that the symbol
+arm's `FindOpOverload` missed because it keys on `Syms[contSym].RecName`. It
+does not miss; it is never asked.
+
+### Landed
+
+- `EnumeratorOpBeatsBuiltin` (`pasparser_stmt.inc`) — the rule, stated once,
+  read by the set early exit, the plain-operator arm and the GetEnumerator arm.
+- `SameExactTypeKind` (`symtab.inc`) — Integer/LongInt are one type, named once.
+- `test/test_for_in_ranks_the_enumerator_against_the_loop_variable.pas` — 12
+  rows, `.expected` derived from fpc, positive control taken by reverting
+  (`set-int` and `set-longint` go red at HEAD).
+
+## Log
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
