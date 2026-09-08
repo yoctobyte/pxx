@@ -995,6 +995,17 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   with a `trap ... EXIT` — reviewed once, run as a unit — which is what
   `tools/*.sh` already do and why they never trip this. If you must delete
   interactively, **spell the path literally.**
+  **THIS IS A HOOK NOW, NOT A NOTE** — `.claude/hooks/no-variable-rm.sh`,
+  registered beside `no-full-suite.sh`, refuses an interactive `rm` whose target
+  carries a `$variable` or a glob. Added 2026-09-07 because the owner reported
+  it was **still** happening, after this rule was written and after he had
+  already asked in his own words. Measured the same hour: **~170 such calls
+  across ten sessions in four days**, the most recent 51 minutes before he
+  said so. **There is no env escape and that is deliberate** — the way through
+  is to spell the path, which is this rule's own instruction and cannot be
+  abused. It denies INSTANTLY rather than stalling, which is the whole point:
+  the built-in prompt costs hours, a refusal costs a retry. `tools/*.sh` are
+  unaffected — the hook sees `tools/foo.sh`, not the `rm` inside it.
 - **Every sha you QUOTE:** read it off `git log origin/master` AFTER the push, or
   from `tools/sync.sh`, which prints it. **The ghost rate is ~100% by
   construction** — this repo rebases nearly every sync, so a pre-push `log -1`
