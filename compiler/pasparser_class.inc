@@ -209,13 +209,23 @@ function FindNestedClassLikeCi(ci: Integer; const nm: AnsiString): Integer;
   `.Make`), which is what pins the defect to the qualified walk over an alias
   rather than to aliases or to nesting.
 
-  The alias lookup is NOT owner-scoped, because the rows carry no owner column
-  and the declaration path is not scoped either -- `var x: TOther.TP` compiles
-  today for a TP declared in TTest. Matching it here makes the two paths agree,
-  which is this ticket's whole claim; scoping both is a separate change with an
-  extra column in it. bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
+  THE ALIAS LOOKUP IS OWNER-SCOPED NOW, and this paragraph used to say the
+  opposite: "NOT owner-scoped, because the rows carry no owner column and the
+  declaration path is not scoped either -- `var x: TOther.TP` compiles today for
+  a TP declared in TTest ... scoping both is a separate change with an extra
+  column in it." The column exists (UClsAliasOwnerCi), so both paths are scoped
+  and they still agree, which was the claim.
+
+  ASK THE OWNER, NOT "IS IT VISIBLE FROM HERE". A qualified walk answers FOR a
+  named class, not from inside one: at `TTest.TP.Create` neither
+  ParsingClassBodyCi nor QualTypeOwnerCi is TTest, so the visibility predicate
+  says no -- correctly -- about the very row this needs. The unscoped fallback
+  stays for a UNIT-level alias reached through a class qualifier.
+  bug-p-a-qualified-nested-alias-is-invisible-to-low-high-and-a-constructor }
 begin
   Result := FindNestedType(ci, nm);
+  if Result >= 0 then Exit;
+  Result := FindUClassAliasCiOwnedBy(ci, ULower(nm));
   if Result >= 0 then Exit;
   Result := FindUClassAliasCi(ULower(nm));
 end;

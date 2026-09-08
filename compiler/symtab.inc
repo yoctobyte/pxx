@@ -1803,6 +1803,33 @@ begin
   if i < 0 then Result := -1 else Result := UClsAliasCi[i];
 end;
 
+function FindUClassAliasCiOwnedBy(ci: Integer; const lo: AnsiString): Integer;
+{ The class-name alias `ci` -- or an ancestor -- declares in its own body, by
+  bare name. Walking UClsParent, the order FindNestedType uses, because a nested
+  type is inherited exactly as a class const is.
+
+  ASKS THE OWNER DIRECTLY RATHER THAN "IS IT VISIBLE FROM HERE". A qualified walk
+  is answering FOR a named class, not from inside one: at `TTest.TP.Create`
+  neither ParsingClassBodyCi nor QualTypeOwnerCi is TTest, so the visibility
+  predicate correctly says no and the row FindNestedClassLikeCi wants is the one
+  it cannot see. Owner-scoped, which is what its own comment said the extra
+  column would let this become. }
+var i, c: Integer;
+begin
+  Result := -1;
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to UClsAliasCount - 1 do
+      if (UClsAliasOwnerCi[i] = c) and UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
+      begin
+        Result := UClsAliasCi[i];
+        Exit;
+      end;
+    c := UClsParent[c];
+  end;
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString;
 begin
