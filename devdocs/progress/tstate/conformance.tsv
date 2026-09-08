@@ -249,7 +249,7 @@ pass	tgeneric102.pp	tgeneric	-
 auto	tgeneric103.pp	tgeneric	-	unit-source
 auto	tgeneric104.pp	tgeneric	-	recompile
 auto	tgeneric105.pp	tgeneric	-	unit-source
-skip	tgeneric106.pp	tgeneric	gap	generic class with `class var` procvar field of type G<T>, method-of-object
+pass	tgeneric106.pp	tgeneric	-	
 pass	tgeneric107.pp	tgeneric	-	
 pass	tgeneric10.pp	tgeneric	-	
 pass	tgeneric11.pp	tgeneric	-	
