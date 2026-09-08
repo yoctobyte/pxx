@@ -132,4 +132,4 @@ takes neither of its `halt` arms.
 Self-host fixedpoint converged (`75dc1e4e746b`).
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7257f1213.
