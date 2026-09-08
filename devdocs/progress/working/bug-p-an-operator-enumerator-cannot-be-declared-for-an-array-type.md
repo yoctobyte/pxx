@@ -4,8 +4,8 @@ track: P
 prio: 35
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-08
 found-by: frankS
 summary: "`operator enumerator(a: TDyn): TEnum` and the same for a static `array[0..1] of Integer` are refused at the DECLARATION with `operator overloading: <T> is not a supported operand type`. fpc 3.2.2 accepts both and runs them in preference to its own built-in array iteration. The refusal is at the operator declaration, not at any for-in, so it also blocks measuring what for-in over an array WOULD do -- two of the five container families in bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin cannot be exercised in pxx at all, and any precedence rule written for them today is unexercised by construction."

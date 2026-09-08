@@ -4,8 +4,8 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-07
 found-by: frankS
 summary: "With `operator enumerator(a: AnsiString)` in scope, `for ch in s` runs the OPERATOR; fpc 3.2.2 iterates the string's characters. Silent: both spellings compile and produce a plausible wrong value. REVISED 2026-09-08 — the rule this ticket originally proposed (a built-in iteration meaning wins over a user operator on the same type) is FALSE and was drawn from the one family where it cannot be told apart from the real rule. Measured over five container families: fpc runs the OPERATOR for sets, static arrays, dyn arrays and even over a class's own GetEnumerator, and the SAME container answers differently when only the loop variable's type changes — `for ch in s` (Char) takes the builtin, `for i in s` (Integer) takes the operator, and a set answers builtin for a `0..7` loop variable and operator for an `Integer` one. fpc ranks candidates by whether the enumerator's Current type matches the LOOP VARIABLE, and on a tie the user operator wins. pxx is inverted in BOTH directions (operator where fpc takes the builtin on every string row; builtin where fpc takes the operator on set-symbol) and its symbol and expression arms already disagree with each other on sets today. Half the rule is already implemented in the GetEnumerator arm at pasparser_stmt.inc:1571 and needs lifting out, not inventing."
