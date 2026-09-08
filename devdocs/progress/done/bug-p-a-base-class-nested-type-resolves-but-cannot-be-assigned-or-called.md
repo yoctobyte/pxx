@@ -129,4 +129,4 @@ variable's (nil) VALUE. A different subject — `@` on a procedural variable —
 and no row in this fixture depends on it.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 24ea941a1.
