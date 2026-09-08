@@ -3,7 +3,7 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: frankS
 ---
 
@@ -61,3 +61,28 @@ which is a true statement about that defect and not about this one.
 `test/test_routine_local_specialization.pas` deliberately names the inner and
 outer types APART so its red would be about the splice; the repro above is the
 only assertion that fails on this.
+
+## FIXED at `0221a024a` — resolved 2026-09-07, and the LAG is the finding
+
+The code and the fixture landed on 2026-09-06 in
+`fix(P): routine-local declarations are scoped in all five name tables, not one`
+(this ticket is the alias row of that group). **Nothing was fixed today; only the
+paperwork was.** Saying so matters, because a ticket that closes with no diff is
+indistinguishable from one that was quietly re-filed, and the P-bug umbrella asks
+for the split.
+
+Re-measured 2026-09-07 at compiler `a8f1784cfad0`:
+
+```
+pxx HEAD    inner 1 / outer 3      <- matches fpc 3.2.2
+pin v407    inner 3 / outer 3      <- the defect, unchanged
+```
+
+The pin still carries it, so **the fix is inert for anything built against
+`$(PXX_STABLE)` until the next pin.**
+
+Already asserted by `test/test_routine_local_name_scoping.pas`
+(`test_rtlocalscope26`), wired in the Makefile, rows 3/4 — green at HEAD.
+
+## Log
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

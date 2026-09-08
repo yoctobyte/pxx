@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: frankS
 ---
 
@@ -101,3 +101,42 @@ dedup compares concrete arguments **by NAME string** (`SpecConcreteNames`), and
 two different types in two scopes share the spelling — a name standing in for
 the type it names, one layer above the tables this ticket is about. Its own
 ticket, or the group's next rung.
+
+## FIXED at `0221a024a` — resolved 2026-09-07, all five tables re-measured
+
+Code and fixture landed 2026-09-06; **this resolution adds no diff and that is
+stated on purpose**, since a ticket closing with no code change looks the same as
+a quiet re-file. Re-measured 2026-09-07 at compiler `a8f1784cfad0`, one probe per
+table, against fpc 3.2.2 and against pin v407:
+
+| table | probe | fpc | pxx HEAD | pin v407 |
+| --- | --- | --- | --- | --- |
+| UCls | sibling routines' local `TRec` | `A 3 / B 1` | `A 3 / B 1` | **refuses** |
+| alias | nested routine's `TRec` shadows enclosing | `inner 1 / outer 3` | same | **`inner 3`** |
+| set const | sibling routines' `S` | `A TRUE / B FALSE TRUE` | same | **`B TRUE FALSE`** |
+| string const | nested reads ENCLOSING const | `from outer` | same | **`undefined variable`** |
+| Syms | control, already scoped | — | — | — |
+
+Five for five at HEAD, none at the pin. **Inert until the next pin** for anything
+built against `$(PXX_STABLE)`.
+
+## The residual is confirmed still open, and it needed the SAME NAME to see
+
+`specialize TBox<TRec>` in a nested routine. Measured today with DISTINCT type
+names first (`TRec` outer, `TRec2` inner) and it **passed** — which would have
+read as the residual being closed too. With the same spelling in both scopes it
+fails:
+
+```
+pxx   pascal26:11: error: "s": no such member on this record/class
+fpc   inner 1 / outer 3
+```
+
+`SpecConcreteNames` keys a specialization by the argument's NAME STRING, so two
+different types sharing a spelling collapse into one specialization — and a probe
+that renames the inner type to keep it readable **removes the only thing under
+test**. That is [[bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide]],
+open, and the row belongs to it rather than here.
+
+## Log
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
