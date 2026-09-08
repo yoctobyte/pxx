@@ -955,6 +955,20 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   **And a corrupted measurement that happens to survive the question you ended
   up asking is indistinguishable from a clean one** — that census was salvaged
   only because the eventual claim was about the distribution and not the count.
+  **AND THE OTHER DIRECTION IS UNGUARDED: A PULL CAN IMPROVE YOUR NUMBERS, AND
+  THE IMPROVEMENT LOOKS EXACTLY LIKE YOUR OWN WORK.** Everything above guards the
+  stale direction, where you claim a green you did not earn. This is the mirror
+  and nothing was watching it: measured 2026-09-08, frankS's conformance run came
+  back **418 pass / 47 gap** against its previous 417 / 48, a row burning in the
+  same run as its change and in the same subsystem — and the row was another
+  seat's, arrived in the pull it did three hours earlier. **A stale tree makes
+  you claim a green you did not earn; a fresh pull makes you claim a DELTA you
+  did not cause**, and a single number over a corpus every seat is burning at
+  once cannot tell them apart. The discriminator is one command —
+  `git log -S'<the row>' -- <the skip or expected file>` — and the reason it does
+  not get run is the whole finding: **the number moved in the direction you
+  wanted, which is the direction nobody checks.** Attribute a delta before you
+  quote it, and say in the resolution which rows are NOT yours.
 - **Park held work as a PATCH or a STASH. Never a file copy.** Unconditionally.
   A patch goes through a merge and can therefore CONFLICT; `cp` has no merge step
   to fail at, so a restored copy silently reverts everything that landed while it
