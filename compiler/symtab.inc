@@ -291,14 +291,31 @@ function AliasOwnsThroughInherit(owner, scope: Integer): Boolean;
   (what a class DESCENDS from). They are different questions and a type can be
   reachable by one and not the other, so one walk cannot answer both.
 
-  This exists for the out-of-line method body. `TSel` declared in `TBase` and
+  It arrived for the out-of-line method body. `TSel` declared in `TBase` and
   used inside `TDer.Look`'s body -- rtl-generics spells exactly this, and it is
   the wall corpus rung 6a hits at generics.defaults:2279
   (`unknown type: TSelectMethod`, owned by TComparerService, used from
-  THashService<T>.LookupEqualityComparer). The DERIVED CLASS BODY and the
-  QUALIFIED `TDer.TSel` spellings already resolved it; only the implementation
-  scope did not, which is what says this belongs on the MethImplOwnerCi arm and
-  nowhere else.
+  THashService<T>.LookupEqualityComparer).
+
+  IT NOW SERVES THREE ARMS, AND THE SENTENCE THAT USED TO STAND HERE -- "the
+  DERIVED CLASS BODY and the QUALIFIED `TDer.TSel` spellings already resolved
+  it; only the implementation scope did not" -- WAS MEASURED FALSE ON
+  2026-09-07. Both spellings answered `unknown type: TAmt` at HEAD and,
+  identically, on pin v407, for every kind that lives in THIS table: a plain
+  alias, a procedural type and a subrange. The reason the claim survived is that
+  the two kinds anyone reaches for when probing a nested type -- a nested RECORD
+  and a nested CLASS -- are registry rows, and FindNestedType has walked
+  UClsParent all along, so they resolved and said nothing about this table. A
+  nested ENUM resolved too, through a table with no owner column at all. Three
+  of six kinds correct is what "already resolved" was measured on.
+
+  So all three chain arms walk inheritance now, and only the one that walks
+  LEXICAL enclosure stayed as it was. frankB's reason for keeping arm 4 exact is
+  unaffected and was never about this: it says walking an ENCLOSING chain from a
+  qualifier answers a different question. Walking UClsParent from
+  QualTypeOwnerCi answers exactly the question `TDer.TAmt` asks -- may TDer's
+  chain answer for this name -- and cannot reach a class TDer does not descend
+  from. bug-p-a-base-class-nested-type-resolves-but-cannot-be-assigned-or-called
 
   Same bound and same reason as AliasOwnsThrough: a class cannot descend from
   itself, and the counter is belt-and-braces against a malformed table. }
@@ -332,18 +349,32 @@ begin
     Recorded because folding them in looks like the natural next simplification
     and is wrong: I wrote it that way first.
 
-    ARM 3 NOW WALKS, BUT A DIFFERENT CHAIN. An out-of-line body is still not
-    lexically inside anything -- that part stands -- but it IS inside a class
-    that has ancestors, and a base class's nested type is visible to a derived
-    class's methods. So arm 3 walks UClsParent (inheritance) and never
-    UClsEnclosingCi (lexical). Arm 4 still does not walk at all, for frankB's
-    reason above, and neither arm was widened to the other's chain: measured,
-    the derived-BODY and qualified `TDer.TSel` spellings already resolved
-    without it and only the implementation scope was blind. }
+    EVERY INHERITANCE ARM WALKS NOW, AND THE LEXICAL ONE STILL DOES NOT. An
+    out-of-line body is not lexically inside anything -- that part stands -- but
+    it IS inside a class that has ancestors, and a base class's nested type is
+    visible to a derived class's methods, to the derived class's own BODY, and
+    through the derived class's NAME. So there are three UClsParent arms and one
+    UClsEnclosingCi arm, and no arm was given the other's chain.
+
+    THE CLAIM THAT USED TO CLOSE THIS COMMENT -- "measured, the derived-BODY and
+    qualified `TDer.TSel` spellings already resolved without it" -- WAS FALSE,
+    and it was false when written. Re-measured 2026-09-07 at HEAD and on pin
+    v407: `FAmt: TAmt` inside a derived body and `var q: TDer.TAmt` both answer
+    `unknown type`, for a plain alias, a procedural type and a subrange alike.
+    What made it look right is that a nested RECORD and a nested CLASS are
+    REGISTRY rows and FindNestedType has walked UClsParent all along, and a
+    nested ENUM lives in a table with no owner column -- so the three kinds a
+    reader probes with are the three this table never sees.
+
+    The lesson is not that the measurement was sloppy: it is that this table
+    holds three of the six nested kinds, and a probe that does not name WHICH
+    kind it used is answering about a different table half the time. Any future
+    claim here should say the kind. }
   AliasVisibleHere := (AliasOwnerCi[a] < 0) or
                       AliasOwnsThrough(AliasOwnerCi[a], ParsingClassBodyCi) or
+                      AliasOwnsThroughInherit(AliasOwnerCi[a], ParsingClassBodyCi) or
                       AliasOwnsThroughInherit(AliasOwnerCi[a], MethImplOwnerCi) or
-                      (AliasOwnerCi[a] = QualTypeOwnerCi);
+                      AliasOwnsThroughInherit(AliasOwnerCi[a], QualTypeOwnerCi);
 end;
 
 function ScopeReachesProc(ownerProc: Integer): Boolean;
