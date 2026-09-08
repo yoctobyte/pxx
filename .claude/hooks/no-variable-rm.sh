@@ -30,6 +30,17 @@
 #   3. If you must delete interactively, SPELL THE PATH LITERALLY. That is the
 #      escape hatch, it is the rule's own instruction, and it cannot be abused.
 #
+# THE GUARD REFUSES ITS OWN TEST HARNESS AND ITS OWN COMMIT MESSAGES, AND THAT IS
+# CORRECT. It matches on command TEXT, so a Bash heredoc listing the cases -- or
+# a commit message describing the rule -- is refused exactly like a command about
+# to run. It cannot tell them apart and must not try. So: the controls live in
+# `tools/devtest_no_variable_rm.py`, created with the Write tool and run as
+# `python3 tools/devtest_no_variable_rm.py`, a command line that names no
+# deleter; and a commit message about this rule goes to a file via Write, then
+# `git commit -F`. 25 controls, both directions. Do NOT weaken the hook to make
+# authoring convenient -- the next person hits this within a minute, and this
+# comment is the answer.
+#
 # Reads the PreToolUse hook payload on stdin, answers a permissionDecision.
 
 set -uo pipefail
@@ -58,6 +69,26 @@ why='This is not about the keystroke. `rm -rf "$T/$n"` trips Claude Code built-i
 rmlines=$(printf '%s' "$scan" \
   | grep -E '^[[:space:]]*(\{[[:space:]]*|\([[:space:]]*|do[[:space:]]+|then[[:space:]]+|else[[:space:]]+|sudo[[:space:]]+|xargs[[:space:]]+|time[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*rm([[:space:]]|$)' \
   | grep -Ev '^[[:space:]]*#')
+# TARGETS THAT NEVER APPEAR IN argv AT ALL. `find ... | xargs -0 rm -rf` and
+# `find ... -exec rm -rf {} +` carry neither a $variable nor a glob on the rm
+# command line -- the paths arrive on stdin or from find -- so every rule above
+# passes them, and they are the shape with the LEAST review available: the
+# command names nothing a reader can check, and what gets deleted depends on a
+# search that ran a moment ago. Found 2026-09-08 by frank-seven asking whether
+# its ad-hoc /tmp reaper would trip this; it would not have, and the honest
+# answer was that the guard could not see it. My own controls had no case from
+# this population -- the exact failure this file warns about, in the guard
+# written to enforce it.
+#
+# A committed script is the answer here and frank-seven reached it independently:
+# a reaper that runs regularly belongs in tools/ with a trap, reviewed once.
+if printf '%s' "$scan" | grep -Eq '(^|[[:space:]])xargs([[:space:]]+(-[^[:space:]]+|[0-9]+))*[[:space:]]+rm([[:space:]]|$)'; then
+  deny "REFUSED: \`xargs ... rm\` -- the targets never appear in the command, so nothing here names what will be deleted and no reviewer can check it. $fix"
+fi
+if printf '%s' "$scan" | grep -Eq 'find[^|;&]*-exec[[:space:]]+rm([[:space:]]|$)'; then
+  deny "REFUSED: \`find ... -exec rm\` -- the targets come from the search, not the command, so nothing here names what will be deleted. $fix"
+fi
+
 [ -z "$rmlines" ] && exit 0
 
 # A GLOB anywhere in an rm target. Includes the non-recursive case: `rm -f
