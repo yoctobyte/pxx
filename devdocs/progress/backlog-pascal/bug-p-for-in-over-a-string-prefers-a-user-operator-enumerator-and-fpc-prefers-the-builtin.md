@@ -156,3 +156,25 @@ its "fix the FIRST one" line suggests.
 at the DECLARATION — `operator overloading: <T> is not a supported operand
 type` — so those two families cannot be measured in pxx at all, and any rule
 written for them today is unexercised.
+
+## A second axis the ranked lookup has to carry (2026-09-08, frankS)
+
+The rule above ranks candidates by the LOOP VARIABLE's type. There is a second
+ranking on the container side, and it is also already implemented elsewhere in
+the tree:
+
+`FindOpOverload(opKind, typeKind, recId)` matches its key **exactly**. With
+`operator enumerator(a: Int64)` in scope and nothing else, `for i in Integer(4)`
+is refused; fpc takes the `Int64` overload for an `Integer` operand by
+assignment compatibility. Measured 2026-09-08 at compiler `70dffa8a0e51`.
+
+`symtab.inc`'s `OpConvSourceRank` is that ladder — "exact kind, else same
+SIGNEDNESS, else any integer", recorded there as fpc's measured answer over five
+sources — and it serves CONVERSION operators only.
+
+So whoever writes the precedence rule is writing a ranked selection twice over:
+once across candidate KINDS (builtin vs GetEnumerator vs operator, keyed on the
+loop variable) and once across candidate OPERANDS within the operator table.
+**Grow one ranked lookup, not two**, and take the operand ladder from
+`OpConvSourceRank` rather than re-deriving it — its header already carries the
+fpc measurement that produced it.

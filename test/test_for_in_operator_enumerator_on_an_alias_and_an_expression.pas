@@ -62,4 +62,15 @@ begin
 
   vv := 9;
   for i in vv + 1 do WriteLn('expr ', i);           { container is an arithmetic expression }
+
+  { THE CONTAINER'S FIRST TOKEN NO LONGER HAS TO BE tkIdent. These three were
+    refused before the dispatch decided anything, by a gate reading the LEXER:
+    `Int64` arrives as tkIdent and `Integer` as its own token kind, so the two
+    spellings of one cast got opposite answers for a reason invisible in the
+    source. `cast` above is the row that always worked and is the control -- it
+    and `castint` must now agree, and they differ only in a token kind.
+    bug-p-a-for-in-container-must-start-with-an-identifier-token }
+  for i in Integer(4) do WriteLn('castint ', i);    { the SAME cast, spelled with a non-ident token }
+  for i in 4 do WriteLn('lit ', i);                 { a bare integer literal }
+  for i in (vv) do WriteLn('paren ', i);            { one pair of parentheses is the whole difference }
 end.

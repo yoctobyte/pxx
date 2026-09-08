@@ -4,11 +4,11 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: done
+owner: frankS
 created: 2026-09-07
 found-by: frankS
-summary: "`for X in <container>` refuses before parsing anything unless the container's FIRST token is tkIdent -- so `for i in (v)`, `for i in 4` and `for i in Integer(4)` are rejected with `expected a generator, enum type, or iterable variable` while `for i in v` and `for i in Int64(4)` compile and match fpc. The discriminator is the TOKEN KIND, not the construct: Int64 lexes as tkIdent and Integer does not, so two spellings of the same cast get opposite answers. Loud, one line, and the general expression dispatch below it already handles every shape the gate excludes."
+summary: "FIXED 2026-09-08. The gate was one line — `if CurTok.Kind <> tkIdent then Error(...)` at pasparser_stmt.inc:3287 — and it never described the container: `for i in (v)`, `for i in 4` and `for i in Integer(4)` were refused while `for i in Int64(4)` compiled, because Int64 lexes as tkIdent and Integer does not. WHAT IT WAS PROTECTING, established before removing it as this ticket asked: the 128 lines below it are seven arms that each read CurTok.SVal (FindSym, FindProc, FindTypeAlias, FindSetConst, FindUField) or the selector token after the name, and none of them means anything for a non-identifier. So the gate is not deleted — it becomes the PRECONDITION on that block, and what falls through reaches the general container-EXPRESSION path below, which is where those spellings were always going to be decided. All five of this ticket's rows now match fpc 3.2.2. RESIDUAL, measured and NOT this defect: with the operator declared only on Int64, `for i in Integer(4)` is still refused, because FindOpOverload matches (opKind, typeKind, recId) EXACTLY while fpc picks the Int64 overload by assignment compatibility — and symtab.inc already has the ranked ladder for it (OpConvSourceRank), used by conversion operators and not by this lookup. Recorded on the precedence ticket, which needs a ranked lookup anyway."
 ---
 
 # A for-in container must start with an identifier token
@@ -78,3 +78,67 @@ rule, which is a bug in it.
 Found while fixing
 `test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas`, whose
 row 4 uses `Int64(4)` precisely because `Integer(4)` does not compile.
+
+
+# Fix (2026-09-08, frankS)
+
+The gate is now the block's precondition rather than a refusal:
+
+```pascal
+    if CurTok.Kind = tkIdent then
+    begin
+      ...the seven ident-only arms, unchanged...
+    end;
+    { general container EXPRESSION path — takes what falls through }
+    ParseExpr;
+```
+
+**What it was protecting, since this ticket asked that it be established BEFORE
+the change and not after.** Every arm between the gate and the expression path
+reads `CurTok.SVal` — `FindSym`, `FindProc` (generator), `FindTypeAlias` (named
+subrange), `FindSetConst`, `FindUField` (implicit-Self field) — or the selector
+token that follows the name. None of them has a meaning for a non-identifier, so
+the gate was a real precondition wearing the shape of a diagnostic. Saying so
+here because a one-line deletion with no recorded reason is what makes the next
+reader restore it.
+
+It was not carrying the counted-for disambiguation the ticket wondered about:
+`for i := 1 to 4` is decided further down by `Expect(tkAssign, ':=')`, past the
+whole for-in dispatch, and the `illegal counter variable` check sits below that.
+
+## Rows, all against fpc 3.2.2
+
+`test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.pas`
+gains three rows and is byte-identical to fpc at 8/8:
+
+| container | before | after |
+| --- | --- | --- |
+| `Int64(4)` | 1004 | 1004 (control — the spelling that always worked) |
+| `Integer(4)` | refused at the gate | 4 |
+| `4` | refused at the gate | 4 |
+| `(vv)` | refused at the gate | 9 |
+
+`cast` and `castint` are the pair that matters: the SAME cast, differing only in
+a token kind, and they now agree with fpc while answering DIFFERENT numbers
+(1004 vs 4) — so the operator table is answering on its key rather than
+ignoring it. A one-row table cannot tell a correct lookup from a lookup that
+ignores its key, and neither can two rows that return the same value.
+
+Positive control on the pre-change compiler: `pascal26:73: error: for-in:
+expected a generator, enum type, or iterable variable`.
+
+## Residual, measured, and NOT this defect
+
+With the operator declared **only** on `Int64`, `for i in Integer(4)` is still
+refused — now by the expression path (`not a generator, enum type, or iterable
+variable`) rather than by the gate. fpc takes the `Int64` overload for an
+`Integer` operand by assignment compatibility; `FindOpOverload` matches
+`(opKind, typeKind, recId)` **exactly**.
+
+That is not a missing rule so much as an unused one: `symtab.inc` already holds
+`OpConvSourceRank`, whose header records fpc's measured ladder ("exact kind,
+else same SIGNEDNESS, else any integer") — and it is consulted by CONVERSION
+operators and not by this lookup. Recorded on
+[[bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin]],
+which has to grow a ranked lookup anyway and should grow one ranked lookup
+rather than two.

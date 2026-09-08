@@ -16966,6 +16966,17 @@ test-core: $(COMPILER)
 	# rows are controls -- they were right through the same qualifier already.
 	./$(COMPILER) test/test_a_qualified_nested_array_type_in_a_declaration.pas $(TESTTMP)/test_qualnestarr26
 	tools/expect_same.sh test_qualnestarr26 "$$($(TESTTMP)/test_qualnestarr26)" "$$(cat test/test_a_qualified_nested_array_type_in_a_declaration.expected)"
+	# MUST NOT COMPILE, both arms: an enumerator whose MoveNext takes arguments is
+	# not the protocol's MoveNext, and the lowering calls it with none. fpc refuses
+	# both. TWO files because there are two arms (operator enumerator, and
+	# GetEnumerator) and ONE resolver -- a fix at either call site would leave the
+	# other accepting, so these two rows are what says the rule is in the resolver.
+	# tforin22.pp had been passing as a %FAIL row for an unrelated reason: its
+	# container is the literal `1`, refused at the for-in tkIdent gate.
+	! ./$(COMPILER) test/test_a_for_in_enumerator_needs_a_parameterless_movenext_operator.pas $(TESTTMP)/test_mnarity_op26 > $(TESTTMP)/test_mnarity_op.log 2>&1
+	tools/expect_same.sh test_mnarity_op26 "$$(grep -c 'enumerator has no parameterless MoveNext' $(TESTTMP)/test_mnarity_op.log)" "1"
+	! ./$(COMPILER) test/test_a_for_in_enumerator_needs_a_parameterless_movenext_getenumerator.pas $(TESTTMP)/test_mnarity_ge26 > $(TESTTMP)/test_mnarity_ge.log 2>&1
+	tools/expect_same.sh test_mnarity_ge26 "$$(grep -c 'enumerator has no parameterless MoveNext' $(TESTTMP)/test_mnarity_ge.log)" "1"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of

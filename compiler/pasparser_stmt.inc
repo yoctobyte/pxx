@@ -883,6 +883,35 @@ begin
   EnumeratorMoveNextMeth := UClsEnumMoveNextM[enumIdx];
   if EnumeratorMoveNextMeth < 0 then
     EnumeratorMoveNextMeth := FindUMeth(enumIdx, 'MoveNext');
+  { A MoveNext THAT TAKES ARGUMENTS IS NOT THE PROTOCOL'S MoveNext, and the
+    lowering calls it with none -- GenMakeMethodCallM passes the instance and no
+    argument list, so the parameter slot was never written and the loop ran on
+    whatever was in it. fpc refuses the enumerator outright (`Cannot find a
+    "MoveNext" method in enumerator "T"`), at the operator DECLARATION for the
+    operator arm and at the loop for GetEnumerator; we refuse at the loop, which
+    is the one place BOTH arms already share -- this routine's own header is the
+    reason, and putting the rule at either call site instead is how one arm
+    stays wrong.
+
+    MEASURED WRONG ON BOTH ARMS, 2026-09-08, compiler 70dffa8a0e51: an
+    `operator enumerator` and a `GetEnumerator` each returning a class whose
+    MoveNext takes an Integer both compiled clean where fpc refuses both.
+    tforin22.pp had been PASSING as a `%FAIL` row, and not because of this
+    check -- its container is the literal `1`, which the for-in dispatch refused
+    at an unrelated tkIdent gate. Removing that gate is what exposed this, so
+    the row was green for a reason with nothing to do with what it asserts.
+
+    ParamCount COUNTS Self for a class method -- the interface-signature check in
+    pasparser_decl.inc prints `ParamCount - 1` as the user-visible arity -- so
+    `> 1` is the test. Deliberately NOT `<> 1`: an interface method's row need
+    not carry the Self slot and tforin9's IMyIterator is exactly that shape.
+    Erring toward accepting is the right direction here, because the failure
+    being closed is ACCEPTING a malformed enumerator; a missed interface case
+    leaves that case exactly where it already was rather than refusing a loop
+    that works today. }
+  if (EnumeratorMoveNextMeth >= 0) and
+     (Procs[UMthProc_[EnumeratorMoveNextMeth]].ParamCount > 1) then
+    EnumeratorMoveNextMeth := -1;
 end;
 
 function EnumeratorCurrentProp(enumIdx: Integer): Integer;
@@ -1085,7 +1114,7 @@ begin
   assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
   mnMi := EnumeratorMoveNextMeth(enumIdx);
-  if mnMi < 0 then Error('for-in: enumerator has no MoveNext (nor an `enumerator MoveNext` directive)');
+  if mnMi < 0 then Error('for-in: enumerator has no parameterless MoveNext (nor an `enumerator MoveNext` directive naming one)');
   mnCall := GenMakeMethodCallM(GenMakeIdent(eSym, eTk), enumIdx, mnMi);
 
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
@@ -1164,7 +1193,7 @@ begin
   assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
   mnMi := EnumeratorMoveNextMeth(enumIdx);
-  if mnMi < 0 then Error('for-in: enumerator has no MoveNext (nor an `enumerator MoveNext` directive)');
+  if mnMi < 0 then Error('for-in: enumerator has no parameterless MoveNext (nor an `enumerator MoveNext` directive naming one)');
   mnCall := GenMakeMethodCallM(GenMakeIdent(eSym, eTk), enumIdx, mnMi);
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
@@ -3284,133 +3313,146 @@ begin
       Result := BuildForInStringValueLoop(varIdx, CurASTNode);
       Exit;
     end;
-    if CurTok.Kind <> tkIdent then Error('for-in: expected a generator, enum type, or iterable variable');
-    { qualified member-access / indexed source (`obj.field`, `Self.field`,
-      `a.b[i]`...): the ident is followed by a `.`/`[` selector, so it is not a
-      bare name — parse it as a general lvalue node and drive the node-based
-      loop. Must come before the bare-name lookups: a local object var would
-      otherwise match FindSym and then choke on the trailing `.`. }
-    if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkDot, tkLBrack]) then
+    { NOT a refusal any more, and it never described the container.
+      `for i in (v)`, `for i in 4` and `for i in Integer(4)` died here while
+      `for i in Int64(4)` compiled -- the discriminator was that Int64 lexes as
+      tkIdent and Integer does not, so two spellings of one cast got opposite
+      answers for a reason invisible in the source. What the gate was actually
+      protecting is the block below it: every arm in it keys on CurTok.SVal or
+      on the token after the name, and none of them means anything for a
+      non-identifier. So the block gets the precondition and the general
+      container-EXPRESSION path below takes what falls through -- which is where
+      those spellings were always going to be decided.
+      bug-p-a-for-in-container-must-start-with-an-identifier-token }
+    if CurTok.Kind = tkIdent then
     begin
-      srcIdx := FindSym(CurTok.SVal);
-      { …unless the name is a PROC rather than a variable: `for i in MakeMat[1]`.
-        ParseLValueAST is handed idx = -1 and answers 'undefined variable', which
-        is a lookup failure and not a statement about the container. ParseExpr
-        resolves the call and applies the `[` through the same suffix path the
-        expression form uses. Mirrors the High/Low arms in pasparser_expr.inc.
-        compat-pascal-index-a-function-call-result }
-      if (srcIdx < 0) and (FindProc(CurTok.SVal) >= 0) then
+      { qualified member-access / indexed source (`obj.field`, `Self.field`,
+        `a.b[i]`...): the ident is followed by a `.`/`[` selector, so it is not a
+        bare name — parse it as a general lvalue node and drive the node-based
+        loop. Must come before the bare-name lookups: a local object var would
+        otherwise match FindSym and then choke on the trailing `.`. }
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkDot, tkLBrack]) then
+      begin
+        srcIdx := FindSym(CurTok.SVal);
+        { …unless the name is a PROC rather than a variable: `for i in MakeMat[1]`.
+          ParseLValueAST is handed idx = -1 and answers 'undefined variable', which
+          is a lookup failure and not a statement about the container. ParseExpr
+          resolves the call and applies the `[` through the same suffix path the
+          expression form uses. Mirrors the High/Low arms in pasparser_expr.inc.
+          compat-pascal-index-a-function-call-result }
+        if (srcIdx < 0) and (FindProc(CurTok.SVal) >= 0) then
+        begin
+          ParseExpr;
+          Result := ParseForInNodeAST(varIdx, CurASTNode);
+          Exit;
+        end;
+        srcTokIdx := TokPos - 1; Next;
+        Result := ParseForInNodeAST(varIdx, ParseLValueAST(srcIdx, srcTokIdx));
+        Exit;
+      end;
+      { generator call → existing coroutine/stackless desugar }
+      gpi := FindProc(CurTok.SVal);
+      if (gpi >= 0) and ProcIsGenerator[gpi] then
+      begin
+        Next;
+        Result := ParseForInGeneratorAST(varIdx, gpi, -1, -1);
+        Exit;
+      end;
+      { enum type name → iterate all ordinals }
+      fsym := FindEnumType(CurTok.SVal);
+      if fsym >= 0 then
+      begin
+        if EnumTypeHasHoles[fsym] then
+          Error('for-in: the enum has non-contiguous values (explicit ordinals) — iteration order is undefined');
+        Next;
+        Result := ParseForInOrdRangeAST(varIdx, 0, EnumTypeValCount[fsym] - 1, tyInteger);
+        Exit;
+      end;
+      { …and a named SUBRANGE type name → iterate ITS bounds. `IntRange = 0..9`,
+        `TLetter = 'a'..'e'`, `TRange1 = first..second` -- FPC's native for-in
+        tier takes any ordinal TYPE, and a subrange is one. Reached only when the
+        name is not also a variable: `for x in v` where `v` happens to share a
+        type's name must stay the container path, which is the same guard the
+        enum arm above relies on by FindEnumType answering about types only.
+        The bounds are read from the columns Low/High already reads, so the two
+        cannot disagree about the same type (bug-a-low-high-of-a-named-subrange-
+        answer-the-base-type). tforin1 }
+      faIdx := FindTypeAlias(CurTok.SVal);
+      if (faIdx >= 0) and AliasIsSub[faIdx] and (FindSym(CurTok.SVal) < 0) then
+      begin
+        Next;
+        Result := ParseForInOrdRangeAST(varIdx, AliasSubLo[faIdx], AliasSubHi[faIdx],
+                                        IntToTypeKind(AliasTk[faIdx]));
+        Exit;
+      end;
+      { …and a named SET CONSTANT as the source. Set iteration itself was already
+        here and already correct -- a set VARIABLE and a bare `[a, b]` constructor
+        both iterate in ordinal order and match fpc 3.2.2 -- so this is not the
+        feature, it is the THIRD SPELLING of it. A named set constant lives in the
+        SetConst table and not in Syms, so the `FindSym` arm below could never see
+        one and it fell through to "not a generator, enum type, or iterable
+        variable", a message that is true and names none of the three things it
+        actually is.
+
+        The trigger is the HEAD of the source being a set constant; ParseExpr then
+        takes the whole expression, so `for c in cs + [clGreen]` comes along for
+        free and reads the mask exactly as `x in cs + [clGreen]` does. The set
+        operand is only ever the right-hand side of a generated `in`, which is why
+        any expression the `in` codegen accepts works here without a second path.
+
+        Element kind: the enum id comes from the table; otherwise the LOOP
+        VARIABLE's own type decides Char from ordinal, which is the same
+        resolution the `[...]` constructor arm above performs on the literal's
+        first element. tforin1 }
+      fcIdx := FindSetConst(CurTok.SVal);
+      if (fcIdx >= 0) and (FindSym(CurTok.SVal) < 0) then
       begin
         ParseExpr;
-        Result := ParseForInNodeAST(varIdx, CurASTNode);
+        forcNode := CurASTNode;
+        if Syms[varIdx].TypeKind = tyAuto then
+        begin
+          Syms[varIdx].TypeKind := tyInteger;
+          SymSyncTypeRef(varIdx);
+        end;
+        if Syms[varIdx].TypeKind = tyChar then forcRec := Ord(tyChar)
+        else forcRec := Ord(tyInteger);
+        Expect(tkDo, 'do');
+        Result := BuildForInSetLoop(varIdx, SetConstEnumId[fcIdx], forcRec,
+                                    forcNode, ParseStatementAST);
         Exit;
       end;
-      srcTokIdx := TokPos - 1; Next;
-      Result := ParseForInNodeAST(varIdx, ParseLValueAST(srcIdx, srcTokIdx));
-      Exit;
-    end;
-    { generator call → existing coroutine/stackless desugar }
-    gpi := FindProc(CurTok.SVal);
-    if (gpi >= 0) and ProcIsGenerator[gpi] then
-    begin
-      Next;
-      Result := ParseForInGeneratorAST(varIdx, gpi, -1, -1);
-      Exit;
-    end;
-    { enum type name → iterate all ordinals }
-    fsym := FindEnumType(CurTok.SVal);
-    if fsym >= 0 then
-    begin
-      if EnumTypeHasHoles[fsym] then
-        Error('for-in: the enum has non-contiguous values (explicit ordinals) — iteration order is undefined');
-      Next;
-      Result := ParseForInOrdRangeAST(varIdx, 0, EnumTypeValCount[fsym] - 1, tyInteger);
-      Exit;
-    end;
-    { …and a named SUBRANGE type name → iterate ITS bounds. `IntRange = 0..9`,
-      `TLetter = 'a'..'e'`, `TRange1 = first..second` -- FPC's native for-in
-      tier takes any ordinal TYPE, and a subrange is one. Reached only when the
-      name is not also a variable: `for x in v` where `v` happens to share a
-      type's name must stay the container path, which is the same guard the
-      enum arm above relies on by FindEnumType answering about types only.
-      The bounds are read from the columns Low/High already reads, so the two
-      cannot disagree about the same type (bug-a-low-high-of-a-named-subrange-
-      answer-the-base-type). tforin1 }
-    faIdx := FindTypeAlias(CurTok.SVal);
-    if (faIdx >= 0) and AliasIsSub[faIdx] and (FindSym(CurTok.SVal) < 0) then
-    begin
-      Next;
-      Result := ParseForInOrdRangeAST(varIdx, AliasSubLo[faIdx], AliasSubHi[faIdx],
-                                      IntToTypeKind(AliasTk[faIdx]));
-      Exit;
-    end;
-    { …and a named SET CONSTANT as the source. Set iteration itself was already
-      here and already correct -- a set VARIABLE and a bare `[a, b]` constructor
-      both iterate in ordinal order and match fpc 3.2.2 -- so this is not the
-      feature, it is the THIRD SPELLING of it. A named set constant lives in the
-      SetConst table and not in Syms, so the `FindSym` arm below could never see
-      one and it fell through to "not a generator, enum type, or iterable
-      variable", a message that is true and names none of the three things it
-      actually is.
+      { iterable variable (string / array / dynarray / open-array param).
 
-      The trigger is the HEAD of the source being a set constant; ParseExpr then
-      takes the whole expression, so `for c in cs + [clGreen]` comes along for
-      free and reads the mask exactly as `x in cs + [clGreen]` does. The set
-      operand is only ever the right-hand side of a generated `in`, which is why
-      any expression the `in` codegen accepts works here without a second path.
-
-      Element kind: the enum id comes from the table; otherwise the LOOP
-      VARIABLE's own type decides Char from ordinal, which is the same
-      resolution the `[...]` constructor arm above performs on the literal's
-      first element. tforin1 }
-    fcIdx := FindSetConst(CurTok.SVal);
-    if (fcIdx >= 0) and (FindSym(CurTok.SVal) < 0) then
-    begin
-      ParseExpr;
-      forcNode := CurASTNode;
-      if Syms[varIdx].TypeKind = tyAuto then
+        Only a BARE one: `for x in o.Bag do` starts with an identifier too, and used to be
+        grabbed here as the variable `o` -- which then failed with "variable is not a string or
+        array" instead of reaching the container-expression path below. `do` immediately after
+        the name is what says the container really is just this variable. }
+      fsym := FindSym(CurTok.SVal);
+      if (fsym >= 0) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
       begin
-        Syms[varIdx].TypeKind := tyInteger;
-        SymSyncTypeRef(varIdx);
-      end;
-      if Syms[varIdx].TypeKind = tyChar then forcRec := Ord(tyChar)
-      else forcRec := Ord(tyInteger);
-      Expect(tkDo, 'do');
-      Result := BuildForInSetLoop(varIdx, SetConstEnumId[fcIdx], forcRec,
-                                  forcNode, ParseStatementAST);
-      Exit;
-    end;
-    { iterable variable (string / array / dynarray / open-array param).
-
-      Only a BARE one: `for x in o.Bag do` starts with an identifier too, and used to be
-      grabbed here as the variable `o` -- which then failed with "variable is not a string or
-      array" instead of reaching the container-expression path below. `do` immediately after
-      the name is what says the container really is just this variable. }
-    fsym := FindSym(CurTok.SVal);
-    if (fsym >= 0) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
-    begin
-      Next;
-      Result := ParseForInVarAST(varIdx, fsym);
-      Exit;
-    end;
-    { implicit-Self array/string field as the iterable (unqualified `Items`
-      inside a method, the same resolution `Self.Items` gets). FindSym only
-      sees locals/globals, so a field lands here. Only a *bare* field (next
-      token `do`) is taken — `for x in Self.Field` and `for x in obj.field`
-      qualified member-access sources are a separate, broader feature. }
-    if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0)
-       and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
-    begin
-      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
-      fldIdx := FindUField(selfClassCi, CurTok.SVal);
-      if fldIdx >= 0 then
-      begin
-        selfSym := Procs[CurProc].Params[0].SymIdx;
-        fldTokIdx := TokPos - 1;
         Next;
-        Result := ParseForInFieldAST(varIdx, selfSym, fldIdx,
-                    Tokens[fldTokIdx].SOffset, Tokens[fldTokIdx].SLen);
+        Result := ParseForInVarAST(varIdx, fsym);
         Exit;
+      end;
+      { implicit-Self array/string field as the iterable (unqualified `Items`
+        inside a method, the same resolution `Self.Items` gets). FindSym only
+        sees locals/globals, so a field lands here. Only a *bare* field (next
+        token `do`) is taken — `for x in Self.Field` and `for x in obj.field`
+        qualified member-access sources are a separate, broader feature. }
+      if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0)
+         and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
+      begin
+        selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+        fldIdx := FindUField(selfClassCi, CurTok.SVal);
+        if fldIdx >= 0 then
+        begin
+          selfSym := Procs[CurProc].Params[0].SymIdx;
+          fldTokIdx := TokPos - 1;
+          Next;
+          Result := ParseForInFieldAST(varIdx, selfSym, fldIdx,
+                      Tokens[fldTokIdx].SOffset, Tokens[fldTokIdx].SLen);
+          Exit;
+        end;
       end;
     end;
     { GENERAL container EXPRESSION with a GetEnumerator: `for F in Data do` where Data is a

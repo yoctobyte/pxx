@@ -3,3 +3,6 @@ distinct 5
 builtin 9
 cast 1004
 expr 1010
+castint 4
+lit 4
+paren 9
