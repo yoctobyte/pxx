@@ -147,4 +147,4 @@ both files are green:**
 Self-host fixedpoint holds (`converged`, `006274f6d15d`).
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 85912e1fa.
