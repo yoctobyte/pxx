@@ -120,3 +120,18 @@ same period had been partly reaped. Ranking by total-at-the-end answers "what is
 in there now"; the question is "what puts it there", and those differ whenever
 the families have different lifetimes. Rank by **inodes per run**, not by the
 standing total.
+
+## Second reading 2026-09-08 13:14Z — the extrapolation holds, and now it is a rate
+
+```
+$ df -i /tmp   -> 1048576 total, 443118 used (43%),  605458 free
+```
+
+Two points now instead of one: 349,311 at 04:50Z, 443,118 at 13:14Z — **+93,807
+in 8h24m, ~11,170/hour, ~268k/day.** The one-point extrapolation above guessed
+~350k/day from a single 24h delta; the measured rate is lower but the same order,
+and the conclusion is unchanged: **605,458 free inodes / 11,170 per hour = ~54
+hours, so the ceiling falls around 2026-09-10 late** unless a producer is fixed.
+
+Recorded because a prediction nobody re-measures is indistinguishable from one
+that was wrong. Bytes at this reading: 5% — still reassuring, still irrelevant.
