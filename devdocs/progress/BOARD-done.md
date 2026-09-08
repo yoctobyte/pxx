@@ -3121,6 +3121,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-aarch64-test-rtti | A | 70 | regression | regression: test-aarch64#src:test/test_rtti.pas at 9d5a4e27029e in step 1/3, `./compiler/pascal26 -dPXX_MANAGED_STRING --target=aarch64 test/test_rtti.pas /tmp/test_aarch64_rtti` (auto-filed by twatch) | — |
 | regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-arm32-compiler-srchash | A | 70 | regression | regression: test-arm32#src:tools/compiler_srchash.sh at b29428afe251 in step 1/1, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-channel | T | 70 | regression | regression: test-arm32#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |

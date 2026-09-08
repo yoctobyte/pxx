@@ -317,3 +317,52 @@ load-bearing and should never have been the first thing offered.
 Two readings that agree are not two sources unless they can fail differently,
 and "the shared step passed" and "the shared step is not the cause" fail
 together. The differing failure messages fail differently from both.
+
+## Quantified 2026-09-08: the `src:tools/compiler_srchash.sh` family, 18 jobs deep
+
+The clearest live instance of this ticket, measured across the whole seven
+archive:
+
+| | |
+| --- | --- |
+| NEW-RED events carrying `src:tools/compiler_srchash.sh` | **71** |
+| distinct JOB names they were attributed to | **18** |
+| distinct shas | 21 |
+| days | 09-01 (14), 09-02 (6), 09-03 (1), 09-05 (38), 09-06 (7), 09-07 (1), 09-08 (4) |
+| regression tickets auto-filed for it | **12** — 10 in `done/`, 2 open, and both open ones are suffixed `-2`, i.e. REPEAT filings of a slug that already closed once |
+
+The 18: test-arm32, test-asm, test-c-abi-mixed-link, test-cjson, test-core,
+test-debug-g, test-emit-obj, test-fgl, test-lua, test-lua-cross, test-smoke,
+test-sqlite-threads-{aarch64,arm32,i386,x86_64}, test-threads, test-uforth,
+test-zlib.
+
+**That list is most of the tier, which is the whole argument.** A defect that
+can present as `test-zlib` on Friday and `test-arm32` on Monday is not a property
+of zlib or of arm32. The failing STEP is a guard prepended to the job —
+`livesrc=$(tools/compiler_srchash.sh)` compared against the `srchash` line of
+`compiler/.pascal26.fixedpoint` — so the job name in the identifier is **whatever
+was running when the guard fired**, and the ticket generator promotes it to the
+subject of a sentence.
+
+**The cost is not just noise, it is MISATTRIBUTION ONTO A SEAT.** Each filing
+carries `bad <sha>, last good <sha>, N commit(s) in range`, so it points at
+whoever happened to land in that window. On 2026-09-08 the two new ones landed at
+`5506794317a7` — a Track P for-in change touching `pasparser_stmt.inc` and
+`symtab.inc`, which cannot affect a source-hash guard. The previous run's
+`test-arm32` instance at `b29428afe251` closed itself as "job green again" one
+run later.
+
+# What is NOT established here
+
+The exact condition that fires on seven each time. One captured log shows
+`stamp sources: deadbeef` against a real tree hash, plus `stamp 214 files, tree
+215` — the stamp did not describe the tree at all. `compiler/.pascal26.fixedpoint`
+is gitignored and therefore per-checkout, written at build time, so the live-vs-
+stamp disagreement is consistent with the watcher's binary predating the tree it
+just pulled — the same hazard CLAUDE.md names for every seat ("rebuild after any
+sync touching `compiler/**` before you measure"), occurring inside the harness
+rather than in a seat.
+
+**Naming that mechanism would need seven's tree state at those moments, which
+this seat does not have.** Recorded as a bounded observation so whoever takes it
+starts from the guard and the harness, not from eighteen innocent jobs.
