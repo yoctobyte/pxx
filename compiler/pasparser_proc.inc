@@ -917,6 +917,7 @@ var
   wasDelphiGenHdr : Boolean;  { this `X.M` header was `X<T>.M` in the source; the mode-Delphi rewrite deleted the group. See GenMethImplSOff. }
   isFunc   : Boolean;
   name     : AnsiString;
+  pQualNm  : AnsiString;  { scratch for the qualified-prefix strip on a param type }
   retType  : TTypeKind;
   tk       : TTypeKind;
   pnames    : array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -1417,6 +1418,15 @@ begin
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
+      { `p: TOwn.TArr` -- strip the OWNER before the probe, as the var section
+        and the field parser do. Without it the parameter was recorded as the
+        ELEMENT scalar and the body could not index it at all.
+        bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration }
+      if CurTok.Kind = tkIdent then
+      begin
+        pQualNm := CurTok.SVal;
+        if EatQualifiedTypePrefix(pQualNm) then ;
+      end;
       if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
       if paramAi >= 0 then
       begin
@@ -1478,6 +1488,12 @@ begin
             base scalar and the callee would index/copy with the base stride
             (bug-pascal-openarray-of-array-param-marshal). }
           paramAi := -1;
+          { and again for the ELEMENT of an open array: `a: array of TOwn.TRow`. }
+          if CurTok.Kind = tkIdent then
+          begin
+            pQualNm := CurTok.SVal;
+            if EatQualifiedTypePrefix(pQualNm) then ;
+          end;
           if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
           if (paramAi >= 0) and (not ArrTypeIsDyn[paramAi]) then
           begin

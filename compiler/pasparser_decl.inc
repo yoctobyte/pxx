@@ -1626,6 +1626,7 @@ end;
 procedure ParseDeclTypeDesc;
 var ai, di, dLo, dHi, flatLen: Integer;
     moreDims, elemResolved: Boolean;
+    qualNm: AnsiString;
 begin
     VDIsArr := False; VDIsDyn := False; VDArrLo := 0; VDArrHi := 0; VDElemTk := tyInteger;
     elemResolved := False; VDElemDynDepth := 0;
@@ -1636,6 +1637,31 @@ begin
     VDIdxTk := 0; VDIdxEnumId := -1;
     VDIsArrND := False; VDNdCnt := 0;
     ai := -1;
+    { STRIP `TOwner.` FIRST, because the array probe below reads CurTok.SVal and
+      for `var a: TOwn.TPArr` that is the OWNER, not the type. FindArrayType
+      answered -1 for `TOwn`, the descriptor fell through to ParseTypeKind --
+      which does its own strip -- and the declaration was ACCEPTED as a scalar.
+      No diagnostic at the declaration; the error arrived at the first `[` as
+      `this value cannot be indexed`, which is the shape a fallthrough-to-a-
+      default produces rather than a refusal.
+
+      The nested RECORD spelling was right through the same qualifier all along,
+      and that is the whole localisation: it reaches ParseTypeKind with ai = -1
+      and gets the strip there. Only the two kinds this routine probes BEFORE
+      ParseTypeKind -- named arrays here -- were reading an unstripped name.
+
+      Not the array lookup made owner-scoped: `ArrType*` carries no owner column
+      (nor does `EnumType*`), which is why the qualified CAST answers those two
+      kinds unscoped too. Adding the column is a separate change and wants both
+      tables at once. See ClassDeclaresTypeNamed's header.
+      bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration }
+    if CurTok.Kind = tkIdent then
+    begin
+      qualNm := CurTok.SVal;
+      { consumes nothing and returns False when there is no `TOwner.` to eat, so
+        it is the test as well as the strip -- see the routine's own header }
+      if EatQualifiedTypePrefix(qualNm) then ;
+    end;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
     if ai >= 0 then
     begin
@@ -1803,6 +1829,11 @@ begin
           would resolve `TA` to a bare base type and drop the dynamic dimension. }
         if (CurTok.Kind = tkIdent) and (not elemResolved) then
         begin
+          { Same strip as at the top of this routine, for the ELEMENT position:
+            `array of TOwn.TDyn` puts CurTok on the OWNER, so the probe missed
+            and the dynamic dimension was dropped silently. }
+          qualNm := CurTok.SVal;
+          if EatQualifiedTypePrefix(qualNm) then ;
           ai := FindArrayType(CurTok.SVal);
           if (ai >= 0) and ArrTypeIsDyn[ai] then
           begin
@@ -1852,6 +1883,9 @@ begin
         case above already handled its own alias element. }
       if VDIsArr and (not VDIsDyn) and (not elemResolved) and (CurTok.Kind = tkIdent) then
       begin
+        { Same strip again -- `array[0..1] of TOwn.TDyn`. }
+        qualNm := CurTok.SVal;
+        if EatQualifiedTypePrefix(qualNm) then ;
         ai := FindArrayType(CurTok.SVal);
         if (ai >= 0) and ArrTypeIsDyn[ai] then
         begin
@@ -5330,6 +5364,7 @@ var
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi: Integer;
   fSem: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
+  fQualNm: AnsiString;
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -5434,6 +5469,19 @@ begin
       real dynamic array. Without this the field's UFldDynDepth stayed
       0 and SetLength(Self.field, n) misrouted to the string path. }
     fAi := -1;
+    { `f: TOwn.TArr` -- strip the OWNER before probing, exactly as
+      ParseDeclTypeDesc does for a var section. Without it the probe missed and
+      ParseTypeKind (which strips for itself) resolved the field to the ELEMENT
+      scalar: `h.f[1] := 8` indexed correctly through the lvalue path while
+      SizeOf(the record) answered 4 against fpc's 16, so the write went past the
+      record and nothing said so. The indexing row is exactly the reason this
+      site looked healthy.
+      bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration }
+    if CurTok.Kind = tkIdent then
+    begin
+      fQualNm := CurTok.SVal;
+      if EatQualifiedTypePrefix(fQualNm) then ;
+    end;
     if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
     if (fAi >= 0) and ArrTypeIsDyn[fAi] then
     begin
@@ -6041,8 +6089,20 @@ procedure ParseFuncReturnTypeShape(var retType: TTypeKind;
   caller ends up recording an array result as an enum, which is the shape of
   three of the four dropped fields this function has already produced. }
 var paramAi: Integer;
+    retQualNm: AnsiString;
 begin
   retStrCap := 0;
+  { `function F: TOwn.TArr` -- strip the OWNER once, ahead of BOTH array probes
+    below, which read CurTok.SVal and would otherwise see the owner. Placed
+    before the tkArray fork because it is a no-op on anything that is not
+    `TOwner . member`, the enum/record/pointer arms included: it then consumes
+    nothing and ParseTypeKind does its own strip exactly as before.
+    bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration }
+  if CurTok.Kind = tkIdent then
+  begin
+    retQualNm := CurTok.SVal;
+    if EatQualifiedTypePrefix(retQualNm) then ;
+  end;
   if CurTok.Kind = tkArray then
   begin
     { `array of T` result: a pointer-sized dynamic-array handle. retType holds

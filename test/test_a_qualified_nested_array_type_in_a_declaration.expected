@@ -1,0 +1,15 @@
+local 5 4
+global 42 43 4
+field 8 4
+plain 3 4
+classvar 9
+dyn-of-dyn 7 2 3
+fix-of-dyn 11 4
+fix-of-fix 13 2
+dyn-of-fix 15 2
+enum 1 TRUE
+param-fix 43 4
+param-dyn 31 3
+param-open 13 2
+ret-fix 41
+ret-dyn 42 3

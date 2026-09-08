@@ -16946,6 +16946,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_clsaliasown26 "$$($(TESTTMP)/test_clsaliasown26)" "$$(cat test/test_a_class_body_alias_does_not_leak_to_the_unit.expected)"
 	./$(COMPILER) -Futest/units test/test_an_alias_in_a_used_unit_ranks_with_the_class_rows.pas $(TESTTMP)/test_aliasrank26
 	tools/expect_same.sh test_aliasrank26 "$$($(TESTTMP)/test_aliasrank26)" "$$(cat test/test_an_alias_in_a_used_unit_ranks_with_the_class_rows.expected)"
+	# a nested ARRAY type reached through its owner's name, in every declaring
+	# position: var section, routine-local, class var, record field, array
+	# ELEMENT, parameter (value/var/open) and function result. Five probe sites
+	# read CurTok.SVal, which for `TOwn.TArr` is the OWNER. The enum/set/record
+	# rows are controls -- they were right through the same qualifier already.
+	./$(COMPILER) test/test_a_qualified_nested_array_type_in_a_declaration.pas $(TESTTMP)/test_qualnestarr26
+	tools/expect_same.sh test_qualnestarr26 "$$($(TESTTMP)/test_qualnestarr26)" "$$(cat test/test_a_qualified_nested_array_type_in_a_declaration.expected)"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of
