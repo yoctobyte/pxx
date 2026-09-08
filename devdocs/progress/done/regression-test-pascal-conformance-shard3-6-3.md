@@ -71,5 +71,5 @@ Measured at `5ea212e36`, compiler `29e343715a4a`:
 same tree is 417 pass, 0 fail, 83 skip, 48 gap, 0 FAIL rows -- unchanged from
 before `d81b90a99`, so nothing was traded for this. Full tier `rc=0`, fgl 7/7,
 `gate.sh quick` GREEN read from the log.
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b6b6c897d.
 - 2026-09-08 — verified dead at HEAD 5ea212e36 (compiler 29e343715a4a) and closed by frankS; the fix is 5ea212e36, the cause was 5ea212e36's parent d81b90a99.

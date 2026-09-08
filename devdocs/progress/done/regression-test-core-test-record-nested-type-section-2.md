@@ -53,5 +53,5 @@ control for it FAILING at `d81b90a99`: `test-core` stops at the first failure an
 my run died on `test_nested_class_type_scoping` before reaching this one. That it
 was red then is host seven's measurement, not mine, and is recorded here as
 seven's rather than restated as if I had reproduced it.
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b6b6c897d.
 - 2026-09-08 — verified dead at HEAD 5ea212e36 (compiler 29e343715a4a) and closed by frankS; the fix is 5ea212e36, the cause was 5ea212e36's parent d81b90a99.
