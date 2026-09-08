@@ -16978,6 +16978,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_basenest26 "$$($(TESTTMP)/test_basenest26)" "$$(cat test/test_a_base_class_nested_type_is_visible_to_its_derived_class.expected)"
 	./$(COMPILER) test/test_a_nested_routine_can_write_the_enclosing_result_through_a_selector.pas $(TESTTMP)/test_nestselwrite26
 	tools/expect_same.sh test_nestselwrite26 "$$($(TESTTMP)/test_nestselwrite26)" "$$(cat test/test_a_nested_routine_can_write_the_enclosing_result_through_a_selector.expected)"
+	./$(COMPILER) test/test_the_enclosing_functions_result_written_from_a_nested_function.pas $(TESTTMP)/test_outerres26
+	tools/expect_same.sh test_outerres26 "$$($(TESTTMP)/test_outerres26)" "$$(cat test/test_the_enclosing_functions_result_written_from_a_nested_function.expected)"
 	# THE TWO REFUSALS ARE THE OTHER HALF OF THE FIX, not paperwork: terecs12c
 	# and terecs13c are %FAIL conformance rows that are NOT skip-listed, so they
 	# pass BY REFUSAL. Lifting the rejection wholesale fixes five rows and breaks

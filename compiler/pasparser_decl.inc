@@ -9484,6 +9484,14 @@ var
   shift, tmpPos: Integer;
   { captured enclosing locals/params (snapshot at the capture site) }
   capNm: array[0..MAX_NEST_CAPS-1] of AnsiString;
+  { THE NAME SPLICED AT THE CALL SITE, which is the same as the lifted param's
+    name for every capture but one. A captured local is spelled identically in
+    both places -- that is what the comment at capActOff says -- and the
+    ENCLOSING FUNCTION'S RESULT cannot be: at the call site it is `Result`, and
+    inside a nested FUNCTION that spelling already names something else. Two
+    columns, because one name genuinely cannot serve both positions.
+    bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results }
+  capActNm: array[0..MAX_NEST_CAPS-1] of AnsiString;
   capTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
   capRec, capDyn, capPtrRec, capProcSig: array[0..MAX_NEST_CAPS-1] of Integer;
   capPtrDepth, capPtrBaseTk, capPtrBaseRec: array[0..MAX_NEST_CAPS-1] of Integer;
@@ -9737,12 +9745,75 @@ begin
         A nested function keeps today's behaviour, deliberately and visibly.
         bug-p-a-qualified-enclosing-function-name-in-a-nested-routine-recurses }
       if (CurProc >= 0) and (i + 1 < TokCount) and
-         ((Tokens[i + 1].Kind = tkAssign) or
-          ((Tokens[nestedStart].Kind <> tkFunction) and
-           (Tokens[i + 1].Kind in [tkDot, tkLBrack, tkCaret]))) and
+         (Tokens[i + 1].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
          CaseEqual(nm, UnqualifiedRoutineName(Procs[CurProc].Name)) and
          (FindSym('Result') >= 0) then
       begin
+        { INSIDE A NESTED **FUNCTION** THE TOKEN `Result` IS ALREADY TAKEN, so
+          the enclosing result gets its own spelling and is captured under it.
+          `Outer := 99` written in a nested function used to be rewritten to
+          `Result` like any other, and that token names the NESTED function's
+          result -- loud when the two result types differ (`cannot assign
+          Integer to AnsiString`) and SILENT when they agree, writing the wrong
+          variable and returning the enclosing result unchanged.
+
+          Two names for one capture is the whole mechanism: `__outerres` is the
+          lifted by-ref PARAMETER, and `Result` is the ACTUAL spliced at the call
+          site, where it still resolves to the enclosing function's result. Every
+          other capture uses one name in both positions, which is why capActNm
+          exists and why it defaults to capNm.
+
+          NOT TAKEN FOR AN ARRAY-VALUED enclosing result: a captured array needs
+          its shape carried (capArr/capDyn/capFixedLen/capFixedLo, three arms at
+          the sibling site) and the result sym is not the place I measured that
+          from. Such a function keeps today's behaviour rather than getting an
+          untested one.
+
+          The residual is the one the design already has for every capture: an
+          actual is spliced AS A NAME and resolved in the CALL SITE's scope, so a
+          call from a SIBLING nested function passes that sibling's `Result`.
+          Pre-existing and not introduced here -- a nested PROCEDURE capturing
+          `Result` has the same hole -- and it is what
+          bug-p-a-sibling-call-to-a-capturing-nested-function-gets-the-wrong-capture-actuals
+          is about.
+          bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results }
+        if Tokens[nestedStart].Kind = tkFunction then
+        begin
+          sidx := FindSym('Result');
+          if (sidx >= 0) and (not Syms[sidx].IsArray) then
+          begin
+            Tokens[i].SOffset := NestStrOff('__outerres');
+            Tokens[i].SLen := 10;
+            TokSrcOff[i] := 0; TokSrcLen[i] := 0;   { synthesized spelling; see ShiftTokParallel }
+            nm := '__outerres';
+            found := False;
+            for j := 0 to capCount - 1 do
+              if CaseEqual(capNm[j], nm) then begin found := True; Break; end;
+            if not found then
+            begin
+              if capCount >= MAX_NEST_CAPS then Error('nested routine: too many captured variables');
+              capNm[capCount]     := nm;
+              capActNm[capCount]  := 'Result';
+              capTk[capCount]     := Syms[sidx].TypeKind;
+              capRec[capCount]    := Syms[sidx].RecName;
+              capArr[capCount]    := False;
+              capDyn[capCount]    := 0;
+              capFixedLen[capCount] := 0;
+              capFixedLo[capCount]  := 0;
+              capPtrTk[capCount]  := Syms[sidx].PtrElemTk;
+              capPtrRec[capCount] := Syms[sidx].PtrElemRec;
+              capPtrDepth[capCount]   := SymPtrDepth[sidx];
+              capPtrBaseTk[capCount]  := SymPtrBaseTk[sidx];
+              capPtrBaseRec[capCount] := SymPtrBaseRec[sidx];
+              capProcSig[capCount]    := SymProcSig[sidx];
+              Inc(capCount);
+            end;
+            Inc(i); Continue;
+          end;
+          { array-valued enclosing result: leave the token alone entirely, so
+            this is neither rewritten to the wrong `Result` nor half-handled. }
+          Inc(i); Continue;
+        end;
         Tokens[i].SOffset := NestStrOff('Result');
         Tokens[i].SLen := 6;
         TokSrcOff[i] := 0; TokSrcLen[i] := 0;   { synthesized spelling; see ShiftTokParallel }
@@ -9805,6 +9876,7 @@ begin
           begin
             if capCount >= MAX_NEST_CAPS then Error('nested routine: too many captured variables');
             capNm[capCount] := Syms[sidx].Name;
+            capActNm[capCount] := Syms[sidx].Name;   { same spelling both ends -- see capActNm }
             if Syms[sidx].IsArray and (SymDynDepth[sidx] > 0) then
             begin
               capTk[capCount] := Syms[sidx].ElemType;
@@ -9976,7 +10048,7 @@ begin
   selfOff := NestStrOff('Self');
   nestSelfOff := NestStrOff('__nestself'); nestSelfLen := 10;
   for k := 0 to capCount - 1 do
-    capActOff[k] := NestStrOff(capNm[k]);
+    capActOff[k] := NestStrOff(capActNm[k]);
   coreCount := 0; emitted := 0;
   if needSelf then
   begin
@@ -9991,7 +10063,7 @@ begin
       core[coreCount].SOffset := 0; core[coreCount].SLen := 0; Inc(coreCount);
     end;
     core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
-    core[coreCount].SOffset := capActOff[k]; core[coreCount].SLen := Length(capNm[k]); Inc(coreCount); Inc(emitted);
+    core[coreCount].SOffset := capActOff[k]; core[coreCount].SLen := Length(capActNm[k]); Inc(coreCount); Inc(emitted);
   end;
   nact := emitted;
 
@@ -10009,7 +10081,7 @@ begin
       coreSelf[coreSelfCount].SOffset := 0; coreSelf[coreSelfCount].SLen := 0; Inc(coreSelfCount);
     end;
     coreSelf[coreSelfCount].Kind := tkIdent; coreSelf[coreSelfCount].IVal := 0; coreSelf[coreSelfCount].Line := 0;
-    coreSelf[coreSelfCount].SOffset := capActOff[k]; coreSelf[coreSelfCount].SLen := Length(capNm[k]); Inc(coreSelfCount); Inc(emitted);
+    coreSelf[coreSelfCount].SOffset := capActOff[k]; coreSelf[coreSelfCount].SLen := Length(capActNm[k]); Inc(coreSelfCount); Inc(emitted);
   end;
 
   { Body rewrites for Self capture: rename explicit `Self`, prefix `__nestself .`

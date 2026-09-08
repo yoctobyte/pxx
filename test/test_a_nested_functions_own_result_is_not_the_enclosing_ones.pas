@@ -22,15 +22,23 @@ program test_a_nested_functions_own_result_is_not_the_enclosing_ones;
   deliberately makes them differ. A probe whose right answer equals its wrong
   answer is not a probe.
 
-  NOT ASSERTED HERE, and both measured identical on pin v407 and at HEAD, i.e.
-  neither fixed nor worsened by the capture change:
-    * `Outer := 99` in a nested FUNCTION -- rewritten to the token `Result`,
-      which then means that function's OWN result: a type error.
+  TWO ROWS WERE LISTED HERE AS NOT ASSERTED AND BOTH ARE FIXED NOW (2026-09-07).
+  The list is corrected rather than deleted, because "not asserted" reads as
+  "still broken" to the next reader and this file is the one that pinned the
+  surrounding behaviour while they were:
+    * `Outer := 99` in a nested FUNCTION -- was rewritten to the token `Result`,
+      which meant that function's OWN result: a type error when the two result
+      types differed and a SILENT wrong write when they agreed. Fixed by giving
+      the enclosing result its own captured spelling (`__outerres`), asserted in
+      test_the_enclosing_functions_result_written_from_a_nested_function.pas.
       bug-p-the-enclosing-functions-name-inside-a-nested-function-writes-the-nested-results
-    * `Outer.FV := 33` in ANY nested routine -- the enclosing-name rewrite only
-      fires when the next token is `:=`, so a qualified write is read as a
-      recursive CALL and the program spins until it segfaults.
+    * `Outer.FV := 33` in ANY nested routine -- the enclosing-name rewrite fired
+      only when the next token was `:=`, so a qualified write was read as a
+      recursive CALL and the program spun until it segfaulted. Fixed; asserted
+      in test_a_nested_routine_can_write_the_enclosing_result_through_a_selector.pas.
       bug-p-a-qualified-enclosing-function-name-in-a-nested-routine-recurses
+  This file's own five rows are unchanged by either and still assert what they
+  always did.
 
   Oracle: fpc 3.2.2 prints all five rows exactly as below. The pinned compiler
   REFUSES this file ("no overload of PeekIt$.. matches these arguments").
