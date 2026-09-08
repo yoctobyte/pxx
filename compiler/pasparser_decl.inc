@@ -3136,8 +3136,19 @@ begin
 	        end;
 	        if isArr then Error('array initializer must be parenthesised');
 	        EnsurePendingInitCapacity(PendingInitCount);
+	        { AN INTERFACE NAME IS EXCLUDED HERE AND THAT IS THE WHOLE VAR-SIDE
+	          FIX. An interface is a class type, so it satisfied every clause of
+	          this guard and was initialised as a METACLASS -- kind 5, an
+	          AN_CLASSREF VMT address -- which is why `var g: TGUID = ICom` held
+	          `0x00410BD8` in its first eight bytes instead of the GUID. The
+	          statement path had the identical defect and fixed it the identical
+	          way, by asking about interfaces FIRST
+	          (bug-a-an-interface-name-as-a-guid-value-copies-rtti). Falling
+	          through reaches TryParseInitValForm, which now carries the GUID arm
+	          for both sections. }
 	        if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
-	           (FindSym(CurTok.SVal) < 0) then
+	           (FindSym(CurTok.SVal) < 0) and
+	           (not IsInterfaceTypeName(CurTok.SVal)) then
 	        begin
 	          { initialized metaclass var: `SSLImplementation: TSSLClass = TSSLNone;`
 	            (blcksock) — init kind 5, an AN_CLASSREF (VMT address) assignment;
@@ -4279,6 +4290,58 @@ begin
             PendingInitKind[PendingInitCount] := 5;
             PendingInitVal[PendingInitCount]  := cCi;
             PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+            Inc(PendingInitCount);
+          end;
+        end
+        else if (cTk = tyRecord) and (CurTok.Kind = tkIdent) and
+                IsInterfaceTypeName(CurTok.SVal) then
+        begin
+          { `const g: TGUID = ICom` -- the CONST half of the same cell as the var
+            arm above. A record-typed const goes straight to the parenthesised
+            record-constant parser, so an interface name met `Expect(tkLParen)`
+            and answered `expected '(' before 'ICom'`: a refusal, where the var
+            spelling accepted and stored an address. Two paths, two different
+            wrong answers, opposite directions -- which is the argument the
+            ticket makes for one shared path and is why this routes through the
+            same helper both var arms now use.
+
+            A DEDICATED BRANCH RATHER THAN WIDENING THE SCALAR ONE. Letting a
+            record-typed const fall through to the general const path would also
+            hand LOCAL consts to TryParseInitValForm for the first time, and its
+            STRING arm fires on the destination type -- so `const S: ShortString
+            = 'x'` inside a routine would change behaviour. That is a separate
+            question with its own extent to enumerate; this branch moves only
+            interface names.
+            bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid }
+          if not TryParseInitValForm(cTk, Ord(Syms[cIdx].PtrElemTk),
+                                     fvKind, fvVal, fvAux) then
+            Error('interface "' + CurTok.SVal + '" is not usable as an initialiser here');
+          if isLocalConst then
+          begin
+            if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+            LocalInitSym[LocalInitCount]    := cIdx;
+            LocalInitElem[LocalInitCount]   := PI_ELEM_NONE;
+            LocalInitFOff[LocalInitCount]   := -1;
+            LocalInitKind[LocalInitCount]   := fvKind;
+            LocalInitVal[LocalInitCount]    := fvVal;
+            LocalInitValAux[LocalInitCount] := fvAux;
+            LocalInitTk[LocalInitCount]     := Ord(cTk);
+            Inc(LocalInitCount);
+          end
+          else
+          begin
+            EnsurePendingInitCapacity(PendingInitCount);
+            PendingInitSym[PendingInitCount]    := cIdx;
+            PendingInitElem[PendingInitCount]   := PI_ELEM_NONE;
+            PendingInitFOff[PendingInitCount]   := -1;
+            PendingInitFLen[PendingInitCount]   := 0;
+            PendingInitPStart[PendingInitCount] := 0;
+            PendingInitPCount[PendingInitCount] := 0;
+            PendingInitFIdx[PendingInitCount]   := PI_ELEM_NONE;
+            PendingInitKind[PendingInitCount]   := fvKind;
+            PendingInitVal[PendingInitCount]    := fvVal;
+            PendingInitValAux[PendingInitCount] := fvAux;
+            PendingInitTk[PendingInitCount]     := Ord(cTk);
             Inc(PendingInitCount);
           end;
         end

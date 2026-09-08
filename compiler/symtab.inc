@@ -2869,6 +2869,23 @@ begin
   Result := FindUClassNonRecord(lo2) >= 0;
 end;
 
+{ An INTERFACE type name, which is a class type by IsClassType and means
+  something entirely different in a value position: its GUID, never a metaclass
+  reference. The statement path learned this as
+  bug-a-an-interface-name-as-a-guid-value-copies-rtti -- falling through to
+  AN_CLASSREF made a record copy read 16 bytes of the RTTI blob, with no
+  diagnostic and a plausible-looking result. Every OTHER site that branches on
+  "is this identifier a class type, used as a value" needs the same order, and
+  the var-section initialiser did not have it. Named rather than open-coded
+  because that is two lookups at each site and the second one is the easy half
+  to forget. }
+function IsInterfaceTypeName(const lo: AnsiString): Boolean;
+var ci: Integer;
+begin
+  ci := FindUClass(lo);
+  IsInterfaceTypeName := (ci >= 0) and UClsIsInterface[ci];
+end;
+
 const
   BRF_SCALAR8 = 1;
   BRF_STRING = 2;

@@ -111,6 +111,19 @@ begin
       ASTIVal[valNode] := LocalInitVal[i];
       ASTTk[valNode] := Ord(tySet);
     end
+    else if LocalInitKind[i] = 10 then
+      { Val IS AN AST NODE the declaration already parsed -- same encoding as the
+        global path's kind 10, deliberately: the two emitters must not drift.
+        Reached by a routine-local `var g: TGUID = ICom`, whose GUID node cannot
+        be rebuilt from a constant the way kinds 1/2/4/5/9 can.
+
+        THE `else` BELOW IS A SILENT CATCH-ALL AND THAT IS HOW THIS PRESENTED:
+        an unrecognised kind becomes an AN_INT_LIT whose IVal is whatever Val
+        held, so a node index was assigned into a TGuid record and the program
+        SIGSEGV'd -- no diagnostic, and the compile said `ok`. A kind the global
+        emitter knows and this one does not is not a missing feature here, it is
+        a wrong value, so new kinds have to land in both. }
+      valNode := LocalInitVal[i]
     else if LocalInitKind[i] = 4 then
     begin
       { `@var` -- Val is the SYM index; address-of that ident. }

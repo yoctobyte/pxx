@@ -132,3 +132,28 @@ manner of `PasSpliceTokFile`, rather than a global set at parse time.
 
 Corpus: `tgeneric91.pp`, still `gap:`. `PXXDBG=p.specunit` prints the two unit
 identities for bodies that get far enough to have them; this one does not.
+
+## 2026-09-08 — the channel the fix needs is a COORDINATED resource
+
+Looked at, not attempted, so the next reader knows what the "parallel channel on
+the splice" costs before starting.
+
+The banked diagnosis is right that the spliced run has to carry its host unit to
+the HEADER. Two ways to carry it, and both touch something shared:
+
+- **A token-index range table**, in the manner of `PasSrcRangeStart`/`PasSrcRangeId`
+  (`dbg_filetable.inc`), which already maps token index to source key for exactly
+  these splices. Cheapest to write, and it inherits whatever that table's answer
+  is to later inserts shifting indices under it.
+- **A 14th token-parallel array**, which `ShiftTokParallel` must then move. There
+  are thirteen today and the routine's own comment records that an earlier
+  version moved exactly one of eleven; the symptom of missing one is not at the
+  edit (`{$R+}` silently stops being in force inside a lifted body).
+- **A marker token** in the stream, which shifts with everything for free and
+  needs no parallel array at all — but a new token kind is the ONE thing
+  CLAUDE.md says to coordinate on by message (`token/node numbering in
+  lexer.inc / defs.inc`).
+
+So the marker-token shape, which is otherwise the most robust of the three, is
+the one that cannot be landed unilaterally. That is a scheduling fact rather
+than a design objection, and it is why this was left rather than half-done.

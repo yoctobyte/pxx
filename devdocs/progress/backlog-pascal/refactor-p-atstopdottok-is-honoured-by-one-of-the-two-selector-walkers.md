@@ -72,3 +72,22 @@ a symbol-rooted receiver STOPS: after the change, the hand-written route deleted
 Both rows already exist in
 `test/test_delphi_parenless_methodref_chained_receiver.pas`, which is what makes
 this cheap to attempt.
+
+# Before unifying: check whether the second walker is ignoring the flag or doing without it on purpose
+
+frankS, 2026-09-08, from the version of this it got wrong the same morning: it
+put a strip ahead of a probe, correct for the case measured, and it broke two
+tests because **the other walker did something extra it had not read** — that
+copy REWROTE the name rather than only consuming the qualifier. *"The two
+walkers were not merely inconsistent; they were doing different jobs."*
+
+So the first step of this ticket is not the one-line guard. It is establishing
+that `ParseLValueAST`'s selector handling is the SAME job as
+`ParseClassRecordSelectors`' and merely lacks the stop — rather than a different
+job that happens to look alike at the call site. If it is the second, the fix is
+not to teach it the flag.
+
+frankS also ranks this above 35 on the evidence that two of its three fixes that
+day were the same animal — one rule, two walkers, one of which never learned it.
+Left at 35 rather than re-ranked from outside; noted here so whoever picks it up
+has the argument.

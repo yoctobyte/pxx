@@ -12473,7 +12473,7 @@ end;
   NOTHING consumed, so the caller falls through to the ordinal path unchanged. }
 function TryParseInitValForm(tk: TTypeKind; ptrElemTk: Integer;
                              var kind: Integer; var val: Int64; var aux: Integer): Boolean;
-var pi, si, ci, mi: Integer;
+var pi, si, ci, mi, gNode: Integer;
 begin
   TryParseInitValForm := False;
   kind := 0; val := 0; aux := 0;
@@ -12492,6 +12492,53 @@ begin
     Next;
     TryParseInitValForm := True;
     Exit;
+  end;
+
+  { AN INTERFACE NAME IN A VALUE POSITION MEANS ITS GUID, in an initialiser
+    exactly as in a statement. `var g: TGUID = ICom` stored `0x00410BD8` -- an
+    ADDRESS -- into the first eight bytes, because AN_GUIDCONST lowers to the
+    interned blob's data address and the ordinal path baked that pointer instead
+    of copying the 16 bytes behind it. Nothing diagnosed it: the declaration
+    compiles, the record is the right size, and the program runs with an
+    interface identity that can never match. `const g: TGUID = ICom` refused
+    outright (`expected '(' before 'ICom'`), which is the better of the two
+    failures and the one people hit second, since const is the spelling this is
+    normally written in.
+
+    KIND 10 RATHER THAN A NEW BAKED SHAPE, and the reason is already written at
+    kind 10's declaration in defs.inc: the other kinds each name a constant the
+    emitter knows how to REBUILD in Data[], and this one keeps the AST so the
+    initialiser runs at program entry `like the assignment it is`. That is the
+    whole fix -- `g := ICom` as a statement has always produced the right bytes
+    (it is an ordinary 16-byte record copy from the interned blob), so this hands
+    the working path the same node instead of teaching a second one how to bake a
+    GUID. Both sections get it because both call this helper, which is what the
+    `@` half of this same four-cell table was fixed by doing (21ac9e7bc).
+
+    THE ARENA FLOOR IS NOT OPTIONAL HERE. Kind 10 is the one pending-init kind
+    that keeps a NODE rather than a constant, so the node can be handed out again
+    before the emitter reads it -- every proc body parsed in between resets
+    ASTNodeCount to the floor. The dyn-array producer raises the floor for
+    exactly this reason and paid for it with `invalid IR node reference in
+    store_mem value`; a second initialised global is what makes it bite.
+    bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid }
+  if (CurTok.Kind = tkIdent) and (tk = tyRecord) then
+  begin
+    ci := FindUClass(CurTok.SVal);
+    if (ci >= 0) and UClsIsInterface[ci] then
+    begin
+      if not UClsHasGuid[ci] then
+        Error('interface "' + CurTok.SVal + '" has no GUID, so it has no value form');
+      kind := 10;
+      gNode := AllocNode(AN_GUIDCONST);
+      ASTIVal[gNode] := InternGuidBlob(ci);
+      ASTTk[gNode] := Ord(tyRecord);
+      val := gNode;
+      if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
+      Next;
+      TryParseInitValForm := True;
+      Exit;
+    end;
   end;
 
   { `@name` -- a link-time address. A routine wins over a variable of the same

@@ -5378,6 +5378,17 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# An interface name in a DECLARATION initialiser means its GUID. All four
+	# cells were wrong and in opposite directions: var accepted and stored an
+	# AN_CLASSREF VMT address (silent, and interface identity is matched BY GUID
+	# at run time), const refused with `expected '(' before 'ICom'`. The
+	# statement row is the control -- it was always right, so a fixture without
+	# it passes if every declaration breaks the same way. The two LOCAL rows are
+	# a separate emitter: FlushLocalInits' `else` turns an unknown init kind into
+	# an integer literal, which compiled clean and SIGSEGV'd.
+	# bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid
+	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
+	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:
 	# `TG.F := TG.Create.Foo`. The receiver used to have to be one identifier, so
 	# the depth-1 spelling worked and a chain reported `wrong number of
