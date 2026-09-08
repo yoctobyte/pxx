@@ -198,3 +198,75 @@ enclosing one is 3, so a collapse prints 3 where 1 is correct and no row passes
 by nothing happening. Row 4 asserts a COMPILE, not a size: two identical record
 types over-minted in two routines are not observable from Pascal, so that row
 cannot see an over-mint and does not claim to.
+
+## 2026-09-08 — the generic-ROUTINE arm is blocked on PASS ORDER, not on keying
+
+Measured at `1defef6b62d0`, then re-checked at `dffc987ce33e`. This arm is
+recorded as parked rather than attempted, because the remedy is a new mechanism
+and the ticket's "both halves must land together" understates what the first
+half costs.
+
+**The wall is not visibility policy. It is that the type does not exist yet.**
+
+```
+pascal26:14: error: unknown type: TTest
+```
+
+`tgenfunc10.pp` is not needed to see it — ONE routine and ONE local type is
+enough, so the two-scopes collision this ticket is about cannot even be reached:
+
+```pascal
+generic function Test<T>(aArg: T): String;
+begin Result := aArg.Test; end;
+procedure Test1;
+type TTest = record Test: LongInt; end;
+var s: String; t: TTest;
+begin t.Test := 42; s := specialize Test<TTest>(t); end;   { unknown type: TTest }
+```
+
+Declare `TTest` at unit level instead and the identical program compiles and
+runs (`one 42` / `two 7` with two callers). **Routine-locality alone is the
+wall.**
+
+### Why, and it is three routines deep
+
+1. `SpecializeInlineGenericFuncUses` sweeps at the TEMPLATE's declaration — pass
+   1, before `Test1` has been read at all. It is a token rewrite and mints the
+   mangled name `Test_TTest` lexically. Nothing semantic exists to key on.
+2. `FlushPendingFuncSpecializations` runs where the declaration section ENDS
+   (`PreScanPass := False;` … `afterDeclTok := TokPos - 1`), which is the fix
+   from `73fa72b9e` and is right for every top-level type.
+3. A routine's local `type` section is parsed in **pass 2**. `ParseSubroutine`
+   skips the body outright while `PreScanPass` is set, so at flush time
+   `TTest` has not been declared anywhere — it is not out of scope, it is
+   ABSENT. `ScopeReachesProc` cannot help; there is no row to reach.
+
+### What a fix would have to be
+
+The concrete body has to be instantiated during pass 2, inside the routine that
+used it — which is what fpc does and what the language means. Nested routines
+are the natural home and they work: two sibling routines may each declare their
+own `Inner` and they stay distinct (measured), so **the keying collision this
+ticket is about dissolves entirely in that design** — `Test_TTest` inside
+`Test1` and `Test_TTest` inside `Test2` are two routines, no identity column
+needed for this arm.
+
+Sketch, with the traps found while costing it:
+
+- record the use's TOKEN INDEX at sweep time (`PendFuncUseTok`), adjusted by
+  `AdjustPreScanSpans` and `AdjustPass2Spans` like every other index into that
+  array;
+- at flush, splice only the entries whose use lies OUTSIDE any routine's
+  DeclItem span; leave the rest queued;
+- in pass 2, after a routine's local declarations are parsed, splice the queued
+  entries whose use lies inside THAT routine.
+
+**Containment by token span is load-bearing and "does it resolve now" is not a
+substitute.** A routine that declares a same-spelled type but never uses the
+generic would otherwise get an instantiation spliced into it and fail to
+compile, in a program fpc accepts. And a "is this name a known type here"
+predicate would be a second copy of `ParseTypeKind`'s cascade — the exact
+second mechanism `normalise-dont-special-case.md` is about, and it has to be
+right about builtins or a working program stops compiling.
+
+Not attempted. The skip row for `tgenfunc10.pp` carries the same conclusion.
