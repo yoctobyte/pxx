@@ -10332,6 +10332,9 @@ begin
     Error('nested routine token buffer overflow');
   if PendNestRtnCount >= MAX_LIFTS then Error('too many nested routines in one body');
   PendNestRtnStart[PendNestRtnCount] := PendNestCount;
+  { …and the scope the header was WRITTEN in, which the re-parse cannot recover
+    from the tokens. See PendNestRtnParent. }
+  PendNestRtnParent[PendNestRtnCount] := CurProc;
   Inc(PendNestRtnCount);
   for i := nestedStart to finalCur - 1 do
   begin
@@ -10401,6 +10404,7 @@ begin
       rtnEnd := TokCount;
     DeclItemStart[DeclItemCount] := rtnStart;
     DeclItemEnd[DeclItemCount]   := rtnEnd;
+    DeclItemOwnerProc[DeclItemCount] := PendNestRtnParent[r];
     Inc(DeclItemCount);
   end;
   PendNestCount := 0;

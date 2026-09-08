@@ -2897,6 +2897,15 @@ var
     several nested routines back to back, so the flush records each as its own
     DeclItem span (one ParseSubroutine per routine). }
   PendNestRtnStart   : array[0..MAX_LIFTS-1] of Integer;
+  { ...and WHICH ROUTINE each one was declared inside. The lift re-parses the
+    stashed tokens as a TOP-LEVEL sibling, where CurProc is -1, so the header's
+    parameter and result types are resolved with no routine scope at all -- and a
+    nested routine whose signature names one of the enclosing routine's local
+    types is then told `unknown type`, in the appended builtin unit, for a name
+    that resolved perfectly the first time the header was read in place. This
+    column is what LiftedScopeProc is filled from.
+    bug-p-a-lifted-nested-routines-signature-cannot-see-the-enclosing-routines-local-type }
+  PendNestRtnParent  : array[0..MAX_LIFTS-1] of Integer;
   PendNestRtnCount   : Integer;
   { Lambda-lift descriptors: a nested routine that captures enclosing state is
     given a mangled unique name; ParseSubroutine looks the name up here (both at
@@ -5020,6 +5029,14 @@ var
     replaying it in pass 2 would double-buffer and corrupt the token stream. }
   DeclItemStart : array[0..MAX_DECL_ITEMS-1] of Integer; { token index of each recorded subroutine }
   DeclItemEnd   : array[0..MAX_DECL_ITEMS-1] of Integer; { token index just past it }
+  { -1 for an item the source wrote at top level; the enclosing routine for one
+    FlushPendingNestedProcs appended. Only the lift can produce a non -1 row. }
+  DeclItemOwnerProc : array[0..MAX_DECL_ITEMS-1] of Integer;
+  { The routine a lifted DeclItem was written inside, in force only while that
+    item is being replayed and only until its own body sets CurProc. -1 means
+    "no lift in progress", which is every other moment of the parse -- it is
+    assigned explicitly rather than left to BSS, because 0 is a real proc index. }
+  LiftedScopeProc : Integer;
   DeclItemCount : Integer;
   { Body-pass (pass 2) token-stream tracking. A nested routine lifted during the
     body pass edits the token stream (forward-rewrite removes the inner body, and

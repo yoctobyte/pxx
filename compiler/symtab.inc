@@ -377,6 +377,19 @@ begin
                       AliasOwnsThroughInherit(AliasOwnerCi[a], QualTypeOwnerCi);
 end;
 
+function ScopeStartProc: Integer;
+{ Where the lexical walk begins. CurProc while a body is being parsed -- and the
+  ENCLOSING routine of a lifted nested routine while its header is, because the
+  lift re-parses that header as a top-level sibling with CurProc = -1 and the
+  signature's types would otherwise be resolved in no routine scope at all. Both
+  walkers start here; a rule spelled at one of two call sites is the shape the
+  ScopeReachesProc comment below is already about.
+  bug-p-a-lifted-nested-routines-signature-cannot-see-the-enclosing-routines-local-type }
+begin
+  if CurProc >= 0 then ScopeStartProc := CurProc
+  else ScopeStartProc := LiftedScopeProc;
+end;
+
 function ScopeReachesProc(ownerProc: Integer): Boolean;
 { May a declaration owned by routine `ownerProc` be seen from the routine being
   parsed now? True for a global (-1), for the routine itself, and for any
@@ -393,7 +406,7 @@ var p, guard: Integer;
 begin
   ScopeReachesProc := True;
   if ownerProc < 0 then Exit;
-  p := CurProc;
+  p := ScopeStartProc;
   guard := 0;
   while (p >= 0) and (guard <= ProcCount) do
   begin
@@ -413,7 +426,7 @@ function ScopeHopsToProc(ownerProc: Integer): Integer;
 var p, guard: Integer;
 begin
   if ownerProc < 0 then begin ScopeHopsToProc := MaxInt; Exit; end;
-  p := CurProc;
+  p := ScopeStartProc;
   guard := 0;
   while (p >= 0) and (guard <= ProcCount) do
   begin

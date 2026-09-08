@@ -16940,6 +16940,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_rtlocalspec26 "$$($(TESTTMP)/test_rtlocalspec26)" "$$(cat test/test_routine_local_specialization.expected)"
 	./$(COMPILER) test/test_routine_local_name_scoping.pas $(TESTTMP)/test_rtlocalscope26
 	tools/expect_same.sh test_rtlocalscope26 "$$($(TESTTMP)/test_rtlocalscope26)" "$$(cat test/test_routine_local_name_scoping.expected)"
+	./$(COMPILER) test/test_a_lifted_nested_routines_signature_sees_the_enclosing_local_type.pas $(TESTTMP)/test_liftsighdr26
+	tools/expect_same.sh test_liftsighdr26 "$$($(TESTTMP)/test_liftsighdr26)" "$$(cat test/test_a_lifted_nested_routines_signature_sees_the_enclosing_local_type.expected)"
 	./$(COMPILER) test/test_a_routine_local_type_keys_its_own_specialization.pas $(TESTTMP)/test_speckeyid26
 	tools/expect_same.sh test_speckeyid26 "$$($(TESTTMP)/test_speckeyid26)" "$$(cat test/test_a_routine_local_type_keys_its_own_specialization.expected)"
 	./$(COMPILER) test/test_two_aliases_of_one_specialization_are_one_class.pas $(TESTTMP)/test_alias1class26

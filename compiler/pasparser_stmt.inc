@@ -5704,6 +5704,7 @@ begin
       <header> var <V> : NativeInt ; begin for <V> := __pflo to __pfhi do <BODY> ; end ; }
   if PendNestRtnCount >= MAX_LIFTS then Error('parallel for: too many synthesized routines in one body');
   PendNestRtnStart[PendNestRtnCount] := PendNestCount;
+  PendNestRtnParent[PendNestRtnCount] := CurProc;   { restored above to the enclosing routine }
   Inc(PendNestRtnCount);
   ptrCastOff := ptrOff;   { reuse interned 'Pointer' / 'NativeInt' for the casts }
   niCastOff  := niOff;

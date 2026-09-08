@@ -1867,6 +1867,7 @@ begin
     they keep their existing source-order visibility. }
   PreScanPass := True;
   DeclItemCount := 0;
+  LiftedScopeProc := -1;   { 0 is a real proc index; never leave this to BSS }
   doneDecls := False;
   while not doneDecls do
     case CurTok.Kind of
@@ -1899,6 +1900,7 @@ begin
       begin
         if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
         DeclItemStart[DeclItemCount] := TokPos - 1;
+        DeclItemOwnerProc[DeclItemCount] := -1;
         ParseSubroutine;
         if not GenericMethodBuffered then
         begin
@@ -1921,6 +1923,7 @@ begin
         begin
           if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
           DeclItemStart[DeclItemCount] := TokPos - 1;
+          DeclItemOwnerProc[DeclItemCount] := -1;
           ParseSubroutine;
           if not GenericMethodBuffered then
           begin
@@ -1966,8 +1969,14 @@ begin
   while i < DeclItemCount do   { not a fixed `for`: a lifted nested routine appends fresh items mid-loop }
   begin
     TokPos := DeclItemStart[i];
+    { A lifted nested routine's HEADER is read here with CurProc = -1, so the
+      scope it was written in has to be handed to the walkers explicitly or its
+      parameter types resolve globally. Cleared straight after: it must not
+      outlive the one item it belongs to. }
+    LiftedScopeProc := DeclItemOwnerProc[i];
     Next;
     ParseSubroutine;
+    LiftedScopeProc := -1;
     Inc(i);
   end;
   Pass2Active := False;

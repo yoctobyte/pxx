@@ -6650,6 +6650,7 @@ begin
         begin
           if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
           DeclItemStart[DeclItemCount] := TokPos - 1;
+          DeclItemOwnerProc[DeclItemCount] := -1;
           ParseSubroutine;
           if not GenericMethodBuffered then
           begin
@@ -6677,6 +6678,7 @@ begin
           begin
             if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
             DeclItemStart[DeclItemCount] := TokPos - 1;
+            DeclItemOwnerProc[DeclItemCount] := -1;
             ParseSubroutine;
             if not GenericMethodBuffered then
             begin
@@ -6758,8 +6760,10 @@ begin
   while ii < DeclItemCount do   { not a fixed `for`: a lifted nested routine appends fresh items mid-loop }
   begin
     TokPos := DeclItemStart[ii];
+    LiftedScopeProc := DeclItemOwnerProc[ii];   { see the twin loop in ParseProgram }
     Next;
     ParseSubroutine;
+    LiftedScopeProc := -1;
     Inc(ii);
   end;
   afterImpTok := Pass2BodyTok;   { kept in sync with pass-2 token edits }
