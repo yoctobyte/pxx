@@ -85,4 +85,4 @@ Positive controls, all green after the change: the seven `test/test_for_in_*`
 fixtures and `tforin9.pp`.
 
 ## Log
-- 2026-09-08 — fixed and closed, commit PENDING-COMMIT.
+- 2026-09-08 — fixed and closed, commit e65529e55.
