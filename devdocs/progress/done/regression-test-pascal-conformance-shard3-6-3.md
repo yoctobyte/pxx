@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: P
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 1 of 1 is `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 3/6`. The job's own `src` (`tools/run_pascal_conformance.sh`, 1 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -45,3 +46,30 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-08 — the seven watcher saw `test-pascal-conformance#shard3/6` GREEN at 76b75db6a7b7 (tier full) and did NOT close this: this is a repeat stub (`regression-test-pascal-conformance-shard3-6-3`, not `regression-test-pascal-conformance-shard3-6`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Verified dead at HEAD (2026-09-08, frankS)
+
+**Re-laned P, not T.** The `track: T` in the frontmatter is the auto-filer's
+stated fallback ("the FAILING STEP named no owner"), not a finding. The defect
+was in `compiler/pasparser_decl.inc` / `pasparser_proc.inc`.
+
+The failing row was `tgeneric8.pp` -- `pascal26:25: error: incompatible types:
+cannot assign AnsiString to Integer`. Same cause as
+[[regression-test-core-test-nested-class-type-scoping]]: `d81b90a99` stripped a
+qualified type prefix ahead of `ParseTypeKindInner`'s own copy, which is the
+copy that rewrites a nested class or record name to its registered row, so a
+name bound to the wrong row and the type check then failed downstream.
+`5ea212e36` narrows the strip to array members.
+
+Measured at `5ea212e36`, compiler `29e343715a4a`:
+
+    tools/run_pascal_conformance.sh ./compiler/pascal26 \
+      library_candidates/fpc-testsuite/tests/test --shard 3/6
+    test-pascal-conformance: 69 pass, 0 fail, 14 skip, 9 auto-gated (of 92)
+
+68/1 -> 69/0, and `tgeneric8.pp` is in the pass column. The whole corpus at the
+same tree is 417 pass, 0 fail, 83 skip, 48 gap, 0 FAIL rows -- unchanged from
+before `d81b90a99`, so nothing was traded for this. Full tier `rc=0`, fgl 7/7,
+`gate.sh quick` GREEN read from the log.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — verified dead at HEAD 5ea212e36 (compiler 29e343715a4a) and closed by frankS; the fix is 5ea212e36, the cause was 5ea212e36's parent d81b90a99.

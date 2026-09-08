@@ -45,5 +45,36 @@ pascal26:106: error: "v": no such member on this record/class
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
 
+
+## Verified dead at HEAD (2026-09-08, frankS)
+
+Cause and fix, so the range does not have to be re-derived: `d81b90a99` put an
+`EatQualifiedTypePrefix` ahead of five `FindArrayType(CurTok.SVal)` probes, which
+for a qualified spelling read the OWNER token. **`ParseTypeKindInner` carries its
+own copy of that strip, and that copy does one thing the shared helper does not:
+when the member is a nested CLASS or RECORD it REWRITES the name to the
+registered row.** Stripping ahead of it consumed the qualifier that arm reads,
+the arm never fired, and the bare name bound to whichever class registered
+first -- which is exactly the defect this test was written for, reintroduced
+through a different door.
+
+`5ea212e36` adds `EatQualifiedArrayTypePrefix`: it decides from the token stream
+WITHOUT consuming and delegates only when the member names a row in `ArrType*`.
+Not a narrowing for safety -- `FindNestedType` answers -1 for an array member, so
+`ParseTypeKindInner` would strip and rewrite nothing there. Same
+`QualTypeOwnerCi`, same final token. The guard is "strip exactly where the two
+copies agree".
+
+**Before and after both measured in this checkout.** At `d81b90a99` my own full
+tier died on this source with four rows -- `"w": no such member on this
+record/class` and the same for `"v"`, at lines 104-106. At `5ea212e36`,
+compiler `29e343715a4a`: `total ok 9 / 9`, zero FAIL rows.
+
+`test/test_a_qualified_nested_array_type_in_a_declaration.pas` now carries the
+guard's own positive control -- two owner classes each declaring a nested class
+named `TIn`, with the fields proving which row was picked -- so the next person
+to widen the strip fails on the row that names the reason rather than here.
+
 ## Log
 - 2026-09-08 — auto-closed by the seven watcher: `test-core#src:test/test_nested_class_type_scoping.pas` passes at 76b75db6a7b7 (tier native); it was red at d81b90a991e9. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+- 2026-09-08 — frankS: the analysis above was appended here and the duplicate stub in `backlog/` (left behind when the watcher filed its close into `done/` without removing it) was deleted, so one slug names one file.
