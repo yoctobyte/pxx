@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-06
-summary: "TOP-LEVEL HALF FIXED 2026-09-08 at cd2d264c72df; the NESTED half, which is this ticket's title, is OPEN. Fixed: two aliases of ONE specialization (`TIntBox` and `TIntBox2`, both `= specialize TBox<Integer>`) were two classes, so `a1 is TIntBox2` answered FALSE where fpc says TRUE and `a1 as TIntBox2` was a hard Runtime error 219 -- while `a2 := a1` was accepted by BOTH compilers, which is the combination that hid it. NOT fixed by routing the mint through the canonical key (this ticket's own proposal, which renames every alias-bound specialization in fgl and rtl-generics and stays parked for that): when an EQUIVALENT specialization is already declared and visible, the new name is registered as a UCLASS ALIAS of that class and nothing is minted. Deliberately not a second Specializations[] row -- BufferGenericMethod walks that table once per matching row and would re-create the duplicate-method warning this ticket opens with. Equivalence is d98d297de's: same template BY INDEX, same arity, same argument spellings AND same SpecArgIdentity, asked only of rows this scope can see. ClassName measured all three ways -- fpc prints `TBox<System.LongInt>` for both aliases, pin v407 printed `TIntBox`/`TIntBox2` (the defect), pxx now prints `TIntBox` for both: fpc's SHAPE, not fpc's spelling, and the first alias's name is unchanged, which the canonical-key rename would not have managed. STILL OPEN, re-measured at cd2d264c72df and not assumed: `TEnumSpec = specialize TEnum<T>` inside a generic class is still minted under the ALIAS, so `specialize TList7<Integer>` and `specialize TList7<String>` still mint two classes called TEnumSpec and tnest8 still stops at `incompatible types: cannot assign Integer to AnsiString`. The two outer specializations pass DIFFERENT arguments, so the collapse never applies there -- that half genuinely needs the canonical key, which CollectHoistCandidates already computes (`TI$TEnumSpec`, `TS$TEnumSpec`) behind the two gates recorded below. tgeneric16.pp's one divergent line is that half and its skip row stays."
+summary: "NESTED HALF FIXED 2026-09-08: the UClass ALIAS table had no owning-class column, so `TInner = TSomething;` written inside a class body was registered UNIT-GLOBALLY and beat another class own nested type of the same name. Its sibling table Alias* has carried AliasOwnerCi for a long time and this one carried nothing -- an ABSENT copy, so the two tables agreed with each other perfectly. Fixed by UClsAliasOwnerCi plus ClassOwnerVisibleHere, which is AliasVisibleHere four arms factored out so both tables ask one question. THE TICKET REDUCTION WAS INVALID AND IS REPLACED: its `Result.V := 9` is assigned to a T that is String in the second instantiation, so fpc 3.2.2 refuses the program too (`Incompatible types: got ShortInt expected ShortString`) -- the compile error it recorded was not the defect. The real symptom, on a program fpc accepts, is a SILENT WRONG VALUE and then a crash: with `ei: TI.TEnumSpec; es: TS.TEnumSpec`, the LAST-declared instantiation won for both, so one of them printed a raw address (`s 4357640`) and reading the pair the other way round segfaulted. Both declaration orders are asserted in the fixture BECAUSE the defect was last-one-wins: one order alone passes with the bug still in. The fgl arm no longer warns at all -- `TFPGList<Integer>` + `TFPGList<String>` in one program compiles clean and runs correct. TOP-LEVEL HALF was fixed 2026-09-08 at cd2d264c72df (two aliases of ONE specialization are one class, via a UClass alias rather than a second mint). STILL OPEN, and it is the only thing left here: the two minted classes SHARE THE BARE NAME `TEnumSpec`, so `ei.ClassName = es.ClassName` is TRUE where fpc says FALSE (fpc prints `TEnum<System.LongInt>` / `TEnum<System.ShortString>`). That is the SPELLING, not the identity -- every value row is right now -- and it is the same residual tgeneric16 carries (pxx prints the alias `TIntegerStack`, fpc the canonical `TAdvStack<System.LongInt>`), which is its ONLY divergent line. Whether a specialization ClassName must match fpc is a question this ticket should not answer alone."
 ---
 
 # The shape
@@ -475,3 +475,95 @@ ignored them answers TRUE there. It goes through `TObject` because fpc refuses
 `a1 is TStrBox` at COMPILE time — "Class or Object types TBox<System.LongInt>
 and TBox<System.ShortString> are not related" — so the row that must print FALSE
 has no oracle written directly.
+
+# 2026-09-08 — THE NESTED HALF, MEASURED AND FIXED
+
+## The recorded reduction is a program fpc REJECTS
+
+```
+unest7.pas(16,78) Error: Incompatible types: got "ShortInt" expected "ShortString"
+```
+
+`function TList7.Mk: TEnumSpec; begin ...; Result.V := 9; end;` assigns 9 to a
+`T` that is `String` in the `TList7<String>` instantiation. fpc refuses it, so
+the compile error this ticket opened with was never evidence of a pxx defect —
+and "legal code is refused" was not true of that text. Corrected by giving `Mk`
+a `const x: T` parameter, which is the same shape and is accepted by both.
+
+## What the defect actually looks like, on a program fpc accepts
+
+```pascal
+type
+  TS = specialize TList7<String>;
+  TI = specialize TList7<Integer>;
+var a: TI; b: TS; ei: TI.TEnumSpec; es: TS.TEnumSpec;
+begin
+  a := TI.Create; b := TS.Create;
+  es := b.Mk('hi'); WriteLn('s ', es.GetCurrent);    { fpc: s hi   pxx: s 4357640 }
+  ei := a.Mk(9);    WriteLn('i ', ei.GetCurrent);    { fpc: i 9    pxx: i 9       }
+end.
+```
+
+**Silent wrong value, no diagnostic.** Declare `TI` first instead and the wrong
+half moves with it — `ei.GetCurrent` then SEGFAULTS, because the Integer field is
+read as a String and the value is not a pointer. **The last-declared
+instantiation wins for both names**, which is why one declaration order alone
+passes with the bug still in and why the fixture asserts both.
+
+## Cause: one table has an owner column and its sibling has none
+
+`Alias*` carries `AliasOwnerCi` (and, since `0221a024a`, `AliasOwnerProc`).
+`UClsAlias*` — the table `type TInner = TSomeClass;` writes to, because
+ParseTypeSection routes a class-valued alias to `RegisterUClassAlias` and never
+to `RegisterGeneralAlias` — carried a unit index and nothing else. So a class
+body's alias was visible to the whole unit.
+
+The generic path reaches it like this, from a `PXXDBG` probe on the registration
+(temporary, not landed):
+
+```
+TMPSPEC reg name=TS         tmpl=TList7 args=String  pcb=-1
+TMPSPEC reg name=TEnumSpec  tmpl=TEnum  args=String  pcb=13   <- TS mints its own
+TMPSPEC reg name=TEnum$Integer tmpl=TEnum args=Integer pcb=-1 <- TI hoists instead
+TMPSPEC reg name=TI         tmpl=TList7 args=Integer pcb=-1
+```
+
+The FIRST instantiation mints a class called `TEnumSpec` inside its own body
+(`pcb` = ParsingClassBodyCi). The SECOND finds the nested prerequisite already
+satisfiable, emits `TEnum$Integer` at top level, and its in-class declaration
+COLLAPSES to `TEnumSpec = TEnum$Integer` — a UClass alias, registered
+unit-globally, which then answers for `TS.TEnumSpec` as well.
+
+`FindNestedType` was never the problem and neither was the qualified walk: the
+non-generic control (two ordinary classes each with a nested class named
+`TInner`) resolved correctly throughout, on this tree and on the pin. **The
+registry is fine; the alias sitting in front of it is not.**
+
+## Fix
+
+`UClsAliasOwnerCi`, written from `ParsingClassBodyCi` at registration, and
+`ClassOwnerVisibleHere(ownerCi)` — `AliasVisibleHere`'s four arms factored out so
+both tables ask exactly one question rather than one table asking and the other
+not. `FindUClassAliasRow`'s `Candidate` now requires it.
+
+`test/test_a_class_body_alias_does_not_leak_to_the_unit.pas` (+
+`test/units/uclsalias.pas`), five rows against the fpc 3.2.2 oracle. The leak row
+needs no generics at all — a class body declaring `TName = TBlue` BEFORE the unit
+declares its own `TName = TRed`, so the first-match-in-this-unit lookup returns
+the class's row. The pinned compiler fails it with `"R": no such member on this
+record/class`.
+
+## The residual, and it is a SPELLING
+
+Both minted classes are still called `TEnumSpec`, so `ei.ClassName =
+es.ClassName` is TRUE where fpc says FALSE. Every VALUE row is correct — these
+are two distinct classes now, they merely share a name string. It is the same
+residual `tgeneric16.pp` carries, and that row's single divergent line:
+
+```
+pxx  TIntegerStack
+fpc  TAdvStack<System.LongInt>
+```
+
+Whether a specialization's `ClassName` has to match fpc's canonical spelling is
+a separate question from identity, and this ticket should not settle it alone.

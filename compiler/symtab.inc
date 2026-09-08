@@ -333,6 +333,20 @@ begin
   end;
 end;
 
+function ClassOwnerVisibleHere(ownerCi: Integer): Boolean;
+{ May a declaration owned by CLASS `ownerCi` be seen from here? -1 is unit level
+  and always visible. The four arms are AliasVisibleHere's own; they live here so
+  the UClass ALIAS table can ask the same question -- it is the sibling that had
+  no owner column at all, and a rule spelled at one of two tables fails by the
+  ABSENT copy, which is the shape this file keeps meeting. }
+begin
+  ClassOwnerVisibleHere := (ownerCi < 0) or
+                           AliasOwnsThrough(ownerCi, ParsingClassBodyCi) or
+                           AliasOwnsThroughInherit(ownerCi, ParsingClassBodyCi) or
+                           AliasOwnsThroughInherit(ownerCi, MethImplOwnerCi) or
+                           AliasOwnsThroughInherit(ownerCi, QualTypeOwnerCi);
+end;
+
 function AliasVisibleHere(a: Integer): Boolean;
 begin
   { ONLY arm 2 walks. Arms 1 and 2 were both approximations of "somewhere in the
@@ -370,11 +384,7 @@ begin
     holds three of the six nested kinds, and a probe that does not name WHICH
     kind it used is answering about a different table half the time. Any future
     claim here should say the kind. }
-  AliasVisibleHere := (AliasOwnerCi[a] < 0) or
-                      AliasOwnsThrough(AliasOwnerCi[a], ParsingClassBodyCi) or
-                      AliasOwnsThroughInherit(AliasOwnerCi[a], ParsingClassBodyCi) or
-                      AliasOwnsThroughInherit(AliasOwnerCi[a], MethImplOwnerCi) or
-                      AliasOwnsThroughInherit(AliasOwnerCi[a], QualTypeOwnerCi);
+  AliasVisibleHere := ClassOwnerVisibleHere(AliasOwnerCi[a]);
 end;
 
 function ScopeStartProc: Integer;
@@ -1760,6 +1770,7 @@ var i, bestRank, r: Integer;
   function Candidate(k: Integer): Boolean;
   begin
     Candidate := UNameMatch(UClsAliasNOff[k], UClsAliasNLen[k], lo) and
+                 ClassOwnerVisibleHere(UClsAliasOwnerCi[k]) and
                  ((not nonRecordOnly) or
                   ((UClsAliasCi[k] >= 0) and (not UClsIsRecord[UClsAliasCi[k]])));
   end;
@@ -1927,6 +1938,7 @@ begin
   UClsAliasNLen[UClsAliasCount] := nlen;
   UClsAliasCi[UClsAliasCount]   := ci;
   UClsAliasUnitIdx[UClsAliasCount] := CurrentUnitIdx;
+  UClsAliasOwnerCi[UClsAliasCount] := ParsingClassBodyCi;   { -1 at unit level }
   Inc(UClsAliasCount);
 end;
 

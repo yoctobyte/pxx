@@ -6624,6 +6624,16 @@ var
     to builtinheap's IInterface with no diagnostic.
     bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record }
   UClsAliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer;
+  { …and the CLASS BODY it was declared in, -1 at unit level. The sibling table
+    Alias* has carried AliasOwnerCi for a long time and this one carried nothing,
+    so a class-body `TInner = TSomething;` was visible to the whole unit and beat
+    another class's own nested type of the same name. That is how two
+    specializations of one generic came to share a nested type: the second
+    instantiation's in-class declaration collapses to an alias of the first's
+    hoisted class, the alias is registered unit-globally, and `TOther.TInner`
+    then resolves through it.
+    bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization }
+  UClsAliasOwnerCi : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasCount : Integer;
   UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
   { An interface's GUID literal (`['{...}']`), which the parser used to discard.
