@@ -138,4 +138,4 @@ and "not asserted" reads as "still broken" to the next reader, so the list is
 corrected in place rather than deleted.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1245a51e5.
