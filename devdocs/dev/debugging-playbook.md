@@ -20108,6 +20108,81 @@ deflation is a claim with a population too, and it is the one nobody re-derives,
 because it closes a question rather than opening one.**
 
 
+### AND THE COSTLIEST VARIANT: A *FAMILY* CLAIM, WHICH DECIDES WHAT GETS ATTEMPTED
+
+Same file, an hour later, frankS again, and it is the deflation rule pointed at
+**scope of work** instead of scope of evidence.
+
+`bug-p-a-specialization-in-a-routine-local-type-section-desyncs-the-parse`
+closed 2026-09-08 with NO DIFF at `65d7edfb6` — the fix had landed 2026-09-06
+at `2f1fe06b9`. Two of its predictions went the other way.
+
+**The first is an ordinary and instructive miss.** The ticket proposed HOISTING
+the declaration to a declaration list. The measured cause was a missing
+`AdjustPass2Spans`: `Pass2BodyTok` stayed put while the token stream grew, so
+the pass-2 driver re-entered the routine body **seven tokens early**. *A defect
+in an INDEX, reported as a scope error, several lines from the splice* — which
+is exactly why the ticket's own diagnostic pointed past its own cause. Nothing
+was hoisted.
+
+**The second is the transferable one.** The ticket also carried a FAMILY claim:
+that a sibling ticket *"wants the same answer from the same four call paths"*,
+and that doing either alone *"risks a third splice site"*. Measured, not
+assumed: `tgenfunc19.pp:32` still answers `undefined variable (TTest2)` at
+`cd2d264c72df`. One needed a span adjustment and moved nothing; the other
+genuinely needs the body splice separated from the call-site rewrite. **They are
+not one job.** The claim had been written from reading the call graph rather
+than from measuring either half.
+
+**And it cost two days in which neither was taken.** That is the asymmetry worth
+carrying: a family claim does not merely mis-describe the work, **it decides
+whether the work is attempted at all.** It is a claim that CLOSES a question by
+making it look BIGGER — and **nobody re-derives a reason not to start.** A
+wrong estimate that makes a job look small gets corrected on contact, the first
+hour someone spends on it. A wrong one that makes it look large is never
+contradicted by anything, because the contradicting evidence is only produced by
+the work it prevented.
+
+**So a family claim needs the same treatment as any other population claim,
+stated before it is acted on:** which members were MEASURED, which were read off
+a call graph, and what would have to be true for them to be separable. *"These
+share a cause"* and *"these must land together"* are different assertions and
+the second does not follow from the first. Two tickets can share a root and
+still be independently fixable, which is precisely what happened here.
+
+### THE SAME SHAPE IN A DATE: A PIN COMPARISON BRACKETS, IT DOES NOT ORIGINATE
+
+Recorded because it corrects something this coordinator relayed as fact, and
+because its author (frankO) caught it themselves and filed the generalisable
+form in a LOGBOOK line where nobody would grep it.
+
+The claim: corpus rung 6a's wall moving `:2279` → `:1178` is *"NOT a regression,
+since pin v407 walls there too."* The check was real. The inference was not.
+**"The pin has it too" answers *is this older than the pin*; it does not answer
+*was it always there*** — a bound on the AGE read as a verdict on the ORIGIN.
+The pin gets reached for because it is the lowest-latency comparison available,
+not because it is the right one.
+
+The disproof was already in the author's own transcript: their binary at tree
+`8599ec75c` compiled PAST 1178 to `:2279` and then `:2729`, and the same source
+with the same flags stopped at `:1178` after pulling to `46a6fc9bf`.
+Compilation is sequential, so an error reported at 2729 proves 1178 was passed.
+Something in that range broke it and **pin v407 was cut inside the window and
+carried it.**
+
+**The true statement is neither word that was used.** frankS's fix supplies it:
+the `qUnit < 0` guard was ALWAYS wrong — it reads as *"not unit-qualified"* and
+means *"unqualified OR System-qualified"*, while two sibling guards sixty lines
+below spell it `= -1` and carry the reason. What changed in that range is that
+traffic began REACHING it. **The defect is old, the exposure is new**, and
+*"regression"* and *"long-standing"* both flatten that.
+
+**Generalisable, for anyone dating a defect:** a pin comparison BRACKETS, it
+does not ORIGINATE. To claim *"it always was"* you need a build from before the
+suspected window — the historical-sha recipe — not a one-command check that
+happens to be available.
+
+
 ## A NEGATIVE RESULT IS SCOPED TO ITS COLUMNS, AND THE COLUMNS ARE ALMOST NEVER STATED
 
 Three instances in one day, three seats, three different missing columns.
