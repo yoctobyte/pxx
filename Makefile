@@ -17006,6 +17006,8 @@ test-core: $(COMPILER)
 	# Both spellings of the string container, because they must move together.
 	./$(COMPILER) test/test_for_in_ranks_the_enumerator_against_the_loop_variable.pas $(TESTTMP)/test_forinrank26
 	tools/expect_same.sh test_forinrank26 "$$($(TESTTMP)/test_forinrank26)" "$$(cat test/test_for_in_ranks_the_enumerator_against_the_loop_variable.expected)"
+	./$(COMPILER) test/test_a_specialization_reports_its_canonical_class_name.pas $(TESTTMP)/test_speccanon26
+	tools/expect_same.sh test_speccanon26 "$$($(TESTTMP)/test_speccanon26)" "$$(cat test/test_a_specialization_reports_its_canonical_class_name.expected)"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of

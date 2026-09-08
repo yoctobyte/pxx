@@ -3,8 +3,9 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: open
+status: working
 owner: frankS
+summary: "A specialization's concrete argument is keyed by its SPELLING, so two different types of one name collapse into a single specialization: `TRec` declared in an outer routine and a DIFFERENT `TRec` in a nested one both key `TBox<TRec>`, and the nested `SizeOf` answers the outer record's 3 where fpc answers 1. The bare name resolves correctly a line earlier — the compiler knows which type is meant and the specialization does not ask. THREE ARMS, one cause. Class/record templates: FIXED 2026-09-08. The ALIAS MIRROR (bug-p-a-nested-specialization-is-named-by-its-alias-...), the same flaw in the opposite direction — two aliases of ONE specialization over-minting where this under-mints: RESOLVED 2026-09-08, and NOT by the canonical key this ticket predicted would close it. Generic ROUTINES: STILL OPEN and blocked on PASS ORDER, not on keying — its keying half is a different mechanism (SpecFuncAlreadyEmitted, name plus value-parameter count), and fixing its visibility half ALONE turns a compile error into a silent wrong value by handing Test2 the body compiled for Test1's TTest. Do not fix the remaining arm by making the comparison stricter in isolation, and do not carry this ticket's canonical-key prediction into it unre-derived: the alias mirror closed without touching the mint at all. Corpus row: tgenfunc10.pp, still `unknown type: TTest`."
 ---
 
 # A specialization's concrete argument is keyed by its SPELLING, so two scopes' types of one name collide into a single specialization
@@ -270,3 +271,44 @@ second mechanism `normalise-dont-special-case.md` is about, and it has to be
 right about builtins or a working program stops compiling.
 
 Not attempted. The skip row for `tgenfunc10.pp` carries the same conclusion.
+
+## 2026-09-08 (frankS) — THE ALIAS MIRROR IS CLOSED. Its remedy was not the one this ticket predicted.
+
+Two of the three arms are now done: the class/record arm (2026-09-08, above) and
+the **alias mirror**, `bug-p-a-nested-specialization-is-named-by-its-alias-...`,
+which is resolved. The generic-ROUTINE arm is what is left, still blocked on
+PASS ORDER as recorded below.
+
+### The "what is still open" list above had gone stale, and re-measuring is what found it
+
+It was measured at `2e620048f2e7` and says `a1 is TIntBox2` answers FALSE. It
+answers **TRUE** now — the identity half landed at `cd2d264c72df`, after that
+measurement. The list read as current because nothing in it says otherwise. Only
+the SPELLING was still divergent, and that is now closed too.
+
+### And the prediction in this ticket's own body was wrong, in an instructive way
+
+This ticket said the canonical key closes both directions, and the alias
+ticket's correction said the key "does NOT close it" because both aliases
+produce `TBox$Integer` either way. **Both were reasoning about the MINT.** The
+spelling half never needed the mint touched at all: the class is still
+registered under the first alias's name, every lookup still keys on that, and
+only the name WRITTEN INTO THE CLASS BLOB is canonicalised — in `rtti_emit.inc`,
+where the specialization table and the name tables are all already in scope.
+
+That matters for this ticket's remaining arm: **"the canonical key closes it" is
+a claim about identity, and ClassName was never an identity question.** Do not
+carry the prediction over to the routine arm without re-deriving it there.
+
+### Residual filed from that work, small and separate
+
+**A RECORD alias is not registered in the UClass alias table.** A class alias
+(`TAliasCls = TCls`) is — `ParseTypeSection`'s `IsClassType` arm calls
+`RegisterUClassAlias`, so `FindUClass` resolves the new name to the same row —
+and a record alias (`TAliasRec = TMyRec`) takes a different path and leaves no
+name->id mapping. Declarations through it work (measured: `var r: TAliasRec`
+sizes and indexes correctly), so nothing is broken today; what is missing is the
+ability to resolve the alias name to its record from a table. It shows up as a
+specialization argument answering `TAliasRec` where fpc answers `TMyRec`.
+Banked, not plumbed: adding a resolution route from the RTTI emitter would be a
+second mechanism for a question the alias table should answer once.

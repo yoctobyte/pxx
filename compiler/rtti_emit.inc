@@ -664,6 +664,251 @@ begin
   end;
 end;
 
+function TypeInfoOrdName(tk: Integer): AnsiString; forward;
+{ Forward because the block below is called from EmitRTTI, which sits EARLIER in
+  this file than TypeInfoOrdName's body. pxx prescans headers and FPC is
+  single-pass, so the call compiles here and not under the FPC seed -- exactly
+  the class gate.sh's seed canary exists for, and exactly what it caught:
+  `rtti_emit.inc(862,31) Error: Identifier not found "TypeInfoOrdName"`, with
+  `make compiler/pascal26` and --tier quick both green. }
+
+{ ===== A SPECIALIZATION'S ClassName ======================================
+
+  `TIntegerStack = specialize TAdvStack<Integer>` is an ALIAS for a
+  specialization, and its ClassName is the SPECIALIZATION's name, not the
+  alias's. pxx implements a specialization by splicing the template's tokens
+  out under the alias's name, so the class is REGISTERED as `TIntegerStack` and
+  reported that way -- which is wrong twice over:
+
+    * it is not the language's answer. fpc 3.2.2 and Delphi both report
+      `Template<Args>`; measured against fpc, `TAdvStack<System.LongInt>`.
+    * with TWO aliases of one specialization it is not even a property of the
+      TYPE. Only the first alias mints; the second becomes a UClass alias of
+      it, so ClassName answers whichever name happens to be declared FIRST and
+      swapping two unrelated declarations changes it.
+
+  The second reason is why this is a defect on our own terms and not FPC
+  parity: an observable that moves with declaration order is not reporting
+  anything about the type.
+
+  Measured rules, fpc 3.2.2, one probe per row rather than recalled:
+
+    Template<Arg,Arg>     no space after the comma
+    System.LongInt        a builtin, unit-qualified, through its ALIASES:
+                          Integer, LongInt and a user `TMyInt = Integer` all
+                          answer System.LongInt, and `string` answers
+                          System.AnsiString
+    g3.TRec               a user type takes its DECLARING unit (the program's
+                          own name when it is declared in the main program)
+    g3.TBox<System.LongInt>   a specialization used as an ARGUMENT carries its
+                          own canonical name, qualified -- so this is recursive
+
+  Note the outermost name is NOT unit-qualified and an argument always is; that
+  asymmetry is fpc's and is measured, not assumed.
+
+  This lives in rtti_emit rather than at the mint site for a reason worth
+  keeping: the answer is needed only when the name is written into the class
+  blob, every input (the specialization table, UClsUnitIdx, the name->kind
+  table) is already in scope HERE, and pasparser_generic.inc is included before
+  both helpers it would otherwise need forwarded. It also means the parser's
+  registered name -- which is what every lookup keys on -- is untouched.
+  bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization }
+
+function SpecCanonUnitName(unitIdx: Integer): AnsiString;
+{ The same rule the UnitName field below uses: -1 is the MAIN PROGRAM, whose
+  name fpc reports as the program's own. }
+begin
+  if unitIdx >= 0 then SpecCanonUnitName := Strs[unitIdx].Text
+  else SpecCanonUnitName := DbgProgName;
+end;
+
+function SpecCanonBuiltinName(const nm: AnsiString): AnsiString;
+{ fpc's canonical System spelling for a builtin argument, or '' if this name is
+  not a builtin at all. Measured against fpc 3.2.2 one probe per row, and the
+  shape of the answer is what makes it a NAME table and not a KIND table:
+
+  ALMOST EVERY BUILTIN KEEPS ITS OWN NAME. Only true aliases fold, and folding
+  by TTypeKind would have collapsed the ones that do not -- WideString,
+  UnicodeString, UTF8String and RawByteString all share one kind here and fpc
+  reports four different names, so a kind-keyed table cannot express this and
+  would have silently answered AnsiString for all four. TypeInfoOrdName below is
+  kind-keyed for exactly the reason it can afford to be: it feeds GetTypeName,
+  where one spelling per kind IS the contract.
+
+  The folds, all measured: Integer/LongInt/Int32 -> LongInt;
+  Cardinal/LongWord/DWord/UInt32 -> LongWord; string/AnsiString -> AnsiString;
+  AnsiChar -> Char.
+
+  ONE MEASURED DIVERGENCE, DELIBERATE: fpc resolves PtrInt and SizeInt to the
+  pointer-width integer -- `System.Int64` on x86-64 and System.LongInt on a
+  32-bit target -- so its answer for those two names is TARGET-DEPENDENT. We
+  keep the written name. A class's own name changing with the target is worse
+  than a stable one that differs from fpc on two spellings nobody specializes
+  over, and a fixture asserting `System.Int64` there would pass on the host and
+  fail on i386 -- the native-only defect class this repo has been bitten by.
+  Recorded in the ticket rather than hidden. }
+begin
+  SpecCanonBuiltinName := '';
+  { the four folds }
+  if CaseEqual(nm, 'integer') or CaseEqual(nm, 'longint') or CaseEqual(nm, 'int32') then
+    SpecCanonBuiltinName := 'LongInt'
+  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or
+          CaseEqual(nm, 'dword') or CaseEqual(nm, 'uint32') then
+    SpecCanonBuiltinName := 'LongWord'
+  else if CaseEqual(nm, 'string') or CaseEqual(nm, 'ansistring') then
+    SpecCanonBuiltinName := 'AnsiString'
+  else if CaseEqual(nm, 'ansichar') or CaseEqual(nm, 'char') then
+    SpecCanonBuiltinName := 'Char'
+  { the width spellings, which fold the same way their canonical name does }
+  else if CaseEqual(nm, 'int8') or CaseEqual(nm, 'shortint') then SpecCanonBuiltinName := 'ShortInt'
+  else if CaseEqual(nm, 'uint8') or CaseEqual(nm, 'byte') then SpecCanonBuiltinName := 'Byte'
+  else if CaseEqual(nm, 'int16') or CaseEqual(nm, 'smallint') then SpecCanonBuiltinName := 'SmallInt'
+  else if CaseEqual(nm, 'uint16') or CaseEqual(nm, 'word') then SpecCanonBuiltinName := 'Word'
+  else if CaseEqual(nm, 'uint64') or CaseEqual(nm, 'qword') then SpecCanonBuiltinName := 'QWord'
+  else if CaseEqual(nm, 'int64') then SpecCanonBuiltinName := 'Int64'
+  { and the ones that keep their own spelling, listed so an unknown identifier
+    is NOT given a System. prefix it has no right to }
+  else if CaseEqual(nm, 'shortstring') then SpecCanonBuiltinName := 'ShortString'
+  else if CaseEqual(nm, 'widestring') then SpecCanonBuiltinName := 'WideString'
+  else if CaseEqual(nm, 'unicodestring') then SpecCanonBuiltinName := 'UnicodeString'
+  else if CaseEqual(nm, 'utf8string') then SpecCanonBuiltinName := 'UTF8String'
+  else if CaseEqual(nm, 'rawbytestring') then SpecCanonBuiltinName := 'RawByteString'
+  else if CaseEqual(nm, 'boolean') then SpecCanonBuiltinName := 'Boolean'
+  else if CaseEqual(nm, 'bytebool') then SpecCanonBuiltinName := 'ByteBool'
+  else if CaseEqual(nm, 'wordbool') then SpecCanonBuiltinName := 'WordBool'
+  else if CaseEqual(nm, 'longbool') then SpecCanonBuiltinName := 'LongBool'
+  else if CaseEqual(nm, 'qwordbool') then SpecCanonBuiltinName := 'QWordBool'
+  else if CaseEqual(nm, 'widechar') then SpecCanonBuiltinName := 'WideChar'
+  else if CaseEqual(nm, 'unicodechar') then SpecCanonBuiltinName := 'UnicodeChar'
+  else if CaseEqual(nm, 'ucs4char') then SpecCanonBuiltinName := 'UCS4Char'
+  else if CaseEqual(nm, 'single') then SpecCanonBuiltinName := 'Single'
+  else if CaseEqual(nm, 'double') then SpecCanonBuiltinName := 'Double'
+  else if CaseEqual(nm, 'extended') then SpecCanonBuiltinName := 'Extended'
+  else if CaseEqual(nm, 'real') then SpecCanonBuiltinName := 'Real'
+  else if CaseEqual(nm, 'comp') then SpecCanonBuiltinName := 'Comp'
+  else if CaseEqual(nm, 'currency') then SpecCanonBuiltinName := 'Currency'
+  else if CaseEqual(nm, 'nativeint') then SpecCanonBuiltinName := 'NativeInt'
+  else if CaseEqual(nm, 'nativeuint') then SpecCanonBuiltinName := 'NativeUInt'
+  else if CaseEqual(nm, 'ptrint') then SpecCanonBuiltinName := 'PtrInt'
+  else if CaseEqual(nm, 'ptruint') then SpecCanonBuiltinName := 'PtrUInt'
+  else if CaseEqual(nm, 'sizeint') then SpecCanonBuiltinName := 'SizeInt'
+  else if CaseEqual(nm, 'sizeuint') then SpecCanonBuiltinName := 'SizeUInt'
+  else if CaseEqual(nm, 'pointer') then SpecCanonBuiltinName := 'Pointer'
+  else if CaseEqual(nm, 'pchar') then SpecCanonBuiltinName := 'PChar'
+  else if CaseEqual(nm, 'pwidechar') then SpecCanonBuiltinName := 'PWideChar'
+  else if CaseEqual(nm, 'variant') then SpecCanonBuiltinName := 'Variant'
+  else if CaseEqual(nm, 'olevariant') then SpecCanonBuiltinName := 'OleVariant';
+end;
+
+function SpecRowByName(const nm: AnsiString): Integer;
+var k: Integer;
+begin
+  SpecRowByName := -1;
+  for k := 0 to SpecializationCount - 1 do
+    if CaseEqual(Specializations[k].Name, nm) then
+    begin SpecRowByName := k; Exit; end;
+end;
+
+function SpecCanonName(k, depth: Integer): AnsiString; forward;
+
+function SpecCanonArgName(const nm: AnsiString; depth: Integer): AnsiString;
+{ One argument, unit-qualified. THE ORDER IS THE RULE, and each step is here
+  because the step after it would have answered wrongly:
+
+  * a specialization ALIAS is also a UClass, so it must be asked first or it
+    answers with its own alias spelling -- the very thing this fixes.
+  * a builtin is asked before the user tables so nothing named `Integer` in a
+    stale alias row can shadow it.
+  * a CLASS or RECORD alias (`TAliasCls = TCls`) is already a UClass alias
+    here, so FindUClass hands back the REAL class and its own name -- which is
+    what fpc reports, with no alias walk needed.
+  * an ENUM keeps its own name (measured: `g4.TMyEnum`), so it is asked BEFORE
+    the scalar alias table, which would otherwise fold it to System.LongInt --
+    an enum is tyInteger plus an identity, and the kind alone cannot say so.
+  * only then a scalar alias (`TMyInt = Integer`), which fpc DOES resolve. }
+var sk, ci, tk, ck: Integer; b, cnm: AnsiString;
+begin
+  sk := SpecRowByName(nm);
+  if sk >= 0 then
+  begin
+    SpecCanonArgName := SpecCanonUnitName(SpecUnitIdx[sk]) + '.' +
+                        SpecCanonName(sk, depth + 1);
+    Exit;
+  end;
+  b := SpecCanonBuiltinName(nm);
+  if b <> '' then begin SpecCanonArgName := 'System.' + b; Exit; end;
+  ci := FindUClass(nm);
+  if ci >= 0 then
+  begin
+    { The RESOLVED class must be canonicalised too, not just named. An INLINE
+      nested specialization (`specialize TBox<specialize TBox<Integer>>`) is
+      normalised to a generated alias, and when its arguments match one already
+      declared it is deduped onto that class with RegisterUClassAlias -- so the
+      generated name has no specialization row of its own, and reading the
+      class's REGISTERED name here handed back the outer alias spelling
+      (`TIntBox`) one level down, which is the same defect this fixes wearing a
+      different name. Measured: the `nested` row of the fixture. }
+    cnm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+    ck := SpecRowByName(cnm);
+    if ck >= 0 then cnm := SpecCanonName(ck, depth + 1);
+    SpecCanonArgName := SpecCanonUnitName(UClsUnitIdx[ci]) + '.' + cnm;
+    Exit;
+  end;
+  if FindEnumType(nm) >= 0 then
+  begin
+    SpecCanonArgName := SpecCanonUnitName(CurrentUnitIdx) + '.' + nm;
+    Exit;
+  end;
+  { AliasSemId excludes an enum alias and AliasIsSub a named SUBRANGE: both are
+    DISTINCT named types that fpc reports under their own name, and both are
+    tyInteger-shaped, so the kind alone would fold them to System.LongInt /
+    System.ShortInt. `TSub = 0..7` answering System.ShortInt is exactly the
+    wrongness this guard exists for -- measured, fpc says `g4.TSub`. }
+  tk := FindTypeAlias(nm);
+  if (tk >= 0) and (AliasSemId[tk] = 0) and (not AliasIsSub[tk]) then
+  begin
+    b := SpecCanonBuiltinName(TypeInfoOrdName(AliasTk[tk]));
+    if b <> '' then begin SpecCanonArgName := 'System.' + b; Exit; end;
+  end;
+  { A subrange, a set, an enum alias, or a name this cannot classify. fpc keeps
+    the written name for a subrange (measured: `g4.TSub`), and keeping it is
+    also the honest answer for the rest -- a name we did not resolve is better
+    reported as itself than folded to a kind we are guessing at. }
+  SpecCanonArgName := SpecCanonUnitName(CurrentUnitIdx) + '.' + nm;
+end;
+
+function SpecCanonName(k, depth: Integer): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  { A specialization cannot contain itself -- ParseSpecialization refuses that
+    as a circular specialization -- so this depth stop is a belt, not the rule.
+    Answering the plain template name is the pre-existing behaviour's shape and
+    cannot loop. }
+  if (k < 0) or (k >= SpecializationCount) or (depth > 8) then
+  begin SpecCanonName := ''; Exit; end;
+  r := Specializations[k].TemplateName + '<';
+  for i := 0 to SpecNParams[k] - 1 do
+  begin
+    if i > 0 then r := r + ',';
+    r := r + SpecCanonArgName(SpecConcreteNames[k * MAX_TEMPLATE_PARAMS + i], depth);
+  end;
+  SpecCanonName := r + '>';
+end;
+
+function ClassRttiName(ci: Integer): AnsiString;
+{ The name written into the class blob, which is what ClassName reads back. }
+var nm: AnsiString; k: Integer;
+begin
+  nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+  k := SpecRowByName(nm);
+  if k >= 0 then
+  begin
+    ClassRttiName := SpecCanonName(k, 0);
+    if ClassRttiName <> '' then Exit;
+  end;
+  ClassRttiName := nm;
+end;
+
 procedure EmitRTTI;
 var ci, i, j, k, base, cnt, hdr, strIdx, etid: Integer;
     propCount, methCount, fieldCount, ifaceCount, firstOff, entryOff: Integer;
@@ -707,8 +952,8 @@ begin
       hdr := UClsRTTIOff[ci];
       tobjCi := FindUClass('TObject');   { the implicit root -- parent link and UnitName both ask }
 
-      { name }
-      nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+      { name -- canonical for a specialization alias, see ClassRttiName above }
+      nm := ClassRttiName(ci);
       strIdx := InternStr(nm);
       AddDataPtrFix(hdr + 0, Strs[strIdx].Offset);
 

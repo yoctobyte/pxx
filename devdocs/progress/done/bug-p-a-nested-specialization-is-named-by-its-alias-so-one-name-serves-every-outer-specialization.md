@@ -5,10 +5,10 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankS
 created: 2026-09-06
-summary: "NESTED HALF FIXED 2026-09-08: the UClass ALIAS table had no owning-class column, so `TInner = TSomething;` written inside a class body was registered UNIT-GLOBALLY and beat another class own nested type of the same name. Its sibling table Alias* has carried AliasOwnerCi for a long time and this one carried nothing -- an ABSENT copy, so the two tables agreed with each other perfectly. Fixed by UClsAliasOwnerCi plus ClassOwnerVisibleHere, which is AliasVisibleHere four arms factored out so both tables ask one question. THE TICKET REDUCTION WAS INVALID AND IS REPLACED: its `Result.V := 9` is assigned to a T that is String in the second instantiation, so fpc 3.2.2 refuses the program too (`Incompatible types: got ShortInt expected ShortString`) -- the compile error it recorded was not the defect. The real symptom, on a program fpc accepts, is a SILENT WRONG VALUE and then a crash: with `ei: TI.TEnumSpec; es: TS.TEnumSpec`, the LAST-declared instantiation won for both, so one of them printed a raw address (`s 4357640`) and reading the pair the other way round segfaulted. Both declaration orders are asserted in the fixture BECAUSE the defect was last-one-wins: one order alone passes with the bug still in. The fgl arm no longer warns at all -- `TFPGList<Integer>` + `TFPGList<String>` in one program compiles clean and runs correct. TOP-LEVEL HALF was fixed 2026-09-08 at cd2d264c72df (two aliases of ONE specialization are one class, via a UClass alias rather than a second mint). STILL OPEN, and it is the only thing left here: the two minted classes SHARE THE BARE NAME `TEnumSpec`, so `ei.ClassName = es.ClassName` is TRUE where fpc says FALSE (fpc prints `TEnum<System.LongInt>` / `TEnum<System.ShortString>`). That is the SPELLING, not the identity -- every value row is right now -- and it is the same residual tgeneric16 carries (pxx prints the alias `TIntegerStack`, fpc the canonical `TAdvStack<System.LongInt>`), which is its ONLY divergent line. Whether a specialization ClassName must match fpc is a question this ticket should not answer alone."
+summary: "RESOLVED 2026-09-08. A specialization's ClassName reported the ALIAS the user wrote (`TIntBox`) instead of the specialization (`TBox<System.LongInt>`). Not merely an FPC-parity gap: only the FIRST alias of a specialization mints and the second becomes a UClass alias of it, so ClassName answered whichever name happened to be declared FIRST — an observable that changes when two unrelated declarations swap places is not reporting a property of the type at all. Three halves, all now closed: the nested-alias half (the UClass alias table had no owning-class column, so a `TInner = TSomething;` inside a class body registered UNIT-GLOBALLY and beat another class's nested type of the same name — fixed by UClsAliasOwnerCi + ClassOwnerVisibleHere, with a fixture asserting BOTH declaration orders because the defect was last-one-wins); the top-level identity half at cd2d264c72df (two aliases of one specialization are ONE class, via a UClass alias rather than a second mint — `a1 is TIntBox2` answers TRUE); and now the SPELLING, canonicalised in rtti_emit.inc where the class blob's name is written, leaving the parser's registered name — which every lookup keys on — untouched. THE REUSABLE FINDING: the canonicalisation is a NAME table, not a KIND table. WideString/UnicodeString/UTF8String/RawByteString share one TTypeKind here and fpc reports four different names, so a kind-keyed fold answers AnsiString for all four while looking perfectly correct on the Integer rows anyone checks first — the collision is manufactured by the readout, and only the string spellings separate the two designs. Enums and named subranges needed the same guard (AliasSemId, AliasIsSub): both are tyInteger-shaped, and `TSub = 0..7` folded to System.ShortInt once before it went in. Burns tgeneric16.pp (conformance 418 -> 419, gap 47 -> 46). Two divergences chosen and recorded rather than hidden: PtrInt/SizeInt, where fpc's own answer is TARGET-DEPENDENT (System.Int64 on x86-64, System.LongInt on i386) so we keep the written name; and a record alias as an argument, which needs a UClass alias row a RECORD alias does not get — banked as a residual on the keying ticket."
 ---
 
 # The shape
@@ -567,3 +567,89 @@ fpc  TAdvStack<System.LongInt>
 
 Whether a specialization's `ClassName` has to match fpc's canonical spelling is
 a separate question from identity, and this ticket should not settle it alone.
+
+## 2026-09-08 (frankS) — RESOLVED: the ClassName residual is closed, canonically
+
+The last thing open on this ticket was the SPELLING: with the identity half
+fixed, `TIntBox` and `TIntBox2` were correctly ONE class, and that class was
+still called `TIntBox`. It now reports `TBox<System.LongInt>`.
+
+### Why this was a defect on our own terms and not FPC parity
+
+Only the FIRST alias mints; the second becomes a UClass alias of it. So
+ClassName answered whichever name happened to be declared first, and swapping
+two unrelated declarations changed it. **An observable that moves with
+declaration order is not reporting a property of the type.** The canonical name
+mentions neither alias, so there is no order left for it to report.
+
+fpc 3.2.2 and Delphi both report `Template<Args>`, so the shape is the
+language's, not one compiler's.
+
+### Where it went, and why not at the mint site
+
+`rtti_emit.inc`, where the class blob's name is written. Every input is already
+in scope there (the specialization table, `UClsUnitIdx`, the name tables), and
+`pasparser_generic.inc` is included BEFORE both helpers it would otherwise have
+needed forwarded. It also leaves the parser's registered name — which every
+lookup keys on — completely untouched, so this cannot disturb identity.
+
+### The rules, measured against fpc 3.2.2, one probe per row
+
+`Template<Arg,Arg>`, no space after the comma. Outermost name NOT qualified,
+every argument qualified — that asymmetry is fpc's and is measured.
+
+**It is a NAME table, not a KIND table, and that is the finding.** Almost every
+builtin keeps its own name; only true aliases fold (`Integer`/`LongInt`/`Int32`
+-> LongInt, `Cardinal`/`LongWord`/`DWord` -> LongWord, `string` -> AnsiString,
+`AnsiChar` -> Char). Keying on TTypeKind would have collapsed the ones that do
+NOT fold: `WideString`, `UnicodeString`, `UTF8String` and `RawByteString` share
+one kind here and fpc reports four different names. A kind-keyed table cannot
+express that and would have answered AnsiString for all four — silently, and
+looking entirely correct on the Integer rows that were checked first.
+
+That last clause is the whole hazard and it has a name here: it is the
+**collision manufactured by the readout**. The rows anyone reaches for when
+checking a specialization's ClassName are the Integer ones, and those are
+exactly the rows where a kind-keyed fold and a name-keyed one give the SAME
+answer — so the probe that feels most natural is the one that cannot fail.
+Only the four string spellings, which share a kind and differ in name,
+separate the two designs. Choose the probe whose right answer differs from the
+default. (frankuser named this shape independently on reading the finding,
+which is why it is recorded in these terms rather than as "watch out for
+aliases".)
+
+An ENUM and a named SUBRANGE keep their own names too, and both are
+tyInteger-shaped, so the scalar-alias arm had to be guarded with `AliasSemId`
+and `AliasIsSub` or `TSub = 0..7` folded to `System.ShortInt`. That row was
+measured wrong once before the guard went in.
+
+### Two divergences, both measured, neither hidden
+
+- **`PtrInt` / `SizeInt`.** fpc resolves them to the pointer-width integer:
+  `System.Int64` on x86-64, `System.LongInt` on i386. **Its answer is
+  target-dependent, so ours deliberately is not** — we keep the written name. A
+  fixture row asserting `System.Int64` would pass on the host and fail on i386,
+  which is precisely the native-only defect class this repo keeps getting bitten
+  by. Chosen, not tolerated.
+- **`TAliasRec = TMyRec` as an argument** answers `TAliasRec` where fpc answers
+  `TMyRec`. A CLASS alias is registered in the UClass alias table and therefore
+  resolves for free; a RECORD alias is not, so nothing reachable from the RTTI
+  emitter can resolve it. Banked rather than half-plumbed — see the residual
+  filed on the keying ticket.
+
+### Corpus
+
+`tgeneric16.pp` burned from `pxx.skip`. Its own skip reason said the spelling
+was all that was left, and it now matches fpc on all six lines.
+
+### Fixture
+
+`test/test_a_specialization_reports_its_canonical_class_name.pas`
+(`test_speccanon26`), 21 rows, `.expected` derived from fpc. `plain` and
+`derived` are controls in the opposite direction — an ordinary class, and a real
+class descending from an inline specialization, must KEEP their own names.
+Positive control by reverting and rebuilding: **19 of 21 rows go red, and the 2
+that stay green are exactly those two controls.**
+
+## Log
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
