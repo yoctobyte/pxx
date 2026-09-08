@@ -43,3 +43,6 @@ Recover with:  rm -f compiler/.pascal26.fixedpoint && make compiler/pascal26
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-08 — auto-closed by the seven watcher: `test-arm32#src:tools/compiler_srchash.sh` passes at 5506794317a7 (tier full); it was red at b29428afe251. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
