@@ -4092,6 +4092,14 @@ def range_note(reg):
                   "that was TESTED, i.e. the upper bound of an untested range; "
                   "the cause is somewhere below it.\n\n" % bad)
 
+    if reg.get("range_non_causal"):
+        banner += ("> **NO COMMIT IN THIS RANGE CAN BE THE CAUSE** — every one "
+                   "of them touches no build input and no source this job "
+                   "reads. The red is real; the range is not evidence about "
+                   "it. Look at the box, the harness and nondeterminism, and "
+                   "do not bisect — a bisect here converges on an innocent "
+                   "commit with the confidence of a real one.\n\n")
+
     if reg.get("pin_axis"):
         # Blind to compiler/** (the pin freezes compiler/builtin/**), NOT blind
         # to lib/ and test/, which the pin deliberately leaves live. Counting
@@ -7029,6 +7037,85 @@ def needs_test(repo, sha):
     return any(not f.startswith(NOTEST_PREFIXES) for f in files)
 
 
+# Paths whose ONLY consumer is a test-SELECTION manifest, mapped to the job
+# families they can actually steer. An ALLOWLIST, spelled out and never
+# inferred: anything absent from this table is treated as causal, so the table
+# growing is a deliberate act with a reason attached, exactly like
+# test/UNWIRED.txt. A heuristic here ("does this look like a manifest?") would
+# fail toward SILENCE -- suppressing a real bisect -- which is the direction
+# this file must never fail in.
+#
+# The empty tuple means "steers no tstate job at all".
+SELECTION_MANIFESTS = {
+    # Selects which conformance rows run. Cannot change any compiled artefact
+    # and cannot be read by a job outside that corpus.
+    "test/pascal-conformance/pxx.skip": ("test-pascal-conformance",),
+    # Read only by tools/check_test_wiring.py, which is not a tstate job.
+    "test/UNWIRED.txt": (),
+}
+
+
+def commit_could_affect(repo, sha, job):
+    """Could `sha` have changed what `job` DOES? Fails toward True.
+
+    THE UNTESTED POPULATION IS NOT THE COULD-HAVE-CAUSED POPULATION, and until
+    this existed the watcher had only the first. `needs_test` asks *is this
+    outside devdocs/ and docs/* -- a question about which commits a gate was
+    never run on. A bisect needs the other question, and the two differ exactly
+    where a commit changes a file that is neither documentation nor an input to
+    the job under test.
+
+    Measured 2026-09-08, regression-test-emit-obj-c-obj-data-dup-a: ten commits
+    in the range, ZERO touching compiler/, lib/ or tools/, and the only two in
+    the `needs_test` population touching one file --
+    test/pascal-conformance/pxx.skip, a Pascal conformance skip list that a C
+    object-emission job does not read. `no_testable_change` therefore did not
+    fire (two testable commits is not zero), and the idle bisect was queued to
+    converge on a skip-list edit and name it for a `--emit-obj` failure. Two of
+    the ten were the coordinator's own docs commits, which is the sharpest form
+    of the argument: a seat that cannot have caused a defect was in its blame
+    population.
+
+    Failing toward True is not caution for its own sake. A guard that declines
+    to bisect and CANNOT be made to bisect is the failure this repo names most
+    often, and it would be invisible here because almost every range is the
+    ordinary kind -- so the positive control (a range containing a compiler/
+    commit must still bisect) is asserted in the devtest, not assumed.
+    """
+    out = sh(["git", "diff-tree", "--no-commit-id", "--name-only", "-r",
+              "-m", "--first-parent", sha], cwd=repo)
+    for f in (l for l in out.splitlines() if l):
+        if f.startswith(NOTEST_PREFIXES):
+            continue
+        fams = SELECTION_MANIFESTS.get(f)
+        if fams is not None and not any(job.startswith(x) for x in fams):
+            continue
+        return True
+    return False
+
+
+def range_non_causal(clone, reg):
+    """True when NO commit in the range could have changed this job.
+
+    The assertion is deliberately about EVERY commit in the range rather than
+    about the named `bad` sha. The stub has printed the `bad`-sha version for
+    weeks and nobody acted on it, because a reader who is told the accused is
+    innocent still assumes one of the others is guilty. The range-wide claim is
+    the one that ends the search.
+
+    Distinct from `no_testable_change`, which asks whether the range is EMPTY
+    of testable commits. Here the range is non-empty and every member is
+    provably irrelevant -- a state that rule cannot represent.
+    """
+    good, bad, job = reg.get("good"), reg.get("bad"), reg.get("job") or ""
+    if not (good and bad and job):
+        return False
+    cs = clone.commits_between(good, bad)
+    if not cs:
+        return False
+    return not any(commit_could_affect(clone.path, c, job) for c in cs)
+
+
 def make_preempted(clone, tested, commit_after=None):
     """Abort-check for idle work (full backfill / opt sweep): a real push
     preempts, docs/tstate-only movement (e.g. our own fast-phase publish)
@@ -7177,6 +7264,21 @@ def repair_regressions(clone, host, st):
                              reg["bad"][:12]), flush=True)
                 save_state(clone, host, st)
 
+            # THE STRONGER SIBLING: the range is non-empty and every commit in
+            # it is provably irrelevant to this job. Recomputed from the bounds
+            # every pass for the same reason as the two above -- the answer
+            # depends on SELECTION_MANIFESTS, which will grow.
+            was = reg.get("range_non_causal")
+            reg["range_non_causal"] = range_non_causal(clone, reg)
+            if reg["range_non_causal"] != was:
+                if reg["range_non_causal"]:
+                    print("twatch: %s — every commit between %s and %s is "
+                          "irrelevant to this job (no build input, no source it "
+                          "reads); the red stands, the range does not"
+                          % (reg.get("job", "?"), reg["good"][:12],
+                             reg["bad"][:12]), flush=True)
+                save_state(clone, host, st)
+
         if reg.get("pin_built") and reg.get("pin_axis") != PIN_AXIS_RULE \
                 and reg.get("good") and reg.get("bad"):
             # REPAIR ON READ, the same way the untestable-commit filter above
@@ -7237,6 +7339,18 @@ def bisect_step(clone, host, st, tier):
                   "%s moved no pinned binary, so that commit cannot be causal; "
                   "the range is unsound (see the stub's pin-provenance note)"
                   % (reg["job"], (reg.get("bad") or "?")[:12]), flush=True)
+            continue
+        if reg.get("range_non_causal"):
+            # DECIDABLE non-causality, the general case of pin_immune above.
+            # Every commit in the range touches no build input and no source
+            # this job reads, so a midpoint test cannot separate anything and
+            # the search converges on whichever innocent commit the halving
+            # happens to land on -- with the full confidence of a real bisect.
+            print("twatch: not bisecting %s — no commit between %s and %s could "
+                  "have changed what this job does, so the range is unsound; "
+                  "look at the box, the harness and nondeterminism instead"
+                  % (reg["job"], (reg.get("good") or "?")[:12],
+                     (reg.get("bad") or "?")[:12]), flush=True)
             continue
         if reg.get("status") == "timeout":
             # A TIMEOUT IS NOT BISECTABLE, and bisecting it anyway produces a
