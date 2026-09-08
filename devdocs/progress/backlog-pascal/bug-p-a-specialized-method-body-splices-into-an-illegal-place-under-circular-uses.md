@@ -61,3 +61,74 @@ The parameters/Result/Self visibility defect this was hiding behind is fixed:
 [[bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters]]. A
 NON-circular library shape — unit B specializes unit A's template, A does not
 use B — works and has a fixture (`test_xunitparams26`).
+
+## 2026-09-08 — MECHANISM, measured. It is NOT the anchor.
+
+Diagnosis banked rather than fixed: the fix is a visibility design question, not
+a splice position, and the ticket's own "where to start" points at the wrong
+routine. Measured at compiler `1defef6b62d0`.
+
+**The class the body names is INVISIBLE at the point the body is spliced, and
+correctly so.** `TSomeGeneric1LongInt` is minted in `ugeneric91b`'s
+IMPLEMENTATION section, which is that unit's private business — the rule
+`DeclVisibleSect` enforces for every declaration table. The body is streamed
+into `ugeneric91a`, where the name cannot resolve, so
+`class procedure TSomeGeneric1LongInt.Test;` is not read as a qualified method
+implementation at all: the parser takes `class procedure TSomeGeneric1LongInt`
+as a header and hits the `.`. **`expected 'begin' before '.'` is a NAME
+RESOLUTION failure wearing a syntax diagnostic**, which is why reading the
+`near:` window suggests an anchor.
+
+**The probe that settles it, and it needs no compiler change.** Add an ordinary
+declaration of that type to `ugeneric91a`'s own implementation:
+
+```pascal
+class procedure TSomeClass1.Test;
+var probe: TSomeGeneric1LongInt;     { <- added }
+```
+
+```
+pascal26:25: error: unknown type: TSomeGeneric1LongInt
+  in: ugeneric91a.pp
+```
+
+A plain `var` declaration cannot fail for an anchor reason. The name is simply
+not visible there, four lines above where the splice lands.
+
+### Which routine actually streams it
+
+Not `FlushPendingClassSpecializations`. `BufferGenericMethod` — when
+`ugeneric91a` finally reaches `class procedure TSomeGeneric1.Test`, it walks
+`Specializations[]` for every row naming this template and streams the body once
+per row, at the CURRENT cursor. The row for `TSomeGeneric1LongInt` was
+registered while `ugeneric91b` was being parsed (from a's `uses`), and that walk
+asks nothing about visibility. The pend/flush path never fires here at all,
+because when `ugeneric91b` specializes a's template a's own method bodies are
+not buffered yet, so `GenericMethodCount > 0` is false.
+
+### Why the obvious fixes are wrong, so the next reader does not spend the hour
+
+- **Move the splice into `ugeneric91b`.** It is fully parsed by then — `a`'s
+  implementation `uses ugeneric91b` completes before line 29 is reached.
+- **Widen the qualified-method-header lookup to see implementation-private
+  specializations of other units.** Fixes this and admits a genuinely unrelated
+  impl-private class of the same name; that is a silent wrong binding, and the
+  wrong-binding direction is the one this file's history keeps punishing.
+- **Make `BufferGenericMethod` skip rows it cannot see.** The body then never
+  exists and `TSomeClass2.Test` calls a method with no implementation, which is
+  a link failure instead of a parse failure. No better.
+
+### The shape that probably is right
+
+The machinery already half exists: `ParseSubroutine` swaps `CurrentUnitIdx` to
+`SpecTemplateDeclUnit(...)` and keeps `SpecBodyHostUnitIdx` for the
+specialization's own unit, precisely so a specialized body resolves in TWO
+scopes — see `bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters`.
+**It runs too late for this.** That swap happens once `methOwnerCi >= 0`, i.e.
+after the qualified header has resolved, and here the header is what fails. The
+body needs its host unit identity available at the HEADER, which means the
+spliced token run has to carry it — a parallel channel on the splice, in the
+manner of `PasSpliceTokFile`, rather than a global set at parse time.
+
+Corpus: `tgeneric91.pp`, still `gap:`. `PXXDBG=p.specunit` prints the two unit
+identities for bodies that get far enough to have them; this one does not.
