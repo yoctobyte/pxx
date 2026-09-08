@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Refuse an interactive `rm` whose target is a VARIABLE or a GLOB.
+#
+# WHY THIS IS A HOOK AND NOT A NOTE: CLAUDE.md has said "NEVER issue `rm` as a
+# Bash tool call with a VARIABLE or a GLOB in the path" since 2026-09-04, and it
+# is a rule rather than a preference precisely because the owner had already
+# asked once in his own words -- "can you stop doing rm with environment vars
+# please". On 2026-09-07 he reported it was STILL happening. Measured the same
+# hour across the fleet's transcripts: ~170 such calls in ten sessions over four
+# days, the most recent 51 minutes earlier. A prose rule in a 65KB file loses to
+# whatever the agent is concentrating on; a refusal does not.
+#
+# WHAT IT ACTUALLY COSTS: not the keystroke. `rm -rf "$T/$n"` trips Claude
+# Code's BUILT-IN dangerous-rm prompt, and that prompt STALLS THE SESSION until
+# the owner personally clears it -- frankA sat on one for 19 HOURS, and a
+# blocked session and a working session look identical from outside. This hook
+# turns a silent multi-hour stall into an instant, self-explaining refusal the
+# agent can act on without anyone being woken up.
+#
+# THERE IS NO ENV ESCAPE, AND THAT IS DELIBERATE. CLAUDE.md: "The fix is not to
+# rephrase the command so it slips past the guard ... a guard you route around
+# is a guard the owner no longer has." The way through is to do the correct
+# thing instead, and all three are cheaper than the rm:
+#   1. Do not delete at all. mktemp -d yields a directory the OS reaps; /tmp is
+#      aged at 6h (/etc/tmpfiles.d/tmp.conf). Walking away is nearly always right.
+#   2. If a loop writes per-iteration artefacts, clean up inside the loop from a
+#      COMMITTED script with `trap ... EXIT` -- reviewed once, run as a unit.
+#      That is why tools/*.sh never trip this: the hook sees `tools/foo.sh`, not
+#      the rm inside it.
+#   3. If you must delete interactively, SPELL THE PATH LITERALLY. That is the
+#      escape hatch, it is the rule's own instruction, and it cannot be abused.
+#
+# Reads the PreToolUse hook payload on stdin, answers a permissionDecision.
+
+set -uo pipefail
+
+payload=$(cat)
+cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)
+[ -z "$cmd" ] && exit 0
+
+# Split on shell separators so each segment is judged on its own. Over-splitting
+# can only expose MORE text to the rules, never less -- the same reasoning as
+# no-full-suite.sh, and the segments deliberately stay on separate LINES.
+scan=$(printf '%s' "$cmd" | sed -E 's/(&&|\|\||[;&|])/\n/g')
+
+deny() {
+  jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  exit 0
+}
+
+fix='Three ways through, all cheaper than the rm. (1) Do not delete: mktemp -d gives you a directory the OS reaps and /tmp is aged at 6h -- walking away is nearly always right. (2) If a loop writes per-iteration artefacts, clean up INSIDE the loop from a committed script with `trap ... EXIT`; that is why tools/*.sh never trip this. (3) If you must delete interactively, SPELL THE PATH LITERALLY -- that is the hatch, and it is the rule itself.'
+
+why='This is not about the keystroke. `rm -rf "$T/$n"` trips Claude Code built-in dangerous-rm prompt, which STALLS THE SESSION until the owner personally clears it -- one seat sat on such a prompt for 19 hours, and from outside a blocked session and a working session look identical. Do not rephrase to slip past this: a guard you route around is a guard the owner no longer has.'
+
+# Only judge segments where `rm` is in COMMAND position: start of the segment, or
+# after sudo/xargs/time/env-assignments. `grep -n 'rm '` and heredoc prose are
+# not rm calls and must pass.
+rmlines=$(printf '%s' "$scan" \
+  | grep -E '^[[:space:]]*(\{[[:space:]]*|\([[:space:]]*|do[[:space:]]+|then[[:space:]]+|else[[:space:]]+|sudo[[:space:]]+|xargs[[:space:]]+|time[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*rm([[:space:]]|$)' \
+  | grep -Ev '^[[:space:]]*#')
+[ -z "$rmlines" ] && exit 0
+
+# A GLOB anywhere in an rm target. Includes the non-recursive case: `rm -f
+# $W/g/*.npy` is one bad expansion away from the recursive one and reads the same.
+if printf '%s' "$rmlines" | grep -Eq 'rm([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^|;&]*[*?]'; then
+  deny "REFUSED: \`rm\` with a GLOB in the path. $why $fix"
+fi
+
+# RECURSIVE rm with a variable anywhere in the target -- the worst shape and the
+# one the owner named. `rm -rf "$S"`, `rm -rf $T/$n`, `rm -r ${WORK}/x`.
+if printf '%s' "$rmlines" | grep -Eq 'rm([[:space:]]+-[^[:space:]]*[rR][^[:space:]]*)+([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^|;&]*\$'; then
+  deny "REFUSED: recursive \`rm\` with a VARIABLE in the path. $why $fix"
+fi
+
+# A bare variable as the whole target, recursive or not: `rm -f "$out"`. One
+# empty expansion from deleting the wrong thing, and it names nothing a reader
+# can check.
+if printf '%s' "$rmlines" | grep -Eq 'rm([[:space:]]+-[^[:space:]]+)*[[:space:]]+"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?([[:space:]]|$)'; then
+  deny "REFUSED: \`rm\` whose whole target is a bare variable. An empty expansion here deletes the wrong thing, and the command names nothing a reviewer can check. $fix"
+fi
+
+# ANY variable in an rm target, recursive or not. This is CLAUDE.md's rule as
+# WRITTEN -- "a VARIABLE or a GLOB in the path" -- and the narrower reading
+# (only the shapes that stall a session) was tried first and rejected: the owner
+# named the pattern, not the stalling subset, and `rm -f $SP/suite24.log` is one
+# of the calls he was reporting. Two rules that disagree is worse than one that
+# occasionally costs a literal path.
+if printf '%s' "$rmlines" | grep -Eq 'rm([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^|;&]*\$'; then
+  deny "REFUSED: \`rm\` with a VARIABLE in the path. $why $fix"
+fi
+
+exit 0

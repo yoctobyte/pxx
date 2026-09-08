@@ -9,6 +9,12 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-full-suite.sh\"",
             "timeout": 10,
             "statusMessage": "checking the gate rule"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-variable-rm.sh\"",
+            "timeout": 10,
+            "statusMessage": "checking the rm rule"
           }
         ]
       }
