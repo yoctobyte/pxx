@@ -685,9 +685,9 @@ begin
     pair FPC's own constexp.pas declares. }
   if ((opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT)) and (not opAlreadyReg) then
   begin
-    dupPi := FindOpConvRanked(opKey, opTypeKind, recId,
-                              Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx],
-                              ProcRetStrCap[procIdx], 0);
+    dupPi := FindOpConvDeclDup(opKey, opTypeKind, recId,
+                               Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx],
+                               ProcRetStrCap[procIdx]);
     if dupPi >= 0 then
       Error('duplicate conversion operator: this source type already converts to this result type');
   end;

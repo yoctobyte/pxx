@@ -9429,7 +9429,34 @@ begin
   OpConvResultCapRank := 1;
 end;
 
-function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRank: Integer): Integer;
+function OpConvImplicitResultRank(pi: Integer): Integer;
+{ On the IMPLICIT path, 0 = a GENERIC string result (or a non-string one) and
+  1 = a SIZED `string[N]`. A preference, and the ONLY thing capacity decides
+  here -- it never filters.
+
+  Measured against fpc 3.2.2, one probe per cell, because the obvious readings
+  are all wrong in some cell:
+
+    sized80 alone            -> TString80   sized80   (a lone sized one is used)
+    sized80 alone            -> TString90   sized80   (so capacity does NOT filter)
+    sized80 + generic        -> TString80   generic   (generic BEATS an exact
+                                                       capacity match)
+    sized80+generic+sized90  -> TString80   generic
+    sized80 + sized90        -> TString80   REFUSED, ambiguous
+
+  The fourth row is what rules out "prefer the closest capacity" and the fifth
+  is what rules out "prefer the first declared": with no generic to fall back
+  on, fpc does not choose at all. Hence a rank plus a TIE TEST, not a filter and
+  not a first-match scan. }
+begin
+  OpConvImplicitResultRank := 0;
+  if not TypeIsFrozenString(Procs[pi].RetType) then Exit;
+  if ProcRetStrCap[pi] = DEFAULT_STR_CAP then Exit;
+  if ProcRetStrCap[pi] = 0 then Exit;
+  OpConvImplicitResultRank := 1;
+end;
+
+function FindOpConvRankedAmb(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRank: Integer; capExact: Boolean; var nBest: Integer): Integer;
 { CONVERSION-operator lookup: `operator :=` / `class operator Implicit`, and
   their OPK_EXPLICIT twin. Keyed on the destination as well as the source, and
   matching the source by ASSIGNMENT COMPATIBILITY rather than exact type kind.
@@ -9453,6 +9480,7 @@ function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRank: 
   destination are not, and constexp.pas declares exactly that pair). Use
   OPCONV_RANK_MAX for a use site. }
 var i, pi, bestPi, bestRank, bestCapRank, r, cr: Integer;
+    okRes: Boolean;
 begin
   { CAPACITY SPLITS EXPLICIT CASTS ONLY, and this is a rule about the language
     rather than a concession to a test row.
@@ -9475,18 +9503,44 @@ begin
     and silent -- the same fall-through shape that segfaulted earlier in this
     change. Normalised only where it is consulted, so the implicit path sees 0
     and behaves exactly as it did before this column existed. }
-  if opKey = OPK_EXPLICIT then
+  { THE DECLARATION AND THE USE SITE ASK DIFFERENT QUESTIONS, and this is the
+    line where they part. `capExact` is the DECLARATION's question -- "does an
+    operator with this exact result type already exist" -- and there String[80],
+    String[90] and ShortString are three different results whichever key they
+    are declared under. The USE site's question is "which operator serves this
+    destination", and there capacity discriminates for an EXPLICIT cast (the
+    cast writes its destination) and never for an implicit assignment (measured:
+    a lone `: String[80]` conversion serves a String[90] destination).
+
+    Conflating them is what kept `operator :=(TTest): TString80` and
+    `: TString90` from BOTH declaring: the duplicate check reused the use-site
+    lookup, which discards capacity on the implicit path, so the two results
+    compared equal and the second declaration was refused. fpc 3.2.2 accepts the
+    pair and refuses at the STORE instead. }
+  if capExact or (opKey = OPK_EXPLICIT) then
     dstCap := OpConvDestCapNorm(dstTk, dstCap)
   else
     dstCap := 0;
-  bestPi := -1; bestRank := 99; bestCapRank := 99;
+  bestPi := -1; bestRank := 99; bestCapRank := 99; nBest := 0;
   i := 0;
   while i < OvrlCount do
   begin
     if (OvrlOpKind[i] = opKey) and (OvrlRecId[i] = srcRec) then
     begin
       pi := OvrlProcIdx[i];
-      if OpConvResultMatches(pi, dstTk, dstRec, dstCap) then
+      okRes := OpConvResultMatches(pi, dstTk, dstRec, dstCap);
+      { THE GENERIC-FALLBACK EXEMPTION IS A USE-SITE RULE AND MUST NOT REACH THE
+        DECLARATION. OpConvResultMatches deliberately lets a result of
+        DEFAULT_STR_CAP match ANY frozen-string destination -- that is what makes
+        a bare `ShortString` conversion serve `s40 := TString40(t)` instead of
+        falling through to a raw store, and removing it segfaulted once already.
+        But "serves every destination" is not "is the same result type": with it
+        in force, declaring `: TString90` found the ShortString operator and
+        called the pair a duplicate, so the generic conversion could not coexist
+        with a sized one at all. Asked exactly, three results are three results. }
+      if okRes and capExact and TypeIsFrozenString(Procs[pi].RetType) then
+        okRes := (OpConvDestCapNorm(Ord(Procs[pi].RetType), ProcRetStrCap[pi]) = dstCap);
+      if okRes then
       begin
         r := OpConvSourceRank(OvrlTypeKind[i], srcTk);
         { The result CAPACITY is a SECOND key, compared only when the source
@@ -9496,19 +9550,64 @@ begin
           silently redefine what the caller asked for. Two keys compared in
           order, which is the shape FindTypeAlias above settled on after adding
           one as a bonus inverted its answer. }
-        cr := OpConvResultCapRank(pi, dstCap);
-        if (r >= 0) and (r <= maxRank) and
-           ((r < bestRank) or ((r = bestRank) and (cr < bestCapRank))) then
+        if opKey = OPK_EXPLICIT then cr := OpConvResultCapRank(pi, dstCap)
+        else cr := OpConvImplicitResultRank(pi);
+        if (r >= 0) and (r <= maxRank) then
         begin
-          bestRank := r;
-          bestCapRank := cr;
-          bestPi := pi;
+          if (r < bestRank) or ((r = bestRank) and (cr < bestCapRank)) then
+          begin
+            bestRank := r;
+            bestCapRank := cr;
+            bestPi := pi;
+            nBest := 1;
+          end
+          else if (r = bestRank) and (cr = bestCapRank) then
+            { A SECOND candidate that is exactly as good. Counted rather than
+              discarded: with two sized results and no generic, fpc refuses the
+              assignment instead of choosing, and a first-match scan cannot tell
+              that case from a lone candidate. The caller decides what a tie
+              means -- the declaration-time duplicate check wants ONE, the store
+              wants a refusal. }
+            Inc(nBest);
         end;
       end;
     end;
     Inc(i);
   end;
-  FindOpConvRanked := bestPi;
+  FindOpConvRankedAmb := bestPi;
+end;
+
+function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRank: Integer): Integer;
+{ The tie-count-discarding form, for callers that only need "is there one". }
+var fcrN: Integer;
+begin
+  FindOpConvRanked := FindOpConvRankedAmb(opKey, srcTk, srcRec, dstTk, dstRec,
+                                          dstCap, maxRank, False, fcrN);
+end;
+
+function FindOpConvDeclDup(opKey, srcTk, srcRec, dstTk, dstRec, dstCap: Integer): Integer;
+{ The DECLARATION-time duplicate question, asked with the result capacity
+  compared EXACTLY and the source kind matched exactly (maxRank 0). See the
+  capExact note inside the core for why this cannot be the use-site lookup. }
+var fcdN: Integer;
+begin
+  FindOpConvDeclDup := FindOpConvRankedAmb(opKey, srcTk, srcRec, dstTk, dstRec,
+                                           dstCap, 0, True, fcdN);
+end;
+
+function FindOpConvToDestAmb(srcTk, srcRec, dstTk, dstRec, dstCap: Integer;
+                             var ambiguous: Boolean): Integer;
+{ The use-site IMPLICIT form, reporting whether the winner was TIED. A tie means
+  two conversions are exactly as applicable -- two sized results with no generic
+  to prefer -- and fpc refuses the assignment there rather than choosing. The
+  caller must refuse too: picking one silently is the accepted-invalid shape,
+  and letting the store fall through raw is the segfaulting one. }
+var ftaN, ftaPi: Integer;
+begin
+  ftaPi := FindOpConvRankedAmb(Ord(tkAssign), srcTk, srcRec, dstTk, dstRec,
+                               dstCap, OPCONV_RANK_MAX, False, ftaN);
+  ambiguous := (ftaPi >= 0) and (ftaN > 1);
+  FindOpConvToDestAmb := ftaPi;
 end;
 
 

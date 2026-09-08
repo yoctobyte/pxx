@@ -17008,6 +17008,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_forinrank26 "$$($(TESTTMP)/test_forinrank26)" "$$(cat test/test_for_in_ranks_the_enumerator_against_the_loop_variable.expected)"
 	./$(COMPILER) test/test_a_specialization_reports_its_canonical_class_name.pas $(TESTTMP)/test_speccanon26
 	tools/expect_same.sh test_speccanon26 "$$($(TESTTMP)/test_speccanon26)" "$$(cat test/test_a_specialization_reports_its_canonical_class_name.expected)"
+	./$(COMPILER) test/test_an_implicit_conversion_operator_is_chosen_without_regard_to_declaration_order.pas $(TESTTMP)/test_convorder26
+	tools/expect_same.sh test_convorder26 "$$($(TESTTMP)/test_convorder26)" "$$(cat test/test_an_implicit_conversion_operator_is_chosen_without_regard_to_declaration_order.expected)"
+	./$(COMPILER) test/test_a_lone_sized_conversion_operator_serves_any_string_destination.pas $(TESTTMP)/test_convlone26
+	tools/expect_same.sh test_convlone26 "$$($(TESTTMP)/test_convlone26)" "$$(cat test/test_a_lone_sized_conversion_operator_serves_any_string_destination.expected)"
+	! ./$(COMPILER) test/test_an_ambiguous_implicit_conversion_is_refused_at_the_store.pas $(TESTTMP)/test_convamb26 > $(TESTTMP)/test_convamb.log 2>&1
+	tools/expect_same.sh test_convamb26 "$$(grep -c 'more than one conversion operator applies' $(TESTTMP)/test_convamb.log)" "1"
 	# a lifted nested routine keeps its thirteen token-parallel channels: {$$R+} is
 	# in force inside its body ({$$R-} arm is the control), and a later syntax error
 	# names the token it is actually at. The runtime row cannot be a byte copy of

@@ -9373,6 +9373,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     miArg, miRec, miPi, miArgN: Integer;   { Initialize/Finalize }
     miTk: TTypeKind; miIsFin: Boolean;
+    convAmbig: Boolean;             { two conversion operators equally apply — see the assign arm }
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     vuArgProc, vuArgAddr, vuArgNode: Integer;   { `return <variant>` -> class via pyvarobj }
@@ -13673,9 +13674,25 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           `p^` and returns nothing for a plain identifier. Wiring it here made
           the path LOOK destination-aware while declaration order actually
           decided which conversion ran. }
-        varIdx := FindOpConvToDest(ASTTk[ASTRight[node]],
-                                   ResolveNodeRec(ASTRight[node]),
-                                   Ord(lhsTk), ResolveNodeRec(ASTLeft[node]), 0);
+        varIdx := FindOpConvToDestAmb(ASTTk[ASTRight[node]],
+                                      ResolveNodeRec(ASTRight[node]),
+                                      Ord(lhsTk), ResolveNodeRec(ASTLeft[node]), 0,
+                                      convAmbig);
+        { AMBIGUOUS IS A REFUSAL, AND THIS IS THE SITE FPC REFUSES AT. Two
+          conversions equally applicable to this destination -- `: String[80]`
+          and `: String[90]` with no generic between them -- and fpc 3.2.2 does
+          not choose: `Incompatible types: got "TTest" expected "TString80"`,
+          raised at the STORE and not at the declaration, which it accepts.
+          toperator92 and toperator95 are exactly that program.
+
+          Refusing HERE rather than at the declaration is the whole point of the
+          change: pxx used to reject the second declaration, which produced the
+          same verdict for the wrong reason and cost the two rows fpc compiles.
+          And falling through instead of erroring is not an option -- the store
+          would go raw, which is the record-into-string shape that segfaulted in
+          writeln when this family was last touched. }
+        if convAmbig then
+          Error('Incompatible types: more than one conversion operator applies to this assignment');
         if varIdx >= 0 then
         begin
           leftAddr := AllocNode(AN_ARG);
