@@ -65,3 +65,43 @@ and the correctly-rounded-libm work, not on this table.
 their edge cases (`isqrt(0)`, `isqrt` of a perfect square, `ldexp` denormal and
 overflow, `frexp(0)`, `frexp` of a negative, `isfinite` over nan/inf/finite),
 and a control that the 39 agreeing names still agree.
+
+## The table's COMMENT has gone stale, and it gives atan2 the wrong reason
+
+Measured 2026-09-08 (`compiler/pascal26` a7b03135f504), reaching this ticket from
+the lekkerzeilen target, whose `hud.py` wants `math.atan2`.
+
+The comment above the `math.*` mapping table in `compiler/pyparser.inc` says:
+
+> `math.log / math.pow / math.atan2` are NOT here — they need a transcendental
+> (Ln, a correctly-rounded pow) and a BUILTIN unit cannot reach one
+
+**Two of the three named now work**, and so does the function that most directly
+refutes the stated reason:
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `math.log(2.718281828)` | 0.9999999998311266 | identical |
+| `math.pow(2.0, 10.0)` | 1024.0 | identical |
+| `math.hypot(3.0, 4.0)` | 5.0 | identical |
+
+`hypot` needs `Sqrt`, so "a builtin unit cannot reach the RTL" is not what keeps
+`atan2` out **today** — the ULP POLICY above is, and that is a completely
+different reason with a completely different fix.
+
+**This misroutes, and it misrouted this seat.** Reading only the comment, the
+obvious conclusion is that `atan2` needs a lowering redesign, and the obvious
+cheap fix is a table row — `lib/rtl/math.pas:63` already declares
+`function ArcTan2(y, x: Double): Double` and the rows just below resolve
+`math.asin` -> `ArcSin` by exactly that rename. **That fix is the one this
+project has refused twice**, and it would ship a silently wrong last digit in
+place of a loud `undefined variable`. The comment should name the ulp policy and
+point here; it currently names a reachability wall that three working functions
+disprove.
+
+**A note for a caller that does not need the last digit:** the refusal is a
+GLOBAL policy about what `math.atan2` may silently mean, not a claim that no
+program may use `ArcTan2`. A target permitted to change its own source (see
+[[umbrella-lekkerzeilen-compiles-and-runs-under-nilpy]], where the owner has
+licensed exactly that) can call an explicit helper and carry the 1 ulp knowingly
+— a HUD heading does not care. Do not read this as licence to map the name.

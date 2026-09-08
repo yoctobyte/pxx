@@ -1,14 +1,20 @@
 ---
 slug: umbrella-lekkerzeilen-compiles-and-runs-under-nilpy
 track: N
-prio: 60
+prio: 75
 type: umbrella
 status: backlog
 owner: ""
 created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
-blocked-by: []
+blocked-by:
+  - bug-n-a-class-body-cannot-alias-a-method-defined-above-it
+  - feature-n-the-array-module
+  - decide-n-does-nilpy-emulate-ctypes-or-bind-natively
+  - bug-n-collections-deque-is-missing
+  - bug-n-str-join-rejects-an-argument-shape-cpython-accepts
+  - feature-nilpy-math-module-twelve-absent-names-measured
 summary: "Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen, 14,297 LOC of Python, 26 runtime modules -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. Measured 2026-09-08 with compiler/pascal26 at a7b03135f504: 3 of 16 runtime modules compile clean, and the other 13 fail on SIX distinct causes, one of which blocks seven modules by itself. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
 ---
 
@@ -126,9 +132,16 @@ settling it.**
 
 **4. `collections.deque` — 1 module** (`chart`).
 
-**5. `math.atan2` — 1 module** (`hud`). Confirmed directly: CPython gives
-`0.4636476090008061`, nilpy answers `no member atan2 came of the qualifier math`.
-A basic libm entry, and the smallest item on this list.
+**5. `math.atan2` — 1 module** (`hud`), **and it is a DELIBERATE refusal, not a
+gap.** `atan2` is measured 1 ulp off, and the standing policy is to keep a
+1-ulp-off RTL routine out rather than trade a loud `undefined variable` for a
+silently wrong last digit — see `feature-nilpy-math-module-twelve-absent-names-measured`,
+which owns it and is blocked on the correctly-rounded-libm work. **Do not "fix"
+this with a table row**; that is the fix the project has refused twice, and this
+seat proposed it before reading far enough. **This is the clearest place the
+cheat licence applies:** the refusal governs what `math.atan2` may silently mean
+for every program, not whether this one may call `ArcTan2` knowingly. A HUD
+heading does not care about the last digit.
 
 **6. `str.join` overload — 1 module** (`text`):
 `no overload of join matches these arguments`.
