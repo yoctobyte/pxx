@@ -11,7 +11,9 @@ tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
   - bug-n-a-class-body-cannot-alias-a-method-defined-above-it
   - feature-n-the-array-module
-  - decide-n-does-nilpy-emulate-ctypes-or-bind-natively
+  - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
+  - bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
+  - feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory
   - bug-n-collections-deque-is-missing
   - bug-n-str-join-rejects-an-argument-shape-cpython-accepts
   - feature-nilpy-math-module-twelve-absent-names-measured
@@ -121,14 +123,39 @@ language is written; the source should not move for this.
 `import: no unit named array and no shim mimic_array`. The shim naming suggests
 the mechanism exists and this module has not been written.
 
-**3. `ctypes` is not available — 1 module, and it is the whole platform layer**
-(`gfx`; also `platform/_ctypes_backend.py`, `_sdl2.py`, `_gl.py`). `ctypes` gets
-**zero** hits anywhere in `pyparser.inc`/`pylexer.inc`. This is the one genuinely
-large item and the one where the cheat licence most plausibly applies: binding
-SDL2 and OpenGL through a pxx-native mechanism instead of emulating CPython's
-`ctypes` may be far cheaper and is arguably the better artefact. **This is a
-Track U-shaped fork, not a bug — do not start building `mimic_ctypes` without
-settling it.**
+**3. `ctypes` is not available — and the fork it looked like DOES NOT EXIST.**
+This was filed as a Track U decision (emulate `ctypes`, or bind natively and
+change the source). **Measurement dissolved it, and the ticket is deleted.**
+
+The project already carries the seam: `lekkerzeilen/platform/__init__.py` selects
+a backend and `platform/_pxx.py` is a stub its own author wrote *for this*,
+planning `import SDL2/SDL.h` — "the same mechanism behind its wrapper-free
+`import sqlite3`". That claim about our compiler is TRUE and tested
+(`test_nilpy_import_sqlite.npy` links `libsqlite3.so.0` and calls into it;
+`test_nilpy_import_c_header_still_works.npy` guards the route). So arm B is not
+"change the source" at all — **filling in a stub the author left for us is
+completing the project, not bending it, and the cheat licence is not spent.**
+
+**And native binding already substantially WORKS**, measured against
+`compiler/pascal26` a7b03135f504:
+
+| | |
+| --- | --- |
+| `import "/usr/include/GL/gl.h"` | **compiles and RUNS** |
+| `import "/usr/include/SDL2/SDL.h"` | stops on ONE line — `SDL_endian.h:166`, asm constraint `"=Q"` |
+| `glGetError()` | compiles and links; dies at exec on `libgl.so` (real name `libGL.so.1`) |
+
+So what looked like "build an FFI subsystem" is **three small, precise
+blockers**, now filed and wired above: the `=Q` inline-asm constraint (Track C,
+one letter, one site), the header-stem-to-soname mapping, and the inability to
+name a header in a subdirectory by anything but an absolute path.
+
+**Decision, and it is settled by measurement rather than taste: bind natively;
+do not build `mimic_ctypes` for this target.** Emulating CPython's FFI on top of
+a compiler whose designed feature is wrapper-free C interop would be a wrapper
+around the mechanism that exists to avoid wrappers. A general `ctypes` shim
+remains worth having for arbitrary third-party Python that binds C libraries —
+that is a separate feature and this umbrella does not rank it.
 
 **4. `collections.deque` — 1 module** (`chart`).
 
