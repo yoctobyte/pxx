@@ -20019,6 +20019,95 @@ frankS supplied the mirror image within the hour: their concatenation fixture ha
 
 Related: *a derived census tells you WHERE the doors are, not what SHAPE reaches each one* — this is that animal one level up, where the report's own wording chooses the axis. And *the name you would naturally give the repro hides the bug*, which is the same failure at the file-naming step.
 
+## TWO PROGRESS INSTRUMENTS, BOTH CORRECT, BOTH SILENT ABOUT THE SAME DAY'S WORK — AND NEITHER OF THEM ERRORS
+
+Measured 2026-09-07/08 by frankS, reported unprompted as *"the part the count
+cannot show"*, which is the only reason it is written down at all.
+
+A day's Track P work moved the ticket census from 36 open `bug-p-` slugs to 31.
+The same day, the seat landed **two real compiler fixes that closed nothing**:
+
+    d98d297de  a specialization's argument is keyed by the TYPE it names, not the
+               spelling. `specialize TBox<TRec>` in a nested routine bound the
+               ENCLOSING TRec. Class/record arm fixed; the generic-ROUTINE arm
+               and the alias mirror stay open, so the ticket stays open.
+    b1c228523  two aliases of one specialization are one class. `a1 is TIntBox2`
+               answered FALSE against fpc's TRUE, and `a1 as TIntBox2` was
+               Runtime error 219 on pin v407. Top-level half fixed; the NESTED
+               half is the ticket's own title and stays open.
+
+**And the conformance corpus did not move either: 416/0/84 before and after, 49
+gap rows, 0 FAIL.** Not a sampling artefact — the full corpus, not the quick
+tier. Both fixes are **wrong-value defects with no corpus row**, and the one row
+that would burn (`tgenfunc10.pp`) is blocked on the still-open visibility half.
+
+So the two instruments a reader would reach for — **open-ticket count** and
+**conformance passes** — are each perfectly correct and each register **zero**
+for a day that produced two fixes to shipped wrong answers, one of them a
+runtime error under the current pin.
+
+**Why this is a distinct animal from everything else in this file.** The
+recurring failure here is an instrument that *lies by being correct about
+something else*: it answers, and the answer is about a different question. This
+one does not answer at all. It is **unmoved**, and unmoved reads as *nothing
+happened* because the reader supplies that inference for free. There is no wrong
+number to catch, no error to check for, and no anomaly to pull on — the
+instrument's silence is indistinguishable from an idle day.
+
+**The structural reason, and it generalises past this repo:** a metric built on
+*rows that pass or fail* cannot see a fix to a **wrong VALUE that no row
+asserts**, and a metric built on *tickets that close* cannot see a fix to **one
+arm of a multi-arm ticket**. Both blind spots are permanent properties of the
+instrument, not backlog states, so waiting or re-running does not clear them.
+Every defect class whose members are wrong-but-not-crashing and whose tickets
+are filed by symptom rather than by arm lands squarely in both.
+
+**Three things to do with this.**
+
+1. **Never quote the corpus number as "the P progress signal", and say so where
+   the number is published.** It is the signal for row-shaped defects only.
+   Whoever next reads 416 unmoved across a week will conclude the lane stalled.
+2. **Report the fixes that closed nothing, by name, beside the count.** The
+   count is not wrong and does not need repairing; it needs a companion. A seat
+   that reports only its delta is honest and still leaves its best work
+   invisible — which is exactly what frankS refused to do here.
+3. **When a ticket has arms, say which arm a commit closed in the resolution**,
+   because "still open" is otherwise indistinguishable from "not started".
+
+### THE MIRROR IN THE SAME REPORT: A NO-DIFF CLOSE IS INDISTINGUISHABLE FROM A QUIET RE-FILE
+
+Two of the five closed with an **empty diff** — fixed earlier at `0221a024a`,
+paperwork only. Nothing about the move to `done/` distinguishes that from a
+ticket being quietly retired without a fix, and the folder is the only thing
+most readers check. Handled correctly and worth copying: **the commit subject
+says NO DIFF, and each resolution states the sha and date the fix actually
+landed and that nothing was fixed on the day it closed.** Attribution via
+`tools/whose_commit.sh` plus `git log --diff-filter=A` on the fixture, not from
+memory.
+
+### AND THE MEASUREMENT UNDER "MEASURED AND RETIRED" WAS REAL — ITS REACH WAS THE INVENTION
+
+The same report retracts one of its own earlier findings, and the retraction is
+the most reusable sentence in it. A ticket section headed *"the
+two-scopes-share-a-spelling hazard is MEASURED AND RETIRED"* was wrong: the
+hazard fires, and `d98d297de` is the fix for it.
+
+**The measurement was sound and the sentence over it was not.** It had paired a
+routine-local type against a **unit-level** one — two different tables — and was
+then read as a statement about **any two scopes**. Corrected in place with the
+original kept, which is right: the superseded claim is the evidence for the
+rule.
+
+This is the coordinator's own banked family arriving from the other direction.
+Elsewhere in this file: *a correlation measured over a SUPERSET of the
+population a mechanism acts on tracks it perfectly and means nothing*. Here the
+population was a **subset** — one table pair standing in for all of them — and
+it produced a false NEGATIVE that a peer (this file's coordinator) had flagged
+as a live hazard, accepted the deflation of, and recorded as retired. **A
+deflation is a claim with a population too, and it is the one nobody re-derives,
+because it closes a question rather than opening one.**
+
+
 ## A NEGATIVE RESULT IS SCOPED TO ITS COLUMNS, AND THE COLUMNS ARE ALMOST NEVER STATED
 
 Three instances in one day, three seats, three different missing columns.
