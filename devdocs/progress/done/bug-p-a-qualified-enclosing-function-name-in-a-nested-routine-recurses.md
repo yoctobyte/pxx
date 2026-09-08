@@ -134,4 +134,4 @@ two readings) and `test_a_nested_functions_own_result_is_not_the_enclosing_ones`
 both pass unchanged.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ca98b9782.
