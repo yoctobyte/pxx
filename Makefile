@@ -16954,6 +16954,17 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_a_lifted_nested_routine_keeps_its_token_channels_diag.pas $(TESTTMP)/test_liftchandiag26 > $(TESTTMP)/test_liftchandiag.log 2>&1
 	grep -q "expected 'then' before '2'" $(TESTTMP)/test_liftchandiag.log
 	grep -q "if q >>> 2 then" $(TESTTMP)/test_liftchandiag.log
+	# ParseOperatorDef is the OTHER open-coded token mover: it inserts two tokens
+	# and (named result) removes one, both by hand, so neither reached
+	# ShiftTokParallel. Two arms because the two movers give two different
+	# offsets -- 'WriteLn' (+2) and 'then' (+1) -- and one arm cannot tell a fix
+	# of both from a fix of either.
+	! ./$(COMPILER) test/test_an_operator_definition_does_not_shift_the_token_channels.pas $(TESTTMP)/test_opchan26 > $(TESTTMP)/test_opchan.log 2>&1
+	grep -q "expected 'then' before '2'" $(TESTTMP)/test_opchan.log
+	grep -q "if q >>> 2 then" $(TESTTMP)/test_opchan.log
+	! ./$(COMPILER) test/test_an_operator_definition_does_not_shift_the_token_channels_named.pas $(TESTTMP)/test_opchannamed26 > $(TESTTMP)/test_opchannamed.log 2>&1
+	grep -q "expected 'then' before '2'" $(TESTTMP)/test_opchannamed.log
+	grep -q "if q >>> 2 then" $(TESTTMP)/test_opchannamed.log
 	./$(COMPILER) test/test_a_routine_local_type_keys_its_own_specialization.pas $(TESTTMP)/test_speckeyid26
 	tools/expect_same.sh test_speckeyid26 "$$($(TESTTMP)/test_speckeyid26)" "$$(cat test/test_a_routine_local_type_keys_its_own_specialization.expected)"
 	./$(COMPILER) test/test_two_aliases_of_one_specialization_are_one_class.pas $(TESTTMP)/test_alias1class26

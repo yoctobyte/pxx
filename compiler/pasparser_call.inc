@@ -344,6 +344,13 @@ begin
      (Tokens[i + 1].Kind = tkColon) then
   begin
     OpResultAlias := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+    { …and the thirteen token-parallel arrays, which this hand-written remove
+      moved none of. It is the same class as the nested-routine lift's:
+      open-coded rather than routed through RemoveTokens, so ShiftTokParallel --
+      which is where that call would have got it for free -- never ran, and
+      grepping RemoveTokens' callers cannot find it because it is not one.
+      bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token }
+    ShiftTokParallel(i, -1);
     for j := i to TokCount - 2 do
     begin
       Tokens[j].Kind := Tokens[j + 1].Kind;
@@ -403,6 +410,16 @@ begin
 
   { Insert 'function/procedure synName' at TokPos (before '(') }
   EnsureTokCapacity(TokCount + 3);
+  { The same for the INSERT side, and this one is MEASURED: with an `operator`
+    definition in the file, a later `if q 2 then` was reported as
+    `expected 'then' before 'WriteLn'` -- two tokens late, which is exactly the
+    insert width -- with the `near:` window shifted to match. Delete the operator
+    and the identical error names '2'. ShiftTokParallel's positive branch also
+    fills the two new slots: directive state inherited from atPos-1, spelling and
+    C-attribute channels zeroed, which is right because both tokens are
+    synthesized and have no source range. Called with the OLD TokCount in place,
+    which is its stated contract. }
+  ShiftTokParallel(TokPos, 2);
   for j := TokCount - 1 downto TokPos do
   begin
     Tokens[j + 2].Kind := Tokens[j].Kind;

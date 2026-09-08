@@ -168,3 +168,40 @@ differ by a diagnostic rather than by luck.
 `..._diag.pas` must NOT compile, and the Makefile greps the diagnostic TEXT and
 the window — a compile-only row cannot see a wrong spelling, and the LINE was
 right all along, which is what made this look cosmetic.
+
+## 2026-09-08 (later) — the same class has a SECOND live site, and the audit that found it
+
+The handle is not a phrase. It is the operation: **what moves tokens?**
+
+```
+grep 'Tokens\[..\] := Tokens\[' compiler/*.inc
+```
+
+Five hits outside `lexer.inc`. Grepping CALLERS of `RemoveTokens` /
+`InsertTokens` finds none of them, by construction — an open-coded move is not
+a caller, which is what makes this rung of the absent-copy shape unreachable by
+enumeration.
+
+**`ParseOperatorDef` (`pasparser_call.inc`) is two of the five**, both in the
+Pascal lane, both calling `AdjustSrcRanges` and neither calling
+`ShiftTokParallel`: a 2-token INSERT of the synthesized `function <synName>`
+header, and a 1-token REMOVE of the `r :` pair for a named operator result.
+
+```
+plain operator          expected 'then' before 'WriteLn'   <- +2, the insert width
+named-result operator   expected 'then' before 'then'      <- +1, insert 2 remove 1
+no operator (control)   expected 'then' before '2'
+```
+
+**The magnitude named the cause a second and third time before any code was
+read**, and it also separates the two movers, which is why both arms are
+fixtures rather than one.
+
+Not claimed: a directive-state instance for this site. The lift's shift is
+`remCount` — dozens of tokens, easily spanning a `{$R}` boundary — while this
+one is 2, and a `{$R+}`-after-an-operator probe traps correctly in both
+compilers. Same mechanism, same fix, only the spelling half measured here.
+
+The remaining three hits are `rparser.inc` (two) and `zparser.inc` (one) —
+Tracks R and Z, both experimental. Not examined, not fixed, recorded so the
+next reader of this section has the list.
