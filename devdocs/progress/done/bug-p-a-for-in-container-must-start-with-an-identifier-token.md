@@ -144,4 +144,4 @@ which has to grow a ranked lookup anyway and should grow one ranked lookup
 rather than two.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9ca01a68e.
