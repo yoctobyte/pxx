@@ -366,3 +366,32 @@ rather than in a seat.
 **Naming that mechanism would need seven's tree state at those moments, which
 this seat does not have.** Recorded as a bounded observation so whoever takes it
 starts from the guard and the harness, not from eighteen innocent jobs.
+
+### The two cheapest rows in the archive, and they need no domain knowledge
+
+frankS pointed out that the argument above is stronger than it was written, and
+checking it made it stronger again. The two consecutive srchash NEW-RED runs of
+2026-09-08 landed on commits that **provably cannot change the hashed file set**:
+
+| sha | what it changes | files in the five hashed globs |
+| --- | --- | --- |
+| `5506794317a7` | ONE line of ONE `.md` — sync.sh's PENDING-COMMIT fill-in | **0** |
+| `b29428afe251` | `tstate/runs-seven.ndjson` + `seven.json` — the watcher's OWN bookkeeping | **0** |
+
+The stamp hashes exactly five globs — `compiler/compiler.pas`, `compiler/*.inc`,
+`compiler/builtin/*.pas`, `lib/rtl/*.pas`, `lib/asmcore/*.pas`. Neither commit
+touches one. So the `stamp 214 files, tree 215` perturbation **cannot have come
+from the commit range**, and the identifier is not merely mislabelled — it is
+pointing at a window whose contents are incapable of causing the failure.
+
+**A tier that reds on a markdown one-liner has already told you the verdict is
+not about the commit**, and the second row is better still: the watcher reddened
+on its own archive write. No knowledge of Pascal, of the for-in rules, or of what
+either job tests is needed to read either row.
+
+This also **closes off** a plausible-sounding lead rather than opening one: a
+one-tracked-file commit looks like a clean probe for an off-by-one-file stamp
+comparison, and it is not, because the file it changes is outside the hashed set
+entirely. Whatever adds the 215th file is in the CHECKOUT or the harness — an
+untracked stray, a build artefact, a partially-written stamp — not in any
+commit. Start there.
