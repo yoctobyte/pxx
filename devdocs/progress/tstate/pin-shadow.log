@@ -634,3 +634,4 @@
 2026-09-08T05:26:07Z	seven	de5232cbcaebdcd3a8c1ac4a8382e4423371a3bd	would NOT pin de5232cbcaeb — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-08T06:11:10Z	seven	baad7e842cd81c3fbb4ec08510e6366883dfcd2f	would NOT pin baad7e842cd8 — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-08T07:13:53Z	seven	d81b90a991e9eb2266c31c9d2f3889173c7ab8df	would NOT pin d81b90a991e9 — 7 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, test-core#src:test/test_nested_class_type_scoping.pas
+2026-09-08T07:29:29Z	seven	76b75db6a7b7354632fa182f8523e18485318486	would NOT pin 76b75db6a7b7 — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
