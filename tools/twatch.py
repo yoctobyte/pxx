@@ -7116,6 +7116,92 @@ def range_non_causal(clone, reg):
     return not any(commit_could_affect(clone.path, c, job) for c in cs)
 
 
+# Directories under devdocs/progress/ that hold no tickets, so a name
+# appearing in one of them is not a second copy of anything.
+NON_TICKET_DIRS = ("tstate", "fixtures", "patches")
+
+
+def duplicate_slugs(repo, rev=None):
+    """Slugs living in more than one ticket folder. -> {slug: [folder, ...]}
+
+    ONE SLUG IN TWO FOLDERS IS OPEN AND CLOSED AT ONCE, and the open half is
+    indistinguishable from a live ticket in every instrument except this
+    comparison -- so it inflates the exact count the owner wants at zero and
+    `ready` keeps offering it. Measured 2026-09-08 by frankuser across the
+    whole tree: 512 open slugs, 3770 terminal, ONE intersection. Rare, and both
+    instances arose within four hours of each other, which is why it is worth a
+    standing check rather than a sweep.
+
+    TWO MECHANISMS, AND THEY ARRIVE FROM OPPOSITE DIRECTIONS:
+
+      * The watcher's close paths are not uniform. `54964cd97` closed as a
+        clean rename `backlog => done`; `364c35bf2` closed as a pure ADD --
+        49 insertions, one file, no rename -- leaving the backlog stub in place.
+      * A peer editing a ticket that was closed underneath it RESURRECTS it.
+        `dae71ffb2` added 67 lines to a `backlog/` path four minutes after the
+        rename removed it; the tree predated the rename, git re-created the
+        file, and the rebase merged silently because the two commits touched
+        different paths. Nothing failed, nothing warned.
+
+    DELIBERATELY BROADER THAN THE OPEN-VS-TERMINAL INTERSECTION that found it.
+    Any slug in two ticket folders is wrong whichever two, so this needs no
+    open/closed classification -- which is a real saving, because that
+    classification is a judgement that would have to be maintained here and
+    could be wrong in a way this check cannot detect. Measured before choosing
+    it: 29 folders, 4476 slugs, ZERO duplicates on a clean tree, so the wider
+    net costs no noise.
+
+    Fails toward NOISE by design, the same direction as SELECTION_MANIFESTS
+    fails toward causal: a false duplicate report costs somebody one look, a
+    missed one costs a permanently open ticket that nobody can see is closed.
+
+    `rev` reads a git tree instead of the working copy, which is what lets the
+    devtest's positive control run against the two real historical trees rather
+    than against a reconstruction of them.
+    """
+    seen = {}
+    if rev:
+        out = sh(["git", "ls-tree", "-r", "--name-only", rev, "--",
+                  "devdocs/progress"], cwd=repo) or ""
+        paths = [l for l in out.splitlines() if l]
+    else:
+        paths = []
+        base = os.path.join(repo, "devdocs", "progress")
+        for d in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            full = os.path.join(base, d)
+            if os.path.isdir(full):
+                paths += ["devdocs/progress/%s/%s" % (d, f)
+                          for f in os.listdir(full)]
+    for path in paths:
+        parts = path.split("/")
+        if len(parts) != 4:
+            continue
+        folder, fn = parts[2], parts[3]
+        if folder in NON_TICKET_DIRS or not fn.endswith(".md") \
+                or fn == "README.md":
+            continue
+        seen.setdefault(fn, []).append(folder)
+    return {k: sorted(v) for k, v in seen.items() if len(set(v)) > 1}
+
+
+def report_duplicate_slugs(clone):
+    """Print any slug open and closed at once. Report only -- never move a file.
+
+    Deliberately not self-healing. Which copy is authoritative is a judgement:
+    on `dae71ffb2` the OPEN half held 67 lines of triage and the closed half
+    held one watcher line, so a tool that kept the closed copy would have
+    deleted the content. A daemon that silently picks one is a data-loss path
+    wearing a tidy-up label.
+    """
+    dups = duplicate_slugs(clone.path)
+    for slug, folders in sorted(dups.items()):
+        print("twatch: DUPLICATE SLUG %s — present in %s. One ticket is open "
+              "and closed at once; `ready` still offers the open half. Merge "
+              "by hand and delete the stub; do NOT assume the closed copy is "
+              "the complete one." % (slug[:-3], ", ".join(folders)), flush=True)
+    return dups
+
+
 def make_preempted(clone, tested, commit_after=None):
     """Abort-check for idle work (full backfill / opt sweep): a real push
     preempts, docs/tstate-only movement (e.g. our own fast-phase publish)
@@ -7195,6 +7281,7 @@ def repair_regressions(clone, host, st):
     BOUNDS rather than cached behind an existence check, so a rule change
     (NOTEST_PREFIXES, PIN_AXIS_RULE) corrects entries in both directions.
     """
+    report_duplicate_slugs(clone)
     for reg in st.get("open_regressions") or []:
         rng = reg.get("range", [])
     """Idle work: narrow one open regression range by testing its midpoint
