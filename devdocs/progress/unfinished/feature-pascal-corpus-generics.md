@@ -2,17 +2,19 @@
 track: P
 prio: 65
 owner: 
-blocked-by: []
+blocked-by: [bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]
 status: unfinished
 type: feature
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done. Re-staged and re-driven 2026-09-09 at compiler 0f14028acc04: the live wall is `generics.defaults.pas:2729`, `no overload of Create matches these arguments / (record, Cardinal, record)` -- a bare method name passed where a method pointer is wanted, read as a CALL. Filed as [[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]], which needs NO generics to reproduce and is now this rung's blocker. THE OLD WALL TABLE IN THIS FILE IS NOT COMPARABLE and must not be diffed against: it was measured on a /tmp symlink stage built from a local FPC checkout, while library_candidates/rtl-generics is the install_lib_candidates.sh tree pinned at 0d122c49, so the line numbers are from two different source sets. Against the SAME staging the frontier moved FORWARD -- pin v407 stops at defaults:1178, HEAD reaches defaults:2729."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished — recon done 2026-07-13 night (rungs 1+2 are green: fpcunit
-  runs, fpjson's suite is 203/203).
+- **Status:** blocked on one named bug — re-driven 2026-09-09, wall at
+  generics.defaults.pas:2729 (rungs 1+2 are green: fpcunit runs, fpjson's suite
+  is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
 
@@ -1354,5 +1356,60 @@ be on its path, and only the attempt says which.
 ## Parked 2026-09-04
 
 the four generics bugs it ranked are all closed; the rung itself (generics.collections compiling) was not attempted today and needs a re-stage, not a conclusion drawn from the four green rows
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-09 (frankS) — re-staged, re-driven, and the wall is one named bug
+
+The park asked for exactly this and warned against concluding anything from the
+four green rows: re-stage and drive. Done, at compiler `0f14028acc04`.
+
+**Staging.** `/tmp/generics-stage` was long gone (the 6h reaper). The corpus now
+lives at `library_candidates/rtl-generics`, which is gitignored wholesale — a
+per-checkout local tree, which is why five sibling checkouts had it and this one
+did not. Staged by copying a sibling rather than re-fetching: three independent
+copies hash identically over all 16 sources (`7314f4e13e39f7fd`) and carry the
+`PROVENANCE.md` from `tools/install_lib_candidates.sh` (FPCSource `0d122c49`,
+`release_3_2_2` tag). No network needed.
+
+**The old table in this file is not comparable to the new numbers, and I nearly
+read a regression out of it.** It records the wall at `collections:120`, and the
+first drive here stopped at `defaults:2729` — upstream in the uses chain, which
+looks exactly like a frontier that moved BACKWARD. It did not: that table was
+measured on a `/tmp` symlink stage built from a local FPC checkout, a different
+source set from the pinned `library_candidates` tree, so the line numbers are
+not the same coordinate system.
+
+**Measured against the SAME staging, the frontier moved FORWARD:**
+
+| compiler | stops at |
+| --- | --- |
+| pin v407 (`stable_pinned`) | `generics.defaults.pas:1178` — `expected ',' before ')'` |
+| HEAD `0f14028acc04` | `generics.defaults.pas:2729` — `no overload of Create matches` |
+
+That differential is the honest one, and it is the reason no regression ticket
+was filed.
+
+**The wall, reduced.** `Create(AEqualityComparison, GetHashCodeMethod,
+AExtendedHasher)` — a constructor delegating to a sibling overload, with
+`GetHashCodeMethod` passed where `TOnHasher<T> = function(constref AValue: T):
+UInt32 of object` is wanted. pxx reads the bare method name as a CALL and types
+the argument `Cardinal`, the method's own result. **It needs no generics at
+all**: a 14-line plain `{$mode delphi}` class reproduces it, and the assignment
+spelling of the same thing already works. Filed as
+[[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]]
+and wired as this rung's `blocked-by:`.
+
+A fix was written and **reverted** — it repairs the free-callee half and turns
+the method-callee half into a segfault, which is worse than the honest refusal
+that stands today. The measurements and the two facts a second attempt needs are
+on that ticket, not here.
+
+**Released rather than held**, for the reason this ticket has already recorded
+twice: a lock over a ticket nobody is working reads as "someone is on it".
+
+## Parked 2026-09-09
+
+blocked on bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced -- re-staged and re-driven 2026-09-09, wall reduced to that one bug; a fix was written and reverted (it turns the method-callee half into a segfault). Do not diff the old wall table against a library_candidates staging: different source sets.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
