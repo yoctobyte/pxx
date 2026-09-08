@@ -4655,6 +4655,42 @@ applied to what the array actually holds.
 worth of anything and an index can walk past a boundary, every position-derived
 message downstream is correct about the arena and wrong about the file.
 
+### AND THE HALF NOBODY RE-RUNS IS THE ORACLE HALF — A REDUCTION CAN BE A PROGRAM FPC ALSO REJECTS
+
+Measured 2026-09-08 by frankS, reported against their own two re-measurements,
+and it is the cheapest guard in this section.
+
+`bug-p-a-nested-specialization-is-named-by-its-alias` opened with *"Legal code
+is refused"* over a reduction whose `Result.V := 9` assigns to a `T` that is
+`String` in the second instantiation. **fpc 3.2.2 refuses that program too.** It
+was never legal code.
+
+**The ticket had been re-measured twice, by the same seat, and both times the
+re-measurement confirmed it** — because what got re-run was the pxx half. The
+pxx error reproduced, every time, honestly, and reading that as confirmation is
+the entire failure. *"fpc accepts this"* sat in the ticket as a settled premise
+and was never executed, because the ticket said so.
+
+**A reduction is an INSTRUMENT, and it was built by someone who already had the
+bug.** That is the asymmetry: the author minimised until the pxx symptom
+survived, which is the half they were watching. Nothing in that process tests
+whether the oracle still accepts the result, and nothing downstream re-checks
+it — a repro's job looks done the moment it reproduces.
+
+**And the cost is not only wasted time: a bad reduction UNDER-RANKS the bug.**
+The corrected shape — give the method a `const x: T` parameter — is accepted by
+both compilers, and the real symptom turned out to be far worse than the
+recorded one: **a silent wrong value (`s 4357640` for a String) and a SEGFAULT
+in the other declaration order.** The ticket had been carrying "refuses legal
+code" for a defect that silently corrupts and crashes.
+
+**The guard is one command: before quoting a ticket's "fpc accepts this", run
+it.** `tools/fpc_diff_probe.sh` exists for exactly this and the reduction is
+already written. Two readings of the same half are one reading — the rule this
+file states elsewhere — and a ticket's premise is the half that never gets a
+second source unless you supply it.
+
+
 ## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
 
 Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
@@ -13726,6 +13762,50 @@ Related, and the same animal from the other end: `## AN INSTRUMENT THAT READS TE
 TELL AN ASSERTION FROM A DESCRIPTION OF ONE`, and CLAUDE.md's *two readings that can go wrong
 the same way are one reading* — here it is **N sites that can be wrong the same way are one
 site**, and the count of them is not corroboration.
+
+### AND ONE LEVEL UP: A RULE SPELLED PER *TABLE*, WHERE THE ABSENT COPY IS A COLUMN
+
+Measured 2026-09-08 by frankS, and it is the section above with the unit of
+duplication changed from a CALL SITE to a DATA TABLE — which is worse, because
+a table's shape is not visible from anywhere a caller stands.
+
+`UClsAlias*` had **no owning-class column**, while its sibling `Alias*` has
+carried `AliasOwnerCi` all along (and `AliasOwnerProc` since `0221a024a`). So
+`type TInner = TSomeClass;` written inside a class body was registered
+**unit-globally**, while the identical construct with a non-class right-hand
+side was scoped correctly.
+
+**Every property the parent section names holds, and two more.**
+
+- **The two tables agreed with each other perfectly, because the copy was
+  ABSENT.** Reading them against each other finds nothing, exactly as the parent
+  rule predicts.
+- **Which registrar a declaration reaches is invisible at the call site.**
+  `ParseTypeSection` routes a class-valued alias to `RegisterUClassAlias` and
+  never to `RegisterGeneralAlias`. Nothing at the point of use says which of two
+  tables you landed in, so *"the scoping rule is implemented"* is true of the
+  code you are looking at and false of the row you produced.
+- **A missing COLUMN has no site to grep for.** A rule spelled per caller can at
+  least be counted — you enumerate the callers. A rule spelled per table is
+  enumerated only by asking each table a question it does not answer about
+  itself, which is the "you cannot enumerate absences from the thing they are
+  absent from" problem in its cheapest possible form.
+
+**The census this earns, and it is small enough to actually run:** *every table
+holding declarations that can be written inside a class or routine body — does
+it have the owner column?* `UClsAlias` is now done. **Enum and array types were
+already noted as having none.** This is the sibling of
+`bug-p-routine-local-name-scoping-is-implemented-in-one-of-three-tables`, which
+is the same finding at the site level; the pair is the argument that the unit of
+audit here is the table, not the function.
+
+**And the full tier earned its keep on the fix.** Adding the owner column broke
+`TTest.TP.Create` — `FindNestedClassLikeCi` was asking *"is it visible from
+here"* where a qualified walk answers *for a named class*. **The quick tier is
+structurally blind to that class of break**: a name that resolves today only
+because nothing else in the file spells it. One data point that "full green
+expected" is the right calibration when the fleet is small enough to afford it.
+
 
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
 
