@@ -147,4 +147,4 @@ not compile (`expected '(' before 'ICom'` at the global const). Self-host
 fixedpoint converged (`a7b03135f504`).
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2cf3b41c0.
