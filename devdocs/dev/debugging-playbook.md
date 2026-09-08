@@ -4691,6 +4691,63 @@ file states elsewhere — and a ticket's premise is the half that never gets a
 second source unless you supply it.
 
 
+## WHEN A TICKET CONTAINS ITS OWN "THIS OTHER HALF MAY NOT BE COSMETIC, NOBODY HAS LOOKED" PARAGRAPH, THAT PARAGRAPH *IS* THE TICKET
+
+Measured 2026-09-08 by frankS, fixed at `9331a1e16`, and it is the mirror of
+the reduction case above — the same under-ranking arriving from the opposite
+direction.
+
+`bug-p-after-a-nested-routine-is-lifted-a-later-syntax-error-names-the-wrong-token`
+was filed as a **DIAGNOSTIC bug at prio 40**: every syntax error after a
+lambda-lifted nested routine names the wrong token. Annoying, cosmetic,
+mid-queue. The ticket also carried a section headed *"the half that may not be
+cosmetic"*, noting that the same stash drops the seven directive states, and
+closing with *"No instance measured; nobody has looked, which is the same
+sentence that preceded the last one."*
+
+Somebody looked. **`{$R+}` is NOT in force inside a lifted nested routine's
+body.** An out-of-range subrange store goes through and the program continues,
+where fpc 3.2.2 raises `Runtime error 201`. The prio-40 diagnostic ticket was
+carrying a **silent loss of range checking for an entire class of routine**.
+
+**The asymmetry, and it is the reusable part.** Elsewhere in this file a bad
+REDUCTION under-ranks a bug: the repro was wrong, so the recorded symptom was
+milder than the real one. Here **the reduction was CORRECT — of the loud half.**
+Nothing was mismeasured. The ticket was honest, its title was true, and the
+ranking simply followed the symptom that was easy to see. **Both failures
+produce the same artefact — a corrupting defect wearing a diagnostic-quality
+summary — and only one of them involves an error.**
+
+**So the rule is about a shape in the prose, not about a measurement:** when a
+ticket contains its own paragraph saying *another half of this may not be
+cosmetic and nobody has checked*, **that paragraph is the ticket** and the
+`prio:` on it is a statement about the half that got looked at. The author has
+already told you the ranking is provisional; nothing downstream re-reads that
+sentence, because the summary — which must be true, and was — says *diagnostic*.
+
+**Two things to do with it.**
+
+1. **Do NOT expect to grep for it — measured, the same hour this was written.**
+   The obvious sweep is the author's own phrasing, and across **436 open
+   tickets** it returns almost nothing: *"nobody has looked"* 1, *"no instance
+   measured"* 0, *"may not be cosmetic"* 0, *"has not been checked"* 0.
+   *"unmeasured"* hits 31 and is a different animal — overwhelmingly an
+   unmeasured **cost or benefit** in a feature ticket, not an unexamined second
+   **observable** in a bug. Of the 9 tickets matching the closest variants, most
+   are perf work; none is this shape.
+   **So the phrasing is idiosyncratic to the author and the sweep is a weak
+   instrument.** Recorded rather than dropped, because "grep the backlog for
+   this" is the advice this section would otherwise have shipped unverified, and
+   the real handle needs a reader: **a bug ranked on a diagnostic or cosmetic
+   symptom whose body names a SECOND observable.** That is a re-read of the
+   body, not a pattern — which is exactly why the shape survives, and why the
+   one that got caught here was caught by somebody working the ticket.
+2. **A ticket's own recursion is a signal, not a stylistic tic.** The sentence
+   here ended *"which is the same sentence that preceded the last one"* — the
+   author had watched this exact pattern resolve badly before and said so, in
+   the ticket, at filing time. That is as loud as a backlog gets.
+
+
 ## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
 
 Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
@@ -13805,6 +13862,41 @@ here"* where a qualified walk answers *for a named class*. **The quick tier is
 structurally blind to that class of break**: a name that resolves today only
 because nothing else in the file spells it. One data point that "full green
 expected" is the right calibration when the fleet is small enough to afford it.
+
+
+### AND THE THIRD INSTANCE, WHICH GREP CANNOT REACH: THE ABSENT COPY IS A *CALL THAT WAS NOT MADE*
+
+Measured 2026-09-08 by frankS, fixed at `9331a1e16`, and it completes the
+ladder: the rule spelled per SITE, then per TABLE, and now per CALL — where
+what is missing is not a line, not a column, but **the routing of an operation
+through the shared implementation at all.**
+
+The token stream has two movers, `InsertTokens` and `RemoveTokens`, and
+`ShiftTokParallel` audits both. **The lambda lift is a third mover and was never
+in that audit**, because it is not spelled as one:
+
+- `ParseNestedRoutine` deletes the in-place body with a hand-written
+  `Tokens[i - remCount] := Tokens[i]` loop **instead of calling
+  `RemoveTokens`** — which is exactly where the parallel shift would have come
+  for free.
+- `FlushPendingNestedProcs` appends the side buffer carrying the `TRawToken`
+  alone, so the parallel channels never travel with it.
+
+**An operation open-coded rather than routed through the shared one inherits
+none of the shared one's invariants** — and this is the variant no enumeration
+finds. A rule spelled per caller is at least *countable*: you list the callers.
+A rule spelled per table is found by interrogating each table. **Grepping
+callers of `RemoveTokens` cannot find this one, because it is not a caller.**
+The only handle is the operation — *what moves tokens?* — never the API.
+
+**And the ticket's own doubt was the single wrong step, with the disproof
+already inside the observation.** It reasoned that the failing token *"is at its
+ORIGINAL index and was never stashed"*, so the channel gap seemed not to cover
+it. But everything after the deleted body moves **DOWN by `remCount`** — which
+is precisely the offset the reported window was off by. **The evidence for the
+mechanism was sitting in the SIZE of the discrepancy**, and a magnitude that
+matches a known quantity is a fact about the cause, not a detail of the symptom.
+Read the size before accepting an argument that a mechanism does not apply.
 
 
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
