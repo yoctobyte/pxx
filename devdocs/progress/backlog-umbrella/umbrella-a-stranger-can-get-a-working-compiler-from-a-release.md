@@ -197,3 +197,33 @@ FPC and compare shas* — and it is stronger than "bootstrap works".
 **The known untested step still stands:** the container had git and make
 installed by hand. A stranger's box may have neither.
 
+## 2026-09-07 — THE RELEASE PROPERTY HAS A CAVEAT AND IT MUST BE QUOTED BESIDE IT
+
+**Measured and holding** (frankS, `0540e3f9d`, at tree `a049a7ec1`): the
+fpc-3.2.2-seeded chain and the pin-derived chain both produce
+`cd30ba1c7d5dedef49c0ce761f9653e5eeaee2c662651c0c12ad93f0a7f4c7f4`, and that is
+byte-for-byte the `compiler_sha256` of seven's green `full` tiers. **Green and
+rebuildable-by-a-stranger are the same artefact.**
+
+**And the check that establishes it is blind in one direction, so never quote
+the property alone.** `compiler/builtin/` is resolved **relative to the CWD**,
+and there are twenty checkouts on this box carrying one. A build started from a
+sibling tree does not fail — it silently compiles THAT tree's builtin units into
+your binary, and **a byte-comparison will not catch it while the two trees'
+builtins happen to agree, which is exactly until someone changes a builtin.**
+Measured the same day: a sibling-root build came out byte-identical because the
+only difference between the two `builtinheap.pas` was a named constant against
+its literal.
+
+**So the release procedure is: run every build and every bootstrap measurement
+with the CWD at the repo root, and state the CWD in the result.** The full rule,
+including why `make bootstrap` must not be used for this check at all — it ends
+in `mv $(BUILD_COMPILER) $(COMPILER)`, so the check leaves your checkout on the
+chain it was testing against and consumes its own control — is in **CLAUDE.md,
+landed `66c830c13` and corrected `d23837d00`.** Read the corrected version: the
+first one said the wrong CWD fails loudly, and it does not.
+
+**Whoever writes the release copy quotes both halves.** "Rebuild it yourself and
+get the same bytes" is the claim; "from the repo root, and here is why that
+matters" is what makes it true rather than usually-true.
+

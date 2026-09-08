@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:25 unfinished:22 blocked:6 backlog:11 backlog-umbrella:8 backlog-core:150 backlog-nilpy:97 backlog-tools:54 backlog-pascal:46 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3547 rejected:79`
+`working:25 unfinished:22 blocked:6 backlog:15 backlog-umbrella:8 backlog-core:150 backlog-nilpy:97 backlog-tools:54 backlog-pascal:46 backlog-decide:44 backlog-libs:23 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3547 rejected:79`
 
 ## Held now (working/ — do not touch these files)
 
@@ -69,7 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 448, ranked
+## Ready — top 30 of 452, ranked
 
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -81,6 +81,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
+- `[p 70] [T]` regression-optdiff-shard0-12
+- `[p 70] [T]` regression-optdiff-shard10-12
+- `[p 70] [T]` regression-optdiff-shard2-12
+- `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
@@ -97,9 +101,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
-- `[p 65] [T]` bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-generics
 
-_418 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_422 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
