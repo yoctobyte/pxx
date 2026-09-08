@@ -2832,6 +2832,19 @@ var
   SpecDeferRound : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecDeferCount : Integer;
   SpecConcreteNames  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  { WHICH DECLARATION each concrete argument NAME resolved to, at the point the
+    specialization was registered -- SpecArgIdentity's number, not a spelling.
+
+    SpecConcreteNames beside it is a SPELLING, and the already-declared shortcut
+    compared only those, so two routines that each declare
+    `type TRec = ...; TBoxRec = specialize TBox<TRec>` read as one declaration
+    restated: the inner one was consumed as a no-op and its `ib.f` was the OUTER
+    TRec. Two different types, one specialization, because a name stood in for
+    the thing it names. The bare `TRec` one line above resolves correctly -- the
+    five name tables are scoped since 0221a024a -- so the compiler knew which
+    type was meant and the dedup did not ask.
+    bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide }
+  SpecConcreteIds    : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of Integer;
   SpecConcreteKinds  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   SpecNParams        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   { The unit each specialization was MATERIALISED in. The table is global;
@@ -2842,6 +2855,22 @@ var
     their own, so the already-declared shortcut has to ask whether the one
     it found is reachable from here. tgeneric96. }
   SpecUnitIdx        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
+  { The ROUTINE each specialization was declared in (CurProc at registration,
+    -1 = unit/global), the same key AliasOwnerProc, UClsOwnerProc, StrConstOwner
+    and SetConstOwner carry -- see ScopeReachesProc for the one rule all of them
+    share. The SIXTH table to need it, and the one that reads as a global fact
+    hardest, because the table genuinely is one flat list.
+
+    Without it the already-declared shortcut fired on a row THIS SCOPE CANNOT
+    SEE: two sibling routines each declaring `type TBoxRec = specialize
+    TBox<TRec>` over one global TRec left the second consumed as a no-op, while
+    the class it would have declared is scoped to the FIRST routine by
+    UClsOwnerProc -- so `var b: TBoxRec` in the second answered `unknown type`.
+    The two halves of one question disagreed, which is the exact shape
+    FindSpecialization's own header records from the unit/section level
+    (bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test);
+    this is that rule one level finer. }
+  SpecOwnerProc      : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   SpecSrcOff         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;  { see TemplateSrcOff -- the same channel, one pool further along }
   SpecSrcLen         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;

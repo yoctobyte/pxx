@@ -16940,6 +16940,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_rtlocalspec26 "$$($(TESTTMP)/test_rtlocalspec26)" "$$(cat test/test_routine_local_specialization.expected)"
 	./$(COMPILER) test/test_routine_local_name_scoping.pas $(TESTTMP)/test_rtlocalscope26
 	tools/expect_same.sh test_rtlocalscope26 "$$($(TESTTMP)/test_rtlocalscope26)" "$$(cat test/test_routine_local_name_scoping.expected)"
+	./$(COMPILER) test/test_a_routine_local_type_keys_its_own_specialization.pas $(TESTTMP)/test_speckeyid26
+	tools/expect_same.sh test_speckeyid26 "$$($(TESTTMP)/test_speckeyid26)" "$$(cat test/test_a_routine_local_type_keys_its_own_specialization.expected)"
 	./$(COMPILER) test/test_record_constructor_overload.pas $(TESTTMP)/test_recctorovl26
 	tools/expect_same.sh test_recctorovl26 "$$($(TESTTMP)/test_recctorovl26)" "$$(cat test/test_record_constructor_overload.expected)"
 	./$(COMPILER) test/test_instance_reached_constructor_value.pas $(TESTTMP)/test_instctorval26

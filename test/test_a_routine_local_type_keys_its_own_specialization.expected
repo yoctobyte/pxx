@@ -1,0 +1,9 @@
+nest-same inner 1
+nest-same outer 3
+nest-type inner 1
+nest-type outer 3
+nest-alias inner 1
+nest-alias outer 3
+sib-shared A 3
+sib-shared B 3
+inherit inner 3

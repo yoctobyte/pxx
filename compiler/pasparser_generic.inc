@@ -118,13 +118,25 @@ function FindSpecialization(const nm: AnsiString): Integer;
   would then not accept, so the importer's OWN declaration was never emitted and
   its `var b: TBox<Integer>` answered `unknown type: TBox$Integer`. A visibility
   question must be asked once.
-  bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test }
+  bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test
+
+  ...AND ROUTINE-AWARE, which is that same rule one level finer again and was
+  the third absent copy. A specialization declared in a routine's `type` section
+  declares its class through SpecializeStream like any other, and since
+  0221a024a that class is scoped to the routine by UClsOwnerProc. This row was
+  still global, so the two halves disagreed in the direction that REFUSES legal
+  code: two sibling routines each writing `type TBoxRec = specialize
+  TBox<TRec>` over one global TRec had the second consumed as an
+  already-declared no-op, against a class only the FIRST routine can see, and
+  its own `var b: TBoxRec` then answered `unknown type: TBoxRec`.
+  bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide }
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to SpecializationCount - 1 do
     if CaseEqual(Specializations[i].Name, nm) and
-       DeclVisibleSect(SpecUnitIdx[i], SpecDeclImpl[i], IMPLTAB_SPEC, i) then
+       DeclVisibleSect(SpecUnitIdx[i], SpecDeclImpl[i], IMPLTAB_SPEC, i) and
+       ScopeReachesProc(SpecOwnerProc[i]) then
       Result := i;
 end;
 
@@ -3862,6 +3874,40 @@ begin
   end;
 end;
 
+{ WHICH DECLARATION a concrete generic argument's NAME denotes from here, as a
+  number that changes when the same spelling denotes a different type.
+
+  Asked by the already-declared shortcut in ParseSpecialization, which compared
+  SPELLINGS and so read two routines' own `TRec` as one type. The bare name one
+  line above the specialization already resolves correctly -- routine-local
+  declarations are scoped in all five name tables since 0221a024a -- so the
+  answer was available and simply not asked for.
+
+  TWO TABLES, NOT FIVE, AND THAT IS THE MEASURED REACH. A routine-local `type`
+  section writes a record or class into the UCls registry and everything else
+  into the alias table, and those are the two a `type TRec = ...` inside a
+  routine can produce. `EnumType*` and `ArrType*` carry NO OWNER COLUMN at all
+  (see ClassDeclaresTypeNamed's header for the same four-table split from the
+  other side), so a routine-local enum or array type is not scoped anywhere yet
+  and two of them still share one identity here -- the status quo, not a
+  regression, and it cannot be fixed in this function alone.
+
+  0 = "the spelling IS the identity": a builtin spelled as a keyword
+  (`Integer`, `string`), or a name nothing has declared yet. Both scopes then
+  agree, which is what keeps a re-emitted prerequisite declaration a no-op --
+  see the already-declared shortcut. The two tables are given DISJOINT ranges
+  rather than both counting from 0, because a UCls index and an alias index are
+  different facts that would otherwise compare equal. }
+function SpecArgIdentity(const nm: AnsiString): Integer;
+var k: Integer;
+begin
+  k := FindUClass(nm);
+  if k >= 0 then begin SpecArgIdentity := 1 + k; Exit; end;
+  k := FindTypeAlias(nm);
+  if k >= 0 then begin SpecArgIdentity := -(1 + k); Exit; end;
+  SpecArgIdentity := 0;
+end;
+
 function ParseSpecialization(const specName: AnsiString): Boolean;
 var
   templateName, aliasNm: AnsiString;
@@ -4059,9 +4105,21 @@ begin
   if (si >= 0) and (SpecTemplateIdx[si] = ti) and
      (SpecNParams[si] = nc) then
   begin
+    { ...and by what each argument NAME actually DENOTES here, not only by how it
+      is spelled. `TRec` in one routine and `TRec` in another are two types, and
+      comparing the spellings alone consumed the second declaration as an exact
+      re-statement of the first: the inner `TBoxRec` became the outer one, so
+      `ib.f.s` answered `no such member` against a record that has p, q, r.
+      A genuine re-statement -- the copy a deferral emits behind its own
+      prerequisites -- is parsed in the SAME scope, so every argument resolves to
+      the same declaration and it stays the no-op it has to be. The names are
+      still compared: SpecArgIdentity answers 0 for a keyword-spelled builtin,
+      where the spelling is the only identity there is.
+      bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide }
     dup := True;
     for i := 0 to nc - 1 do
-      if not CaseEqual(SpecConcreteNames[si * MAX_TEMPLATE_PARAMS + i], cNames[i]) then
+      if (not CaseEqual(SpecConcreteNames[si * MAX_TEMPLATE_PARAMS + i], cNames[i])) or
+         (SpecConcreteIds[si * MAX_TEMPLATE_PARAMS + i] <> SpecArgIdentity(cNames[i])) then
         dup := False;
     if dup then
     begin
@@ -4183,9 +4241,11 @@ begin
   begin
     SpecConcreteKinds[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := cKinds[i];
     SpecConcreteNames[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := cNames[i];
+    SpecConcreteIds[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := SpecArgIdentity(cNames[i]);
   end;
   SpecNParams[SpecializationCount] := nc;
   SpecUnitIdx[SpecializationCount] := CurrentUnitIdx;
+  SpecOwnerProc[SpecializationCount] := CurProc;
   SpecDeclImpl[SpecializationCount] := DeclInImplNow;
   SpecTemplateIdx[SpecializationCount] := ti;
   Inc(SpecializationCount);

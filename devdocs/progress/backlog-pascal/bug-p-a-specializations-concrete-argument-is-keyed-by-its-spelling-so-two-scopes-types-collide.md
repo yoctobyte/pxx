@@ -127,3 +127,74 @@ broke four corpus rows (tgenfunc3/4/9/12) while `gate.sh quick` reported GREEN �
 see `bug-p-a-generic-routines-specialization-renames-a-field-of-the-same-name`.
 Anything landed here needs the full conformance corpus, not the quick tier,
 because out-of-line generic methods appear nowhere else.
+
+## 2026-09-08 — THE CLASS/RECORD ARM IS FIXED. The ticket stays open on the other two.
+
+Landed at compiler `2e620048f2e7`. **What moved is arm 1 of three** — the
+class-template arm, the one this ticket opens with. The generic-ROUTINE arm and
+the alias mirror are untouched and are re-measured below rather than assumed.
+
+**The fix is the identity, not a stricter string.** `SpecArgIdentity(nm)` answers
+WHICH DECLARATION a concrete argument's name denotes from here — `FindUClass`,
+then `FindTypeAlias`, in disjoint numeric ranges, and 0 for a keyword-spelled
+builtin or an undeclared name, where the spelling is the only identity there is.
+It is recorded per argument at registration (`SpecConcreteIds`, beside
+`SpecConcreteNames`) and compared by the already-declared shortcut alongside the
+spelling. The bare `TRec` one line above already resolved correctly since
+`0221a024a`; the shortcut simply never asked.
+
+**This ticket's own warning — "do not make the comparison stricter in isolation,
+that mints a second specialization per scope" — is answered, and row 4 of the
+fixture is the control.** A stricter STRING would over-mint. An identity does
+not: two routines naming one GLOBAL `TRec` resolve to one `ci`, stay one
+specialization, and `sib-shared A 3 / B 3` is the assertion.
+
+### And that control found a SECOND defect, pre-existing and in the opposite direction
+
+Measured on pre-change HEAD by stash-and-rebuild, so it is not mine: two sibling
+routines each writing `type TBoxRec = specialize TBox<TRec>` over one GLOBAL
+`TRec` **refused legal code** —
+
+```
+pascal26:12: error: unknown type: TBoxRec
+```
+
+The shortcut consumed the second declaration as an already-declared no-op
+against a class that `UClsOwnerProc` scopes to the FIRST routine, so the two
+halves of one visibility question disagreed. That is the shape
+`FindSpecialization`'s own header already records at the unit/section level
+(`bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test`),
+one level finer, and the third absent copy of the same rule. `SpecOwnerProc` is
+the sixth table to take the `ScopeReachesProc` key the other five took at
+`0221a024a`; the filter went INTO `FindSpecialization` rather than beside its
+caller, because two filters for one rule is how the second goes stale.
+
+### What is still open, measured at `2e620048f2e7`, not assumed
+
+- **The alias mirror**, `bug-p-a-nested-specialization-is-named-by-its-alias-...`:
+  `TIntBox` and `TIntBox2` both `= specialize TBox<Integer>` still mint two
+  classes and `a1 is TIntBox2` answers **FALSE** where fpc 3.2.2 answers TRUE.
+  Unchanged by this. **The canonical key does NOT close it and this ticket said
+  it would** — the key is built from the argument's spelling, so both aliases
+  produce `TBox$Integer` either way; what closes it is minting under that key
+  and registering the user's name with `RegisterUClassAlias`, which is that
+  ticket's own remedy and wants a full tier.
+- **The generic-ROUTINE arm**, `tgenfunc10.pp`: still stops at
+  `pascal26:14: error: unknown type: TTest`, the VISIBILITY half, unchanged. Its
+  keying half is a different mechanism — `SpecFuncAlreadyEmitted(nm,
+  nValParams)`, name plus value-parameter count — and is NOT what this fix
+  touched. The ordering warning above still stands in full: fixing the routine
+  visibility alone would hand Test2 the body compiled for Test1's `TTest`.
+
+### Fixture
+
+`test/test_a_routine_local_type_keys_its_own_specialization.pas`
+(`test_speckeyid26`, Makefile), differential against fpc 3.2.2, five rows.
+Row 1 is the defect and **needs the same name in both scopes**: measured first
+with `TRec`/`TRec2` and it PASSED, which would have read as the defect being
+closed. Rows 2 and 3 keep that measurement as controls, varying the type name
+and the alias name independently. Every nested type is 1 byte and every
+enclosing one is 3, so a collapse prints 3 where 1 is correct and no row passes
+by nothing happening. Row 4 asserts a COMPILE, not a size: two identical record
+types over-minted in two routines are not observable from Pascal, so that row
+cannot see an over-mint and does not claim to.
