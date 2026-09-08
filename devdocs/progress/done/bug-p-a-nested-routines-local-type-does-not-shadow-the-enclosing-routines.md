@@ -85,4 +85,4 @@ Already asserted by `test/test_routine_local_name_scoping.pas`
 (`test_rtlocalscope26`), wired in the Makefile, rows 3/4 — green at HEAD.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c77f2c91c.

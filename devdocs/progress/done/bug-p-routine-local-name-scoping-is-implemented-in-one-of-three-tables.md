@@ -139,4 +139,4 @@ test**. That is [[bug-p-a-specializations-concrete-argument-is-keyed-by-its-spel
 open, and the row belongs to it rather than here.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c77f2c91c.
