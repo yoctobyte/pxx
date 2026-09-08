@@ -1,14 +1,14 @@
 ---
 slug: bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type
 track: P
-prio: 35
+prio: 30
 type: bug
-blocked-by: []
+blocked-by: [bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct]
 status: working
 owner: frankS
 created: 2026-09-08
 found-by: frankS
-summary: "`operator enumerator(a: TDyn): TEnum` and the same for a static `array[0..1] of Integer` are refused at the DECLARATION with `operator overloading: <T> is not a supported operand type`. fpc 3.2.2 accepts both and runs them in preference to its own built-in array iteration. The refusal is at the operator declaration, not at any for-in, so it also blocks measuring what for-in over an array WOULD do -- two of the five container families in bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin cannot be exercised in pxx at all, and any precedence rule written for them today is unexercised by construction."
+summary: "`operator enumerator(a: TDyn): TEnum` and the static-array form are refused at the DECLARATION with `operator overloading: <T> is not a supported operand type`. fpc 3.2.2 accepts both and runs them in preference to its own built-in array iteration. RE-SCOPED 2026-09-08, twice over, both corrections downward. (1) It is NOT a missing entry in an accepted set: the Ovrl table carries three columns — OpKind, TypeKind, RecId — an array type has no RecId, so an array operand can only key on its ELEMENT kind and collapses onto the row for that scalar. That is the identical collapse tforin15 is skipped for, whose reason ends `do not half-plumb it`, and the use site cannot supply an array identity either: no AST node carries an ArrType row, so the expression spelling could not be keyed even if the declaration were. Same channel as bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct, extended to operators. (2) It does NOT block the for-in precedence work, and this ticket said it did. Those two families have exactly ONE enumerator candidate in pxx, so a precedence RULE is vacuous there rather than untested — what is unmeasurable is the array arm, not the rule."
 ---
 
 # `operator enumerator` on an array type is refused at the declaration
@@ -55,3 +55,49 @@ mentions enumerators.
 Check whether the same gate refuses a `record` and a `set` operand — the set
 form IS accepted today (measured, `operator enumerator(a: TSet)` compiles), so
 the accepted set is not simply "scalars".
+
+
+## Re-scoped 2026-09-08 (frankS) — twice, both corrections downward
+
+**It is not a missing entry in an accepted set.** `defs.inc` gives the operator
+table three columns — `OvrlOpKind`, `OvrlTypeKind`, `OvrlRecId` — and an array
+type has no rec id. So an array operand could only be keyed on its ELEMENT kind,
+and `operator enumerator(a: TDyn)` with `TDyn = array of Integer` would register
+under `(tyInteger, REC_NONE)`: **the same row as `operator enumerator(a:
+Integer)`**, first declared winning.
+
+That is not a hypothesis about a new column; it is the collapse the tree already
+has and already documents. `tforin15.pp` is skipped for exactly it — `Twice` and
+`Integer` under one key, pxx printing 1 where fpc prints 2 — and its reason ends
+*"Burning this row needs alias IDENTITY in the operator table AND at the use
+site… Do not half-plumb it; that ticket settled that a channel which guesses is
+worse than one that abstains."* `OperandTypeKindRec`'s own header says the same
+in the paragraph immediately above the refusal this ticket quotes, and names
+`tarray18` as the array case staying a gap.
+
+**The use site cannot supply the identity either**, which is what makes this
+larger than the declaration. A symbol container can recover its array row
+(`FindArrayType` over `SymDeclTypeNOff`, as `pasparser_expr.inc:4752` does), but
+no AST node carries one — so the EXPRESSION spelling would still key on the
+element kind and the two spellings would disagree. Wiring only the declaration
+is the half-plumbing both prior tickets refuse.
+
+So this is `blocked-by`
+[[bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct]] — the same
+channel, extended to operators — and re-ranked 35 -> 30, because it is one more
+consumer of a channel that does not exist rather than a standalone fix.
+
+## And it does not block the precedence work — this ticket said it did
+
+The summary originally argued that two of the five container families are
+unmeasurable and therefore *"any precedence rule written for them today would
+land with two arms untested"*. **That is the wrong reading of what those two
+families are.** With the operator declaration refused, an array container in pxx
+has exactly ONE enumerator candidate — the built-in. A rule that RANKS candidates
+has nothing to rank there. It is not untested; it is vacuous, and it stays
+vacuous until this ticket is burned.
+
+What is genuinely unmeasurable is this ticket's own arm, not the rule. Recorded
+because the original phrasing would have held up
+[[bug-p-for-in-over-a-string-prefers-a-user-operator-enumerator-and-fpc-prefers-the-builtin]]
+behind a blocker that is not one, and I wrote it.

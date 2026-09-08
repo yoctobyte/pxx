@@ -150,12 +150,20 @@ invented; it needs to be lifted out of that arm and stated once for all of
 them**, which is what this ticket already asks for and is a bigger change than
 its "fix the FIRST one" line suggests.
 
-### Filed alongside, not fixed here
+### Filed alongside, not fixed here, and NOT a blocker
 
 `operator enumerator(a: TStat)` and `operator enumerator(a: TDyn)` are refused
 at the DECLARATION — `operator overloading: <T> is not a supported operand
-type` — so those two families cannot be measured in pxx at all, and any rule
-written for them today is unexercised.
+type` — so those two families cannot be measured in pxx at all:
+[[bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type]].
+
+**That does not hold this ticket up, and I first wrote that it did.** With the
+declaration refused, an array container in pxx has exactly ONE enumerator
+candidate, so a rule that RANKS candidates has nothing to rank there — vacuous
+rather than untested. The rule is written and exercised on the families that
+genuinely carry two candidates (string, set, class-with-GetEnumerator, scalar
+alias); the array families join it when that ticket is burned, and that one is
+blocked on an identity channel that does not exist yet.
 
 ## A second axis the ranked lookup has to carry (2026-09-08, frankS)
 
