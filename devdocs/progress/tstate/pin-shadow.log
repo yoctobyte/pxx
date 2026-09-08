@@ -639,3 +639,4 @@
 2026-09-08T08:45:27Z	seven	94bb8a52547efc657c002d915cc34a7384ee7774	would NOT pin 94bb8a52547e — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-08T09:51:33Z	seven	e014dc0f058e0c8a822ba016ad96092a8e300ae6	would NOT pin e014dc0f058e — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-08T11:06:57Z	seven	71c79152c34dee732dbd4bd46ea558aaeb9e4a2d	would NOT pin 71c79152c34d — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
+2026-09-08T11:24:42Z	seven	0fe9137ee7c0b19fbc07886e697eccb1da428eaf	would NOT pin 0fe9137ee7c0 — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
