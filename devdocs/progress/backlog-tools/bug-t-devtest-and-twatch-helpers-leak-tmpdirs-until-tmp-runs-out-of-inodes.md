@@ -82,3 +82,41 @@ Removed 30,976 stale top-level entries from `/tmp` (everything but dotfiles,
 minutes), with the watcher stopped and no pxx process running.
 `/tmp` inodes went **1,048,568 used → 834 used**, bytes 4.1G → 61M. This is a
 patch, not a fix: the families above will refill it.
+
+# Refill rate measured 2026-09-08 04:50Z — the ceiling is ~2 days out
+
+The remediation above left `/tmp` at **834 inodes used**. One day later, with no
+change to the producers:
+
+```
+$ df -i /tmp   -> 1048576 total, 349311 used (34%)
+$ df -h /tmp   ->      47G total,     2.3G used (5%)
+```
+
+Same signature as the outage: **bytes reassuring, inodes climbing.** At ~350k
+per day the ceiling is reached in about **two days**, so this recurs on its own
+schedule unless the producers are fixed. The date is the useful part — a reader
+who finds this after the next outage should not have to re-derive that it was
+predicted.
+
+**The dominant family is NOT `tstate-at.*` — it is `testmgr-*`, and it is an
+order of magnitude worse PER INSTANCE.** Measured on seven the same minute:
+
+| family | dirs | inodes | per dir |
+| --- | --- | --- | --- |
+| `/tmp/testmgr-*` | 42 | 192,118 | ~4,574 |
+| `/tmp/tstate-at.*` | 42 | (counted in the outage: 163,491 over 241 dirs) | ~678 |
+
+The individual `testmgr-*` dirs cluster tightly at **~9,070 files each** for the
+larger ones — one per tier run, never removed. The equal count of 42 in both
+families is what a per-run leak looks like: the two are created by the same
+runs, so they accumulate in lockstep and either one alone reads as "some dirs
+piled up" rather than as a rate.
+
+**Why the biggest producer was missed the first time:** the outage census ranked
+families by TOTAL inodes at the moment /tmp was already full, and at that point
+`tstate-at.*` had had ~31h to accumulate while the `testmgr-*` dirs from the
+same period had been partly reaped. Ranking by total-at-the-end answers "what is
+in there now"; the question is "what puts it there", and those differ whenever
+the families have different lifetimes. Rank by **inodes per run**, not by the
+standing total.
