@@ -887,6 +887,38 @@ begin
   if Pass2BodyTok >= atPos then Pass2BodyTok := Pass2BodyTok + delta;
 end;
 
+{ The PRE-SCAN twin of AdjustPass2Spans: keep pass 1's own recorded indices in
+  sync with a token-stream edit BEHIND the cursor.
+
+  Pass 1 records a DeclItem span per top-level routine and parses no body, so an
+  edit behind TokPos silently invalidates both TokPos and every span already
+  recorded -- and nothing errors, because every index in range still reads a real
+  token. That is the same failure AdjustPass2Spans exists for, one pass earlier,
+  and it is why SpecializeInlineGenericFuncUses' rewrite sweep was forward-only:
+  the sweep is destructive (it collapses `specialize F<C>(` to `F_C(` through
+  RemoveTokens), so reaching backwards to an earlier declaration without this
+  would trade a refusal for a desync -- the worse direction, since a refusal has
+  a complainant.
+
+  CALLED EXPLICITLY, not from InsertTokens/RemoveTokens like its twin, and that
+  asymmetry is deliberate. Those two are called from dozens of sites that edit
+  AHEAD of the cursor, where nothing needs adjusting, and several of them already
+  compensate by hand from the count they get back -- wiring this in would double
+  the correction at every one of them. The behind-cursor edit is the rare case
+  and it gets the explicit call.
+  bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten }
+procedure AdjustPreScanSpans(atPos, delta: Integer);
+var k: Integer;
+begin
+  if Pass2Active then Exit;   { pass 2 has its own adjuster, wired into the edit }
+  for k := 0 to DeclItemCount - 1 do
+  begin
+    if DeclItemStart[k] >= atPos then DeclItemStart[k] := DeclItemStart[k] + delta;
+    if DeclItemEnd[k]   >= atPos then DeclItemEnd[k]   := DeclItemEnd[k]   + delta;
+  end;
+  if TokPos >= atPos then TokPos := TokPos + delta;
+end;
+
 procedure InsertTokens(insertPos: Integer; const srcTokens: array of TRawToken; count: Integer);
 var i: Integer;
 begin

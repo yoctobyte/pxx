@@ -16946,6 +16946,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_alias1class26 "$$($(TESTTMP)/test_alias1class26)" "$$(cat test/test_two_aliases_of_one_specialization_are_one_class.expected)"
 	./$(COMPILER) -Futest/units test/test_a_specialized_routine_body_lands_after_the_declarations.pas $(TESTTMP)/test_gfsplice26
 	tools/expect_same.sh test_gfsplice26 "$$($(TESTTMP)/test_gfsplice26)" "$$(cat test/test_a_specialized_routine_body_lands_after_the_declarations.expected)"
+	./$(COMPILER) -Futest/units test/test_an_inline_specialize_above_the_generic_routines_body.pas $(TESTTMP)/test_inlspecfwd26
+	tools/expect_same.sh test_inlspecfwd26 "$$($(TESTTMP)/test_inlspecfwd26)" "$$(cat test/test_an_inline_specialize_above_the_generic_routines_body.expected)"
 	./$(COMPILER) test/test_record_constructor_overload.pas $(TESTTMP)/test_recctorovl26
 	tools/expect_same.sh test_recctorovl26 "$$($(TESTTMP)/test_recctorovl26)" "$$(cat test/test_record_constructor_overload.expected)"
 	./$(COMPILER) test/test_instance_reached_constructor_value.pas $(TESTTMP)/test_instctorval26

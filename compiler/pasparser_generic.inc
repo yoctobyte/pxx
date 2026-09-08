@@ -4646,6 +4646,7 @@ var i, k, q, j, nSpec, nArg, base, sweepEnd, sg: Integer;
     { which arities this NAME is declared at, anywhere in the unit -- index is
       the type-parameter count, slot 0 unused }
     declArity: array[0..MAX_TEMPLATE_PARAMS] of Boolean;
+    sweepStart: Integer;   { the EARLIEST declaration of this name at this arity }
 begin
   fname := GenericFuncs[gfi].Name;
   { A generic routine name may be OVERLOADED on its type-parameter count, and
@@ -4659,6 +4660,7 @@ begin
     declared after. bug-p-... (see the skip row for tgenfunc8.pp) }
   for q := 0 to MAX_TEMPLATE_PARAMS do declArity[q] := False;
   sweepEnd := TokCount;
+  sweepStart := TokPos;
   i := 0;
   while i + 2 < TokCount do
   begin
@@ -4678,6 +4680,21 @@ begin
          (k >= 1) and (k <= MAX_TEMPLATE_PARAMS) then
       begin
         declArity[k] := True;
+        { ...AND WHERE THIS NAME IS FIRST DECLARED, which is where the rewrite
+          sweep has to begin.
+
+          It began at TokPos -- immediately after this routine's DEFINITION --
+          so a use written between an INTERFACE header and the implementation's
+          body was never rewritten and reached the reader as the literal token
+          run: `undefined variable (specialize)`. FPC accepts that program; the
+          header is what makes the name visible, and a unit is the only place
+          the two can be apart. In a PROGRAM there is no earlier header, so
+          sweepStart stays at TokPos and use-before-declaration goes on being
+          refused exactly as fpc refuses it -- the bound is a scope rule, not a
+          workaround.
+          bug-p-an-inline-specialize-before-the-generic-routines-body-is-not-rewritten }
+        if (k = GenericFuncNParams[gfi]) and ((i - 1) < sweepStart) then
+          sweepStart := i - 1;
         { …and WHERE the next sibling at THIS arity is declared, which is where
           this template's claim on the token stream ends.
 
@@ -4705,7 +4722,7 @@ begin
     others have already had their turn and consumed only what preceded it. }
   isLast := sweepEnd >= TokCount;
   nSpec := 0;
-  i := TokPos;
+  i := sweepStart;
   while i + 4 < sweepEnd do
   begin
     { Two surfaces for the same use. `specialize F<C>(` is the objfpc spelling
@@ -4870,6 +4887,12 @@ begin
       TokSrcOff[i] := 0;   { it says F_C now -- see the note in ExpandGenericMethod }
       TokSrcLen[i] := 0;
       RemoveTokens(i + 1, j - i);
+      { ...and so does everything PASS 1 has recorded, once the sweep can reach
+        behind the cursor. TokPos and the DeclItem spans of routines already
+        walked are indices into the same array, and RemoveTokens' own adjuster
+        is a no-op outside the body pass. See AdjustPreScanSpans for why it is
+        called here rather than wired into RemoveTokens. }
+      AdjustPreScanSpans(i + 1, -(j - i));
       { The bound is an INDEX into the same array RemoveTokens just shortened,
         so it moves with it. Left unadjusted it would walk forward past the
         sibling declaration by exactly the number of tokens collapsed so far --

@@ -3,7 +3,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: frankS
 ---
 
@@ -77,3 +77,57 @@ fails differently — `@G$Integer.Create: unknown method` — and `tgenfunc10.pp
 fails at `unknown type: TTest`. Both were measured at the same binary and
 neither is this cause; do not fold them in on the strength of the shared word
 "inline".
+
+## FIXED 2026-09-08 at compiler `1defef6b62d0` — and the ticket's own prescription is what landed
+
+`SpecializeInlineGenericFuncUses` now starts its rewrite sweep at `sweepStart`,
+the EARLIEST declaration of this name at this arity, instead of at `TokPos`. The
+arity pre-pass already walked the whole stream to build `declArity`, so finding
+that index cost one comparison inside a loop that was already there.
+
+**And the guard the ticket said must land first, landed first.** `AdjustPreScanSpans`
+is the pass-1 twin of `AdjustPass2Spans`: on a behind-cursor collapse it moves
+`TokPos` and every already-recorded `DeclItem` span. Without it the sweep would
+have traded a refusal for a desync, which is the worse direction because a
+refusal has a complainant — this ticket's own words, and they were right.
+
+It is called EXPLICITLY from the one site rather than wired into
+`RemoveTokens`/`InsertTokens` like its twin. Those two have dozens of callers
+that edit AHEAD of the cursor, where nothing needs adjusting, and several already
+compensate by hand from the count they get back; wiring it in would double the
+correction at every one of them. That asymmetry is written at the function.
+
+### The boundary, re-measured — the scope rule is intact
+
+|  | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| interface header, use, then body (the repro) | **42** | 42 |
+| header, body, then use (always worked) | 42 | 42 |
+| no header at all, use, then body | **refused** | refused |
+
+The third row is the one that must NOT change and it did not: with no
+declaration ahead of the use, both compilers refuse. `sweepStart` defaults to
+`TokPos`, so in a PROGRAM — where a generic routine has no separate header —
+nothing moves at all. **A unit is the only place a declaration and its body can
+be apart, which is exactly why this construct has no program-level spelling and
+why the divergence was unit-only.**
+
+### `tgeneric102.pp` BURNS
+
+It compiles, runs `rc=0`, and its output matches the fpc 3.2.2 oracle line for
+line (diffed, not eyeballed). Its skip row is removed: **49 gap rows -> 48.**
+
+### Fixture
+
+`test/test_an_inline_specialize_above_the_generic_routines_body.pas`
+(`test_inlspecfwd26`) with `test/units/uinlinespecfwd.pas`, differential against
+fpc 3.2.2. Two rows print 42 and 32 rather than one number twice: both uses
+specialize ONE template at ONE type, so a sweep that collapsed them, or a body
+emitted once under a shared mangled name, would print the same value in both.
+The third row — the must-still-refuse one — is stated in the file's header
+rather than asserted, because a compile error cannot be a row of an output
+comparison, and "not asserted" would otherwise read as "not checked". Positive
+control on pin v407: `undefined variable (specialize)` at the unit's line 18.
+
+## Log
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
