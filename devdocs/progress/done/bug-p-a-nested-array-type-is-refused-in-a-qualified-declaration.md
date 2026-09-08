@@ -122,3 +122,6 @@ stops handing it the wrong name.
 RELATIONS (`SizeOf(g) div SizeOf(LongInt)`), never as byte counts, so no row
 carries a target-specific constant. Positive control on the pristine tree at
 `0015a3a314d1`: twelve `cannot be indexed` errors and no binary.
+
+## Log
+- 2026-09-08 — fixed and closed, commit d81b90a99.
