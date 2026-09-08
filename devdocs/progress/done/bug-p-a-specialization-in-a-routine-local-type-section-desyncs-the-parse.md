@@ -131,4 +131,4 @@ other way. That sibling, and the generic-ROUTINE arm of
 the live members of the family.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 65d7edfb6.
