@@ -141,4 +141,4 @@ Positive control on pin v407: `unknown type: TInProg`, reported against the
 UNIT's file, which is the reported diagnostic's own shape.
 
 ## Log
-- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-08 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 73fa72b9e.
