@@ -14848,8 +14848,8 @@
   "sha": "285208414d3f332c0b13f2a084e671fbad114be7"
  },
  "last_slow": {
-  "date": "2026-09-08T04:07:33Z",
-  "sha": "1e5371209512861f958c1594671f75e028024bb5"
+  "date": "2026-09-08T04:55:57Z",
+  "sha": "d0e253df7e7aa86c8e3a0ce36ba5e8a20bc507e7"
  },
  "open_regressions": [],
  "pin_baseline": {
