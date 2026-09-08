@@ -469,6 +469,46 @@ begin
   Result := True;
 end;
 
+function EatQualifiedArrayTypePrefix(var name: AnsiString): Boolean;
+{ EatQualifiedTypePrefix, fired ONLY when the member it would land on names a
+  row in `ArrType*`.
+
+  THE GUARD IS THE WHOLE POINT, AND IT IS NOT A NARROWING FOR SAFETY'S SAKE.
+  ParseTypeKindInner carries its own copy of this strip (the CLASS-qualified
+  arm), and that copy does something this routine does not: when the member is
+  a nested CLASS or RECORD it REWRITES the name to the registered one, which is
+  how `tother.tinner` picks tother's row rather than the first `tinner` in the
+  table. A caller that strips ahead of ParseTypeKind therefore consumes the
+  qualifier that arm was going to read, the arm never fires, and the bare name
+  resolves to whichever class registered it first -- silently, since both are
+  classes and the wrong one merely lacks the fields
+  (test_nested_class_type_scoping, `b.w`: no such member).
+
+  An ARRAY member is exactly the case where that cannot happen: `FindNestedType`
+  answers -1 for it (it is not a UClass row), so ParseTypeKindInner's copy would
+  strip and rewrite NOTHING, which is what this routine does. Same
+  QualTypeOwnerCi, same final token. So the guard is not "strip less to be
+  safe"; it is "strip exactly where the two copies agree".
+
+  Non-consuming: it decides from the token stream and only then delegates.
+  bug-p-a-nested-array-type-is-refused-in-a-qualified-declaration }
+var eqaLast: AnsiString; eqaHops, eqaPos: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if NestedOwnerCi(CurTok.SVal) < 0 then Exit;
+  if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
+  eqaLast := CurTok.SVal;
+  if ScanNestedTypeRun(CurTok.SVal, eqaLast, eqaHops) >= 0 then ;
+  if eqaHops = 0 then eqaHops := 1;   { the bare-name strip EatQualifiedTypePrefix falls back to }
+  { where that many `. ident` hops land: CurTok is at TokPos-1, each hop is two tokens }
+  eqaPos := TokPos + 2 * eqaHops - 1;
+  if (eqaPos < 0) or (eqaPos >= TokCount) then Exit;
+  if FindArrayType(GetTokenStr(eqaPos)) < 0 then Exit;
+  Result := EatQualifiedTypePrefix(name);
+end;
+
 function FindClassConst(ci: Integer; const nm: AnsiString): Integer;
 { Registry lookup by (class ci, bare name), walking the parent chain (own ->
   ancestors) so a subclass method sees an inherited class const. Returns the

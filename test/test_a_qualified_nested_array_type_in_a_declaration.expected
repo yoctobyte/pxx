@@ -8,6 +8,7 @@ fix-of-dyn 11 4
 fix-of-fix 13 2
 dyn-of-fix 15 2
 enum 1 TRUE
+sibling-class 61 62 63
 param-fix 43 4
 param-dyn 31 3
 param-open 13 2

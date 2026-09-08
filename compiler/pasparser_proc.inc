@@ -1425,7 +1425,7 @@ begin
       if CurTok.Kind = tkIdent then
       begin
         pQualNm := CurTok.SVal;
-        if EatQualifiedTypePrefix(pQualNm) then ;
+        if EatQualifiedArrayTypePrefix(pQualNm) then ;
       end;
       if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
       if paramAi >= 0 then
@@ -1492,7 +1492,7 @@ begin
           if CurTok.Kind = tkIdent then
           begin
             pQualNm := CurTok.SVal;
-            if EatQualifiedTypePrefix(pQualNm) then ;
+            if EatQualifiedArrayTypePrefix(pQualNm) then ;
           end;
           if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
           if (paramAi >= 0) and (not ArrTypeIsDyn[paramAi]) then

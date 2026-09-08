@@ -1660,7 +1660,7 @@ begin
       qualNm := CurTok.SVal;
       { consumes nothing and returns False when there is no `TOwner.` to eat, so
         it is the test as well as the strip -- see the routine's own header }
-      if EatQualifiedTypePrefix(qualNm) then ;
+      if EatQualifiedArrayTypePrefix(qualNm) then ;
     end;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
     if ai >= 0 then
@@ -1833,7 +1833,7 @@ begin
             `array of TOwn.TDyn` puts CurTok on the OWNER, so the probe missed
             and the dynamic dimension was dropped silently. }
           qualNm := CurTok.SVal;
-          if EatQualifiedTypePrefix(qualNm) then ;
+          if EatQualifiedArrayTypePrefix(qualNm) then ;
           ai := FindArrayType(CurTok.SVal);
           if (ai >= 0) and ArrTypeIsDyn[ai] then
           begin
@@ -1885,7 +1885,7 @@ begin
       begin
         { Same strip again -- `array[0..1] of TOwn.TDyn`. }
         qualNm := CurTok.SVal;
-        if EatQualifiedTypePrefix(qualNm) then ;
+        if EatQualifiedArrayTypePrefix(qualNm) then ;
         ai := FindArrayType(CurTok.SVal);
         if (ai >= 0) and ArrTypeIsDyn[ai] then
         begin
@@ -5480,7 +5480,7 @@ begin
     if CurTok.Kind = tkIdent then
     begin
       fQualNm := CurTok.SVal;
-      if EatQualifiedTypePrefix(fQualNm) then ;
+      if EatQualifiedArrayTypePrefix(fQualNm) then ;
     end;
     if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
     if (fAi >= 0) and ArrTypeIsDyn[fAi] then
@@ -6101,7 +6101,7 @@ begin
   if CurTok.Kind = tkIdent then
   begin
     retQualNm := CurTok.SVal;
-    if EatQualifiedTypePrefix(retQualNm) then ;
+    if EatQualifiedArrayTypePrefix(retQualNm) then ;
   end;
   if CurTok.Kind = tkArray then
   begin

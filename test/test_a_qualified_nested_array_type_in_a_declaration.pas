@@ -32,6 +32,18 @@ type
   THolder = record f: TOwn.TPArr; end;
   TTopArr = array[0..3] of LongInt;
 
+  { The guard's own positive control. Two owners each declare a nested CLASS of
+    ONE name, so the qualifier picks which type is meant rather than merely
+    disambiguating the parse -- and ParseTypeKindInner's copy of the strip is
+    what rewrites the name to the right row. Stripping ahead of it for a CLASS
+    member consumes the qualifier that arm reads, and `bw.w` then resolves
+    against whichever `TIn` registered first: `no such member`, silently for a
+    reader who only sees two classes with the same shape.
+    EatQualifiedArrayTypePrefix declines here because FindNestedType answers a
+    row, which is exactly the case where the two copies do NOT agree. }
+  TOwnerA = class type TIn = class x: LongInt; end; end;
+  TOwnerB = class type TIn = class w, v: LongInt; end; end;
+
 var
   g: TOwn.TPArr;              { global var section }
   h: THolder;                 { record field -- control, already worked }
@@ -43,6 +55,8 @@ var
   e: TOwn.TE;                 { enum -- control }
   s: TOwn.TSet;               { set -- control }
   b: TOwn.TDyn;               { for the var parameter }
+  ba: TOwnerA.TIn;
+  bb: TOwnerB.TIn;            { must NOT bind to TOwnerA's TIn }
 
 procedure TakeFix(const v: TOwn.TPArr);          { value parameter }
 begin WriteLn('param-fix ', v[2], ' ', SizeOf(v) div SizeOf(LongInt)); end;
@@ -92,6 +106,9 @@ begin
   WriteLn('fix-of-fix ', kf[1][2], ' ', SizeOf(kf) div SizeOf(g));
   WriteLn('dyn-of-fix ', qf[1][2], ' ', Length(qf));
   WriteLn('enum ', Ord(e), ' ', eC in s);
+  ba := TOwnerA.TIn.Create; ba.x := 61;
+  bb := TOwnerB.TIn.Create; bb.w := 62; bb.v := 63;
+  WriteLn('sibling-class ', ba.x, ' ', bb.w, ' ', bb.v);
   TakeFix(g);
   TakeDyn(b);
   TakeOpen([kf[0], kf[1]]);
