@@ -38,3 +38,6 @@ pascal26:94: error: a statement cannot start with '.'
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-08 — auto-closed by the seven watcher: `test-core#src:test/test_a_nested_type_may_specialize_its_own_template.pas` passes at 1e5371209512 (tier native); it was red at 630c8d31c63a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.

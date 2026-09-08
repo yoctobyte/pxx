@@ -38,3 +38,6 @@ pascal26:57: error: a statement cannot start with '.'
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-08 — auto-closed by the seven watcher: `test-core#src:test/test_a_qualified_nested_alias_is_a_type_and_a_scope.pas` passes at 1e5371209512 (tier native); it was red at 630c8d31c63a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
