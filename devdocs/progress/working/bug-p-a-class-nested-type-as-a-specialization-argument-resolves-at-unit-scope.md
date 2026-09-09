@@ -3,7 +3,7 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-status: open
+status: working
 owner: frankZ
 summary: "A type named as a SPECIALIZATION ARGUMENT inside a class body is resolved where the class does not yet exist. Class-nested is the case it was found through and NOT the boundary — frankH's `TEnum<TDerived>` inside `TDerived` fails on the class's own unit-scope name; the boundary is \"declared at or after the class's own declaration\". `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is the hoisted prerequisite's INSERTION POINT, not visibility and not the routine-local pass-order arm. Eleven-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild, which attributes THAT and cannot speak to the new wall's cause) and that wall is now generics.defaults.pas:3250, owned by bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity."
 ---
