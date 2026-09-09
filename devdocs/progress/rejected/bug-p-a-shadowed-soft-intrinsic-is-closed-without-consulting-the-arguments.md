@@ -3,7 +3,7 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: working
+status: rejected
 owner: frankS
 created: 2026-09-06
 summary: "REJECTED 2026-09-09 -- THE LATENT SHAPE IS FPC'S OWN BEHAVIOUR, measured across five shadow shapes rather than reasoned about. This ticket already recorded that its live instance was gone; what it kept was the claim that a Boolean answering WHETHER (rather than WHICH) is a defect in waiting. It is not, because fpc answers WHETHER too: a user routine named Delete hides the System intrinsic ENTIRELY under fpc, in the same program, in a used unit, and even when marked `overload` -- three shapes, both compilers refuse, byte-for-byte the same verdict. The one shape where the two differ is the inverse of what the ticket predicts: with a SAME-ARITY wrong-type shadow (`Delete(var s: AnsiString; index, count)`, which is exactly what the live instance had), fpc REFUSES and pxx REOPENS the intrinsic and runs the dynamic-array Delete correctly. That is `us accepting what FPC rejects`, which is not a defect. The fifth shape -- a shadow declared as a MEMBER of the enclosing class -- WAS a real defect, and it is not this one: pxx silently ran the member with 0.0, which turned out to be an arity hole on every bare in-class call and is fixed under bug-p-a-bare-method-call-inside-its-own-class-ignores-arity. Nothing is left here: no divergence, and the residual design observation has no reachable observable."
