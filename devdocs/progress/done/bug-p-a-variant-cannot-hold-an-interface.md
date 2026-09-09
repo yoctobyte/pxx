@@ -360,4 +360,4 @@ gate could not, and neither could any amount of testing the feature itself.
   be a silent no-op, not a fix. Recorded there too.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit aa9a216fb.
