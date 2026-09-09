@@ -391,6 +391,20 @@ right.** An 80%-accurate name is worse than a 0%-accurate one — the part you
 sample confirms it. A stale imperative can be **obeyed by tooling while false in
 the world**.
 
+**AND THE MOST EXPENSIVE STALE ROW IS A HAZARD BLOCK, BECAUSE OBEYING ONE
+PRODUCES NO SIGNAL.** A stale fact gets contradicted by the next measurement; a
+stale WARNING is written to stop a reader, it succeeds, and a reader who stops
+generates nothing that could reveal it was wrong. Measured 2026-09-09
+(`e1808ad71`): the sized-boolean ticket carried an `ORDERING HAZARD` block
+saying the feature would ship four more instances of a sibling bug. That bug was
+closed and the fork it named was not merely decided but BUILT — and two further
+rows of the same ticket were stale as well. It was found only because the seat
+**re-measured instead of reading**, which is the one behaviour a hazard block is
+designed to discourage. So a warning does not decay like a fact, it decays like a
+LOCK: silently, in the direction of doing nothing, for as long as it is trusted.
+**Re-measure the hazard before you obey it**, and when you write one, date it and
+name the measurement that would retire it.
+
 **Every instrument that lies, lies by being CORRECT ABOUT SOMETHING ELSE.** A
 stale binary, a stale tree, a store-local `cat-file`, a truncated `tail`, a
 `grep -L` answering about a literal string. **None error. All answer.** So the
