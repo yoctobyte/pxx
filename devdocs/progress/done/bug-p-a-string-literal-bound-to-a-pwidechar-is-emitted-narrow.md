@@ -211,4 +211,4 @@ literal addressing) and the **hand-built row** (`p := @buf[0]` over an
 pointer was never broken as a pointer). All three rows equal fpc 3.2.2.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit edb2b04a9.
