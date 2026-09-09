@@ -45,7 +45,7 @@ not in the tag table; it is:
   ARC-correct variant-to-variant copy already calls;
 - the same in each backend that hand-rolls the store.
 
-## The duplication it will meet
+## The duplication it will meet  — DONE, `a770a1dd6`
 
 The source-kind-to-`VT_*` mapping is written FIVE times: `VariantTagForTk` in
 `compiler/ir.inc` (documented as the shared, target-independent home) and four
@@ -85,11 +85,21 @@ ticket dismissed as "not one more arm" is most of what is left.
 
 ### What is actually left
 
-1. **A tag and its arms.** `VariantTagForTk` (ir.inc) is the shared home and
-   already serves i386, arm32, riscv32, xtensa and wasm32. x86-64
-   (`ir_codegen.inc` ~11653) and aarch64 (~5057) hand-roll a verbatim copy of
-   the same `case`, which is the duplication the ticket names and correctly
-   wants collapsed FIRST — that part of its plan stands.
+1. **A tag and its arms. THE COLLAPSE IS ALREADY DONE — `a770a1dd6`,
+   2026-09-09.** The section above ("The duplication it will meet") is history
+   now: all four hand-rolled copies — `ir_codegen.inc`'s IR_VAR_STORE and
+   IR_VAR_BOX, and aarch64's two twins — call `VariantTagForTk`, which every
+   other backend already did. Verified on the targets it serves, since quick
+   cannot see them: `--target=aarch64` and `--target=i386` on
+   `test_variant_class_cross.pas` both print `end 7 100`, and every boxable
+   kind's tag was read back out of the slot on x86-64. The ticket's plan was
+   right to want this first; it is no longer work.
+
+   What is left of this item is the NEW arm itself, and it is not a
+   `VariantTagForTk` arm: that function keys on TTypeKind alone, and an
+   interface is `tyRecord` — indistinguishable there from a plain record, which
+   must keep refusing. The interface case has to be recognised where the recId
+   is still in hand (ir.inc's lowering), not at the backend.
 
 2. **The lifetime question, which is the real one and is not what was asked.**
    `PXXIntfRelease(p, ifaceId)` needs an interface id to find the IMT, and a
