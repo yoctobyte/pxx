@@ -141,4 +141,4 @@ the two callers share it rather than growing an eighth copy of that loop.
   FPC seed canary active (committed from a dirty tree, so the canary ran).
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b708205d2.
