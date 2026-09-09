@@ -22430,3 +22430,41 @@ mangled name>` becoming `unknown type: specialize` is not "closer", it is a
 different layer failing, which means the first layer stopped running. Ask what
 else the call you just corrected was ACHIEVING as a side effect before reading a
 new error as progress.
+
+## A NEW-LOOKING FAILURE READS AS A FRESH ONE, AND THAT IS HOW A STALE BINARY SURVIVES A RULE YOU READ THIS MORNING
+
+CLAUDE.md already says it in as many words — *"A CLEAN TREE IS NOT EVIDENCE
+ABOUT THE BINARY. The `converged after N round(s)` line is."* This is the
+mechanism that gets a reader past it anyway, measured 2026-09-09 by frankH, cost:
+one full measurement cycle and a nearly-filed ticket.
+
+It had pulled. Its tree was clean. The ticket that fixes the very thing it was
+looking at had moved into `done/` **in front of it**. And it then measured a
+typed const `array[0..1] of Pointer = (@P1, @P2)` answering `too many array
+constant elements` — failing at one element too, while `nil`, records and
+enum-indexed arrays were all fine. Sharp boundary, clean repro, three variants.
+It looked like a ticket. It was a `compiler/pascal26` from before the pull. A
+rebuild — `converged after 1 round(s)` — and the finding evaporated, along with
+a second one beside it.
+
+**Two things make this one hard to catch and neither is carelessness:**
+
+1. **Novelty reads as freshness.** Every instrument-staleness habit is trained on
+   *repeating* a measurement and getting the old answer. Here the answer was NEW
+   to the reader — a failure it had never seen — and new answers do not feel
+   stale. The tree, the pull and the ticket move were all real, current, and all
+   silent about the binary.
+2. **It cannot catch itself.** A stale binary here produced a plausible,
+   reproducible, well-bounded *compiler diagnostic* — not a crash, not the
+   stale-binary RED that `gate.sh` knows how to name. Every property that makes
+   a finding look worth filing was present.
+
+So the check is not "does this look stale" — it never will. **Before filing
+anything you found by compiling, print the `converged` line and the binary's
+sha256 beside the failure.** And when the thing you are looking at is in a
+subsystem somebody just landed in, the rebuild is the FIRST step of the repro,
+not a step you take once the finding surprises you.
+
+Corollary worth its own sentence: **a `done/` ticket in front of you is evidence
+about the SOURCES, and your repro runs on the BINARY.** Watching a fix land is
+the moment you are least likely to suspect you are not running it.
