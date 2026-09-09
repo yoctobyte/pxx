@@ -2320,28 +2320,25 @@ begin
         `Char(v)` punned the tag word into a control character and `Boolean(v)`
         was right only by accident (a non-zero tag reads as True). }
       if op = Ord(tkChar_T) then castTk := tyChar else castTk := tyBoolean;
-      vcNode := VariantCastToTemp(CurASTNode, castTk);
-      if vcNode >= 0 then
-      begin
-        CurASTNode := vcNode;
-        LastExprTk := castTk;
-      end
-      else
-      begin
-        { The SAME node the identifier-spelled casts build (AN_PTR_CAST with
-          ASTIVal = -1, the built-in ordinal pun), not an AN_CALL intrinsic.
-          `Char` and `Boolean` are lexer TOKENS while `AnsiChar` is an
-          identifier, so the two spellings took different paths and drifted:
-          after the narrowing mask learned about tyChar, `AnsiChar(258)`
-          answered 2 like FPC and `Char(258)` still answered 258. One concept,
-          one node — now both spellings narrow through the one arm in ir.inc.
-          bug-p-a-char-cast-does-not-truncate-to-one-byte }
-        node := AllocNode(AN_PTR_CAST);
-        ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := -1;    { built-in cast }
-        if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
-        CurASTNode := node;
-      end;
+      { THE SHARED BUILDER, not a fourth transcription of it. This arm used to
+        spell PromoDemoteToInt64 / VariantCastToTemp / AN_PTR_CAST(-1) itself,
+        which is TryScalarNamedCast's ordinal branch minus its FIRST arm --
+        TryExplicitOpCast. So a record with `operator Explicit(a: TRec): Boolean`
+        answered through `TMyBool(r)` and was REINTERPRETED through `Boolean(r)`:
+        measured TRUE against fpc 3.2.2's FALSE, a silent wrong value at the
+        keyword spelling of the same cast. The Char row of that same probe
+        printed 'A' through BOTH doors and proves nothing -- the record's first
+        field was 65 and the reinterpret and the operator agree on it. An
+        expected value that collides with the failure value is a row that cannot
+        fail; the fixture uses Chr(v + 1) so it can.
+
+        PromoDemoteToInt64 is a no-op on a record or class and VariantCastToTemp
+        declines a non-variant operand, so putting Explicit ahead of both is
+        order-equivalent for every operand that is not the one this fixes --
+        which is why the merge is byte-identical on the corpus.
+        refactor-p-five-dispatch-sites-for-one-named-type-cast }
+      if not TryScalarNamedCast(castTk, SEM_NONE, 0) then
+        Error('compiler error: the shared cast builder declined Char/Boolean');
     end;
     tkSingle_T, tkDouble_T, tkExtended_T, tkReal_T:
     begin
@@ -2382,9 +2379,21 @@ begin
       { THE FOURTH COPY OF THIS BLOCK, and the one that was here first: the
         alias door and the builtin-name door each grew their own transcription
         of it, and the builtin-name door's never arrived, which is how
-        `Currency(i)` came to hand on an integer's bits. One body now. }
-      fcNode := FloatCastToTemp(CurASTNode, castTk);
-      if fcNode >= 0 then CurASTNode := fcNode;
+        `Currency(i)` came to hand on an integer's bits. One body now — and it
+        is TryScalarNamedCast's, not FloatCastToTemp's alone.
+
+        Calling FloatCastToTemp directly was this arm's whole body, and that is
+        the float branch of the shared builder WITHOUT its TryExplicitOpCast.
+        The failure was not a wrong value here but a REFUSAL: with
+        `operator Explicit(a: TRec): Double` declared, `Double(r)` reported
+        `incompatible types: cannot assign record to Double` -- FloatCastToTemp
+        built the temp and the store had nothing to convert -- while
+        `TMyDbl(r)`, an alias of the same type through the identifier door,
+        compiled and gave fpc's answer. Same for Single. A cast that is refused
+        at one spelling of its own target and accepted at another.
+        refactor-p-five-dispatch-sites-for-one-named-type-cast }
+      if not TryScalarNamedCast(castTk, SEM_NONE, 0) then
+        Error('compiler error: the shared cast builder declined a float target');
     end;
     tkString_T:
     begin

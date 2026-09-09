@@ -740,3 +740,50 @@ TBox<Double>` read `Double` back out of the pool — live code that could not wo
 if the sentence held. Corrected at the source and at both quotes. Anyone building
 the merged resolver reads names out of that channel, so the wrong sentence would
 have been read as "you cannot".
+
+## 2026-09-09 — the two keyword arms that COULD share the builder now do
+
+`tkChar_T, tkBoolean_T` and `tkSingle_T/tkDouble_T/tkExtended_T/tkReal_T` call
+`TryScalarNamedCast` instead of building their own nodes. Each of those arms was
+the shared builder's corresponding branch MINUS its first arm,
+`TryExplicitOpCast`, and that missing arm was live:
+
+| with `operator Explicit(a: TRec): X` in scope | before | fpc 3.2.2 |
+| --- | --- | --- |
+| `Boolean(r)` | TRUE (reinterpreted the bytes) | FALSE |
+| `TMyBool(r)` | FALSE | FALSE |
+| `Double(r)` | **refused**: `cannot assign record to Double` | 16.25 |
+| `TMyDbl(r)` | 16.25 | 16.25 |
+
+A silent wrong value at one spelling and a refusal at the other, with the
+identifier alias of the SAME type correct in both cases. That is this ticket's
+defect rate continuing, not a new family — and it is the two arms the state note
+above named as still building their own nodes.
+
+**The Char row of the first probe passed while the defect was live**, because
+the operator was `Chr(a.v)` and a.v was 65: the reinterpret and the operator
+both answer 'A'. An expected value that collides with the failure value is a row
+that cannot fail, whatever else is right about the control. The fixture's
+operator adds one so that 'B' is reachable only through it.
+
+**Byte-identity control, since "one body now" is a codegen claim no output test
+can make**: 35 files in `test/` that spell one of the six keyword cast targets,
+compiled by the pre-change and post-change compilers — 34 built by both, 34
+byte-identical, 0 differing, 1 (`test_parallel_for_private`) built by NEITHER
+and therefore pre-existing. The harness's positive control is the probe itself:
+it reports DIFFERS there, with `Boolean keyword TRUE` against `FALSE`.
+`PXX_ALLOW_FULL_SUITE=1` was needed for the sweep — an identity claim is exactly
+what the quick tier's value assertions cannot make.
+
+Order equivalence is why the merge is byte-identical rather than merely
+green: `PromoDemoteToInt64` is a no-op on a record or class and
+`VariantCastToTemp` declines a non-variant operand, so moving `TryExplicitOpCast`
+ahead of both changes nothing for any operand that is not the one it fixes.
+
+**STILL OPEN, and it is now the whole of this ticket.** The RECOGNITION merge:
+one `name -> (castKind, enumId, aliasIdx)` resolver replacing `FindTypeAlias`
+and `BuiltinScalarTypeKind` asked separately. The two keyword arms that remain
+outside the shared builder are outside it correctly — `tkInteger_T`/
+`tkLongWord_T` build an `AN_CALL` passthrough (the Ord/Chr model, not a cast
+node) and `tkString_T` is a target `TryScalarNamedCast` explicitly declines,
+along with `tyPointer`, for the reasons its own header gives.

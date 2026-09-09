@@ -8619,6 +8619,16 @@ test-core: $(COMPILER)
 	# i386/aarch64/arm32/riscv32 under qemu.
 	./$(COMPILER) test/test_a_builtin_type_name_is_redeclared.pas $(TESTTMP)/test_rdcl26
 	tools/expect_same.sh test_rdcl26 "$$($(TESTTMP)/test_rdcl26)" "$$(cat test/test_a_builtin_type_name_is_redeclared.expected)"
+	# `operator Explicit` answers at the KEYWORD spelling of a cast, not only at
+	# an identifier alias of the same type. Char/Boolean/Single/Double are lexer
+	# tokens and their arms were the shared cast builder minus TryExplicitOpCast:
+	# `Boolean(r)` reinterpreted where `TMyBool(r)` called the operator (TRUE vs
+	# fpc's FALSE), and `Double(r)` was refused outright while `TMyDbl(r)`
+	# compiled. Row 1's operator adds one on purpose -- with Chr(a.v) the
+	# reinterpret and the operator both answer 'A' and the row cannot fail.
+	# fpc-identical on all eight rows; ran on i386/aarch64/arm32/riscv32.
+	./$(COMPILER) test/test_explicit_operator_at_the_keyword_cast_door.pas $(TESTTMP)/test_expkw26
+	tools/expect_same.sh test_expkw26 "$$($(TESTTMP)/test_expkw26)" "$$(cat test/test_explicit_operator_at_the_keyword_cast_door.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always
