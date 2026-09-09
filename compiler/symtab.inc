@@ -17537,6 +17537,8 @@ begin
 end;
 
 function ResolveNodeRec(node: Integer): Integer; forward;   { NodeMetaclassCi's FIELD arm needs it; real body just below }
+function OperandPairMayOverload(op, left, right: Integer): Boolean; forward;  { may `left op right` have an overload at all -- the guard that stood copied at two call sites }
+function OperandRecOfNode(node: Integer): Integer; forward;  { the operator-overload table's record key: ResolveNodeRec, except a whole ARRAY keys as REC_ARRAY_OPERAND. Forward because ResolveNodeRec's own two operator arms ask it, and it needs ASTNodeIsWholeArray, which is defined after both. }
 
 { Every AST node kind that IS a routine call.
 
@@ -18613,8 +18615,8 @@ begin
     fIdx := -1;
     if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) or
        TkIsRecordOrClass(ASTTk[ASTRight[node]]) then
-      fIdx := FindOpOverload2(ASTIVal[node], ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]),
-                              ASTTk[ASTRight[node]], ResolveNodeRec(ASTRight[node]));
+      fIdx := FindOpOverload2(ASTIVal[node], ASTTk[ASTLeft[node]], OperandRecOfNode(ASTLeft[node]),
+                              ASTTk[ASTRight[node]], OperandRecOfNode(ASTRight[node]));
     if fIdx >= 0 then
       Result := ProcRetRecId[fIdx]
     else
@@ -18633,10 +18635,10 @@ begin
     begin
       if ASTKind[node] = AN_NEG then
         fIdx := FindOpOverloadUnary(Ord(tkMinus), ASTTk[ASTLeft[node]],
-                                    ResolveNodeRec(ASTLeft[node]))
+                                    OperandRecOfNode(ASTLeft[node]))
       else
         fIdx := FindOpOverloadUnary(Ord(tkNot), ASTTk[ASTLeft[node]],
-                                    ResolveNodeRec(ASTLeft[node]));
+                                    OperandRecOfNode(ASTLeft[node]));
     end;
     if fIdx >= 0 then
       Result := ProcRetRecId[fIdx]
@@ -18714,6 +18716,55 @@ begin
     refactor-p-is-this-node-a-whole-array-is-answered-in-four-places-with-four-lists }
   if ASTKind[node] <> AN_DEREF then Exit;
   Result := DerefPtrArrayShape(node);
+end;
+
+function OperandPairMayOverload(op, left, right: Integer): Boolean;
+{ Is it worth asking the operator table about `left op right` at all?
+
+  Three ways yes, and the THIRD is the one that was missing. Either operand is
+  a record or class; or the operation is not predefined for the two kinds (what
+  lets a scalar-keyed overload such as `operator - (a, b: AnsiString)` fire);
+  or either operand is a whole ARRAY -- because an array's kind IS its
+  element's, so `p + q` over two `array of LongInt` asked OperationIsPredefined
+  about integer `+`, got True, and never looked in the table at all. The
+  declaration had been accepted; the use site then took the built-in
+  dynamic-array concatenation and assigned an array handle to a LongInt.
+  Measured: 124286578720984 where fpc 3.2.2 prints 405.
+
+  Written once because the same expression stood at two call sites already, and
+  four consumers of "an array is not its element" now exist in this feature --
+  the operand NAME door (OperandTypeKindRec), the table KEY (OperandRecOfNode),
+  the declaration-time predefined CHECK, and this.
+  bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand }
+begin
+  OperandPairMayOverload :=
+    TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) or
+    (OperandRecOfNode(left) = REC_ARRAY_OPERAND) or
+    (OperandRecOfNode(right) = REC_ARRAY_OPERAND) or
+    (not OperationIsPredefined(op, ASTTk[left], ASTTk[right]));
+end;
+
+function OperandRecOfNode(node: Integer): Integer;
+{ The record key an OPERATOR-OVERLOAD lookup should use for this operand.
+
+  ResolveNodeRec everywhere else, and REC_ARRAY_OPERAND for a whole array --
+  because an array's TypeKind IS its element kind and ResolveNodeRec answers
+  with the ELEMENT's record, so without this an `array of Char` operand and a
+  `Char` operand are the SAME (kind, rec) pair. Measured 2026-09-09: with both
+  operators declared, `c and d` on two Chars ran the array body and segfaulted
+  inside Length.
+
+  ONE function rather than the test at each lookup, because there are nine
+  operand-key sites across three files (binary, unary, `**`, the for-in
+  enumerator precedence check, OPK_EXPLICIT, and ResolveNodeRec's own two
+  operator arms), and a rule spelled per caller fails by an absent copy -- the
+  registration side asks OperandTypeKindRec exactly once for the same reason.
+  bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand }
+begin
+  if ASTNodeIsWholeArray(node) then
+    Result := REC_ARRAY_OPERAND
+  else
+    Result := ResolveNodeRec(node);
 end;
 
 

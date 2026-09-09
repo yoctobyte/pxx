@@ -93,6 +93,34 @@ begin
     if (ai >= 0) and (IntToTypeKind(AliasTk[ai]) <> tyUnknown) then
       stk := IntToTypeKind(AliasTk[ai]);
   end;
+  { A NAMED ARRAY TYPE -- `TArr = array of Char`, toperator78's `TTests`,
+    tarray18's `array of LongInt`. Arrays are not in the scalar alias table at
+    all (they live in ArrType*), so the name reached the Error below and
+    `operator and (a, b: TArr)` answered "not a supported operand type".
+
+    THE KIND ALONE IS NOT ENOUGH AND KEYING ON IT WAS MEASURED WRONG. An
+    array's TypeKind IS its element kind, so registering `TArr` as (tyChar,
+    REC_NONE) makes it the same table row as `Char`: with both operators
+    declared, `c and d` on two Chars ran the ARRAY body and segfaulted inside
+    Length. REC_ARRAY_OPERAND is what separates them, and the use site pairs it
+    through OperandRecOfNode. See defs.inc for why the sentinel is negative.
+
+    ELEMENT-KIND-BLIND, deliberately: `array of Char` and `array of LongInt`
+    both key as (elemKind, REC_ARRAY_OPERAND), so they are distinct rows for
+    the same reason two scalar kinds are. What this does NOT distinguish is a
+    FIXED array from a dynamic one of the same element -- fpc does, and a
+    program declaring both would take the first. Recorded rather than fixed:
+    the operand table has no place to put an extent, and no measured program
+    wants it. }
+  if stk = tyUnknown then
+  begin
+    ai := FindArrayType(nm);
+    if (ai >= 0) and (IntToTypeKind(ArrTypeElemTk[ai]) <> tyUnknown) then
+    begin
+      stk := IntToTypeKind(ArrTypeElemTk[ai]);
+      rec := REC_ARRAY_OPERAND;
+    end;
+  end;
   if stk = tyUnknown then
     Error('operator overloading: ' + nm + ' is not a supported operand type');
   tk := Ord(stk);
@@ -677,7 +705,21 @@ begin
       the table with nothing in it. The old `opKey <> Ord(tkPow)` clause existed
       because the aggregate rule had nowhere to put a row.
       bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
-    if OperationIsPredefined(opKey, opTypeKind, rightTk) then
+    { AN ARRAY OPERAND IS NEVER THE PREDEFINED SCALAR OPERATION, and asking the
+      table without this row said it was. OperationIsPredefined keys on the two
+      KINDS, and an array's kind IS its element's -- so `operator + (a, b:
+      TNums)` over `array of LongInt` was refused as "predefined for built-in
+      operand types", naming integer `+`. fpc 3.2.2 accepts it, measured
+      alongside the other two rows of test_operator_array_operand.
+
+      The third consumer of the same fact in this fix, which is the shape worth
+      naming: the operand NAME door (OperandTypeKindRec), the use-site KEY
+      (OperandRecOfNode) and this CHECK each had to learn that an array is not
+      its element. REC_ARRAY_OPERAND is what all three ask, so a fourth consumer
+      asks it too rather than re-deriving it from the kind.
+      bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand }
+    if (recId <> REC_ARRAY_OPERAND) and (rightRec <> REC_ARRAY_OPERAND) and
+       OperationIsPredefined(opKey, opTypeKind, rightTk) then
       Error('impossible operator overload: this operation is predefined for built-in operand types');
   end;
   { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }

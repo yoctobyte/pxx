@@ -8592,6 +8592,13 @@ test-core: $(COMPILER)
 	# cannot see it. Ran on i386/aarch64/arm32/riscv32 under qemu.
 	./$(COMPILER) test/test_variant_cast_to_interface.pas $(TESTTMP)/test_vcast26
 	tools/expect_same.sh test_vcast26 "$$($(TESTTMP)/test_vcast26)" "$$(cat test/test_variant_cast_to_interface.expected)"
+	# A NAMED ARRAY TYPE can be an operator operand. Row 2 is the positive
+	# control and is the row that matters: keying an array operand by its
+	# ELEMENT kind (the obvious fix) makes `array of Char` and `Char` the same
+	# table row, and `c and d` on two Chars then ran the ARRAY body and
+	# segfaulted inside Length. fpc-identical on all three rows.
+	./$(COMPILER) test/test_operator_array_operand.pas $(TESTTMP)/test_oparr26
+	tools/expect_same.sh test_oparr26 "$$($(TESTTMP)/test_oparr26)" "$$(cat test/test_operator_array_operand.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always

@@ -599,6 +599,20 @@ const
   RTTI_FIELD_FLAG_PUBLISHED = 1;
 
   REC_NONE         = 0;
+  { An ARRAY operand's record key, for the operator-overload table only.
+    NEGATIVE on purpose: every real rec id is >= 0, so this can never collide
+    with one, and no arithmetic anywhere turns a rec id negative -- whereas
+    taking a free small number would have had to be defended against the
+    builtin rows at 1..15 forever.
+
+    It exists because an array's TypeKind IS its ELEMENT kind and
+    ResolveNodeRec answers with the ELEMENT's record, so `array of Char` and
+    `Char` are the SAME (kind, rec) pair to a table keyed on those two. With
+    both registered, `c and d` on two Chars dispatched to the ARRAY operator
+    and segfaulted inside Length -- measured 2026-09-09, with pxx's own
+    "operator is already overloaded for these operand types" warning naming the
+    collision at the declaration. bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand }
+  REC_ARRAY_OPERAND = -2;
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
 
@@ -752,9 +766,30 @@ const
                           to its operand (the underlying call suspends on its own
                           via the reactor/CoYield). STACKLESS (later): the marker
                           that bounds the state-machine split locally. }
-  AN_STR_FROM_CHAR = 55; { String(c) rvalue: materialise a 1-char string. Left =
-                           char expr; ASTIVal = hidden string temp sym. Lowered in
-                           shared IR by reusing the `s := c` store + a var read. }
+  AN_STR_FROM_CHAR = 55; { THE GENERIC ASSIGN-THEN-YIELD NODE, whatever the name
+                           says. Left = a store into a hidden temp, Right = the
+                           read of that temp; the node's VALUE, its ADDRESS and
+                           its RECORD are all its Right's. `String(c)` named it
+                           -- Left = the `s := c` store, ASTIVal = the temp sym
+                           -- and four frontends now build it for every
+                           temp-and-yield desugar there is: pasparser_expr
+                           (`Variant(x)`, the scalar variant casts, `IFoo(v)`),
+                           pasparser_lval, pyparser and rparser.
+
+                           THE NARROW NAME COST TWO ABSENT CONSUMERS on
+                           2026-09-09, and the shape is worth more than the
+                           incident. An author scanning ResolveNodeRec's kind
+                           arms for "which of these could carry a record" read
+                           "materialise a 1-char string" and CORRECTLY concluded
+                           no. The comment was not stale and the name is not
+                           wrong: both were true of the original use and silent
+                           about the general one, so nothing ever contradicted
+                           them. An over-broad name eventually matches something
+                           absurd and gets caught; an under-broad one is only
+                           ever caught by the bug -- here `IFoo(v)` reaching the
+                           interface ARC assign arm as "not an interface" and
+                           taking a raw record copy with no retain.
+                           bug-p-a-variant-typecast-to-an-interface-segfaults }
   AN_IS_TEST       = 56; { `X is T`: Left = instance expr; ASTIVal = target class ci.
                            Boolean = X's VMT is T's or a descendant's (closed-world). }
   AN_AS_CAST       = 57; { `X as T`: Left = instance expr; ASTIVal = target class ci.

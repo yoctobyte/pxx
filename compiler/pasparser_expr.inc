@@ -211,7 +211,7 @@ var pi, argN, callN: Integer;
 begin
   UnaryOpOverloadCall := -1;
   if (operand < 0) or (not TkIsRecordOrClass(ASTTk[operand])) then Exit;
-  pi := FindOpOverloadUnary(opKind, ASTTk[operand], ResolveNodeRec(operand));
+  pi := FindOpOverloadUnary(opKind, ASTTk[operand], OperandRecOfNode(operand));
   if pi < 0 then Exit;
   argN := AllocNode(AN_ARG);
   ASTLeft[argN] := operand;
@@ -2260,7 +2260,7 @@ begin
         if ((IntToTypeKind(ASTTk[CurASTNode]) = tyRecord) or
             (IntToTypeKind(ASTTk[CurASTNode]) = tyClass)) then
         begin
-          i := FindOpOverload(OPK_EXPLICIT, ASTTk[CurASTNode], ResolveNodeRec(CurASTNode));
+          i := FindOpOverload(OPK_EXPLICIT, ASTTk[CurASTNode], OperandRecOfNode(CurASTNode));
           if (i >= 0) and TypeIsOrdinal(Procs[i].RetType) then
           begin
             argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
@@ -10183,9 +10183,20 @@ begin
   if not ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkSlash) or
           (op = tkDiv) or (op = tkMod)) then Exit;
   { A dynamic array on ONE side (two is concatenation and never arrives here).
-    Adding the two handles produced a wild pointer and a runtime SIGSEGV. }
+    Adding the two handles produced a wild pointer and a runtime SIGSEGV.
+
+    ...AND NOT WHEN AN OVERLOAD COVERS THE PAIR, which the sentence above and
+    this routine's header both assumed could not happen. It can now: a named
+    array type is a legal operand type, and the overload arm in ParseSimpleExpr
+    RETYPES the node rather than `continue`ing -- so unlike concatenation and
+    unlike a record operator, an array operator's node DOES reach here. Without
+    this the declaration was accepted and the use site was then refused by a
+    check written when no such declaration could exist.
+    bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand }
   if ((NodeDynDepth(left) > 0) or (NodeDynDepth(right) > 0)) and
-     ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkDiv)) then
+     ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkDiv)) and
+     (FindOpOverload2(Ord(op), ASTTk[left], OperandRecOfNode(left),
+                      ASTTk[right], OperandRecOfNode(right)) < 0) then
   begin
     ErrorRecover('arithmetic operator not supported for dynamic arrays '
                  + '(only `a + b` over two dynamic arrays is defined, as concatenation)');
@@ -10195,8 +10206,8 @@ begin
     first qwords and produce garbage, or a wild pointer copy, at run time. }
   if ((IntToTypeKind(ASTTk[left]) = tyRecord) or
       (IntToTypeKind(ASTTk[right]) = tyRecord)) and
-     (FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
-                      ASTTk[right], ResolveNodeRec(right)) < 0) then
+     (FindOpOverload2(Ord(op), ASTTk[left], OperandRecOfNode(left),
+                      ASTTk[right], OperandRecOfNode(right)) < 0) then
     ErrorRecover('no operator overload found for record operands '
                  + '(operator not declared, or its unit not compiled?)'
                  + ' — PXXDBG=a.opovl prints the lookup and every candidate');
@@ -10231,8 +10242,8 @@ begin
     left := CurASTNode;
     ParseFactor;
     right := CurASTNode;
-    opci := FindOpOverload2(Ord(tkPow), ASTTk[left], ResolveNodeRec(left),
-                            ASTTk[right], ResolveNodeRec(right));
+    opci := FindOpOverload2(Ord(tkPow), ASTTk[left], OperandRecOfNode(left),
+                            ASTTk[right], OperandRecOfNode(right));
     if opci < 0 then
       Error('operator ** is not overloaded for these operands: `**` has no '
           + 'built-in meaning in Pascal -- declare `operator **` (or a `class '
@@ -10373,10 +10384,9 @@ begin
       about, and it is closed by the two halves agreeing rather than by this
       guard being narrow.
       bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
-    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) or
-       (not OperationIsPredefined(Ord(op), ASTTk[left], ASTTk[right])) then
-      opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
-                              ASTTk[right], ResolveNodeRec(right));
+    if OperandPairMayOverload(Ord(op), left, right) then
+      opci := FindOpOverload2(Ord(op), ASTTk[left], OperandRecOfNode(left),
+                              ASTTk[right], OperandRecOfNode(right));
     if opci >= 0 then
       { Overloaded operator on a record/class operand returns its result type. }
       ASTTk[node] := Ord(Procs[opci].RetType)
@@ -10854,10 +10864,9 @@ begin
       about, and it is closed by the two halves agreeing rather than by this
       guard being narrow.
       bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
-    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) or
-       (not OperationIsPredefined(Ord(op), ASTTk[left], ASTTk[right])) then
-      opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
-                              ASTTk[right], ResolveNodeRec(right));
+    if OperandPairMayOverload(Ord(op), left, right) then
+      opci := FindOpOverload2(Ord(op), ASTTk[left], OperandRecOfNode(left),
+                              ASTTk[right], OperandRecOfNode(right));
     if opci >= 0 then
       { Overloaded operator on a record/class operand: the node's type is the
         operator's result type, so an inferred target and the aggregate-return
@@ -11402,8 +11411,8 @@ begin
        ((op = tkLt) or (op = tkGt) or (op = tkLe) or (op = tkGe)) and
        ((IntToTypeKind(ASTTk[left]) = tyRecord) or
         (IntToTypeKind(ASTTk[right]) = tyRecord)) and
-       (FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
-                        ASTTk[right], ResolveNodeRec(right)) < 0) then
+       (FindOpOverload2(Ord(op), ASTTk[left], OperandRecOfNode(left),
+                        ASTTk[right], OperandRecOfNode(right)) < 0) then
       { RECOVERS: the node it leaves behind is an ordinary boolean AN_BINOP, so
         the parse carries on and the file's LATER mistakes are reported too --
         which is the whole point of moving the check here. A plain Error() would

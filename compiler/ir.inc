@@ -3148,8 +3148,8 @@ begin
       baseAddr := IRLowerAST(baseNode)
     else if (ASTKind[baseNode] = AN_BINOP) and (ASTTk[baseNode] = Ord(tyRecord)) and
             (FindOpOverload2(Integer(ASTIVal[baseNode]),
-                             ASTTk[ASTLeft[baseNode]], ResolveNodeRec(ASTLeft[baseNode]),
-                             ASTTk[ASTRight[baseNode]], ResolveNodeRec(ASTRight[baseNode])) >= 0) then
+                             ASTTk[ASTLeft[baseNode]], OperandRecOfNode(ASTLeft[baseNode]),
+                             ASTTk[ASTRight[baseNode]], OperandRecOfNode(ASTRight[baseNode])) >= 0) then
       { ...AND AN OVERLOADED OPERATOR'S RESULT, WHICH IS THE SAME THING WEARING
         A DIFFERENT NODE KIND. `(x + y).v` answered `IR_UNSUPPORTED ... (kind
         5)` while `z := x + y; z.v` was correct, and the two are the same
@@ -12808,8 +12808,8 @@ begin
       { Operator overloading: a <op> b on a class/record operand resolves to a
         call to the registered operator proc (lhs, rhs), mirroring the direct
         backend. Args are passed by value (rdi=lhs, rsi=rhs). }
-      cpi := FindOpOverload2(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]),
-                             ASTTk[ASTRight[node]], ResolveNodeRec(ASTRight[node]));
+      cpi := FindOpOverload2(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], OperandRecOfNode(ASTLeft[node]),
+                             ASTTk[ASTRight[node]], OperandRecOfNode(ASTRight[node]));
       if cpi >= 0 then
       begin
         left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
