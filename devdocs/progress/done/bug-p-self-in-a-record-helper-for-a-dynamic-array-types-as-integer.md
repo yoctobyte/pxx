@@ -183,3 +183,6 @@ still refused; a helper for `TA` does not attach to a same-shape `TB`; `TA` gets
 it (7); fixed array (4); by-ref mutation through `Self` survives (20 in the
 probe, `sum=15` in the committed test — `Self` is by reference, so a helper that
 writes actually writes); string helper unchanged (8).
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
