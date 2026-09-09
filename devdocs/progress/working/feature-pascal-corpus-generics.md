@@ -2,20 +2,19 @@
 track: P
 prio: 65
 owner: frankS
-blocked-by: [bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]
+blocked-by: []
 status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked on anything unnamed, and the frontier has moved TWO whole units this morning. Measured 2026-09-09 at binary `417ee5636a72`: `generics.defaults` compiles and runs on its own driver, `collections.pas:120 unknown type: PT` is GONE, and the wall is now **`generics.defaults.pas:3250`, `undefined variable (TGOrdinalStringComparer)`** on `FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create`. READ THE NEAR-WINDOW, NOT THE MESSAGE: `T` is substituted to `string` and `THashFactory` is not, so the `<` is being read as less-than and the source line is fine. Diagnosed and filed as bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (three sites pick a method impl's template by NAME and take the last match, and rtl-generics declares `TGStringComparer<T, THashFactory>` beside `TGStringComparer<T>` in one unit). That ticket also records why it is NOT fixed yet: making attribution arity-aware corrects the substitution and exposes a second gap one layer down, and a 30-line unit that compiles today fails with only the first half applied. THE TWO STAGINGS ARE THE SAME FILE -- `generics.collections.pas` is byte-identical between `library_candidates/rtl-generics` and `/usr/share/fpcsrc/3.2.2` (md5 `1010a887c20dc546215749ca46c5a773`, 110423 bytes) -- so every wall line number in this file, the 2026-08-30 table included, is the same coordinate system. An earlier version of this summary claimed the opposite. Claimed by frankS, handed over by frankZ."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `2f5a0b2ac8ec`, two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` reaches `too many deferred specializations`, with `TEnumerator$PT` minted 55 times (MAX_SPECIALIZATIONS is 256, 872 mints in the run). THAT SECOND ONE IS NOT DIAGNOSED: `PT` is a nested type named as a specialization argument, which is bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope territory, but it may equally be an amplification of the 3250 fix that got us here. Measure which before quoting it. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** claimed (frankS). Wall: `generics.defaults.pas:3250`,
-  `undefined variable (TGOrdinalStringComparer)` — diagnosed, filed, and NOT
-  fixed on purpose; see the blocker. Rungs 1+2 are green: fpcunit runs, fpjson's
-  suite is 203/203.
+- **Status:** claimed (frankS). Not blocked. Two walls, one per driver —
+  `unresolved forward: TInstance.CreateSelector` (Defaults) and `too many
+  deferred specializations` (Collections). Rungs 1+2 green.
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
 
@@ -1591,3 +1590,34 @@ blocker, not here.
 never reaches it. The commit is not the cause — the two name loops are dated
 2026-08-29 and 2026-08-20. An error vanishing under a revert is not an
 attribution; the code's age is.
+
+
+## 2026-09-09 (frankS) — `:3250` is through, and the next number needs attributing before anyone quotes it
+
+Fixed as [[bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]]
+(`3801a4d66`): name-vs-arity attribution at four sites, an ahead-buffered arena
+copy re-captured at flush time, and a "spliced but not parsed yet" list for the
+collapse arm. Conformance 423/0/42, identical to a control run at HEAD, so
+nothing in that corpus moved either way.
+
+**The frontier now, at binary `2f5a0b2ac8ec`:**
+
+| driver | wall |
+| --- | --- |
+| `uses Generics.Defaults` | `unresolved forward: TInstance.CreateSelector` |
+| `uses Generics.Collections` | `too many deferred specializations` |
+
+**Do not read the second as the older `PT` defect without measuring.**
+`PXXDBG=p.mint:*` counts **872 mints in the run and 55 of `TEnumerator$PT`
+alone**, against `MAX_SPECIALIZATIONS = 256`. `PT` is a nested type named as a
+specialization argument, which is
+[[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]]
+— but 55 mints of one alias is also exactly what a fix that makes more bodies
+stream correctly would produce, and I have not separated the two. The next seat's
+first question is which, and `p.mint` answers it in one run.
+
+**Four walls fell here today and three of them were peers'.** The rung's value
+was the attempt, not any one fix: driving the target named each bug in the order
+it actually mattered, and every one of them was a name standing in for an
+identity — a method name for a reference, a type name for a scope, a template
+name for an arity, a copy for the stream it came from.
