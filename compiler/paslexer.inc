@@ -421,6 +421,110 @@ begin
   end;
 end;
 
+{ ===== the CONDITIONAL PROBE's save slot =====
+
+  `{$if declared(X)}` is answered by scanning the token stream, and a used
+  unit's tokens are not in it yet (LexAppend runs at PARSE time). The probe
+  below LEXES a used unit into a scratch region so the scan can see it, and
+  lexing a unit RUNS ITS DIRECTIVES -- so without this pair the unit's
+  {$define}s and {$PACKRECORDS}es escape into the rest of the main file's lex.
+
+  THAT IS NOT HYPOTHETICAL, IT IS A FIXED BUG BEING REINTRODUCED. Measured
+  2026-09-09 with the probe wired and this pair absent: a `{$DEFINE X}` in the
+  used unit made the MAIN program's `{$ifdef X}` take the true arm, fpc says
+  false. That is [[bug-p-a-units-define-leaks-into-the-units-it-uses]] exactly,
+  which PasResetDefinesToBaseline above exists to prevent -- so the probe has to
+  arrive with the same discipline the parser's own unit load already has.
+
+  SAVE-AND-RESTORE, NOT RESET-TO-BASELINE, and the difference matters: the
+  baseline is the COMMAND LINE, and the main file has legitimately set
+  directives of its own by the time a conditional is evaluated. Resetting would
+  discard those. The baseline pair is used per-probed-unit (each unit is lexed
+  from the command-line state, which is FPC's scoping rule); this pair wraps the
+  whole probe and puts the caller's own state back.
+
+  THE ENUMERATION HAS TO MATCH PasSnapshotDirectiveBaseline / 
+  PasSnapshotDefineBaseline ABOVE, which is why it is written here beside them
+  and not next to the probe that uses it: a directive added to one list and not
+  the other leaks silently, and a leak in this direction produces a DIFFERENT
+  PROGRAM rather than an error. tools/probe_state_lists.py checks the two
+  enumerations against each other. }
+var
+  ProbeDepth: Integer = 0;   { re-entrancy guard: a probed unit's own conditionals must not probe }
+  ProbeSavePackRecords, ProbeSavePackEnum, ProbeSaveNChecks: Integer;
+  ProbeSaveMaxStackFrame, ProbeSaveTokCharLen: Integer;
+  ProbeSaveHMinus, ProbeSaveScopedEnums, ProbeSaveQChecks, ProbeSaveAssertions: Boolean;
+  ProbeSaveRChecks, ProbeSaveIChecks, ProbeSaveInterfacesCom: Boolean;
+  ProbeSaveNestedComments, ProbeSaveDelphiMode, ProbeSaveCaseMode: Boolean;
+  ProbeSaveDefineCount, ProbeSaveDefineCharLen: Integer;
+  ProbeSaveUnitDir: AnsiString;
+  ProbeSaveDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  ProbeSaveDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  ProbeSaveDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
+
+procedure PasProbeSaveLexState;
+var i: Integer;
+begin
+  ProbeSavePackRecords := PackRecordsVal;
+  ProbeSavePackEnum := PackEnumVal;
+  ProbeSaveHMinus := HMinusVal;
+  ProbeSaveScopedEnums := ScopedEnumsVal;
+  ProbeSaveQChecks := QChecksVal;
+  ProbeSaveAssertions := AssertionsVal;
+  ProbeSaveRChecks := RChecksVal;
+  ProbeSaveNChecks := NChecksVal;
+  ProbeSaveIChecks := IChecksVal;
+  ProbeSaveInterfacesCom := InterfacesComMode;
+  ProbeSaveMaxStackFrame := MaxStackFrameSize;
+  ProbeSaveNestedComments := NestedComments;
+  ProbeSaveDelphiMode := DelphiMode;
+  ProbeSaveCaseMode := CaseSensitiveMode;
+  ProbeSaveUnitDir := CurUnitDir;
+  { the token CHAR POOL, which the scratch tokens grow and truncating TokCount
+    does not give back. Not a correctness bug on its own -- the next real token
+    overwrites the entries -- but a probe that runs per failing declared() over
+    a program with many units walks it toward STRING_CAP, and the overflow says
+    `token char pool overflow` at a line that has nothing to do with it. }
+  ProbeSaveTokCharLen := TokCharLen;
+  ProbeSaveDefineCount := PasDefineCount;
+  ProbeSaveDefineCharLen := PasDefineCharLen;
+  for i := 0 to MAX_PAS_DEFINES - 1 do
+  begin
+    ProbeSaveDefineActive[i] := PasDefineActive[i];
+    ProbeSaveDefineHasValue[i] := PasDefineHasValue[i];
+    ProbeSaveDefineValue[i] := PasDefineValue[i];
+  end;
+end;
+
+procedure PasProbeRestoreLexState;
+var i: Integer;
+begin
+  PackRecordsVal := ProbeSavePackRecords;
+  PackEnumVal := ProbeSavePackEnum;
+  HMinusVal := ProbeSaveHMinus;
+  ScopedEnumsVal := ProbeSaveScopedEnums;
+  QChecksVal := ProbeSaveQChecks;
+  AssertionsVal := ProbeSaveAssertions;
+  RChecksVal := ProbeSaveRChecks;
+  NChecksVal := ProbeSaveNChecks;
+  IChecksVal := ProbeSaveIChecks;
+  InterfacesComMode := ProbeSaveInterfacesCom;
+  MaxStackFrameSize := ProbeSaveMaxStackFrame;
+  NestedComments := ProbeSaveNestedComments;
+  DelphiMode := ProbeSaveDelphiMode;
+  CaseSensitiveMode := ProbeSaveCaseMode;
+  CurUnitDir := ProbeSaveUnitDir;
+  TokCharLen := ProbeSaveTokCharLen;
+  PasDefineCount := ProbeSaveDefineCount;
+  PasDefineCharLen := ProbeSaveDefineCharLen;
+  for i := 0 to MAX_PAS_DEFINES - 1 do
+  begin
+    PasDefineActive[i] := ProbeSaveDefineActive[i];
+    PasDefineHasValue[i] := ProbeSaveDefineHasValue[i];
+    PasDefineValue[i] := ProbeSaveDefineValue[i];
+  end;
+end;
+
 procedure PasDefine(const name: AnsiString);
 var i, j, len: Integer;
 begin
@@ -1414,7 +1518,11 @@ end;
   deferred to the dotted-unit-names work). A symbol behind an as-yet-unselected
   branch is not in the stream, so probes like Synapse's POSIX `Posix.StrOpts.*`
   (no such unit under the POSIX profile) correctly evaluate false. }
-function PasCondNameDeclared(const qname: AnsiString): Boolean;
+function PasCondNameDeclaredIn(const qname: AnsiString; lo, hi: Integer): Boolean;
+{ The declaration scan, over an ARBITRARY token range. Split out of
+  PasCondNameDeclared 2026-09-09 so the same walk can be pointed at a used
+  unit's tokens, which live in a scratch region at the end of the stream rather
+  than in [0, TokCount). }
 var i, dotPos, k, sect: Integer;
     nm, t: AnsiString;
     expectName, expectRoutine: Boolean;
@@ -1430,7 +1538,7 @@ begin
   sect := 0;              { 1 = inside a const/type/var declaration section }
   expectName := False;    { next identifier is a declaration target }
   expectRoutine := False; { next identifier is a routine name }
-  for k := 0 to TokCount - 1 do
+  for k := lo to hi - 1 do
   begin
     case Tokens[k].Kind of
       tkConst, tkType, tkVar:
@@ -1462,6 +1570,45 @@ begin
         end;
     end;
   end;
+end;
+
+{ How many units this file NAMED but the probe could not read. Set by
+  PasCondNameDeclaredInUses, read once, immediately, by the caller below --
+  it describes THE LAST PROBE and nothing else. }
+var PasCondUnitsUnread: Integer = 0;
+
+function PasCondNameDeclared(const qname: AnsiString): Boolean;
+{ THE THIRD ANSWER IS A WARNING, NOT A REFUSAL, and that is the whole design of
+  this arm.
+
+  The `sizeof` arm eleven lines below refuses a name it cannot size, and that is
+  right there: a sizeof it cannot answer is always either a programmer error or
+  an unanswerable question, so a diagnostic naming the operand beats a plausible
+  number steering a branch. `declared` cannot copy it. False is what this
+  operator EXISTS to return -- feature detection under a profile where the
+  feature is absent -- so refusing whenever a used unit is unreadable would turn
+  every defensive `{$if declared(X)}` in a program with any `uses` clause into a
+  hard error. That is Synapse's own shape, and Synapse is the case the operator
+  was written for.
+
+  So the unreadable case stays False and says so. That is the same move that
+  closed this ticket's neighbours: make the negative DISTINGUISHABLE rather than
+  make the lookup wider, because the failure here is not a wrong value but a
+  silently different program.
+  bug-p-declared-cannot-see-a-used-units-declarations }
+begin
+  Result := PasCondNameDeclaredIn(qname, 0, TokCount);
+  if Result then Exit;
+  PasProbeSaveLexState;
+  Result := PasCondNameDeclaredInUses(qname);
+  PasProbeRestoreLexState;
+  if (not Result) and (PasCondUnitsUnread > 0) then
+    Warn('declared(' + qname + ') is False, and ' + AIntToStr(PasCondUnitsUnread) +
+         ' unit(s) named in this file could not be read while the conditional was '
+         + 'evaluated -- if the name is declared there, this conditional took the '
+         + 'wrong arm. A used unit is read here only to answer declared(); the '
+         + 'compile itself resolves it later and will report its own error if it '
+         + 'is genuinely missing.');
 end;
 
 { Read a value-stack slot as a boolean. A bool slot passes through; an int

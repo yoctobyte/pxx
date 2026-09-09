@@ -4,7 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 status: working
-summary: "`{$if declared(X)}` cannot see a used unit's declarations and answers False, silently taking the `{$else}` arm -- the type is fully usable in the same program in which `declared()` says it is not. `PasCondNameDeclared` scans `Tokens[0..TokCount-1]`, and a used unit's tokens are appended by `LexAppend` at PARSE time, so every conditional in the main file is decided before a single unit token exists. THREE THINGS MEASURED 2026-09-09 THAT DECIDE THE FIX. (1) Refusing cannot be the third answer: it regresses every defensive `declared()` in a program with any `uses` at all, which is the Synapse shape the operator was written for -- the third answer has to be a WARNING attached to the False. (2) A Pascal-only resolver in the lexer is a NEW wrong answer, not a narrower one: the chain at `pasparser_proc.inc:4928-5589` has C stages in ORDERING-SIGNIFICANT positions -- a `.c` beside the source at :5190 blocks the `-Fu` Pascal stage at :5236 -- so a second copy answers True about a `.pas` the compile never reads. (3) The resolver alone is NECESSARY BUT NOT SUFFICIENT: 151 of 400 real FPC unit interfaces (38%) carry an `{$I}` include and 94 (24%) a conditional, so a text scan answers about text rather than declarations -- and `lib/rtl` is 0/111 on includes, so A FIXTURE BUILT FROM OUR OWN RTL CANNOT SAMPLE THAT. The fix is to lex the unit with the real lexer (`LexAppend` documents itself re-entrant) into a scratch region and scan the TOKENS; the one blocker is that the search chain is unreachable from the lexer, so step one is a faithful extraction of 4928-5589 into one resolver with one owner. Deferring the conditional to parse time is rejected and why is recorded."
+summary: "FIXED 2026-09-09 for the UNIT half; the ARITY half is still open. `{$if declared(X)}` answered False for a name declared in a used unit -- silently taking the `{$else}` arm for a type the same program then constructs -- because `PasCondNameDeclared` scans the token stream and `LexAppend` puts a unit's tokens there at PARSE time, after every conditional in the main file is decided. NOW: `PasCondNameDeclaredInUses` asks `ResolveUsesUnitSource` for the source, LEXES it into a scratch region and scans the TOKENS, then truncates `TokCount` back. IT LEXES RATHER THAN SCANNING TEXT because 151 of 400 real FPC interfaces (38%) carry an `{$I}` include -- a text scan answers False for a name in an include it never opened, this ticket's own silent negative one level down, and `lib/rtl` is 0/111 on includes so a fixture built from our own RTL cannot sample it. THE THIRD ANSWER IS A WARNING, NOT A REFUSAL: refusing would regress every defensive declared() in a program with any `uses`, which is the Synapse shape the operator was written for, so an unreadable unit leaves False and says so. THE COST WAS A REINTRODUCED BUG AND IT IS MEASURED: lexing a unit RUNS ITS DIRECTIVES, so without the new save/restore pair a used unit's `$DEFINE` escaped into the main program -- [[bug-p-a-units-define-leaks-into-the-units-it-uses]] exactly. The pair is a second enumeration of the directive set, so `tools/probe_state_lists.py` (wired into gate.sh, positive control asserted) checks it against `PasSnapshotDirectiveBaseline` rather than trusting them to stay in step. Fixture byte-identical to fpc; its four rows are read TOGETHER because each is 0 or 1 -- 1/1/0/0 correct, always-True 1/1/1/1, always-False 0/0/0/0, no state discipline 1/1/1/0, that last measured on a control binary. STILL OPEN: transitive `uses` (only directly-named units are probed) and the arity spelling. Cost ~40ms per FAILING declared() per used unit; a hit never reaches the probe."
 owner: frankZ
 ---
 
@@ -174,3 +174,94 @@ avoids the resolver entirely, and it fails because the two arms of a
 `{$if declared(X)}` routinely declare the SAME NAME differently — so the parser,
 not the lexer, would have to honour a skip marker at every declaration site.
 That is more invasive than the extraction and lands the cost in a worse place.
+
+
+## Fixed — 2026-09-09 (frankZ)
+
+`declared()` now answers across a `uses`. The ticket's own repro prints
+`declared() says=1` where it printed `0`, and
+`test/test_declared_sees_a_used_units_declarations.pas` is byte-identical to
+fpc 3.2.2.
+
+**It LEXES the used unit rather than scanning its text**, which is measurement
+(3) above turned into a design: `PasCondNameDeclaredInUses` asks
+`ResolveUsesUnitSource` for the source, `LexAppend`s it into a scratch region at
+the end of the token stream, runs the declaration scan over that range, and
+truncates `TokCount` back. Includes and the unit's own conditionals are then
+handled by the thing that handles them everywhere else. The scan itself was
+split into `PasCondNameDeclaredIn(qname, lo, hi)` so the same walk can be
+pointed at a range that is not `[0, TokCount)`.
+
+The resolver is reached the way `paslexer.inc` already reaches the type table:
+a forward in `compiler.pas`, beside `PasCondSizeOfTypeName`, whose own comment
+says it *"forwards a QUESTION and carries no answer"* to avoid a second source
+of truth. Same reason, same shape.
+
+### The third answer is a WARNING, and the sizeof arm is why that needed saying
+
+The `sizeof` arm eleven lines below refuses a name it cannot size, and that is
+right there — a sizeof it cannot answer is always an error or unanswerable.
+`declared` cannot copy it: False is what this operator EXISTS to return. So a
+unit the probe could not read leaves the answer False and emits a warning naming
+how many units were unreadable. Measured firing on a `uses` of a C unit, and NOT
+firing when every named unit resolves.
+
+### What it cost, and the control that says so
+
+**Lexing a unit runs its directives.** Measured with the probe wired and no
+save/restore: a `$DEFINE` in the used unit made the MAIN program's `$ifdef` take
+the true arm where fpc takes the false one — i.e. this change reintroduced
+[[bug-p-a-units-define-leaks-into-the-units-it-uses]], which
+`PasResetDefinesToBaseline` exists to prevent. `PasProbeSaveLexState` /
+`PasProbeRestoreLexState` wrap the probe; each probed unit is lexed FROM THE
+COMMAND-LINE BASELINE, which is FPC's scoping rule and what the parser's own
+unit load already does.
+
+That created a SECOND enumeration of the same directive set, which is the defect
+shape this repo has paid for repeatedly — so it is checked rather than trusted:
+`tools/probe_state_lists.py`, wired into `gate.sh`, asserts the probe's save list
+covers every global `PasSnapshotDirectiveBaseline` snapshots, that save and
+restore are symmetric, and that the define arrays match. Its positive control is
+asserted: delete one saved directive and it fails naming it.
+
+**The fixture's four rows are read together and no single one discriminates**,
+because each value is 0 or 1: `1/1/0/0` is correct, always-True gives `1/1/1/1`,
+always-False `0/0/0/0`, and a probe with no state discipline gives `1/1/1/0`.
+That last was measured on a control binary built for the purpose, not inferred.
+
+**Cost:** ~40ms per FAILING `declared()` per used unit (12 failing calls over 4
+RTL units: 1.6s against a 1.1s baseline). Only failing calls pay it — a hit in
+the main file's own stream never reaches the probe. Not cached; if a corpus run
+gets slow with many `declared()` guards over many units, this is the place.
+
+## Still open — this closes the unit half, not the ticket's arity half
+
+- **TRANSITIVE `uses`.** Only units named in the file are probed, not units they
+  name. FPC sees the transitive interface. The residual error is False-when-True,
+  i.e. this same defect narrowed, and a probed unit's own conditionals do not
+  probe (the depth guard) because `a uses b` and `b uses a` is legal and would
+  not terminate.
+- **ARITY**, the second half of the original report: `declared(TDel)` where only
+  `TDel<T>` exists answers True here and False under FPC, and the objfpc row
+  agrees for the wrong reason because `generic` is a plain `tkIdent` that eats
+  the scanner's `expectName` slot. Untouched. `tgeneric93.pp` needs both halves
+  plus the transitive one.
+
+  **MEASURED 2026-09-09 rather than guessed, and the guess was wrong.** I was
+  about to write that the unit half might be enough for `tgeneric93.pp`, since
+  every name it probes lives in `ugeneric93a` / `ugeneric93b` and both are
+  DIRECTLY used. It gets nowhere: the file's very first conditional, line 9, is
+  `{$if declared(NotDeclared<>)}`, and we answer
+  `conditional directive: declared requires (NAME)` at line 0 — dead in the
+  preprocessor before the unit question is ever asked. **The arity spelling is
+  not the second half of that row, it is the gate on it**, and `<>` has to be
+  accepted by `ReadPasCondQualifiedName` before any amount of unit visibility
+  moves this corpus file. The parse of `<>`/`<,>`/`<,,>` described above is
+  therefore the next piece of work, not a follow-up.
+
+Noticed while writing the fixture and NOT chased: fpc refuses a `{ }` comment
+containing `{$if declared(X)}` in Delphi mode (`illegal character`) because it
+closes at the first `}`, while pxx compiles it. Us accepting what FPC rejects is
+not a defect by the rules, so it is recorded here rather than filed — but if it
+means `NestedComments` is on under `{$mode delphi}` where fpc has it off, that
+direction is worth someone's measurement.

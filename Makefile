@@ -11728,6 +11728,21 @@ test-core: $(COMPILER)
 	# 111/333 exactly as this does.
 	./$(COMPILER) -Futest/csrcwins_units test/test_a_c_beside_the_source_outranks_a_pas_in_a_search_root.pas $(TESTTMP)/test_csrcwins26
 	tools/expect_same.sh test_csrcwins26 "$$($(TESTTMP)/test_csrcwins26)" "$$(printf 'pick 111\nroot 333')"
+	# `{$if declared(X)}` ACROSS A `uses`. The scan owns the token stream and a
+	# used unit is not in it -- LexAppend puts it there at PARSE time -- so this
+	# answered False for a type the same program then constructs, silently taking
+	# the {$else} arm. Fixed by LEXING the used unit into a scratch region (not
+	# scanning its text: 38% of real FPC interfaces carry an {$I}) and scanning
+	# the tokens.
+	# READ THE FOUR ROWS TOGETHER, because each value is 0 or 1 and no single one
+	# discriminates: 1/1/0/0 is correct, always-True gives 1/1/1/1, always-False
+	# 0/0/0/0, and a probe with NO state discipline gives 1/1/1/0 -- that last is
+	# the one this fixture exists for, since lexing a unit runs its directives and
+	# decl_probe_unit's $DEFINE would otherwise escape into the program's own
+	# $ifdef. Measured at 1/1/1/0 with the save/restore pair removed. Byte-identical
+	# to fpc 3.2.2.
+	./$(COMPILER) -Futest/declared_units test/test_declared_sees_a_used_units_declarations.pas $(TESTTMP)/test_declared_uses26
+	tools/expect_same.sh test_declared_uses26 "$$($(TESTTMP)/test_declared_uses26)" "$$(printf 'type   1\nfn     1\nleak   0\nabsent 0\nuse    7')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

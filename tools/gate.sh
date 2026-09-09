@@ -661,6 +661,29 @@ else
   RC=1
 fi
 
+# `{$if declared(X)}` is answered by LEXING a used unit into a scratch region,
+# and lexing a unit runs its directives -- so the probe saves the caller's lexer
+# state and puts it back. Two enumerations now describe the same set of
+# directives (PasSnapshotDirectiveBaseline and PasProbeSaveLexState), and a
+# directive added to one and not the other ESCAPES from a probed unit into the
+# rest of the main file's lex. That failure is not an error: a leaked
+# {$PACKRECORDS} changes a record's ABI and a leaked {$define} flips an {$ifdef}
+# to its other arm, so the compile stays green and builds a different program.
+# Measured 2026-09-09 with the save/restore pair absent -- it reproduced
+# bug-p-a-units-define-leaks-into-the-units-it-uses exactly. Sub-second; it
+# parses one file and builds nothing.
+# bug-p-declared-cannot-see-a-used-units-declarations
+if [ -f tools/probe_state_lists.py ]; then
+  step "the conditional probe restores every directive it can disturb" "$LOGDIR/probe-state-lists.log" \
+       python3 tools/probe_state_lists.py                             || RC=1
+else
+  say "  FAIL  conditional probe state lists — tools/probe_state_lists.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
+fi
+
 # crtl NAME MAP STALENESS. compiler/crtl_names.inc is GENERATED from the crtl
 # headers, and a C program's call to a crtl function resolves through it -- so a
 # stale map is a function that exists in lib/crtl and cannot be reached from C.

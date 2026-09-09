@@ -5329,6 +5329,114 @@ begin
 
 end;
 
+function PasCondNameDeclaredInUses(const nm: AnsiString): Boolean;
+{ `{$if declared(X)}` WHERE X LIVES IN A USED UNIT.
+
+  PasCondNameDeclared scans the token stream, and a used unit is not in it:
+  LexAppend puts a unit's tokens there at PARSE time, while every conditional in
+  the main file is decided during LexAll. So `declared()` answered False for a
+  type the very same program then constructs -- and False is indistinguishable
+  from a correct negative, which is the common case, so nothing looked wrong. A
+  conditional that takes the wrong branch does not produce a wrong value; it
+  produces a different program.
+
+  WHY THIS LEXES THE UNIT INSTEAD OF SCANNING ITS TEXT. Measured over 400 real
+  FPC unit sources: 151 interfaces (38%) contain an {$I} include and 94 (24%) a
+  conditional, so the declarations are not all IN the file, and a text scan
+  answers False for a name that lives in an .inc it never opened -- this
+  ticket's own silent negative, one level down. lib/rtl is 0/111 on includes, so
+  a fixture built from our own RTL cannot sample that at all. LexAppend handles
+  includes and conditionals because it is the real lexer, and its own comment
+  says it already runs re-entrantly.
+
+  WHY IT ASKS ResolveUsesUnitSource RATHER THAN LOOKING FOR THE FILE ITSELF: the
+  search chain has C stages in ordering-significant positions, so a Pascal-only
+  copy would report a .pas the compile never reads. See that procedure's header.
+
+  WHAT IT DOES NOT DO, stated rather than left to be discovered:
+  * TRANSITIVE uses. Only the units named in this file are probed, not the units
+    THEY name. FPC sees the transitive interface; we do not yet. The direction of
+    the residual error is False-when-True, i.e. the same defect, narrowed.
+  * ARITY. `declared(TDel)` where only `TDel<T>` exists answers True here and
+    False under FPC. Untouched by this change and still open on the ticket.
+  * A UNIT IT CANNOT READ. Counted and reported by the caller as a WARNING beside
+    the False -- see PasCondNameDeclared. It cannot REFUSE: False is the correct
+    answer for the case this operator was written for (a profile with no such
+    unit), so refusing would regress every defensive declared() in a program
+    with any uses clause at all.
+  bug-p-declared-cannot-see-a-used-units-declarations }
+var k, u, savedTC, unreadable: Integer;
+    unm, rPath, rEmsg: AnsiString;
+    rIsC, rIsH, rIsPy, isPathForm: Boolean;
+    ci: Integer;
+begin
+  Result := False;
+  PasCondUnitsUnread := 0;
+  { A probed unit's OWN conditionals must not probe -- `a uses b` and `b uses a`
+    is legal and would not terminate. Conservative on purpose: at depth the
+    answer falls back to what the stream already shows, which is this defect
+    narrowed rather than a new one. }
+  if ProbeDepth > 0 then Exit;
+  unreadable := 0;
+  k := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkUses then
+    begin
+      u := k + 1;
+      while (u < TokCount) and (Tokens[u].Kind <> tkSemicolon) do
+      begin
+        if Tokens[u].Kind = tkIdent then
+        begin
+          unm := PasCondTokText(u);
+          isPathForm := False;
+          for ci := 1 to Length(unm) do
+            if unm[ci] = '/' then isPathForm := True;
+          { A path-form `uses './x'` reaches the resolver's isPath arm, which
+            calls Error on a miss. An unresolvable one is the PARSER's
+            diagnostic to raise, at the parser's line -- raising it here would
+            move a real error to the preprocessor and blame a conditional. }
+          if not isPathForm then
+          begin
+            UnitContent := '';
+            rIsC := False; rIsH := False; rIsPy := False;
+            rPath := ''; rEmsg := '';
+            ResolveUsesUnitSource(unm, LowerCase(unm), unm, False, False, 0, '',
+                                  True, False, '', '', False, 0,
+                                  rPath, rIsC, rIsH, rIsPy, rEmsg);
+            if (Length(UnitContent) = 0) or rIsC or rIsPy then
+              Inc(unreadable)
+            else
+            begin
+              { each unit is lexed from the COMMAND-LINE baseline, which is
+                FPC's scoping rule for {$define} and the per-file directives --
+                the same reset ParseUsesUnitBody performs before a real load. }
+              PasResetDefinesToBaseline;
+              PasResetDirectivesToBaseline;
+              CurUnitDir := GetFilePath(rPath);
+              savedTC := TokCount;
+              Inc(ProbeDepth);
+              LexAppend(UnitContent);
+              Dec(ProbeDepth);
+              if PasCondNameDeclaredIn(nm, savedTC, TokCount) then Result := True;
+              TokCount := savedTC;
+              if Result then
+              begin
+                PasCondUnitsUnread := 0;
+                Exit;
+              end;
+            end;
+          end;
+        end;
+        Inc(u);
+      end;
+      k := u;
+    end;
+    Inc(k);
+  end;
+  PasCondUnitsUnread := unreadable;
+end;
+
 procedure ParseUsesUnitBody(const name: AnsiString;
   diagLine: Integer; const diagSpell: AnsiString);
 { DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
