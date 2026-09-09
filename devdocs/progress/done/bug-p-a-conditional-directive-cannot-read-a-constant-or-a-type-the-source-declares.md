@@ -98,7 +98,7 @@ at 144. Both numbers are first-failure counts and therefore lower bounds --
 a unit that stops on the cycle may stop here next.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4d83bc2ca.
 
 ## Resolved 2026-09-09, frankH — abc681636 + fcbe280b7
 
