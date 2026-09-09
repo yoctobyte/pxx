@@ -1,0 +1,13 @@
+sizes   b16=2 b32=4 b64=8  wb=2 lb=4 qb=8 b=1
+True    b16=1 b32=1 b64=1
+True    wb=-1 lb=-1 qb=-1
+False   b16=0  wb=0
+<-65535 b16=65535  wb=-1
+write   b16=TRUE  wb=TRUE
+not     b16=FALSE  wb=FALSE
+if b16  : taken
+if !b16 : NOT taken
+bounds  b16 H=1 L=0  b64 H=1 L=0
+bounds  wb  H=-1 L=0
+szbnd   b16=2 b32=4 b64=8  wb=2
+assign  b16=TRUE ord=1

@@ -136,7 +136,7 @@ end;
   cheap form would be correct today and would fail the day the caller widens.
   Constant folding removes it for a literal operand.
   bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln }
-function SemBoolMaterialise(n: Integer; tk: TTypeKind): Integer;
+function SemBoolMaterialiseOp(n: Integer; tk: TTypeKind; op: Integer): Integer;
 var mbZero, mbCmp: Integer;
 begin
   Result := n;
@@ -153,10 +153,36 @@ begin
   ASTIVal[mbZero] := 0;
   ASTTk[mbZero] := Ord(tk);
   Result := AllocNode(AN_BINOP);
-  ASTIVal[Result] := Ord(tkMinus);
+  ASTIVal[Result] := op;
   ASTLeft[Result] := mbZero;
   ASTRight[Result] := mbCmp;
   ASTTk[Result] := Ord(tk);
+end;
+
+function SemBoolMaterialise(n: Integer; tk: TTypeKind): Integer;
+begin
+  Result := SemBoolMaterialiseOp(n, tk, Ord(tkMinus));
+end;
+
+{ THE FAMILY-AWARE ENTRY POINT, and the only place the two conventions are
+  chosen between. `0 - (n <> 0)` is all-bits-set (C-ABI, *Bool); `0 + (n <> 0)`
+  is a plain 1 (Pascal, BooleanNN) -- fpc answers Ord(True) = -1 for the first
+  family and 1 for the second, measured 2026-09-09.
+
+  It takes the SemId rather than a kind because the kind alone cannot tell you
+  which convention applies: tyUInt16 is Boolean16's storage AND an ordinary
+  Word's. The three call sites -- assignment, argument passing, and the named
+  cast -- previously each computed the kind themselves and would each have
+  needed the same new guard. THAT is the shape this file's own comments keep
+  warning about: `there are two dozen places that build an AN_ASSIGN and
+  exactly one that lowers it`, one family rule, one place to put it.
+  feature-p-the-booleannn-family-of-explicit-width-boolean-type-names }
+function SemBoolMaterialiseSem(n: Integer; sem: Integer): Integer;
+begin
+  if SemBoolIsPascal(sem) then
+    Result := SemBoolMaterialiseOp(n, BoolStorageKindOf(sem), Ord(tkPlus))
+  else
+    Result := SemBoolMaterialiseOp(n, BoolStorageKindOf(sem), Ord(tkMinus));
 end;
 
 { A UNARY operator overload on an aggregate operand, built as an ORDINARY CALL.
@@ -7644,7 +7670,7 @@ begin
             if SemIsBool(castSem) and
                ((IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) or
                 (IntToTypeKind(ASTTk[CurASTNode]) = tyBool8)) then
-              CurASTNode := SemBoolMaterialise(CurASTNode, castTk);
+              CurASTNode := SemBoolMaterialiseSem(CurASTNode, castSem);
             { A CHAR operand cast to a STRING type is a CONVERSION, not a
               reinterpret: `AnsiString(c)` must materialise a 1-char string.
               Falling through built an AN_PTR_CAST that re-typed the character

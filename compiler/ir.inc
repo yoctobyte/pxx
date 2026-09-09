@@ -4965,9 +4965,8 @@ begin
      SemIsBool(ProcParamSemId[cpi * MAX_PROC_PARAMS + pathIdx]) and
      ((IntToTypeKind(ASTTk[argAST]) = tyBoolean) or
       (IntToTypeKind(ASTTk[argAST]) = tyBool8)) then
-    argAST := SemBoolMaterialise(argAST,
-                BoolStorageTypeKind(
-                  SemBoolWidth(ProcParamSemId[cpi * MAX_PROC_PARAMS + pathIdx])));
+    argAST := SemBoolMaterialiseSem(argAST,
+                ProcParamSemId[cpi * MAX_PROC_PARAMS + pathIdx]);
 
   { A by-VALUE SET or FROZEN-STRING param gets its OWN COPY too — the same rule
     as the open array above, on the two remaining parameter kinds that got it
@@ -13280,8 +13279,8 @@ begin
       if SemIsBool(NodeSemIdOf(ASTLeft[node])) and
          ((IntToTypeKind(ASTTk[ASTRight[node]]) = tyBoolean) or
           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyBool8)) then
-        ASTRight[node] := SemBoolMaterialise(ASTRight[node],
-                            IntToTypeKind(ASTTk[ASTLeft[node]]));
+        ASTRight[node] := SemBoolMaterialiseSem(ASTRight[node],
+                            NodeSemIdOf(ASTLeft[node]));
 
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is
         CALLED. Taking its address is what `@fp` is for, and `fp()` with explicit

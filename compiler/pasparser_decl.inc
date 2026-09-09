@@ -260,7 +260,7 @@ end;
   decide-how-a-type-carries-an-identity-its-kind-cannot-hold }
 function SemKindMatches(tk: TTypeKind; sem: Integer): Boolean;
 begin
-  if SemIsBool(sem) then Result := tk = BoolStorageTypeKind(SemBoolWidth(sem))
+  if SemIsBool(sem) then Result := tk = BoolStorageKindOf(sem)
   else Result := EnumKindMatches(tk, SemEnumOf(sem));
 end;
 

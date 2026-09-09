@@ -15811,6 +15811,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_nestown26 "$$($(TESTTMP)/test_nestown26)" "$$(cat test/test_nested_fn_bare_own_name_read.expected)"
 	./$(COMPILER) test/test_nested_fn_bare_own_name_delphi.pas $(TESTTMP)/test_nestowndel26
 	tools/expect_same.sh test_nestowndel26 "$$($(TESTTMP)/test_nestowndel26)" "$$(cat test/test_nested_fn_bare_own_name_delphi.expected)"
+	# fpc ships TWO sized-boolean families and we shipped one: Boolean16/32/64
+	# were `unknown type` while ByteBool/WordBool/LongBool/QWordBool resolved.
+	# They differ in EXACTLY TWO things -- Ord(True) is 1 here and all-bits-set
+	# there, and the ordinal reads UNSIGNED here and SIGNED there -- so the
+	# fixture asserts both families side by side on every row that can tell them
+	# apart, and the cast rows use 65535 rather than 200 because 200 fits a
+	# signed 16-bit and answers the same in both worlds. A row that cannot fail
+	# is not a row. Ord is read through Int64() throughout: this subsystem's
+	# prior was poisoned once by a WriteLn readout that truncated fpc's answer
+	# to exactly ours and reported parity on the one row where the two disagree.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_booleannn_family.pas $(TESTTMP)/test_boolnn26
+	tools/expect_same.sh test_boolnn26 "$$($(TESTTMP)/test_boolnn26)" "$$(cat test/test_booleannn_family.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out

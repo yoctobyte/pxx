@@ -8274,6 +8274,18 @@ begin
     A rule spelled as a list fails by an ABSENT entry, and the three that were
     present agreed with each other perfectly. }
   else if CaseEqual(nm, 'qwordbool') then Result := tyInt64
+  { THE SECOND FAMILY. fpc ships TWO sized-boolean families and we had one:
+    Boolean16/32/64 are PASCAL booleans of a larger size, so `Ord(True)` is 1
+    and the ordinal reads UNSIGNED -- `Boolean16(65535)` is 65535 where
+    `WordBool(65535)` is -1 (fpc 3.2.2, 2026-09-09). Hence tyUInt*, not the
+    signed kinds one arm up; the booleanness rides in BuiltinScalarSemId as
+    SemPBool, the same way the C-ABI family's does.
+    There is no `Boolean8`: plain `Boolean` already is the one-byte Pascal
+    boolean, and fpc refuses the spelling.
+    feature-p-the-booleannn-family-of-explicit-width-boolean-type-names }
+  else if CaseEqual(nm, 'boolean16') then Result := tyUInt16
+  else if CaseEqual(nm, 'boolean32') then Result := tyUInt32
+  else if CaseEqual(nm, 'boolean64') then Result := tyUInt64
   { WideChar is a UTF-16 code UNIT; UCS4Char is a CODE POINT and converts to a
     string as UTF-8. Distinct kinds on purpose — see defs.inc.
 
@@ -8356,6 +8368,9 @@ begin
   else if CaseEqual(nm, 'wordbool') then Result := SemBool(2)
   else if CaseEqual(nm, 'longbool') then Result := SemBool(4)
   else if CaseEqual(nm, 'qwordbool') then Result := SemBool(8)
+  else if CaseEqual(nm, 'boolean16') then Result := SemPBool(2)
+  else if CaseEqual(nm, 'boolean32') then Result := SemPBool(4)
+  else if CaseEqual(nm, 'boolean64') then Result := SemPBool(8)
   else Result := SEM_NONE;
 end;
 
@@ -8467,6 +8482,23 @@ end;
   `for b := Low(ByteBool) to High(ByteBool)` means. CHOSEN, not tolerated;
   CLAUDE.md, "ON PAR WITH THE LANGUAGE, NOT WITH FPC".
 
+  QWORDBOOL IS WHERE THE TRUNCATION COINCIDENCE STOPS, measured 2026-09-09 and
+  worth having beside the paragraph above rather than discovered again. At
+  widths 1/2/4 fpc's Int64 extremes truncate to exactly our -1/0 even through an
+  Int64() readout -- the ordinal is narrower than the reader -- so the two
+  answers agree and the divergence is invisible at every width the original
+  measurement used. At width 8 there is nothing left to truncate:
+  `Int64(Ord(High(QWordBool)))` is 9223372036854775807 there and -1 here. Same
+  chosen divergence, one width later, and the only one that can be SEEN. A
+  fixture asserting fpc's raw output therefore cannot carry the QWordBool bounds
+  row while carrying the other three, which is not a defect in either compiler
+  and is the reason test_booleannn_family.pas omits it and says so.
+
+  And fpc cannot store its own answer: `wb := High(WordBool)` is refused by
+  fpc's ASSEMBLER -- "word value exceeds bounds 9223372036854775807" -- while
+  the same line compiles here. That is the front-end/back-end disagreement this
+  paragraph predicted, now observed from the other side.
+
   `semId` comes back so the EXPRESSION door can stamp ASTSemId and WriteLn
   prints TRUE/FALSE rather than -1; the const door has no channel for a boolean
   identity yet and publishes tyBoolean through CEOrdTk instead.
@@ -8475,7 +8507,17 @@ function SizedBoolSemBound(semId: Integer; wantHigh: Boolean; var v: Int64): Boo
 begin
   Result := SemIsBool(semId);
   if not Result then Exit;
-  if wantHigh then v := -1 else v := 0;
+  { High is True and Low is False for both families; what "True" IS differs.
+    All-bits-set for the C-ABI family (the paragraph above argues that choice
+    at length), and 1 for the Pascal family -- where, unusually for this pair,
+    fpc agrees with us exactly: `Ord(High(Boolean16))` is 1 and `Ord(Low(...))`
+    is 0, the same answer it gives for plain Boolean, and none of the Int64-
+    extreme strangeness the *Bool names have. Measured 2026-09-09 with the
+    readout widened to Int64, which is the step that was missing when this
+    file first recorded the *Bool row. }
+  if not wantHigh then v := 0
+  else if SemBoolIsPascal(semId) then v := 1
+  else v := -1;
 end;
 
 { ...and the same answer keyed by NAME, for the builtin spelling. The pair
@@ -9265,7 +9307,7 @@ begin
   if SizedBoolBound(nm, wantHigh, bv, sbSem) then
   begin
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
-    ASTTk[outNode] := Ord(BoolStorageTypeKind(SemBoolWidth(sbSem)));
+    ASTTk[outNode] := Ord(BoolStorageKindOf(sbSem));
     ASTSemId[outNode] := sbSem;
     Result := True; Exit;
   end;
@@ -9314,7 +9356,7 @@ begin
       if SizedBoolSemBound(sbSem, wantHigh, bv) then
       begin
         Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
-        ASTTk[outNode] := Ord(BoolStorageTypeKind(SemBoolWidth(sbSem)));
+        ASTTk[outNode] := Ord(BoolStorageKindOf(sbSem));
         ASTSemId[outNode] := sbSem;
         Result := True; Exit;
       end;

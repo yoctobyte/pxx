@@ -2540,6 +2540,31 @@ const
     ByteBool is -17, WordBool -18, LongBool -20 and QWordBool -24. The gap
     -2..-16 is deliberate headroom for the next family; do not close it. }
   SEM_BOOL_BASE = -16;
+  { THE SECOND BOOLEAN FAMILY, and it is deliberately BELOW the first rather
+    than beside it: `Boolean16`/`Boolean32`/`Boolean64` are Pascal booleans of
+    a larger size, so `SemIsBool` -- which asks `< SEM_BOOL_BASE` -- is TRUE
+    for them too, and every reader that only wants "is this a sized boolean,
+    and how wide" keeps working untouched. That is the same negative-space
+    property the enum boundary above buys, applied a second time: an unwidened
+    reader gets a TRUE answer, never a wrong one.
+
+    THE TWO FAMILIES DIFFER IN EXACTLY TWO THINGS, measured against fpc 3.2.2
+    2026-09-09, and everything else about them is shared:
+
+      Ord(True)            BooleanNN 1        *Bool all-bits-set (-1)
+      the ordinal's sign   BooleanNN UNSIGNED  *Bool SIGNED
+
+    `Boolean16(65535)` answers 65535 and `WordBool(65535)` answers -1 -- one
+    probe, both halves, and a value inside the signed range cannot tell them
+    apart. High/Low follow the same split: 1/0 here, -1/0 there.
+
+    So only two things are family-aware -- BoolStorageKindOf (signedness) and
+    the True-materialisation in ir.inc. `SemBoolWidth` decodes BOTH, which is
+    what keeps the other twenty readers out of this.
+
+    -25..-32 is headroom between the families; do not close that either.
+    feature-p-the-booleannn-family-of-explicit-width-boolean-type-names }
+  SEM_PBOOL_BASE = -32;
 
   NILCHK_DEFAULT = 0;
   NILCHK_ON      = 1;

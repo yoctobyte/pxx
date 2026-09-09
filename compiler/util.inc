@@ -384,15 +384,43 @@ begin
   if width <= 0 then Result := SEM_NONE else Result := SEM_BOOL_BASE - width;
 end;
 
+{ The identity of a PASCAL boolean `width` bytes wide -- Boolean16 2,
+  Boolean32 4, Boolean64 8. Same width story as SemBool above; what differs is
+  that True is 1 rather than all-bits-set and the ordinal reads UNSIGNED. }
+function SemPBool(width: Integer): Integer;
+begin
+  if width <= 0 then Result := SEM_NONE else Result := SEM_PBOOL_BASE - width;
+end;
+
+{ TRUE for BOTH families -- see SEM_PBOOL_BASE in defs.inc. A reader that only
+  asks "is this a sized boolean" is answered correctly for Boolean16 without
+  being widened, which is the whole reason the second family sits below the
+  first instead of beside it. }
 function SemIsBool(sem: Integer): Boolean;
 begin
   Result := sem < SEM_BOOL_BASE;
 end;
 
-{ Storage width in bytes of a sized-boolean SemId, else 0. }
+{ TRUE only for the Boolean16/32/64 family. The two call sites that need it are
+  the ones where the families genuinely disagree: BoolStorageKindOf, and the
+  True-materialisation in ir.inc. If you are reaching for this anywhere else,
+  check first whether SemIsBool already answers your question -- it usually
+  does, and that is by design. }
+function SemBoolIsPascal(sem: Integer): Boolean;
+begin
+  Result := sem < SEM_PBOOL_BASE;
+end;
+
+{ Storage width in bytes of a sized-boolean SemId, else 0 -- BOTH families.
+  Decoding both here is what keeps the twenty SemIsBool readers untouched: a
+  single-family decoder would have returned 18 for Boolean16 (SEM_BOOL_BASE
+  minus -34) and every one of them would have believed it. A wrong width does
+  not error; it sizes a store. }
 function SemBoolWidth(sem: Integer): Integer;
 begin
-  if sem < SEM_BOOL_BASE then Result := SEM_BOOL_BASE - sem else Result := 0;
+  if sem < SEM_PBOOL_BASE then Result := SEM_PBOOL_BASE - sem
+  else if sem < SEM_BOOL_BASE then Result := SEM_BOOL_BASE - sem
+  else Result := 0;
 end;
 
 { The TTypeKind a sized boolean of `width` travels in -- its layout, with the
@@ -410,4 +438,38 @@ begin
   else
     Result := tyInteger;
   end;
+end;
+
+{ ...and the PASCAL family's, which is the same widths UNSIGNED. Measured
+  against fpc 3.2.2 2026-09-09: `Boolean16(65535)` answers 65535 where
+  `WordBool(65535)` answers -1. A probe value inside the signed range cannot
+  separate them -- `Boolean16(200)` and `WordBool(200)` both answer 200 -- so
+  the discriminator has to exceed the signed range, which is the same trap
+  ByteBool's own comment records for 200 vs 255 one family over. }
+function PBoolStorageTypeKind(width: Integer): TTypeKind;
+begin
+  case width of
+    1: Result := tyUInt8;
+    2: Result := tyUInt16;
+    8: Result := tyUInt64;
+  else
+    Result := tyUInt32;
+  end;
+end;
+
+{ THE STORAGE KIND OF A SIZED BOOLEAN, KEYED BY ITS IDENTITY RATHER THAN BY A
+  BARE WIDTH -- the one place the two families' signedness is decided.
+
+  It exists because `BoolStorageTypeKind(SemBoolWidth(sem))` was written out at
+  four call sites, and that idiom is family-BLIND: it would have given
+  Boolean16 a signed tyInt16 at every one of them, and the failure is a wrong
+  Ord on a value above the signed range rather than anything that errors. One
+  function, four callers, so the next family is one arm here and not a fifth
+  transcription. }
+function BoolStorageKindOf(sem: Integer): TTypeKind;
+begin
+  if SemBoolIsPascal(sem) then
+    Result := PBoolStorageTypeKind(SemBoolWidth(sem))
+  else
+    Result := BoolStorageTypeKind(SemBoolWidth(sem));
 end;
