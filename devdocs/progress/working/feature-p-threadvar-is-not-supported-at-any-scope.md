@@ -5,8 +5,8 @@ track: P
 prio: 40
 type: feature
 blocked-by: []
-status: unfinished
-owner: 
+status: working
+owner: frankH
 created: 2026-09-06
 summary: "`threadvar t: LongInt;` at program or unit level is refused with `expected 'begin' before 'threadvar'`. FPC supports it, and it is the language's only spelling for thread-local storage -- so a program that wants per-thread state has no way to ask for it. Measured 2026-09-06 by probe while dispositioning tclass17 and terecs21, two `%FAIL` rows about `threadvar` INSIDE A CLASS whose refusals were being satisfied by this gap rather than by their own subject."
 ---
