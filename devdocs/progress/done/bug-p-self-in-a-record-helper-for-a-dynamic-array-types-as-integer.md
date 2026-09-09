@@ -185,4 +185,4 @@ probe, `sum=15` in the committed test — `Self` is by reference, so a helper th
 writes actually writes); string helper unchanged (8).
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ba4294885.
