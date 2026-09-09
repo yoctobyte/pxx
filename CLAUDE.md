@@ -501,6 +501,23 @@ passes and certifies the broken instrument. The same applies
 to any "proof-grade" flag — a flag that cannot come out false is the same animal.
 And a **gate that cannot pass** is not a gate either.
 
+**AND A CENSUS BUILT ON THE HYPOTHESIS IT IS TESTING WILL AGREE WITH IT.** The
+guard rules above are about what an assertion can OBSERVE; this is about what
+the SELECTION CRITERION already assumes, and it is the earlier failure — the
+counterexample is filtered out before any assertion runs, so a correct
+assertion over a question-begging population returns a clean, confident,
+wrong number. Measured 2026-09-09 (`6aa50d6eb`): a ticket predicted that
+widening a regex would make certain rows *"newly match"*, and the census
+written to check it filtered on **newly matches** — the ticket's own premise —
+so it reported 0 of 5987 lines affected and could not see the one row that
+does move. The premise was false in a way the defect itself proves: those rows
+already matched, and matching a suffix of the prefix is *precisely why* the
+path was being mangled. **The fix is to compare OUTCOMES, not to filter on the
+claim** — `OLD.sub()` against `NEW.sub()` per line, which found it. So before
+trusting a count, ask **"what did I have to believe to decide what to count?"**
+A census whose filter restates the hypothesis is not evidence for it, however
+large N is, and N being large is what makes it persuasive.
+
 **A positive control is not enough on its own — a guard must also be AIMED and
 READ.** Assert that the thing under test actually RAN before you compare its
 output (a comparison whose inputs were never proven to exist cannot fail), and
