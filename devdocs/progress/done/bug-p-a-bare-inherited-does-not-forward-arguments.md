@@ -41,3 +41,6 @@ parameter, a three-parameter mix and a three-level hierarchy. The
 zero-parameter rows are the controls that the case which already worked still
 does — a destructor and an argumentless override are where `inherited;` is
 written most often, and they take the same new path.
+
+Log: fixed in commit 851f170cb; the ticket sat in `backlog-pascal/` after that
+and was only MOVED to `done/` in commit 340175742 — the close, not the fix.

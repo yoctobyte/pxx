@@ -322,3 +322,5 @@ never fire again.
 **The record body still has its own hand-maintained list** — this ticket was
 about the class body, and the record loop's arms (`class var`, `class
 operator`) were left alone. That is the same shape one level over.
+
+Log: fixed and closed in commit 340175742.
