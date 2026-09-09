@@ -69,3 +69,41 @@ globals` and `common_bufsiz.h` redeclares its enum. The unity was a way past
 the missing capability at small scale; it stops being one well below DOSBox.
 
 Full goal: `devdocs/dev/the-goal-cross-cross.md`.
+
+## 2026-09-09 — the first blocker, found without compiling anything: THERE IS NO C++ FRONTEND
+
+This umbrella has had zero blockers since it was filed, which in this repo means
+nobody has attempted it. The first attempt does not get as far as a compile.
+
+**DOSBox is a C++ codebase.** pxx has twelve frontends and **not one of them is
+C++** — enumerated from `compiler/`: Ada (skeleton), BASIC, C, Erlang, Fortran,
+Algol, LOLCODE, Pascal, Python, Rust, Whitespace, Zig. `grep -ril 'c++'` across
+every lexer and parser returns nothing.
+
+So the flagship real-program proof — *"owner named it first when stating the
+goal"* — is blocked on a frontend that does not exist, and has been since the
+umbrella was written. **That is not a criticism of the umbrella; it is the
+information an attempt was supposed to produce, and no attempt was made.**
+
+**What this changes about ranking.** The goal is not "a hard C++ program"; it is
+**a large real codebase that either builds and runs or does not, with no partial
+credit.** Three honest dispositions, and someone should pick one rather than
+leave prio 50 sitting on an unreachable target:
+
+1. **A C++ frontend becomes a real, ranked goal** — enormous, and it should be
+   ranked as its own multi-month feature rather than hidden inside this
+   umbrella's `blocked-by`.
+2. **Substitute the proof.** If the point is "a large real codebase, no partial
+   credit", a large C program serves it — busybox is already 11 tickets deep and
+   is the same shape of proof. DOSBox then becomes aspirational rather than
+   prio 50.
+3. **Keep it and accept it is unreachable this year**, explicitly, so nobody
+   attempts it again and rediscovers this.
+
+This seat is not choosing between them: (1) is a scope question about what pxx
+is, which is the owner's, and the goal doc names DOSBox specifically.
+
+**Verification note, scoped:** the frontend enumeration was measured on this
+tree today. That DOSBox is C++ is general knowledge and was NOT verified here —
+no DOSBox source exists on this box or on seven. Anyone acting on this should
+confirm it against the source they intend to build, which is one `ls src/`.
