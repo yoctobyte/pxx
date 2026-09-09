@@ -15142,7 +15142,7 @@
  },
  "open_regressions": [
   {
-   "bad": "e8020484be2cfc0df3c421f7172b6675410d19a6",
+   "bad": "bdfa9484f2f401f3050e2cbadab7df640cfd27b5",
    "bad_untestable": true,
    "first_seen": false,
    "good": "cbb03092bac6f384a11220e8e6fcdc9db8cf1333",
@@ -15154,9 +15154,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "bdfa9484f2f401f3050e2cbadab7df640cfd27b5",
-    "144e0ba269e1fd8c8c646e7c46a9535db0a685c5",
-    "9b41467003c81362538eddbb90f5efd487f71bbc"
+    "bdfa9484f2f401f3050e2cbadab7df640cfd27b5"
    ],
    "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1",
