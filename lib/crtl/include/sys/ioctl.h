@@ -130,6 +130,34 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 #define N_HDLC          13    /* synchronous HDLC */
 #define N_SYNC_PPP      14    /* synchronous PPP */
 
+/* THE MODEM STATUS BITS, from the same header (lines 36-46). They are the
+   argument TIOCMGET reads into and TIOCMSET/TIOCMBIC/TIOCMBIS write, all three
+   of which are already above -- so this is the same shape as the line
+   disciplines: the ioctls were here and the numbers they carry were not.
+
+   TIOCM_CD and TIOCM_RI are aliases and not extra bits; glibc spells them as
+   aliases and so does this, because a program that tests carrier detect writes
+   one name and a program that tests ring writes the other, and collapsing them
+   to literals loses which question was being asked.
+
+   Found attempting busybox at 394 applets, on the SECOND pass: closing N_SLIP
+   moved networking/slattach.c's refusal from :107 to :218, where it polls
+   carrier with `ioctl(fd, TIOCMGET, &modem) ... modem & TIOCM_CAR'. At 0 that
+   is carrier permanently absent. A first-error-per-TU census names the first
+   wall in a file, never every wall -- this constant was invisible until the
+   one in front of it was gone. */
+#define TIOCM_LE        0x001
+#define TIOCM_DTR       0x002
+#define TIOCM_RTS       0x004
+#define TIOCM_ST        0x008
+#define TIOCM_SR        0x010
+#define TIOCM_CTS       0x020
+#define TIOCM_CAR       0x040
+#define TIOCM_RNG       0x080
+#define TIOCM_DSR       0x100
+#define TIOCM_CD        TIOCM_CAR
+#define TIOCM_RI        TIOCM_RNG
+
 /* THE SOCKET IOCTLS, transcribed from this box's /usr/include/linux/sockios.h
    by a script rather than by hand -- 77 numbers is exactly the population where
    one recalled digit becomes a DIFFERENT ioctl on a real socket, and a wrong

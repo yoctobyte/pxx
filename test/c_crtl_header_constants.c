@@ -406,6 +406,24 @@ int main(void)
   P(N_HDLC);
   P(N_SYNC_PPP);
 
+  /* Modem status bits -- same header. TIOCMGET/TIOCMSET/TIOCMBIC/TIOCMBIS were
+     in crtl and the bits they carry were not, which is the line-discipline
+     shape again. slattach polls carrier with `modem & TIOCM_CAR'; at 0 that is
+     carrier permanently absent. FOUND ON THE SECOND PASS, after N_SLIP was
+     fixed -- a first-error-per-TU census names the first wall in a file and
+     never the ones behind it. */
+  P(TIOCM_LE);
+  P(TIOCM_DTR);
+  P(TIOCM_RTS);
+  P(TIOCM_ST);
+  P(TIOCM_SR);
+  P(TIOCM_CTS);
+  P(TIOCM_CAR);
+  P(TIOCM_RNG);
+  P(TIOCM_DSR);
+  P(TIOCM_CD);
+  P(TIOCM_RI);
+
   /* Not diffed -- see the note at the top. */
   printf("%-30s %d\n", "O_LARGEFILE_NONZERO", O_LARGEFILE != 0);
   return 0;

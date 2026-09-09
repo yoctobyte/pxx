@@ -19933,7 +19933,7 @@ test-core: $(COMPILER)
 	#
 	# NO EXPECTED VALUES: the same source is compiled by pxx against
 	# lib/crtl/include and by gcc against the host's headers, and the two
-	# outputs are diffed. 304 of 305 rows must match. The 305th, O_LARGEFILE,
+	# outputs are diffed. 315 of 316 rows must match. The 316th, O_LARGEFILE,
 	# is excluded on purpose and asserted as a relation instead -- glibc makes
 	# it 0 on a 64-bit userspace and the kernel makes it 0100000, crtl takes
 	# the kernel's because crtl's callers reach the kernel directly, and both
@@ -19944,7 +19944,7 @@ test-core: $(COMPILER)
 	  gcc -w -o $(TESTTMP)/c_hdrconst_gcc test/c_crtl_header_constants.c || { echo "c_hdrconst gcc FAIL"; exit 1; }; \
 	  tools/expect_same.sh c_hdrconst26 "$$($(TESTTMP)/c_hdrconst26 | grep -v O_LARGEFILE_NONZERO)" "$$($(TESTTMP)/c_hdrconst_gcc | grep -v O_LARGEFILE_NONZERO)" || exit 1; \
 	  tools/expect_same.sh c_hdrconst26/largefile "$$($(TESTTMP)/c_hdrconst26 | grep O_LARGEFILE_NONZERO)" "O_LARGEFILE_NONZERO            1" || exit 1; \
-	  echo "=== c_hdrconst: 304 constants identical to gcc, O_LARGEFILE ours by choice ==="; \
+	  echo "=== c_hdrconst: 315 constants identical to gcc, O_LARGEFILE ours by choice ==="; \
 	else \
 	  echo "=== c_hdrconst: gcc absent, constants NOT verified ==="; \
 	fi
