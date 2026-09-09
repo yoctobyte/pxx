@@ -772,6 +772,37 @@ else
   RC=1
 fi
 
+# THE TSTATE READER DISCIPLINE, MOVED HERE FROM A TIER NO PER-FIX GATE RUNS.
+# tools/tstate_reader_devtest.py refuses any tool that reads tstate by
+# filesystem path unless it is in ALLOWED. Its ONLY failure mode is SOMEONE
+# ADDED A FILE -- nothing an existing tool does can trip it -- and it was
+# enforced solely in `tools-devtest`, which this gate does not run. So the
+# sequence was always the same: author gates green, lands, pushes; the full
+# tier goes red hours later at their sha; a bisect attributes it correctly and
+# a seat spends a pass rediscovering that the fixture was fine all along.
+#
+# THREE TIMES OUT OF THREE the correct fix was one entry in ALLOWED, and three
+# times out of three the file was a synthetic fixture under its own tmp dir --
+# the legitimate pattern. A guard that fires only on new files, is enforced
+# only where no per-fix gate looks, and whose right answer is always "add a
+# row" is catching AUTHORS rather than defects. The guard's population is
+# right and its regex must not be relaxed: a mkdtemp join genuinely is
+# indistinguishable from a live read by pattern alone. What was wrong is
+# WHERE it ran.
+#
+# 0.41s measured (min of 3, this box), against a ~30s gate that is defended.
+# bug-t-the-tstate-reader-guard-is-enforced-in-a-tier-no-per-fix-gate-runs
+if [ -f tools/tstate_reader_devtest.py ]; then
+  step "no new tool reads tstate by path" "$LOGDIR/tstate-reader.log" \
+       python3 tools/tstate_reader_devtest.py                                  || RC=1
+else
+  say "  FAIL  tstate reader discipline — tools/tstate_reader_devtest.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
+fi
+
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
 # session in the fleet and had no test at all until 2026-09-03, which is how it
 # reached four open tickets: each fix was checked by hand against the case that

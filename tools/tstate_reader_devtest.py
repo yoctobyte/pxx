@@ -31,6 +31,19 @@ import twatch  # noqa: E402
 # Files allowed to touch tstate by filesystem path, and WHY. Adding a name here
 # is a deliberate act; the point of the list is that it is short and argued.
 ALLOWED = {
+    "testmgr_red_is_self_describing_devtest.py":
+        "same shape as twatch_detail_slot_devtest below, and reached the same "
+        "way: it drives the real write_report_md() into its own mkdtemp and "
+        "globs the report back (os.path.join(tmp, tw.TSTATE_REL, ...)). It "
+        "does that BECAUSE its subject is a rendering defect -- a 0-byte job "
+        "log publishing a silent empty ``` block -- and grepping the "
+        "function's constants instead would pass on a branch that exists and "
+        "is unreachable, which is the defect class the file is about. "
+        "THE FOURTH ENTRY ADDED FOR A SYNTHETIC FIXTURE, and the first one "
+        "the author was shown before landing rather than by a full tier hours "
+        "later: added 2026-09-09 in the same commit that moved this guard "
+        "into gate.sh quick and made this message print the stanza to paste. "
+        "Four for four, still zero tools actually reading live tstate.",
     "twatch_detail_slot_devtest.py":
         "builds a SYNTHETIC tstate under a tmp dir and globs it back "
         "(os.path.join(tmp, tw.TSTATE_REL, ...) at :69 and :90). The guard "
@@ -217,10 +230,40 @@ def case_no_unlisted_tool_reads_tstate_by_path():
         text = py.read_text(encoding="utf-8", errors="replace")
         if PATH_JOIN.search(text):
             offenders.append(py.name)
+    # SELF-DESCRIBING AT THE POINT OF FAILURE, because the resolution has been
+    # "add one entry" three times out of three and every one of those three was
+    # a SYNTHETIC FIXTURE under its own tmp dir -- the legitimate pattern. The
+    # old message named the offender and said "add them to ALLOWED with the
+    # reason", which is correct and leaves the author to discover from this
+    # file's history that a fixture is legitimate at all. Someone meeting this
+    # red for the first time reads it as "you did something wrong".
+    #
+    # So the message now distinguishes the two cases and prints the stanza to
+    # paste. It does NOT decide which case applies -- the author knows and this
+    # file cannot -- it just stops the reading of the fixture case as a defect.
     assert not offenders, (
-        "these read tstate by filesystem path and are not in ALLOWED: %s — "
-        "route them through twatch.materialize_tstate()/states_at(), or add "
-        "them to ALLOWED with the reason" % ", ".join(offenders))
+        "these read tstate by filesystem path and are not in ALLOWED: %s\n"
+        "\n"
+        "  TWO CASES, AND ONLY YOU CAN TELL THEM APART:\n"
+        "\n"
+        "  (a) it reads the LIVE archive — route it through\n"
+        "      twatch.materialize_tstate() / states_at() instead. The live\n"
+        "      tree grows every few minutes, so an assertion about its\n"
+        "      contents is not reproducible.\n"
+        "\n"
+        "  (b) it builds a SYNTHETIC fixture under its own tmp dir and\n"
+        "      asserts on that. This is the legitimate pattern, it is what\n"
+        "      the last three offenders were, and a mkdtemp join is\n"
+        "      indistinguishable from a live read by pattern alone — which\n"
+        "      is why this guard cannot tell and you have to. Add:\n"
+        "\n"
+        "%s\n"
+        % (", ".join(offenders),
+           "\n".join(
+               '          "%s":\n'
+               '              "builds its own tstate under a tmp dir and asserts on THAT; "\n'
+               '              "never opens the checkout\'s own",' % o
+               for o in offenders)))
     return f"{len(ALLOWED)} allowed, all argued"
 
 

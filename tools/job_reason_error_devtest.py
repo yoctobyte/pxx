@@ -199,8 +199,26 @@ def main():
                            ("a log shorter than the tail window", short)):
             check(t.job_reason(Stub(path)) == old_job_reason(path),
                   "byte-identical: %s" % name)
-        check(t.job_reason(Stub(empty)) == "",
-              "an empty log still reads as 'unknown', not as a reason")
+        # SUPERSEDED 2026-09-09, deliberately, and the direction matters.
+        # This row was a NO-CHANGE control for the error-scan widening, not a
+        # policy about empty logs -- section 3's whole job is "my change did
+        # not move this", with the pre-fix code as the oracle. That reading is
+        # what made it read as an argued rule.
+        #
+        # It is not one. An empty log publishing "" is the defect in
+        # bug-t-a-failing-grep-q-step-leaves-the-archive-unable-to-say-what-broke:
+        # job_reason's own docstring reserves "" for "gone or unreadable", the
+        # log here is READABLE and says nothing, and the two were published as
+        # the same finding. A recipe row asserting with a bare `grep -q` prints
+        # nothing at all when it fails, so this is a routine shape, not a
+        # corner -- measured on test_libmanifest across two consecutive runs,
+        # where the archive recorded a red it could not describe.
+        #
+        # The three rows BELOW are the ones that keep "" meaning what the
+        # docstring says, and they are why this can be changed safely: gone,
+        # never-launched and noise-only all still read as unknown.
+        check("printed nothing" in t.job_reason(Stub(empty)),
+              "a READABLE but empty log now says so, instead of publishing ''")
         check(t.job_reason(Stub(None)) == "",
               "and a job with no log at all returns ''")
         check(t.job_reason(Stub(os.path.join(td, "gone.log"))) == "",

@@ -2026,7 +2026,39 @@ def repo_tree_state():
 # shape to be usable from a job that changes directory. See snapshot_compiler().
 RUN_COMPILER = os.path.join(RUN_TMP, "compiler", "pascal26")
 # `./compiler/pascal26` but never `./compiler/pascal26-managed` / `-debug`.
-COMPILER_PATH_RE = re.compile(r"\./compiler/pascal26(?![-\w])")
+#
+# THE WHOLE RELATIVE PREFIX, not a suffix of it. This was
+# `\./compiler/pascal26(?![-\w])`, unanchored on the left, and
+# `../../compiler/pascal26` CONTAINS `./compiler/pascal26` at offset 4 -- so the
+# leading `..` survived the substitution and the row was rewritten to
+# `.././tmp/testmgr-<id>/compiler/pascal26`, a path that does not exist.
+# RUN_COMPILER is absolute, so consuming the entire prefix is correct from any
+# CWD, which is what makes this a pattern change rather than a CWD calculation.
+#
+# ONE ROW IN THE TREE SPELLS IT THAT WAY and it is deliberate:
+# `cd test/libmanifest && ! ../../$(COMPILER) unitalias_no_row.pas ...` compiles
+# a unit from INSIDE its own directory, which is the entire point of that test.
+# It must not be respelled to suit this regex.
+#
+# THE FAILURE WAS SILENT IN BOTH DIRECTIONS, which is why it cost two sessions:
+# the row carries a leading `!`, so the missing binary made the compile step
+# EXIT 0 and PASS while writing a log whose only content was `No such file or
+# directory`; the next row is a bare `grep -q` for a note that is therefore
+# absent, and `grep -q` prints nothing when it fails. Net effect:
+# test_libmanifest RED under testmgr, GREEN under gate.sh quick and bare make,
+# with a 0-byte job log. bug-t-testmgr-rewrites-a-relative-compiler-path-into-a-nonexistent-one
+#
+# AND IT DOES NOT MOVE `pin_built`, contrary to what that ticket predicted.
+# The same constant decides Job.pin_built via `not COMPILER_PATH_RE.search()`,
+# and the ticket reasoned that a `../../` row does not match today and would
+# start to. It DOES match today -- matching a suffix of the prefix is precisely
+# why it mangles the path -- so `bool(search)` is unchanged. Measured over all
+# 42 tier targets and 5987 recipe lines naming compiler/pascal26: exactly ONE
+# line's substitution result moves (the libmanifest row), `bool(search)` moves
+# on ZERO lines, and ZERO lines lose a substitution they had. Asserted in
+# tools/testmgr_compiler_path_devtest.py so the invariant is a guard and not
+# this paragraph.
+COMPILER_PATH_RE = re.compile(r"(?<![\w.-])(?:\.{1,2}/)+compiler/pascal26(?![-\w])")
 # A recipe line invoking the PINNED stable binary (as opposed to a
 # HEAD-built one). Paired with COMPILER_PATH_RE to decide Job.pin_built.
 PINNED_INVOKE_RE = re.compile(
@@ -2367,8 +2399,18 @@ def report_job(j):
             "step_i": step_i,
             "step_line": " ".join(step_line.split())[:STEP_LINE_MAX],
             "step_src": step_sources(step_line),
-            "step_n": sum(1 for l in (getattr(j, "lines", None) or [])
-                          if not l.strip().startswith("#")),
+            # THE SAME LINE SET `step_i` INDEXES INTO, which it was not.
+            # Job.script() writes `i` from `enumerate(self.lines)` -- every
+            # line, comments included, because skipping them would break
+            # failed_step()'s `lines[i]`. This counted only the NON-comment
+            # lines, so the numerator indexed one set and the denominator
+            # measured another and the citation read `line 35 of 10 of the
+            # job's recipe`. A number that cannot be true, in exactly the
+            # field a reader uses to locate the step -- and it does not read
+            # as broken, it reads as "near the end".
+            # len(), so the pair can only ever disagree if script() stops
+            # numbering the same list. Asserted in testmgr_report_devtest.py.
+            "step_n": len(getattr(j, "lines", None) or []),
             "flaky": j.flaky,
             "attempts": j.attempts,
             # `is not None`, not truthiness: the unset sentinel is None
@@ -2457,8 +2499,46 @@ def job_reason(job):
         end -= 1
     start = max(floor, end - REASON_LINES)
     lines = [ln for ln in scanned[start:end] if ln.strip()]
-    if not lines:
-        return ""
+    # NOISE-ONLY IS NOT EMPTY, and conflating them was the first version of
+    # this fix. `make: *** [t] Error 1` is a real line that carries nothing the
+    # job's status and name do not already say -- job_reason_devtest.py asserts
+    # it yields "" and that argument is untouched here. Saying "the step
+    # printed nothing" about a log that printed that would be a second false
+    # statement in the field this whole change exists to stop lying in.
+    # The residual is named in the ticket rather than swept in: a noise-only
+    # log still publishes "", and its step is still recoverable from the
+    # report's own `step_line`, which twatch renders separately.
+    # AND A THIRD CASE FALLS OUT OF THIS, which was NOT the intent and is kept
+    # on purpose. When `lines` is empty because the tail is ENTIRELY noise, the
+    # old `return ""` short-circuited before the substantive-error scan below,
+    # so a log that named its error two lines above `make: *** Error 1`
+    # published nothing at all. That is this ticket's own defect in a shape the
+    # scan was written to cover and could never reach -- the fpc case it was
+    # written for has a tail of WARNINGS, so `lines` was non-empty and the scan
+    # ran. Now the noise-only tail falls through to it and reports the error.
+    # Asserted in testmgr_red_is_self_describing_devtest.py rather than left as
+    # a side effect of where a return moved.
+    if not lines and not any(ln.strip() for ln in scanned):
+        # THE LOG WAS READABLE AND SAID NOTHING, which is not what "" means
+        # here -- this function's own docstring promises "" reads as "the log
+        # is gone or unreadable". A red whose log is 0 bytes published that ""
+        # and the report's failure-detail block came out empty: the archive
+        # recorded that a job went red and could not say what.
+        #
+        # It is a REAL shape, not a corner: a recipe row asserting with a bare
+        # `grep -q` prints nothing at all when it fails, and `grep -q` is
+        # correct as a recipe step and silent as the last thing a failing job
+        # does. Measured on test_libmanifest across two consecutive runs.
+        #
+        # So say so, and say what was running -- testmgr already knows, from
+        # the `.step` marker script() writes before every line. That marker is
+        # also why this is right for a TIMEOUT: it names the line the job was
+        # sitting in, which is the case where the log says least of all.
+        # Not written into the log itself, deliberately: script()'s own
+        # comment refuses to salt the log with harness output, because the log
+        # is what this function and diagnostic_lines() read.
+        # bug-t-a-failing-grep-q-step-leaves-the-archive-unable-to-say-what-broke
+        return empty_log_reason(job)
     # If the tail already diagnoses the failure, it is the whole answer and is
     # left exactly as it was -- this branch is why the change can only ever ADD.
     # Only when it does NOT do we go looking, and then for one line: the last
@@ -2605,6 +2685,27 @@ def failed_step(job):
     if not 0 <= i < len(lines):
         return None, ""
     return i, lines[i]
+
+
+def empty_log_reason(job):
+    """What a red publishes when its log is READABLE and EMPTY.
+
+    Never "" -- that spelling is reserved for a log that is gone or
+    unreadable, and the whole point here is that those two are different
+    findings and were being published as the same one.
+
+    Names the failing step, because a step that printed nothing is exactly the
+    case where the step's own text is the entire evidence. `grep -q` is the
+    shape that produced this and the command line is what a reader needs: it
+    says which assertion failed even though the assertion said nothing.
+    """
+    i, line = failed_step(job)
+    step = " ".join((line or "").split())[:STEP_LINE_MAX]
+    if step:
+        return ("the failing step printed nothing (empty log) — it was: %s"
+                % step)
+    return ("the failing step printed nothing (empty log) and the step was "
+            "not recorded")
 
 
 def step_sources(line):

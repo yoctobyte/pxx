@@ -33458,8 +33458,27 @@ demos: pxx-stable-check
 # as though it had finished: an INCOMPLETE run reporting in the vocabulary of a
 # complete one. The rule both share -- a report says what was actually decided,
 # and names what it never reached.
+#
+# THE PRE-RUN PROGRESS PRINT IS WHY A RED HERE POINTED FOUR NAMES AWAY FROM THE
+# DEFECT, and it stays, because it is also the only thing that names the script
+# a TIMEOUT was sitting in -- this target is ONE recipe line, so testmgr's
+# `.step` marker cannot narrow it further. The problem was never the marker; it
+# was that the loop keeps printing progress AFTER a failure, so the log TAIL --
+# which is what the stored tstate reason and the report's failure-detail block
+# are both made of -- ends up being the scripts that ran LAST, all of them
+# green. Measured 2026-09-09 on `fc2ce3d02`: the reason named
+# twatch_toolchain / twatch_verify_request / verify_assertions / whoholds, all
+# four passing on both boxes and none ever implicated; the real failure was
+# tstate_reader_devtest.py, earlier in the alphabet. A seat ran the four named
+# scripts, got green, and concluded the row was stale. It was not.
+#
+# So the failures are captured as they happen and REPEATED at the end, after
+# the loop, where the tail will carry them. Correct about the loop's progress
+# is still correct -- it just has to stop being the last thing said.
+# bug-t-the-tstate-reader-guard-is-enforced-in-a-tier-no-per-fix-gate-runs
 tools-devtest:
 	@n=0; bad=0; failed=''; \
+	: > $(TESTTMP)/tools_devtest_reds.log; \
 	for f in tools/*devtest*.py; do \
 	  case "$$f" in *bench_timing_devtest.py) continue ;; esac; \
 	  printf '  tools-devtest: %s\n' "$$f"; \
@@ -33468,9 +33487,13 @@ tools-devtest:
 	  else \
 	    bad=$$((bad+1)); failed="$$failed $$f"; \
 	    echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; \
+	    { echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; } \
+	      >> $(TESTTMP)/tools_devtest_reds.log; \
 	  fi; \
 	done; \
 	if [ $$bad -gt 0 ]; then \
+	  echo "  ---- the $$bad failing script(s), repeated so the log TAIL names them"; \
+	  cat $(TESTTMP)/tools_devtest_reds.log; \
 	  echo "  tools-devtest: $$n green, $$bad RED --$$failed"; exit 1; \
 	fi; \
 	echo "  tools-devtest: $$n guard(s) green"
@@ -33487,8 +33510,12 @@ tools-devtest:
 # default gate: each needs a network peer or a system library, so folding them
 # in here would import exactly the non-hermetic reds those rules exist to keep
 # out. Same tally-don't-stop-at-first-red behaviour as the Python half.
+# ...and the shell half has the identical tail-floods-with-progress defect, so
+# it gets the identical repeat-at-the-end. Fixing one arm of a double case and
+# leaving the sibling is how the second path stays broken.
 tools-devtest-sh:
 	@n=0; bad=0; failed=''; \
+	: > $(TESTTMP)/tools_devtest_sh_reds.log; \
 	for f in tools/*devtest*.sh; do \
 	  case "$$f" in \
 	    *c_interop_devtest.sh|*tls_openssl_devtest.sh|*tls13_handshake_devtest.sh) continue ;; \
@@ -33500,9 +33527,13 @@ tools-devtest-sh:
 	  else \
 	    bad=$$((bad+1)); failed="$$failed $$f"; \
 	    echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest_sh.log; \
+	    { echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest_sh.log; } \
+	      >> $(TESTTMP)/tools_devtest_sh_reds.log; \
 	  fi; \
 	done; \
 	if [ $$bad -gt 0 ]; then \
+	  echo "  ---- the $$bad failing script(s), repeated so the log TAIL names them"; \
+	  cat $(TESTTMP)/tools_devtest_sh_reds.log; \
 	  echo "  tools-devtest-sh: $$n green, $$bad RED --$$failed"; exit 1; \
 	fi; \
 	echo "  tools-devtest-sh: $$n guard(s) green"

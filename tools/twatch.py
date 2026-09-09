@@ -2228,10 +2228,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         lines.append("repro: `tools/testmgr.py --tier %s --job '%s'` at %s"
                      % (report["tier"], job_key(first), sha))
         log = first.get("log")
+        body = ""
         if log and os.path.exists(log):
-            lines.append("```")
             with open(log, errors="replace") as f:
                 body = f.read()
+        if body.strip():
+            lines.append("```")
             diag = diagnostic_lines(body)
             if diag:
                 lines.append("(diagnostics)")
@@ -2239,6 +2241,46 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                 lines.append("(tail)")
             lines.append(body[-4000:])
             lines.append("```")
+        else:
+            # A BLOCK THAT SAYS NOTHING IS NOT A BLOCK THAT SAYS THE LOG WAS
+            # EMPTY. This used to emit an empty fenced code block for a 0-byte
+            # log -- or, when the log dir had been reaped, nothing at all after
+            # the `repro:` line -- and a reader takes both as "the detail is
+            # elsewhere", not as "there is no detail and here is why".
+            #
+            # It is a routine shape: a recipe row asserting with a bare
+            # `grep -q` prints NOTHING when it fails, so a job whose LAST step
+            # is such an assertion goes red with an empty log. Measured on
+            # test_libmanifest across two consecutive runs.
+            #
+            # The two fields that SURVIVE the run are used instead. `log` is a
+            # path in a temp dir the OS reaps, which is why this branch is also
+            # the right one for an old report read later; `reason` and
+            # `step_line` are in the report itself. step_note() already renders
+            # the step in the job list above, and repeating it here is
+            # deliberate -- this block is what a reader opens first and it must
+            # not be the one place that stays silent.
+            # bug-t-a-failing-grep-q-step-leaves-the-archive-unable-to-say-what-broke
+            why = (first.get("reason") or "").strip()
+            step = (first.get("step_line") or "").strip()
+            if log and not os.path.exists(log):
+                lines.append("(no job log: %s no longer exists — the log dir "
+                             "is reaped after LOGDIR_KEEP_SECS)" % log)
+            else:
+                lines.append("(the job log is EMPTY — the failing step printed "
+                             "nothing, which a bare `grep -q` assertion does)")
+            if step:
+                lines.append("failing step:")
+                lines.append("```")
+                lines.append(step)
+                lines.append("```")
+            if why:
+                lines.append("reason: %s" % why)
+            if not step and not why:
+                lines.append("...and the report carries no step or reason "
+                             "either, so this red is genuinely undescribed. "
+                             "That is a harness defect, not a property of the "
+                             "job.")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     return rel
