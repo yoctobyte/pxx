@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: open
 owner: frankZ
-summary: "A class-nested type used as a SPECIALIZATION ARGUMENT is resolved at UNIT scope, not in the class that declares it. `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is class-nested visibility at the hoisted prerequisite, not the routine-local pass-order arm. Nine-step reduction ladder in the body, measured at compiler 417ee5636a72 / 1c16d4523."
+summary: "A class-nested type used as a SPECIALIZATION ARGUMENT is resolved at UNIT scope, not in the class that declares it. `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is class-nested visibility at the hoisted prerequisite, not the routine-local pass-order arm. Nine-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -173,11 +173,35 @@ Reduced from `generics.collections.pas` while driving
 established** — see the note below; it stands on its own as an fpc-differential
 defect either way.
 
-Bisect of the rung's wall (`uses Generics.Collections` alone, source
-`/usr/share/fpcsrc/3.2.2/packages/rtl-generics/src`; frankS has since measured
-that tree byte-identical to `library_candidates/rtl-generics`, md5
-`1010a887c20dc546215749ca46c5a773`, so the two line-number sets are comparable
-after all):
+**AND THE RUNG'S WALL IS NO LONGER `unknown type: PT` AT ALL — measured, and
+attributed.** `1c16d4523` (frankH, "a specialized body now materialises where
+the specialization is visible") cleared it. Revert-rebuild, not timing:
+
+| compiler | binary | wall on `uses Generics.Collections` |
+| --- | --- | --- |
+| HEAD `d47ae0762` | `417ee5636a72` | `generics.defaults.pas:3250 undefined variable (TGOrdinalStringComparer)` |
+| that commit's `compiler/defs.inc` + `pasparser_generic.inc` reverted to its parent, rebuilt | `4a6207c05ba2` | `generics.collections.pas:120 unknown type: PT` |
+
+Only two ticket-only commits separate the two trees. `4a6207c05ba2` is also the
+binary frankS quoted the PT wall at independently, which is a second source that
+fails differently from a revert.
+
+**The ladder in this ticket survives that fix** — all nine rows re-measured at
+`417ee5636a72`, nothing moved — so this is not the same defect wearing a
+different face, and it is now certain that it is NOT the rung's blocker. Filed
+against the corpus as provenance only.
+
+## The bisect that produced it, and the two ways it lied
+
+Recorded because both failure modes are cheap to repeat. Driver `uses
+Generics.Collections` alone, source `/usr/share/fpcsrc/3.2.2/packages/rtl-generics/src`
+(frankS has since measured that tree byte-identical to
+`library_candidates/rtl-generics`, md5 `1010a887c20dc546215749ca46c5a773`, so the
+two line-number sets are comparable after all — the rung's old warning that they
+are not is dead).
+
+At binary `4a6207c05ba2`, truncating the interface at line N and appending
+`implementation end.`:
 
 - cut 163 **compiles** — and it contains every declaration the wall looks like it
   is about: `TEnumerable<T>` with `public type PT = ^T` and
@@ -185,16 +209,25 @@ after all):
   = class abstract(TEnumerator<PT>)` at :144, `TCustomPointersCollection<T, PT>`
   at :146, `TEnumerableWithPointers<T>` at :157. **The declaration region is not
   the defect.**
-- cuts 200 / 300 / 400 are **masked, not clean**: `unexpected token in a unit
-  interface section` at N+4, a truncation artefact. A bisect that reads those as
-  verdicts reports "nothing reproduces", which is what this one did on its first
-  pass.
-- cut 466 compiles; cut 469 compiles; **cut 470 reproduces** — and :470 is
-  `{$I inc\generics.dictionariesh.inc}`, a single line.
-- Inside that include, cuts 40 / 80 / 120 / 132 / 190 / 200 do **not** reproduce,
-  so the include's `:132 function GetPtrEnumerator: TEnumerator<PT>; override;`
-  — the line that looks exactly like v2 — is **not** the trigger on its own. The
-  trigger is past :200 and is not yet named.
+- cut 466 compiles; cut 469 compiles; **cut 470 reproduces** — :470 is the single
+  line `{$I inc\generics.dictionariesh.inc}`.
 
-**So the ladder above is an independently-reproducible defect and NOT yet shown
-to be the rung's blocker.** Those are two claims and only the first is measured.
+**LIE ONE — a truncation artefact wearing the shape of a verdict.** Cuts 200,
+300 and 400 fail with `unexpected token in a unit interface section` at N+4, and
+a bisect that treats any failure as reproduction reports "nothing reproduces",
+which is what this one did on its first pass. Cuts at or below 163 fail with
+`--emit-obj: this object would define no linkable symbol`, which is the
+truncation's link artefact and means the file COMPILED. Neither error is about
+the tree.
+
+**LIE TWO — the instrument moved mid-sweep, in the hands of someone who had just
+written the rule down.** The bisect INSIDE the include ran cuts 40-200 on
+`4a6207c05ba2` and cuts 230-656 on `417ee5636a72`, because a pull-and-rebuild
+happened between them. The tell was that cut 656 — the WHOLE include, i.e. the
+unmodified file — did not reproduce. That table is withdrawn, not corrected:
+half of it is a statement about a binary that no longer exists. **PUSH -> LET THE
+PULL SETTLE -> REBUILD -> MEASURE has a fourth failure mode nobody had written
+down: rebuilding CORRECTLY, in the middle of a sweep, is still moving the
+instrument.** The rule reads as being about starting from a stale tree; the
+hazard is any rebuild inside the measurement, including the one the rule tells
+you to do.

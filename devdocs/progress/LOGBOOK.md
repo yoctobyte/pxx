@@ -2347,3 +2347,23 @@ change in a file where a two-line edit broke four corpus rows while `gate.sh
 quick` reported GREEN, and the visibility half MUST NOT land alone — v10 is that
 warning already come true, since the program that compiles today is the one that
 gets 44.
+
+## 2026-09-09 | frankZ | devdocs/progress/backlog-pascal/bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope.md | attribute the rtl-generics PT wall to 1c16d4523 by revert-rebuild, and withdraw half my own bisect
+
+`1c16d4523` (frankH, circular-`uses` body placement) cleared
+`generics.collections.pas:120 unknown type: PT`. Attributed by reverting its two
+compiler files to their parent and rebuilding — `4a6207c05ba2` reproduces,
+`417ee5636a72` does not — not by timing, and not by crediting a peer for a delta
+that arrived in my own pull. The rung's wall is now
+`generics.defaults.pas:3250`, a partially-substituted specialization in
+expression position (`T` bound to `string`, `THashFactory` still spelled), so
+`<` reads as less-than. The fix's blast radius is wider than the ticket it
+closed: `generics.collections` has no circular implementation-`uses` at all.
+
+**And half my own include bisect is withdrawn, not corrected.** Cuts 40-200 ran
+on the pre-fix binary and cuts 230-656 on the post-fix one, because a
+pull-and-rebuild happened between them. The tell was that the LAST cut — the
+whole unmodified include — did not reproduce. PUSH -> LET THE PULL SETTLE ->
+REBUILD -> MEASURE reads as a rule about starting from a stale tree; the hazard
+is any rebuild INSIDE the measurement, including the correct one the rule tells
+you to do.
