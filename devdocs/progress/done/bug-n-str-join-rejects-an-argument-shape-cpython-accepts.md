@@ -122,4 +122,4 @@ Pre-existing and NOT fixed here: `bytes(s, "utf8")`, the two-argument encoding
 form, has no overload at all. `s.encode("utf8")` works, so the gap is narrow.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d1efd1dee.

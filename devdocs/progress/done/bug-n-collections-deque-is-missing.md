@@ -74,4 +74,4 @@ that table selects by arity and cannot select by type, and Counter's two
 refusal for a silently wrong count.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d1efd1dee.

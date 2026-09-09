@@ -83,4 +83,4 @@ revert-when-fixed pattern and the same shape pylib's own `bytes(b: TPyBytes)`
 already uses for the function-side version of that bug.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d1efd1dee.
