@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:151 backlog-nilpy:105 backlog-tools:55 backlog-pascal:11 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3617 rejected:80`
+`working:29 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:151 backlog-nilpy:105 backlog-tools:55 backlog-pascal:11 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3618 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
@@ -18,7 +18,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
-- `compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all` [P] — owner: frankH
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA

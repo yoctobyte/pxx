@@ -698,3 +698,45 @@ table, so no pair exists for them. `ShortString(c)` is a third thing again —
 variable" while fpc accepts it. Not fixed here; adding a name to that table
 reaches the declaration path too, which is a wider blast radius than this
 change earns.
+
+## 2026-09-09 — the sibling closed, and it did NOT need the recognition merge
+
+[[compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all]] is closed. That
+ticket said *"whoever takes that refactor should take this with it; landing it
+separately means landing it twice"*, and that turned out to be false in the
+useful direction: the two are not one edit, because the redeclaration case does
+not need the keyword arms to learn anything.
+
+**Why, stated as the finding and not as a note.** That ticket's prescription and
+this one's remaining half are the same instruction — make the keyword-token arms
+ask the resolver the identifier arms ask. Enumerating what that costs: ~110 arms
+across seven files. Not five, not four. The five/four in this ticket's title
+counts the arms in `ParseFactorCore` that RECOGNISE a named cast; the population
+that would have to learn "this name may be an alias" is every arm that branches
+on a type-keyword token anywhere — array index types, `Str`/`Write` formatting,
+`TypeInfo`, generic type arguments, the const folder's door. **A count taken
+inside one function is a count about that function.** The same failure this
+ticket already recorded when it found the SIXTH door 4000 lines below.
+
+So the redeclaration case took the other road: the token stops arriving as a
+keyword at all (`TypeDeclNameTokIsIdent`, `pasparser_name.inc`), and every one
+of the ~110 arms is correct without being edited.
+
+**That road does nothing for THIS ticket and the distinction is worth holding.**
+Demotion only fires where the source declared the name. For the ordinary program
+— which is every program — `Char(x)`, `Boolean(x)`, `Single(x)` and `String(x)`
+still arrive as keywords and still build their own `AN_PTR_CAST` beside
+`TryScalarNamedCast`'s two identifier call sites. The construction merge is
+untouched and it is where the seven-in-one-day defect rate came from, which
+remains this ticket's justification and is still a measurement rather than an
+argument from elegance.
+
+**One correction to a fact this ticket's neighbourhood relied on.** `defs.inc`
+said `SOffset`/`SLen` "hold text only for identifiers and strings", and
+`pasparser_name.inc` quoted it onward twice to tell callers a type-keyword token
+carries an EMPTY SVal. It does not: the Pascal lexer sets `CurTok.SVal` for every
+word token before `LexAppend` copies it, which is what lets `specialize
+TBox<Double>` read `Double` back out of the pool — live code that could not work
+if the sentence held. Corrected at the source and at both quotes. Anyone building
+the merged resolver reads names out of that channel, so the wrong sentence would
+have been read as "you cannot".

@@ -99,7 +99,10 @@ end;
   type name", while `TBox<Integer>` and even `TBox<string>` worked. The same
   token-kinds-vs-names split IsMethodNameTok's comment describes, one construct
   on: the list was written once and never grew with the lexer.
-  NOTE the same empty-SVal rule applies — read these with GetTokenStr, not SVal. }
+  NOTE read these with GetTokenStr(idx) and not CurTok.SVal -- not because a
+  keyword token has no text (it does; see defs.inc's TokSrcOff note, which used
+  to say otherwise and was measured wrong), but because CurTok describes the
+  CURRENT token and these questions are asked at a LOOKAHEAD index. }
 function IsConcreteTypeArgKind(k: TTokenKind): Boolean;
 begin
   IsConcreteTypeArgKind := k in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T,
@@ -107,10 +110,106 @@ begin
                                  tkSingle_T, tkDouble_T, tkExtended_T];
 end;
 
+{ THE NINE BUILTIN TYPE NAMES A SOURCE MAY REDECLARE, and the one it may not.
+
+  `type Integer = Int64;` is the portability-unit idiom -- a compat header
+  pinning a width the dialect leaves open -- and it did not COMPILE here:
+  `expected 'begin' before 'Integer'`. Not because we protect builtins.
+  `longint`, `cardinal`, `word` and `uint8` are builtin type names every bit as
+  much as `integer` is, and all four could always be redeclared, because they
+  lex as tkIdent and reach the type-declaration parser as a NAME. The other
+  nine lex as one of the eight kinds below and that parser wants an identifier,
+  so they never arrived. `longint` is the sharpest of the controls: a SYNONYM
+  of `integer`, same width, same meaning, and the two answered differently.
+  Nothing in the type system distinguished them -- only the lexer did.
+
+  `string` is deliberately absent: fpc refuses `type string = ...` too, so it
+  is a genuine reserved word and BOTH compilers agree on it. It is the row that
+  makes the fixture say something rather than merely pass -- see
+  test_a_builtin_type_name_is_redeclared.
+
+  WHY THIS IS A DEMOTION AND NOT A RESOLVER CONSULTED AT EACH KEYWORD ARM,
+  which is what compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all
+  prescribed. Those arms number about 110 across seven files -- casts, array
+  index types, Str/Write formatting, TypeInfo, generic type arguments, the
+  const folder's own door 4000 lines from ParseFactorCore's. Teaching each of
+  them to ask FindTypeAlias first is a rule spelled per caller, and a rule
+  spelled per caller fails by an ABSENT COPY: the arm nobody edited keeps
+  meaning the builtin, the declaration compiles, and the program silently gets
+  the wrong type. That is the failure this compiler keeps paying for.
+
+  A token that never arrives as a keyword needs no arm to be taught anything.
+  After the demotion the name flows the path `longint` has always flowed --
+  FindTypeAlias first, builtin second -- so the declaration, a variable of the
+  type, SizeOf of the name, and a cast to it all move TOGETHER, which is the
+  gate that ticket asked for. Two of the three moving is the
+  declared-invariant-that-never-runs shape this tree refuses everywhere else.
+
+  SCOPE, stated because it is narrower than "redeclaration works". The rewrite
+  runs FORWARD from the declaration to the end of the token stream, which is
+  exactly Pascal's declare-before-use and covers a program's own body and a
+  unit's consumers (a unit's tokens are spliced in before the tokens that use
+  it). It does NOT model per-unit visibility: it is one token stream, so an
+  alias declared in one unit reaches every later token, and a unit spliced in
+  AFTER the declaration keeps the builtin meaning. Say that in a ticket rather
+  than in a test if it ever bites -- nothing in the corpus writes it. }
+function IsRedeclarableTypeKeywordKind(k: TTokenKind): Boolean;
+begin
+  IsRedeclarableTypeKeywordKind :=
+    (k = tkInteger_T) or (k = tkBoolean_T) or (k = tkChar_T) or
+    (k = tkReal_T) or (k = tkSingle_T) or (k = tkDouble_T) or
+    (k = tkExtended_T) or (k = tkLongWord_T);
+end;
+
+{ Rewrite every later token that SPELLS `nm` and lexed as a type keyword into a
+  plain identifier.
+
+  Keyed on the SPELLING and not on the KIND, and that is load-bearing: `byte`
+  and `integer` are ONE kind (tkInteger_T, paslexer.inc), so demoting by kind
+  would hand `type Integer = Int64;` a redefined `Byte` as well -- a second
+  type silently changing width, from a declaration that never named it. The
+  spelling comes out of the token pool, never from CurTok.SVal, which describes
+  the CURRENT token and not the one at index i. }
+procedure DemoteTypeKeywordToIdent(fromIdx: Integer; const nm: AnsiString);
+var i: Integer;
+begin
+  for i := fromIdx to TokCount - 1 do
+    if IsRedeclarableTypeKeywordKind(Tokens[i].Kind) and
+       CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nm) then
+      Tokens[i].Kind := tkIdent;
+end;
+
+{ Can the CURRENT token serve as the NAME being declared in a type section --
+  and if it is a redeclarable builtin type name, make it so.
+
+  The demotion happens HERE, inside the question, because the answer is what
+  changes: ParseTypeSection's loop is gated on tkIdent, so the section would
+  end before any body could run. It is idempotent -- the first arm answers for
+  every later call -- and it fires only on `<type keyword> =`, which is a type
+  DECLARATION and nothing else. A use of the name is never followed by `=` at a
+  declaration position. }
+function TypeDeclNameTokIsIdent: Boolean;
+var nm: AnsiString;
+begin
+  TypeDeclNameTokIsIdent := True;
+  if CurTok.Kind = tkIdent then Exit;
+  TypeDeclNameTokIsIdent := False;
+  if not IsRedeclarableTypeKeywordKind(CurTok.Kind) then Exit;
+  if (TokPos < 1) or (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkEq) then Exit;
+  nm := GetTokenStrFromRaw(Tokens[TokPos - 1].SOffset, Tokens[TokPos - 1].SLen);
+  if nm = '' then Exit;
+  DemoteTypeKeywordToIdent(TokPos - 1, nm);
+  CurTok.Kind := tkIdent;
+  TypeDeclNameTokIsIdent := True;
+end;
+
 { Index-addressed IsMethodNameTok, for LOOKAHEAD past the current token — same
   token set, deliberately sharing the predicate above so the two cannot drift.
-  A caller that accepts this must read the name with GetTokenStr(idx): the
-  type-keyword tokens carry an EMPTY SVal. }
+  A caller that accepts this must read the name with GetTokenStr(idx), because
+  CurTok is the CURRENT token and this question is asked at a lookahead index --
+  not because a keyword token has no text of its own. It has; the claim that it
+  does not was measured wrong on 2026-09-09 and is corrected at its source, in
+  defs.inc's TokSrcOff note. }
 function IsMethodNameTokAt(idx: Integer): Boolean;
 begin
   IsMethodNameTokAt := (idx >= 0) and (idx < TokCount) and

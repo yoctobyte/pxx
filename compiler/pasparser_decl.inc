@@ -7412,7 +7412,12 @@ begin
     (e.g. `protected` resuming members after a NESTED class-body type section)
     ends the section instead of desyncing on Expect('='). generic/operator
     keep their keyword forms. }
-  while (CurTok.Kind = tkIdent) and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and (not CaseEqual(CurTok.SVal, 'implementation')) and (not CaseEqual(CurTok.SVal, 'initialization')) and (not CaseEqual(CurTok.SVal, 'finalization')) and not stopTypes and
+  { TypeDeclNameTokIsIdent, not `CurTok.Kind = tkIdent`: the name being declared
+    may be one of the nine builtin type names that lex as a KEYWORD, and this is
+    the door they were turned away at. See pasparser_name.inc for why the fix is
+    a demotion rather than a resolver taught to ~110 keyword arms.
+    compat-p-nine-builtin-type-names-cannot-be-redeclared-at-all }
+  while TypeDeclNameTokIsIdent and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and (not CaseEqual(CurTok.SVal, 'implementation')) and (not CaseEqual(CurTok.SVal, 'initialization')) and (not CaseEqual(CurTok.SVal, 'finalization')) and not stopTypes and
         (CaseEqual(CurTok.SVal, 'generic') or CaseEqual(CurTok.SVal, 'specialize') or CaseEqual(CurTok.SVal, 'operator') or
          ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkEq)) or
          ((not CaseEqual(CurTok.SVal, 'operator')) and

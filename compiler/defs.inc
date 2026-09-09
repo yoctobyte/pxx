@@ -2862,8 +2862,21 @@ var
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   { The SOURCE SPELLING of each pooled template token, the same channel
     TokSrcOff/TokSrcLen carry for Tokens[] and for the same reason: SOffset/SLen
-    hold text only for identifiers and strings, so a window built from them
-    alone drops a body's punctuation. A specialization splices VERBATIM COPIES
+    hold text only for what the lexer scanned as a WORD or a string literal --
+    identifiers, KEYWORDS and strings -- and nothing for punctuation or numbers,
+    so a window built from them alone drops a body's punctuation.
+
+    THE `identifiers and strings` THIS SENTENCE USED TO SAY WAS WRONG ABOUT
+    KEYWORDS, and it was quoted onward twice (pasparser_name.inc's
+    IsConcreteTypeArgKind and IsMethodNameTokAt both told their callers that a
+    type-keyword token carries no text). It does. The Pascal lexer sets
+    CurTok.SVal for every word token before LexAppend copies it, which is what
+    lets `specialize TBox<Double>` read `Double` back out of the pool through
+    GetTokenStr -- live, working code that could not exist if the sentence held.
+    Measured 2026-09-09 while making the nine redeclarable builtin type names
+    reach the type-declaration parser as identifiers, which reads their
+    SPELLING out of exactly this channel. The reason TokSrcOff exists is
+    unchanged and is the punctuation, not the keywords. A specialization splices VERBATIM COPIES
     of these tokens into Tokens[], and a copy with no span leaves the splice
     unable to say what the token said. Captured beside Kind/IVal/Line/SOffset,
     zeroed for a SUBSTITUTED token because its text is no longer the

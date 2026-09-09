@@ -1,0 +1,9 @@
+1 sizeof name    8 2
+2 sizeof var     8 2
+3 value survives 5000000000
+4 field          5000000001 8
+5 cast           8 5000000
+6 function       10000000000
+7 array elem     2500000000 24
+8 byte untouched 1 255
+9 ord of wide    65

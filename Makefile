@@ -8609,6 +8609,16 @@ test-core: $(COMPILER)
 	# segfaulted inside Length. fpc-identical on all three rows.
 	./$(COMPILER) test/test_operator_array_operand.pas $(TESTTMP)/test_oparr26
 	tools/expect_same.sh test_oparr26 "$$($(TESTTMP)/test_oparr26)" "$$(cat test/test_operator_array_operand.expected)"
+	# NINE BUILTIN TYPE NAMES can be redeclared -- `type Integer = Int64;`, the
+	# portability-unit idiom, which did not compile because Integer lexes as a
+	# KEYWORD and the type-declaration parser wants an identifier. Row 8 is the
+	# control and is not about redeclaration: `byte` and `integer` are ONE token
+	# kind, so a fix keyed on the kind redefines Byte here too, and every other
+	# row passes while it does. `string` stays refused by both compilers and its
+	# check is in the file header. fpc-identical on all nine rows; ran on
+	# i386/aarch64/arm32/riscv32 under qemu.
+	./$(COMPILER) test/test_a_builtin_type_name_is_redeclared.pas $(TESTTMP)/test_rdcl26
+	tools/expect_same.sh test_rdcl26 "$$($(TESTTMP)/test_rdcl26)" "$$(cat test/test_a_builtin_type_name_is_redeclared.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always
