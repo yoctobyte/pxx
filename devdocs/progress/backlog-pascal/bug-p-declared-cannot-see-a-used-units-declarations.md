@@ -76,3 +76,31 @@ probes lives in `ugeneric93a` / `ugeneric93b`.
 
 Changing the bare form to require arity 0 is a behaviour change for any existing
 `declared(SomeGeneric)`; grep before landing it.
+
+## 2026-09-09 — still reproduces, unchanged
+
+Re-measured at commit `69a5f3c6f`, binary `5d5dcb45d328` (stamp removed and the
+build forced to `converged after 1 round(s)`, because `make` printed `verified`
+with nine build inputs moved).
+
+```
+the type IS usable: TRUE
+declared() says=0
+```
+
+Same shape as filed, same asymmetry: the type is fully usable in the same
+program in which `declared()` answers False. Nothing above has gone stale — the
+cause section still describes the code, and the fix is still the one it says it
+is (resolving and lexing a used unit DURING the main `LexAll`, in shared lexer
+territory). Confirmed rather than attempted, so the next reader does not have to
+re-establish that the repro is live.
+
+Also worth carrying to whoever takes it: the note about separating "not
+declared" from "declared somewhere I cannot see yet" is the whole difficulty,
+and it is the same silent-negative shape as three of its neighbours in this
+group — `--strict-visibility` accepting an unchecked record, and a `uses`
+failure that cannot say a manifest went unread. Both of those were closed by
+making the negative DISTINGUISHABLE rather than by making the lookup wider. That
+is a hint about the shape of the answer here, not a design for it: `declared()`
+returning False is correct for the case the operator was written for (a profile
+with no such unit), so the repair has to add a THIRD answer, not flip the second.

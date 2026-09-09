@@ -6,7 +6,7 @@ blocked-by: []
 status: open
 owner: ""
 created: 2026-09-06
-summary: "SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape -- including shapes it could never bind. Fixed for the bare-name dyn-array Delete/Insert case (DynArrayReopensIntrinsic, pasparser_stmt.inc); the general answer, and the non-bare spellings `Delete(obj.Items, i, 1)` / `Insert(x, p^.list, i)`, are still closed. Sixteen call sites share the predicate."
+summary: "SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape. THE LIVE INSTANCE IS GONE AS OF 2026-09-09 AND THIS TICKET IS NOW ABOUT THE LATENT SHAPE ONLY -- re-measured at 69a5f3c6f, binary 5d5dcb45d328. Both halves of the fork this ticket described landed independently: the compiler reopens the intrinsic (f5ad23c32, 906737db0) and Track B removed the declarations (475528dae, 'sysutils must not declare the two names fpc keeps in system'). All three non-bare spellings this ticket listed as STILL CLOSED now work -- Delete(obj.Items,i,1), Delete(p^.list,i,1), Insert(x,Self.F,i) -- and the ESP risk the fork carried did not materialise: string Delete/Insert with sysutils in scope still gives fpc's answer. Enumerating from the concept rather than the callers, as this ticket instructs: NO free routine in lib/rtl re-declares any soft intrinsic today. The Delete/Insert/Move hits in classes.pas and contnrs.pas are METHODS, which FindProc does not see. What remains is a Boolean that cannot express WHICH, with no live instance."
 ---
 
 # A shadowed soft intrinsic is closed without consulting the arguments
@@ -83,3 +83,62 @@ user `Delete(var a: TA; index, count)` and so do we. Verified in
 `test/test_a_dynamic_array_delete_survives_a_string_delete_in_scope.pas`, whose
 last row is that control. fpc REFUSES a dyn-array argument when only a string
 `Delete` is in scope; we accept it, which is the benign direction.
+
+## 2026-09-09 — re-measured: the live instance is gone, the shape is not
+
+Verified at commit `69a5f3c6f`, binary `5d5dcb45d328`, `converged after 1
+round(s)` (the stamp was removed and the build forced, because `make` had
+printed `verified` with nine build inputs moved).
+
+**The "What is not" section above is now false and is kept for the record.**
+All three spellings it named as still closed:
+
+```
+Delete(b.Items, 1, 1)    len 3 -> 2    OK
+Delete(p^.list, 1, 1)    len 3 -> 2    OK
+Insert(9, Self.F, 1)     len 3 -> 4    OK
+```
+
+**Both halves of the fork landed, independently and by different tracks.** The
+compiler side reopened the intrinsic (`f5ad23c32`, then `906737db0` for
+`Insert`'s element list). Track B took the other half this ticket had explicitly
+handed them — `475528dae`, *"sysutils must not declare the two names fpc keeps
+in system"* — so the source-level anomaly is gone too.
+
+**The ESP risk that fork carried did not materialise.** This ticket warned that
+removing the sysutils declarations would take `Delete`/`Insert` from ESP string
+code. Measured: `Delete(s,2,3)` then `Insert('XY',s,2)` on `'abcdef'` with
+sysutils in scope gives `aXYef`, which is fpc's answer. The committed control
+`test_a_dynamic_array_delete_survives_a_string_delete_in_scope` still matches
+its `.expected`.
+
+## Enumerating from the concept, which is what this ticket asked for
+
+The question this ticket poses is *"which RTL units declare a name that collides
+with an intrinsic"*. Answered by measurement rather than by reading callers:
+
+**No free routine in `lib/rtl/*.pas` re-declares any soft intrinsic today** —
+not `Delete`, `Insert`, `SetLength`, `New`, `Dispose`, `Str`, `GetMem`,
+`FreeMem`, `FillChar` or `Move`.
+
+**And the first attempt at that census was wrong in the direction this repo
+keeps finding.** A grep for `^\s*(procedure|function)\s+Delete\s*\(` reports
+`classes.pas` and `contnrs.pas`, which reads as *"the collision moved"*. Those
+are **METHODS** — indented, inside class declarations — and `FindProc` does not
+see them. Anchoring at column 1 returns nothing at all. The grep did not error;
+it answered a question about text when the question was about free routines,
+and the wrong answer was the interesting-looking one. Probing the six shapes
+directly (`uses classes` / `uses contnrs` with dyn-array `Delete`, `Insert`,
+`Move`) confirms every intrinsic stays open.
+
+## Disposition — deliberately NOT re-ranked here
+
+What survives is the SHAPE: `SoftIntrinsicOpen` is still a Boolean, still asked
+before any argument is parsed, and `IntrinsicShadowIsStringOnly` remains the
+narrow "which, not whether" patch beside it. That is real and it is now
+**latent** — the exposure is a USER program declaring a colliding routine that
+cannot bind, and a user routine that CAN bind must still win, and does.
+
+Left at its current prio rather than demoted on one session's reading. A reader
+deciding between `low-prio/` and the fourteen-call-site overhaul should know the
+measured cost is currently zero, which is a fact this ticket did not have.
