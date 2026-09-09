@@ -2516,7 +2516,21 @@ function ClassHelperRecFor(recId: Integer; const memberName: AnsiString): Intege
   ANY FIFTH LOOP MUST ASK IT TOO. That is the whole reason this is one function
   and not a redirect per site, and a count in a comment is exactly the kind of
   name that goes stale while reading as verified: the two loops it named were
-  correct, so the sentence sampled true. bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper }
+  correct, so the sentence sampled true. bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper
+
+  AND THE SCOPE QUESTION IS A DIFFERENT ONE, SETTLED SEPARATELY AND LATER --
+  read the paragraph above as being about WHICH LOOPS ASK, never about WHOSE
+  HELPERS ANSWER. Until 2026-09-09 FindHelperForType below had no visibility
+  test of any kind: a flat scan in which any helper anywhere won, including one
+  declared by a scope the code being compiled cannot see. It is the same shape
+  as the four-loops-called-two note one layer down -- a question with no filter
+  at all, sampling correct because nothing had yet asked it from two places --
+  and it stayed invisible until two scopes declared helpers for RELATED classes,
+  which is what a generic template body specialized by a program that has its
+  own helper does. See HelperRowVisibleHere, and
+  bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own.
+  frankZ's framing, recorded here because a reader who finds the four-loop note
+  will otherwise take the scope question for settled. }
 var ci, hci: Integer;
 begin
   Result := recId;

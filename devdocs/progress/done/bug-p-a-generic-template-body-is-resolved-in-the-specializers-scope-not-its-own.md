@@ -154,3 +154,16 @@ Log: fixed in `compiler/symtab.inc` + `compiler/pasparser_proc.inc` +
 `compiler/pasparser_generic.inc` + `compiler/defs.inc`, commit f0aca9c59. That commit
 also burns `tgenfunc19.pp` from `test/pascal-conformance/pxx.skip` and re-aims
 the fixture; the close is this file's move to `done/` in the same commit.
+
+### The half worth carrying out of this ticket
+
+`FindHelperForType` having **no visibility test of any kind** is the finding to
+flag, and not for this row's sake. frankZ's framing, which is better than the
+one above: it is the same shape as the four-member-lookup-loops-documented-as-two
+note one layer down — *a question with no scope filter at all, sampling correct
+because nothing had yet asked it from two places*. It sat directly under the
+class-helper dispatch work of the same morning.
+
+`ClassHelperRecFor`'s comment now says so, because a reader who finds the
+four-loop note will otherwise take the scope question for settled: that
+paragraph is about WHICH LOOPS ASK, never about WHOSE HELPERS ANSWER.
