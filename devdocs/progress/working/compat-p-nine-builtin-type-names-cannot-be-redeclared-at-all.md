@@ -4,8 +4,8 @@ title: "Nine builtin type names cannot be redeclared, because they lex as keywor
 track: P
 prio: 30
 type: compat
-status: open
-owner: ""
+status: working
+owner: frankH
 created: 2026-09-06
 blocked-by: []
 summary: "`type Integer = Int64;` does not COMPILE -- `expected 'begin' before 'Integer'` -- because Integer lexes as tkInteger_T and the type-declaration parser wants an identifier. fpc 3.2.2 accepts it and honours it everywhere: the declaration, a variable of that type, and a cast all answer 8. Measured 2026-09-06 over the whole population derived from paslexer.inc rather than hand-picked: TEN names lex as type keywords, and NINE of them are refused by pxx and accepted by fpc -- boolean, byte, char, double, extended, integer, longword, real, single. `string` is refused by BOTH, so it is a genuine reserved word and the boundary is exact. The control that names the cause: longint, cardinal, word and uint8 are builtin type names too and pxx redeclares all four happily, so this is not about shadowing a builtin -- it is about the name never reaching the parser as an identifier. THE DECLARATION HALF MUST NOT BE FIXED ALONE. Every USE of the name still lexes as a keyword and takes a keyword arm that never consults FindTypeAlias, so a parser that merely accepted the declaration would give a type declaration that silently does not apply -- the declared-invariant-that-never-runs shape this tree refuses everywhere else. The whole fix is that the keyword arms consult the same resolver the identifier arms do, which is [[refactor-p-five-dispatch-sites-for-one-named-type-cast]]'s ordering rule applied to the one population that cannot express it."
