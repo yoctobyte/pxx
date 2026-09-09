@@ -137,4 +137,4 @@ ancestor chain (so `PT` is found through `TEnumerable<T>`) HANGS this driver —
 >90s, 176 mint lines, then `unknown type: TList$UInt32$PT`.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2473d920e.
