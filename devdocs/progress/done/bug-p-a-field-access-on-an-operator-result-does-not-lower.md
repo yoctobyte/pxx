@@ -76,3 +76,5 @@ are answered:
 | is `AN_INDEX` over an operator result the same arm? | **yes.** `(p - q).a[0]` failed identically; an index over an operator result reaches the same field/base walk, and one fix closed both. |
 
 Both are rows in the fixture now, so neither can go stale as prose.
+
+Log: fixed and closed in commit 5e5fae367.
