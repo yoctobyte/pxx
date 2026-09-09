@@ -4,8 +4,8 @@ title: "`cclasses.pas:2909` — `Entry := @Entry^^.Next` refused with `dereferen
 track: P
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankH
 created: 2026-09-05
 found-by: frankB
 blocked-by: []
