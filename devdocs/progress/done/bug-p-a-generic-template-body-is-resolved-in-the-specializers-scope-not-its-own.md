@@ -149,3 +149,8 @@ than trusted: it prints `Ok` and exits 0 under pxx, and identically under fpc
 `specialize DoTest<TTest> <> 2 -> Halt(1)` and `<TTest2> <> 3 -> Halt(2)`.
 
 Gate GREEN, FPC seed canary PASS.
+
+Log: fixed in `compiler/symtab.inc` + `compiler/pasparser_proc.inc` +
+`compiler/pasparser_generic.inc` + `compiler/defs.inc`, commit f0aca9c59. That commit
+also burns `tgenfunc19.pp` from `test/pascal-conformance/pxx.skip` and re-aims
+the fixture; the close is this file's move to `done/` in the same commit.
