@@ -5519,6 +5519,28 @@ test-core: $(COMPILER)
 	# compat-pascal-overload-prefers-signed-for-an-unsigned-argument
 	./$(COMPILER) test/test_a_an_integer_overload_pair_is_chosen_by_signedness.pas $(TESTTMP)/test_ovlsign26
 	$(TESTTMP)/test_ovlsign26 | diff -u test/test_a_an_integer_overload_pair_is_chosen_by_signedness.expected -
+	# Two ARRAY parameters competing for one `[...]` slot: selection could not
+	# separate them and fell through to first-declared. fpc prefers `array of
+	# const` at a bracket slot UNCONDITIONALLY -- measured in both declaration
+	# orders against Integer/string/Double/Byte element types and against an
+	# empty `[]` -- and that answer needs no ARGUMENT types at all, which is what
+	# makes it available while the probe still cannot parse a bracket.
+	# EVERY FAMILY IS DECLARED IN BOTH ORDERS: a one-order fixture cannot fail
+	# this, because first-declared is right half the time by construction --
+	# 5 of the 12 rows move against the pinned pre-fix compiler and they are
+	# exactly the ones declaring array-of-const SECOND. The `sole`/`ctsole` rows
+	# guard the single-array path that already worked.
+	# TWO DOORS, both covered: FindUMethOverloadAhead's bracket narrowing for the
+	# method half, ClassCtorArraySigAt for the constructor half -- the latter
+	# decides how the `[...]` is PARSED, so its `ints` rows assert a SUM and not
+	# a count (a count reads the same through an Integer stride or a TVarRec one).
+	# THE `veto` ROW'S EXPECTED VALUE IS PXX'S OWN AND DIVERGES FROM FPC -- every
+	# other line is fpc 3.2.2's. It is here so the tySet veto stays guarded, and
+	# the divergence is filed, not fixed:
+	# bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it
+	# bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
+	./$(COMPILER) test/test_p_an_array_of_const_wins_a_bracket_argument.pas $(TESTTMP)/test_arrconstwin26
+	$(TESTTMP)/test_arrconstwin26 | diff -u test/test_p_an_array_of_const_wins_a_bracket_argument.expected -
 	# The OTHER half of the `static` directive change: a record's static class
 	# function no longer HAS a Self, and the call site that hand-rolls its own
 	# argument loop was still prepending a by-value dummy. The chain was then one

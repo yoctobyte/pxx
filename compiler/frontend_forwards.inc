@@ -96,6 +96,11 @@ procedure EmitProgramRuntimeStubsForTarget; forward;        { THE finish-the-run
   file but used earlier needs a forward here, or `make bootstrap` breaks while every
   pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
+{ The per-CANDIDATE form. ParamIsVarRecArray above asks the whole visible
+  overload SET by name, which is right for deciding how to PARSE a `[...]`
+  and wrong for ranking one candidate against another -- it answers the same
+  for every member of the set. FindUMethOverloadAhead needs the other one. }
+function ParamIsVarRecArrayAt(procIdx, argNo: Integer): Boolean; forward;
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
 function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer; forward;
 { The bracket door itself, not just its two predicates. pasparser_call.inc is

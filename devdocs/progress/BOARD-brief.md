@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:105 backlog-tools:56 backlog-pascal:5 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3626 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:105 backlog-tools:56 backlog-pascal:7 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3628 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -18,7 +18,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
-- `bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order` [P] — owner: frankS
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -74,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 424, ranked
+## Ready — top 30 of 425, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -103,8 +102,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
-- `[p 70] [T]` regression-test-core-test-generic-nested-inline-specialize
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
+- `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 
-_394 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_395 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1,0 +1,12 @@
+intfirst  vr    cnt=2
+vrfirst   vr    cnt=2
+intfirst  vr    cnt=0
+vrfirst   vr    cnt=0
+strfirst  vr    cnt=2
+dblfirst  vr    cnt=2
+sole      ints  cnt=2
+sole      bool  TRUE
+veto      ints  cnt=2
+ctintfirst vr   cnt=3
+ctvrfirst  vr   cnt=3
+ctsole     ints sum=60

@@ -3471,9 +3471,10 @@ var
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
   nBr, brOnly: Integer;
+  nVR, vrOnly: Integer;   { ...and how many of those are `array of const` }
   rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
-  ok, okBr, vetoed, okAny: Boolean;
+  ok, okBr, okVR, vetoed, okAny: Boolean;
   lo, name2: AnsiString;
 begin
   Result := -1;
@@ -3601,27 +3602,62 @@ begin
         calls had before the probe existed -- unchanged, deliberately: the
         probe still cannot PARSE a bracket argument, so it cannot rank one. }
       nBr := 0; brOnly := -1; vetoed := False;
+      nVR := 0; vrOnly := -1;
       for c := 0 to nCand - 1 do
       begin
         pi := UMthProc_[cand[c]];
         okBr := True;
+        okVR := True;
         for j := 0 to nExplicitArgs - 1 do
           if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
           begin
             pj := 1 + j;
             if (pj >= MAX_PROC_PARAMS) or (pj >= Procs[pi].ParamCount) then
-              okBr := False
+            begin
+              okBr := False;
+              okVR := False;
+            end
             else
             begin
               if ParamOwnKind(pi, pj) = tySet then vetoed := True;
               if not Procs[pi].Params[pj].IsArray then okBr := False;
+              if not ParamIsVarRecArrayAt(pi, pj) then okVR := False;
             end;
           end;
         if okBr then begin Inc(nBr); brOnly := cand[c]; end;
+        if okBr and okVR then begin Inc(nVR); vrOnly := cand[c]; end;
       end;
       if (nBr = 1) and not vetoed then
       begin
         Result := brOnly;
+        Exit;
+      end;
+      { TWO OR MORE ARRAY CANDIDATES AT THE BRACKET SLOT, which the probe cannot
+        rank because it cannot PARSE a `[...]` at all -- no parameter to bind
+        against, so ParseArgExpr reads the '[' as a set literal and Error halts.
+        It therefore has no element type with which to rank `array of Integer`
+        against `array of const`, and the call fell through to arity, i.e. to
+        first-declared. `c.P2(2, [7, 8])` ran the Integer body; fpc runs the
+        array-of-const one, and reversing the two declarations flipped pxx.
+
+        THE ANSWER NEEDS NO ARGUMENT TYPES, WHICH IS WHY THIS IS AVAILABLE
+        WITHOUT FIXING THE PROBE: fpc prefers `array of const` at a bracket slot
+        unconditionally. Measured 2026-09-09 against fpc 3.2.2, BOTH declaration
+        orders, against `array of Integer`, `array of string`, `array of Double`
+        and `array of Byte`, with element lists of integers, strings, floats and
+        an EMPTY `[]`: `array of const` wins every one of those rows. It also
+        wins where the elements could not possibly convert, so this is a rule
+        about the PARAMETER and not about the literal.
+
+        Between two non-const arrays fpc does rank by element type
+        (`[7, 8]` takes `array of Integer` over `array of string` in both
+        orders), and THAT still needs the probe -- so this narrows the ticket
+        rather than closing its mechanism. With no varrec candidate, or more
+        than one, the fall-through below is unchanged.
+        bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order }
+      if (nBr > 1) and (nVR = 1) and not vetoed then
+      begin
+        Result := vrOnly;
         Exit;
       end;
       Result := FindUMethArity(ci, name, nExplicitArgs);
@@ -4242,31 +4278,47 @@ function ClassCtorArraySigAt(ci, argIdx: Integer): Integer;
   same door every other call path now goes through, so the decision is written
   once rather than a tenth time.
 
-  FIRST MATCH WINS, which is what the Boolean did too, and it is not a choice
-  this function can improve: the bracket must be PARSED before overload
-  resolution can run, so with two constructors declaring different array kinds
-  at one slot there is nothing here to rank them by. That is
+  AN `array of const` AT THE SLOT WINS OVER ANY OTHER ARRAY, and only then does
+  first-match decide. This half of the ordering IS rankable and the comment here
+  used to say it was not -- it argued that the bracket must be parsed before
+  overload resolution can run, so there is nothing to rank the candidates by.
+  True, and it rules out ranking by the ARGUMENT; fpc's actual rule needs no
+  argument at all. Measured 2026-09-09 against fpc 3.2.2 on the method path, in
+  both declaration orders, against Integer/string/Double/Byte element types and
+  against an empty `[]`: `array of const` takes the slot every time. So the
+  preference is a property of the PARAMETERS, available right here.
+
+  Same change, same reason, as the nVR/vrOnly pass in FindUMethOverloadAhead --
+  one property, two addresses, which is why the ticket covers both.
+
+  WHAT IS STILL FIRST-MATCH: two non-const arrays differing only in element
+  type. THAT needs the argument, so it needs the probe to become
+  parameter-aware, and it is
+  bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type.
   bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
-  in the constructor's clothing; do not fix it here.
   bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
-var mi, mpi, base, cnt, k: Integer;
+var mi, mpi, base, cnt, k, pass: Integer;
 begin
   Result := -1;
   if (ci < 0) or (ci >= UClsCount) then Exit;
   base := UClsMBase[ci];
   cnt := UClsMCount[ci];
-  for k := 0 to cnt - 1 do
+  for pass := 0 to 1 do
   begin
-    mi := base + k;
-    if not UMthIsCtor[mi] then continue;
-    mpi := UMthProc_[mi];
-    if mpi < 0 then continue;
-    if (argIdx + 1) < Procs[mpi].ParamCount then
-      if Procs[mpi].Params[argIdx + 1].IsArray then
-      begin
-        Result := mpi;
-        Exit;
-      end;
+    for k := 0 to cnt - 1 do
+    begin
+      mi := base + k;
+      if not UMthIsCtor[mi] then continue;
+      mpi := UMthProc_[mi];
+      if mpi < 0 then continue;
+      if (argIdx + 1) < Procs[mpi].ParamCount then
+        if Procs[mpi].Params[argIdx + 1].IsArray then
+          if (pass = 1) or ParamIsVarRecArrayAt(mpi, argIdx + 1) then
+          begin
+            Result := mpi;
+            Exit;
+          end;
+    end;
   end;
 end;
 
