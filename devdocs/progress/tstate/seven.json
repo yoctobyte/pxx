@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-09T11:49:56Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy"
-   ],
-   "new_red": [
-    "test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh"
-   ],
-   "sha": "e8020484be2cfc0df3c421f7172b6675410d19a6",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-09T11:54:17Z",
    "fixed": [],
    "new_red": [],
@@ -487,6 +474,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-09T20:44:46Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ab1d60ab88f231c8430546456c2e56161e57ba01",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -5250,7 +5246,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
-  "test-uforth#src:tools/compiler_srchash.sh": "96454497c72a4ac4bcb1b2bfb75eae7cf7575e88",
+  "test-uforth#src:tools/compiler_srchash.sh": "ab1d60ab88f231c8430546456c2e56161e57ba01",
   "test-uforth#src:tools/compiler_srchash.sh@1": "ab1d60ab88f231c8430546456c2e56161e57ba01",
   "test-uforth#src:tools/compiler_srchash.sh@10": "ab1d60ab88f231c8430546456c2e56161e57ba01",
   "test-uforth#src:tools/compiler_srchash.sh@11": "ab1d60ab88f231c8430546456c2e56161e57ba01",
@@ -15049,14 +15045,14 @@
  },
  "last": {
   "code_fp": "0c5ad13167ab",
-  "date": "2026-09-09T20:41:00Z",
+  "date": "2026-09-09T20:44:46Z",
   "deadline": 4547.4,
   "sha": "ab1d60ab88f231c8430546456c2e56161e57ba01",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1015.0
+  "verdict": "GREEN",
+  "wall": 215.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15107,14 +15103,14 @@
   },
   "slow": {
    "code_fp": "0c5ad13167ab",
-   "date": "2026-09-09T19:26:46Z",
+   "date": "2026-09-09T20:44:46Z",
    "deadline": 4547.4,
-   "sha": "96454497c72a4ac4bcb1b2bfb75eae7cf7575e88",
+   "sha": "ab1d60ab88f231c8430546456c2e56161e57ba01",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 216.8
+   "wall": 215.7
   }
  },
  "last_full": {
