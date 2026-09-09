@@ -1568,6 +1568,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_annotated_class_attribute26 | diff -u test/test_nilpy_annotated_class_attribute.expected -
 	./$(COMPILER) test/test_nilpy_class_body_method_alias.npy $(TESTTMP)/test_nilpy_class_body_method_alias26
 	$(TESTTMP)/test_nilpy_class_body_method_alias26 | diff -u test/test_nilpy_class_body_method_alias.expected -
+	./$(COMPILER) test/test_nilpy_attribute_on_a_parenthesised_receiver.npy $(TESTTMP)/test_nilpy_paren_recv26
+	$(TESTTMP)/test_nilpy_paren_recv26 | diff -u test/test_nilpy_attribute_on_a_parenthesised_receiver.expected -
 	./$(COMPILER) test/test_nilpy_class_attribute_through_class_name.npy $(TESTTMP)/test_nilpy_clsattr_byname26
 	$(TESTTMP)/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which

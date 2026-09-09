@@ -9295,10 +9295,7 @@ begin
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
-        ((ASTKind[CurASTNode] = AN_CALL) or
-         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
-         (ASTKind[CurASTNode] = AN_TERNARY)) and
-        not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
+        PyDynAttrSuffix(CurASTNode) do
   begin
     Next;                       { consume '.'; CurTok = the method name }
     smNameTok := TokPos - 1;
@@ -9388,10 +9385,7 @@ begin
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind <> tkLParen) and
-        ((ASTKind[CurASTNode] = AN_CALL) or
-         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
-         (ASTKind[CurASTNode] = AN_TERNARY)) and
-        not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
+        PyDynAttrSuffix(CurASTNode) do
   begin
     smBase := CurASTNode;
     Next;                       { consume '.'; CurTok = the attribute name }

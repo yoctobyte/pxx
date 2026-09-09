@@ -9,7 +9,6 @@ created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
-  - bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed
   - feature-n-the-array-module
   - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
   - bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
@@ -230,3 +229,22 @@ queue                                 1   gauges
 
 `wake` and `__main__` are two modules the earlier census did not list under
 blocker 1; they fail on 1b through the same import of `math3d`.
+
+## RE-MEASURED again 2026-09-09 (frankB) — blocker 1b closed; 5 -> 7 modules
+
+`compiler/pascal26` sha256 `16efc5348050`. **math3d and wake now compile.** The
+seven modules that imported math3d get PAST it and fail on their own next
+causes, nearly all already blockers here: `math.atan2` (rig, sim, traffic,
+vessel — the deliberate refusal), `array` (app, audio, world), `ctypes`
+(capture, gfx), `queue` (gauges), `str.join` (text).
+
+**Two causes are NEW and not yet filed**, both first-error readings that need
+reducing before they are worth a ticket:
+
+- `chart:189` — `Nil Python: cannot infer the type of field self.z0`
+- `environment`, `__main__`, `wind` at `:141` — `no class declares a method or
+  callable ...`
+
+Every number here is a LOWER BOUND: this is a first-error census, so a module
+that clears one cause may surface another, which is exactly what math3d did
+twice in a row today.

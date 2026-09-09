@@ -3,7 +3,7 @@ slug: bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-par
 track: N
 prio: 55
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-09
 found-by: frankB
@@ -74,3 +74,6 @@ be applied wherever it recurs.
 predates the alias fix entirely — gives the identical error on the identical
 line once the alias line is deleted, so nothing here was introduced by that
 change. It was masked behind the earlier error.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

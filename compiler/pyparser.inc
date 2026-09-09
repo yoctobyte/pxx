@@ -9594,6 +9594,44 @@ begin
             ((dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi));
 end;
 
+function PyDynAttrSuffix(n: Integer): Boolean;
+{ May a Python `.attr` / `.method()` suffix follow this non-lvalue receiver,
+  dispatched at RUN time?
+
+  THE SIBLING OF PySubscriptableSuffix, AND IT EXISTS BECAUSE THE TWO HAD
+  DRIFTED. The subscript guard above asks about the receiver's TYPE; the two
+  dynamic-attribute loops in ParseFactorInner asked instead for a hard-coded
+  list of node KINDS, and a list of kinds goes stale every time a new kind can
+  produce a variant. Its own comment records one such drift already -- both dot
+  loops knew only AN_CALL while the subscript guard had been taught
+  AN_VIRTUAL_CALL, so `P(7).mk().mk().a` stopped at the second link.
+
+  The next one was a PARENTHESISED receiver: `(p).norm()` and `(p).x` on an
+  unannotated parameter are ordinary Python and were parse errors, while
+  `(p)[0]` worked -- because the bracket asked the predicate and the dot asked
+  the list. `p.norm()` without the parentheses worked too, so the grouping was
+  the whole difference. It blocked lekkerzeilen's math3d.py at
+  `f = (target - eye).normalized()`, and through it seven more modules.
+  bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed
+
+  A tyClass or tyRecord receiver is somebody else's: the class-selector loops
+  resolve a real member and must keep winning, so they are excluded here rather
+  than left to ordering. What remains is a value whose members can only be known
+  at run time, which is exactly what the dynamic-attribute path is for.
+
+  The KIND arm is kept beside the TYPE arm rather than replaced by it: a call
+  that returns something other than a variant still reaches these loops today
+  and narrowing that silently is a different change from fixing the grouped
+  receiver. One predicate, so the next kind that needs adding is added once. }
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) in [tyClass, tyRecord] then Exit;
+  if IntToTypeKind(ASTTk[n]) = tyVariant then begin Result := True; Exit; end;
+  Result := (ASTKind[n] = AN_CALL) or (ASTKind[n] = AN_VIRTUAL_CALL) or
+            (ASTKind[n] = AN_TERNARY);
+end;
+
 { `base[idx]` for those bases: pystr_at for a string, the container's own getter
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }

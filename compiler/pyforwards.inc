@@ -157,6 +157,7 @@ function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-ki
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
+function PyDynAttrSuffix(n: Integer): Boolean; forward; { Nil Python: may `.attr` follow this non-lvalue, dispatched at run time? (pyparser.inc) }
 function PyParseFactorPrefix: Boolean; forward; { Nil Python: type()/super()/lambda at the head of ParseFactor (pyparser.inc) }
 function PyParseFactorForm(var stop: Boolean): Boolean; forward; { Nil Python: the FACTOR forms ParseFactorCore is the else of (pyparser.inc) }
 procedure PyStrCallResultSuffix(var node: Integer; var tk: TTypeKind); forward; { Nil Python `f()[i]` / `f()[a:b]` on a str-returning CALL (pyparser.inc) }

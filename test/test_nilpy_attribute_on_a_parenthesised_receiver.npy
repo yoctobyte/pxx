@@ -1,0 +1,67 @@
+# A Python `.attr` / `.method()` suffix on a PARENTHESISED receiver whose static
+# type is unknown -- an unannotated parameter, so a variant at compile time.
+# bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed
+#
+# The two dynamic-attribute loops asked for a hard-coded list of node KINDS
+# while the subscript guard beside them asked a PREDICATE about the receiver's
+# type, so `(p)[0]` parsed and `(p).x` did not. Every row below is a shape that
+# was a parse error; the last three are the ones that always worked and must
+# keep working, because a fix that widened the aperture too far would take the
+# grouped SUBSCRIPT or the class-typed receiver with it.
+
+
+class V:
+    def __init__(self, x):
+        self.x = x
+
+    def __sub__(self, o):
+        return V(self.x - o.x)
+
+    def norm(self):
+        return self.x
+
+
+class Holder:
+    def __init__(self, v):
+        self.v = v
+
+    def get(self):
+        return self.v
+
+
+def method_on_grouped_binop(p, q):
+    return (p - q).norm()
+
+
+def method_on_grouped_name(p):
+    return (p).norm()
+
+
+def field_on_grouped_name(p):
+    return (p).x
+
+
+def chained_off_a_group(p, q):
+    return (p - q).norm() + (p).x
+
+
+def grouped_subscript(p):          # worked before -- must keep working
+    return (p)[0]
+
+
+def unparenthesised(p):            # worked before -- must keep working
+    return p.norm()
+
+
+def grouped_class_typed():         # worked before -- must keep working
+    return (V(9)).norm()
+
+
+print(method_on_grouped_binop(V(3), V(1)))
+print(method_on_grouped_name(V(5)))
+print(field_on_grouped_name(V(5)))
+print(chained_off_a_group(V(3), V(1)))
+print(grouped_subscript([7, 8]))
+print(unparenthesised(V(5)))
+print(grouped_class_typed())
+print((Holder(V(4)).get()).norm())
