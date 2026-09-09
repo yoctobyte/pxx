@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: working
 owner: frankZ
-summary: "A type named as a SPECIALIZATION ARGUMENT is resolved where the template body materialises, not where the source wrote it. Three doors, three ways to be in neither table NestedSpecArg consults. DOOR A (a non-generic class, its own or a non-generic ancestor's nested type) and DOOR C (inherited from a GENERIC ancestor, the rtl-generics shape) are FIXED here; DOOR B (the template's own body) always worked. The silent arm now answers 300 where it answered 44. Two regression tests, both byte-matching fpc 3.2.2, both with a clean negative control on a pre-fix binary. STILL OPEN: `unknown type: PT` at generics.collections.pas:120/123/217 is UNMOVED by any of this — one unidentified mint of `TEnumerator<PT>`. The driver now compiles the unit end to end (11 errors, 6m59s) where it used to abort on `duplicate class name TEnumerator$PT`, which is worth having because everything after an abort is unchecked, NOT because a count went down: an aborting run has no count to compare against. NOT a blocker of this ticket and filed separately: bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template, a PRE-EXISTING door-B leak (verified on a binary without this fix) that makes any two-instantiation regression row go red for its own reason."
+summary: "A type named as a SPECIALIZATION ARGUMENT is resolved where the template body materialises, not where the source wrote it. THREE DOORS -- three ways to be in neither table NestedSpecArg consults. Door A (a non-generic class, its own or a non-generic ancestor's nested type) is fixed at 3a89c6184; door C (inherited from a GENERIC ancestor, the rtl-generics shape) at 61a9463be; door B (the template's own body) always worked. The silent arm answers 300 where it answered 44. Every ladder row now passes except v7, which is bug-p-a-qualified-type-name-cannot-be-a-generic-argument and unchanged. Two regression tests, both byte-matching fpc 3.2.2, both with a clean negative control on a pre-fix binary. STILL OPEN, and it is one question: the Generics.Collections driver compiles end to end (11 errors, 6m59s) where it used to abort, and of its 8 `TEnumerator` mints seven now resolve while exactly ONE is bare `alias=TEnumerator$PT` -- which site produces it is unidentified, and the one experiment that looked like it would answer that made the corpus worse and settled nothing. SEPARATE, filed, and NOT a blocker: bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template, a PRE-EXISTING leak verified on a binary without either fix, which is why both tests here instantiate each template once."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -618,3 +618,42 @@ at :152, and at :222/:361/:554/:619/:862 as `GetPtrEnumerator: TEnumerator<PT>;
 override;` in descendants. One of them resolves `PT` to nothing. A
 `PXXDBG=p.mint:TEnumerator,p.specbound` run over the corpus names it; it costs
 seven minutes and nobody has spent them.
+
+## 2026-09-09 (frankZ) — THE LADDER, RE-MEASURED AT `61a9463be` / binary `24f4fc4ec625`
+
+Every row re-run, not copied forward. The v-numbers are the original ladder's.
+
+| | shape | before | now |
+| --- | --- | --- | --- |
+| v1 | inherited nested type used PLAINLY | ok | ok |
+| v2 | spec arg, GENERIC ancestor + generic descendant | unknown type: PT | **ok** |
+| v3 | same, ancestor NON-generic, `PT = ^Integer` | unknown type: PT | **ok** |
+| v4 | same, ancestor AND descendant non-generic | unknown type: PT | **ok** |
+| v5 | no inheritance, the class declares `PT` itself | unknown type: PT | **ok** |
+| v6 | `TElem = Integer`, a plain alias not a pointer | unknown type: TElem | **ok** |
+| v7 | qualified: `TEnum<TDerived.TElem>` | unknown type: TDerived | unchanged — `bug-p-a-qualified-type-name-cannot-be-a-generic-argument` |
+| v8 | v6 plus a unit-scope namesake declared FIRST | ok | ok |
+| v9 | concrete argument (control) | ok | ok |
+| v10 | v8 with the namesake a DIFFERENT type | ok, **v=44** | ok, **v=300** |
+| v11 | v6 with the namesake declared AFTER the class | unknown type: TElem | **ok** |
+
+v7 is the one row untouched and it is deliberately untouched: the qualified
+argument now gets SKIPPED by the hoist rewrite rather than mangled into
+`TDerived.TDerived$PT`, which returns it to its own original failure. Its alias
+`$qual$TDerived$PT = TDerived.PT;` is still emitted above `TDerived`, which is
+that ticket's defect and not this one's.
+
+**What is left here is one question and it is narrow.** Of the 8 `TEnumerator`
+mints the Collections driver produces at this tree, seven resolve
+(`$TCustomList$UInt32$PT` x4, `$UInt32` x2, `$TEnumerable$UInt32$PT` x1) and
+exactly one is bare `alias=TEnumerator$PT tmpl=TEnumerator args=PT`. It is
+labelled `deferred`. `TEnumerator<PT>` is written at generics.collections.pas
+:133, :144, :152, :222, :361, :554, :619 and :862; one of those eight resolves
+`PT` to nothing.
+
+**And the obvious next experiment has already been run and it settled nothing.**
+The bare mint has the signature of a scan with an empty hoist table, which is
+also the signature of
+`bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`
+— but fixing that one's call site made the corpus WORSE, not better, so no link
+between them was established. Recorded so nobody spends the seven minutes twice.
