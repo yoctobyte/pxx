@@ -1636,6 +1636,39 @@ pre code{background:none;padding:0}
                         f"frontmatter key in its first 12 lines — an orphan fragment wearing a "
                         f"fence, which is exactly what a split ticket's tail looks like")
                     problems = 1
+                # A TERMINAL STATUS IN A RANKED FOLDER, which is the
+                # SINGLE-FILE version of the duplicate the scan below catches.
+                # That one needs two files to notice ("finished in one folder
+                # and still ranked in another"); one file declaring `status:
+                # done` while sitting in backlog-* produces the identical harm
+                # -- ready/next keep offering finished work -- and no pair
+                # exists for anything to compare.
+                #
+                # Measured 2026-09-09: bug-p-a-bare-inherited-does-not-forward-
+                # arguments had been fixed and tested at 851f170cb, carried
+                # `status: done`, and sat in backlog-pascal/. `check` was
+                # silent, the board ranked it at p40, and it was handed to a
+                # second agent as available work. The file parses perfectly and
+                # says it is finished in its own frontmatter -- the folder and
+                # the field simply disagree, and only the folder is consulted.
+                st_decl = ""
+                for _ln in head_lines[1:]:
+                    _m = re.match(r"status:\s*(\S+)", _ln)
+                    if _m:
+                        st_decl = _m.group(1).strip().strip("\"'")
+                        break
+                if st_decl in ("done", "rejected", "decided"):
+                    lines.append(
+                        f"TERMINAL-IN-RANKED: {st}/{path.name} declares "
+                        f"`status: {st_decl}` but sits in a RANKED folder, so "
+                        f"ready/next keep offering it as open work and an agent "
+                        f"can be dispatched onto a ticket that is already "
+                        f"finished. Move it to {st_decl}/ (git mv) and "
+                        f"regenerate the board. If the STATUS is the wrong half "
+                        f"— the work is not actually done — fix the field "
+                        f"instead; the folder and the field disagree and this "
+                        f"check cannot tell you which one is lying.")
+                    problems = 1
                 slug_toks.append((st, path.name, {
                     t for t in re.split(r"[-_.]", path.stem.lower())
                     if len(t) > 2 and t not in _DUP_STOP}))

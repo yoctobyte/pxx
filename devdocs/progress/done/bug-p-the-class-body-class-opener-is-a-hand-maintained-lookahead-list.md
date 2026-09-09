@@ -3,12 +3,12 @@ slug: bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
-summary: "UNBLOCKED AND ONE ARM LONGER, 2026-09-06: the blocker closed by ADDING a fifth arm (`class constructor`/`class destructor`, in BOTH member loops) rather than by replacing the enumeration, so this ticket's argument is stronger and its example list is now historical -- the two spellings it cited as falling through are handled, and the list that let them fall through is unchanged. A class body recognises `class` only through a hand-maintained lookahead list -- `class const` (pasparser_decl.inc:6772), `class var` (:6796), `class property` (:6808), `class procedure`/`class function` (:6828) -- and every other `class X` spelling falls past all four to the member-loop terminus. It worked because the terminus was a bare `else Next` that stepped over the `class` and left something the remaining arms could parse, so FPC's `class generic function` and `class class function` (its generic-class-method spellings) have never had an opener and have always been handled by accident. Narrowing the terminus in 76efae23e turned that accident into two regressions within an hour -- the full suite caught `class generic function`, frankS's conformance corpus caught `class class function` in tgenfunc3/tgenfunc4 -- both fixed at 7d263221f by putting tkClass back in the skip list, which restores the accident rather than removing it. THE LIST IS THE DEFECT: it is an enumeration that must be extended for every new `class X`, with no diagnostic when it is not, and `class` sitting in a skip list DOCUMENTED as section keywords now hides that. The fix is a tkClass opener that consumes the keyword and re-dispatches, so an unknown `class X` is refused by the arm that owns X."
+summary: "RESOLVED 2026-09-09: the class body recognised `class` through five independent `tkClass` + one-token-lookahead arms, so `class X` for any X nobody had enumerated matched none of them and fell to the member-loop terminus, which stepped over the `class` and let the ordinary arms take what was left. The harm was not a parse failure but a WRONG PARSE: `class wibble: LongInt;` compiled as a plain INSTANCE field, one shared slot per class silently becoming one per instance. Replaced by a single prefix loop that consumes `class` and `generic` in EITHER order (both are real -- `generic class function` is FPC's, `class generic function` is ours) and one guard that refuses any other `class X`; `class operator` gets its own message, since pxx implements it for RECORD types only. Three of this ticket's claims were wrong and are corrected in the resolution: `class class function` appears nowhere in the FPC corpus (tgenfunc3.pp is `generic class function`, tgenfunc4.pp is plain `class function`). 18 probe rows asserted in both directions; the record body's own list is untouched and is the same shape one level over."
 ---
 
 # `class` in a class body is recognised by enumeration, not by structure
@@ -265,3 +265,60 @@ ticket's territory, not a regression in the one that closed** — the warning wa
 only ever about the two spellings now handled.
 
 *Noted by the author of the fifth arm.*
+
+## Resolved 2026-09-09 — one opener, and it errors
+
+The five arms are gone. A prefix loop ahead of the member arms consumes `class`
+(setting `sawClassKw`) and `generic`, **in either order**, and each arm now
+tests `sawClassKw` + the current token instead of `tkClass` + a lookahead.
+After the loop, a single guard refuses any `class X` where X is not one of
+const, var, property, procedure, function, constructor, destructor.
+
+`class operator` gets its own message rather than that list, because the list
+would read as *you mistyped* and the writer did not — they wrote a real
+Delphi/FPC construct that pxx implements for RECORD types only.
+
+### Three of this ticket's claims did not survive measurement
+
+- **`class class function` appears NOWHERE in the FPC corpus.** `tgenfunc3.pp`
+  contains `generic class function`; `tgenfunc4.pp` contains a plain `class
+  function`. The `76efae23e` regression was real, but not of the spelling
+  recorded here. `class generic function` — the reversed order — exists only
+  in our own `test/generic_xunit_method_units/uxgm.pas:10`. Both orders are
+  handled, which is why the opener is a LOOP and not two ordered tests.
+- **A repeated `class` is absorbed, not refused.** Nothing in the corpus writes
+  it and accepting what FPC rejects is not a defect.
+- **The concrete harm is not a spelling that fails to parse — it is one that
+  parses into the WRONG THING.** `class wibble: LongInt;` compiled, and
+  compiled as a plain INSTANCE field: the terminus stepped over the `class`
+  and the field parser took the rest, turning one shared slot per class into
+  one slot per instance with no diagnostic. That is the case a test can only
+  see by demanding the refusal, which is why the fixture exists.
+
+### What was measured
+
+18 rows, each with an expected verdict asserted in BOTH directions: the seven
+valid spellings, both `generic` orders, a repeated `class`, a plain field, a
+plain `var`, `class of` as a type, and `class operator` in a RECORD body all
+compile; a class-prefixed field, `class 42`, `class type` and `class operator`
+in a CLASS body are all refused, the last with its own message.
+
+`class operator` in a class body was the one thing the census caught that the
+plan had missed — 165 hits corpus-wide, 20+ test files. **Pin v407 refuses it
+too**, as `expected ':' before <name>`, which is this ticket's own
+silent-absorption symptom. So the new message is a better diagnostic for the
+same refusal, never a narrowing. No file outside `test/` writes it in a class
+body.
+
+`ParseClassVarSection` ate `class` AND `var` and has a second caller in the
+record body, which has no opener; the keyword consumption moved out to both
+call sites rather than the class body being made to fake a token position.
+
+The standalone `generic` arm was deleted, not kept as a second chance: the
+opener runs unconditionally before it with the same predicate, and the only
+arms between the two `continue` rather than advancing the token, so it could
+never fire again.
+
+**The record body still has its own hand-maintained list** — this ticket was
+about the class body, and the record loop's arms (`class var`, `class
+operator`) were left alone. That is the same shape one level over.

@@ -5360,13 +5360,17 @@ procedure ParseClassVarSection(ci: Integer);
   never looked at whether the owner was a class. The comment described the
   absence of a caller, and read as the absence of a mechanism.
 
-  Enters with CurTok on `class` and the next token `var`. }
+  Enters with CurTok on `var`, the `class` ALREADY CONSUMED by the caller.
+  It used to eat both, but the class body's `class` is now eaten by the shared
+  opener there (one lookahead point for every `class X` member), so the callee
+  can no longer assume the keyword is still in front of it. The record body,
+  which has no such opener yet, consumes it at the call site. }
 var
   nFldNames, fni, i: Integer;
   cvNOffs: array[0..15] of Integer;
   cvNLens: array[0..15] of Integer;
 begin
-  Next; Next;   { consume 'class' 'var' }
+  Next;   { consume 'var'; the caller has already eaten 'class' }
   while (CurTok.Kind = tkIdent) and (not IsClassMemberStartWord(CurTok.SVal)) do
   begin
     nFldNames := 0;
@@ -5788,6 +5792,7 @@ begin
               'routine -- its storage is global and the type is not')
       else
       begin
+        Next;   { consume 'class'; ParseClassVarSection enters on 'var' }
         ParseClassVarSection(ci);
         continue;
       end;
@@ -7044,6 +7049,7 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   curPublishedExplicit: Boolean;  { the section was an EXPLICIT `published` marker (not the implicit default) — the class-property publish check keys on it }
+  sawClassKw: Boolean;           { this member began with the `class` keyword — see the opener }
   sawClassProp: Boolean;          { this member began with `class property` — both the publish and the `stored` refusal key on it }
   curVis: Integer;   { current member visibility (VIS_*) for the class body section; stamped onto each field/method (enforced only under StrictVisibility) }
   curStrictVis: Boolean;  { the pending section was introduced by `strict` }
@@ -7978,10 +7984,79 @@ begin
             so there is nothing to scope. `class const` and `const` are the same thing:
             a constant is already per-class, not per-instance. Neither parsed before —
             `const` fell into the field parser, which demanded a ':' after the name. }
-          if (CurTok.Kind = tkConst) or
-             ((CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkConst)) then
+          { THE `class` OPENER — ONE lookahead point, not five, and it
+            DIAGNOSES. Each member kind used to carry its own `(tkClass) and
+            (Tokens[TokPos].Kind = X)` test, so `class X` for an X nobody had
+            enumerated matched none of them, fell to the member-loop terminus,
+            and was SKIPPED: the `class` was stepped over and whatever followed
+            was parsed as an ordinary member. `class wibble: LongInt;` compiled
+            as a plain INSTANCE field — the class-ness discarded, no
+            diagnostic. That is the same silent-absorption this loop has been
+            bitten by twice already (`class constructor` wired to nothing, a
+            property's `default <value>` operand).
+
+            BOTH KEYWORD ORDERS ARE REAL, which is why this is a loop and not
+            two tests. `class generic function Twice<T>` is ours
+            (test/generic_xunit_method_units/uxgm.pas:10); `generic class
+            function Add<T>` is FPC's, and it is what tgenfunc3.pp actually
+            contains — measured, because the ticket recorded that file as
+            `class class function` and it is not. A repeated `class` is
+            absorbed rather than refused: nothing in the corpus writes it, and
+            accepting what FPC rejects is not a defect.
+
+            `class of` is a TYPE, never a member, so it is left alone.
+
+            The list below is still an enumeration — `class` genuinely changes
+            what each kind MEANS (a class var is not a var, a class property is
+            not a property), so no dispatch can be written without knowing the
+            set. What changes is that there is now ONE of it and it ERRORS,
+            instead of five that fall through in silence.
+            bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list }
+          sawClassKw := False;
+          while True do
           begin
-            if CurTok.Kind = tkClass then Next;   { consume `class`, leaving `const` }
+            if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+               (Tokens[TokPos].Kind <> tkOf) then
+            begin
+              sawClassKw := True;
+              Next;
+            end
+            else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic') and
+                    (TokPos < TokCount) and
+                    ((Tokens[TokPos].Kind = tkProcedure) or
+                     (Tokens[TokPos].Kind = tkFunction) or
+                     (Tokens[TokPos].Kind = tkClass)) then
+              Next
+            else
+              Break;
+          end;
+          { `class operator` is a REAL construct that pxx does not implement in a
+            CLASS body -- the record body has its own arm for it
+            (ParseRecordFields, the signature-only skip) and this loop has
+            none. It gets its own sentence because the generic list below would
+            read as "you mistyped", and the writer did not: they wrote a
+            construct we do not support. Measured against pin v407, which
+            refuses it too -- as `expected ':' before <name>`, i.e. the
+            silent-absorption symptom this opener exists to end: the `class`
+            was stepped over and `operator` was read as a FIELD NAME. So this
+            is a better message for the same refusal, not a narrowing. No file
+            outside test/ writes it in a class body. }
+          if sawClassKw and (CurTok.Kind = tkIdent) and
+             CaseEqual(CurTok.SVal, 'operator') then
+            Error('`class operator` is not supported in a class body yet — ' +
+                  'it is implemented for RECORD types only');
+          if sawClassKw and
+             not ((CurTok.Kind = tkConst) or (CurTok.Kind = tkVar) or
+                  (CurTok.Kind = tkProperty) or (CurTok.Kind = tkProcedure) or
+                  (CurTok.Kind = tkFunction) or
+                  ((CurTok.Kind = tkIdent) and
+                   (CaseEqual(CurTok.SVal, 'constructor') or
+                    CaseEqual(CurTok.SVal, 'destructor')))) then
+            Error('`class` here must be followed by const, var, property, ' +
+                  'procedure, function, constructor or destructor');
+
+          if (CurTok.Kind = tkConst) then
+          begin
             { Scope this const section to the class: each entry registers under a
               mangled key + a ClassConst registry row (owner ci + visibility)
               instead of the global tables — bug-pascal-class-const-visibility. }
@@ -8003,7 +8078,7 @@ begin
             It used to be `ParseTypeKind + AllocVar`, which reserved a SCALAR
             slot for an array type — indexing worked, Length() silently answered
             garbage, and an inline `array[...] of T` did not parse at all. }
-          if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkVar) then
+          if sawClassKw and (CurTok.Kind = tkVar) then
           begin
             ParseClassVarSection(ci);
             continue;
@@ -8015,32 +8090,26 @@ begin
             implicit default section stays lenient (pxx treats every class as
             $M+, so erroring there would reject plain Delphi code). }
           sawClassProp := False;
-          if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkProperty) then
+          if sawClassKw and (CurTok.Kind = tkProperty) then
           begin
             if curPublishedExplicit then
               Error('a class property cannot be published');
             sawClassProp := True;   { …and `stored` is the same rule; see ParsePropertyTailDirectives }
-            Next;   { consume `class`; the property branch parses the rest }
           end;
 
           { `generic` before a method header -- the objfpc surface of a generic
-            METHOD. Consumed here so both surfaces arrive at the `<` test below
-            in the same shape and one routine does the expansion. Without this
-            arm the loop read `generic` as a field name and answered
-            `expected ':' before 'function'`.
+            METHOD -- WAS CONSUMED HERE, by an arm identical to the one now in
+            the opener above. It is gone rather than kept as a second chance:
+            the opener runs unconditionally before this point with the same
+            predicate, and the only arms between the two `continue` instead of
+            advancing the token, so this could never fire again. A dead arm
+            that looks live is the next reader's wrong answer.
             feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
-          if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generic') and
-             ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction) or
-              (Tokens[TokPos].Kind = tkClass)) then
-            Next;
 
           isClassMethod := False;
           isClassCtorDtor := False;
-          if (CurTok.Kind = tkClass) and ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
-          begin
-            isClassMethod := True;
-            Next; { consume 'class' }
-          end
+          if sawClassKw and ((CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction)) then
+            isClassMethod := True
           { ...and `class constructor` / `class destructor`, which are neither
             constructors nor ordinary class methods: FPC runs them ONCE,
             automatically, around the program rather than at a call site. They
@@ -8059,13 +8128,12 @@ begin
             body in InitProcs/FiniProcs, the same list a unit's
             `initialization` section uses.
             bug-p-a-class-constructor-is-accepted-and-never-runs }
-          else if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkIdent) and
-                  (CaseEqual(GetTokenStr(TokPos), 'constructor') or
-                   CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+          else if sawClassKw and (CurTok.Kind = tkIdent) and
+                  (CaseEqual(CurTok.SVal, 'constructor') or
+                   CaseEqual(CurTok.SVal, 'destructor')) then
           begin
             isClassMethod := True;
             isClassCtorDtor := True;
-            Next; { consume 'class' }
           end;
 
           if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or

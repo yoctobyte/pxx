@@ -5400,6 +5400,33 @@ test-core: $(COMPILER)
 	# bug-p-a-delphi-parenless-method-reference-cannot-have-a-chained-receiver
 	./$(COMPILER) test/test_delphi_parenless_methodref_chained_receiver.pas $(TESTTMP)/test_delphi_chainref26
 	$(TESTTMP)/test_delphi_chainref26 | diff -u test/test_delphi_parenless_methodref_chained_receiver.expected -
+	# EVERY spelling the class-body `class` opener accepts, in one file: class
+	# const/var/property/function/procedure/constructor/destructor plus BOTH
+	# keyword orders around `generic`. One file because the opener is one
+	# lookahead point now -- it was five independent arms, where a regression
+	# could hit one spelling and leave the other four green. With `class const`
+	# and `class generic function` dropped (fpc 3.2.2 has neither), fpc -Mdelphi
+	# prints the other seven rows identically.
+	# bug-p-the-class-body-class-opener-is-a-hand-maintained-lookahead-list
+	./$(COMPILER) test/test_class_body_class_opener.pas $(TESTTMP)/test_cls_opener26
+	$(TESTTMP)/test_cls_opener26 | diff -u test/test_class_body_class_opener.expected -
+	# ...and the two REFUSALS, which is where the value is: before the opener
+	# both of these COMPILED. `class wibble: LongInt;` became a plain instance
+	# field -- one shared slot per class silently turned into one per instance,
+	# a working program with the wrong storage model, which no output row can
+	# see. Each row reads WHICH refusal, not just that one happened: the two
+	# messages are different on purpose and a bare exit check would score
+	# either as a pass for the other.
+	if ./$(COMPILER) test/test_class_body_class_opener_field_refused.pas $(TESTTMP)/test_cls_op_fld26 >/dev/null 2>&1; then \
+	  echo "FAIL: a class-prefixed FIELD declaration compiled -- the class-ness is being discarded and the member parsed as an INSTANCE field"; exit 1; \
+	fi
+	if ./$(COMPILER) test/test_class_body_class_opener_operator_refused.pas $(TESTTMP)/test_cls_op_op26 >/dev/null 2>&1; then \
+	  echo "FAIL: a class operator compiled in a CLASS body -- it is implemented for record types only"; exit 1; \
+	fi
+	./$(COMPILER) test/test_class_body_class_opener_field_refused.pas $(TESTTMP)/test_cls_op_fld26 2>&1 \
+	  | grep -q "must be followed by const, var, property"
+	./$(COMPILER) test/test_class_body_class_opener_operator_refused.pas $(TESTTMP)/test_cls_op_op26 2>&1 \
+	  | grep -q "not supported in a class body yet"
 	# A BARE method name in ARGUMENT position, `Take(HashIt)` inside a sibling
 	# method: referenced, not called. The bare-Self method call loop asked the
 	# bracket door and not the bare-proc one, so ParseExpr took the name under
