@@ -1,20 +1,21 @@
 ---
 track: P
 prio: 65
-owner: 
+owner: frankS
 blocked-by: []
-status: unfinished
+status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, but NO LONGER BLOCKED and the frontier has moved a whole unit. Re-measured 2026-09-09 at binary 4a6207c05ba2 / HEAD a130f0689, against the SAME library_candidates staging (0d122c49) as the 2729 figure, so this is comparable: `generics.defaults` now COMPILES AND RUNS (`uses Generics.Defaults` -> rc=0, prints `defaults ok`), the old wall defaults:2729 is PAST, and its blocker bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced is in done/. The live wall driving the real target (uses Generics.Collections, specializing TList<LongInt>) is `generic template IEqualityComparer not found`, near `specialize IEqualityComparer<string>` / `TOnEqualityComparison$string` -- fired during INSTANTIATION, since the $string suffix is our own mangled specialization name. DO NOT AIM AT THE REPORTED LOCATION: it says generics.memoryexpanders.pas:67, and that file never mentions IEqualityComparer, uses only Classes and SysUtils, and has `const MAX_LOAD_FACTOR = 1;` on line 67 -- the filename and the line number come from different units. IEqualityComparer<T> is declared at defaults:77. THE OLD WALL TABLE IN THIS FILE IS STILL NOT COMPARABLE and must not be diffed against: it was measured on a /tmp symlink stage built from a local FPC checkout. Unclaimed -- frankH measured the frontier only to correct a summary stale in two places."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, NO LONGER BLOCKED, and the frontier has moved a whole unit. Re-measured 2026-09-09 at binary 4a6207c05ba2: `generics.defaults` COMPILES AND RUNS (`uses Generics.Defaults` -> rc=0, prints `defaults ok`), the old wall defaults:2729 is PAST, and its blocker bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced is in done/. TWO DRIVERS, TWO WALLS, both real -- quote the driver beside the number. (a) `uses Generics.Collections` alone prints THREE errors, and the FIRST is the wall: `collections.pas:120 unknown type: PT` on `TEnumerator<T>.DoGetCurrent`, then :123, then `:119 duplicate class name TEnumerator$PT`. `$PT` is our own mangled specialization name on a type PARAMETER, so it fires during instantiation; PXXDBG=p.mint mints that name FOUR times and p.nspec shows the substitution set as `PT->PT`. (b) `uses Generics.Defaults, Generics.Collections` + specializing TList<LongInt> gives `generic template IEqualityComparer not found`. DO NOT AIM AT THAT REPORT'S LOCATION: it says generics.memoryexpanders.pas:67, and that file never mentions IEqualityComparer, uses only Classes and SysUtils, and has `const MAX_LOAD_FACTOR = 1;` on line 67 -- the filename and the line number come from different units; IEqualityComparer<T> is declared at defaults:77. THE OLD WALL TABLE IN THIS FILE IS COMPARABLE AFTER ALL and an earlier version of this summary said the opposite: generics.collections.pas is BYTE-IDENTICAL between the library_candidates staging and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes), so the line numbers are the same coordinates. Claimed by frankS 2026-09-09, handed over by frankZ."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** blocked on one named bug — re-driven 2026-09-09, wall at
-  generics.defaults.pas:2729 (rungs 1+2 are green: fpcunit runs, fpjson's suite
-  is 203/203).
+- **Status:** claimed (frankS). Not blocked. Wall on driver (a):
+  `generics.collections.pas:120`, `unknown type: PT` -- the FIRST of three errors,
+  read the whole stream. Rungs 1+2 are green: fpcunit runs, fpjson's suite is
+  203/203.
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
 
@@ -1469,11 +1470,15 @@ driver beside the number or the next reader will read one as a regression of the
 other.
 
 **Compiling a driver over the unit** (`uses Generics.Collections;` alone, DELPHI
-and objfpc both, binary `4a6207c05ba2` at HEAD `a9b94453f`):
+and objfpc alike, binary `4a6207c05ba2`) — the WHOLE output, three errors, in the
+order they are printed:
 
 ```
-collections.pas:119: error: duplicate class name TEnumerator$PT -- one of that
-  name is already declared in this unit
+collections.pas:120: error: unknown type: PT
+  near: class abstract protected function DoGetCurrent : >>> PT ; virtual
+collections.pas:123: error: unknown type: PT
+  near: public property Current : >>> PT read DoGetCurrent
+collections.pas:119: error: duplicate class name TEnumerator$PT
   near:  PT   class abstract >>> protected function DoGetCurrent
 ```
 
@@ -1488,28 +1493,28 @@ is strictly better -- two lines onto the existing `ClassDeclaresTypeNamed` where
 mine added a predicate, three kinds mine did not cover, and a `%FAIL` row mine
 did not have.
 
-**AND THE NUMBER I FIRST WROTE HERE CAME OFF THAT DISCARDED TREE.** I recorded
-the frontier as `collections:120 -- unknown type: PT`, an exact match for the
-2026-08-30 table, and built a correction on the exactness. Re-measured at HEAD
-with no local change, the diagnostic is the one above: **one line earlier and a
-different error.** The `:120` figure is not reproducible -- the tree that
-produced it no longer exists -- so do not quote it. What survives is that both
-land on the SAME declaration, `TEnumerator<PT> = class abstract` with
-`DoGetCurrent` at the caret, which is the 2026-08-30 caret's own subject.
+**AND I RETRACTED THE `:120` FIGURE FOR AN HOUR ON A `tail -3`.** I read this
+same output through `tail -3`, saw only the LAST error, and wrote that the
+frontier had moved to `:119 duplicate class name` -- "one line earlier and a
+different error" -- and that `:120 unknown type: PT` was not reproducible. It is
+the FIRST error and it never moved. `tail` did not lie about anything; it was
+correct about the last three lines. Rules file, "every instrument that lies, lies
+by being CORRECT ABOUT SOMETHING ELSE" -- and the instrument here is the one that
+sentence names by example. **Read the whole diagnostic stream on a corpus driver;
+the first error is the wall and the later ones are usually its wake.**
 
 ### Correction 1 — the stagings ARE comparable, and I said they were not
 
 This morning I wrote that the old wall table "is NOT comparable to a
 library_candidates staging" because one was a `/tmp` symlink tree from a local
 FPC checkout and the other is the `install_lib_candidates.sh` tree at
-`0d122c49`, "so the line numbers are different coordinates". Both stagings wall at the SAME
-declaration in the same file -- `TEnumerator<PT> = class abstract`, `:119`/`:120`
-with `DoGetCurrent` at the caret in both. Two stagings of different sources do
-not land on one declaration by coincidence: it is the same upstream, and the line
-numbers are the same coordinates. **What I do NOT have is a match to the line and
-the message** -- I claimed one this morning off the discarded tree, and the
-diagnostic has moved since. The comparability holds on the construct, not on the
-digits.
+`0d122c49`, "so the line numbers are different coordinates". **The two stagings are the SAME FILE, byte for byte.**
+`md5sum` on `generics.collections.pas` from `library_candidates/rtl-generics`
+and from `/usr/share/fpcsrc/3.2.2` is `1010a887c20dc546215749ca46c5a773` in both,
+110423 bytes. Line numbers from the two stagings are therefore the same
+coordinates by construction, not by inference, and every wall figure in this file
+-- the 2026-08-30 table's `:120` included -- is directly comparable. One `md5sum`
+settles what I spent two claims and a retraction reasoning about.
 
 The caution was reasonable when I wrote it and it was doing real work — it
 stopped me reporting a regression off a staging difference. But it was a
@@ -1523,10 +1528,40 @@ between then and 09-08 broke `generics.defaults` at `:2729` and MASKED that
 frontier; `ad7c03b03` removed it and `2242a5903` cleared the weakness behind it.
 The rung is back where it was in August with two fixes under it.
 
-**Next**, for whoever takes it: the wall is on `TEnumerator<PT> = class abstract`
-in `generics.collections.pas` (`:119` today, `duplicate class name
-TEnumerator$PT`; `:120`, `unknown type: PT` in the 2026-08-30 table). `PT` is a
-generic type PARAMETER and `$PT` is our own mangled specialization name, so this
-fires during instantiation, twice for one template. The 2026-08-30 note warns it
-must not be assumed to be the same defect as the `TKey` one before it. Still
-unmeasured, still stands.
+**Next — two instruments already point at the mechanism, and neither reading is
+measured yet.**
+
+`PXXDBG=p.mint:*` on the driver: `TEnumerator$PT` is minted **four times**, every
+one of them `args=PT` -- the literal spelling. One sibling site in the same run
+mints `TEnumerator$TEnumerable$UInt32$PT`, i.e. the enclosing substitution IS
+carried there, so the machinery exists and some sites do not reach it.
+
+`PXXDBG=p.nspec:TEnumerator$PT` prints the substitution set in force at each
+registration. Three read `under=TCustomListWithPointers$UInt32 nsub=1
+subs=T->UInt32` -- `PT` is not in the set at all -- and the fourth reads
+`under=TPointersCollection nsub=2 subs=T->UInt32 PT->PT`, **PT mapped to
+itself**. That probe's own header says what such a line means: "an argument that
+comes out as a template PARAMETER name means the name was not in SpecSubNames
+here".
+
+**Hypothesis, NOT MEASURED:** the mangled specialization name takes the
+argument's SPELLING rather than its resolved identity, so a nested alias `PT` in
+one class, a type parameter `PT` in another and a second nested alias `PT` in
+`TCustomSet<T>` all mangle to `TEnumerator$PT`, and the second registration is
+the duplicate. frankZ reached the same hypothesis independently from a bisect and
+neither of us has separated it from "the body is resolved in the specializer's
+scope" -- both produce `unknown type: PT` at `TEnumerator<T>`'s own `:120`.
+**What would falsify it:** a narrowed trigger line that has nothing to do with a
+second `PT`.
+
+frankZ's bisect, same coordinates (see the md5 above): cut at 163 COMPILES --
+and 163 contains all four of the declarations everyone has been staring at,
+including `TEnumerable<T>`'s `PT = ^T` and both `TEnumerator<PT>` uses -- so the
+DECLARATION region is not the defect and something at 466-490 instantiates. Cuts
+at 200/300/400 are masked by a truncation artefact (`unexpected token in a unit
+interface section` at N+4) and must not be read as verdicts.
+
+The 2026-08-30 note warns this must not be assumed to be the same defect as the
+`TKey` one before it (`bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body`,
+in `done/`) -- whose fix installed the `p.nspec` probe above, for this exact
+symptom. Still unmeasured, still stands.
