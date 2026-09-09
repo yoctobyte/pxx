@@ -9294,6 +9294,36 @@ begin
                        (tk = Ord(tyNativeInt)) or (tk = Ord(tyNativeUInt));
 end;
 
+function SameExactTypeKind(a, b: TTypeKind): Boolean;
+{ Are these two kinds the SAME TYPE, for a comparison whose semantics is an
+  EXACT match? Only one pair differs from `a = b`: `Integer` and `LongInt` are
+  one type -- both 4-byte signed, FPC declares one as the other's alias -- and
+  they carry distinct kinds here (tyInteger / tyInt32), so a bare comparison
+  discriminates on the SPELLING. See MatchParamExact below for what that cost
+  once (bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching).
+
+  Extracted when the second exact-match site appeared -- for-in enumerator
+  precedence, which asks whether an `operator enumerator`'s Current type IS the
+  loop variable's. It reproduced the closed bug exactly: `for l in st` with
+  `l: longint` took the built-in where FPC runs the operator, while the same
+  loop spelled `integer` ran it. Two copies is the point to name the rule
+  rather than to write it twice.
+
+  It sits HERE, ahead of OpConvSourceRank, because a THIRD caller appeared:
+  conversion-operator ranking. Measured 2026-09-09 against fpc 3.2.2 -- with
+  `operator :=(Int64): TDst` declared BEFORE `operator :=(LongInt): TDst` and an
+  `i: Integer` source, fpc runs the LongInt one, so exactness beats declaration
+  order and the two spellings must compare EQUAL for it to. A bare `paramTk =
+  srcTk` made neither exact, tied them at rank 1, and pxx refused the assignment
+  outright. fpc also refuses the pair at DECLARATION (`overloaded functions have
+  the same parameter list`), which the same change now gets for free through
+  FindOpConvDeclDup. }
+begin
+  Result := (a = b) or
+            ((a = tyInteger) and (b = tyInt32)) or
+            ((a = tyInt32) and (b = tyInteger));
+end;
+
 function OpConvSourceRank(paramTk, srcTk: Integer): Integer;
 { How well a conversion operator's PARAMETER type accepts a source of kind
   srcTk. Lower is better; -1 means not assignment-compatible at all, so the
@@ -9314,7 +9344,7 @@ function OpConvSourceRank(paramTk, srcTk: Integer): Integer;
   reaches only a float parameter -- FPC has no implicit float-to-integer. }
 begin
   OpConvSourceRank := -1;
-  if paramTk = srcTk then
+  if SameExactTypeKind(IntToTypeKind(paramTk), IntToTypeKind(srcTk)) then
   begin
     OpConvSourceRank := 0;
     Exit;
@@ -9479,7 +9509,7 @@ function FindOpConvRankedAmb(opKey, srcTk, srcRec, dstTk, dstRec, dstCap, maxRan
   source to the same destination are ambiguous; QWord and Int64 to one
   destination are not, and constexp.pas declares exactly that pair). Use
   OPCONV_RANK_MAX for a use site. }
-var i, pi, bestPi, bestRank, bestCapRank, r, cr: Integer;
+var i, pi, bestPi, bestRank, bestCapRank, bestSrcTk, r, cr: Integer;
     okRes: Boolean;
 begin
   { CAPACITY SPLITS EXPLICIT CASTS ONLY, and this is a rule about the language
@@ -9521,7 +9551,7 @@ begin
     dstCap := OpConvDestCapNorm(dstTk, dstCap)
   else
     dstCap := 0;
-  bestPi := -1; bestRank := 99; bestCapRank := 99; nBest := 0;
+  bestPi := -1; bestRank := 99; bestCapRank := 99; bestSrcTk := -1; nBest := 0;
   i := 0;
   while i < OvrlCount do
   begin
@@ -9558,16 +9588,39 @@ begin
           begin
             bestRank := r;
             bestCapRank := cr;
+            bestSrcTk := OvrlTypeKind[i];
             bestPi := pi;
             nBest := 1;
           end
-          else if (r = bestRank) and (cr = bestCapRank) then
-            { A SECOND candidate that is exactly as good. Counted rather than
-              discarded: with two sized results and no generic, fpc refuses the
-              assignment instead of choosing, and a first-match scan cannot tell
-              that case from a lone candidate. The caller decides what a tie
-              means -- the declaration-time duplicate check wants ONE, the store
-              wants a refusal. }
+          else if (r = bestRank) and (cr = bestCapRank) and
+                  SameExactTypeKind(IntToTypeKind(OvrlTypeKind[i]),
+                                    IntToTypeKind(bestSrcTk)) then
+            { A SECOND candidate that is exactly as good AND CONVERTS FROM THE
+              SAME SOURCE TYPE. Counted rather than discarded: with two sized
+              results and no generic, fpc refuses the assignment instead of
+              choosing, and a first-match scan cannot tell that case from a lone
+              candidate. The caller decides what a tie means -- the
+              declaration-time duplicate check wants ONE, the store wants a
+              refusal.
+
+              THE SAME-SOURCE TEST IS THE WHOLE DIFFERENCE BETWEEN A REFUSAL AND
+              A CHOICE, and without it this counted the wrong ties. fpc 3.2.2
+              refuses only when the candidates are interchangeable ON THE
+              SOURCE SIDE and differ in their RESULT -- toperator92/95, one
+              `: TString80` and one `: TString90` from the same TTest. When the
+              PARAMETER types differ it does not refuse at all: it takes the
+              FIRST DECLARED. Measured 2026-09-09, and the pair is the proof
+              because the set is identical and only the order moves --
+
+                operator :=(SmallInt) then operator :=(Int64),  d := 5 -> SmallInt
+                operator :=(Int64)    then operator :=(SmallInt), d := 5 -> Int64
+
+              and likewise {Byte,Word} -> Byte against {Word,Byte} -> Word. So
+              declaration order is the tie-break, which this scan already
+              implements by replacing only on a STRICTLY better rank; the bug
+              was counting the loser and turning a decided call into
+              `more than one conversion operator applies`. Every row of a
+              six-operator ladder refused that way. }
             Inc(nBest);
         end;
       end;
@@ -12323,26 +12376,6 @@ function IsIntTypeKind(t: TTypeKind): Boolean;
 begin
   Result := t in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
-end;
-
-function SameExactTypeKind(a, b: TTypeKind): Boolean;
-{ Are these two kinds the SAME TYPE, for a comparison whose semantics is an
-  EXACT match? Only one pair differs from `a = b`: `Integer` and `LongInt` are
-  one type -- both 4-byte signed, FPC declares one as the other's alias -- and
-  they carry distinct kinds here (tyInteger / tyInt32), so a bare comparison
-  discriminates on the SPELLING. See MatchParamExact below for what that cost
-  once (bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching).
-
-  Extracted when the second exact-match site appeared -- for-in enumerator
-  precedence, which asks whether an `operator enumerator`'s Current type IS the
-  loop variable's. It reproduced the closed bug exactly: `for l in st` with
-  `l: longint` took the built-in where FPC runs the operator, while the same
-  loop spelled `integer` ran it. Two copies is the point to name the rule
-  rather than to write it twice. }
-begin
-  Result := (a = b) or
-            ((a = tyInteger) and (b = tyInt32)) or
-            ((a = tyInt32) and (b = tyInteger));
 end;
 
 function MatchParamExact(i, j: Integer; argTk: TTypeKind): Boolean;

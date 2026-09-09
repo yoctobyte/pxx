@@ -15879,6 +15879,27 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_const_fold_overflows_into_qword.pas $(TESTTMP)/test_cfoldq26
 	tools/expect_same.sh test_cfoldq26 "$$($(TESTTMP)/test_cfoldq26)" "$$(cat test/test_const_fold_overflows_into_qword.expected)"
+	# Which `operator :=` an untyped integer CONSTANT selects. fpc types the
+	# constant BY VALUE first -- smallest type that holds it, signed candidate
+	# before unsigned at each width -- and ranks the operators against THAT.
+	# pxx typed every literal Integer and ranked that, so `d := 200` took the
+	# Int64 conversion where fpc takes the Byte one. Three defects had to go
+	# for this file to pass and each has its own block, because each one alone
+	# still gets rows wrong:
+	#   1. the literal's static kind instead of its value (the ladder rows);
+	#   2. a source-rank TIE was refused outright as "more than one conversion
+	#      operator applies" -- fpc takes the FIRST DECLARED, which the fwd/rev
+	#      pair proves with an identical candidate set in opposite order;
+	#   3. `Integer` and `LongInt` are ONE type, so exactness has to see through
+	#      the spelling; declared Int64-first, the alias rows answer Int64
+	#      without it.
+	# The negative rows are the ones that separate a real fix from a node-kind
+	# test: `-1` is an AN_NEG over a constant, not a literal node, so a fix
+	# keyed on AN_INT_LIT passes all ten ladder rows and fails those two.
+	# `0-1` folds to a literal and is kept as the control that says so.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_conv_op_rank_literal_by_value.pas $(TESTTMP)/test_convrank26
+	tools/expect_same.sh test_convrank26 "$$($(TESTTMP)/test_convrank26)" "$$(cat test/test_conv_op_rank_literal_by_value.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out

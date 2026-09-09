@@ -9361,6 +9361,50 @@ begin
   last := IRAppend(IR_LABEL, -1, -1, -1, skipLabel, 0);
 end;
 
+function OpConvSrcTkOfNode(n: Integer): Integer;
+{ The source kind a CONVERSION-OPERATOR lookup should rank an expression by.
+
+  For everything except an untyped integer literal that is `ASTTk[n]`. For a
+  literal it is LiteralIntKind of its VALUE, because that is the type fpc gives
+  an untyped integer constant and therefore the type its overload ranking sees.
+  pxx types every literal tyInteger, so `d := 200` ranked as an Integer and took
+  `operator :=(Int64)` where fpc takes `operator :=(Byte)`.
+
+  This is the SECOND consumer of that ladder -- MatchCallDelphiProcAddr's
+  litTypes retry is the first, and it guards the same two cases for the same
+  reasons:
+
+    * ASTSemId >= 0 -- an enum MEMBER folds to an AN_INT_LIT carrying its
+      ordinal, and re-typing that by value would rank it as a plain number;
+    * a literal already tagged tyUInt64 by NormalizeWideUnsignedLiteral keeps
+      its static kind. LiteralIntKind takes an Int64 and can never return
+      tyUInt64, so a value above High(Int64) reaches it as a NEGATIVE number and
+      would come back tyInt8. That is the one input where re-deriving is
+      strictly worse than not asking.
+
+  IT ASKS ASTConstIntValue, NOT `ASTKind = AN_INT_LIT`, and the difference is
+  two thirds of the rows. `-1` is not a literal node here: unary minus over a
+  constant builds an AN_NEG and types it from the folded value (ParseFactor's
+  tkMinus arm), so a kind test sees AN_NEG, falls back to ASTTk = tyInteger and
+  ranks -1 as a LongInt -- which is exactly the defect, one node shape further
+  out. `0-1` DID fold to a literal and answered correctly, which is what makes
+  the AN_INT_LIT version look right until a negative row is asserted. The folder
+  also covers a named `const`, and fpc ranks that by value too (measured).
+
+  Measured against fpc 3.2.2 (2026-09-09) on a six-operator ladder
+  ShortInt/Byte/SmallInt/Word/LongInt/Int64, which pins the rule completely:
+  5,127->ShortInt  128,200,255->Byte  256,32767->SmallInt  32768,65535->Word
+  65536->LongInt  -1->ShortInt  -200->SmallInt. Every rung is the smallest type
+  that holds the value, signed candidate before unsigned at each width. }
+var ocsV: Int64;
+begin
+  if (n >= 0) and (ASTSemId[n] < 0) and (ASTTk[n] <> Ord(tyUInt64)) and
+     TkIsIntegerFamily(ASTTk[n]) and ASTConstIntValue(n, ocsV, 0) then
+    OpConvSrcTkOfNode := Ord(LiteralIntKind(ocsV))
+  else
+    OpConvSrcTkOfNode := ASTTk[n];
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
@@ -13673,7 +13717,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           `p^` and returns nothing for a plain identifier. Wiring it here made
           the path LOOK destination-aware while declaration order actually
           decided which conversion ran. }
-        varIdx := FindOpConvToDestAmb(ASTTk[ASTRight[node]],
+        { OpConvSrcTkOfNode, not ASTTk: an untyped integer literal must rank by
+          its VALUE. `d := 200` with `operator :=(Byte)` and `operator
+          :=(Int64)` declared took the Int64 one, because pxx types every
+          literal tyInteger and Integer prefers the signed parameter. fpc types
+          the constant Byte and takes the Byte one. }
+        varIdx := FindOpConvToDestAmb(OpConvSrcTkOfNode(ASTRight[node]),
                                       ResolveNodeRec(ASTRight[node]),
                                       Ord(lhsTk), ResolveNodeRec(ASTLeft[node]), 0,
                                       convAmbig);

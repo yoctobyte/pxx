@@ -1,0 +1,24 @@
+5 -> ShortInt
+127 -> ShortInt
+128 -> Byte
+200 -> Byte
+255 -> Byte
+256 -> SmallInt
+32767 -> SmallInt
+32768 -> Word
+65535 -> Word
+65536 -> LongInt
+-1 -> ShortInt
+-200 -> SmallInt
+0-1 -> ShortInt
+K200 -> Byte
+KNEG -> ShortInt
+KSUM -> SmallInt
+100+156 -> SmallInt
+fwd 5 -> SmallInt
+rev 5 -> Int64
+fwd 300 -> SmallInt
+rev 300 -> SmallInt
+Integer var -> LongInt
+65536 -> LongInt
+qword literal -> 18446744073709551615
