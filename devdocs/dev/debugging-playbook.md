@@ -2982,6 +2982,54 @@ a plausible mechanism. Before reporting that master's gate is red, reseed from
 `pinned` and rebuild — three commands, and the alternative is a peer bisecting
 a bug that is not there.
 
+## A PROBE WHOSE INPUT ORDER LETS A BROKEN BUILD ANSWER CORRECTLY — the ordering sibling of "the right answer collides with the default"
+
+CLAUDE.md already refuses a probe whose expected VALUE is also the value a
+build that did nothing would produce (`sizeof(int)` where 4 is both the answer
+and `TypeStorageSize(tyUnknown)`). **The same trap has a second axis, and the
+colliding thing is not the value but the ARRANGEMENT of the input.**
+
+Measured 2026-09-09, three sessions, three costumes in one day:
+
+- **Declaration order** (frankZ, forward pointers in a class type section).
+  With `PRec` written before `PPRec`, the construct compiled throughout — on
+  the pin, at HEAD, and with the bug fully present. Only the reversed order
+  reaches the arm at all. A probe using the order a programmer writes by
+  instinct measured nothing, and would have printed PASS on every build ever
+  made.
+- **Operand order in a matrix** (frankH, the operator predefined table). The
+  209-cell sweep is SAME-TYPE pairs only. Generalising it to mixed pairs "by
+  type family" looks safe and is wrong in both directions — `+ (LongInt,
+  Pointer)` is predefined while `- (LongInt, Pointer)` is not, and
+  `+ (Pointer, Pointer)` is not while `- (Pointer, Pointer)` is. The cells the
+  sweep covers cannot see the asymmetry, because the asymmetry only exists
+  BETWEEN families.
+- **Which spelling of one expression you probe** (frankH, `(x + y).v`). The
+  temporary spelling `z := x + y; z.v` compiled the whole time the direct one
+  was an IR_UNSUPPORTED. A row asserting the workaround passes forever.
+
+**The question to ask is not "can this guard fail" but "does my input reach the
+arm at all".** A positive control drawn from the right population, reading the
+right quantity, with an expected value that differs from every default, STILL
+proves nothing if the arrangement of the input routes around the code under
+test. That is a fourth independent check on top of the three CLAUDE.md already
+names (drawn from the right population; aimed and read; assertion class matched
+to defect class), and it is the one that is invisible in a green run.
+
+**The cheap discipline: assert BOTH orders.** frankZ's
+`test_a_forward_pointer_in_a_nested_type_section.pas` carries the forward and
+the natural order as separate rows for exactly this reason, and the pair costs
+one extra row. Where an order cannot be enumerated — a matrix — say in the
+fixture which axis was measured and which was not, so the next reader does not
+read a same-type sweep as a statement about mixed pairs.
+
+**The tell that you have this and not something else:** the bug is real,
+reproducible, and your probe is green on a build you have already proven
+broken by other means. If reverting the fix does not redden your probe, the
+probe is not aimed at the fix — and unlike a wrong value, nothing about the
+output says so.
+
+
 ## A guard can fail in the FALSE DIRECTION, and that costs more than a silent one
 
 Measured 2026-08-30. `tools/csmith_target_devtest.py` asserted, unconditionally:
