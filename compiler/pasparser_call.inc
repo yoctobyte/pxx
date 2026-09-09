@@ -4445,7 +4445,7 @@ begin
   end;
 end;
 
-function ClassCtorArraySigAt(ci, argIdx: Integer): Integer;
+function ClassCtorArraySigAt(ci, argIdx: Integer; const ctorName: AnsiString): Integer;
 { WHICH constructor wants an array at this argument slot, not WHETHER one does.
 
   ClassCtorWantsVarRecAt above answers the Boolean, and a Boolean is all the
@@ -4459,6 +4459,23 @@ function ClassCtorArraySigAt(ci, argIdx: Integer): Integer;
   Returning the Procs[] row lets the caller reach TryParseBracketArgForSlot, the
   same door every other call path now goes through, so the decision is written
   once rather than a tenth time.
+
+  SCOPED TO ONE NAME, AND THAT IS A REGRESSION FIX, NOT A REFINEMENT. This
+  routine used to scan every constructor of the class regardless of NAME, which
+  was harmless while first-match ran (the called ctor was usually the first one
+  declared) and became a wrong answer the moment the array-of-const preference
+  below was added: `TC.Create([10, 20, 30])` against
+  `constructor Create(const A: array of Integer)` found `CreateV(const A: array
+  of const)` two lines further down the same class and parsed the bracket as a
+  TVarRec vector -- sum 10 against fpc's 60, the exact defect
+  test_a_bracket_argument_reaches_the_same_door_at_every_call_path was written
+  to catch, reintroduced through the other half of the same predicate. Found by
+  Track T's full tier at af0e5a0ad099 and by frankH; `gate.sh quick` was GREEN
+  on the same tree. **`Create` and `CreateV` are two NAMES, not two overloads**,
+  and fpc's preference is between overloads. The parent walk comes with the
+  restriction: without it a class that inherits `Create` and declares
+  `CreateX(array of Integer)` would name-miss on its own rows and answer with
+  neither.
 
   AN `array of const` AT THE SLOT WINS OVER ANY OTHER ARRAY, and only then does
   first-match decide. This half of the ordering IS rankable and the comment here
@@ -4479,27 +4496,35 @@ function ClassCtorArraySigAt(ci, argIdx: Integer): Integer;
   bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type.
   bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
   bug-p-the-bracket-argument-door-is-hand-written-at-every-call-path }
-var mi, mpi, base, cnt, k, pass: Integer;
+var mi, mpi, base, cnt, k, pass, curr: Integer;
+    lo: AnsiString;
 begin
   Result := -1;
   if (ci < 0) or (ci >= UClsCount) then Exit;
-  base := UClsMBase[ci];
-  cnt := UClsMCount[ci];
+  lo := ULower(ctorName);
   for pass := 0 to 1 do
   begin
-    for k := 0 to cnt - 1 do
+    curr := ci;
+    while curr >= 0 do
     begin
-      mi := base + k;
-      if not UMthIsCtor[mi] then continue;
-      mpi := UMthProc_[mi];
-      if mpi < 0 then continue;
-      if (argIdx + 1) < Procs[mpi].ParamCount then
-        if Procs[mpi].Params[argIdx + 1].IsArray then
-          if (pass = 1) or ParamIsVarRecArrayAt(mpi, argIdx + 1) then
-          begin
-            Result := mpi;
-            Exit;
-          end;
+      base := UClsMBase[curr];
+      cnt := UClsMCount[curr];
+      for k := 0 to cnt - 1 do
+      begin
+        mi := base + k;
+        if not UMthIsCtor[mi] then continue;
+        if not UMemberNameMatch(UMthNOff[mi], UMthNLen[mi], curr, ctorName, lo) then continue;
+        mpi := UMthProc_[mi];
+        if mpi < 0 then continue;
+        if (argIdx + 1) < Procs[mpi].ParamCount then
+          if Procs[mpi].Params[argIdx + 1].IsArray then
+            if (pass = 1) or ParamIsVarRecArrayAt(mpi, argIdx + 1) then
+            begin
+              Result := mpi;
+              Exit;
+            end;
+      end;
+      curr := UClsParent[curr];
     end;
   end;
 end;

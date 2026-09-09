@@ -10,3 +10,5 @@ veto      ints  cnt=2
 ctintfirst vr   cnt=3
 ctvrfirst  vr   cnt=3
 ctsole     ints sum=60
+ctnamed    ints sum=60
+ctnamedvrf ints sum=60

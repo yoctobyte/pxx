@@ -104,6 +104,23 @@ type
   TCSole = class
     constructor Create(const A: array of Integer);
   end;
+  { A DIFFERENTLY-NAMED CONSTRUCTOR MUST NOT TAKE THE SLOT, and these two rows
+    exist because the rule above took it. fpc's preference is between
+    OVERLOADS -- `Create` and `CreateV` are two names -- and the routine that
+    implements it scanned every constructor of the class, which was harmless
+    while first-match ran and became a wrong parse the moment array-of-const
+    started winning: `TCNamed.Create([10, 20, 30])` found `CreateV` and built a
+    TVarRec vector the Integer body read with the wrong stride, sum 10 for
+    fpc's 60. Both declaration orders, because the arrangement that broke had
+    `Create` FIRST and the scan reached past it anyway. }
+  TCNamed = class
+    constructor Create(const A: array of Integer);
+    constructor CreateV(const A: array of const);
+  end;
+  TCNamedVrFirst = class
+    constructor CreateV(const A: array of const);
+    constructor Create(const A: array of Integer);
+  end;
 
 procedure TIntFirst.P(N: Integer; A: array of Integer); begin WriteLn('intfirst  ints  cnt=', Length(A)); end;
 procedure TIntFirst.P(N: Integer; A: array of const);   begin WriteLn('intfirst  vr    cnt=', Length(A)); end;
@@ -130,10 +147,14 @@ constructor TCIntFirst.Create(const A: array of const);   begin WriteLn('ctintfi
 constructor TCVrFirst.Create(const A: array of const);    begin WriteLn('ctvrfirst  vr   cnt=', Length(A)); end;
 constructor TCVrFirst.Create(const A: array of Integer);  begin WriteLn('ctvrfirst  ints sum=', SumOf(A)); end;
 constructor TCSole.Create(const A: array of Integer);     begin WriteLn('ctsole     ints sum=', SumOf(A)); end;
+constructor TCNamed.Create(const A: array of Integer);    begin WriteLn('ctnamed    ints sum=', SumOf(A)); end;
+constructor TCNamed.CreateV(const A: array of const);    begin WriteLn('ctnamed    vr   cnt=', Length(A)); end;
+constructor TCNamedVrFirst.CreateV(const A: array of const);  begin WriteLn('ctnamedvrf vr   cnt=', Length(A)); end;
+constructor TCNamedVrFirst.Create(const A: array of Integer); begin WriteLn('ctnamedvrf ints sum=', SumOf(A)); end;
 
 var
   ai: TIntFirst; av: TVrFirst; asx: TStrFirst; ad: TDblFirst; so: TSole; ve: TVeto;
-  ci: TCIntFirst; cv: TCVrFirst; cs: TCSole;
+  ci: TCIntFirst; cv: TCVrFirst; cs: TCSole; cn: TCNamed; cnv: TCNamedVrFirst;
 begin
   ai := TIntFirst.Create; av := TVrFirst.Create; asx := TStrFirst.Create;
   ad := TDblFirst.Create; so := TSole.Create;    ve := TVeto.Create;
@@ -151,4 +172,6 @@ begin
   ci := TCIntFirst.Create([10, 20, 30]);
   cv := TCVrFirst.Create([10, 20, 30]);
   cs := TCSole.Create([10, 20, 30]);
+  cn := TCNamed.Create([10, 20, 30]);
+  cnv := TCNamedVrFirst.Create([10, 20, 30]);
 end.

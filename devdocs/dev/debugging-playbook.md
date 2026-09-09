@@ -3044,6 +3044,56 @@ broken by other means. If reverting the fix does not redden your probe, the
 probe is not aimed at the fix — and unlike a wrong value, nothing about the
 output says so.
 
+### THE FIFTH COSTUME AND IT WEARS THE OTHER FACE: AN ARRANGEMENT THAT KEPT A LATENT DEFECT HARMLESS, AND THE CORRECT CHANGE THAT STOPPED IT
+
+Everything above is about an arrangement hiding a defect from a PROBE. The
+same axis has a second face and it costs more, because the misreading it
+produces is confident and has a suspect: **an incidental ordering can hold a
+latent defect harmless in the PRODUCT, so the defect arrives with — and looks
+caused by — the correct change that stopped the ordering holding.**
+
+Measured 2026-09-09 (frankS, `ClassCtorArraySigAt`, found by Track T's full
+tier and by frankH's stash-and-rebuild control; `gate.sh quick` was GREEN on
+the tree that shipped it). The routine answers *which* constructor wants an
+array at a bracket slot, and it scanned **every constructor of the class
+regardless of NAME**. That was a real defect for months and produced no wrong
+answer, because it returned the first match and the constructor being called
+was almost always the first one declared. Adding a correct, separately
+measured rule on top — `array of const` wins the slot, which is fpc's actual
+behaviour between OVERLOADS — made the scan reach past the called ctor to a
+differently-named one, and `TC.Create([10, 20, 30])` began parsing its bracket
+as a TVarRec vector.
+
+**One predicate, two halves, one of them measured.** The measured half was
+right and stayed right. The unmeasured half had never been exercised because
+first-match kept routing around it — the same "does my input reach the arm"
+question as the section above, asked about the SHIPPED code rather than about
+a probe.
+
+**Why the misreading is confident: the timing is perfect and the author is
+fresh.** The red appears in the same window as the change, in the same
+subsystem, with a new test suite beside it. Read at face value, the diff is
+the cause and the visible new rule is the obvious thing to back out — which
+reverts the correct half and leaves the defect. The peer who reported it
+guessed exactly that from the commit subject and said so: *"a name-blind scan
+over constructors is not something I would have got to from the outside."*
+
+**The discriminator is the same one CLAUDE.md gives for tier deltas, run in
+the third direction.** That rule covers a delta you did not earn and a delta
+you did not cause; this is a delta you DID cause and still must not attribute
+to the half you are about to revert. Ask **which half of the predicate the
+failing case exercises**, not whether the diff is in the blast radius. Here:
+the failing row has two constructors with different NAMES, so it cannot be
+about a preference between overloads at all.
+
+**The cheap discipline, again, and it is the same one:** the guard rows added
+with the fix carry **both declaration orders** — `Create` before `CreateV`
+and after. Both on purpose: the arrangement that actually broke had `Create`
+FIRST, which is the order a single-order fixture picks by instinct, so a
+one-order row would have passed while the bug was live. **When a scan's answer
+could depend on order, the fixture asserts both orders — including the order
+that looks obviously safe.**
+
 
 ## A guard can fail in the FALSE DIRECTION, and that costs more than a silent one
 

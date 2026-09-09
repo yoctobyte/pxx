@@ -781,6 +781,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     ctorSig, ctorBrk: Integer;   { WHICH ctor wants an array at this slot, and the shared door's answer }
+    ctorNm: AnsiString;          { the ctor NAME as written -- the door is per-name, not per-class }
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     { rcDelegated LEFT THIS BLOCK with the record-name cast's own suffix loop:
       ParseCastPostfixSuffix carries the equivalent bit (pcMovedOff) as its own
@@ -8117,6 +8118,10 @@ begin
          (Tokens[TokPos+1].Kind = tkIdent) and
          ((GetTokenStr(TokPos+1) = 'Create') or (GetTokenStr(TokPos+1) = 'create')) then
       begin
+        { CAPTURED BEFORE IT IS EATEN, because the bracket door below is
+          per-NAME and not per-class: `Create` and `CreateV` are two names, not
+          two overloads, and a class may declare both. }
+        ctorNm := GetTokenStr(TokPos + 1);
         Next; { Eat class name }
         Next; { Eat dot }
         Next; { Eat 'Create' }
@@ -8160,7 +8165,7 @@ begin
             ctorBrk := -1;
             if CurTok.Kind = tkLBrack then
             begin
-              ctorSig := ClassCtorArraySigAt(ctorCi, ctorArgN);
+              ctorSig := ClassCtorArraySigAt(ctorCi, ctorArgN, ctorNm);
               if ctorSig >= 0 then
                 ctorBrk := TryParseBracketArgForSlot(ctorSig, ctorArgN + 1);
             end;
