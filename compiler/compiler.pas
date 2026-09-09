@@ -1761,6 +1761,22 @@ begin
       MimicFpc := True;
       EnableStrictFpc;
       IChecksVal := True;
+      { AND assertions OFF, which is FPC's default and not ours: FPC compiles
+        Assert out unless -Sa. Without this, a program whose only difference
+        from an FPC build is a failing Assert exits 1 under --mimic-fpc and 0
+        under `fpc -Mobjfpc`, so the output is not bit-identical -- measured
+        2026-09-09 on a probe whose main-unit Assert raised only under pxx.
+        This sits in the mimic arms and NOT in EnableStrictFpc on the {$I+}
+        precedent one line above: EnableStrictFpc carries COMPILE-TIME parity
+        (case, operator, visibility, require-forward) and a RUNTIME-polarity
+        default belongs to "claim to BE FPC", not to the strict umbrella --
+        --strict-fpc on its own must not silently delete a user's assertions.
+        A source-level {$ASSERTIONS ON} still wins (that is what the two corpus
+        rows using Assert do), and a later -Sa on the command line still wins
+        too, last-flag-wins like every other pair here.
+        feature-p-assertions-switch-and-strict-default }
+      NoAssertionsFlag := True;
+      AssertionsVal := False;  { PasInitDefines already ran; see its comment }
       Inc(i);
     end
     else if option = '--mimic-fpc' then
@@ -1778,6 +1794,22 @@ begin
         uses undirectived overloads by design, so it would fail to compile the
         very corpora --mimic-fpc exists to build; see EnableStrictFpc. }
       IChecksVal := True;
+      { AND assertions OFF, which is FPC's default and not ours: FPC compiles
+        Assert out unless -Sa. Without this, a program whose only difference
+        from an FPC build is a failing Assert exits 1 under --mimic-fpc and 0
+        under `fpc -Mobjfpc`, so the output is not bit-identical -- measured
+        2026-09-09 on a probe whose main-unit Assert raised only under pxx.
+        This sits in the mimic arms and NOT in EnableStrictFpc on the {$I+}
+        precedent one line above: EnableStrictFpc carries COMPILE-TIME parity
+        (case, operator, visibility, require-forward) and a RUNTIME-polarity
+        default belongs to "claim to BE FPC", not to the strict umbrella --
+        --strict-fpc on its own must not silently delete a user's assertions.
+        A source-level {$ASSERTIONS ON} still wins (that is what the two corpus
+        rows using Assert do), and a later -Sa on the command line still wins
+        too, last-flag-wins like every other pair here.
+        feature-p-assertions-switch-and-strict-default }
+      NoAssertionsFlag := True;
+      AssertionsVal := False;  { PasInitDefines already ran; see its comment }
       Inc(i);
     end
     else if (option = '--strict') or (option = '--require-forward') then

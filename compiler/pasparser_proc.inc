@@ -6215,7 +6215,28 @@ begin
       made the child RAISE range and overflow errors fpc does not raise, and
       `{$ASSERTIONS OFF}` silenced the child's Assert against pxx's own default.
       All measured; see PasSnapshotDirectiveBaseline for the table.
-      Same root exception as the defines above, for the same reason. }
+
+      NO ROOT EXCEPTION HERE, unlike the defines above, and the reason the
+      defines carry one does not transfer. That exception rests on "the root is
+      one source, its directives are lexically ordered, and nothing about it is
+      order-dependent" -- which is FALSE for this half, because the main file is
+      LEXED IN FULL before the parser ever reaches its `uses`. So what a root
+      snapshot folded in was not the state at the `uses`; it was the state at
+      END OF FILE. Measured 2026-09-09, both directions, against fpc:
+
+        main program, {$ASSERTIONS ON} written AFTER the final `end.`
+          pxx --no-assertions  used unit's Assert FIRES     fpc: silent
+        main program, {$C-} written AFTER the final `end.`
+          pxx default          used unit's Assert SILENT    fpc -Sa: fires
+
+      Text past `end.` that fpc never compiles at all was deciding a used
+      unit's runtime behaviour, and {$PACKRECORDS 1} in the same position is
+      the same bug as a RECORD LAYOUT. Nothing selects RTL behaviour through
+      one of these eleven the way {$undef PXX_MANAGED_STRING} selects the
+      string model through a define, so the exception bought nothing and cost
+      that. The defines fork above is untouched -- it has its own positive
+      control (test_frozen_string_reentrant.pas) and its own reason.
+      feature-p-assertions-switch-and-strict-default }
     savedPackRecords := PackRecordsVal;
     savedPackEnum := PackEnumVal;
     savedHMinus := HMinusVal;
@@ -6227,8 +6248,7 @@ begin
     savedIChecks := IChecksVal;
     savedInterfacesCom := InterfacesComMode;
     savedMaxStackFrame := MaxStackFrameSize;
-    if savedCurrentUnitIdx < 0 then PasSnapshotDirectiveBaseline
-    else PasResetDirectivesToBaseline;
+    PasResetDirectivesToBaseline;
 
     { …and the per-library MANIFEST goes on top of that snapshot: the nearest
       pxxlib.cfg at or above this unit's own directory supplies its defines,

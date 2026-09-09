@@ -14526,6 +14526,47 @@ test-core: $(COMPILER)
 	@# the oracle is not a differential row, it is two answers that collide.
 	./$(COMPILER) -Futest/units test/test_a_used_unit_keeps_its_own_assertion_default.pas $(TESTTMP)/test_assertdefault26
 	tools/expect_same.sh test_assertdefault26 "$$($(TESTTMP)/test_assertdefault26 | tail -n 2)" "$$(printf 'fails=0\nASSERTDEFAULT OK')"
+	@# feature-p-assertions-switch-and-strict-default. ONE source, FOUR command
+	@# lines, and the fact that TWO of them expect a different block is the whole
+	@# claim -- a flag that did nothing would make all four read the `on` block
+	@# and fail the last two rows. The file's own header explains each row.
+	@#
+	@# THE TWO BLOCKS ARE FPC 3.2.2's OWN ANSWERS, measured 2026-09-09 on the
+	@# same five-row source with the same two units: `fpc -Mobjfpc -Sa` prints
+	@# the `on` block and `fpc -Mobjfpc` with no flags prints the `off` block,
+	@# byte for byte. So this is a differential in both directions and not a
+	@# snapshot of our own behaviour: pxx's DEFAULT is deliberately FPC's -Sa
+	@# (see AssertionsVal in defs.inc) and pxx's --mimic-fpc is deliberately
+	@# FPC's default, which is the gap this ticket closed -- --mimic-fpc used to
+	@# print the `on` block, so a program whose only divergence from an FPC build
+	@# was a failing Assert exited 1 where fpc exits 0.
+	@#
+	@# unit-ambient IS NOT A DUPLICATE OF test_assertdefault26 ABOVE. That row
+	@# expects `on`, which under a used-unit reset is BOTH the right answer and
+	@# the never-touched answer, so it cannot tell "reset to the command-line
+	@# baseline" from "left alone" -- the two collide. These rows expect `off`
+	@# for the same unit under a flag, which only a live reset can produce.
+	./$(COMPILER) -Futest/units test/test_the_assertions_polarity_follows_the_command_line.pas $(TESTTMP)/test_assertpolarity26
+	tools/expect_same.sh test_assertpolarity-default "$$($(TESTTMP)/test_assertpolarity26)" "$$(printf 'ambient=on\ndir-on=on\ndir-off=off\nunit-ambient=on\nunit-off=off')"
+	./$(COMPILER) -Sa -Futest/units test/test_the_assertions_polarity_follows_the_command_line.pas $(TESTTMP)/test_assertpolarity_sa26
+	tools/expect_same.sh test_assertpolarity--Sa "$$($(TESTTMP)/test_assertpolarity_sa26)" "$$(printf 'ambient=on\ndir-on=on\ndir-off=off\nunit-ambient=on\nunit-off=off')"
+	./$(COMPILER) --no-assertions -Futest/units test/test_the_assertions_polarity_follows_the_command_line.pas $(TESTTMP)/test_assertpolarity_no26
+	tools/expect_same.sh test_assertpolarity---no-assertions "$$($(TESTTMP)/test_assertpolarity_no26)" "$$(printf 'ambient=off\ndir-on=on\ndir-off=off\nunit-ambient=off\nunit-off=off')"
+	./$(COMPILER) --mimic-fpc -Futest/units test/test_the_assertions_polarity_follows_the_command_line.pas $(TESTTMP)/test_assertpolarity_mimic26
+	tools/expect_same.sh test_assertpolarity---mimic-fpc "$$($(TESTTMP)/test_assertpolarity_mimic26)" "$$(printf 'ambient=off\ndir-on=on\ndir-off=off\nunit-ambient=off\nunit-off=off')"
+	@# ...and the directive baseline a used unit is reset FROM is the COMMAND
+	@# LINE, never the main file's trailing lexer state. The fixture named below
+	@# writes {$$ASSERTIONS ON} AFTER its final `end.` -- text fpc does not
+	@# compile at all -- and that used to re-arm the used unit's Assert under
+	@# --no-assertions, because a root-level `uses` re-snapshotted the baseline
+	@# and the main file is lexed IN FULL before the parser reaches its `uses`.
+	@# The same position with {$$PACKRECORDS 1} in it is a record layout, which
+	@# is why this row exists at all rather than being folded into the four
+	@# above. fpc prints `off` here (measured, fresh unit cache -- fpc REUSES a
+	@# .ppu built under a different -Sa, so this was re-measured in a clean
+	@# directory after a stale .ppu answered for the wrong command line).
+	./$(COMPILER) --no-assertions -Futest/units test/test_a_directive_after_the_final_end_reaches_a_used_unit.pas $(TESTTMP)/assertpolarity_tail26
+	tools/expect_same.sh assertpolarity_tail26 "$$($(TESTTMP)/assertpolarity_tail26)" "unit-ambient=off"
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
 	# mistakes reports the first and hides three behind it, which is how a
