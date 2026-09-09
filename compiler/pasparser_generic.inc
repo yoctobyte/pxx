@@ -3676,11 +3676,44 @@ end;
 
   ATTRIBUTION is by the name the CURRENT scope resolves, which is the same rule
   FindSpecialization and FindUClass use ("last visible row wins"): the header's
-  class name must match this template's name. Two templates of one name in two
-  unrelated units would need the losing one to also have a method impl in the
-  stream at this moment; the alternative -- matching on parameter shape -- is
-  what ScanDelphiMethodImplsForNestedSpecs refuses for a stronger reason, since
-  `T` is the commonest parameter name there is.
+  class name must match this template's name.
+
+  THAT IS NOT SUFFICIENT, AND THE PARAGRAPH HERE NAMED THE WRONG RISK UNTIL
+  2026-09-09. It hedged about "two templates of one name in two unrelated
+  units", which is remote. The case that actually bites is NEAR: **two templates
+  of one name in ONE unit, differing only in ARITY**, which is legal and which
+  rtl-generics uses four times over --
+
+      TGStringComparer<T, THashFactory> = class ...
+      TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)
+
+  -- so the two-parameter body is streamed for a one-parameter specialization
+  under a substitution binding only `T`. THREE sites take the last name match:
+  this one, EmitLateNestedSpecDecls, and ParseSubroutine's `X.M` branch. The
+  convention is inherited here rather than introduced, and the fix is one
+  ticket for all three, because the header's arity is recoverable --
+  DelphiRewriteGenericUses deletes the group and can record it.
+  Found by frankS, who also established that it does not land alone: fixing
+  arity exposes a second gap one layer down, where a `specialize NAME<args>`
+  group in expression position inside a streamed body is never collapsed to its
+  minted alias, and a 30-line unit that compiles at HEAD then fails.
+  bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity
+
+  The alternative attribution -- matching on parameter SHAPE -- stays refused
+  for the reason ScanDelphiMethodImplsForNestedSpecs gives: `T` is the commonest
+  parameter name there is. Arity is a different question from shape and is the
+  one to ask.
+
+  AND THE ORIGINAL PARAGRAPH WAS WORSE THAN SILENCE, WHICH IS THE PART TO CARRY
+  AWAY. A missing caveat leaves a reader to find the question themselves. A
+  caveat naming the WRONG risk reads as CONSIDERED, so the next reader takes the
+  question as asked and answered and moves on -- it buys the same silence a
+  stale hazard block buys, and buys it without ever having been true. It
+  succeeds at stopping the reader, and a reader who stops generates nothing that
+  could reveal it was wrong. When you hedge, name the population you actually
+  checked; a hedge about a remote case is not evidence that the near one was
+  looked for. (CLAUDE.md, "hedge the premise, not just the inference" and "the
+  most expensive stale row is a hazard block".)
   bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
 procedure BufferTemplateMethodsAhead(ti: Integer);
 var scan, hdr, fin, ts, tc, gm: Integer; dup: Boolean;
