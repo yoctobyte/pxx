@@ -7,8 +7,8 @@ owner: ""
 created: 2026-09-06
 found-by: frankA
 tags: [tls, threads, c-frontend, errno]
-blocked-by: [decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative]
-summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything. CONSTRAINT CORRECTED 2026-09-06 (frankC): the `FS base is zero in every thread` reading that bounded this ticket was taken on a register pxx DELIBERATELY DOES NOT USE -- thread_emit.inc:142 installs a per-thread block with arch_prctl(ARCH_SET_GS), `GS, not fs: fs belongs to libc`. Re-measured on a pxx-native BeginThread with the same sentinel control: GS is DISTINCT and non-zero per thread (main 42D110 in .bss, child 7BDB21FF7A80 off its own stack), FS is 0 in both. So step (1), `a per-thread TCB with a distinct base`, is ALREADY DONE on x86-64, with a slot map (TLS_SLOT_*, TLS_BLOCK_SIZE=1152, three free map slots plus a 64-slot tail) that ir_codegen.inc:78 records as unused rather than absent. Two real constraints replace the wrong one: (a) GS-relative is NOT the psABI, so this serves pxx-compiled code and not TLS relocations in gcc-built objects -- a fork to be ruled on, not defaulted; (b) a thread pxx did not create INHERITS the parent`s GS base rather than getting its own (measured: glibc pthread_create gives main and child the IDENTICAL 4298F0), which is the same hazard the clone stub`s comment cites -- a valid-looking pointer into another thread`s storage, not a null you could test for. The ticket does not get smaller: __thread still compiles to one shared .bss object."
+blocked-by: []
+summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything. CONSTRAINT CORRECTED 2026-09-06 (frankC): the `FS base is zero in every thread` reading that bounded this ticket was taken on a register pxx DELIBERATELY DOES NOT USE -- thread_emit.inc:142 installs a per-thread block with arch_prctl(ARCH_SET_GS), `GS, not fs: fs belongs to libc`. Re-measured on a pxx-native BeginThread with the same sentinel control: GS is DISTINCT and non-zero per thread (main 42D110 in .bss, child 7BDB21FF7A80 off its own stack), FS is 0 in both. So step (1), `a per-thread TCB with a distinct base`, is ALREADY DONE on x86-64, with a slot map (TLS_SLOT_*, TLS_BLOCK_SIZE=1152, three free map slots plus a 64-slot tail) that ir_codegen.inc:78 records as unused rather than absent. Two real constraints replace the wrong one: (a) GS-relative is NOT the psABI, so this serves pxx-compiled code and not TLS relocations in gcc-built objects -- a fork to be ruled on, not defaulted; (b) a thread pxx did not create INHERITS the parent`s GS base rather than getting its own (measured: glibc pthread_create gives main and child the IDENTICAL 4298F0), which is the same hazard the clone stub`s comment cites -- a valid-looking pointer into another thread`s storage, not a null you could test for. The ticket does not get smaller: __thread still compiles to one shared .bss object. UNBLOCKED 2026-09-09: THE MECHANISM IS BUILT AND IS FRONTEND-AGNOSTIC. 7a166c995 (frankH, Track P) shipped Pascal `threadvar` on it, so C can reuse it as-is and none of it needs re-deriving. Storage is SymTlsOffset[sym] (a FLAG, -1 = not thread-local) plus a bump allocator over TLS_USER_BYTES (3072) past slot 143 -- so constraint (c) recorded here, `the block is exactly full, three free slots`, is RESOLVED and the trap it warned about was avoided: frankH added a user area rather than spending the slack on a demo. The GS-vs-psABI fork (a) is RULED by implementation in the recommended direction -- GS-only, with --emit-obj/--shared and every non-x86-64 target REFUSED in code -- and the shipped reason is sharper than the one filed: `gs:` with no base FAULTS, and inside a glibc host it SUCCEEDS and returns glibc`s TCB, so the boundary is a correctness hazard and not merely an absent feature. (b), the foreign-created thread inheriting its creator`s GS, is NOT this ticket`s and is not new: bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine owns it, measured 2026-09-01 at 18 SIGSEGV in 100 runs. WHAT IS LEFT FOR C IS ONE REWRITE, NOT A MECHANISM: the equivalent of ThreadVarRewriteRange at the C frontend`s own single lowering entry, turning a thread-local ident into AN_DEREF(AN_TLSBASE + const). Same constraints as shipped: x86-64, scalars only."
 ---
 
 # `__thread` is accepted and silently ignored
@@ -272,3 +272,64 @@ stream rather than skipping a declaration.
 
 Verified: `make compiler/pascal26` converged, `dd5f6da0ac5b`.
 `tools/gate.sh quick` GREEN.
+
+## UNBLOCKED 2026-09-09 — the mechanism exists, and C needs a rewrite rather than a mechanism
+
+`7a166c995` (frankH, Track P) shipped Pascal `threadvar` on the GS block.
+Verified here rather than taken on the message: `TLS_USER_BYTES = 3072` and
+`TLS_BLOCK_SIZE = TLS_USER_FIRST_OFF + TLS_USER_BYTES` in `defs.inc`,
+`SymTlsOffset` in `defs.inc:4787` written at `pasparser_decl.inc:2723`, and
+`ThreadVarRewriteRange` at `ir_codegen.inc:13783` called from `CompileAST`.
+
+**Constraint (c) above is RESOLVED, and the trap it named was avoided.** This
+ticket warned that three free slots are enough for a one-variable demo and not
+for the feature, so whoever implemented it must size the area first. That is
+what happened: a user area past slot 143 with a bump allocator, and the three
+map slots untouched. Worth recording that the warning was followed rather than
+just vindicated.
+
+### What C actually needs
+
+**One rewrite at the C frontend's own single lowering entry**, turning a
+thread-local identifier into `AN_DEREF(AN_TLSBASE + const)`. There is no
+addressing change and no new mechanism — the Pascal side does exactly this in
+`ThreadVarRewriteRange` before anything lowers the tree, and `AN_TLSBASE`'s
+`ASTIVal` is a **byte offset** from the base (0 for the `__pxxTlsBase`
+intrinsic), which sidesteps whether `Pointer + Integer` scales: at IR level an
+`IR_BINOP` on a `tyPointer` operand is a raw byte add.
+
+**Do NOT add a fourth `TSymKind`.** frankH's reasoning, worth carrying because
+it is the kind of thing a C implementer would rediscover the hard way: there are
+**175 `Kind = skGlobal` tests tree-wide**, essentially all written
+`if Kind = skGlobal then <absolute/RIP> else <rbp-relative>`. A fourth kind
+lands in the `else` at every untaught site — a thread-local addressed as a
+LOCAL, i.e. a plausible wrong address in the current frame. Keeping the symbol
+`skGlobal` with its ordinary (unused) BSS storage means an untaught path reads a
+process-wide global instead: still wrong, but it links and it is findable. That
+is the same "prefer the failure that stays visible" choice this ticket's own
+refusal argument rests on.
+
+### The trap that cost frankH a round, and would cost C the same
+
+**"AST nodes are only ever appended" is FALSE.** The arena is rolled back per
+statement (`ASTNodeCount := ASTArenaFloor`, twelve sites), so node indices are
+REUSED. A sweep using a high-water mark on `ASTNodeCount` silently skips any
+statement whose tree is smaller than the previous one's — it failed on exactly
+one statement, and adding an unrelated line in front of it made it pass. Sweep
+`[ASTArenaFloor .. ASTNodeCount)` plus the unswept permanent region; see
+`ThreadVarRewriteHigh`.
+
+A bug that appears and disappears when you add an unrelated line is the shape
+that gets called flaky and closed.
+
+### Constraints C inherits unchanged
+
+x86-64 only; scalars only (ordinal, pointer, float); refused under
+`--emit-obj`/`--shared`. Managed types need per-thread init/final at thread
+start and exit, for which no hook exists — a rung above, and the same rung for
+both frontends.
+
+**This does not fix `errno`.** C11 7.5 wants `errno` thread-local and the
+mechanism now exists to make it so, but `errno` is declared in the crtl and
+reached by the whole C runtime; that is a separate change with its own
+measurement.

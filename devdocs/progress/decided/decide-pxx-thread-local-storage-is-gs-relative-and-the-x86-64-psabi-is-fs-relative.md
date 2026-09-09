@@ -2,7 +2,7 @@
 track: U
 prio: 55
 type: decide
-status: open
+status: decided
 owner: ""
 created: 2026-09-06
 found-by: frankC
@@ -90,3 +90,55 @@ fork goes, that question is part of it** and should not be answered separately
 by whoever writes the code.
 
 Blocks [[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]].
+
+## RULED 2026-09-09, BY IMPLEMENTATION, IN THE RECOMMENDED DIRECTION
+
+`7a166c995` (frankH, Track P, `feature-p-threadvar-is-not-supported-at-any-scope`)
+shipped Pascal `threadvar` on the GS block. That settles this fork as **option
+1 — GS-only with the boundary enforced** — and it enforces it in code rather
+than documenting it: `--emit-obj` and `--shared` are REFUSED
+(`AssignThreadVarStorage`, `pasparser_decl.inc`), as is every target but
+x86-64.
+
+**AND THE SHIPPED REASON IS SHARPER THAN THE ONE THIS TICKET ARGUED.** I framed
+the boundary as an interop *limitation* — a feature you do not get across an
+`--emit-obj` edge. The refusal's own text names it as a *correctness* hazard:
+
+> *"`gs:` with no base does not read 0, it FAULTS -- and inside a glibc host it
+> succeeds and returns glibc's TCB, which is worse."*
+
+That is the difference between an absent feature and a silent wrong one. An
+object with no ELF entry point has nothing to install the block, so the failure
+is not "thread-locals are process-wide" but "thread-locals resolve into another
+runtime's thread control block". **Refusing is therefore not conservatism about
+interop; it is the only answer that is not silently wrong**, and the reasoning
+this ticket offered would have supported a weaker guard.
+
+**The residual question that remains is unchanged and has no consumer:** whether
+to grow an FS/psABI path so a pxx object carrying thread-locals can be linked
+into a gcc program. Nobody has produced such a consumer, which was this
+ticket's own deciding test. It reopens if one appears; it is not open now.
+
+## (b) IS NOT MINE AND IS NOT NEW — it already has a ticket and a worse measurement
+
+The foreign-created-thread hazard bundled in above is
+[[bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine]], measured
+**2026-09-01**, before the reading here. `ir_codegen.inc:265` carries it: gdb
+reports `gs_base = 0x411f98` for ALL FIVE threads of
+`test/test_multithreading.pas` — `BSS_TLS_MAIN`, the main thread's block —
+because a libc-`pthread_create` thread never runs the clone stub that carves
+and installs one. It cost **18 SIGSEGV in 100 runs** through a shared heap
+magazine, and the pinned v399 compiler crashes at the same rate, so it is not a
+regression.
+
+My probe reproduced the same fact by a different route (identical GS across
+threads, via `arch_prctl(ARCH_GET_GS)` rather than gdb), which is corroboration
+rather than a finding — **two instruments that fail differently, agreeing.**
+Bundling it here was right at the time and is wrong now: it has an owner, and a
+second copy of a measured hazard is how one of them goes stale. **Follow that
+ticket, not this section.**
+
+Resolving. The fork was ruled by code, and the residual has an owner.
+
+## Log
+- 2026-09-09 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
