@@ -8,7 +8,7 @@ created: 2026-09-09
 found-by: frankS
 tags: [interfaces, abi, representation]
 blocked-by: []
-summary: "The fork inside bug-a-a-hand-built-com-interface-cannot-be-called, lifted out because it was ranked 55 under a live umbrella with the architecture decision buried in a bug body -- every `ready --track A` surfaced it to a seat that had to make an ABI call alone or skip, and skipping leaves no trace. THE PREMISE IS NOT IN DOUBT and this is not a compat-or-not question: FPC accepts, and its own packages rely on, a construct we cannot run (rtl-generics reaches every default comparer through a hand-built {VMT, RefCount, Size} record used as an interface), which is `compat, ranked by how much real code uses it` -- and it blocks feature-pascal-corpus-generics. The MIRROR (`IFoo(Pointer(anObject))` works here, RTE 216 under fpc) is the other direction and `us accepting what FPC rejects is not a defect` disposes of it; the two rules do not collide, they describe the two directions. What is genuinely open is HOW: (A) a synthesised RTTI shim at a cast whose operand is statically a non-class pointer, or (B) move pxx to FPC's representation, where the interface value IS the IMT pointer. Recommendation: A, because the one-word value is load-bearing in at least four places that would all move under B. Neither is attempted."
+summary: "The fork inside bug-a-a-hand-built-com-interface-cannot-be-called, lifted out because it was ranked 55 under a live umbrella with the architecture decision buried in a bug body -- every `ready --track A` surfaced it to a seat that had to make an ABI call alone or skip, and skipping leaves no trace. THE PREMISE IS NOT IN DOUBT and this is not a compat-or-not question: FPC accepts, and its own packages rely on, a construct we cannot run (rtl-generics reaches every default comparer through a hand-built {VMT, RefCount, Size} record used as an interface), which is `compat, ranked by how much real code uses it` -- and it blocks feature-pascal-corpus-generics. The MIRROR (`IFoo(Pointer(anObject))` works here, RTE 216 under fpc) is the other direction and `us accepting what FPC rejects is not a defect` disposes of it; the two rules do not collide, they describe the two directions. What is genuinely open is HOW: (A) a synthesised RTTI shim where a `Pointer`-typed value reaches an interface-typed destination, or (B) move pxx to FPC's representation, where the interface value IS the IMT pointer. BOTH PRICES ARE NOW MEASURED (frankH, 2304d362c) AND BOTH OF MY FIRST NUMBERS WERE WRONG: A was written to fire on a CAST and generics.defaults.pas contains zero pointer-to-interface casts -- all six conversions are implicit ASSIGNMENTS -- so an implementation keyed on the cast would compile the motivating source, change nothing, and be green; and the "four places" I priced B with was the wrong axis, since the [inst]->vmt->[vmt-8]->rtti walk lives in exactly TWO functions (PXXIntfIMTOf, PXXIntfComIMTOf) with the rest as callers, the nil check is representation-agnostic, and the item that actually prices B was absent from my list: AN_INTF_CALL takes the callee's Self FROM the interface value, and pxx's IMT is a bare array of code addresses with nowhere for Self to come from. A is cheaper than priced and B is dearer. Recommendation stands at A on cost -- but cost is not the whole question: whether pxx WANTS fpc's interface ABI as a goal is an argument for B that no cost measurement reaches, and the-goal-cross-cross's foreign-object aim points at it. Neither is attempted."
 ---
 
 # How does a hand-built COM interface become callable?
@@ -28,24 +28,36 @@ OTHER direction and is disposed of by `us accepting what FPC rejects is not a
 defect`. Recorded because the mirror reads like a reason to close this, and it
 is not one.
 
-## Option A — a synthesised shim at the cast (recommended)
+## Option A — a synthesised shim where a `Pointer` becomes an interface (recommended)
 
-A hard cast to an interface type whose operand is **statically** a non-class
-pointer is precisely the hand-built case, and the cast site knows it. Emit a
-shim object carrying real pxx RTTI whose interface table maps the target id to
-the raw pointer, so `PXXIntfIMTOf` finds it by the existing walk.
+> **THIS SECTION AS FIRST WRITTEN KEYED ON A SHAPE THAT DOES NOT OCCUR**, and
+> the measurement is in *(1)* below (frankH, `2304d362c`): `generics.defaults.pas`
+> contains **zero** pointer-to-interface CASTS. Every one of the six conversions
+> is an implicit ASSIGNMENT of a `Pointer`-typed result into an interface-typed
+> destination. A fix keyed on the cast would compile the motivating source and
+> change nothing, and its green would be real — this ticket's own hazard from
+> the other side. Read the two bullets below as the reasoning that produced the
+> option, not as its trigger; the trigger is an ASSIGNMENT rule.
+
+A `Pointer`-typed value reaching an interface-typed destination is precisely the
+hand-built case, and it is compile-time visible. Emit a shim object carrying
+real pxx RTTI whose interface table maps the target id to the raw pointer, so
+`PXXIntfIMTOf` finds it by the existing walk.
 
 - **For:** local. Nothing else in the compiler or RTL moves. The one-word value
   keeps its meaning everywhere, including the four places that read it as an
   instance: `AN_INTF_CALL`'s lowering, the ARC assign/release helpers,
   `PXXIntfComIMTOf`'s variant path, and the emitted nil checks.
-- **Against, and this is the real cost:** the shim needs storage and a lifetime.
-  Static-per-cast-site is wrong if the same site casts different pointers;
-  heap-per-cast needs a free, and the thing being cast is by construction an
-  object whose refcounting we do not control.
-- **Open sub-question, cheap to measure:** how many distinct cast sites does
-  `generics.defaults.pas` actually reach? If the answer is "one, in
-  `_LookupVtableInfoEx`", the storage question shrinks to almost nothing.
+- **Against, as first written:** the shim needs storage and a lifetime.
+  Static-per-site is wrong if the same site converts different pointers;
+  heap-per-conversion needs a free. **BOTH OBJECTIONS ARE ANSWERED** by *(1)*:
+  the operands are typed constants, one per element type, so a shim keyed on
+  the OPERAND is itself static. The residual is the two operands that are not
+  (`Comparer_Binary`, `Comparer_DynArray`).
+- **The sub-question I posed was the wrong one.** I asked how many CAST SITES
+  the file reaches and guessed "one, in `_LookupVtableInfoEx`". The answer is
+  zero casts and six assignment sites, and the number that prices A is neither
+  — it is **how many operands are not static**, which is two.
 
 ## Option B — adopt FPC's representation
 
