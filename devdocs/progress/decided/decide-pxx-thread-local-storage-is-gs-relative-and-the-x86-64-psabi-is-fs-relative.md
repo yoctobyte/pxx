@@ -141,4 +141,4 @@ ticket, not this section.**
 Resolving. The fork was ruled by code, and the residual has an owner.
 
 ## Log
-- 2026-09-09 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit 4a8aae977.
