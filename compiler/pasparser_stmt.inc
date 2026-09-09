@@ -8813,6 +8813,33 @@ begin
               begin
                 Next;
                 smMai := 1;
+                { THE FOURTH DOOR, and the one that was never built rather than
+                  built wrong: EMPTY PARENS. `Desc();` inside the class that
+                  declares `Desc(const a: array of const)` was accepted and the
+                  callee read a garbage descriptor (`Length(a)` = 8, no
+                  diagnostic), while `Self.Desc()` two lines away refused it --
+                  `Desc() requires 1 argument(s), none given` -- and fpc 3.2.2
+                  refuses the bare spelling too. The qualified route asks this
+                  question at both of its copies; this loop asked at none.
+
+                  It is NOT an arity test. The same shape serves `Def()` on
+                  `Def(x: Integer = 3; y: Integer = 4)`, which prints 34 here
+                  and under fpc alike, so the question is whether the first
+                  UNSUPPLIED parameter has a declared default -- which is what
+                  the shared helper asks, and asking it here rather than
+                  spelling a third copy is the point.
+                  bug-p-empty-parens-at-a-bare-method-call-reads-a-garbage-argument
+
+                  NOT WHEN THE PRE-CHECK ALREADY SPOKE, for the same reason
+                  the tail below is skipped then: `Req()` against
+                  `Req(x: Integer)` is a too-few call the arity check catches
+                  first, and running both printed two diagnostics for one
+                  mistake. The carve-out shapes -- an `array of const` tail, or
+                  no strict candidate at all -- are exactly the ones the
+                  pre-check stays silent about, which is where this arm is the
+                  only thing asking. }
+                if (CurTok.Kind = tkRParen) and (not smArityBad) then
+                  ApplyEmptyCallParens(smpii, name, smcallNode, smLastArg, smMai);
                 { THE THIRD DOOR, and the loop is now BOUNDED like every other
                   method-argument loop in the frontend rather than swallowing to
                   the `)`.

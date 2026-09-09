@@ -2900,6 +2900,23 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_p_a_bare_variadic_method_call.pas $(TESTTMP)/test_bare_variadic26
 	@$(TESTTMP)/test_bare_variadic26 | diff -u test/test_p_a_bare_variadic_method_call.expected - \
 	  || { echo 'test_p_a_bare_variadic_method_call: FAIL - elided and bracketed spellings disagree, or a bounded-loop control broke'; exit 1; }
+	@# ...and the FOURTH door in that same hand-rolled loop, which was never
+	@# built rather than built wrong: EMPTY PARENS. `Desc();` against a required
+	@# `const a: array of const` was accepted and the callee read a garbage
+	@# descriptor (Length(a)=8, no diagnostic), while `Self.Desc()` on the very
+	@# next line refused it correctly and fpc refuses the bare one too.
+	@# THE ASSERTION IS THE LINE NUMBER. Error HALTS, so one diagnostic prints,
+	@# and the PINNED compiler refuses this file as well -- at line 44, the
+	@# QUALIFIED call. "Refused" and the message text are both green on the pin;
+	@# only 43-not-44 separates a fixed build from a broken one.
+	@# bug-p-empty-parens-at-a-bare-method-call-reads-a-garbage-argument
+	@rm -f $(TESTTMP)/test_bare_emptyparen26
+	@out=$$(./$(COMPILER) test/test_p_empty_parens_at_a_bare_method_call_fail.pas $(TESTTMP)/test_bare_emptyparen26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: Desc() requires 1 argument(s), none given' \
+	   && test ! -e $(TESTTMP)/test_bare_emptyparen26 \
+	  || { echo "test_p_empty_parens_at_a_bare_method_call_fail: FAIL - rc=$$rc (want rc=1, the refusal on line 43 = the BARE call, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

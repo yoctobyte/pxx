@@ -142,3 +142,28 @@ the two callers share it rather than growing an eighth copy of that loop.
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b708205d2.
+
+### Correction, same day: the expression twin does NOT have the tail
+
+The fixture's first header said the same call inside an EXPRESSION "goes
+through a different parser arm that already had the tail". **That was wrong**,
+and it was wrong in a commit on origin before it was measured. The expression
+arm (`pasparser_expr.inc`, the bare implicit-Self factor) is the statement
+loop's twin with **none** of the four doors:
+
+    Desc(['a', 1])   expression position  ->  n=0        (bracket read as a set)
+    Desc('a', 1)     expression position  ->  SEGFAULT
+    Req(1, 2, 3)     against Req(x: Integer) -> accepted, returns 3
+    Req()            against Req(x: Integer) -> accepted, reads garbage
+
+Recorded here rather than only in the new ticket because the claim travelled in
+this ticket's own write-up, and a sibling-path claim is the kind a reader
+inherits without re-measuring. Filed as
+[[bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors]].
+
+It was found by inverting the search, which is worth the sentence: not *where
+is this rule spelled* (that returns the correct copies and is silent about the
+missing one) but *enumerate the positions the rule should cover, and subtract
+the ones that have it*. Receiver spellings x contexts, one probe file. Credit
+frankB, who reached the same inversion the same evening from a NilPy
+constructor mapping.

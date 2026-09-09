@@ -10,10 +10,17 @@
   AN_ARG, so the callee's open-array descriptor was whatever the SECOND one
   happened to be. `Length(a)` segfaulted, having compiled clean.
 
-  STATEMENT POSITION IS THE WHOLE POINT -- the same call written inside an
-  expression (`WriteLn(Desc('a', 1))`) goes through a different parser arm that
-  already had the tail. Every call below is therefore a bare statement, and the
-  method prints its own row rather than returning one.
+  EVERY CALL BELOW IS A BARE STATEMENT, because that is the loop this file
+  guards. The same call written inside an EXPRESSION goes through a different
+  arm (pasparser_expr.inc's bare implicit-Self factor), and an earlier version
+  of this header claimed that arm "already had the tail". IT DOES NOT -- it is
+  the same hand-rolled loop with NONE of the doors, measured 2026-09-09:
+  `Desc('a', 1)` in expression position segfaults exactly as the statement
+  spelling did, and `Desc(['a', 1])` there answers `n=0` because the bracket is
+  still read as a set. That is filed as its own ticket rather than asserted
+  here, and this note stays because a claim about a sibling path is the kind a
+  reader inherits without re-measuring.
+  bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors
 
   THE SINGLE-ELEMENT ROW IS NOT A WEAKER VERSION OF THE MULTI ONE -- it
   crashed by the other route. `Desc('a')` has an arity that MATCHES, so

@@ -1538,6 +1538,51 @@ begin
   Result := (CurTok.Kind = tkRParen) and ParamsDefaultedFrom(mpi, nextIdx);
 end;
 
+{ EMPTY PARENS on a method call -- `obj.F()`, `F()` -- which is TWO different
+  calls wearing one spelling, and the parser has to decide which before its
+  argument loop runs at all (the loop would hand the `)` to ParseExpr and report
+  "expected expression").
+
+  All-defaulted: FPC accepts it, fcl-json's own suite calls `J.FormatJSON()`,
+  and the defaults are filled here. A method with NO parameters already worked,
+  because the loop simply never ran.
+
+  REQUIRED parameters: it is a missing-argument error, not a free pass. The
+  shortcut that set argIdx past the arity loop unconditionally left the required
+  slots unfilled and the callee read an UNINITIALISED frame -- `c.m()` against
+  `def m(self, a)` SEGFAULTED, and `[1,2,3].count()` quietly returned a wrong
+  value, which is the worse of the two. Not NilPy-only: `c.M()` against
+  `function M(a: Integer)` was accepted in Pascal too, where FPC rejects it.
+  `*args`/`**kwargs` methods are variadic by construction and are exempt; the
+  call-site star-unpack form is handled by each caller.
+  bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults
+
+  SHARED because it was written twice and then MISSING from a third site, which
+  is the whole shape devdocs/dev/normalise-dont-special-case.md warns about: the
+  bare implicit-Self statement call (`Desc();` inside the class that declares
+  Desc) had no empty-parens arm at all, so it read a garbage descriptor -- n=8
+  against `const a: array of const` -- while `Self.Desc()` two lines away
+  refused it correctly. Two copies did not drift; the copy that was never made
+  is what stayed broken.
+  bug-p-empty-parens-at-a-bare-method-call-reads-a-garbage-argument
+
+  argIdx is set PAST the arity loop either way: there is nothing to parse, and
+  the caller's Expect/ExpectCallRParen consumes the `)`. }
+procedure ApplyEmptyCallParens(mpi: Integer; const calleeName: AnsiString;
+                               callNode: Integer; var lastArg: Integer;
+                               var argIdx: Integer);
+begin
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+    FillDefaultArgs(mpi, 1, callNode, lastArg)
+  else if (Procs[mpi].ParamCount > 1) and
+          (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) then
+    Error(calleeName + '() requires ' +
+          AIntToStr(Procs[mpi].ParamCount - 1) +
+          ' argument(s), none given');
+  argIdx := Procs[mpi].ParamCount;   { nothing to parse; the caller consumes the `)` }
+end;
+
 { Would CALLING this method already produce the method pointer the context
   wants? Then it is a CALL, not a reference, and TryParseParenlessMethodRef must
   stand down.
