@@ -98,6 +98,97 @@ It blocks a clean two-instantiation regression test for that ticket, and it is
 in the path of any real generic container corpus, where one template is
 specialized many times by construction.
 
+## THE SITE, MEASURED — `EmitLateNestedSpecDecls` sets the substitution and not the table
+
+`PXXDBG=p.nspec:*` on the repro names it in three lines:
+
+```
+reg alias=TPtrs$LongInt$TOwner$LongInt$PT under=TOwner$LongInt subs=T->LongInt ts=12  head=class public type PT ...
+reg alias=TPtrs$Byte$TOwner$Byte$PT       under=TOwner$Byte    subs=T->Byte    ts=12  head=class public type PT ...
+reg alias=TPtrs$LongInt$TOwner$Byte$PT    under=TOwner$LongInt subs=T->LongInt ts=71  head=function TOwner Ptrs specialize TPtrs ...
+```
+
+The first two are the class-body scans and both are right. **The third is the
+METHOD IMPLEMENTATION header** (`ts=71`, `head=function TOwner . Ptrs : ...`),
+and note what it says: the SUBSTITUTION is correct — `under=TOwner$LongInt`,
+`subs=T->LongInt`. Only the hoisted name is Byte's. Two pieces of one state,
+one of them refreshed and one of them not.
+
+`EmitLateNestedSpecDecls` (`pasparser_generic.inc`) loops every specialization:
+
+```pascal
+    ti := SpecTemplateIdx[si];
+    SpecializeTemplateName := Templates[ti].Name;
+    SetSpecSubs(ti, si);                                       { <- refreshed }
+    ScanDelphiMethodImplsForNestedSpecs(ti, Specializations[si].Name);
+```
+
+`SetSpecSubs` is there. `CollectHoistCandidates` is not — so `HoistName` /
+`HoistFull` hold whatever the last `ParseSpecialization` left, and
+`NestedSpecArg` reads BOTH tables. Two later rows in the same log show the third
+state: the table empty, and `PT` resolving to nothing at all
+(`alias=TPtrs$LongInt$PT tmpl=TPtrs args=LongInt PT`).
+
+**This is the fourth instance in one day of one shape** — a rule present on one
+side of a pair and absent on the other, silent on arrival, failing by agreeing
+and then building something else, with the diagnostic naming the materialisation
+rather than the pair. The other three are frankS's static-method `Self`, its
+`ScanDelphiMethodImplsForNestedSpecs` header test, and the two in
+`bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope`.
+Playbook section: "A RULE THAT LIVES ON ONE SIDE OF A DECLARATION/IMPLEMENTATION
+PAIR FAILS BY AGREEING".
+
+**And it may be the last rtl-generics wall too, which is NOT yet established.**
+`PXXDBG=p.mint:TEnumerator` over the Collections driver at `61a9463be` shows the
+hoisting working almost everywhere — `TEnumerator$TCustomList$UInt32$PT`,
+`TEnumerator$TEnumerable$UInt32$PT` — and exactly ONE bare
+`alias=TEnumerator$PT tmpl=TEnumerator args=PT`, which is the shape a scan with
+an empty hoist table produces. That is a HYPOTHESIS from a matching signature,
+not a measurement: the bad corpus mint is labelled `deferred` and this one is
+labelled `late`, so they are not the same site and may not share a cause.
+Re-measure after the fix rather than assuming.
+
+## THE ONE-LINE FIX IS WRONG, AND ITS FAILURE IS THE REAL FINDING
+
+Attempted and REVERTED at `24f4fc4ec625` (HEAD = `61a9463be`), both variants
+measured on the repro:
+
+```pascal
+    SetSpecSubs(ti, si);
+    CollectHoistCandidates(ti, Specializations[si].Name);   { <- added }
+    ScanDelphiMethodImplsForNestedSpecs(ti, Specializations[si].Name);
+```
+
+| variant | repro |
+| --- | --- |
+| HEAD | `unknown type: TPtrs$LongInt$TOwner$Byte$PT` — the leak |
+| `+ CollectHoistCandidates` | `unknown type: specialize` at line 15 |
+| `+ CollectHoistCandidates + EmitHoistedDecls` | `expected 'begin' before 'TPtrs'` at line 15 |
+
+**The name became correct and the program got WORSE**, and the reason is the
+part worth having: `ScanRangeForNestedSpecs` skips a group whose alias is
+already `NestedSpecKnown`, and **collapsing the `specialize X<...>` group in the
+stream is a SIDE EFFECT of registering it.** With the wrong name the group was
+registered (wrongly) and therefore collapsed; with the right name it is already
+known, so it is not registered, so nothing collapses it and the literal word
+`specialize` survives into the stream — which is the exact symptom
+`ScanRangeForNestedSpecs`'s own header comment describes for a range it never
+scanned.
+
+So this is **not a one-line fix and not only a table-refresh bug.** Registration
+and collapse are one operation serving two purposes, and they need separating
+before the table can be corrected: the scan must collapse a group whose alias is
+already known, and register only when it is not. Anyone taking this should
+expect to touch that skip condition, not just the call site.
+
+**That also retires the hypothesis above.** The single bare
+`alias=TEnumerator$PT` in the Collections driver is NOT shown to be this defect
+— the experiment that would have linked them made the corpus worse, not better,
+so nothing was learned about the corpus from it. Measured for the record at
+`61a9463be`: of the 8 `TEnumerator` mints, 7 resolve (`$TCustomList$UInt32$PT`
+x4, `$UInt32` x2, `$TEnumerable$UInt32$PT` x1) and exactly one is bare. Which
+site produces it is still unidentified.
+
 ## Where to start
 
 The read is already resolved eagerly and correctly; the fix belongs at the
