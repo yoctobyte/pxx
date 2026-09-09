@@ -154,6 +154,45 @@ end;
   SpecTemplateIdx exists to fix. Reading the name back here would reintroduce it
   one level down, and it would pick the WRONG UNIT, which is exactly the kind of
   wrong answer this function is being added to prevent. }
+procedure NoteGFSpecBodyUnit(const specName: AnsiString; unitIdx: Integer);
+{ Remember that the routine about to be spliced under `specName` is a generic
+  ROUTINE's body copied out of `unitIdx`, so ParseSubroutine can parse it AS
+  that unit -- the rule specialized METHOD bodies have had since
+  bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site.
+
+  Last write wins, and re-specializing the same name is a re-statement of the
+  same fact, so a repeat is an update rather than a new row. }
+var i: Integer;
+begin
+  for i := 0 to GFSpecBodyCount - 1 do
+    if CaseEqual(GFSpecBodyName[i], specName) then
+    begin
+      GFSpecBodyUnit[i] := unitIdx;
+      Exit;
+    end;
+  if GFSpecBodyCount >= MAX_SPECIALIZATIONS then Exit;   { advisory table; losing a row costs the old scope, never correctness of the parse }
+  GFSpecBodyName[GFSpecBodyCount] := specName;
+  GFSpecBodyUnit[GFSpecBodyCount] := unitIdx;
+  Inc(GFSpecBodyCount);
+end;
+
+function GFSpecBodyDeclUnit(const specName: AnsiString; var found: Boolean): Integer;
+{ The declaring unit NoteGFSpecBodyUnit recorded for this spliced routine name,
+  with `found` separating "no row" from a row whose unit is legitimately -1 (a
+  generic routine declared by the main program, which is most of them). }
+var i: Integer;
+begin
+  GFSpecBodyDeclUnit := -1;
+  found := False;
+  for i := 0 to GFSpecBodyCount - 1 do
+    if CaseEqual(GFSpecBodyName[i], specName) then
+    begin
+      GFSpecBodyDeclUnit := GFSpecBodyUnit[i];
+      found := True;
+      Exit;
+    end;
+end;
+
 function SpecTemplateDeclUnit(const nm: AnsiString): Integer;
 var si, ti: Integer;
 begin
@@ -5147,6 +5186,7 @@ begin
       the first spliced token. When ParseSubroutine finishes, CurTok is back on
       the token it was holding, which is what the caller expects. }
     Dec(TokPos);
+    NoteGFSpecBodyUnit(PendFuncName[p], GenericFuncUnitIdx[PendFuncGfi[p]]);
     SpecializeStream(GenericFuncs[PendFuncGfi[p]].TokStart,
                      GenericFuncs[PendFuncGfi[p]].TokCount, PendFuncName[p]);
     Next;
@@ -5476,6 +5516,7 @@ begin
     GenericFuncParams[gfi * MAX_TEMPLATE_PARAMS + j] := paramNames[j];
   GenericFuncs[gfi].IsFunc   := isFunc;
   GenericFuncIsDelphi[gfi]   := isDelphi;   { parallel array -- see its declaration }
+  GenericFuncUnitIdx[gfi]    := CurrentUnitIdx;   { parallel array -- see its declaration }
   GenericFuncs[gfi].TokStart := TemplateTokenCount;
   GenericFuncs[gfi].TokCount := 0;
   { Where this body CAME from -- captured now for the same reason
@@ -6042,6 +6083,7 @@ begin
     SpecSubValues[q] := concreteNames[q];
     SpecSubKinds[q]  := concreteKinds[q];
   end;
+  NoteGFSpecBodyUnit(specName, GenericFuncUnitIdx[gfi]);
   SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount, specName);
   Next;
   ParseSubroutine;

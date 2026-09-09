@@ -28,7 +28,7 @@ program test_a_class_helper_on_a_class_level_method;
   | row                | pxx | fpc 3.2.2 |
   | ------------------ | --: | --------: |
   | gen-TTest          |   2 |         2 |
-  | **gen-TTest2**     | **4** |     **3** |  <- KNOWN DIVERGENCE, see below
+  | gen-TTest2         |   3 |         3 |  <- WAS the known divergence; see below
   | inunit             |   2 |         2 |
   | plain-TTest        |   2 |         2 |
   | plain-TTest2       |   4 |         4 |
@@ -36,21 +36,34 @@ program test_a_class_helper_on_a_class_level_method;
   | instance           | 400 |       400 |
   | stmt-touch         |   2 |         2 |
 
-  THE ONE DIVERGENCE IS A SECOND DEFECT, REVEALED AND NOT CAUSED. Before this
-  fix pxx answered `gen-TTest2` = 3 and that MATCHED fpc -- for the wrong reason:
-  it applied no class-level helper in any scope, so no exclusion rule was doing
-  the work. The `plain-TTest2` row is what settles it: same class, same helper,
-  same program, generics removed, and pxx answered 3 there too where fpc answers
-  4. The row was pinned at 3 in its own commit (17a0e4bd6) BEFORE dispatch was
-  touched, precisely so this flip would read as a defect revealed.
+  `gen-TTest2` WAS A SECOND DEFECT, REVEALED AND NOT CAUSED, and it is now
+  fixed. Before class-level dispatch worked at all, pxx answered 3 here and that
+  MATCHED fpc -- for the wrong reason: it applied no class-level helper in any
+  scope, so no exclusion rule was doing the work. The `plain-TTest2` row is what
+  settled it: same class, same helper, same program, generics removed, and pxx
+  answered 3 there too where fpc answers 4. The row was pinned at 3 in its own
+  commit (17a0e4bd6) BEFORE dispatch was touched, precisely so the flip to 4
+  would read as a defect revealed; it then read 4 for one day.
 
-  What it reveals: fpc answers 4 for `TTest2.CS` and 3 for `specialize
+  What it revealed: fpc answers 4 for `TTest2.CS` and 3 for `specialize
   DoTest<TTest2>` -- same class, same helper, same program -- so fpc resolves a
-  template body's names in the TEMPLATE's declaration context and a helper
-  declared by the SPECIALIZING program does not reach it. pxx has no such rule.
-  That is two-phase name lookup for generics, it was not measurable until helpers
-  were applied at all, and it is its own ticket. Do NOT "fix" this row by
-  narrowing helper dispatch; the other seven rows are the constraint.
+  template body's names in the TEMPLATE's declaration context, and a helper
+  declared by the SPECIALIZING program does not reach it.
+
+  IT WAS FIXED AS A SCOPE RULE AND NOT BY NARROWING DISPATCH, which is what the
+  other seven rows demanded. Two halves, both of them rules this compiler
+  already had somewhere else. First, a specialized generic ROUTINE's body now
+  parses as its DECLARING unit -- the rule a specialization's METHOD bodies have
+  had since bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site,
+  which a generic routine never got (measured: `DoTest_TTest` parsed at
+  body-unit=-1, the PROGRAM, while the same unit's own methods carried
+  body-unit=60). Second, helper lookup is visibility-aware at all --
+  FindHelperForType was a flat global scan with no visibility test of any kind,
+  so any helper anywhere won.
+
+  `gen-TTest` = 2 and `gen-TTest2` = 3 are ONE RULE ON TWO INPUTS: the template
+  unit's own helper still reaches the body, the specializing program's does not.
+  Narrowing dispatch would have fixed the second and broken the first.
 
   bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper
   bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own }

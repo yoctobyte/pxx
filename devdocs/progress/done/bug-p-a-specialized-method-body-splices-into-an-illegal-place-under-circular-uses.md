@@ -240,3 +240,31 @@ Log: fixed in `compiler/pasparser_generic.inc` + `compiler/defs.inc`, commit
 1c16d4523. That commit also burns `tgeneric91.pp` from
 `test/pascal-conformance/pxx.skip` and adds fixture `test_circspec26`; the close
 is this file's move to `done/` in the same commit.
+
+## The repro understates what this closed — the fix is not confined to circular `uses`
+
+frankZ attributed it by REVERT-REBUILD, not by timing, and I verified it here
+rather than taking it. Driver `uses Generics.Collections` alone against the full
+unmodified `/usr/share/fpcsrc/3.2.2/packages/rtl-generics/src`:
+
+| compiler | wall |
+| --- | --- |
+| this fix reverted to its parent, rebuilt (`4a6207c05ba2`) | `generics.collections.pas:120 unknown type: PT` |
+| with it (`eb141da06a89`, my own run) | `generics.defaults.pas:3250 undefined variable (TGOrdinalStringComparer)` |
+
+`grep -c "unknown type: PT"` = **0**. The whole `TEnumerator$PT` family — which
+frankS and frankZ reached from two separate entry points in one morning — went
+with it.
+
+**`generics.collections` has no circular implementation-`uses` at all.** So the
+defect is "a specialized body materialised in the wrong stream", and the cycle
+is one ROUTE to it, not the condition. What the two share is the ordering:
+something forces the specialization to be registered before the template's
+bodies have been walked. A cycle is the loudest way to arrange that and was the
+way it was found.
+
+Recorded because the ticket's title and repro would otherwise let a later reader
+scope the fix to cycles and re-file the rest.
+
+The new `:3250` wall is a different animal and belongs to the corpus rung, not
+here.

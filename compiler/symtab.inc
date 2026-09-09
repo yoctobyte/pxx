@@ -2429,6 +2429,38 @@ begin
     end;
 end;
 
+function HelperRowVisibleHere(ci: Integer): Boolean;
+{ May the scope being compiled see HELPER row `ci`? ClassRowVisibleHere's rule
+  minus one carve-out, and the carve-out is why this is a separate function
+  rather than a call.
+
+  ClassRowVisibleHere exempts rows whose unit is the SPECIALIZING scope
+  (`UClsUnitIdx[ci] = SpecBodyHostUnitIdx`), because while a specialized body is
+  parsed as its declaring unit, the rows the SPECIALIZATION minted still have to
+  resolve -- `Result := TFPGListEnumeratorSpec.Create(Self)` in fgl.pp. Those are
+  SYNTHESIZED CLASS rows. A `class helper` is never one: nothing the specializer
+  mints is a helper, so the exemption has no subject here, and applying it
+  anyway is what let a helper declared by the specializing PROGRAM reach inside
+  a template body imported from another unit.
+
+  Without this, FindHelperForType was a flat global scan with no visibility test
+  of any kind -- any helper anywhere won, which is invisible until two scopes
+  declare helpers for related classes.
+  bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own }
+begin
+  HelperRowVisibleHere := True;
+  if DeclVisibilityProbe then Exit;
+  { a unit cannot see the main program's declarations -- ClassRowVisibleHere's
+    own note, and the same reasoning applies to a helper it declares }
+  if (CurrentUnitIdx >= 0) and (UClsUnitIdx[ci] < 0) then
+  begin
+    HelperRowVisibleHere := False;
+    Exit;
+  end;
+  HelperRowVisibleHere := DeclVisibleSect(UClsUnitIdx[ci], UClsDeclImpl[ci],
+                                          IMPLTAB_UCLS, ci);
+end;
+
 function FindHelperForType(tk: TTypeKind; rec: Integer): Integer;
 { Newest-declared TYPE HELPER whose target matches (tk, rec); -1 if none.
   FPC scoping: the last visible helper wins, hence the downward scan. The two
@@ -2442,6 +2474,7 @@ begin
   begin
     have := UClsHelperTk[i];
     if have < 0 then continue;
+    if not HelperRowVisibleHere(i) then continue;
     if (have = want) or
        (((have = Ord(tyString)) or (have = Ord(tyAnsiString))) and
         ((want = Ord(tyString)) or (want = Ord(tyAnsiString)))) then

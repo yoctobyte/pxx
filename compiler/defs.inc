@@ -3045,6 +3045,26 @@ var
     the same shape for the same record.
     feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
   GenericFuncIsDelphi : array[0..MAX_GENERIC_FUNCS-1] of Boolean;
+  { The unit each generic ROUTINE was declared in -- the same channel
+    TemplateUnitIdx carries for a generic CLASS, and needed for the same reason:
+    a specialized body is a template body copied here from another file, so it
+    must resolve its names as its DECLARING unit and not as whoever specialized
+    it. That rule was implemented for a specialization's METHOD bodies
+    (bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site)
+    and a generic ROUTINE's body never got it -- measured with
+    PXXDBG=p.specunit, `DoTest_TTest` parses at body-unit=-1, the PROGRAM, while
+    the same unit's ordinary methods carry body-unit=60.
+    bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own }
+  GenericFuncUnitIdx : array[0..MAX_GENERIC_FUNCS-1] of Integer;
+  { Spliced specialized-routine name -> the declaring unit its body must parse
+    as. Keyed by NAME rather than carried in a global, because parsing one
+    concrete body can register another specialization (a generic routine that
+    calls a second one), so the splice and the parse do not nest predictably.
+    Same reason FlushPendingFuncSpecializations loops on a count its own body
+    can grow. }
+  GFSpecBodyName  : array[0..MAX_SPECIALIZATIONS-1] of AnsiString;
+  GFSpecBodyUnit  : array[0..MAX_SPECIALIZATIONS-1] of Integer;
+  GFSpecBodyCount : Integer;
 
   { A generic routine's TYPE PARAMETERS, one row of MAX_TEMPLATE_PARAMS per
     routine, with the used length beside it. This is the data-model half of

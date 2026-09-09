@@ -1038,6 +1038,8 @@ var
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
   savedBodyUnitIdx, tmplDeclUnit, savedSpecHost: Integer;   { a specialization's method body parses as its DECLARING unit — see below }
+  gfUnit: Integer;      { the same, for a specialized generic ROUTINE's body }
+  gfFound: Boolean;
   savedMIO: Integer;   { MethImplOwnerCi across this decl -- see defs.inc }
   inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
@@ -3528,6 +3530,22 @@ begin
       bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site }
     savedBodyUnitIdx := CurrentUnitIdx;
     savedSpecHost    := SpecBodyHostUnitIdx;
+    { A specialized generic ROUTINE's body is the same thing as a
+      specialization's METHOD body one arm down -- a template body copied here
+      from another file -- and it never got this rule. Measured with
+      PXXDBG=p.specunit: `DoTest_TTest` parsed at body-unit=-1, the PROGRAM,
+      while the very same unit's ordinary methods carry body-unit=60.
+
+      `gfFound` and not `gfUnit >= 0`: a generic routine declared by the MAIN
+      PROGRAM records -1 legitimately, and that is the common case, so a bare
+      sign test would read "no row" and "the program declared it" as one.
+      bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own }
+    gfUnit := GFSpecBodyDeclUnit(name, gfFound);
+    if gfFound and (methOwnerCi < 0) then
+    begin
+      SpecBodyHostUnitIdx := CurrentUnitIdx;
+      CurrentUnitIdx := gfUnit;
+    end;
     if methOwnerCi >= 0 then
     begin
       tmplDeclUnit := SpecTemplateDeclUnit(
