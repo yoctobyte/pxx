@@ -474,6 +474,23 @@ running, never because FPC does it differently.
 **The worst question is one a MEASUREMENT would have answered.** Before
 escalating, ask what you would have to measure for the question to disappear.
 
+**BUT ASKING HIM FOR HISTORY IS CHEAP, AND IT IS THE ONE THING NO MEASUREMENT
+REACHES.** Everything above is about asking him to DECIDE, which is expensive.
+Asking him what HAPPENED — why a thing was built this way in July, what a
+decision was reacting to, whether something was tried before — costs him one
+line and is often unrecoverable otherwise. **He holds a continuous model of
+this project across months; a session holds one context window and then loses
+it.** His framing, 2026-09-09: *"you are like the 200IQ genious with a 3-second
+goldfish memory ... i know stuff about 3+ month of development that you simply
+dont unless you research it time and time again."* That is not modesty, it is
+an accurate description of the memory architectures, and it has a cost: a seat
+that reconstructs history from `git log` and ticket bodies spends real tokens
+to produce a worse answer than one question would have. **Reconstruct the
+record; ask him for the reasoning behind it.** And when he answers, WRITE IT
+DOWN where the next session finds it — his own point cuts at us too: *"code i
+wrote myself. 2 year later i'll have no clue unless i left notes."* Asking him
+the same question twice is the version of this that is genuinely expensive.
+
 ## The name is not the thing
 
 **An identifier standing in for the thing it names, trusted because it looked
