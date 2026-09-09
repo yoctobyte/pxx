@@ -5634,9 +5634,10 @@ test-core: $(COMPILER)
 	# method half, ClassCtorArraySigAt for the constructor half -- the latter
 	# decides how the `[...]` is PARSED, so its `ints` rows assert a SUM and not
 	# a count (a count reads the same through an Integer stride or a TVarRec one).
-	# THE `veto` ROW'S EXPECTED VALUE IS PXX'S OWN AND DIVERGES FROM FPC -- every
-	# other line is fpc 3.2.2's. It is here so the tySet veto stays guarded, and
-	# the divergence is filed, not fixed:
+	# THE `veto` ROW WAS THE ONE DIVERGENT LINE AND IS NOT ANY MORE -- every line
+	# is fpc 3.2.2's now. It held pxx's own answer while the tySet case was open;
+	# an ordinal element list gives the set the slot since 2026-09-09, which is
+	# fpc's rule in both declaration orders.
 	# bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it
 	# bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
 	./$(COMPILER) test/test_p_an_array_of_const_wins_a_bracket_argument.pas $(TESTTMP)/test_arrconstwin26

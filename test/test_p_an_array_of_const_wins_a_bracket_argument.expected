@@ -6,7 +6,7 @@ strfirst  vr    cnt=2
 dblfirst  vr    cnt=2
 sole      ints  cnt=2
 sole      bool  TRUE
-veto      ints  cnt=2
+veto      set
 ctintfirst vr   cnt=3
 ctvrfirst  vr   cnt=3
 ctsole     ints sum=60

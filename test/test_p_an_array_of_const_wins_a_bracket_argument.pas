@@ -33,23 +33,34 @@
 
   The `sole` rows are the guard in the other direction: with ONE array candidate
   the narrowing already had the answer and took it, and that path must not move.
-  The `veto` row is the second one: a `tySet` parameter at the bracket slot
-  means the `[...]` really may be a set, so the narrowing declines outright and
-  the old arity behaviour stands -- the fix must not overrule that veto.
 
-  READ THE `veto` ROW'S EXPECTED VALUE CAREFULLY: it is PXX's OWN ANSWER AND IT
-  DIVERGES FROM FPC. Every other line in the .expected is fpc 3.2.2's output;
-  that one is not. fpc resolves `ve.P(2, [7, 8])` to the `set` overload and pxx
-  runs the array one, because pxx's veto declines to narrow at all and falls
-  back to first-declared. Measured while writing this fixture, filed as
-  bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it,
-  and deliberately NOT fixed here -- guessing the other way would break a
-  working call to buy this one, which is the veto's own stated reason. The row
-  is here so the veto path is guarded: a later change that overruled it would
-  silently start picking the array where the set is meant, and nothing else in
-  the tree mixes the two.
+  THE `veto` ROW USED TO BE THE ONE DIVERGENT LINE IN THIS FILE AND IS NOT ANY
+  MORE -- every line is fpc 3.2.2's now. Its expected value was pxx's OWN answer
+  (`veto ints cnt=2`), loudly labelled, because a `tySet` parameter at the
+  bracket slot made the narrowing decline outright and fall back to
+  first-declared, where fpc resolves `ve.P(2, [7, 8])` to the `set` overload.
+  Fixed 2026-09-09 once the elements could be classified: an ordinal element
+  list gives the set the slot, which is fpc's measured rule in both declaration
+  orders, and the veto still stands for every list that cannot be classified --
+  which is the case its own reasoning was about.
+  bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it
 
-  STILL OPEN and deliberately not covered here: two NON-const arrays differing
+  THAT ROW IS WHY THE FILE WAS WORTH ITS RUNTIME TWICE. It was put in as an
+  inert must-not-move control, diffed against fpc out of habit, and turned out
+  to be a divergence -- a control is asserted against ITSELF, so it records our
+  answer where a reader expects the right one. It then sat here as a pinned
+  divergence for exactly as long as it took to measure the rule, which is the
+  argument for pinning one loudly rather than leaving it unwritten.
+
+  ALSO CLOSED SINCE, and covered by its own fixture
+  test_p_a_bracket_slot_is_ranked_by_what_its_elements_are rather than here: two
+  NON-const arrays differing only in element type. The paragraph below was
+  written when that was open, and its reasoning -- "that genuinely needs the
+  probe" -- was the wrong blocker. fpc ranks by the elements' CLASS, which is
+  readable from the tokens; no parse is needed. Kept as written because the
+  mistake is the useful part.
+
+  STILL OPEN when this was written: two NON-const arrays differing
   only in element type. fpc ranks those by element (`[7, 8]` takes
   `array of Integer` over `array of string` in both orders) and that genuinely
   needs the probe. pxx refuses one of those two orders outright today, on the

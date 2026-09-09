@@ -3451,7 +3451,30 @@ begin
   Result := -1;
   if cls = BEC_UNKNOWN then Exit;
   if (pi < 0) or (pj < 0) then Exit;
-  if not Procs[pi].Params[pj].IsArray then Exit;
+  if not Procs[pi].Params[pj].IsArray then
+  begin
+    { A SET PARAMETER TAKES THE SLOT WHEN THE ELEMENTS ARE ORDINAL, AND ONLY
+      THEN. Measured against fpc 3.2.2, both declaration orders: with
+      `set of Byte` against `array of Integer`, `[7, 8]` and `[700, 800]` both
+      run the SET body; against `array of string`, `[7, 8]` runs the SET and
+      `['a', 'b']` runs the string array; `[1.5, 2.5]` is refused outright
+      ("Ordinal expression expected"). So the set outranks every array for an
+      ordinal list and is not viable for any other.
+
+      100 rather than 90 is the whole rule: it has to beat `array of Integer`,
+      which scores 90 on the same list.
+
+      THE PARSE SIDE NEEDS NO CHANGE AND THAT IS WHY THIS IS SAFE. Naming the
+      set candidate is enough: TryParseBracketArgForSlot is handed the CHOSEN
+      Procs[] row, finds neither ParamIsVarRecArray nor ParamIsOpenArrayScalar
+      on a set parameter, returns -1, and the argument goes to ParseExpr --
+      which parses `[7, 8]` as the set literal it now is. The probe's reading
+      and the committed parse are the same row, which is the property that
+      makes a half-wired door impossible here.
+      bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it }
+    if (cls = BEC_ORDINAL) and (ParamOwnKind(pi, pj) = tySet) then Result := 100;
+    Exit;
+  end;
   ek := ParamElemKind(pi, pj);
   case cls of
     BEC_ORDINAL:
@@ -3849,11 +3872,11 @@ var
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
   nBr, brOnly: Integer;
-  bcls, bestRank, bestCand, nBest, rk: Integer;   { element-class ranking at a bracket slot }
+  bcls, bestRank, bestCand, nBest, rk, nSet: Integer;   { element-class ranking at a bracket slot }
   nVR, vrOnly: Integer;   { ...and how many of those are `array of const` }
   rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
-  ok, okBr, okVR, vetoed, okAny: Boolean;
+  ok, okBr, okVR, okSet, vetoed, okAny: Boolean;
   lo, name2: AnsiString;
 begin
   Result := -1;
@@ -3981,12 +4004,13 @@ begin
         calls had before the probe existed -- unchanged, deliberately: the
         probe still cannot PARSE a bracket argument, so it cannot rank one. }
       nBr := 0; brOnly := -1; vetoed := False;
-      nVR := 0; vrOnly := -1;
+      nVR := 0; vrOnly := -1; nSet := 0;
       for c := 0 to nCand - 1 do
       begin
         pi := UMthProc_[cand[c]];
         okBr := True;
         okVR := True;
+        okSet := True;
         for j := 0 to nExplicitArgs - 1 do
           if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
           begin
@@ -3995,16 +4019,19 @@ begin
             begin
               okBr := False;
               okVR := False;
+              okSet := False;
             end
             else
             begin
-              if ParamOwnKind(pi, pj) = tySet then vetoed := True;
+              if ParamOwnKind(pi, pj) = tySet then vetoed := True
+              else okSet := False;
               if not Procs[pi].Params[pj].IsArray then okBr := False;
               if not ParamIsVarRecArrayAt(pi, pj) then okVR := False;
             end;
           end;
         if okBr then begin Inc(nBr); brOnly := cand[c]; end;
         if okBr and okVR then begin Inc(nVR); vrOnly := cand[c]; end;
+        if okSet then Inc(nSet);
       end;
       if (nBr = 1) and not vetoed then
       begin
@@ -4062,7 +4089,7 @@ begin
         had before. That is deliberate -- a confident wrong answer here is a
         silently miscompiled argument, and the honest unknown costs nothing that
         was not already being paid. }
-      if (nBr > 1) and not vetoed then
+      if nBr + nSet > 1 then
       begin
         bcls := BEC_UNKNOWN;
         for j := 0 to nExplicitArgs - 1 do
@@ -4083,8 +4110,8 @@ begin
               if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
               begin
                 pj := 1 + j;
-                if (pj >= MAX_PROC_PARAMS) or (pj >= Procs[pi].ParamCount) or
-                   (not Procs[pi].Params[pj].IsArray) then okBr := False
+                if (pj >= MAX_PROC_PARAMS) or (pj >= Procs[pi].ParamCount) then
+                  okBr := False
                 else if rk < 0 then
                   rk := BracketCandRank(pi, pj, BracketArgElemClass(lp, j));
               end;
