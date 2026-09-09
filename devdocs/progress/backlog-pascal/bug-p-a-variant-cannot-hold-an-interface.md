@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-08-26
-summary: "`v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem."
+summary: "`v := ifc` for any interface does not compile (`Variant := this type not yet supported`). Reproduces at HEAD 2026-09-09 (923ac147a, compiler be9a7fbee4fa). **THE BLOCKER THIS TICKET WAS RANKED ON DOES NOT EXIST.** It said an interface is `a 16-byte fat pointer {IMT, instance}` needing `16 bytes of payload where the slot carries 8` -- taken from `UClsIsInterface`'s comment, which was stale. Measured: SizeOf(IIntf) = 8 in pxx and in fpc 3.2.2, in every aggregate context; an interface value is ONE WORD and a call recovers the IMT from the instance per call (PXXIntfIMTOf). So it fits the existing payload exactly, like VT_OBJECT's class instance pointer, and no payload widening is needed. What IS real: the LIFETIME half. A CORBA interface (pxx default) is not refcounted and needs none; a COM one needs _AddRef/_Release, and the slot has no room for the ifaceId that PXXIntfRelease takes -- which is the actual design question, and it is not the one the ticket asked. See [[refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds]] for the stale-comment group that produced the wrong premise."
 ---
 
 # `v := ifc`
@@ -55,3 +55,65 @@ grew a hole in the first place. Collapsing the four onto `VariantTagForTk`
 belongs with this ticket rather than before it: whoever adds the interface arm
 has to touch all of them anyway, and doing the collapse first with full-tier
 cross-target gating is the cheaper order.
+
+
+## Re-measured and re-scoped (frankD, 2026-09-09)
+
+Reproduces at HEAD: `923ac147a`, compiler `be9a7fbee4fa`. The refusal is on the
+STORE (`v := ifc`), not the read.
+
+### The stated blocker is false
+
+> pxx spells it `tyRecord` — a 16-byte fat pointer `{IMT, instance}`
+> [...] a variant tag for it, and 16 bytes of payload where the slot carries 8
+
+Measured, pxx and fpc 3.2.2 answering identically to all three rows:
+
+    SizeOf(IIntf) = 8
+    SizeOf(record of two IIntf) = 16
+    SizeOf(array[0..2] of IIntf) = 24
+
+An interface value is **one machine word — the instance pointer**, FPC's ABI.
+`RTTI_IFACE_SIZE`'s comment says so directly ("what lets an interface VALUE be a
+single instance pointer instead of a fat {IMT,instance} pair"), and
+`IRIntfInstanceWord` in `ir.inc` says it again in its body. The fat pointer went
+away; `UClsIsInterface`'s comment did not, and this ticket was written from it.
+
+**So there is nothing to widen.** The payload holds an interface value exactly
+as it holds VT_OBJECT's class instance pointer, and the tag-table work the
+ticket dismissed as "not one more arm" is most of what is left.
+
+### What is actually left
+
+1. **A tag and its arms.** `VariantTagForTk` (ir.inc) is the shared home and
+   already serves i386, arm32, riscv32, xtensa and wasm32. x86-64
+   (`ir_codegen.inc` ~11653) and aarch64 (~5057) hand-roll a verbatim copy of
+   the same `case`, which is the duplication the ticket names and correctly
+   wants collapsed FIRST — that part of its plan stands.
+
+2. **The lifetime question, which is the real one and is not what was asked.**
+   `PXXIntfRelease(p, ifaceId)` needs an interface id to find the IMT, and a
+   16-byte slot holding {tag, instance} has nowhere to put one. Options, none
+   measured yet:
+   - release through `IInterface`'s id rather than the specific interface's —
+     `_AddRef`/`_Release` live on the INSTANCE and every COM interface
+     implicitly derives IInterface (IMT slots 0..2), so any implemented
+     interface's IMT reaches the same pair. Needs the compiler to resolve
+     IInterface's ci at emit time.
+   - a raw-instance release helper that takes no ifaceId.
+   - refuse COM and accept CORBA, keeping an honest diagnostic for the unsafe
+     half.
+
+   **CORBA is pxx's default and is not refcounted at all**
+   (`UClsIsComInterface`, set only under `{$interfaces com}`), so the default
+   case needs no ARC and matches the borrow semantics VT_OBJECT already has for
+   a manual-lifetime instance.
+
+3. **Reading it back.** `IIntf(v)` was not investigated. The ifaceId at a cast
+   site is static, so the payload does not need to carry it.
+
+### The ranking consequence
+
+This was p40 and unclaimed from 2026-08-26 because its first section says the
+work is a lifetime-and-payload overhaul. Half of that is gone. Whoever takes it
+should re-cost it against the two items above, not against the original text.

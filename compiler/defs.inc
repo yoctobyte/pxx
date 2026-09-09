@@ -710,10 +710,19 @@ const
   AN_AS_CAST       = 57; { `X as T`: Left = instance expr; ASTIVal = target class ci.
                            Checked downcast — yields X typed as T, traps on mismatch. }
   AN_INTF_CALL     = 58; { CORBA interface method call `iface.M(args)`. Left = arg
-                           chain; Right = interface value (fat ptr {IMT,instance});
-                           ASTIVal = signature proc idx; ASTSOffset = IMT slot. }
-  AN_INTF_FROM_CLASS = 59; { class -> interface fat-pointer build. Left = class
-                             instance expr; ASTIVal = IMT-table entry index. }
+                           chain; Right = interface value -- A SINGLE INSTANCE
+                           POINTER (FPC's ABI), not a fat {IMT,instance} pair;
+                           ASTIVal = signature proc idx; ASTSOffset = IMT slot.
+                           The IMT is recovered from the instance PER CALL via
+                           PXXIntfIMTOf (see pasparser_stmt.inc's own note), which
+                           is what makes the value one word. }
+  { DEAD SINCE THE FAT POINTER WENT AWAY, 2026-09-09: nothing constructs one.
+    Census that says so, and the one that would retire this line -- `grep -rn
+    AN_INTF_FROM_CLASS compiler/ | grep -v defs.inc` returns ZERO. Kept only
+    because removing an AST kind is node numbering, which CLAUDE.md says to
+    coordinate by message rather than land alone.
+    refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
+  AN_INTF_FROM_CLASS = 59; { was: class -> interface fat-pointer build. }
   AN_SET_INCL      = 60; { Include(s, v): Left = set lvalue, Right = value expr. }
   AN_SET_EXCL      = 61; { Exclude(s, v): Left = set lvalue, Right = value expr. }
   AN_DYN_COPY      = 62; { Copy(arr, index [, count]) over a dynamic array → fresh
@@ -1272,7 +1281,16 @@ const
   IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
   IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
   IR_VMTADDR      = 58;  { IRA = class index (ci); load the runtime address of that class's VMT (= the per-class identity stored at [instance+0]). Used by is/as type-tests. }
-  IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. Captured as the fat pointer's first word. }
+  { DEAD SINCE THE FAT POINTER WENT AWAY, 2026-09-09. It existed to load the IMT
+    for a fat pointer's FIRST WORD, and an interface value has no first word any
+    more -- it IS the instance pointer, and AN_INTF_CALL recovers the IMT per
+    call via PXXIntfIMTOf. Four backends still carry an encoder arm for it
+    (ir_codegen.inc, _aarch64, _arm32, _386) plus an IRVerify arm, and NOTHING
+    creates the node: `grep -rn 'IRAppend(IR_IMTADDR' compiler/` returns zero,
+    which is the census that would retire these five arms. Kept because removing
+    an IR node kind is node numbering -- coordinate, do not land it alone.
+    refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
+  IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. }
   IR_STORE_DYN    = 60;  { ARC-correct whole dyn-array store into a slot ADDRESS (record/class field or nested sub-array). IRA = slot-address node; IRB = new handle value node; IRC = dyn depth; IRIVal = -1 (non-symbol → node-derived descriptor); IRTk = base TTypeKind; IRSetLenBaseRec = base record id. Retains the new handle, publishes it, element-aware releases the old. Implemented on EVERY backend, and emitted for every target -- this line named five and excluded xtensa for a while after xtensa had the arm, which is why the arm sat unreachable. Regression: test_cross_dynarray_slot_store, which fails on any target that publishes the handle without retaining. }
   IR_SETLEN_STR   = 61;  { SetLength on a managed AnsiString reached through ANY lvalue (symbol, record/class field, var-param field, index, deref). IRA = target slot-ADDRESS node (IRLowerAddress of the lvalue → &handle slot); IRB = new length count node. Calls PXXStrSetLen(addr, n). Address-based so a field/var-param target needs no symbol reconstruction — the managed-string analogue of IR_SETLEN_DYN. Frozen inline strings (tyString, the self-host model) keep the -101 store-length path; only tyAnsiString reaches here. }
   IR_CLONE        = 62;  { IRA = first IR_ARG (flags, childStack, entry, arg, ctidptr — exactly 5); moves them into the SysV arg regs and calls the bare clone+trampoline stub (CloneStubAddr). Result (child tid) in the accumulator. Libc-free thread creation; x86-64 first, i386 next. }
@@ -6648,7 +6666,7 @@ var
     being visible and `TVMT = record f: TFacClass; end` inside a class could
     not see the `TFacClass` declared two lines above it.
     bug-p-a-nested-record-field-cannot-see-a-sibling-nested-type }
-  UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
+  UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { interface type: methods are slot signatures (no bodies/fields); a var of it is ONE MACHINE WORD -- the instance pointer, FPC's ABI. Measured 2026-09-09: SizeOf(IIntf) = 8, same as fpc 3.2.2. It was a 16-byte fat pointer {IMT, instance} and this line said so for long enough that a ticket was designed against it -- see the note on IMTClass below. }
   { The `enumerator MoveNext` / `enumerator Current` MEMBER DIRECTIVES (FPC):
     a type may nominate any method to play MoveNext and any property to play
     Current, so `function StepForward: Boolean; enumerator MoveNext;` makes
@@ -6701,8 +6719,38 @@ var
 
   { Per-(class, interface) Interface Method Table: a Data[] array of code
     addresses, one per interface method slot, filled (like the VMT) via
-    MethodFixups to the class's implementing methods. A class->interface
-    assignment captures IMTOff as the fat pointer's first word. }
+    MethodFixups to the class's implementing methods.
+
+    IT IS NO LONGER PART OF AN INTERFACE VALUE, and this line said it was until
+    2026-09-09: `a class->interface assignment captures IMTOff as the fat
+    pointer's first word`. An interface value is ONE WORD, the instance pointer,
+    and a call recovers its IMT from the instance's RTTI by interface id
+    (PXXIntfIMTOf; RTTI_IFACE_SIZE above states the same thing and is the
+    comment that stayed right). IMTOff is read by the RTTI emitter and by
+    IR_IMTADDR, which nothing emits.
+
+    THE STALE VERSION COST A TICKET. bug-p-a-variant-cannot-hold-an-interface
+    was filed and ranked on `pxx spells it tyRecord (a 16-byte fat pointer)`,
+    and prescribed widening the 8-byte variant payload to 16 -- work that is not
+    needed, against a representation that had already moved. The measurement
+    that retires any future version of this claim is one line:
+    `writeln(SizeOf(IIntf))`.
+
+    WHAT WAS MEASURED, EXACTLY, so the next reader knows the edge of it: the
+    WIDTH, in every aggregate context -- SizeOf(IIntf) = 8, a record of two is
+    16, an array of three is 24, and fpc 3.2.2 answers identically to all three.
+    That the one word is the INSTANCE POINTER is read off IRIntfInstanceWord's
+    body and RTTI_IFACE_SIZE above, not measured here.
+
+    NOT RECONCILED: about a dozen comments in ir.inc's lowering still narrate a
+    16-byte fat pointer -- `build the CORBA fat pointer {IMT, instance}`,
+    `interface := interface falls through to the 16-byte record copy`, `the
+    address of its fat-pointer temp`. They are describing code that now moves
+    one word, and the record-copy path they name copies RecSize bytes, which the
+    SizeOf rows say is 8. Left alone deliberately rather than half-corrected:
+    each needs its own path read, and a comment rewritten from a neighbour's
+    measurement is how this drift started.
+    refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
   IMTClass : array[0..MAX_IMT-1] of Integer;  { implementing class ci }
   IMTIntf  : array[0..MAX_IMT-1] of Integer;  { interface ci }
   IMTOff   : array[0..MAX_IMT-1] of Integer;  { Data[] offset of the IMT }

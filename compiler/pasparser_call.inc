@@ -1220,7 +1220,9 @@ end;
   pasparser_expr.inc -- and all eleven spelled the SAME two-way choice:
   AN_VIRTUAL_CALL when the accessor has a vtable slot, AN_CALL when it does
   not. The choice is THREE-way. An interface receiver dispatches through the
-  IMT (AN_INTF_CALL), takes Self from the fat pointer instead of argument 0,
+  IMT (AN_INTF_CALL), takes Self from the interface value itself -- which IS the
+  instance pointer (FPC's ABI), not the second word of a fat pair -- instead of
+  argument 0,
   and carries its slot in ASTSOffset rather than ASTRight. None of the eleven
   copies knew that, so a property declared in an interface read a class VMT off
   a fat pointer -- the ordinary method call `i.M(...)` had the arm (see the
