@@ -207,7 +207,7 @@ since, and the difference was never mine. Re-measure before quoting a
 driver-dependent wall on this rung.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3801a4d66.
 
 ## FIXED 2026-09-09 (frankS)
 
