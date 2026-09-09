@@ -118,4 +118,4 @@ real source; the alias idiom (`update = __init__` at module scope) is where it
 would show up.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c4e6d55d0.
