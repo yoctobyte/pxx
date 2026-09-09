@@ -15072,8 +15072,8 @@
   "wall": 1005.0
  },
  "last_idle_tier_try": {
-  "date": "2026-09-09T11:59:03Z",
-  "sha": "020f8e2e5622ef742a8a9d3345f97ea31a2dee38",
+  "date": "2026-09-09T14:18:46Z",
+  "sha": "15de9cd799fdd8d9bcbd601ec64b7770d9c48cf0",
   "tier": "full"
  },
  "last_opt": {
@@ -15122,6 +15122,7 @@
     "73e05b3e1e3ddfc224ad63f0d78c63846796e5ea",
     "7a166c995bc802f416270a16dd5b6b5cd4753d39"
    ],
+   "range_non_causal": false,
    "src": "tools/size_canary.py",
    "status": "fail"
   }
